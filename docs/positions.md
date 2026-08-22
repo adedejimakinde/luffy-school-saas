@@ -47,6 +47,35 @@ value and printing the rounded one is the same bug wearing a different hat:
 `45/60` and `15/20` are both `75.00` by different arithmetic, and there is a
 test that they share a position.
 
+### The rounding mode is stated, not inherited
+
+`Decimal.quantize(PLACES)` with no `rounding=` does not mean "round normally".
+It reads `decimal.getcontext().rounding`, whose default is `ROUND_HALF_EVEN` —
+banker's rounding, where **74.505 goes down to 74.50** and 75.505 goes down to
+75.50. That is not what a Nigerian report card does, it cannot be explained to a
+parent standing at a grade boundary, and because ties are decided on the
+quantised value it silently decides *positions* as well as printed numbers.
+
+Two further reasons it could not be left implicit:
+
+- the context is **thread-local and mutable**. Any library in the process
+  calling `decimal.setcontext()` would change every percentage and every
+  position on the platform, with no change to this code and no test failing
+  anywhere near the cause;
+- a module whose whole argument is that this number is exact cannot outsource
+  the last step of computing it to ambient state.
+
+So `ROUNDING = ROUND_HALF_UP` is named once, `_round()` is the only function
+that quantises, and there is a test that forces the context to `ROUND_DOWN` and
+asserts the answer does not move.
+
+The **divisions** still run in the ambient context, at its 28 significant
+digits, and that is a decision rather than an oversight. A division that does
+not terminate cannot land exactly on a half at two places, and one that
+terminates is exact — so the digit the context decides twenty-odd places out
+cannot push a percentage across a `PLACES` boundary, and cannot make two
+children tie who otherwise would not. Only the quantise can, and it is stated.
+
 ## "Not marked" is not zero, in the arithmetic as well as the table
 
 `gradebook` keeps the distinction by having no `Score` row at all. This module
@@ -140,6 +169,47 @@ Once task 3 lands, **a released term must be served from the snapshot instead**.
 A position recomputed after release can silently disagree with the card a parent
 is holding, which is the whole reason position is the number that gets frozen.
 
+## One read of the marks for the whole page
+
+The first version of the broadsheet asked the database separately for every
+number a row needs: the roster, then each subject's percentages, then each
+subject's positions, then the averages, then the class average. Twelve subjects
+and forty-five children came to fifty-odd round trips for one page.
+
+The cost is the smaller half. **The correctness is the point.** `gradebook`
+saves one mark per cell-blur, so a teacher marking while a HOD reads the
+broadsheet is the ordinary case, not a race worth discounting. Under
+`READ COMMITTED` each of those queries sees a different moment, so a single mark
+landing between the percentage read and the position read produces a row showing
+`88.00` in **1st** place above a row showing `91.00` — the same "identical
+percentages, different positions" failure this module was written to prevent,
+arriving by a route the `Decimal` argument does not cover.
+
+`positions.class_results()` now does one roster read and one aggregate read, and
+derives everything else in Python, so every number on the page comes from one
+instant. The observable proxy in the tests is the query count: a page whose cost
+does not grow with the number of subjects is a page that is not re-reading per
+subject. Two subjects and eight subjects are asserted to cost the same, stated
+as a comparison rather than a fixed number so an unrelated query elsewhere does
+not fail the test while the per-subject loop coming back still does.
+
+**The residue is stated rather than papered over.** The roster is a second
+query, so a child placed between the two reads appears on the sheet with no
+marks and renders blank. Closing even that would need `REPEATABLE READ`, which
+cannot be set inside the transaction `TestCase` wraps every test in.
+
+### The columns are the subjects the class was marked in
+
+Drawn from the marks, not from `Subject.objects.all()`. The subject table is per
+school and deliberately keeps retired subjects — `Subject.is_active` reads *"a
+subject no longer taught. Kept, because old scores name it"* — so ranging over
+all of them puts an all-blank Technical Drawing column on a class that has not
+been taught it for three sessions, beside every subject the school teaches to
+any other year group. The aggregate already knows which subjects have marks.
+
+Ordering is `Subject.Meta.ordering`, which is `["name"]`, so the columns stay
+alphabetical rather than falling into primary-key order.
+
 ## Control experiments
 
 The method as ever: break one thing deliberately, re-run, read the failure.
@@ -156,6 +226,35 @@ passed three tests it should have broken, which said nothing about the code and
 everything about where the control was aimed — the naive-zero bug lives in the
 aggregation, not in the percentage helper. A control that fails to break
 anything is a result, not a formality.
+
+### The self-review round
+
+Four more, run against the three fixes above. Two of them landed; the other two
+passed, and both times the passing control was the finding.
+
+| Broken | Result | What it proved |
+| --- | --- | --- |
+| `_round()` quantises with a bare `.quantize(PLACES)`, inheriting the context | **4 of 4** rounding tests fail, every one `Decimal('74.50') != Decimal('74.51')` | the rounding mode is asserted rather than commented, including the test that forces the context to `ROUND_DOWN` |
+| subject positions re-read the marks, once per subject | `10 != 2` on eight subjects, and the growth test `10 != 4` | the one-read property is pinned by query count, and the per-subject loop cannot come back unnoticed |
+| `class_average()` re-derives the mean itself with a bare `.quantize(PLACES)` | **passed — 4 tests, OK** | the test was aimed one level too low. Re-aimed, the same break fails it `74.50 != 74.51` |
+| columns come from `Subject.objects` instead of from the marks | unit test fails `[1, 2, 3] != [1]` — but **all 16 API tests passed** | the unit was pinned and the payload was not. A new API test now fails the same break with `[2, 1, 3] != [1]` |
+
+**Row three is the naive-zero lesson again, one level up.** A class average is
+the mean of the children's *already-rounded* averages, so a single child
+averaging 74.505 has it quantised to 74.51 before the class mean is taken: the
+mean is then 74.51 exactly and both ways of computing it agree, however either
+one rounds. The test asserted a real property of a case that could not exhibit
+the bug. It takes **two** children — 74.50 and 74.51, mean 74.505 — to put the
+half at the level `class_average()` rounds at.
+
+**Row four says where a test lives matters as much as what it asserts.** The
+break was caught by the positions unit test and by nothing in the API module,
+which meant the thing a school actually receives — the JSON — was unpinned. The
+column list is a property of the payload, so it is now asserted on the payload.
+
+Both are the same shape as the naive-zero row above, and worth the repetition:
+a control that fails to break anything has found something, and what it has
+found is in the test.
 
 ## `.order_by()` on the aggregate, again
 

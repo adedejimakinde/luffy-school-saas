@@ -75,7 +75,8 @@ rather than the template, because omitting a field from a card while leaving it
 in the JSON is the same leak with an extra step.
 """
 
-from decimal import Decimal
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Mapping
 
 from django.db.models import Sum
@@ -87,8 +88,33 @@ from gradebook.models import Score
 #: quantised value, so what decides a tie is the number a parent can see.
 PLACES = Decimal("0.01")
 
+#: **Stated, not inherited.** `Decimal.quantize()` with no `rounding=` reads
+#: `decimal.getcontext().rounding`, which defaults to `ROUND_HALF_EVEN` —
+#: banker's rounding, where 74.505 goes down to 74.50 and 75.505 goes down to
+#: 75.50. That is not what a Nigerian report card does, it is not explainable to
+#: a parent at a grade boundary, and because `dense_positions()` ties on the
+#: quantised value it would silently decide positions too.
+#:
+#: Worse, that context is thread-local and mutable: any library in the process
+#: calling `decimal.setcontext()` would change every percentage and every
+#: position on the platform with no code change here. A module whose thesis is
+#: that this number is exact cannot leave its rounding to ambient state.
+#:
+#: The *divisions* below still run in the ambient context, at its 28 significant
+#: digits, and that is left alone on purpose rather than overlooked. A division
+#: that does not terminate cannot land exactly on a half at two places, and one
+#: that does terminate is exact — so the digit the context decides, twenty-odd
+#: places out, cannot move a percentage across a `PLACES` boundary or make two
+#: children tie who otherwise would not. Only the quantise below can do that,
+#: and it is stated.
+ROUNDING = ROUND_HALF_UP
+
 #: The percentage every score is expressed as before anything is compared.
 FULL_MARKS = Decimal(100)
+
+
+def _round(value: Decimal) -> Decimal:
+    return value.quantize(PLACES, rounding=ROUNDING)
 
 
 def _percentage(scored: int, available: int) -> Decimal | None:
@@ -101,7 +127,7 @@ def _percentage(scored: int, available: int) -> Decimal | None:
     """
     if not available:
         return None
-    return (Decimal(scored) * FULL_MARKS / Decimal(available)).quantize(PLACES)
+    return _round(Decimal(scored) * FULL_MARKS / Decimal(available))
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -138,6 +164,112 @@ def _subject_totals(term, student_ids) -> dict[tuple[int, int], tuple[int, int]]
     }
 
 
+@dataclass(frozen=True)
+class ClassResults:
+    """Everything a broadsheet needs, derived from **one** read of the marks.
+
+    This shape exists because of a bug rather than for tidiness. The first
+    version asked the database separately for each number a row needs — the
+    roster, then each subject's percentages, then each subject's positions,
+    then the averages, then the class average — which is both slow and *wrong*.
+
+    Slow: four queries per subject, each one re-aggregating the whole class's
+    marks across every subject and throwing away all but one. Twelve subjects
+    and forty-five children came to fifty-odd round trips for one page.
+
+    Wrong, and this is the half that matters: the gradebook saves one mark per
+    cell-blur, so a teacher marking while another reads the broadsheet is the
+    ordinary case. Under READ COMMITTED each of those queries sees a different
+    moment. A mark landing between the percentage read and the position read
+    produces a row showing 88.00 in 1st place above a row showing 91.00 —
+    exactly the "identical percentages, different positions" failure this
+    module was written to prevent, arriving by a different route.
+
+    Everything below is computed in Python from `_subject_totals()`, so every
+    number on the page comes from the same instant.
+
+    The roster is still a second query, and the residue is honest and small: a
+    child placed between the two reads appears in `student_ids` with no marks
+    and renders blank. Making even that atomic would need `REPEATABLE READ`,
+    which cannot be set inside the transaction `TestCase` wraps every test in.
+    """
+
+    student_ids: list[int]
+    #: Only subjects this class was actually marked in this term — see
+    #: `class_results()` for why the full `Subject` table is the wrong list.
+    subject_ids: list[int]
+    percentages: dict[tuple[int, int], Decimal]
+    subject_positions: dict[tuple[int, int], int]
+    averages: dict[int, Decimal]
+    positions: dict[int, int]
+    class_average: Decimal | None
+
+    def percentage(self, student_id, subject_id) -> Decimal | None:
+        return self.percentages.get((student_id, subject_id))
+
+    def subject_position(self, student_id, subject_id) -> int | None:
+        return self.subject_positions.get((student_id, subject_id))
+
+
+def class_results(class_group, term) -> ClassResults:
+    """The whole broadsheet, from one roster read and one aggregate read.
+
+    `subject_ids` is drawn from the marks rather than from `Subject.objects`,
+    and the difference is visible on the page. The subject table is per school
+    and keeps retired subjects on purpose — `Subject.is_active` says "a subject
+    no longer taught, kept because old scores name it" — so listing all of them
+    puts an all-blank Technical Drawing column on a class that has not been
+    taught it for three sessions, alongside every subject the school teaches to
+    other year groups. What a broadsheet should show is the subjects this class
+    was marked in, which the aggregate already knows.
+    """
+    students = roster_ids(class_group, term)
+    totals = _subject_totals(term, students)
+
+    percentages: dict[tuple[int, int], Decimal] = {}
+    per_student: dict[int, list[Decimal]] = {student: [] for student in students}
+    subject_ids: list[int] = []
+
+    for (student_id, subject_id), (scored, available) in totals.items():
+        percentage = _percentage(scored, available)
+        if percentage is None:
+            continue
+        percentages[(student_id, subject_id)] = percentage
+        per_student[student_id].append(percentage)
+        if subject_id not in subject_ids:
+            subject_ids.append(subject_id)
+
+    averages = {
+        student_id: _round(sum(marks) / Decimal(len(marks)))
+        for student_id, marks in per_student.items()
+        if marks
+    }
+
+    subject_positions: dict[tuple[int, int], int] = {}
+    for subject_id in subject_ids:
+        in_subject = {
+            student_id: value
+            for (student_id, other), value in percentages.items()
+            if other == subject_id
+        }
+        for student_id, position in dense_positions(in_subject).items():
+            subject_positions[(student_id, subject_id)] = position
+
+    return ClassResults(
+        student_ids=students,
+        subject_ids=sorted(subject_ids),
+        percentages=percentages,
+        subject_positions=subject_positions,
+        averages=averages,
+        positions=dense_positions(averages),
+        class_average=(
+            _round(sum(averages.values()) / Decimal(len(averages)))
+            if averages
+            else None
+        ),
+    )
+
+
 def subject_percentages(class_group, term, subject_id) -> dict[int, Decimal]:
     """Every rostered child's percentage in one subject.
 
@@ -145,16 +277,17 @@ def subject_percentages(class_group, term, subject_id) -> dict[int, Decimal]:
     present with a zero or a `None`. A caller ranking this gets only the
     children who can be ranked, and a caller displaying it asks with `.get()`
     and renders a blank.
+
+    A convenience over `class_results()` for a caller that wants one subject.
+    Anything rendering a whole page should use `class_results()` directly, so
+    that every number on it comes from one read.
     """
-    students = roster_ids(class_group, term)
-    totals = _subject_totals(term, students)
-    percentages = {}
-    for student_id in students:
-        scored, available = totals.get((student_id, subject_id), (0, 0))
-        percentage = _percentage(scored, available)
-        if percentage is not None:
-            percentages[student_id] = percentage
-    return percentages
+    results = class_results(class_group, term)
+    return {
+        student_id: value
+        for (student_id, other), value in results.percentages.items()
+        if other == subject_id
+    }
 
 
 def overall_percentages(class_group, term) -> dict[int, Decimal]:
@@ -164,24 +297,13 @@ def overall_percentages(class_group, term) -> dict[int, Decimal]:
     the worked example that separates the two readings. Children with no marks
     at all are absent from the mapping, for the reason `subject_percentages()`
     leaves them out of a single subject.
+
+    **The denominator is that child's own marked-subject count**, which is what
+    makes this the child's own average and is also its sharpest edge: a child
+    marked only in Mathematics and scoring 100 averages 100.00 and outranks a
+    child marked in ten subjects averaging 95. See the module docstring.
     """
-    students = roster_ids(class_group, term)
-    totals = _subject_totals(term, students)
-
-    per_student: dict[int, list[Decimal]] = {student: [] for student in students}
-    for (student_id, _subject_id), (scored, available) in totals.items():
-        percentage = _percentage(scored, available)
-        if percentage is not None:
-            per_student[student_id].append(percentage)
-
-    averages = {}
-    for student_id, subjects in per_student.items():
-        if not subjects:
-            continue
-        averages[student_id] = (sum(subjects) / Decimal(len(subjects))).quantize(
-            PLACES
-        )
-    return averages
+    return class_results(class_group, term).averages
 
 
 def dense_positions(values: Mapping[int, Decimal]) -> dict[int, int]:
@@ -191,8 +313,9 @@ def dense_positions(values: Mapping[int, Decimal]) -> dict[int, int]:
     competition ranking (1, 2, 2, 4) changes this function and nothing else.
 
     Ties are found by equality on the `Decimal` handed in, so a caller that
-    quantises differently from `_percentage()` would get a different answer —
-    which is why nothing else in this module rounds.
+    quantises differently would get a different answer — which is why every
+    value this module produces goes through `_round()`, and why `_round()` is
+    the only place a rounding mode is named.
     """
     ordered = sorted(set(values.values()), reverse=True)
     position_of = {value: index + 1 for index, value in enumerate(ordered)}
@@ -201,12 +324,17 @@ def dense_positions(values: Mapping[int, Decimal]) -> dict[int, int]:
 
 def subject_positions(class_group, term, subject_id) -> dict[int, int]:
     """Position in one subject, out of the class roster for that term."""
-    return dense_positions(subject_percentages(class_group, term, subject_id))
+    results = class_results(class_group, term)
+    return {
+        student_id: position
+        for (student_id, other), position in results.subject_positions.items()
+        if other == subject_id
+    }
 
 
 def class_positions(class_group, term) -> dict[int, int]:
     """Position in class, on the child's own average across their subjects."""
-    return dense_positions(overall_percentages(class_group, term))
+    return class_results(class_group, term).positions
 
 
 def class_average(class_group, term) -> Decimal | None:
@@ -223,16 +351,23 @@ def class_average(class_group, term) -> Decimal | None:
     `None` when nobody in the class has a mark, which is the honest answer and
     the one a caller can render as a dash. Zero would claim the class sat
     exams and scored nothing.
+
+    Delegates rather than re-deriving, and that is not tidiness. This function
+    used to compute the mean itself and quantise it with a bare
+    `.quantize(PLACES)` — inheriting `ROUND_HALF_EVEN` from the decimal context
+    while `class_results()` rounded the same mean with `ROUNDING`. At a mean of
+    74.505 the two disagreed: 74.50 here, 74.51 there. One number, computed two
+    ways, printed differently depending on which caller asked. There is now one
+    way to compute it.
     """
-    averages = overall_percentages(class_group, term)
-    if not averages:
-        return None
-    return (sum(averages.values()) / Decimal(len(averages))).quantize(PLACES)
+    return class_results(class_group, term).class_average
 
 
 __all__ = [
+    "ClassResults",
     "class_average",
     "class_positions",
+    "class_results",
     "dense_positions",
     "overall_percentages",
     "roster_ids",

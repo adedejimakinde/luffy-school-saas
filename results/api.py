@@ -172,34 +172,40 @@ def broadsheet(request, class_group_id: int, term_id: int):
     class_group = get_object_or_404(ClassGroup, pk=class_group_id)
     term = get_object_or_404(Term, pk=term_id)
 
-    student_ids = positions.roster_ids(class_group, term)
-    names = _named(student_ids)
-    averages = positions.overall_percentages(class_group, term)
-    overall = positions.dense_positions(averages)
+    # One read of the marks for the whole page. Asking per row or per subject
+    # would put every number on this response at a different instant — and the
+    # gradebook saves a mark per cell-blur, so a teacher marking while a HOD
+    # reads this is the ordinary case, not a race worth discounting. The
+    # visible symptom is the one this module exists to prevent: 88.00 printed
+    # above 91.00 because the percentage and the position were read either side
+    # of an incoming mark. See `positions.ClassResults`.
+    results = positions.class_results(class_group, term)
+    names = _named(results.student_ids)
 
-    subjects = list(Subject.objects.all())
-    per_subject = {
-        subject.pk: (
-            positions.subject_percentages(class_group, term, subject.pk),
-            positions.subject_positions(class_group, term, subject.pk),
-        )
-        for subject in subjects
-    }
+    # Only the subjects this class was actually marked in, which is what
+    # `results.subject_ids` holds. `Subject.objects.all()` is the wrong list:
+    # the table is per school and keeps retired subjects on purpose, so it puts
+    # an all-blank column on the sheet for every subject the school teaches to
+    # anybody. Ordered by `Subject.Meta.ordering`, so columns stay alphabetical
+    # rather than falling into primary-key order.
+    subjects = list(Subject.objects.filter(pk__in=results.subject_ids))
 
     rows = []
-    for student_id in student_ids:
+    for student_id in results.student_ids:
         rows.append(
             PlacingOut(
                 student_membership_id=student_id,
                 student=names.get(student_id, "—"),
-                average=_as_text(averages.get(student_id)),
-                position=overall.get(student_id),
+                average=_as_text(results.averages.get(student_id)),
+                position=results.positions.get(student_id),
                 subjects=[
                     SubjectPlacingOut(
                         subject_id=subject.pk,
                         subject=subject.name,
-                        percentage=_as_text(per_subject[subject.pk][0].get(student_id)),
-                        position=per_subject[subject.pk][1].get(student_id),
+                        percentage=_as_text(
+                            results.percentage(student_id, subject.pk)
+                        ),
+                        position=results.subject_position(student_id, subject.pk),
                     )
                     for subject in subjects
                 ],
@@ -209,7 +215,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
     return BroadsheetOut(
         class_group=str(class_group),
         term=str(term),
-        class_average=_as_text(positions.class_average(class_group, term)),
+        class_average=_as_text(results.class_average),
         rows=rows,
     )
 

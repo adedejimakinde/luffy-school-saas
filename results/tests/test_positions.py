@@ -11,14 +11,21 @@ The properties, one section each:
 - ties decided on the number as printed, not on an unrounded one;
 - an unmarked child has no position rather than the last one;
 - the overall average is the child's own across their subjects, not a weighted
-  total and not the class's.
+  total and not the class's;
+- half-way values round the same way whatever the ambient decimal context says,
+  and whichever function a caller happens to reach for;
+- a whole page comes from **one** read of the marks, so no two numbers on it
+  are separated by an incoming mark.
 """
 
 import contextlib
+import decimal
 from datetime import date
 from decimal import Decimal
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django_tenants.utils import schema_context
 
 from academics.models import ClassGroup, Term, TermName
@@ -390,3 +397,286 @@ class RankingIsScopedToTheTermTests(PositionSetUp):
 
         self.assertEqual(first_term[ada.pk], Decimal("40.00"))
         self.assertEqual(second_term[ada.pk], Decimal("90.00"))
+
+
+class RoundingIsStatedNotInheritedTests(PositionSetUp):
+    """Half-way values, and the two ways this module used to lose them.
+
+    `Decimal.quantize()` with no `rounding=` reads
+    `decimal.getcontext().rounding`, which is `ROUND_HALF_EVEN` — banker's
+    rounding, where 74.505 goes *down* to 74.50. That is not what a Nigerian
+    report card does, and because `dense_positions()` ties on the quantised
+    value it decides positions as well as printed numbers.
+
+    Two properties, and the second is the one that was actually broken:
+
+    - the rounding does not follow the ambient decimal context, which is
+      thread-local and mutable by any library in the process;
+    - every function that produces a given number rounds it the same way.
+    """
+
+    def _child_averaging_74_505(self, username="ada", full_name="Ada A"):
+        """A child whose own average is exactly 74.505.
+
+        88.00 in Maths and 61.01 in English: (88.00 + 61.01) / 2 = 74.505,
+        which is a true half and so is decided entirely by the rounding mode.
+        61.01 needs a denominator finer than 100, hence 6101 out of 10000.
+        """
+        child = self.enrol(
+            self.stmarys, username, full_name, self.group_id, self.term_id
+        )
+        self.mark(self.stmarys, self.term_id, self.maths_id, child, 88)
+        self.mark(
+            self.stmarys,
+            self.term_id,
+            self.english_id,
+            child,
+            6101,
+            out_of=10000,
+        )
+        return child
+
+    def test_a_half_is_rounded_up_not_to_even(self):
+        child = self._child_averaging_74_505()
+
+        with connected_to(self.stmarys):
+            averages = positions.overall_percentages(
+                *self.group_and_term(self.group_id, self.term_id)
+            )
+
+        self.assertEqual(
+            averages[child.pk],
+            Decimal("74.51"),
+            "74.505 came back as banker's rounding would leave it",
+        )
+
+    def test_the_ambient_decimal_context_cannot_change_a_printed_number(self):
+        """The control: force the context to a mode that would change it.
+
+        `ROUND_DOWN` would make 74.505 print as 74.50. If this module inherited
+        the context — as it did before `ROUNDING` was stated — this assertion
+        would fail, which is exactly what makes it a test rather than a comment.
+        """
+        child = self._child_averaging_74_505()
+
+        with decimal.localcontext() as context:
+            context.rounding = decimal.ROUND_DOWN
+            with connected_to(self.stmarys):
+                averages = positions.overall_percentages(
+                    *self.group_and_term(self.group_id, self.term_id)
+                )
+
+        self.assertEqual(averages[child.pk], Decimal("74.51"))
+
+    def _child_averaging_74_50(self, username="tayo", full_name="Tayo T"):
+        """A child whose own average is exactly 74.50, with nothing to round.
+
+        88.00 and 61.00, both out of 100. On its own this child is not
+        interesting; paired with the 74.505 one it puts the half **in the class
+        mean**, which is the level `class_average()` rounds at.
+        """
+        child = self.enrol(
+            self.stmarys, username, full_name, self.group_id, self.term_id
+        )
+        self.mark(self.stmarys, self.term_id, self.maths_id, child, 88)
+        self.mark(self.stmarys, self.term_id, self.english_id, child, 61)
+        return child
+
+    def test_the_class_average_agrees_with_the_broadsheets_copy_of_it(self):
+        """One number, and it used to be computed two ways.
+
+        `class_average()` derived the mean itself and quantised it with a bare
+        `.quantize(PLACES)`, inheriting `ROUND_HALF_EVEN`, while
+        `class_results().class_average` rounded the same mean with `ROUNDING`.
+        At a class mean of 74.505 they disagreed — 74.50 from one, 74.51 from
+        the other — so which number a parent's teacher quoted depended on which
+        function their screen happened to call.
+
+        **The half has to be in the class mean, not in a child's own average**,
+        and the first version of this test got that wrong. One child averaging
+        74.505 proves nothing here: their average is quantised to 74.51 *before*
+        the class mean is taken, so the mean is 74.51 exactly and the two code
+        paths agree however either of them rounds. Restoring the bug left the
+        test passing, which is how the mistake was found — see the control table
+        in docs/positions.md.
+
+        So: two children, 74.50 and 74.51, whose mean is (74.50 + 74.51) / 2 =
+        74.505. `ROUND_HALF_UP` makes that 74.51; the inherited
+        `ROUND_HALF_EVEN` makes it 74.50, because 0 is the even digit.
+        """
+        self._child_averaging_74_505()
+        self._child_averaging_74_50()
+
+        with connected_to(self.stmarys):
+            group, term = self.group_and_term(self.group_id, self.term_id)
+            standalone = positions.class_average(group, term)
+            from_results = positions.class_results(group, term).class_average
+
+        self.assertEqual(standalone, Decimal("74.51"))
+        self.assertEqual(standalone, from_results)
+
+    def test_the_other_school_rounds_the_same_way(self):
+        """The rule is the module's, not one schema's."""
+        theirs = self.enrol(
+            self.grace, "chika", "Chika C", self.their_group_id, self.their_term_id
+        )
+        self.mark(self.grace, self.their_term_id, self.their_maths_id, theirs, 88)
+        self.mark(
+            self.grace,
+            self.their_term_id,
+            self.their_english_id,
+            theirs,
+            6101,
+            out_of=10000,
+        )
+
+        with connected_to(self.grace):
+            averages = positions.overall_percentages(
+                *self.group_and_term(self.their_group_id, self.their_term_id)
+            )
+
+        self.assertEqual(averages[theirs.pk], Decimal("74.51"))
+
+
+class OneReadForTheWholePageTests(PositionSetUp):
+    """Every number on a broadsheet comes from the same instant.
+
+    The failure this guards is not slowness. The gradebook saves one mark per
+    cell-blur, so a teacher marking while a HOD reads the broadsheet is the
+    ordinary case; under READ COMMITTED a page that asks the database once per
+    subject sees a different moment in each answer. A mark landing between the
+    percentage read and the position read prints 88.00 in 1st place above a row
+    showing 91.00 — the same "identical percentages, different positions"
+    failure the module exists to prevent, reached by a different route.
+
+    Query *counts* are the observable proxy: a page whose cost does not grow
+    with the number of subjects is a page that is not re-reading per subject.
+    """
+
+    def _class_of_two(self, subject_ids):
+        ada = self.enrol(self.stmarys, "ada", "Ada A", self.group_id, self.term_id)
+        bola = self.enrol(self.stmarys, "bola", "Bola B", self.group_id, self.term_id)
+        for subject_id in subject_ids:
+            self.mark(self.stmarys, self.term_id, subject_id, ada, 88)
+            self.mark(self.stmarys, self.term_id, subject_id, bola, 61)
+        return ada, bola
+
+    def _more_subjects(self, how_many):
+        with connected_to(self.stmarys):
+            return [
+                Subject.objects.create(name=f"Subject {n}", code=f"S{n}").pk
+                for n in range(how_many)
+            ]
+
+    @staticmethod
+    def _reads(captured):
+        """The captured SQL, minus `schema_context`'s own bookkeeping.
+
+        `django_tenants` issues a `SET search_path` on entering and leaving a
+        schema. Those are real round trips but they are the harness, not the
+        page, and counting them would make this assertion about how the test is
+        written rather than about how many times the marks are read.
+        """
+        return [
+            query["sql"]
+            for query in captured.captured_queries
+            if not query["sql"].startswith("SET search_path")
+        ]
+
+    def test_class_results_reads_the_marks_once_however_many_subjects(self):
+        """The roster, then the marks. Not once per subject."""
+        extra = self._more_subjects(6)
+        self._class_of_two([self.maths_id, self.english_id, *extra])
+
+        with connected_to(self.stmarys):
+            group, term = self.group_and_term(self.group_id, self.term_id)
+            with CaptureQueriesContext(connection) as captured:
+                results = positions.class_results(group, term)
+
+        reads = self._reads(captured)
+        self.assertEqual(len(results.subject_ids), 8)
+        self.assertEqual(
+            len(reads),
+            2,
+            "one query per subject is the stale-read bug, not a slow page:\n"
+            + "\n".join(sql[:120] for sql in reads),
+        )
+        self.assertEqual(
+            len([sql for sql in reads if "gradebook_score" in sql]),
+            1,
+            "the marks were read more than once",
+        )
+
+    def test_the_cost_does_not_grow_with_the_subject_count(self):
+        """Two subjects and eight subjects cost the same.
+
+        Stated as a comparison rather than a fixed number so the test survives
+        an unrelated extra query elsewhere, and still fails the moment the
+        per-subject loop comes back.
+        """
+        ada, bola = self._class_of_two([self.maths_id, self.english_id])
+
+        with connected_to(self.stmarys):
+            group, term = self.group_and_term(self.group_id, self.term_id)
+            with CaptureQueriesContext(connection) as two_subjects:
+                positions.class_results(group, term)
+
+        for subject_id in self._more_subjects(6):
+            for student in (ada, bola):
+                self.mark(self.stmarys, self.term_id, subject_id, student, 70)
+
+        with connected_to(self.stmarys):
+            group, term = self.group_and_term(self.group_id, self.term_id)
+            with CaptureQueriesContext(connection) as eight_subjects:
+                results = positions.class_results(group, term)
+
+        self.assertEqual(len(results.subject_ids), 8)
+        self.assertEqual(
+            len(self._reads(eight_subjects)),
+            len(self._reads(two_subjects)),
+        )
+
+    def test_a_subject_nobody_was_marked_in_is_not_a_column(self):
+        """`subject_ids` comes from the marks, not from `Subject.objects`.
+
+        The subject table keeps retired subjects on purpose — `is_active` says
+        "no longer taught, kept because old scores name it" — so ranging over
+        all of them puts an all-blank column on the sheet for every subject the
+        school teaches to anybody.
+        """
+        self._class_of_two([self.maths_id])
+        with connected_to(self.stmarys):
+            retired = Subject.objects.create(
+                name="Technical Drawing", code="TD", is_active=False
+            )
+
+        with connected_to(self.stmarys):
+            results = positions.class_results(
+                *self.group_and_term(self.group_id, self.term_id)
+            )
+
+        self.assertEqual(results.subject_ids, [self.maths_id])
+        self.assertNotIn(retired.pk, results.subject_ids)
+        self.assertNotIn(self.english_id, results.subject_ids)
+
+    def test_the_other_school_is_read_in_its_own_schema(self):
+        """Two tenants, because a roster query missing its filter reads fine on
+        one school and wrongly on two."""
+        self._class_of_two([self.maths_id])
+        theirs = self.enrol(
+            self.grace, "chika", "Chika C", self.their_group_id, self.their_term_id
+        )
+        self.mark(self.grace, self.their_term_id, self.their_maths_id, theirs, 95)
+
+        with connected_to(self.stmarys):
+            ours = positions.class_results(
+                *self.group_and_term(self.group_id, self.term_id)
+            )
+        with connected_to(self.grace):
+            others = positions.class_results(
+                *self.group_and_term(self.their_group_id, self.their_term_id)
+            )
+
+        self.assertNotIn(theirs.pk, ours.student_ids)
+        self.assertEqual(others.student_ids, [theirs.pk])
+        self.assertEqual(others.averages[theirs.pk], Decimal("95.00"))

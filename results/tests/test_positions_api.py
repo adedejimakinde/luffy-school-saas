@@ -28,7 +28,8 @@ from django.db import connection
 from academics.models import ClassGroup, Term
 from accounts.models import Role, User
 from accounts.services import grant_membership, link_guardian
-from results.tests.test_positions import PASSWORD, PositionSetUp
+from gradebook.models import Subject
+from results.tests.test_positions import PASSWORD, PositionSetUp, connected_to
 from schools.models import Domain, School
 
 HOST = "st-marys.testserver"
@@ -118,6 +119,43 @@ class StaffCanSeeThePositionTests(BroadsheetApiSetUp):
         ][0]
         self.assertEqual(maths["position"], 1)
         self.assertEqual(maths["percentage"], "88.00")
+
+    def test_the_columns_are_the_subjects_the_class_was_marked_in(self):
+        """Not every subject the school has a row for.
+
+        `setUp` creates Mathematics *and* English and marks only Mathematics, so
+        a broadsheet built from `Subject.objects.all()` carries an all-blank
+        English column here. The subject table is per school and deliberately
+        keeps subjects nobody is taught any more — `is_active` reads "a subject
+        no longer taught. Kept, because old scores name it" — so on a real
+        school that column is one per retired subject and one per subject taught
+        only to another year group.
+
+        Asserted at the API because that is the surface it reaches. The control
+        run that broke `class_results()` into listing the whole table failed the
+        unit test and left all sixteen tests in this module passing, which said
+        the payload itself was unpinned.
+        """
+        with connected_to(self.stmarys):
+            retired = Subject.objects.create(
+                name="Technical Drawing", code="TD", is_active=False
+            )
+
+        response = self.signed_in(self.principal)
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = response.json()["rows"]
+        self.assertEqual(len(rows), 2)
+
+        for row in rows:
+            with self.subTest(student=row["student"]):
+                self.assertEqual(
+                    [s["subject_id"] for s in row["subjects"]],
+                    [self.maths_id],
+                    "a subject with no marks in this class became a column",
+                )
+                self.assertNotIn(
+                    retired.pk, [s["subject_id"] for s in row["subjects"]]
+                )
 
     def test_an_unmarked_child_comes_back_blank_rather_than_zero(self):
         absent = self.enrol(
