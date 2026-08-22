@@ -76,7 +76,7 @@ in the JSON is the same leak with an extra step.
 """
 
 from dataclasses import dataclass
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Context, Decimal, localcontext
 from typing import Mapping
 
 from django.db.models import Sum
@@ -99,22 +99,48 @@ PLACES = Decimal("0.01")
 #: calling `decimal.setcontext()` would change every percentage and every
 #: position on the platform with no code change here. A module whose thesis is
 #: that this number is exact cannot leave its rounding to ambient state.
-#:
-#: The *divisions* below still run in the ambient context, at its 28 significant
-#: digits, and that is left alone on purpose rather than overlooked. A division
-#: that does not terminate cannot land exactly on a half at two places, and one
-#: that does terminate is exact — so the digit the context decides, twenty-odd
-#: places out, cannot move a percentage across a `PLACES` boundary or make two
-#: children tie who otherwise would not. Only the quantise below can do that,
-#: and it is stated.
+#: `CONTEXT` below closes the rest of that hole.
 ROUNDING = ROUND_HALF_UP
 
 #: The percentage every score is expressed as before anything is compared.
 FULL_MARKS = Decimal(100)
 
+#: **The whole calculation runs in this, not in whatever the caller left set.**
+#:
+#: Pinning `ROUNDING` alone was not enough, and the gap is worth spelling out
+#: because the first version of this module claimed to have closed it. A context
+#: carries a *precision* as well as a rounding mode, and `prec` is thread-local
+#: and mutable in exactly the same way. Two things follow from a small one:
+#:
+#: - `Decimal.quantize()` raises `InvalidOperation` when the quantised
+#:   coefficient needs more digits than `prec`. At `prec=3`, quantising 74.505
+#:   to two places wants four digits and raises — so a library calling
+#:   `decimal.setcontext()` anywhere in the process turns every broadsheet on
+#:   the platform into a 500, not a wrong number;
+#: - the divisions lose their significant digits first. At `prec=3`,
+#:   `6101 * 100 / 10000` comes back 61.0 rather than 61.01, and the printed
+#:   percentage is wrong before any rounding decision is reached.
+#:
+#: 28 digits is CPython's own default, so this pins the arithmetic to what it
+#: already does rather than changing any number — what it removes is the
+#: possibility of somebody else changing it. `_round()` still names `ROUNDING`
+#: explicitly, which is belt and braces and costs nothing.
+CONTEXT = Context(prec=28, rounding=ROUNDING)
+
 
 def _round(value: Decimal) -> Decimal:
-    return value.quantize(PLACES, rounding=ROUNDING)
+    with localcontext(CONTEXT):
+        return value.quantize(PLACES, rounding=ROUNDING)
+
+
+def _mean(values) -> Decimal:
+    """The mean of some already-quantised percentages, quantised again.
+
+    One function because two callers used to do this inline and one of them
+    rounded differently — see `class_average()`.
+    """
+    with localcontext(CONTEXT):
+        return _round(sum(values) / Decimal(len(values)))
 
 
 def _percentage(scored: int, available: int) -> Decimal | None:
@@ -127,7 +153,8 @@ def _percentage(scored: int, available: int) -> Decimal | None:
     """
     if not available:
         return None
-    return _round(Decimal(scored) * FULL_MARKS / Decimal(available))
+    with localcontext(CONTEXT):
+        return _round(Decimal(scored) * FULL_MARKS / Decimal(available))
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -240,7 +267,7 @@ def class_results(class_group, term) -> ClassResults:
             subject_ids.append(subject_id)
 
     averages = {
-        student_id: _round(sum(marks) / Decimal(len(marks)))
+        student_id: _mean(marks)
         for student_id, marks in per_student.items()
         if marks
     }
@@ -263,9 +290,7 @@ def class_results(class_group, term) -> ClassResults:
         averages=averages,
         positions=dense_positions(averages),
         class_average=(
-            _round(sum(averages.values()) / Decimal(len(averages)))
-            if averages
-            else None
+            _mean(averages.values()) if averages else None
         ),
     )
 

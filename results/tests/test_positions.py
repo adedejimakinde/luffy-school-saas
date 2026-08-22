@@ -482,6 +482,29 @@ class RoundingIsStatedNotInheritedTests(PositionSetUp):
         self.mark(self.stmarys, self.term_id, self.english_id, child, 61)
         return child
 
+    def test_a_small_ambient_precision_cannot_break_the_page(self):
+        """The other half of the context, and it fails louder than a wrong number.
+
+        `prec` is thread-local and mutable exactly like `rounding`, and pinning
+        only the rounding mode left this open. At `prec=3` two separate things go
+        wrong: the division `6101 * 100 / 10000` comes back 61.0 rather than
+        61.01, so the percentage is wrong before any rounding happens; and
+        `quantize()` raises `InvalidOperation`, because 74.51 needs four digits
+        and only three are allowed. The second is the worse one — a library
+        calling `decimal.setcontext()` anywhere in the process turns every
+        broadsheet on the platform into a 500.
+        """
+        child = self._child_averaging_74_505()
+
+        with decimal.localcontext() as context:
+            context.prec = 3
+            with connected_to(self.stmarys):
+                averages = positions.overall_percentages(
+                    *self.group_and_term(self.group_id, self.term_id)
+                )
+
+        self.assertEqual(averages[child.pk], Decimal("74.51"))
+
     def test_the_class_average_agrees_with_the_broadsheets_copy_of_it(self):
         """One number, and it used to be computed two ways.
 

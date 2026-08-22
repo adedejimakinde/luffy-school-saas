@@ -138,12 +138,29 @@ def _require_position_authority(actor, school):
         raise Http404("No such broadsheet.")
 
 
-def _named(student_ids) -> dict:
-    """`membership id -> the child's name`, in one query."""
+def _named(school, student_ids) -> dict:
+    """`membership id -> the child's name`, in one query.
+
+    **Scoped to this school and to STUDENT in the lookup itself**, on the
+    reasoning `gradebook.api._student_here()` sets out: a membership at another
+    school is *not found* rather than found and then trusted.
+
+    That matters more here than it looks, because of what the roster is made of.
+    `ClassPlacement.student_membership_id` is a bare integer into the shared
+    `public` membership table — no foreign key and no database integrity, the
+    policy `docs/tenancy.md` settles — and it is checked against
+    `why_not_a_student_here()` only at write time, by `academics.services`. A
+    placement row that reached the table another way (a bad import, a script, a
+    hand-edited row) would otherwise put another school's child's real name on
+    this sheet, which is the one thing tenancy is supposed to make impossible.
+
+    Narrowed, such a row simply has no name and renders `"—"`, the same blank an
+    unmarked child gets.
+    """
     return {
         membership.pk: membership.user.full_name or membership.user.username
         for membership in Membership.objects.select_related("user").filter(
-            pk__in=student_ids
+            pk__in=student_ids, school=school, role=Role.STUDENT
         )
     }
 
@@ -180,7 +197,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
     # above 91.00 because the percentage and the position were read either side
     # of an incoming mark. See `positions.ClassResults`.
     results = positions.class_results(class_group, term)
-    names = _named(results.student_ids)
+    names = _named(school, results.student_ids)
 
     # Only the subjects this class was actually marked in, which is what
     # `results.subject_ids` holds. `Subject.objects.all()` is the wrong list:

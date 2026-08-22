@@ -69,12 +69,28 @@ So `ROUNDING = ROUND_HALF_UP` is named once, `_round()` is the only function
 that quantises, and there is a test that forces the context to `ROUND_DOWN` and
 asserts the answer does not move.
 
-The **divisions** still run in the ambient context, at its 28 significant
-digits, and that is a decision rather than an oversight. A division that does
-not terminate cannot land exactly on a half at two places, and one that
-terminates is exact — so the digit the context decides twenty-odd places out
-cannot push a percentage across a `PLACES` boundary, and cannot make two
-children tie who otherwise would not. Only the quantise can, and it is stated.
+### Naming the rounding mode was not enough
+
+The first version of this stopped there, and said in a comment that the module
+no longer depended on ambient state. It still did. **A context carries a
+precision as well as a rounding mode**, and `prec` is thread-local and mutable
+in exactly the same way. Set it low and two things break, in order:
+
+- the **divisions** lose their significant digits first. At `prec=3`,
+  `6101 × 100 / 10000` comes back `61.0` rather than `61.01`, so the percentage
+  is already wrong before any rounding decision is reached;
+- `quantize()` then raises **`InvalidOperation`**, because 74.51 needs four
+  digits and only three are allowed. That is not a wrong number on a card, it is
+  a 500 on every broadsheet on the platform, caused by a library the results
+  code has never heard of.
+
+So the whole calculation runs in `CONTEXT = Context(prec=28, rounding=ROUNDING)`
+rather than in whatever the caller left set. 28 digits is CPython's own default,
+so this changes no number that was ever printed — what it removes is somebody
+else's ability to change them. The control is in the table below and it fails
+with `decimal.InvalidOperation`, which is the point: the guarantee the docs
+claimed and the guarantee the test pinned were not the same guarantee until
+this landed.
 
 ## "Not marked" is not zero, in the arithmetic as well as the table
 
@@ -210,6 +226,29 @@ any other year group. The aggregate already knows which subjects have marks.
 Ordering is `Subject.Meta.ordering`, which is `["name"]`, so the columns stay
 alphabetical rather than falling into primary-key order.
 
+## The roster is bare integers, so the name lookup is narrow
+
+`ClassPlacement.student_membership_id` points into the shared `public` membership
+table with **no foreign key and no database integrity** — the policy
+`docs/tenancy.md` settles for every cross-schema reference in this project, and
+the one `fees.FeeLedgerEntry` and `gradebook.Score` already follow.
+`academics.services.place_student()` checks the id names a student of this
+school, but that check runs **at write time and is the only thing standing
+there**. A row that arrived another way — a bad import, a data migration, a hand
+edit — carries whatever id it was given.
+
+So the broadsheet must not assume its own roster. `_named()` looks memberships up
+scoped to this school and to `Role.STUDENT`, on the reasoning
+`gradebook.api._student_here()` sets out: a membership at another school is *not
+found* rather than found and then trusted. Looked up unscoped, one such row puts
+another school's child's **real name** on this school's sheet — a cross-tenant
+disclosure produced by a read, from a view behaving correctly in every other
+respect. The control below shows the payload it produces.
+
+The row is rendered **blank, not dropped**. It is still on the roster and still
+wrong, and a sheet that hides it hides the corruption too; a dash is the same
+answer an unmarked child gets, and it is one a school can see and ask about.
+
 ## Control experiments
 
 The method as ever: break one thing deliberately, re-run, read the failure.
@@ -255,6 +294,23 @@ column list is a property of the payload, so it is now asserted on the payload.
 Both are the same shape as the naive-zero row above, and worth the repetition:
 a control that fails to break anything has found something, and what it has
 found is in the test.
+
+### The code-review round
+
+Two more, from the review of the branch. Both were low severity and both were
+worth fixing, because each is a failure only a second school or a second thread
+can produce.
+
+| Broken | Result | What it proved |
+| --- | --- | --- |
+| `_named()` looks memberships up unscoped again | the response body carries `"student_membership_id": 20, "student": "Chika C"` — Grace Academy's child, named on St Mary's sheet | the narrow lookup is what stops a corrupt roster row becoming a cross-tenant disclosure, and the assertion is on the bytes rather than on a flag |
+| the arithmetic runs in the ambient context again | `decimal.InvalidOperation` at `prec=3` | the exposure was a 500 on every broadsheet, not a wrong number, and the old comment claimed a guarantee no test held it to |
+
+The second is the more instructive. The comment already said the module did not
+depend on ambient state; it was true of the rounding mode and false of the
+precision, and nothing failed, because the test varied only the half the comment
+had got right. A claim in a docstring is not pinned until a control tries the
+part of it nobody thought about.
 
 ## `.order_by()` on the aggregate, again
 

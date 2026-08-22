@@ -25,7 +25,7 @@ together, and neither one alone answers it.
 
 from django.db import connection
 
-from academics.models import ClassGroup, Term
+from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Role, User
 from accounts.services import grant_membership, link_guardian
 from gradebook.models import Subject
@@ -215,6 +215,75 @@ class PositionNeverReachesAFamilyTests(BroadsheetApiSetUp):
 
         self.assertNotIn(b"class_average", response.content.lower())
         self.assertNotIn(b"74.50", response.content)
+
+
+class ARosterRowNamingAnotherSchoolsChildTests(BroadsheetApiSetUp):
+    """The roster is bare integers, so the name lookup has to be narrow.
+
+    `ClassPlacement.student_membership_id` points into the shared `public`
+    membership table with **no foreign key and no database integrity** — the
+    policy `docs/tenancy.md` settles for every cross-schema reference in this
+    project. `academics.services.place_student()` checks the id names a student
+    of this school, but that check runs at write time and is the only thing
+    standing there: a row inserted by a bad import, a data migration or a hand
+    edit carries whatever id it was given.
+
+    So the question this asks is what the broadsheet does with a roster row it
+    should never have had. Looking names up unscoped, it prints another school's
+    child's real name — a cross-tenant disclosure produced by a *read*, from a
+    view that is behaving correctly otherwise. Looked up narrowly, the row has no
+    name and renders the same blank an unmarked child gets.
+
+    Written by inserting the row directly, on purpose. Going through
+    `place_student()` would be testing the write-time guard, which already has
+    its own tests; this is about the read not trusting it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.their_child = self.enrol(
+            self.grace, "chika", "Chika C", self.their_group_id, self.their_term_id
+        )
+        with connected_to(self.stmarys):
+            ClassPlacement.objects.create(
+                class_group=ClassGroup.objects.get(pk=self.group_id),
+                term=Term.objects.get(pk=self.term_id),
+                student_membership_id=self.their_child.pk,
+            )
+
+    def test_the_other_schools_child_is_not_named_on_our_sheet(self):
+        response = self.signed_in(self.principal)
+        self.assertEqual(response.status_code, 200, response.content)
+
+        self.assertNotIn(
+            b"Chika C",
+            response.content,
+            "a placement row carrying another school's membership id put that "
+            "child's real name on this school's broadsheet",
+        )
+
+    def test_the_row_renders_blank_rather_than_disappearing(self):
+        """Blank, not dropped.
+
+        The row is still on the roster and still wrong, and a sheet that hides
+        it hides the corruption too. A dash is the same answer an unmarked child
+        gets, and it is the one a school can see and ask about.
+        """
+        response = self.signed_in(self.principal)
+        rows = {r["student_membership_id"]: r for r in response.json()["rows"]}
+
+        self.assertIn(self.their_child.pk, rows)
+        self.assertEqual(rows[self.their_child.pk]["student"], "—")
+        self.assertIsNone(rows[self.their_child.pk]["average"])
+        self.assertIsNone(rows[self.their_child.pk]["position"])
+
+    def test_our_own_children_are_still_named(self):
+        """The control on the control: narrowing must not blank the whole sheet."""
+        response = self.signed_in(self.principal)
+        rows = {r["student_membership_id"]: r for r in response.json()["rows"]}
+
+        self.assertEqual(rows[self.child.pk]["student"], "Ada A")
+        self.assertEqual(rows[self.classmate.pk]["student"], "Bisi B")
 
 
 class TheRefusalIsNotAnExistenceOracleTests(BroadsheetApiSetUp):
