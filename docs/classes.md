@@ -185,6 +185,67 @@ id carried across the boundary does not fail to resolve, it resolves to somebody
 else's row — and it is worth a test that states it rather than a comment
 somewhere hoping to be read.
 
+## The class teacher, and the authority it carries
+
+`ClassTeacher` says who is answerable for one group in one term. It exists
+because of an authorisation gap rather than for completeness
+([issue #25](https://github.com/adedejimakinde/luffy-school-saas/issues/25)).
+
+`results.services.SUBMITTING_ROLES` admitted any `TEACHER` at the school, under
+a comment reading *"a class teacher submits"* — and nothing enforced that,
+because there was no class teacher to enforce against. `_require_authority()`
+asks `roles_at(school)`, which is school-wide; nothing bound the actor to the
+`class_group` on the sheet. **A JSS 1A teacher could submit JSS 3B's results**,
+and the transition row would record them as that class's submitting signatory:
+an audit trail accurate about who acted and silent about their having had no
+standing to.
+
+### Per term, for the reason placements are
+
+A class teacher changes between terms — leave, reassignment in January — and
+everything a report card is reckoned from is already per term. A group-scoped
+assignment would have to be *edited* to describe that change, which would
+silently rewrite who was answerable for a card that had already gone home. The
+constraint is one teacher per `(class_group, term)`.
+
+Reassignment is an **update, not a second row**: the question every caller asks
+is "who is it now", and two rows would make `is_class_teacher()` answer yes for
+both the first time anybody was replaced. The history question — *who actually
+submitted this* — is already answered by `ResultSheetTransition.actor_id`, which
+is append-only and cannot be rewritten by a later reassignment.
+
+A school with co-form-teachers is a real thing and is **not** modelled. "The
+class teacher" is who signs; two people who both signed is a different design
+with a different audit story.
+
+### Three refusals, and they are different sentences
+
+| | |
+| --- | --- |
+| a teacher of another group | *not the class teacher of JSS 1A* — the hole this closes |
+| a group with nobody assigned | *JSS 1A has no class teacher for this term* — a configuration problem, and the message says so rather than pretending the sheet is in the wrong state |
+| a teacher at another school | refused by the outer role check first, for having no role here at all |
+
+An **administrator is unaffected**, deliberately. `SUBMITTING_ROLES` admits
+`ADMIN` on the stated reasoning that entering and submitting a paper sheet is
+office work in most schools; an administrator is not a teacher of anything, so
+"which class are they the class teacher of" is not a question about them.
+Narrowing the office path is a separate decision from scoping the teaching one,
+and there is a test pinning it so it cannot change by accident.
+
+### Assigning is an office act
+
+`CLASS_TEACHER_ROLES` is `{principal, admin}` — the same set as
+`PLACEMENT_ROLES` and for the same reason. **A teacher who could assign
+themselves to a group could grant themselves the authority to submit its
+results**, which would hand straight back what this table took away. There is a
+test for that specifically.
+
+The control: removing the scope from `submit()` fails five tests — every one
+that asserts a refusal, including the no-class-teacher case and the
+per-term one. Nothing else in the suite notices, which is the measure of how
+quietly the gap sat there.
+
 ## Not built here
 
 - **Promotion.** `level` exists to make it expressible, and nothing computes it

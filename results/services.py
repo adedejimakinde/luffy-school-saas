@@ -52,6 +52,7 @@ exception hierarchy.
 from django.db import connection, transaction
 from django_tenants.utils import get_public_schema_name
 
+from academics import services as academics
 from accounts.models import Role
 
 from .models import (
@@ -281,9 +282,66 @@ def _locked(sheet):
     return ResultSheet.objects.select_for_update().order_by().get(pk=sheet.pk)
 
 
-def _move(sheet, actor, *, expected, to_state, reason="", roles, step):
+def _require_class_teacher_scope(sheet, actor, school, step):
+    """A teacher may only act on **their own** class group's sheet.
+
+    The hole this closes, and it was live in the chain as merged (issue #25):
+    `_require_authority()` asks `roles_at(school)`, which is school-wide, and
+    nothing bound the actor to the `class_group` on the sheet. Any teacher could
+    submit any class group's results, for any term, and the transition row would
+    record them as the submitting signatory of a class they do not teach — an
+    audit trail accurate about who acted and silent about their having had no
+    standing to act.
+
+    **An administrator is unaffected**, and that is deliberate rather than an
+    oversight. `SUBMITTING_ROLES` admits ADMIN on the stated reasoning that
+    entering and submitting a paper sheet is office work in most schools; an
+    administrator is not a teacher of anything, so "which class are they the
+    class teacher of" is not a question about them. Narrowing the office path is
+    a separate decision from scoping the teaching one, and would be a change to
+    make deliberately.
+
+    A group with **nobody assigned** refuses every teacher, which is the honest
+    reading: an unassigned class has no class teacher, so nobody is it. That is a
+    school configuration problem, and the message says so rather than pretending
+    the sheet is in the wrong state.
+    """
+    roles = set(actor.roles_at(school))
+    if Role.ADMIN.value in roles:
+        return
+
+    membership_id = actor.membership_id_at(school, Role.TEACHER)
+    if academics.is_class_teacher(membership_id, sheet.class_group, sheet.term):
+        return
+
+    if academics.class_teacher_of(sheet.class_group, sheet.term) is None:
+        raise NotAllowedToActOnResults(
+            f"{sheet.class_group} has no class teacher for {sheet.term}, so "
+            f"nobody may {step} its results yet. A principal or an administrator "
+            f"assigns one."
+        )
+    raise NotAllowedToActOnResults(
+        f"{actor} is not the class teacher of {sheet.class_group} for "
+        f"{sheet.term}, so may not {step} its results. That step is taken by the "
+        f"class teacher of the group."
+    )
+
+
+def _move(
+    sheet,
+    actor,
+    *,
+    expected,
+    to_state,
+    reason="",
+    roles,
+    step,
+    class_teacher_only=False,
+):
     """One step. Locked, checked, recorded and applied in a single transaction."""
-    _require_authority(actor, roles, step)
+    school = _require_authority(actor, roles, step)
+    if class_teacher_only:
+        _require_class_teacher_scope(sheet, actor, school, step)
 
     with transaction.atomic():
         locked = _locked(sheet)
@@ -356,7 +414,12 @@ def open_sheet(class_group, term, actor):
 
 
 def submit(sheet, actor):
-    """Teacher: these results are ready to be checked."""
+    """Teacher: these results are ready to be checked.
+
+    **Scoped to the class teacher of this group**, not to teachers in general —
+    see `_require_class_teacher_scope()` for the hole that closes and why an
+    administrator is still admitted.
+    """
     return _move(
         sheet,
         actor,
@@ -364,6 +427,7 @@ def submit(sheet, actor):
         to_state=SheetState.SUBMITTED,
         roles=SUBMITTING_ROLES,
         step="submit",
+        class_teacher_only=True,
     )
 
 

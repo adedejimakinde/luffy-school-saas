@@ -273,6 +273,25 @@ class User(AbstractBaseUser, PermissionsMixin):
             .values_list("role", flat=True)
         )
 
+    def membership_id_at(self, school, role) -> int | None:
+        """This login's membership pk in one role at one school, or `None`.
+
+        Access-scoped exactly like `roles_at()`, so a suspended teacher has no
+        membership here to be a class teacher with — the authorisation and the
+        identity have to agree, and they only do if both ask the same question.
+
+        Returns the **id**, not the object, because that is the shape every
+        tenant table stores: a bare integer with no foreign key, the policy
+        docs/tenancy.md settles. "Is this person the class teacher" is a
+        comparison against one of those columns.
+        """
+        return (
+            self.memberships.with_access()
+            .filter(school=school, role=role)
+            .values_list("pk", flat=True)
+            .first()
+        )
+
     def has_access_to(self, school) -> bool:
         return (
             self.is_platform_staff

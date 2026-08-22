@@ -25,6 +25,7 @@ from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
 from django_tenants.utils import schema_context
 
+from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
 from accounts.models import MembershipStatus, Role, User
 from accounts.services import grant_membership
@@ -91,6 +92,23 @@ class ChainSetUp(TestCase):
                 ends_on=date(2025, 12, 12),
             ).pk
             self.their_jss1a_id = ClassGroup.objects.create(name="JSS 1A", level=1).pk
+
+        self.make_class_teacher(self.stmarys, self.teacher, self.jss1a_id, self.term_id)
+
+    def make_class_teacher(self, school, user, class_group_id, term_id):
+        """Put `user` in charge of that group for that term.
+
+        Every chain test needs this now: submission is scoped to the class
+        teacher of the group (issue #25), so a fixture that grants the TEACHER
+        role and stops has built somebody who cannot submit anything.
+        """
+        membership = user.memberships.get(school=school, role=Role.TEACHER)
+        with connected_to(school):
+            return academics.assign_class_teacher(
+                ClassGroup.objects.get(pk=class_group_id),
+                Term.objects.get(pk=term_id),
+                membership,
+            )
 
     def _staff(self, username, full_name, school, role):
         user = User.objects.create_user(username, PASSWORD, full_name=full_name)
