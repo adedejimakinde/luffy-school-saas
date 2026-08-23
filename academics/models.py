@@ -307,3 +307,113 @@ class ClassPlacement(models.Model):
 
     def __str__(self):
         return f"membership {self.student_membership_id} in {self.class_group} ({self.term})"
+
+
+class ClassTeacherQuerySet(models.QuerySet):
+    def for_class(self, class_group, term):
+        return self.filter(class_group=class_group, term=term)
+
+    # There is deliberately no `membership_id_for()` here. It existed, returning
+    # the assigned teacher's id, and nothing called it: `is_class_teacher()`
+    # answers the authority question and `class_teacher_of()` hands back the row
+    # for everything else, including the id. A third read path over two rows
+    # would only be somewhere for the three to drift apart.
+
+    def is_class_teacher(self, membership_id, class_group, term) -> bool:
+        """Is this membership the class teacher of this group, this term?
+
+        `False` when nobody is assigned, which is the honest answer and the one
+        the caller wants: an unassigned class has no class teacher, so nobody is
+        it. Refusing on that is a school configuration problem with a message,
+        not an authorisation hole.
+        """
+        if membership_id is None:
+            return False
+        return self.for_class(class_group, term).filter(
+            teacher_membership_id=membership_id
+        ).exists()
+
+
+class ClassTeacher(models.Model):
+    """Who is answerable for one class group in one term.
+
+    **Per term, not per group**, which is the same decision `ClassPlacement`
+    turns on and made for the same reason. A class teacher changes between
+    terms — people go on leave, arms are reassigned in January — and everything
+    a report card is reckoned from is already per term. A group-scoped
+    assignment would have to be *edited* to describe that change, which would
+    silently rewrite who signed a card that had already gone home.
+
+    Why this table exists at all: `results.services.SUBMITTING_ROLES` admitted
+    any TEACHER at the school, with a comment saying "a class teacher submits"
+    and nothing enforcing it, because there was no class teacher to enforce
+    against. A JSS 1A teacher could submit JSS 3B's results and be recorded as
+    the signatory of a class they do not teach — the audit row accurate about
+    who acted and silent about their having had no standing to. Issue #25.
+
+    One teacher per (group, term), by constraint. A school with co-form-teachers
+    is a real thing and is not modelled here: "the class teacher" is who signs,
+    and two people who both signed is a different design with a different audit
+    story. Widening this is a change to make deliberately.
+    """
+
+    # Both tenant-local, so both are real foreign keys with real integrity — the
+    # note `ClassPlacement` and `gradebook.Assessment` carry.
+    class_group = models.ForeignKey(
+        ClassGroup, related_name="class_teachers", on_delete=models.PROTECT
+    )
+    term = models.ForeignKey(
+        Term, related_name="class_teachers", on_delete=models.PROTECT
+    )
+
+    # A bare id, not a ForeignKey, pointing at the teacher's TEACHER membership
+    # in the shared `accounts` app — the policy docs/tenancy.md settles and the
+    # fourth table to follow it. `academics.services` checks the id names a
+    # teacher *of this school* before anything is written; see
+    # `accounts.staff.why_not_a_teacher_here()`.
+    teacher_membership_id = models.PositiveBigIntegerField(db_index=True)
+
+    assigned_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ClassTeacherQuerySet.as_manager()
+
+    class Meta:
+        # Local columns, not the relations. `ordering = ["class_group", "term"]`
+        # sorts by `ClassGroup.Meta.ordering` and `Term.Meta.ordering`, so the
+        # one-row read every refused submission makes — `class_teacher_of()`,
+        # which is `.first()` — compiles to a three-table join sorted by the
+        # term's session and the group's level. Worse, `assign_class_teacher()`
+        # locks this table through `update_or_create()`, and a joined
+        # `SELECT ... FOR UPDATE` takes a lock in *every* joined table: two
+        # administrators assigning teachers to two different groups would
+        # serialise on `academics_term`, which neither of them writes.
+        #
+        # It is join-free today only because `QuerySet.get()` clears ordering
+        # itself — the margin `results.services._locked()` documents at length
+        # and this codebase has decided twice is too thin to rest on. The same
+        # fix `ResultSheetTransition.Meta` made, for the same reason.
+        ordering = ["class_group_id", "term_id"]
+        # No `indexes` entry. The unique constraint below already builds a btree
+        # led by exactly `(class_group, term)`, which is the authority question
+        # — "is this person the class teacher of this group, now" — so a
+        # declared index on the same two columns in the same order answers no
+        # query the constraint cannot. It is a second identical index per tenant
+        # schema, one per school on the platform, maintained on every assignment
+        # for nothing. `results.ResultSheetTransition.Meta` records the same
+        # decision; `ClassPlacement` above keeps its index because there the
+        # unique is `(term, student_membership_id)` and the index
+        # `(class_group, term)` — genuinely different columns.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["class_group", "term"],
+                name="one_class_teacher_per_group_per_term",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"membership {self.teacher_membership_id} teaches "
+            f"{self.class_group} ({self.term})"
+        )

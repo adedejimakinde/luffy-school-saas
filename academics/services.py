@@ -31,9 +31,10 @@ only holds for the view.
 from django.db import IntegrityError, connection, transaction
 
 from accounts.models import LIVE_STATUSES, Membership, Role
+from accounts.staff import why_not_a_teacher_here
 from accounts.students import why_not_a_student_here
 
-from .models import ClassPlacement
+from .models import ClassPlacement, ClassTeacher
 
 
 class AcademicsError(Exception):
@@ -90,6 +91,20 @@ _UNIQUE_VIOLATION = "23505"
 
 #: The constraint whose firing means "somebody placed this child first".
 _COLLISION = "one_class_placement_per_student_per_term"
+
+
+class NotThisSchoolsTeacher(AcademicsError):
+    """The membership named is not a TEACHER of the school being written to.
+
+    The sibling of `NotThisSchoolsStudent`, and it names the school the teacher
+    actually works at — correct for a log and a test, and a cross-tenant leak if
+    it were ever returned to an HTTP caller. `results.api` answers a flat 404 for
+    that reason; this message is for the people who can already see both.
+    """
+
+
+class NotAllowedToAssignClassTeachers(AcademicsError):
+    """Who may say which teacher is answerable for a class group."""
 
 
 def _is_the_placement_colliding(exc) -> bool:
@@ -429,15 +444,148 @@ def remove_placement_as(actor, term, membership) -> bool:
     return remove_placement(term, membership)
 
 
+#: Who may say which teacher is answerable for a class group.
+#:
+#: The same set as `PLACEMENT_ROLES` and for the same reason: this is an office
+#: act, not a teaching one. A teacher assigning themselves to a class group
+#: would be granting themselves the authority to submit its results, which is
+#: precisely the authority this table exists to scope (issue #25).
+CLASS_TEACHER_ROLES = frozenset({Role.PRINCIPAL.value, Role.ADMIN.value})
+
+
+def _require_teacher_of_this_school(membership):
+    reason = why_not_a_teacher_here(
+        membership, subject="a class teacher assignment", holder="class register"
+    )
+    if reason:
+        raise NotThisSchoolsTeacher(reason)
+    return membership
+
+
+def class_teacher_of(class_group, term):
+    """The `ClassTeacher` row for this group this term, or `None`."""
+    return ClassTeacher.objects.for_class(class_group, term).first()
+
+
+def is_class_teacher(membership_id, class_group, term) -> bool:
+    """Is this membership the class teacher of this group, this term?
+
+    `False` when nobody is assigned. An unassigned class has no class teacher,
+    so nobody is it — which is a school configuration problem for a caller to
+    phrase, not a hole for one to fall through.
+    """
+    return ClassTeacher.objects.is_class_teacher(membership_id, class_group, term)
+
+
+def assign_class_teacher(class_group, term, membership, *, by=None):
+    """Make one teacher answerable for one group for one term. Returns the row.
+
+    Reassignment is an **update, not a second row**. A class has one class
+    teacher at a time and the question every caller asks is "who is it now"; a
+    history of who it has been is a different feature with a different table,
+    and inventing it here would make `is_class_teacher()` ambiguous the first
+    time anybody was replaced.
+
+    That is a real limitation and it is worth naming: once a term's results are
+    released, who signed them is recorded by `ResultSheetTransition.actor_id`,
+    which is append-only and cannot be rewritten by a later reassignment. So the
+    audit question — *who submitted this* — is already answered elsewhere and
+    does not depend on this row still saying what it said in March.
+    """
+    _require_teacher_of_this_school(membership)
+
+    row, _ = ClassTeacher.objects.update_or_create(
+        class_group=class_group,
+        term=term,
+        defaults={
+            "teacher_membership_id": membership.pk,
+            "assigned_by_id": _stamp(by),
+        },
+    )
+    return row
+
+
+def unassign_class_teacher(class_group, term) -> bool:
+    """Leave a group with no class teacher. True if there was one."""
+    deleted, _ = ClassTeacher.objects.for_class(class_group, term).delete()
+    return bool(deleted)
+
+
+def can_assign_class_teachers(actor, school) -> bool:
+    """May `actor` say who teaches what at `school`?
+
+    Access-scoped like every other authority question here: an invited or
+    suspended administrator has a membership and no authority, because
+    `roles_at()` is scoped to ACCESS_STATUSES.
+    """
+    if not getattr(actor, "is_authenticated", False):
+        return False
+    return bool(set(actor.roles_at(school)) & CLASS_TEACHER_ROLES)
+
+
+def _require_class_teacher_authority(actor, school):
+    if not can_assign_class_teachers(actor, school):
+        raise NotAllowedToAssignClassTeachers(
+            f"{actor} may not assign class teachers at {school}. Who is "
+            f"answerable for a class group is set by a principal or an "
+            f"administrator of the school."
+        )
+
+
+def assign_class_teacher_as(actor, class_group, term, membership, *, by=None):
+    """`assign_class_teacher()` for a caller with a request behind it.
+
+    Authority is asked at the *teacher's* school, which
+    `_require_teacher_of_this_school()` then pins to the schema being written —
+    the two-question shape `place_student_as()` sets out, and not the same
+    question twice.
+    """
+    _require_class_teacher_authority(actor, membership.school)
+    return assign_class_teacher(
+        class_group, term, membership, by=actor if by is None else by
+    )
+
+
+def unassign_class_teacher_as(actor, school, class_group, term) -> bool:
+    """`unassign_class_teacher()` for a caller with a request behind it.
+
+    This one was missing, and it was the only write in the module without an
+    actor-checked sibling — which matters more here than the symmetry suggests.
+    Taking the class teacher off a group is not the harmless half of assigning
+    one: `results.services._require_class_teacher_scope()` then refuses *every*
+    teacher with "has no class teacher for this term", so the group cannot
+    submit its results at all. Exported unchecked, the first screen that needed
+    "remove this class teacher" would have reached for the only function there
+    was, and any signed-in teacher could have stopped a class they do not teach
+    from being submitted.
+
+    Takes `school` explicitly rather than reading it off a membership, because
+    unlike every other `_as()` here there is no membership in the arguments —
+    the whole act is the absence of one. The caller passes the school whose
+    schema it is connected to, and `_require_class_teacher_authority()` asks
+    whether this actor may set class teachers there.
+    """
+    _require_class_teacher_authority(actor, school)
+    return unassign_class_teacher(class_group, term)
+
+
 __all__ = [
+    "CLASS_TEACHER_ROLES",
     "PLACEMENT_ROLES",
     "AcademicsError",
     "AlreadyPlaced",
+    "NotAllowedToAssignClassTeachers",
     "NotAllowedToPlace",
     "NotPlaced",
     "NotThisSchoolsStudent",
+    "NotThisSchoolsTeacher",
+    "assign_class_teacher",
+    "assign_class_teacher_as",
+    "can_assign_class_teachers",
     "can_place_students",
     "carry_forward_placements",
+    "class_teacher_of",
+    "is_class_teacher",
     "move_student",
     "move_student_as",
     "place_student",
@@ -445,4 +593,6 @@ __all__ = [
     "placement_of",
     "remove_placement",
     "remove_placement_as",
+    "unassign_class_teacher",
+    "unassign_class_teacher_as",
 ]

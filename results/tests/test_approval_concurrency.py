@@ -54,6 +54,7 @@ from django.test import TransactionTestCase
 from django.test.utils import CaptureQueriesContext
 from django_tenants.utils import schema_context
 
+from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
 from accounts.models import Role, User
 from accounts.services import grant_membership
@@ -132,6 +133,13 @@ class TwoSchoolsSetUp(TransactionTestCase):
                 ends_on=date(2025, 12, 12),
             )
             group = ClassGroup.objects.create(name="JSS 1A", level=1)
+            # Submission is scoped to the class teacher of the group (#25), so
+            # the fixture has to say who that is before it can walk the chain.
+            academics.assign_class_teacher(
+                group,
+                term,
+                teacher.memberships.get(school=school, role=Role.TEACHER),
+            )
             sheet = services.open_sheet(group, term, teacher)
             services.submit(sheet, teacher)
             services.check(sheet, vp)

@@ -185,6 +185,153 @@ id carried across the boundary does not fail to resolve, it resolves to somebody
 else's row — and it is worth a test that states it rather than a comment
 somewhere hoping to be read.
 
+## The class teacher, and the authority it carries
+
+`ClassTeacher` says who is answerable for one group in one term. It exists
+because of an authorisation gap rather than for completeness
+([issue #25](https://github.com/adedejimakinde/luffy-school-saas/issues/25)).
+
+`results.services.SUBMITTING_ROLES` admitted any `TEACHER` at the school, under
+a comment reading *"a class teacher submits"* — and nothing enforced that,
+because there was no class teacher to enforce against. `_require_authority()`
+asks `roles_at(school)`, which is school-wide; nothing bound the actor to the
+`class_group` on the sheet. **A JSS 1A teacher could submit JSS 3B's results**,
+and the transition row would record them as that class's submitting signatory:
+an audit trail accurate about who acted and silent about their having had no
+standing to.
+
+### Per term, for the reason placements are
+
+A class teacher changes between terms — leave, reassignment in January — and
+everything a report card is reckoned from is already per term. A group-scoped
+assignment would have to be *edited* to describe that change, which would
+silently rewrite who was answerable for a card that had already gone home. The
+constraint is one teacher per `(class_group, term)`.
+
+Reassignment is an **update, not a second row**: the question every caller asks
+is "who is it now", and two rows would make `is_class_teacher()` answer yes for
+both the first time anybody was replaced. The history question — *who actually
+submitted this* — is already answered by `ResultSheetTransition.actor_id`, which
+is append-only and cannot be rewritten by a later reassignment.
+
+A school with co-form-teachers is a real thing and is **not** modelled. "The
+class teacher" is who signs; two people who both signed is a different design
+with a different audit story.
+
+### The check reads the locked row, not the instance it was handed
+
+Found in review of this branch, and it was the gap reopening itself one level
+down. `_move()`'s contract is that every decision is taken on the copy re-read
+under `select_for_update()`; `_require_class_teacher_scope()` was the single
+check that was not. It read `class_group` and `term` off the instance the caller
+passed in, while the row it authorised a write to was fetched by `pk` alone.
+
+So the authority question and the write asked about **two different sheets**:
+
+```python
+pretending = ResultSheet(pk=<JSS 3B's sheet>, class_group=<JSS 1A>, term=term)
+services.submit(pretending, kemi)     # Kemi teaches JSS 1A. JSS 3B is submitted.
+```
+
+An instance whose `class_group` disagrees with its row is not exotic — a
+deserialised one, a cached one, or a row whose `class_group` a bulk `.update()`
+has since corrected, which nothing guards; only `state` has a trigger. The
+outcome is exactly the audit failure issue #25 exists to close, reached through
+the one input the check trusted.
+
+The scope check now runs **inside the transaction, against `locked`**. The role
+check stays outside it, deliberately: a caller with no standing at all should
+not be able to take a row lock, while *which group this sheet belongs to* is a
+fact about the row and has to be read from it.
+
+The control is `TheScopeIsCheckedOnTheLockedRowTests`, written before the fix
+and failing then — `NotAllowedToActOnResults not raised`, with JSS 3B submitted
+under Kemi's name.
+
+### Four refusals, and they are different sentences
+
+| | |
+| --- | --- |
+| a teacher of another group | *not the class teacher of JSS 1A* — the hole this closes |
+| a group with nobody assigned | *JSS 1A has no class teacher for this term* — a configuration problem, and the message says so rather than pretending the sheet is in the wrong state |
+| a group whose class teacher can no longer act | *JSS 1A's class teacher is Kemi Bello, who cannot currently act at St Mary's* — see below |
+| a teacher at another school | refused by the outer role check first, for having no role here at all |
+
+The third is the one review added, and the reason it is its own sentence is
+worth keeping. `assign_class_teacher()` does **not** refuse a membership without
+access — the same decision `place_student()` makes about ended memberships, and
+for the same reason: backfilling a past term's register is real work and the
+people in it have often left. `why_not_a_teacher_here()` therefore asks about
+role and school, exactly as its sibling `why_not_a_student_here()` does, and not
+about status.
+
+The consequence is that an assignment outlives the access it was made against. A
+suspended class teacher cannot submit — `roles_at()` is access-scoped, so she
+holds no `TEACHER` role at all — and neither can anybody else, because she is
+still the class teacher. The group is stuck, and that much is correct. What was
+wrong was that every colleague was told *"you are not the class teacher of JSS
+1A"*: true, unhelpful, and it sends them looking for somebody who cannot act
+either. The status is read on the **refusal path only**, which costs one query
+where it does not matter.
+
+An **administrator is unaffected**, deliberately. `SUBMITTING_ROLES` admits
+`ADMIN` on the stated reasoning that entering and submitting a paper sheet is
+office work in most schools; an administrator is not a teacher of anything, so
+"which class are they the class teacher of" is not a question about them.
+Narrowing the office path is a separate decision from scoping the teaching one,
+and there is a test pinning it so it cannot change by accident.
+
+### Assigning is an office act
+
+`CLASS_TEACHER_ROLES` is `{principal, admin}` — the same set as
+`PLACEMENT_ROLES` and for the same reason. **A teacher who could assign
+themselves to a group could grant themselves the authority to submit its
+results**, which would hand straight back what this table took away. There is a
+test for that specifically.
+
+**So is unassigning**, and that took a second pass to see. `assign_class_teacher()`
+had an actor-checked `_as()` sibling and `unassign_class_teacher()` did not — it
+was the only write in the module without one. It reads as the harmless half of
+the pair and is not: a group with nobody assigned refuses *every* teacher, so an
+unchecked unassign lets anybody signed in stop a class they do not teach from
+submitting its results at all. `unassign_class_teacher_as()` takes the school
+explicitly rather than reading it off a membership, because unlike every other
+`_as()` in the module there is no membership in the arguments — the whole act is
+the absence of one.
+
+### Two indexes for one question, and a sort that joins
+
+Both found in review, both about the same table, and both are things this
+codebase had already written down somewhere else.
+
+`ClassTeacher` declared `Index(fields=["class_group", "term"])` *and* a
+`UniqueConstraint` on the same two columns in the same order. The constraint
+already builds that btree, so the declared index answered no query it could not
+— a second identical index in every tenant schema, one per school, maintained on
+every assignment for nothing. `results.ResultSheetTransition.Meta` records the
+identical decision about `(sheet, cycle)`. `ClassPlacement` keeps its index
+because there the unique is `(term, student_membership_id)` and the index
+`(class_group, term)`: genuinely different columns.
+
+`Meta.ordering` was `["class_group", "term"]` — two relations, each with its own
+`Meta.ordering`. `class_teacher_of()` is a `.first()` and runs on every refused
+submission, and `assign_class_teacher()` locks this table through
+`update_or_create()`. A joined `SELECT ... FOR UPDATE` takes a lock in every
+joined table, so two administrators assigning teachers to two different groups
+would serialise on `academics_term`, which neither writes. It is join-free today
+only because `QuerySet.get()` clears ordering itself — the margin
+`results.services._locked()` documents at length and this codebase has twice
+decided is too thin to rest on. Now `["class_group_id", "term_id"]`, the fix
+`ResultSheetTransition.Meta` already made.
+
+Both were corrected in migration `0004` itself rather than in a follow-up, since
+nothing outside a test database has ever applied it.
+
+The control: removing the scope from `submit()` fails five tests — every one
+that asserts a refusal, including the no-class-teacher case and the
+per-term one. Nothing else in the suite notices, which is the measure of how
+quietly the gap sat there.
+
 ## Not built here
 
 - **Promotion.** `level` exists to make it expressible, and nothing computes it
