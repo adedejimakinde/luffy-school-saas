@@ -53,7 +53,7 @@ from django.db import connection, transaction
 from django_tenants.utils import get_public_schema_name
 
 from academics import services as academics
-from accounts.models import Role
+from accounts.models import ACCESS_STATUSES, Membership, Role
 
 from .models import (
     ADVANCING_STATES,
@@ -201,16 +201,23 @@ def _named(roles) -> str:
 
 
 def _require_authority(actor, allowed, step):
+    """The school this act belongs to, and the roles the actor holds there.
+
+    Returns both because the caller needs both and asking twice means asking
+    the database twice: `_require_class_teacher_scope()` wants to know whether
+    this is an administrator, which is a fact this function has just read.
+    """
     if not getattr(actor, "is_authenticated", False):
         raise NotAllowedToActOnResults(f"Signing in is required to {step} results.")
 
     school = _school_on_this_connection()
-    if not set(actor.roles_at(school)) & allowed:
+    roles = set(actor.roles_at(school))
+    if not roles & allowed:
         raise NotAllowedToActOnResults(
             f"{actor} may not {step} results at {school}. That step is taken by "
             f"{_named(allowed)}."
         )
-    return school
+    return school, roles
 
 
 def _require_not_already_signed(sheet, actor, to_state):
@@ -282,7 +289,7 @@ def _locked(sheet):
     return ResultSheet.objects.select_for_update().order_by().get(pk=sheet.pk)
 
 
-def _require_class_teacher_scope(sheet, actor, school, step):
+def _require_class_teacher_scope(sheet, actor, school, roles, step):
     """A teacher may only act on **their own** class group's sheet.
 
     The hole this closes, and it was live in the chain as merged (issue #25):
@@ -292,6 +299,16 @@ def _require_class_teacher_scope(sheet, actor, school, step):
     record them as the submitting signatory of a class they do not teach — an
     audit trail accurate about who acted and silent about their having had no
     standing to act.
+
+    **`sheet` must be the row read under the lock**, never the instance the
+    caller passed in. That is the module docstring's rule and this check was the
+    one place that broke it: it read `class_group` and `term` off the caller's
+    object while `_move()` wrote to the row `_locked()` fetched by `pk` alone. A
+    mismatched instance — deserialised, cached, or holding a `class_group` a
+    bulk `.update()` has since corrected, none of which any guard prevents — was
+    therefore authorised against one group and applied to another. See
+    `tests/test_class_teacher_scope.TheScopeIsCheckedOnTheLockedRowTests`, which
+    submits JSS 3B on JSS 1A's authority with the check taking its old argument.
 
     **An administrator is unaffected**, and that is deliberate rather than an
     oversight. `SUBMITTING_ROLES` admits ADMIN on the stated reasoning that
@@ -306,20 +323,59 @@ def _require_class_teacher_scope(sheet, actor, school, step):
     school configuration problem, and the message says so rather than pretending
     the sheet is in the wrong state.
     """
-    roles = set(actor.roles_at(school))
     if Role.ADMIN.value in roles:
         return
 
-    membership_id = actor.membership_id_at(school, Role.TEACHER)
-    if academics.is_class_teacher(membership_id, sheet.class_group, sheet.term):
-        return
-
-    if academics.class_teacher_of(sheet.class_group, sheet.term) is None:
+    assignment = academics.class_teacher_of(sheet.class_group, sheet.term)
+    if assignment is None:
         raise NotAllowedToActOnResults(
             f"{sheet.class_group} has no class teacher for {sheet.term}, so "
             f"nobody may {step} its results yet. A principal or an administrator "
             f"assigns one."
         )
+
+    membership_id = actor.membership_id_at(school, Role.TEACHER)
+    if membership_id is not None and membership_id == assignment.teacher_membership_id:
+        return
+
+    _refuse_for_somebody_elses_class(assignment, actor, school, sheet, step)
+
+
+def _refuse_for_somebody_elses_class(assignment, actor, school, sheet, step):
+    """Say which of the two refusals this is. Only ever on the way to raising.
+
+    The two are worth telling apart. "You are not the class teacher" is true of
+    an ordinary teacher looking at the wrong group and tells them everything
+    they need. Said about a group whose assigned teacher has been **suspended or
+    has left**, it is still true and completely unhelpful: the group cannot be
+    submitted by anybody, and the person reading the refusal has no way to learn
+    that from it. They go looking for a colleague who cannot act.
+
+    That state is reachable on purpose. `assign_class_teacher()` does not refuse
+    a membership without access, for the reason `place_student()` gives about
+    ended memberships — backfilling a past term's register is real work and the
+    people in it have often left — so the assignment outlives the access, and
+    the *reading* side is where the difference has to be explained.
+
+    One extra query, on the refusal path only.
+    """
+    holder = (
+        Membership.objects.select_related("user")
+        .filter(
+            pk=assignment.teacher_membership_id,
+            school=school,
+            role=Role.TEACHER,
+        )
+        .first()
+    )
+    if holder is None or holder.status not in ACCESS_STATUSES:
+        who = "somebody who is no longer here" if holder is None else holder.name
+        raise NotAllowedToActOnResults(
+            f"{sheet.class_group}'s class teacher for {sheet.term} is {who}, "
+            f"who cannot currently act at {school} — so nobody may {step} its "
+            f"results. A principal or an administrator assigns another."
+        )
+
     raise NotAllowedToActOnResults(
         f"{actor} is not the class teacher of {sheet.class_group} for "
         f"{sheet.term}, so may not {step} its results. That step is taken by the "
@@ -339,12 +395,18 @@ def _move(
     class_teacher_only=False,
 ):
     """One step. Locked, checked, recorded and applied in a single transaction."""
-    school = _require_authority(actor, roles, step)
-    if class_teacher_only:
-        _require_class_teacher_scope(sheet, actor, school, step)
+    school, held = _require_authority(actor, roles, step)
 
     with transaction.atomic():
         locked = _locked(sheet)
+
+        # Inside the lock, and on `locked` rather than `sheet`. The role check
+        # above is deliberately still outside it — a caller with no standing at
+        # all should not be able to take a row lock — but *which group this
+        # sheet belongs to* is a fact about the row, and reading it off the
+        # caller's instance is how JSS 1A's teacher submitted JSS 3B.
+        if class_teacher_only:
+            _require_class_teacher_scope(locked, actor, school, held, step)
 
         if locked.state == SheetState.RELEASED:
             raise ReleaseIsFinal(

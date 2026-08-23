@@ -546,24 +546,46 @@ def assign_class_teacher_as(actor, class_group, term, membership, *, by=None):
     )
 
 
+def unassign_class_teacher_as(actor, school, class_group, term) -> bool:
+    """`unassign_class_teacher()` for a caller with a request behind it.
+
+    This one was missing, and it was the only write in the module without an
+    actor-checked sibling — which matters more here than the symmetry suggests.
+    Taking the class teacher off a group is not the harmless half of assigning
+    one: `results.services._require_class_teacher_scope()` then refuses *every*
+    teacher with "has no class teacher for this term", so the group cannot
+    submit its results at all. Exported unchecked, the first screen that needed
+    "remove this class teacher" would have reached for the only function there
+    was, and any signed-in teacher could have stopped a class they do not teach
+    from being submitted.
+
+    Takes `school` explicitly rather than reading it off a membership, because
+    unlike every other `_as()` here there is no membership in the arguments —
+    the whole act is the absence of one. The caller passes the school whose
+    schema it is connected to, and `_require_class_teacher_authority()` asks
+    whether this actor may set class teachers there.
+    """
+    _require_class_teacher_authority(actor, school)
+    return unassign_class_teacher(class_group, term)
+
+
 __all__ = [
-    "unassign_class_teacher",
-    "is_class_teacher",
-    "class_teacher_of",
-    "can_assign_class_teachers",
-    "assign_class_teacher_as",
-    "assign_class_teacher",
-    "NotThisSchoolsTeacher",
-    "NotAllowedToAssignClassTeachers",
     "CLASS_TEACHER_ROLES",
     "PLACEMENT_ROLES",
     "AcademicsError",
     "AlreadyPlaced",
+    "NotAllowedToAssignClassTeachers",
     "NotAllowedToPlace",
     "NotPlaced",
     "NotThisSchoolsStudent",
+    "NotThisSchoolsTeacher",
+    "assign_class_teacher",
+    "assign_class_teacher_as",
+    "can_assign_class_teachers",
     "can_place_students",
     "carry_forward_placements",
+    "class_teacher_of",
+    "is_class_teacher",
     "move_student",
     "move_student_as",
     "place_student",
@@ -571,4 +593,6 @@ __all__ = [
     "placement_of",
     "remove_placement",
     "remove_placement_as",
+    "unassign_class_teacher",
+    "unassign_class_teacher_as",
 ]

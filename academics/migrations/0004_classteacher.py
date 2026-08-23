@@ -51,13 +51,12 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "ordering": ["class_group", "term"],
-                "indexes": [
-                    models.Index(
-                        fields=["class_group", "term"],
-                        name="academics_c_class_g_f72619_idx",
-                    )
-                ],
+                # Local columns, and no declared index — see `ClassTeacher.Meta`
+                # for both. The index this file used to create duplicated the
+                # unique constraint's btree exactly; edited here rather than
+                # dropped in a later migration because nothing has ever applied
+                # this one outside a test database.
+                "ordering": ["class_group_id", "term_id"],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("class_group", "term"),

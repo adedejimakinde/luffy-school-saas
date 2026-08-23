@@ -30,7 +30,7 @@ from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, ClassTeacher, Term, TermName
-from accounts.models import Role, User
+from accounts.models import MembershipStatus, Role, User
 from accounts.services import grant_membership
 from results import services
 from results.models import ResultSheet, ResultSheetTransition, SheetState
@@ -372,4 +372,174 @@ class WhoMayAssignTests(ClassTeacherSetUp):
                     ClassGroup.objects.get(pk=self.jss3b_id),
                     Term.objects.get(pk=self.term_id),
                     membership,
+                )
+
+
+class TheScopeIsCheckedOnTheLockedRowTests(ClassTeacherSetUp):
+    """The scope check has to read the row, not the instance handed in.
+
+    `_move()`'s contract is that every decision is taken on the copy re-read
+    under `select_for_update()` — the module docstring says so in as many words,
+    and `_locked()`'s says why. `_require_class_teacher_scope()` was the one
+    check that did not: it read `class_group` and `term` off the caller's
+    instance, while the row it authorised a write to was fetched by `pk` alone.
+
+    An instance whose `class_group` disagrees with the row is not exotic. A
+    deserialised one, a cached one, or a row whose `class_group` was corrected
+    by a bulk `.update()` — nothing guards that column, only `state` has a
+    trigger — all produce one. The result is the audit failure issue #25 exists
+    to close, reached through the single input the check trusted: Kemi is
+    authorised against JSS 1A and JSS 3B is submitted with her name on it.
+    """
+
+    def test_a_mismatched_instance_cannot_borrow_another_groups_authority(self):
+        jss3b_sheet = self.sheet_for(
+            self.stmarys, self.jss3b_id, self.term_id, self.sade
+        )
+
+        with connected_to(self.stmarys):
+            # Kemi's own group, on an instance pointing at Sade's sheet.
+            pretending = ResultSheet(
+                pk=jss3b_sheet.pk,
+                class_group=ClassGroup.objects.get(pk=self.jss1a_id),
+                term=Term.objects.get(pk=self.term_id),
+                state=SheetState.DRAFT,
+            )
+
+            with self.assertRaises(services.NotAllowedToActOnResults) as refused:
+                services.submit(pretending, self.kemi)
+
+            self.assertIn("not the class teacher", str(refused.exception))
+            self.assertEqual(
+                ResultSheet.objects.get(pk=jss3b_sheet.pk).state,
+                SheetState.DRAFT,
+                "JSS 3B is Sade's, and stays where it was",
+            )
+            self.assertEqual(
+                ResultSheetTransition.objects.filter(sheet_id=jss3b_sheet.pk).count(),
+                0,
+                "a refused step leaves no signature behind",
+            )
+
+
+class AStaleAssignmentSaysSoTests(ClassTeacherSetUp):
+    """An assignment can outlive the access it was made against.
+
+    `assign_class_teacher()` does not refuse a membership without access, and
+    that is deliberate — `place_student()` gives the reasoning about ended
+    memberships, and backfilling a past term's register is the case it protects.
+    The consequence is that a group's class teacher can be suspended or can
+    leave while the row still names them, and then **no teacher can submit that
+    group at all**: not the assigned one, who has no TEACHER role left, and not
+    anybody else, who is not the class teacher.
+
+    That much is correct. What was wrong was the sentence: every colleague was
+    told "you are not the class teacher of JSS 1A", which is true, unhelpful,
+    and sends them looking for somebody who cannot act either.
+    """
+
+    def suspend(self, user):
+        membership = user.memberships.get(school=self.stmarys, role=Role.TEACHER)
+        membership.status = MembershipStatus.SUSPENDED
+        membership.save(update_fields=["status"])
+
+    def test_a_colleague_is_told_the_class_teacher_cannot_act(self):
+        sheet = self.sheet_for(self.stmarys, self.jss1a_id, self.term_id, self.kemi)
+        self.suspend(self.kemi)
+
+        with connected_to(self.stmarys):
+            with self.assertRaises(services.NotAllowedToActOnResults) as refused:
+                services.submit(sheet, self.sade)
+
+        message = str(refused.exception)
+        self.assertIn("cannot currently act", message)
+        self.assertIn("Kemi Bello", message)
+        self.assertNotIn(
+            "not the class teacher",
+            message,
+            "the unhelpful sentence is the one this test exists to keep out",
+        )
+
+    def test_the_suspended_class_teacher_is_refused_on_her_role(self):
+        """She loses the role before she loses the assignment.
+
+        `roles_at()` is access-scoped, so a suspended teacher holds no TEACHER
+        role and never reaches the class-teacher check at all.
+        """
+        sheet = self.sheet_for(self.stmarys, self.jss1a_id, self.term_id, self.kemi)
+        self.suspend(self.kemi)
+
+        with connected_to(self.stmarys):
+            with self.assertRaises(services.NotAllowedToActOnResults) as refused:
+                services.submit(sheet, self.kemi)
+
+        self.assertIn("may not submit results", str(refused.exception))
+
+    def test_an_ordinary_wrong_group_still_gets_the_ordinary_refusal(self):
+        """The control: with the class teacher present, the message is the plain one."""
+        sheet = self.sheet_for(self.stmarys, self.jss1a_id, self.term_id, self.kemi)
+
+        with connected_to(self.stmarys):
+            with self.assertRaises(services.NotAllowedToActOnResults) as refused:
+                services.submit(sheet, self.sade)
+
+        self.assertIn("not the class teacher", str(refused.exception))
+        self.assertNotIn("cannot currently act", str(refused.exception))
+
+
+class WhoMayUnassignTests(ClassTeacherSetUp):
+    """Taking the class teacher off a group is an office act, like putting one on.
+
+    It is not the harmless half of the pair. A group with nobody assigned cannot
+    be submitted by anyone, so an unchecked `unassign_class_teacher()` would let
+    a teacher stop a class they do not teach from being submitted at all.
+    """
+
+    def test_a_teacher_may_not_unassign(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(academics.NotAllowedToAssignClassTeachers):
+                academics.unassign_class_teacher_as(
+                    self.sade,
+                    self.stmarys,
+                    ClassGroup.objects.get(pk=self.jss1a_id),
+                    Term.objects.get(pk=self.term_id),
+                )
+
+            self.assertTrue(
+                ClassTeacher.objects.filter(
+                    class_group_id=self.jss1a_id, term_id=self.term_id
+                ).exists(),
+                "the refusal has to leave the assignment standing",
+            )
+
+    def test_a_principal_may_unassign(self):
+        with connected_to(self.stmarys):
+            removed = academics.unassign_class_teacher_as(
+                self.principal,
+                self.stmarys,
+                ClassGroup.objects.get(pk=self.jss1a_id),
+                Term.objects.get(pk=self.term_id),
+            )
+
+        self.assertTrue(removed)
+        with connected_to(self.stmarys):
+            self.assertFalse(
+                ClassTeacher.objects.filter(
+                    class_group_id=self.jss1a_id, term_id=self.term_id
+                ).exists()
+            )
+
+    def test_the_other_schools_principal_may_not_unassign_ours(self):
+        """Authority is asked at the school passed in, and theirs is not ours."""
+        their_principal = self._staff(
+            "ngozi", "Ngozi Eze", self.grace, Role.PRINCIPAL
+        )
+
+        with connected_to(self.stmarys):
+            with self.assertRaises(academics.NotAllowedToAssignClassTeachers):
+                academics.unassign_class_teacher_as(
+                    their_principal,
+                    self.stmarys,
+                    ClassGroup.objects.get(pk=self.jss1a_id),
+                    Term.objects.get(pk=self.term_id),
                 )

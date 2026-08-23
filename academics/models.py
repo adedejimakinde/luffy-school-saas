@@ -313,13 +313,11 @@ class ClassTeacherQuerySet(models.QuerySet):
     def for_class(self, class_group, term):
         return self.filter(class_group=class_group, term=term)
 
-    def membership_id_for(self, class_group, term) -> int | None:
-        """The class teacher's membership id, or `None` if nobody is assigned."""
-        return (
-            self.for_class(class_group, term)
-            .values_list("teacher_membership_id", flat=True)
-            .first()
-        )
+    # There is deliberately no `membership_id_for()` here. It existed, returning
+    # the assigned teacher's id, and nothing called it: `is_class_teacher()`
+    # answers the authority question and `class_teacher_of()` hands back the row
+    # for everything else, including the id. A third read path over two rows
+    # would only be somewhere for the three to drift apart.
 
     def is_class_teacher(self, membership_id, class_group, term) -> bool:
         """Is this membership the class teacher of this group, this term?
@@ -382,12 +380,31 @@ class ClassTeacher(models.Model):
     objects = ClassTeacherQuerySet.as_manager()
 
     class Meta:
-        ordering = ["class_group", "term"]
-        indexes = [
-            # The authority question, asked on every submission and every
-            # rating: "is this person the class teacher of this group, now".
-            models.Index(fields=["class_group", "term"]),
-        ]
+        # Local columns, not the relations. `ordering = ["class_group", "term"]`
+        # sorts by `ClassGroup.Meta.ordering` and `Term.Meta.ordering`, so the
+        # one-row read every refused submission makes — `class_teacher_of()`,
+        # which is `.first()` — compiles to a three-table join sorted by the
+        # term's session and the group's level. Worse, `assign_class_teacher()`
+        # locks this table through `update_or_create()`, and a joined
+        # `SELECT ... FOR UPDATE` takes a lock in *every* joined table: two
+        # administrators assigning teachers to two different groups would
+        # serialise on `academics_term`, which neither of them writes.
+        #
+        # It is join-free today only because `QuerySet.get()` clears ordering
+        # itself — the margin `results.services._locked()` documents at length
+        # and this codebase has decided twice is too thin to rest on. The same
+        # fix `ResultSheetTransition.Meta` made, for the same reason.
+        ordering = ["class_group_id", "term_id"]
+        # No `indexes` entry. The unique constraint below already builds a btree
+        # led by exactly `(class_group, term)`, which is the authority question
+        # — "is this person the class teacher of this group, now" — so a
+        # declared index on the same two columns in the same order answers no
+        # query the constraint cannot. It is a second identical index per tenant
+        # schema, one per school on the platform, maintained on every assignment
+        # for nothing. `results.ResultSheetTransition.Meta` records the same
+        # decision; `ClassPlacement` above keeps its index because there the
+        # unique is `(term, student_membership_id)` and the index
+        # `(class_group, term)` — genuinely different columns.
         constraints = [
             models.UniqueConstraint(
                 fields=["class_group", "term"],
