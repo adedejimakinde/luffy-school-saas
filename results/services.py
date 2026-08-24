@@ -44,7 +44,7 @@ that wants to move a sheet has to name the person it is moving it on behalf of,
 which is the right amount of friction for rewriting an approval chain.
 
 Authority is always asked at the school **on the connection**, and the portal is
-refused rather than treated as a school — see `_school_on_this_connection()`,
+refused rather than treated as a school — see `school_on_this_connection()`,
 which is where that used to raise `School.DoesNotExist` out of the module's own
 exception hierarchy.
 """
@@ -158,8 +158,14 @@ OPENING_ROLES = (
 )
 
 
-def _school_on_this_connection():
+def school_on_this_connection():
     """The school whose schema is being written.
+
+    Public, and named without the underscore, because `results.ratings` asks the
+    same question and the answer has to be the same one. Copying six lines into
+    the second module would have been six lines that could disagree about
+    whether the portal is a school — which is the one thing this function exists
+    to be right about.
 
     Read from the connection rather than passed in, for the reason
     `accounts.students.why_not_a_student_here()` reads it there: the sheet being
@@ -210,7 +216,7 @@ def _require_authority(actor, allowed, step):
     if not getattr(actor, "is_authenticated", False):
         raise NotAllowedToActOnResults(f"Signing in is required to {step} results.")
 
-    school = _school_on_this_connection()
+    school = school_on_this_connection()
     roles = set(actor.roles_at(school))
     if not roles & allowed:
         raise NotAllowedToActOnResults(
@@ -393,8 +399,16 @@ def _move(
     roles,
     step,
     class_teacher_only=False,
+    freeze=None,
 ):
-    """One step. Locked, checked, recorded and applied in a single transaction."""
+    """One step. Locked, checked, recorded and applied in a single transaction.
+
+    `freeze` is called with the locked sheet **after** the transition row and
+    the new state are written, and inside the same transaction. Only `release()`
+    passes one. It is a callback rather than a branch on `to_state` so that this
+    function stays a description of the chain, and so that task 3 adds what it
+    freezes by extending one release-time step rather than by editing the mover.
+    """
     school, held = _require_authority(actor, roles, step)
 
     with transaction.atomic():
@@ -443,6 +457,14 @@ def _move(
             fields.append("cycle")
         locked.save(update_fields=fields)
 
+        if freeze is not None:
+            # After the state is written, so anything frozen here can rely on
+            # the sheet already reading `released` — and inside the transaction,
+            # so a sheet that says `released` always has the card that was
+            # released sitting behind it. There is no window in which one exists
+            # without the other.
+            freeze(locked)
+
     return recorded
 
 
@@ -459,7 +481,7 @@ def open_sheet(class_group, term, actor):
     that the `_as()` split the other service modules use is absent here because
     there are no actor-less primitives. `open_sheet()` was exactly the primitive
     that argument said did not exist: exported, writing a tenant table, and
-    never once asking `_school_on_this_connection()`. Anything reachable from a
+    never once asking `school_on_this_connection()`. Anything reachable from a
     future screen — a parent, a student, a suspended teacher — could mint
     `ResultSheet` rows for arbitrary (class, term) pairs, each of which
     `ResultSheetTransition.sheet`'s `PROTECT` then makes awkward to remove.
@@ -518,7 +540,25 @@ def approve(sheet, actor):
 
 
 def release(sheet, actor):
-    """Publish to parents. The last thing that happens to this version."""
+    """Publish to parents. The last thing that happens to this version.
+
+    **The moment the card is frozen.** `ratings.freeze_for_release()` copies the
+    conduct section of every child in the class as it reads right now — the
+    trait names, the order they are in, the scores and the school's word for
+    each score — because every one of those is a row the school may edit next
+    term and none of them may reach backwards into a card that has gone home.
+
+    That is task 4's half of the snapshot. Task 3 adds the scores, the averages
+    and the attendance the same way: another function called from here, inside
+    this transaction, not another branch in `_move()`.
+
+    Imported inside the function rather than at the top of the module, because
+    `ratings` imports this one — it needs `school_on_this_connection()` and
+    `ResultsError`, which are the chain's own — and a module-level import here
+    would close the circle.
+    """
+    from . import ratings
+
     return _move(
         sheet,
         actor,
@@ -526,6 +566,7 @@ def release(sheet, actor):
         to_state=SheetState.RELEASED,
         roles=RELEASING_ROLES,
         step="release",
+        freeze=ratings.freeze_for_release,
     )
 
 

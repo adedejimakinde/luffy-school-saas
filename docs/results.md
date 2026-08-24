@@ -374,10 +374,28 @@ do create schemas, and nothing structural stops the next one being written
 without it. That is [issue #20](https://github.com/adedejimakinde/luffy-school-saas/issues/20),
 not something this branch fixes.
 
+## The freeze hangs off release
+
+`release()` passes a `freeze` callback to `_move()`, which calls it after the
+new state is written and inside the same transaction. A sheet that says
+`released` therefore always has the card that was released sitting behind it —
+there is no window in which one exists without the other.
+
+A callback rather than a branch on `to_state`, so that `_move()` stays a
+description of the chain: what gets frozen is not the mover's business, and the
+next thing to freeze is added by extending one release-time step rather than by
+editing the step that walks the chain.
+
+Today one thing hangs there — `ratings.freeze_for_release()`, which copies every
+child's conduct section as it reads at that moment. See
+[docs/ratings.md](ratings.md#the-freeze-a-released-card-does-not-change) for what
+it copies and why a join would not do. Task 3's scores, averages and attendance
+join it the same way.
+
 ## Not built here
 
-- **The snapshot.** Release is the moment it is frozen; what gets frozen is
-  task 3.
+- **The rest of the snapshot.** The conduct section is frozen at release (above);
+  the scores, the averages and the attendance are task 3.
 - **Revisions.** Task 8. The constraint above is written so that a revision
   makes a new version rather than moving this one.
 - **Screens.** No HTTP surface, for the reason `fees.services` has none: the
