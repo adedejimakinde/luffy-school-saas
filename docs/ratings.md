@@ -360,10 +360,16 @@ dict is used for both paths, so every correction would overwrite the teacher who
 made the judgement with whoever last touched the row. `gradebook.services`
 already keeps the pair apart the same way.
 
-Both are bare ids into the shared membership table, nullable, on
-`docs/tenancy.md`'s policy and `Score.recorded_by_id`'s reasoning: a rating can
-arrive from an import of last year's cards with nobody behind it, and naming a
-fictional rater is worse than naming none.
+Both are bare ids, nullable, on `docs/tenancy.md`'s policy and
+`Score.recorded_by_id`'s reasoning: a rating can arrive from an import of last
+year's cards with nobody behind it, and naming a fictional rater is worse than
+naming none.
+
+They hold **`User` ids** — `rate_as()` stamps the actor, and an actor is a user.
+`student_membership_id`, in the next column of the same table, is a `Membership`
+id. Three `PositiveBigIntegerField`s on one row, two id spaces, and both are
+small dense integers: a "who rated this child?" panel that resolves the wrong
+one does not fail, it names somebody else.
 
 ## Nothing to call yet
 
@@ -375,6 +381,25 @@ frozen or live, and the caller does not have to know which.
 That is also why `academics.services` has no `api.py` and this module has none:
 the rules have to hold for an import too, and a rule that lives in a view only
 holds for the view.
+
+## Every refusal is this module's own
+
+The constraints are what actually hold — that is why they are there — but a
+service that lets one fire hands the caller a raw `IntegrityError`: outside
+`RatingsError`, so every `except ResultsError` misses it, and fatal to an
+enclosing transaction with no savepoint under it. So the service refuses what
+the table would refuse, first and in a sentence:
+
+| the caller does this | what used to happen | what happens now |
+| --- | --- | --- |
+| adds a trait named `"   "` | `a_trait_has_a_name` fires as a 500 | "A trait needs a name" |
+| re-adds a trait it had hidden | `uniq_trait_name_per_group` fires | "…already a trait of the affective section, hidden rather than deleted" |
+| renames a scale point that is not on the scale | `update_or_create` *inserts*, then the CHECK fires | "7 is not on the scale" |
+| passes `"conduct"` as a group | `ValueError` from the enum cast | "…is not a section of the report card" |
+
+Re-adding a hidden trait is refused rather than quietly unhidden. A hidden trait
+carries every rating ever made against it, so bringing it back is a decision
+about that history, not a side effect of typing a name into an "add" box.
 
 ## Open
 
@@ -393,6 +418,21 @@ holds for the view.
   argument. Both go together in
   [issue #28](https://github.com/adedejimakinde/luffy-school-saas/issues/28),
   to be decided with task 8's revisions rather than twice in two shapes.
+- **A rating begun before the sheet exists takes no lock**, because there is no
+  row to lock, so it can still land under a submission that opens and submits
+  the sheet in the same window. Closing it needs a lock on something other than
+  the row —
+  [issue #30](https://github.com/adedejimakinde/luffy-school-saas/issues/30).
+- **A child placed into a released term gets no section at all**: the frozen
+  table has no rows for them and the live path is never reached, so their card
+  prints nothing where every classmate's carries a section.
+  [Issue #31](https://github.com/adedejimakinde/luffy-school-saas/issues/31),
+  which task 3 will meet in a larger form.
+- **Every `ForeignKey` carries an automatic index** that a unique constraint
+  already leads with, here and across the repository.
+  [Issue #32](https://github.com/adedejimakinde/luffy-school-saas/issues/32);
+  `NoIndexIsBuiltTwiceTests` holds the declared-index rule and excludes those by
+  an explicit list, so adding a relation fails until somebody looks.
 - A third trait group, if one is ever wanted, is a `TraitGroup` member plus a
   column on `ReportCardSettings`. `FIELD_FOR` is a written-down map rather than
   `getattr(self, f"{group}_enabled")` so that the pair cannot drift into an

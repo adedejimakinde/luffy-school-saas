@@ -271,7 +271,7 @@ narrowest step, and it should not admit anybody who cannot act on the row they
 have just created.
 
 Authority is asked at the school on the connection, and **the portal is refused
-outright**. `_school_on_this_connection()` had no answer for the public schema:
+outright**. `school_on_this_connection()` had no answer for the public schema:
 a caller that never entered a tenant got `School.DoesNotExist`, which is outside
 `ResultsError`, so a refusal arrived as a 500 — and where a
 `School(schema_name="public")` row exists, as this codebase's own tests create,

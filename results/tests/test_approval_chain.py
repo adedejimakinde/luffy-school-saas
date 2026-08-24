@@ -300,7 +300,7 @@ class OpeningASheetTests(ChainSetUp):
     def test_results_cannot_be_acted_on_from_the_portal(self):
         """The public schema is the portal, not a customer.
 
-        `_school_on_this_connection()` had no answer here. A caller that never
+        `school_on_this_connection()` had no answer here. A caller that never
         entered a tenant got `School.DoesNotExist`, which is outside
         `ResultsError`, so every `except ResultsError` handler missed it and a
         refusal arrived as a 500. Worse where a `School(schema_name="public")`

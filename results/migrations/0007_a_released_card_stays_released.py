@@ -80,10 +80,17 @@ BEFORE UPDATE OR DELETE ON results_releasedtraitrating
 FOR EACH ROW EXECUTE FUNCTION results_frozen_ratings_are_append_only();
 """
 
-# COALESCE(NEW, OLD): on DELETE, NEW is null. Both rows carry the same term and
-# student, so either answers the question — but reading the wrong one is a
-# null-guarded no-op, which is a trigger that silently permits the thing it was
-# written to refuse.
+# On DELETE, NEW is null, so the row being asked about is OLD. Both rows carry
+# the same term and student, so either answers the question — but reading the
+# wrong one is a null-guarded no-op, which is a trigger that silently permits
+# the thing it was written to refuse.
+#
+# Existence is decided by FOUND rather than by testing the selected value for
+# NULL. `SELECT g.name INTO released_group` followed by `IF released_group IS
+# NOT NULL` is the same null-guarded no-op one level down: it happens to work
+# only because `academics_classgroup.name` is NOT NULL today, and a nullable
+# column there would turn this guard off silently. The name is still selected,
+# because the refusal quotes it.
 LIVE_FUNCTION = """
 CREATE OR REPLACE FUNCTION results_ratings_stop_at_release() RETURNS trigger AS $$
 DECLARE
@@ -107,7 +114,7 @@ BEGIN
       AND s.state = 'released'
     LIMIT 1;
 
-    IF released_group IS NOT NULL THEN
+    IF FOUND THEN
         RAISE EXCEPTION
             'this term has been released for %; its ratings are part of a card '
             'somebody is holding and % is not allowed. Correcting a released '

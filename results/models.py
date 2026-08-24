@@ -579,6 +579,12 @@ class TraitRating(models.Model):
     # the insert, and names the teacher whose judgement this is; `updated_by_id`
     # moves on every correction. Stamped on both by the same value the first
     # time, which is why only a later correction tells them apart.
+    #
+    # **These hold `User` ids, not `Membership` ids** — `rate_as()` stamps the
+    # actor, and the actor is a user. The column above holds a membership id,
+    # and both are small dense integers, so a screen resolving the wrong one
+    # would confidently name an unrelated person rather than fail.
+    # `ResultSheetTransition.actor_id` is a user id for the same reason.
     rated_by_id = models.PositiveBigIntegerField(null=True, blank=True)
     updated_by_id = models.PositiveBigIntegerField(null=True, blank=True)
 
@@ -589,11 +595,13 @@ class TraitRating(models.Model):
 
     class Meta:
         ordering = ["term_id", "student_membership_id", "trait_id"]
-        indexes = [
-            # The card read: every rating for one child this term, which is one
-            # query per card rather than one per trait.
-            models.Index(fields=["term", "student_membership_id"]),
-        ]
+        # There is deliberately no `Meta.indexes` entry for
+        # `(term, student_membership_id)` — the card read. The unique constraint
+        # below builds a btree led by exactly those two columns, so a declared
+        # index answers no query it cannot and is a second index per tenant
+        # schema, one per school on the platform, maintained on every insert for
+        # nothing. `ResultSheetTransition.Meta` in this file made the same call
+        # first; this one was written before that note was read.
         constraints = [
             models.UniqueConstraint(
                 fields=["term", "student_membership_id", "trait"],
@@ -704,10 +712,12 @@ class ReleasedTraitRating(models.Model):
         # sorting `group` as a string — which agrees today and would stop
         # agreeing the first time a group is added whose value sorts wrong.
         ordering = ["sheet_id", "student_membership_id", "position", "trait_name", "id"]
-        indexes = [
-            # One card: every frozen line for one child on one sheet.
-            models.Index(fields=["sheet", "student_membership_id"]),
-        ]
+        # No declared index, for the reason `TraitRating.Meta` gives: the unique
+        # constraint below is already a btree on `(sheet, student_membership_id,
+        # trait)`, and the card read — every frozen line for one child on one
+        # sheet — is its leading pair. `freeze_for_release()` bulk-inserts about
+        # five hundred rows per class per release, and each index is paid for on
+        # every one of them.
         constraints = [
             models.UniqueConstraint(
                 fields=["sheet", "student_membership_id", "trait"],

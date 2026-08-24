@@ -176,12 +176,6 @@ class Migration(migrations.Migration):
                     "trait_name",
                     "id",
                 ],
-                "indexes": [
-                    models.Index(
-                        fields=["sheet", "student_membership_id"],
-                        name="results_rel_sheet_i_844639_idx",
-                    )
-                ],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("sheet", "student_membership_id", "trait"),
@@ -252,12 +246,6 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["term_id", "student_membership_id", "trait_id"],
-                "indexes": [
-                    models.Index(
-                        fields=["term", "student_membership_id"],
-                        name="results_tra_term_id_5d89c6_idx",
-                    )
-                ],
                 "constraints": [
                     models.UniqueConstraint(
                         fields=("term", "student_membership_id", "trait"),

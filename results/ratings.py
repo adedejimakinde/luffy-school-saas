@@ -134,6 +134,25 @@ class RatingsLocked(RatingsError):
 CONFIGURING_ROLES = frozenset({Role.PRINCIPAL.value, Role.ADMIN.value})
 
 
+def _group(group) -> str:
+    """A `TraitGroup` value, or this module's own refusal.
+
+    `TraitGroup("conduct")` raises a bare `ValueError`, which is outside
+    `ResultsError` — so every caller wrapping "get this class's results out" in
+    `except ResultsError` misses it, and a mistyped query parameter arrives as a
+    500. The same hole `school_on_this_connection()` was written about, where a
+    `School.DoesNotExist` escaped the hierarchy this one exists to keep.
+    """
+    try:
+        return TraitGroup(group).value
+    except ValueError:
+        known = ", ".join(member.value for member in TraitGroup)
+        raise RatingsError(
+            f"{group!r} is not a section of the report card. There are two: "
+            f"{known}."
+        ) from None
+
+
 # ---------------------------------------------------------------------------
 # Settings: which sections this school prints.
 # ---------------------------------------------------------------------------
@@ -153,7 +172,7 @@ def settings() -> ReportCardSettings:
 
 
 def is_enabled(group) -> bool:
-    return settings().enabled(group)
+    return settings().enabled(_group(group))
 
 
 def enabled_groups() -> list[str]:
@@ -169,7 +188,7 @@ def enabled_groups() -> list[str]:
 
 def set_group_enabled(group, on: bool) -> ReportCardSettings:
     """Turn one section on or off. Returns the settings row."""
-    group = TraitGroup(group).value
+    group = _group(group)
     row, _ = ReportCardSettings.objects.get_or_create(pk=1)
     setattr(row, ReportCardSettings.FIELD_FOR[group], bool(on))
     row.save(update_fields=[ReportCardSettings.FIELD_FOR[group], "updated_at"])
@@ -185,10 +204,73 @@ def traits(group=None, *, include_hidden=False):
     """The traits this school rates, in the order they print."""
     rows = Trait.objects.all()
     if group is not None:
-        rows = rows.in_group(TraitGroup(group).value)
+        rows = rows.in_group(_group(group))
     if not include_hidden:
         rows = rows.visible()
     return rows
+
+
+#: What `Trait.name` holds. Read off the field so the refusal below and the
+#: column agree about one number, rather than a form promising one length and
+#: Postgres enforcing another.
+MAX_TRAIT_NAME = Trait._meta.get_field("name").max_length
+
+
+def _require_a_trait_name(name) -> str:
+    """A name, stripped, that says something and fits the column.
+
+    **The service refuses what the table would refuse.** The constraint is what
+    actually holds, and a service that leaves it to fire hands the caller a raw
+    `IntegrityError` — outside `RatingsError`, so every `except ResultsError`
+    misses it, and fatal to any enclosing transaction with no savepoint under
+    it. A principal who typed spaces into a form gets a 500 where a sentence
+    would do.
+    """
+    if not isinstance(name, str):
+        raise RatingsError(f"A trait is named with text, not {name!r}.")
+    name = name.strip()
+    if not name:
+        raise RatingsError(
+            "A trait needs a name. A blank line on the conduct section is a box "
+            "with nothing to tick against it."
+        )
+    if len(name) > MAX_TRAIT_NAME:
+        raise RatingsError(
+            f"A trait name fits {MAX_TRAIT_NAME} characters and this one is "
+            f"{len(name)}."
+        )
+    return name
+
+
+def _refuse_a_name_already_in_the_group(group, name, *, except_pk=None):
+    """`uniq_trait_name_per_group` counts hidden rows, and hiding is the workflow.
+
+    A school hides "Honesty", forgets, and adds it again next term. The
+    constraint refuses the insert — correctly, because the row is still there —
+    and without this the refusal arrives naming a constraint, when what the
+    person needs to be told is that the trait already exists and is hidden.
+
+    Deliberately does not unhide it for them. A hidden trait carries every
+    rating ever made against it, so bringing it back is a decision about that
+    history, not a side effect of typing a name into an "add" box.
+    """
+    clash = Trait.objects.in_group(group).filter(name=name)
+    if except_pk is not None:
+        clash = clash.exclude(pk=except_pk)
+    existing = clash.first()
+    if existing is None:
+        return
+    if existing.is_hidden:
+        raise RatingsError(
+            f"“{name}” is already a trait of the "
+            f"{TraitGroup(group).label.lower()} section, hidden rather than "
+            f"deleted — every rating ever made against it still names it. Show "
+            f"it again instead of adding a second one."
+        )
+    raise RatingsError(
+        f"“{name}” is already on the {TraitGroup(group).label.lower()} section. "
+        f"Two lines with one name is one judgement with two boxes to tick."
+    )
 
 
 def add_trait(group, name, *, position=None) -> Trait:
@@ -198,7 +280,9 @@ def add_trait(group, name, *, position=None) -> Trait:
     adding "Respect for school property" means it to appear after what is
     already there, and a default of zero would silently put it first.
     """
-    group = TraitGroup(group).value
+    group = _group(group)
+    name = _require_a_trait_name(name)
+    _refuse_a_name_already_in_the_group(group, name)
     if position is None:
         last = (
             Trait.objects.in_group(group)
@@ -207,7 +291,27 @@ def add_trait(group, name, *, position=None) -> Trait:
             .first()
         )
         position = 0 if last is None else last + 1
-    return Trait.objects.create(group=group, name=name.strip(), position=position)
+    return Trait.objects.create(group=group, name=name, position=position)
+
+
+def _the_trait_row(trait) -> Trait:
+    """This school's trait with that `pk`, whatever instance was handed in.
+
+    `_require_a_ratable_trait()` argues the case for the rating path; it holds
+    identically for the writes below, and more sharply, because they *change*
+    the row. `trait.save(update_fields=["name"])` compiles to
+    `UPDATE results_trait SET name=... WHERE id=<pk>` against the schema on the
+    connection — so an instance read on another school's connection renames
+    whichever of *our* traits holds that id, silently and with no error
+    anywhere. The two schemas are seeded identically, so the ids coincide.
+    """
+    try:
+        return Trait.objects.get(pk=trait.pk)
+    except Trait.DoesNotExist:
+        raise RatingsError(
+            f"There is no trait {trait.pk!r} on this school's sheet. A trait "
+            f"belongs to the school whose schema it was read in."
+        ) from None
 
 
 def rename_trait(trait, name) -> Trait:
@@ -217,7 +321,10 @@ def rename_trait(trait, name) -> Trait:
     keeps printing it, because `ReleasedTraitRating.trait_name` is a copy taken
     at release rather than a join to this row.
     """
-    trait.name = name.strip()
+    trait = _the_trait_row(trait)
+    name = _require_a_trait_name(name)
+    _refuse_a_name_already_in_the_group(trait.group, name, except_pk=trait.pk)
+    trait.name = name
     trait.save(update_fields=["name", "updated_at"])
     return trait
 
@@ -230,9 +337,33 @@ def set_trait_hidden(trait, hidden: bool = True) -> Trait:
     Hiding is what a school actually wants: the trait leaves next term's sheet
     and every card already issued is untouched.
     """
+    trait = _the_trait_row(trait)
     trait.is_hidden = bool(hidden)
     trait.save(update_fields=["is_hidden", "updated_at"])
     return trait
+
+
+def _as_ids(values):
+    """Whatever the screen sent, as integers. Anything else is dropped.
+
+    A drag-and-drop posts JSON, and JSON has no integers in a URL or a form:
+    `["12", "9", "7"]` is what arrives. Matched against a dict keyed by `pk`,
+    every one of those misses, `reorder()` renumbers the group into the order it
+    was already in, and returns 0 — a silent no-op the screen reports as
+    success, and one the "ids of rows that no longer exist" rule makes
+    indistinguishable from a legitimate one.
+
+    Coerced here rather than at each call site so the two `reorder` paths cannot
+    disagree, and non-numeric junk is dropped rather than raising: the function's
+    contract is already "ids it does not recognise are ignored".
+    """
+    ids = []
+    for value in values:
+        try:
+            ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ids
 
 
 def reorder(group, trait_ids) -> int:
@@ -262,13 +393,13 @@ def reorder(group, trait_ids) -> int:
     reordering is not a way to change what section a trait is in. So are ids
     naming a trait twice, and ids of rows that no longer exist.
     """
-    group = TraitGroup(group).value
+    group = _group(group)
     # Iterated in `Meta.ordering`, so `known` — and therefore `rest` below — is
     # in the order the group prints today.
     known = {trait.pk: trait for trait in Trait.objects.in_group(group)}
 
     named, seen = [], set()
-    for trait_id in trait_ids:
+    for trait_id in _as_ids(trait_ids):
         trait = known.get(trait_id)
         if trait is None or trait.pk in seen:
             continue
@@ -296,10 +427,40 @@ def scale_labels() -> dict[int, str]:
     return dict(RatingScalePoint.objects.values_list("value", "label"))
 
 
+#: What `RatingScalePoint.label` holds, read off the field for the reason
+#: `MAX_TRAIT_NAME` is.
+MAX_SCALE_LABEL = RatingScalePoint._meta.get_field("label").max_length
+
+
 def set_scale_label(value: int, label: str) -> RatingScalePoint:
-    """Rename one point of the scale. The number it stands for does not move."""
+    """Rename one point of the scale. The number it stands for does not move.
+
+    Both arguments are checked here, and the value check is the one that matters:
+    `update_or_create(value=7)` finds no row and *inserts* one, so a caller who
+    meant to rename a point and mistyped its number would mint an off-scale
+    point — refused by `a_scale_point_is_within_the_scale` as a raw
+    `IntegrityError`, outside this module's hierarchy and fatal to any enclosing
+    transaction. `_require_a_score_on_the_scale()` twenty lines down was already
+    asking exactly this question about scores.
+
+    It stays an upsert rather than becoming a pure update, deliberately: a point
+    deleted out from under the scale in `psql` is one a school must be able to
+    put back, and `_label_for()` already covers the window where it is missing.
+    """
+    _require_a_score_on_the_scale(value)
+    if not isinstance(label, str) or not label.strip():
+        raise RatingsError(
+            f"Point {value} of the scale needs a word. The key at the foot of "
+            f"the card prints it."
+        )
+    label = label.strip()
+    if len(label) > MAX_SCALE_LABEL:
+        raise RatingsError(
+            f"A scale label fits {MAX_SCALE_LABEL} characters and this one is "
+            f"{len(label)}."
+        )
     point, _ = RatingScalePoint.objects.update_or_create(
-        value=value, defaults={"label": label.strip()}
+        value=value, defaults={"label": label}
     )
     return point
 
@@ -382,8 +543,20 @@ def sheet_for(class_group, term):
     The read path's copy, taking no lock: `card_sections()` asks it to decide
     whether to render the freeze or live configuration, and rendering a card
     must not lock the row a principal is trying to release.
+
+    `.order_by()` before `.first()`, and it is not decoration.
+    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
+    and `.filter().first()` keeps it, so this compiled to a three-table join
+    sorted by the term's session and the class's level, once per child, for a
+    row `one_result_sheet_per_class_term` guarantees is unique. `_locked_sheet_for()`
+    below documents the same hazard and uses `.get()`, which clears ordering
+    itself; this is the spelling that does not.
     """
-    return ResultSheet.objects.filter(class_group=class_group, term=term).first()
+    return (
+        ResultSheet.objects.filter(class_group=class_group, term=term)
+        .order_by()
+        .first()
+    )
 
 
 def _locked_sheet_for(class_group, term):
@@ -423,7 +596,12 @@ def _require_the_sheet_is_open(class_group, term):
 
     A sheet that does not exist yet is open: the chain has not started, and
     rating before anybody opens the class's sheet is the ordinary order of
-    events.
+    events. **No lock is taken in that case, and cannot be** — Postgres has no
+    row to lock — so the ordering below is a guarantee about sheets that exist.
+    A rating begun before the sheet is opened can still land after somebody else
+    opens *and* submits it in the same window. Closing that needs a lock on
+    something other than the row, which is
+    [issue #30](https://github.com/adedejimakinde/luffy-school-saas/issues/30).
 
     **The sheet is locked, not merely read**, and the caller writes the rating
     in the same transaction. Unlocked, this is a check followed by an act on
@@ -469,7 +647,7 @@ def _stamp(by):
     return getattr(by, "pk", by)
 
 
-def rate(term, trait, membership, score, *, by=None) -> TraitRating:
+def rate(term, trait, membership, score, *, by=None, placement=None) -> TraitRating:
     """Record one judgement of one child on one trait. Returns the row.
 
     An upsert: rating a child a 4 where they were a 3 is a correction, not a
@@ -494,9 +672,23 @@ def rate(term, trait, membership, score, *, by=None) -> TraitRating:
     just said, in a sentence written for them, what was actually wrong.
     `gradebook.services` narrows its equivalent catch rather than dropping it,
     because there the collision genuinely reaches the caller; here nothing does.
+
+    `placement` is the row the caller has **already authorised against**, and
+    passing it is what makes the guard and the write agree about which class
+    group the child is in. `rate_as()` reads the placement, asks whether this
+    actor is that group's class teacher, and hands the same row down; without
+    it this function read the placement a second time, and an
+    `academics.move_student()` committing between the two would have the rating
+    checked against JSS 1A's sheet on JSS 1A's teacher's authority and written
+    against JSS 1B's. That is `_require_class_teacher_scope()`'s bug — the guard
+    and the act about two different rows — one module along and one level down.
+
+    Left optional rather than required because the primitive is reachable
+    without an actor: an import has nobody to authorise and no earlier read to
+    reuse, so it reads its own.
     """
     _require_student_of_this_school(membership)
-    placement = _require_placed(membership, term)
+    placement = placement or _require_placed(membership, term)
     trait = _require_a_ratable_trait(trait)
     _require_a_score_on_the_scale(score)
 
@@ -532,16 +724,20 @@ def rate(term, trait, membership, score, *, by=None) -> TraitRating:
         return rating
 
 
-def clear_rating(term, trait, membership) -> bool:
+def clear_rating(term, trait, membership, *, placement=None) -> bool:
     """Unrate. True if there was a rating.
 
     Deletes the row rather than nulling the score, for the reason
     `gradebook.Score` deletes: no row is how "not rated" is spelled, and a
     nullable score would make a blank on the card ambiguous between "the teacher
     has not got to this yet" and "the teacher looked and left it empty".
+
+    `placement` carries the same meaning it does in `rate()`: the row the caller
+    authorised against, so that the guard and the delete are about one class
+    group.
     """
     _require_student_of_this_school(membership)
-    placement = _require_placed(membership, term)
+    placement = placement or _require_placed(membership, term)
 
     with transaction.atomic():
         _require_the_sheet_is_open(placement.class_group, term)
@@ -835,7 +1031,15 @@ def rate_as(actor, term, trait, membership, score, *, by=None) -> TraitRating:
     _require_student_of_this_school(membership)
     placement = _require_placed(membership, term)
     _require_the_class_teacher(actor, placement, term)
-    return rate(term, trait, membership, score, by=actor if by is None else by)
+    return rate(
+        term,
+        trait,
+        membership,
+        score,
+        by=actor if by is None else by,
+        # The row the authority question was just answered about. See `rate()`.
+        placement=placement,
+    )
 
 
 def clear_rating_as(actor, term, trait, membership) -> bool:
@@ -843,7 +1047,7 @@ def clear_rating_as(actor, term, trait, membership) -> bool:
     _require_student_of_this_school(membership)
     placement = _require_placed(membership, term)
     _require_the_class_teacher(actor, placement, term)
-    return clear_rating(term, trait, membership)
+    return clear_rating(term, trait, membership, placement=placement)
 
 
 def set_group_enabled_as(actor, group, on: bool) -> ReportCardSettings:

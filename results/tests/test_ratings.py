@@ -833,6 +833,310 @@ class RatingsFollowTheChainTests(RatingsSetUp):
                     )
 
 
+class TheServiceRefusesWhatTheTableWouldTests(RatingsSetUp):
+    """Every refusal a caller can trigger arrives as a `RatingsError`.
+
+    The constraints are what actually hold — that is the whole reason they are
+    there — but a service that leaves them to fire hands back a raw
+    `IntegrityError`: outside the hierarchy `RatingsError` exists to keep, so
+    every `except ResultsError` misses it, and fatal to an enclosing
+    transaction that has no savepoint under it. A principal who typed spaces
+    into a form should read a sentence, not cause a 500.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.enable(self.stmarys, TraitGroup.AFFECTIVE)
+
+    def test_a_blank_trait_name_is_refused_by_the_service_first(self):
+        with connected_to(self.stmarys):
+            for blank in ("", "   ", "\n\t"):
+                with self.subTest(blank=repr(blank)):
+                    with self.assertRaises(ratings.RatingsError):
+                        ratings.add_trait_as(
+                            self.principal, TraitGroup.AFFECTIVE, blank
+                        )
+
+            with self.assertRaises(ratings.RatingsError):
+                ratings.rename_trait_as(self.principal, self.trait("Honesty"), "  ")
+
+            self.assertEqual(self.trait("Honesty").name, "Honesty")
+
+    def test_a_name_longer_than_the_column_is_refused_with_the_number(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(ratings.RatingsError) as refused:
+                ratings.add_trait_as(
+                    self.principal,
+                    TraitGroup.AFFECTIVE,
+                    "x" * (ratings.MAX_TRAIT_NAME + 1),
+                )
+
+        self.assertIn(str(ratings.MAX_TRAIT_NAME), str(refused.exception))
+
+    def test_re_adding_a_hidden_trait_says_it_is_hidden(self):
+        """The documented workflow, and the constraint counts hidden rows.
+
+        A school hides "Honesty", forgets, and adds it again next term. What
+        they need to read is that it is already there and hidden — not the name
+        of a unique constraint.
+        """
+        with connected_to(self.stmarys):
+            ratings.set_trait_hidden_as(self.principal, self.trait("Honesty"))
+
+            with self.assertRaises(ratings.RatingsError) as refused:
+                ratings.add_trait_as(self.principal, TraitGroup.AFFECTIVE, "Honesty")
+
+            self.assertEqual(
+                Trait.objects.filter(group=TraitGroup.AFFECTIVE, name="Honesty").count(),
+                1,
+            )
+            self.assertTrue(
+                self.trait("Honesty").is_hidden,
+                "refusing must not quietly unhide it — the row carries every "
+                "rating ever made against it",
+            )
+
+        self.assertIn("hidden", str(refused.exception))
+
+    def test_adding_a_name_the_section_already_shows_is_refused(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(ratings.RatingsError):
+                ratings.add_trait_as(self.principal, TraitGroup.AFFECTIVE, "Honesty")
+
+    def test_the_same_name_in_the_other_section_is_fine(self):
+        """The constraint is per group, and so is the check in front of it."""
+        with connected_to(self.stmarys):
+            added = ratings.add_trait_as(
+                self.principal, TraitGroup.PSYCHOMOTOR, "Honesty"
+            )
+
+            self.assertEqual(added.group, TraitGroup.PSYCHOMOTOR)
+
+    def test_a_rename_onto_an_existing_name_is_refused(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(ratings.RatingsError):
+                ratings.rename_trait_as(
+                    self.principal, self.trait("Honesty"), "Neatness"
+                )
+
+            self.assertEqual(self.trait("Honesty").name, "Honesty")
+
+    def test_renaming_a_trait_to_what_it_already_says_is_not_a_clash(self):
+        with connected_to(self.stmarys):
+            same = ratings.rename_trait_as(
+                self.principal, self.trait("Honesty"), "Honesty"
+            )
+
+            self.assertEqual(same.name, "Honesty")
+
+    def test_the_duplicate_check_reads_the_rows_group_not_the_arguments(self):
+        """The instance-vs-row rule, on the path that *writes*.
+
+        An instance can claim any group. Check the claim and the clash is
+        looked for in the wrong section, so the rename is allowed through and
+        `uniq_trait_name_per_group` refuses it as an `IntegrityError` instead.
+        """
+        with connected_to(self.stmarys):
+            honesty = self.trait("Honesty")
+            claiming_psychomotor = Trait(
+                pk=honesty.pk, group=TraitGroup.PSYCHOMOTOR, name=honesty.name
+            )
+
+            with self.assertRaises(ratings.RatingsError):
+                ratings.rename_trait_as(
+                    self.principal, claiming_psychomotor, "Neatness"
+                )
+
+            self.assertEqual(self.trait("Honesty").name, "Honesty")
+            self.assertEqual(self.trait("Neatness").name, "Neatness")
+
+    def test_a_trait_that_is_not_in_this_schema_is_refused_by_name(self):
+        with connected_to(self.stmarys):
+            missing = Trait(pk=9_999, group=TraitGroup.AFFECTIVE, name="Invented")
+
+            for act in (
+                lambda: ratings.rename_trait_as(self.principal, missing, "Anything"),
+                lambda: ratings.set_trait_hidden_as(self.principal, missing),
+            ):
+                with self.subTest(act=act):
+                    with self.assertRaises(ratings.RatingsError) as refused:
+                        act()
+                    self.assertIn("9999", str(refused.exception).replace(",", ""))
+
+    def test_an_unknown_section_is_this_modules_refusal_not_a_value_error(self):
+        """`TraitGroup("conduct")` raises `ValueError`, which nothing catches."""
+        with connected_to(self.stmarys):
+            for act in (
+                lambda: ratings.traits("conduct"),
+                lambda: ratings.is_enabled("conduct"),
+                lambda: ratings.set_group_enabled_as(self.principal, "conduct", True),
+                lambda: ratings.add_trait_as(self.principal, "conduct", "Diligence"),
+            ):
+                with self.subTest(act=act):
+                    with self.assertRaises(ratings.RatingsError):
+                        act()
+
+    def test_a_scale_point_off_the_scale_is_refused_before_it_is_inserted(self):
+        """`update_or_create(value=7)` inserts. The CHECK then fires at the table."""
+        with connected_to(self.stmarys):
+            with self.assertRaises(ratings.RatingsError):
+                ratings.set_scale_label_as(self.principal, 7, "Superb")
+
+            self.assertEqual(RatingScalePoint.objects.count(), 5)
+
+    def test_a_blank_scale_label_is_refused_too(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(ratings.RatingsError):
+                ratings.set_scale_label_as(self.principal, 3, "   ")
+
+            self.assertEqual(ratings.scale_labels()[3], "Good")
+
+    def test_ids_that_arrive_as_strings_still_reorder(self):
+        """A drag-and-drop posts JSON, and JSON ids arrive as text.
+
+        Matched against a dict keyed by `pk`, every one misses: the group is
+        renumbered into the order it was already in, nothing moves, and the
+        screen is told 0 rows changed — a silent no-op reported as success.
+        """
+        with connected_to(self.stmarys):
+            wanted = ["Honesty", "Neatness", "Punctuality"]
+            moved = ratings.reorder_as(
+                self.principal,
+                TraitGroup.AFFECTIVE,
+                [str(self.trait(name).pk) for name in wanted],
+            )
+
+            self.assertTrue(moved)
+            self.assertEqual(
+                [line.name for line in self.sections()[0].lines][:3], wanted
+            )
+
+
+class TheGuardAndTheWriteShareOnePlacementTests(RatingsSetUp):
+    """`rate_as()` authorises against a placement; `rate()` must use that one.
+
+    Reading it twice is the shape `_require_class_teacher_scope()` was corrected
+    on: the authority question and the write were about two different rows. Here
+    an `academics.move_student()` committing between the two reads would have a
+    rating authorised against JSS 1A's class teacher and checked against JSS
+    1B's sheet — including its state, so a rating could land in a term the guard
+    would have refused.
+
+    The race itself needs two connections; what is pinned here is the plumbing
+    that removes it — that the write path honours the placement it is handed
+    rather than looking one up.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.enable(self.stmarys, TraitGroup.AFFECTIVE)
+
+    def test_the_sheet_checked_is_the_one_the_placement_names(self):
+        with connected_to(self.stmarys):
+            jss3b = ClassGroup.objects.get(pk=self.jss3b_id)
+            other = services.open_sheet(jss3b, self.term(), self.principal)
+            services.submit(other, self.sade)
+
+            # Ada sits in JSS 1A, whose sheet is still a draft. Handed JSS 3B's
+            # placement, the write must look at JSS 3B's sheet — and refuse.
+            elsewhere = academics.placement_of(
+                self.membership_of(self.ada).pk, self.term()
+            )
+            elsewhere.class_group = jss3b
+
+            with self.assertRaises(ratings.RatingsLocked) as refused:
+                ratings.rate(
+                    self.term(),
+                    self.trait("Punctuality"),
+                    self.membership_of(self.ada),
+                    5,
+                    placement=elsewhere,
+                )
+
+        self.assertEqual(refused.exception.state, "submitted")
+
+    def test_without_one_it_reads_the_placement_itself(self):
+        """The primitive is still reachable from an import with no earlier read."""
+        with connected_to(self.stmarys):
+            self.assertEqual(
+                ratings.rate(
+                    self.term(),
+                    self.trait("Punctuality"),
+                    self.membership_of(self.ada),
+                    4,
+                ).score,
+                4,
+            )
+
+
+class NoIndexIsBuiltTwiceTests(RatingsSetUp):
+    """A declared index whose columns lead another index buys nothing.
+
+    `ResultSheetTransition.Meta` in this app already argues it: a second btree
+    over the same leading columns is one more index per tenant schema, per
+    school on the platform, maintained on every insert for nothing — and
+    `freeze_for_release()` inserts about five hundred rows per class per
+    release.
+
+    Asserted against `pg_indexes` rather than against `Meta`, because the rule
+    is about what Postgres builds and `UniqueConstraint` builds one too.
+
+    **Django's automatic per-`ForeignKey` index is excluded**, and that is a
+    deliberate line rather than an oversight. `term_id` and `sheet_id` are each
+    a strict prefix of their table's unique constraint, so they are redundant by
+    exactly the same argument — but every `ForeignKey` in this codebase has one,
+    `ResultSheetTransition.sheet` on `main` included, and turning them off is a
+    `db_index=False` decision about delete-time lookups that belongs to the
+    whole repository rather than to this table. It is
+    [issue #32](https://github.com/adedejimakinde/luffy-school-saas/issues/32).
+    What this test holds is the rule the app has already written down: no
+    *declared* index repeats a constraint's btree.
+    """
+
+    #: The columns Django indexes on its own, one per `ForeignKey`. Listed
+    #: rather than detected, so adding a relation to either table makes this
+    #: test fail until somebody has looked at what it costs.
+    AUTOMATIC = {
+        "results_traitrating": [["term_id"], ["trait_id"]],
+        "results_releasedtraitrating": [["sheet_id"], ["trait_id"]],
+    }
+
+    def columns_of_each_index(self, table):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT indexname, indexdef FROM pg_indexes "
+                "WHERE schemaname = %s AND tablename = %s",
+                [self.stmarys.schema_name, table],
+            )
+            rows = cursor.fetchall()
+
+        found = {}
+        for name, definition in rows:
+            columns = definition[definition.index("(") + 1 : definition.rindex(")")]
+            found[name] = [column.strip() for column in columns.split(",")]
+        return found
+
+    def test_no_index_leads_with_the_columns_another_already_leads_with(self):
+        for table in ("results_traitrating", "results_releasedtraitrating"):
+            with self.subTest(table=table):
+                with connected_to(self.stmarys):
+                    indexes = self.columns_of_each_index(table)
+
+                automatic = self.AUTOMATIC[table]
+                for name, columns in indexes.items():
+                    if columns in automatic:
+                        continue
+                    for other, others in indexes.items():
+                        if name == other:
+                            continue
+                        self.assertNotEqual(
+                            others[: len(columns)],
+                            columns,
+                            f"{name} {columns} is a prefix of {other} {others}: "
+                            f"two btrees over one answer",
+                        )
+
+
 class TheFreezeTests(RatingsSetUp):
     """**The one to get right.** A released card does not change. Ever.
 
