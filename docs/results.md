@@ -386,16 +386,24 @@ description of the chain: what gets frozen is not the mover's business, and the
 next thing to freeze is added by extending one release-time step rather than by
 editing the step that walks the chain.
 
-Today one thing hangs there — `ratings.freeze_for_release()`, which copies every
-child's conduct section as it reads at that moment. See
-[docs/ratings.md](ratings.md#the-freeze-a-released-card-does-not-change) for what
-it copies and why a join would not do. Task 3's scores, averages and attendance
-join it the same way.
+Two things hang there today, and they run in the order they print:
+`ratings.freeze_for_release()`, which copies every child's conduct section as it
+reads at that moment, then `comments.freeze_for_release()`, which copies the
+class teacher's and the principal's remarks. See
+[docs/ratings.md](ratings.md#the-freeze-a-released-card-does-not-change) and
+[docs/comments.md](comments.md#the-freeze-a-released-card-does-not-change) for
+what each copies and why a join would not do. Task 3's scores, averages and
+attendance join them the same way.
+
+They hang off a **named function** rather than two `freeze=` parameters or a
+list, so `_move()` goes on knowing nothing about any of it: what gets frozen is
+a growing list, and the mover is a description of the chain.
 
 ## Not built here
 
-- **The rest of the snapshot.** The conduct section is frozen at release (above);
-  the scores, the averages and the attendance are task 3.
+- **The rest of the snapshot.** The conduct section and the two remarks are
+  frozen at release (above); the scores, the averages and the attendance are
+  task 3.
 - **Revisions.** Task 8. The constraint above is written so that a revision
   makes a new version rather than moving this one.
 - **Screens.** No HTTP surface, for the reason `fees.services` has none: the
