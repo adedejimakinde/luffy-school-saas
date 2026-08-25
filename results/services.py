@@ -49,6 +49,8 @@ which is where that used to raise `School.DoesNotExist` out of the module's own
 exception hierarchy.
 """
 
+from collections.abc import Iterable
+
 from django.db import connection, transaction
 from django_tenants.utils import get_public_schema_name
 
@@ -221,9 +223,22 @@ def as_ids(values):
     screen reports as success, and one the "ids of rows that no longer exist"
     rule makes indistinguishable from a legitimate one.
 
-    Non-numeric junk is dropped rather than raising: every caller's contract is
-    already "ids it does not recognise are ignored".
+    Non-numeric junk *inside* the sequence is dropped rather than raising: every
+    caller's contract is already "ids it does not recognise are ignored".
+
+    A **string** is refused rather than iterated, and that is the case worth
+    naming. `as_ids("12,9")` iterates characters, so `int()` succeeds on "1",
+    "2" and "9" and skips the comma — yielding `[1, 2, 9]`, three ids the school
+    never named, against which the list is cheerfully renumbered and the call
+    reports success. It is the same silent no-op this function was extracted to
+    prevent, wearing different clothes. So is a non-sequence: `None` would raise
+    a bare `TypeError`, outside `ResultsError`, arriving at a screen as a 500.
     """
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise ResultsError(
+            f"A list of ids is a sequence of numbers, not {values!r}. A single "
+            f"id still arrives as a list of one."
+        )
     ids = []
     for value in values:
         try:
@@ -693,6 +708,15 @@ def history(sheet):
     return ResultSheetTransition.objects.filter(sheet=sheet)
 
 
+# Includes the shared plumbing `ratings` and `comments` import — the lock, the
+# predicate, the id coercion and the school lookup. Each says "public" in its own
+# docstring and both docs name them as the shared surface; leaving them out let
+# the module's stated API and its declared one disagree, which is worse than
+# either answer on its own.
+#
+# Not `sheet_for`: `ratings` and `comments` each define their own, and this module
+# has none. A name listed here that the module does not define is not inert — it
+# raises `AttributeError` on `from results.services import *`, at import time.
 __all__ = [
     "APPROVING_ROLES",
     "CHECKING_ROLES",
@@ -706,10 +730,14 @@ __all__ = [
     "ResultsError",
     "WrongState",
     "approve",
+    "as_ids",
     "check",
     "history",
+    "is_open_for_writing",
+    "locked_sheet_for",
     "open_sheet",
     "release",
+    "school_on_this_connection",
     "send_back",
     "submit",
 ]

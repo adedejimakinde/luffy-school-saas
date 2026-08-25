@@ -531,9 +531,9 @@ def sheet_for(class_group, term):
     `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
     and `.filter().first()` keeps it, so this compiled to a three-table join
     sorted by the term's session and the class's level, once per child, for a
-    row `one_result_sheet_per_class_term` guarantees is unique. `_locked_sheet_for()`
-    below documents the same hazard and uses `.get()`, which clears ordering
-    itself; this is the spelling that does not.
+    row `one_result_sheet_per_class_term` guarantees is unique. `services.locked_sheet_for()`
+    documents the same hazard and uses `.get()`, which clears ordering itself;
+    this is the spelling that does not.
     """
     return (
         ResultSheet.objects.filter(class_group=class_group, term=term)

@@ -153,6 +153,34 @@ def phrases(author):
     return CommentPhrase.objects.for_author(_author(author))
 
 
+#: What `PositiveSmallIntegerField` actually holds. Named rather than inlined so
+#: the refusal and the column cannot drift.
+HIGHEST_POSITION = 32_767
+
+
+def _require_a_position(position):
+    """A place in the list, or `None` for "the end". This module's own refusal.
+
+    `position` is an exposed keyword argument, so a screen reaches the column
+    with it directly: `-1` arrives as an `IntegrityError`, `"first"` as a
+    `DataError`, and `70000` overflows `smallint`. Each is outside
+    `CommentsError`, and each marks the caller's transaction unusable — the
+    failure the rest of this module goes to lengths to close.
+    """
+    if position is None:
+        return None
+    if isinstance(position, bool) or not isinstance(position, int):
+        raise CommentsError(
+            f"A position in the list is a whole number, not {position!r}."
+        )
+    if not 0 <= position <= HIGHEST_POSITION:
+        raise CommentsError(
+            f"{position} is not a place in the list. A position is 0 to "
+            f"{HIGHEST_POSITION}, and leaving it out puts the phrase at the end."
+        )
+    return position
+
+
 def _refuse_a_phrase_already_offered(author, text, *, except_pk=None):
     """`uniq_comment_phrase_per_author`, asked before the insert rather than after.
 
@@ -185,8 +213,9 @@ def add_phrase(author, text, *, position=None) -> CommentPhrase:
     school adding a phrase means it to appear after what is already there.
     """
     author = _author(author)
-    text = _require_text_that_fits(text)
+    text = _require_text_that_fits(text, noun="phrase")
     _refuse_a_phrase_already_offered(author, text)
+    position = _require_a_position(position)
     if position is None:
         last = (
             CommentPhrase.objects.for_author(author)
@@ -229,7 +258,7 @@ def edit_phrase(phrase, text) -> CommentPhrase:
     stores the sentence the teacher left, not a reference to this row.
     """
     phrase = _the_phrase_row(phrase)
-    text = _require_text_that_fits(text)
+    text = _require_text_that_fits(text, noun="phrase")
     _refuse_a_phrase_already_offered(phrase.author, text, except_pk=phrase.pk)
     phrase.text = text
     phrase.save(update_fields=["text", "updated_at"])
@@ -298,26 +327,35 @@ def reorder_phrases(author, phrase_ids) -> int:
 # ---------------------------------------------------------------------------
 
 
-def _require_text_that_fits(text) -> str:
-    """A remark, stripped, that says something and fits the box.
+def _require_text_that_fits(text, *, noun="remark", blank_message=None) -> str:
+    """A sentence, stripped, that says something and fits the box.
 
     Checked here as well as by the column, and the two are not the same check.
     `varchar(250)` refuses 251 characters with a `DataError` naming a column;
     this refuses it with a sentence naming the limit, which is what a teacher
     who has just written four lines needs to read. The column stays because a
     rule that lives in the service only holds for the service.
+
+    `noun` and `blank_message` because this serves **two audiences**. A teacher
+    writing a remark and an administrator curating the phrase bank hit the same
+    three rules, but telling the administrator "a remark cannot be blank — clear
+    it instead" names an object they are not editing and an act that does not
+    apply: there is no card in front of them and nothing to clear.
+    `locked_sheet_for()`'s docstring makes the same call one level up — the
+    shared part is the rule, and the wording belongs to whoever reads it.
     """
     if not isinstance(text, str):
-        raise CommentsError(f"A remark is text, not {text!r}.")
+        raise CommentsError(f"A {noun} is text, not {text!r}.")
     text = text.strip()
     if not text:
         raise CommentsError(
-            "A remark cannot be blank. Clear it instead — an empty remark and no "
-            "remark are the same thing, and the card prints neither."
+            blank_message
+            or f"A {noun} cannot be blank. An empty {noun} and no {noun} are "
+            f"the same thing, and the card prints neither."
         )
     if len(text) > MAX_COMMENT_LENGTH:
         raise CommentsError(
-            f"A remark fits {MAX_COMMENT_LENGTH} characters and this one is "
+            f"A {noun} fits {MAX_COMMENT_LENGTH} characters and this one is "
             f"{len(text)}. The box on the card is a fixed size."
         )
     return text
@@ -452,7 +490,16 @@ def write(
     if placement is None:
         placement = _require_placed(membership, term)
     author = _author(author)
-    body = _require_text_that_fits(body)
+    body = _require_text_that_fits(
+        body,
+        noun="remark",
+        # "Clear it instead" is advice about `clear()`, which exists for a
+        # remark and has no counterpart in the phrase bank.
+        blank_message=(
+            "A remark cannot be blank. Clear it instead — an empty remark and "
+            "no remark are the same thing, and the card prints neither."
+        ),
+    )
 
     stamp = _stamp(by)
     # Its own atomic block, for the reason `place_student()` gives: an
@@ -533,8 +580,15 @@ def missing(class_group, term) -> dict[int, list[str]]:
     }
     outstanding = {}
     for student_id in students:
+        # **Values, not labels.** The screen this exists for links "eleven still
+        # to write" to the box that writes them, and that box calls `write_as()`,
+        # which takes `"principal"` — not "Principal's remark". Returning the
+        # label makes every caller map it back by scanning `CommentAuthor`, and
+        # that reverse lookup breaks the first time a label is reworded or
+        # translated. `card_comments()` below returns both for the same reason,
+        # keeping `author` for the caller and `heading` for the page.
         absent = [
-            author.label
+            author.value
             for author in CommentAuthor
             if (student_id, author.value) not in written
         ]

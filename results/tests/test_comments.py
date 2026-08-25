@@ -424,8 +424,31 @@ class AnEmptyRemarkIsAbsentTests(CommentsSetUp):
 
         ada = self.membership_of(self.ada).pk
         bisi = self.membership_of(self.bisi).pk
-        self.assertEqual(outstanding[ada], [PRINCIPAL.label])
-        self.assertEqual(outstanding[bisi], [TEACHER.label, PRINCIPAL.label])
+        self.assertEqual(outstanding[ada], [PRINCIPAL.value])
+        self.assertEqual(outstanding[bisi], [TEACHER.value, PRINCIPAL.value])
+
+    def test_what_it_reports_is_what_write_as_takes(self):
+        """Values, not labels — pinned by using them rather than by asserting.
+
+        The screen this exists for links "still to write" to the box that writes
+        it, so the two ends have to speak the same alphabet. Asserting the
+        strings would pass just as well against labels that no caller can use;
+        feeding them back to `write_as()` is the claim itself. A label arriving
+        here would be refused by `_author()`, which is the regression.
+        """
+        with connected_to(self.stmarys):
+            outstanding = comments.missing(self.jss1a(), self.term())
+
+            for author in outstanding[self.membership_of(self.ada).pk]:
+                actor = self.kemi if author == TEACHER.value else self.principal
+                self.write(actor, author, f"Written from {author}.")
+
+            self.assertEqual(comments.missing(self.jss1a(), self.term()).keys(),
+                             {self.membership_of(self.bisi).pk})
+            self.assertEqual(
+                sorted(line.author for line in self.lines()),
+                sorted([TEACHER.value, PRINCIPAL.value]),
+            )
 
 
 class ThePhraseBankTests(CommentsSetUp):
@@ -795,6 +818,112 @@ class TheServiceRefusesWhatTheTableWouldTests(CommentsSetUp):
                     with self.assertRaises(comments.CommentsError) as refused:
                         act()
                     self.assertIn("form_master", str(refused.exception))
+
+    def test_a_position_that_is_not_a_place_in_the_list_is_refused(self):
+        """`position` is an exposed keyword, so a screen reaches the column with it.
+
+        Each of these is a different escape from this module's hierarchy, which
+        is why they are listed rather than summarised: `-1` and `70000` are the
+        column's refusals (`IntegrityError`, then `smallint` overflow), `"first"`
+        is a `DataError`, and `1.5` a `ValueError` out of the query compiler.
+        `True` is the quiet one — it is an `int`, so nothing downstream objects
+        and the phrase silently lands at position 1.
+        """
+        with connected_to(self.stmarys):
+            for position in (-1, 70_000, "first", 1.5, True):
+                with self.subTest(position=position):
+                    with self.assertRaises(comments.CommentsError):
+                        comments.add_phrase_as(
+                            self.principal, TEACHER, "Tries hard.", position=position
+                        )
+
+            self.assertFalse(CommentPhrase.objects.exists())
+
+    def test_a_refused_position_leaves_the_transaction_usable(self):
+        """The half that matters: an `IntegrityError` would have poisoned it."""
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                with self.assertRaises(comments.CommentsError):
+                    comments.add_phrase_as(
+                        self.principal, TEACHER, "Tries hard.", position=-1
+                    )
+                comments.add_phrase_as(self.principal, TEACHER, "A quiet term.")
+
+            self.assertEqual(
+                [phrase.text for phrase in comments.phrases(TEACHER)], ["A quiet term."]
+            )
+
+    def test_the_column_is_what_makes_that_guard_worth_having(self):
+        """What the table does when the service does not go first.
+
+        The test above shows the guard holding; this shows the cost of its
+        absence, which is the half a passing test cannot demonstrate on its own.
+        The same `-1` written straight at the column raises `IntegrityError` —
+        outside `ResultsError`, so every caller wrapping "get this class's
+        results out" misses it — and leaves the enclosing transaction unusable,
+        so the school's next phrase cannot be saved either. That second sentence
+        is what the guard is really for: the error is recoverable, the poisoned
+        transaction is not.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                with self.assertRaises(IntegrityError):
+                    CommentPhrase.objects.create(
+                        author=TEACHER.value,
+                        text="Straight to the column.",
+                        position=-1,
+                    )
+
+                with self.assertRaises(transaction.TransactionManagementError):
+                    CommentPhrase.objects.exists()
+
+    def test_a_string_of_ids_is_refused_rather_than_iterated(self):
+        """`"12,9"` is a sequence — of characters. That is the whole bug.
+
+        `int()` succeeds on "1", "2" and "9" and skips the comma, so the list is
+        renumbered against three ids the school never named and the call reports
+        success. It is the silent no-op `as_ids()` was extracted to prevent,
+        wearing different clothes, and no exception marks it.
+        """
+        with connected_to(self.stmarys):
+            first = comments.add_phrase_as(self.principal, TEACHER, "First.")
+            second = comments.add_phrase_as(self.principal, TEACHER, "Second.")
+
+            with self.assertRaises(services.ResultsError):
+                comments.reorder_phrases_as(
+                    self.principal, TEACHER, f"{second.pk},{first.pk}"
+                )
+
+            self.assertEqual(
+                [phrase.text for phrase in comments.phrases(TEACHER)],
+                ["First.", "Second."],
+                "nothing moved",
+            )
+
+    def test_ids_that_are_not_a_sequence_at_all_are_this_modules_refusal(self):
+        """`None` would iterate into a bare `TypeError`, outside the hierarchy."""
+        with connected_to(self.stmarys):
+            for phrase_ids in (None, 7):
+                with self.subTest(phrase_ids=phrase_ids):
+                    with self.assertRaises(services.ResultsError):
+                        comments.reorder_phrases_as(
+                            self.principal, TEACHER, phrase_ids
+                        )
+
+    def test_a_blank_phrase_is_refused_in_the_phrase_banks_own_words(self):
+        """Same rule as a remark, different reader.
+
+        "Clear it instead" is advice about `clear()`, which exists for a remark
+        on a card and has no counterpart here — there is no card in front of an
+        administrator curating the bank, and nothing to clear.
+        """
+        with connected_to(self.stmarys):
+            with self.assertRaises(comments.CommentsError) as refused:
+                comments.add_phrase_as(self.principal, TEACHER, "   ")
+
+        message = str(refused.exception)
+        self.assertIn("phrase", message)
+        self.assertNotIn("Clear it instead", message)
 
     def test_offering_the_same_phrase_twice_is_refused_before_it_is_inserted(self):
         with connected_to(self.stmarys):

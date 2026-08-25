@@ -296,6 +296,54 @@ the middle of the group the school had just arranged.
 Ids belonging to the other author are ignored rather than moved across:
 reordering is not a way to turn a teacher's phrase into a principal's.
 
+But a **bare string is refused, not iterated**, and that is the case worth
+naming. `"12,9"` is a sequence — of characters — so coercion succeeds on "1",
+"2" and "9", skips the comma, and renumbers the list against three ids the
+school never named, reporting success. It is the same silent no-op `as_ids()`
+exists to prevent, wearing different clothes, and nothing downstream objects to
+it. A non-sequence is refused for the plainer reason: `None` would iterate into
+a bare `TypeError`, outside `ResultsError`, and reach a screen as a 500.
+
+### Which error a refusal arrives as
+
+There is one rule, and it follows from where the check lives rather than from
+which feature the caller was using:
+
+| Where the check lives | What it raises |
+| --- | --- |
+| Shared plumbing in `results.services` — `as_ids()`, `locked_sheet_for()`, `school_on_this_connection()` | `ResultsError` |
+| A feature module's own rule — `comments`, `ratings` | `CommentsError`, `RatingsError` |
+
+Shared plumbing cannot raise a feature's error without knowing its callers, and
+it has two. So `as_ids()` raises the parent that `CommentsError` and
+`RatingsError` both subclass, and a caller catching only `CommentsError` misses
+it. **Catch `ResultsError` to catch everything a results call can refuse with;
+catch `CommentsError` only when you specifically mean this module's own rules.**
+
+That is why this module's contract is stated as *inside the `ResultsError`
+hierarchy* rather than as `CommentsError` — the guarantee worth relying on is
+that no refusal escapes the hierarchy into an `IntegrityError`, `ValueError` or
+`TypeError`, not that every one carries the narrower class.
+
+The rule generalises: anything else built on the same plumbing inherits it, so
+the write guard on live marks ([issue #27](https://github.com/adedejimakinde/luffy-school-saas/issues/27))
+will refuse with `ResultsError` from the shared half and its own error from its
+own, without that being a special case to rediscover.
+
+### A position is checked before it reaches the column
+
+`add_phrase()` takes `position` as an exposed keyword, so a screen reaches a
+`PositiveSmallIntegerField` with it directly. Left out it means "the end", which
+is what a school adding a phrase intends; given, it has to be a place in the
+list. Each way of not being one escapes this module's hierarchy differently —
+`-1` as an `IntegrityError`, `"first"` as a `DataError`, `70000` as a `smallint`
+overflow — and each of those marks the caller's transaction unusable, which is
+the failure the rest of this module goes to lengths to close.
+
+`True` is the quiet one. It is an `int` as far as Python is concerned, so
+nothing downstream objects and the phrase lands at position 1 — no error, wrong
+answer. It is refused explicitly for that reason.
+
 ## A correction keeps its author
 
 `written_by_id` is stamped once, at the insert, and names whose remark this is.
