@@ -66,7 +66,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "student_membership_id",
-                    models.PositiveBigIntegerField(db_index=True),
+                    models.PositiveBigIntegerField(),
                 ),
                 (
                     "author",
@@ -117,7 +117,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "student_membership_id",
-                    models.PositiveBigIntegerField(db_index=True),
+                    models.PositiveBigIntegerField(),
                 ),
                 (
                     "author",

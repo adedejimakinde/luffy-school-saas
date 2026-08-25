@@ -57,7 +57,6 @@ from .models import (
     RatingScalePoint,
     ReleasedTraitRating,
     ReportCardSettings,
-    ResultSheet,
     SheetState,
     Trait,
     TraitGroup,
@@ -70,6 +69,7 @@ from .services import (
     is_open_for_writing,
     locked_sheet_for,
     school_on_this_connection,
+    sheet_for,
 )
 
 
@@ -520,26 +520,6 @@ def _require_a_score_on_the_scale(score):
         )
 
 
-def sheet_for(class_group, term):
-    """The chain's sheet for this group and term, or `None` if never opened.
-
-    The read path's copy, taking no lock: `card_sections()` asks it to decide
-    whether to render the freeze or live configuration, and rendering a card
-    must not lock the row a principal is trying to release.
-
-    `.order_by()` before `.first()`, and it is not decoration.
-    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
-    and `.filter().first()` keeps it, so this compiled to a three-table join
-    sorted by the term's session and the class's level, once per child, for a
-    row `one_result_sheet_per_class_term` guarantees is unique. `services.locked_sheet_for()`
-    documents the same hazard and uses `.get()`, which clears ordering itself;
-    this is the spelling that does not.
-    """
-    return (
-        ResultSheet.objects.filter(class_group=class_group, term=term)
-        .order_by()
-        .first()
-    )
 
 
 def _require_the_sheet_is_open(class_group, term):

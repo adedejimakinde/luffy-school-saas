@@ -282,6 +282,37 @@ def locked_sheet_for(class_group, term):
         return None
 
 
+def sheet_for(class_group, term):
+    """The chain's sheet for this group and term, or `None` if never opened.
+
+    The read path's counterpart to `locked_sheet_for()`, **taking no lock**:
+    `comments.card_comments()` and `ratings.card_sections()` each ask it whether
+    to render the freeze or the live rows, and rendering a card must not lock the
+    row a principal is trying to release.
+
+    `.order_by()` before `.first()`, and it is not decoration.
+    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
+    and `.filter().first()` keeps it, so this compiled to a three-table join
+    sorted by the term's session and the class's level, once per child, for a
+    row `one_result_sheet_per_class_term` guarantees is unique.
+    `locked_sheet_for()` above documents the same hazard and uses `.get()`,
+    which clears ordering itself; this is the spelling that does not.
+    `ratings.sheet_for()` shipped without the call and was corrected on it.
+
+    **Here rather than copied into both modules**, unlike the refusals
+    `locked_sheet_for()` deliberately leaves local. Those stay local because
+    their wording is read by a teacher and the two callers phrase them
+    differently. This has no wording and no refusal — it is one query and one
+    trap — so two copies bought nothing and meant maintaining the `.order_by()`
+    note in two places, which is the state a review found it in.
+    """
+    return (
+        ResultSheet.objects.filter(class_group=class_group, term=term)
+        .order_by()
+        .first()
+    )
+
+
 def is_open_for_writing(sheet) -> bool:
     """Can what this sheet is reckoned from still be changed?
 
@@ -714,9 +745,11 @@ def history(sheet):
 # the module's stated API and its declared one disagree, which is worse than
 # either answer on its own.
 #
-# Not `sheet_for`: `ratings` and `comments` each define their own, and this module
-# has none. A name listed here that the module does not define is not inert — it
-# raises `AttributeError` on `from results.services import *`, at import time.
+# `sheet_for` earns its place by being defined here, which it was not when this
+# list first named it: a name listed in `__all__` that the module does not define
+# is not inert — it raises `AttributeError` on `from results.services import *`,
+# at import time. The entry was removed for that reason and is back because the
+# function moved, not because the rule softened.
 __all__ = [
     "APPROVING_ROLES",
     "CHECKING_ROLES",
@@ -739,5 +772,6 @@ __all__ = [
     "release",
     "school_on_this_connection",
     "send_back",
+    "sheet_for",
     "submit",
 ]

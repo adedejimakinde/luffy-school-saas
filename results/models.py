@@ -889,7 +889,7 @@ class ReportCardComment(models.Model):
     # A bare id into the shared membership table — docs/tenancy.md's policy.
     # `comments.write()` checks the id names a student of *this* school before
     # anything is written; see `accounts.students.why_not_a_student_here()`.
-    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+    student_membership_id = models.PositiveBigIntegerField()
 
     author = models.CharField(max_length=16, choices=CommentAuthor)
 
@@ -979,7 +979,7 @@ class ReleasedComment(models.Model):
         on_delete=models.PROTECT,
     )
 
-    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+    student_membership_id = models.PositiveBigIntegerField()
 
     author = models.CharField(max_length=16, choices=CommentAuthor)
 

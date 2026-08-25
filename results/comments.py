@@ -57,7 +57,6 @@ from .models import (
     CommentPhrase,
     ReleasedComment,
     ReportCardComment,
-    ResultSheet,
     SheetState,
 )
 from .services import (
@@ -66,6 +65,7 @@ from .services import (
     is_open_for_writing,
     locked_sheet_for,
     school_on_this_connection,
+    sheet_for,
 )
 
 
@@ -211,6 +211,12 @@ def add_phrase(author, text, *, position=None) -> CommentPhrase:
 
     `position` defaults to the end of that author's list rather than to zero: a
     school adding a phrase means it to appear after what is already there.
+
+    **The computed end is checked too, not only the given one.** Guarding the
+    argument and then letting `last + 1` run past the column is the same escape
+    with the guard's back turned: a list whose last phrase sits at
+    `HIGHEST_POSITION` overflows `smallint` on the next append, as a `DataError`
+    outside `CommentsError` that takes the enclosing transaction with it.
     """
     author = _author(author)
     text = _require_text_that_fits(text, noun="phrase")
@@ -223,6 +229,12 @@ def add_phrase(author, text, *, position=None) -> CommentPhrase:
             .values_list("position", flat=True)
             .first()
         )
+        if last is not None and last >= HIGHEST_POSITION:
+            raise CommentsError(
+                f"This list already reaches position {HIGHEST_POSITION}, which "
+                f"is as far as the column goes, so there is no end to add to. "
+                f"Reordering the list renumbers it from 0 and makes room."
+            )
         position = 0 if last is None else last + 1
     return CommentPhrase.objects.create(author=author, text=text, position=position)
 
@@ -242,11 +254,16 @@ def _the_phrase_row(phrase) -> CommentPhrase:
     and lets `uniq_comment_phrase_per_author` fire instead. That is exactly what
     `ratings._the_trait_row()` was added for, on the same two verbs.
     """
+    # An id or an instance, because a screen posting a phrase id has one and not
+    # the other. `phrase.pk` on an `int` is an `AttributeError`, and junk from a
+    # form reaches `get()` as a `ValueError` — both outside the hierarchy this
+    # module promises, and both arriving at a screen as a 500 naming nothing.
+    phrase_id = getattr(phrase, "pk", phrase)
     try:
-        return CommentPhrase.objects.get(pk=phrase.pk)
-    except CommentPhrase.DoesNotExist:
+        return CommentPhrase.objects.get(pk=phrase_id)
+    except (CommentPhrase.DoesNotExist, TypeError, ValueError):
         raise CommentsError(
-            f"There is no phrase {phrase.pk!r} in this school's bank. A phrase "
+            f"There is no phrase {phrase_id!r} in this school's bank. A phrase "
             f"belongs to the school whose schema it was read in."
         ) from None
 
@@ -381,27 +398,44 @@ def _require_placed(membership, term):
     return placement
 
 
-def sheet_for(class_group, term):
-    """The chain's sheet for this group and term, or `None` if never opened.
 
-    The read path's copy, taking no lock: `card_comments()` asks it whether to
-    render the freeze or the live rows, and rendering a card must not lock the
-    row a principal is trying to release.
 
-    `.order_by()` before `.first()`, and it is not decoration.
-    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
-    and `.filter().first()` keeps it, so this compiles to a three-table join
-    sorted by the term's session and the class's level, once per child, for a
-    row `one_result_sheet_per_class_term` guarantees is unique.
-    `services.locked_sheet_for()` documents the same hazard and uses `.get()`,
-    which clears ordering itself; this is the spelling that does not.
-    `ratings.sheet_for()` shipped without the call and was corrected on it.
+def _require_this_remark_has_not_gone_home(term, membership, author):
+    """Has *this* remark been frozen and released, wherever the child sits now?
+
+    A different question from the one below, and it has to be asked separately
+    because the one below answers it wrong after a class move.
+    `_require_the_sheet_is_open()` reaches the sheet through
+    `placement.class_group` — the class the child is in **today** — so releasing
+    JSS 1A and then moving the child to JSS 3B leaves the guard looking at JSS
+    3B's untouched draft and permitting a rewrite of a remark already in a
+    parent's hand. Migration `0010` states the case in full.
+
+    So this asks the frozen row directly: a `ReleasedComment` for this
+    `(term, student, author)` means released, and placement never enters into
+    it. The rule generalises past this module — **a guard on a released artefact
+    keys off the artefact, not off the child's current placement**, because
+    placement is a live fact that changes while release is an event that
+    happened.
+
+    It does not replace the sheet-state check. A card released with no
+    principal's remark freezes no row for the principal, so this finds nothing
+    and the check below is what refuses a principal writing one onto a released
+    sheet. Each covers a case the other cannot see.
     """
-    return (
-        ResultSheet.objects.filter(class_group=class_group, term=term)
-        .order_by()
-        .first()
-    )
+    # Through `sheet__term`, because `ReleasedComment` stores the sheet and not
+    # the term — the sheet is what was released, and it carries the term with it.
+    if ReleasedComment.objects.filter(
+        sheet__term=term,
+        student_membership_id=membership.pk,
+        author=author,
+    ).exists():
+        raise CommentsLocked(
+            f"{membership.name or membership.user}'s {CommentAuthor(author).label} "
+            f"for {term} has been released to a parent. It has to keep saying "
+            f"what it said, and correcting it is a revision rather than an edit.",
+            state=SheetState.RELEASED,
+        )
 
 
 def _require_the_sheet_is_open(class_group, term):
@@ -511,6 +545,7 @@ def write(
     # write. Checking outside and writing inside is two transactions with a
     # submission free to land between them.
     with transaction.atomic():
+        _require_this_remark_has_not_gone_home(term, membership, author)
         _require_the_sheet_is_open(placement.class_group, term)
         comment, _ = ReportCardComment.objects.update_or_create(
             term=term,
@@ -545,6 +580,7 @@ def clear(term, membership, author, *, placement=None) -> bool:
     author = _author(author)
 
     with transaction.atomic():
+        _require_this_remark_has_not_gone_home(term, membership, author)
         _require_the_sheet_is_open(placement.class_group, term)
         deleted, _ = ReportCardComment.objects.filter(
             term=term, student_membership_id=membership.pk, author=author

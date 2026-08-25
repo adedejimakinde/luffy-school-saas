@@ -704,6 +704,96 @@ class TheFreezeTests(CommentsSetUp):
                 ["A diligent term. Well done.", "Promoted to the next class."],
             )
 
+    def test_a_released_remark_survives_the_child_moving_class(self):
+        """The freeze is about `(term, student, author)`, not where the child sits.
+
+        Both halves of the guard — the service and 0009's trigger — used to ask
+        "is this child's *current* class released?", which is a different
+        question and gives the wrong answer the moment the office moves anybody.
+        Release JSS 1A with Ada's remark frozen, move Ada to JSS 3B, whose sheet
+        nobody has opened, and JSS 3B's class teacher inherits a child whose
+        card is already in a parent's hand. Answering by placement, the guard
+        looks at JSS 3B, finds a draft, and lets the rewrite through: the frozen
+        card reads one thing and the school's screen another, which is the
+        disagreement `0009`'s docstring exists to prevent.
+
+        The move itself is legitimate and stays allowed — a child really does
+        change class mid-term. It is the *rewrite* that is refused.
+        """
+        with connected_to(self.stmarys):
+            self.write(self.kemi, TEACHER, "Written in JSS 1A.")
+            sheet = self.walk_to_released()
+            frozen_before = list(
+                ReleasedComment.objects.filter(sheet=sheet).values_list(
+                    "student_membership_id", "author", "body"
+                )
+            )
+
+            academics.move_student(
+                ClassGroup.objects.get(pk=self.jss3b_id),
+                self.term(),
+                self.membership_of(self.ada),
+            )
+
+            # Sade teaches JSS 3B, so she is now Ada's class teacher — and still
+            # may not rewrite a remark that has been released.
+            with self.assertRaises(comments.CommentsLocked):
+                comments.write_as(
+                    self.sade,
+                    self.term(),
+                    self.membership_of(self.ada),
+                    TEACHER,
+                    "Rewritten in JSS 3B.",
+                )
+
+            with self.assertRaises(comments.CommentsLocked):
+                comments.clear_as(
+                    self.sade, self.term(), self.membership_of(self.ada), TEACHER
+                )
+
+            self.assertEqual(
+                list(
+                    ReleasedComment.objects.filter(sheet=sheet).values_list(
+                        "student_membership_id", "author", "body"
+                    )
+                ),
+                frozen_before,
+            )
+            self.assertEqual(
+                ReportCardComment.objects.get(
+                    term=self.term(),
+                    student_membership_id=self.membership_of(self.ada).pk,
+                    author=TEACHER.value,
+                ).body,
+                "Written in JSS 1A.",
+                "the live row is untouched too, not merely the frozen copy",
+            )
+
+    def test_the_database_refuses_the_rewrite_even_without_the_service(self):
+        """The trigger half, reached the way `.update()` reaches it.
+
+        `_require_the_sheet_is_open()` can be bypassed — `.update()` never calls
+        `save()`, and a management command or a shell does not go through the
+        service at all. The guarantee has to hold in the database or it is not a
+        guarantee, which is the argument `0007` and `0009` were written on.
+        """
+        with connected_to(self.stmarys):
+            self.write(self.kemi, TEACHER, "Written in JSS 1A.")
+            self.walk_to_released()
+
+            academics.move_student(
+                ClassGroup.objects.get(pk=self.jss3b_id),
+                self.term(),
+                self.membership_of(self.ada),
+            )
+
+            with self.assertRaises(IntegrityError):
+                ReportCardComment.objects.filter(
+                    term=self.term(),
+                    student_membership_id=self.membership_of(self.ada).pk,
+                    author=TEACHER.value,
+                ).update(body="Rewritten straight at the table.")
+
     def test_the_freeze_records_only_the_remarks_that_exist(self):
         """No row for a remark nobody wrote — absent stays absent, frozen too."""
         with connected_to(self.stmarys):
@@ -818,6 +908,55 @@ class TheServiceRefusesWhatTheTableWouldTests(CommentsSetUp):
                     with self.assertRaises(comments.CommentsError) as refused:
                         act()
                     self.assertIn("form_master", str(refused.exception))
+
+    def test_the_computed_end_of_the_list_cannot_run_past_the_column(self):
+        """Guarding the argument and not the computed value guards nothing.
+
+        `add_phrase()` without a `position` appends at `last + 1`, and that sum
+        was never checked — so a list whose last phrase sits at
+        `HIGHEST_POSITION` overflowed `smallint` on the very next append, as a
+        `DataError` outside the hierarchy that takes the transaction with it.
+        The refusal the caller *did* pass through made no difference: it is the
+        same escape, reached by the path the guard was not watching.
+        """
+        with connected_to(self.stmarys):
+            comments.add_phrase_as(
+                self.principal,
+                TEACHER,
+                "The last place there is.",
+                position=comments.HIGHEST_POSITION,
+            )
+
+            with transaction.atomic():
+                with self.assertRaises(comments.CommentsError) as refused:
+                    comments.add_phrase_as(self.principal, TEACHER, "One too many.")
+
+                # Still usable, which a `DataError` would not have left it.
+                comments.add_phrase_as(
+                    self.principal, TEACHER, "Somewhere earlier.", position=0
+                )
+
+        self.assertIn(str(comments.HIGHEST_POSITION), str(refused.exception))
+
+    def test_a_phrase_id_is_taken_where_an_instance_is(self):
+        """A screen posts an id, not a model. `phrase.pk` on an `int` is an
+        `AttributeError` — outside the hierarchy, and a 500 naming nothing."""
+        with connected_to(self.stmarys):
+            phrase = comments.add_phrase_as(self.principal, TEACHER, "A diligent term.")
+
+            self.assertEqual(
+                comments.edit_phrase_as(self.principal, phrase.pk, "Reworded.").text,
+                "Reworded.",
+            )
+            self.assertTrue(comments.remove_phrase_as(self.principal, phrase.pk))
+
+    def test_junk_where_a_phrase_belongs_is_this_modules_refusal(self):
+        """An id that names nothing, and things that are not ids at all."""
+        with connected_to(self.stmarys):
+            for phrase in (9_999, "not-an-id", None, 1.5):
+                with self.subTest(phrase=phrase):
+                    with self.assertRaises(comments.CommentsError):
+                        comments.remove_phrase_as(self.principal, phrase)
 
     def test_a_position_that_is_not_a_place_in_the_list_is_refused(self):
         """`position` is an exposed keyword, so a screen reaches the column with it.

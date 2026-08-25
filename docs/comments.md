@@ -169,13 +169,22 @@ a teacher, so they stay where the vocabulary is.
 two relations and a `select_for_update()` that inherits it would lock a row in
 `academics_term` and `academics_classgroup` too.
 
-The read path has the same trap without the lock. `sheet_for()` — which decides
-whether a card renders from the freeze or the live rows, once per child — must
-call `.order_by()` before `.first()`, or it compiles to a three-table join
-sorted by the term's session and the class's level to find a row
+The read path has the same trap without the lock, and `sheet_for()` — which
+decides whether a card renders from the freeze or the live rows, once per child
+— **is shared too**, for the same reason and one more. It must call
+`.order_by()` before `.first()`, or it compiles to a three-table join sorted by
+the term's session and the class's level to find a row
 `one_result_sheet_per_class_term` guarantees is unique.
 `TheCardReadTakesNoJoinItDoesNotNeedTests` asserts that on the captured SQL, so
 an ordering added later fails there first.
+
+It began as a copy in each module and a review found the two had already started
+to drift — same query, same trap, two docstrings maintained separately. Unlike
+the refusals above, there was nothing module-specific holding them apart: no
+wording a teacher reads, no refusal at all, just one query and one note about
+`Meta.ordering`. So it now lives in `results.services` beside `locked_sheet_for()`
+and both modules import it. `comments.sheet_for` and `ratings.sheet_for` still
+resolve, because an imported name is an attribute of the importing module.
 
 ### And the database holds the terminal case
 
@@ -212,6 +221,44 @@ inside the transaction that writes the release row, alongside
 `ratings.freeze_for_release()` and in the order the two print. A sheet that says
 `released` therefore always has the card that was released sitting behind it,
 rather than part of one.
+
+### Keyed on the child and the term, not on where the child sits
+
+**A guard on a released artefact keys off the artefact, not off the child's
+current placement.** Placement answers "whose class is this child in today",
+which is a live fact that changes; release is an event that happened, and what
+records it is the frozen row.
+
+`0009` shipped without that distinction. It asked "has this term been released
+for this child's *class*?" and reached the sheet by joining through
+`academics_classplacement`, so the answer moved when the child did. Release JSS
+1A with a remark frozen, move the child to JSS 3B — legitimate, mid-term, and
+what `academics.move_student()` is for — and the guard looks at JSS 3B's
+untouched draft and permits a rewrite of a remark already in a parent's hand.
+The frozen card then says one thing and the school's screen another, which is
+exactly what `0009`'s own docstring says it exists to prevent. It prevented it
+for a child who stayed put.
+
+Migration `0010` asks the frozen row directly instead: a `ReleasedComment` for
+this `(term, student, author)` means released, wherever the child is now.
+`_require_this_remark_has_not_gone_home()` is the service half of the same
+question.
+
+Both checks stay, because they answer different things. A card released with no
+principal's remark freezes no row for the principal, so the frozen-row check
+finds nothing and the sheet-state check is what stops a principal writing one
+onto a released sheet. Each covers a case the other cannot see.
+
+> The same join is in `results/0007` for `TraitRating`, and
+> `ratings._require_the_sheet_is_open()` asks through `placement.class_group`
+> too, so **released ratings have this hole today**. Not fixed here — it is
+> merged task 4 code with its own tests to write. It is
+> [issue #33](https://github.com/adedejimakinde/luffy-school-saas/issues/33),
+> which notes that ratings freeze a row even for an unrated trait and so
+> probably needs the frozen-row check *alone* rather than this module's two.
+> The rule above is what that fix should be built on, and so should
+> [issue #27](https://github.com/adedejimakinde/luffy-school-saas/issues/27)'s
+> write guard on live marks, rather than a third copy of the placement join.
 
 ### Only the remarks that exist
 
@@ -311,7 +358,7 @@ which feature the caller was using:
 
 | Where the check lives | What it raises |
 | --- | --- |
-| Shared plumbing in `results.services` — `as_ids()`, `locked_sheet_for()`, `school_on_this_connection()` | `ResultsError` |
+| Shared plumbing in `results.services` — `as_ids()`, `locked_sheet_for()`, `sheet_for()`, `school_on_this_connection()` | `ResultsError` |
 | A feature module's own rule — `comments`, `ratings` | `CommentsError`, `RatingsError` |
 
 Shared plumbing cannot raise a feature's error without knowing its callers, and
