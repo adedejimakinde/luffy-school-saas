@@ -37,6 +37,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from academics.services import placement_of
 from accounts.models import Role
 from accounts.students import why_not_a_student_here
 
@@ -90,6 +91,27 @@ class ScoreChangedMeanwhile(GradebookError):
         self.current = current
 
 
+class MarksLocked(GradebookError):
+    """The sheet has left `draft`, so its marks are part of what is being checked.
+
+    Carries `state` — where the sheet actually is — so the caller can say
+    whether this is "the vice principal has it" or "this went home in March".
+    The same shape as `results.ratings.RatingsLocked`, deliberately: the two
+    halves of one report card should not refuse in two different vocabularies.
+
+    **Over HTTP this is a 423.** Not a 409, which in this codebase means "the
+    row moved while you were typing" and is answered by reloading and sending
+    again — a released term never reopens, so that client retries for ever. Not
+    a 403, which is a refusal of the caller's authority, and the caller's
+    authority has not changed; the resource's state has.
+    `gradebook.api` implements it and states the case in full.
+    """
+
+    def __init__(self, message, state=None):
+        super().__init__(message)
+        self.state = state
+
+
 class _AnyVersion:
     """Sentinel type. See `ANY_VERSION`."""
 
@@ -123,6 +145,149 @@ def _require_student_of_this_school(membership):
     if reason:
         raise NotThisSchoolsStudent(reason)
     return membership
+
+
+def _require_this_card_has_not_gone_home(assessment, membership):
+    """Has a card for this child, this term, already been frozen and sent home?
+
+    Asked of the frozen rows, and **placement never enters into it**.
+    `_require_the_sheet_is_open()` below reaches the sheet through
+    `placement.class_group` — the class the child is in *today* — so releasing
+    JSS 1A and then moving the child to JSS 3B leaves it looking at JSS 3B's
+    untouched draft and permitting a write onto a card already in a parent's
+    hand. `results.ratings._require_this_card_has_not_gone_home()` and
+    `results.comments._require_this_card_has_not_gone_home()` are the same guard
+    one and two tables over: **a guard on a released artefact keys off the
+    artefact, not off the child's current placement**, because placement is a
+    live fact that changes while release is an event that happened.
+
+    **This was written up as unclosable, and it was not.** The first draft of
+    this module justified the placement key with "nothing freezes marks until
+    task 3", and that conflated two different claims. Nothing freezes the
+    *marks* — true, and still task 3's to fix. But the guarantee being enforced
+    here is *a card went home for this child*, and `ReleasedTraitRating` answers
+    exactly that: one row per child per visible trait, written by
+    `ratings.freeze_for_release()` inside the same transaction that writes the
+    release row. Whether the marks were frozen has no bearing on whether the
+    release is knowable, and `0011` was already keying on it one table over.
+
+    **What is left is a per-school gap, not a per-child one.**
+    `freeze_for_release()` returns early when no group is enabled and again when
+    no trait is visible, so a school with the conduct section off freezes
+    nothing for anybody and this finds nothing to refuse with. That residue — a
+    ratings-disabled release, for a child who is then moved — is what the
+    unconditional per-child marker required by
+    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34)
+    closes, and it is the same residue `ratings` documents for the same reason.
+    The child who stayed put is refused by the check below either way.
+    """
+    # Deferred on purpose, like the import below. See that docstring.
+    from results.models import ReleasedTraitRating, SheetState
+
+    # Through `sheet__term`, because `ReleasedTraitRating` stores the sheet and
+    # not the term — the sheet is what was released, and it carries the term.
+    if ReleasedTraitRating.objects.filter(
+        sheet__term=assessment.term,
+        student_membership_id=membership.pk,
+    ).exists():
+        raise MarksLocked(
+            f"{membership.name}'s report card for {assessment.term} has been "
+            f"released to a parent. Its marks are part of what that card says, "
+            f"and correcting one is a revision rather than an edit.",
+            state=SheetState.RELEASED,
+        )
+
+
+def _require_the_sheet_is_open(assessment, membership):
+    """Marks are editable while the sheet is in `draft`, and not after.
+
+    The seam this closes: the approval chain and the gradebook were built in the
+    right order and never introduced, so a mark could be changed at any point
+    after the chain left `draft` — including after release, which means a parent
+    holding a card the database now disagrees with, with no revision and no
+    audit row. `results` makes release terminal for the sheet's *state*; this is
+    what makes it terminal for its *contents*.
+
+    **A late import, and it is not stylistic.** `results` already imports this
+    app — `results/api.py` for `Subject`, `results/positions.py` for `Score` —
+    so a module-level import here would make the two apps mutually dependent at
+    the package level. It happens to work today because `results/services.py`
+    imports nothing from `gradebook`, but that is a fact about which module the
+    edge lands on rather than a layering that holds. Deferring it to call time
+    keeps the import graph honest at module scope and costs one dict lookup on
+    a path that is already doing a locking query.
+
+    Moving `ResultSheet` down into `academics` would resolve it properly and is
+    a larger change than the bug being fixed; a released result is editable
+    today, and a cleanliness concern should not gate a correctness fix. The
+    import is reversible where the model move is not.
+
+    **The sheet is locked, not merely read**, and the caller writes the mark in
+    the same transaction — `results.services.locked_sheet_for()` is the same
+    `SELECT ... FOR UPDATE` that `ratings._require_the_sheet_is_open()` takes.
+    Unlocked, this is a check followed by an act on what it checked: a teacher
+    pressing save while the vice principal presses submit would find the sheet
+    in `draft` and commit a mark into a document submitted a millisecond later,
+    leaving the signature attached to a sheet nobody signed.
+
+    **A child with no placement is not refused.** Entering a mark has never
+    required one, and adding that requirement here would be a different change
+    with its own argument; no placement means no class, which means no sheet
+    governs the mark. It is also the honest answer: there is nothing this
+    function could be checking against.
+
+    **Why this keys on the placement, and what stands in front of it.** `Score`
+    reaches a class only through `academics.ClassPlacement`, because an
+    assessment belongs to a `(term, subject)` and is sat by every class taught
+    that subject. So this asks where the child sits *today*, which is the wrong
+    key for a released card and the only key available here.
+    `_require_this_card_has_not_gone_home()` runs first and asks the right one,
+    off the frozen artefact — so a moved child reaches this function only at a
+    school whose conduct section is off. That function has what is left and why
+    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34)
+    is what closes it.
+
+    **The pre-sheet race, which the lock above does not close.**
+    `locked_sheet_for()` returns `None` and locks nothing when no sheet exists,
+    so the ordering promised above is a guarantee about sheets that *exist*. A
+    mark begun before anybody opens the class's sheet can still land after
+    somebody else opens *and* submits it in the same window. Closing that needs
+    a lock on something other than the row;
+    `results.ratings._require_the_sheet_is_open()` carries the identical residue
+    and files it as
+    [issue #30](https://github.com/adedejimakinde/luffy-school-saas/issues/30).
+    This is that same race, not a second one.
+
+    Returns nothing. The sheet it looked at is deliberately not handed back:
+    neither caller needs it, and returning it would imply the mark is written
+    against that row rather than merely permitted by it.
+    """
+    # Deferred on purpose. See the docstring — `results` imports this app.
+    from results.models import SheetState
+    from results import services as results_services
+
+    placement = placement_of(membership.pk, assessment.term)
+    if placement is None:
+        return
+
+    sheet = results_services.locked_sheet_for(placement.class_group, assessment.term)
+    if results_services.is_open_for_writing(sheet):
+        return
+
+    if sheet.state == SheetState.RELEASED:
+        raise MarksLocked(
+            f"{placement.class_group} — {assessment.term} has been released to "
+            f"parents. Its marks are part of a card somebody is holding, and "
+            f"correcting one is a revision rather than an edit.",
+            state=sheet.state,
+        )
+    raise MarksLocked(
+        f"{placement.class_group} — {assessment.term} is "
+        f"{sheet.get_state_display().lower()}, so its marks are part of what is "
+        f"being reviewed and cannot be changed. Ask for the sheet to be sent "
+        f"back if one is wrong.",
+        state=sheet.state,
+    )
 
 
 def _require_a_mark_this_assessment_can_hold(assessment, value):
@@ -211,13 +376,26 @@ def set_score(assessment, membership, value, *, expected_version=None, by=None):
     _require_student_of_this_school(membership)
     _require_a_mark_this_assessment_can_hold(assessment, value)
 
-    if expected_version is ANY_VERSION:
-        return _write_regardless(assessment, membership.pk, value, by)
-    if expected_version is None:
-        return _insert_first_mark(assessment, membership.pk, value, by)
-    return _update_the_mark_shown(
-        assessment, membership.pk, value, expected_version, by
-    )
+    # The state check is *inside* the transaction that writes, holding the
+    # sheet's row lock across it — see `_require_the_sheet_is_open()`. Checking
+    # outside and writing inside is two transactions with a submission free to
+    # land between them. The helpers below open their own atomic blocks, which
+    # become savepoints here, which is exactly what their note asks for: an
+    # `IntegrityError` still rolls back only the failed write.
+    with transaction.atomic():
+        # The artefact first, then the placement. The order is the rule: a card
+        # that went home is a fact about this child, and the sheet check below
+        # can only ask about the class they sit in now.
+        _require_this_card_has_not_gone_home(assessment, membership)
+        _require_the_sheet_is_open(assessment, membership)
+
+        if expected_version is ANY_VERSION:
+            return _write_regardless(assessment, membership.pk, value, by)
+        if expected_version is None:
+            return _insert_first_mark(assessment, membership.pk, value, by)
+        return _update_the_mark_shown(
+            assessment, membership.pk, value, expected_version, by
+        )
 
 
 def _insert_first_mark(assessment, membership_id, value, by):
@@ -356,16 +534,37 @@ def clear_score(assessment, membership, *, expected_version, by=None):
     Clearing a mark that is already gone is a no-op rather than an error: the
     end state the caller asked for is the end state that holds, and a retried
     request should not fail because it succeeded the first time.
+
+    **That promise survives the sheet guard, and it took an ordering to keep
+    it.** The guards run *after* the check for a mark to delete, not before. Run
+    first, they would refuse a retried DELETE of an already-cleared mark on a
+    sheet that has since been submitted — the request whose whole point is that
+    it is safe to send twice, failing precisely because it worked the first
+    time. There is nothing for a released card to protect in that case: no row
+    is being written, and the end state is the one the caller asked for.
+
+    The existence check is unversioned on purpose. A row that is present at some
+    *other* version is still a mark on a closed sheet, so it is `MarksLocked`
+    and not `ScoreChangedMeanwhile`: telling that caller to reload and retry
+    sends them round a loop that cannot terminate, because the sheet is what
+    refused them and reloading does not reopen it.
     """
     _require_student_of_this_school(membership)
 
-    rows = Score.objects.filter(
-        assessment=assessment, student_membership_id=membership.pk
-    )
-    if expected_version is not ANY_VERSION:
-        rows = rows.filter(version=expected_version)
+    with transaction.atomic():
+        if _current(assessment, membership.pk) is None:
+            return  # Already clear. Nothing to write, so nothing to guard.
 
-    deleted, _ = rows.delete()
+        _require_this_card_has_not_gone_home(assessment, membership)
+        _require_the_sheet_is_open(assessment, membership)
+
+        rows = Score.objects.filter(
+            assessment=assessment, student_membership_id=membership.pk
+        )
+        if expected_version is not ANY_VERSION:
+            rows = rows.filter(version=expected_version)
+
+        deleted, _ = rows.delete()
     if deleted:
         return
 
@@ -412,7 +611,12 @@ class NotAllowedToMark(GradebookError):
     Under `GradebookError` like every other refusal here, so `except
     GradebookError` still means "the mark was not written". Callers that need to
     tell a refusal of *authority* from a refusal of *state* — an HTTP layer
-    choosing between 403 and 409 — catch this one first.
+    choosing between 403 and everything else — catch this one first.
+
+    The parenthetical used to read "403 and 409", which stopped being true when
+    `MarksLocked` became a 423: a refusal of state is now 409 when the mark
+    moved and 423 when the sheet shut, and the only claim this class needs to
+    make is that neither of them is this one.
     """
 
 
@@ -485,6 +689,7 @@ __all__ = [
     "MARK_ENTERING_ROLES",
     "GradebookError",
     "InvalidScore",
+    "MarksLocked",
     "NotAllowedToMark",
     "NotThisSchoolsStudent",
     "ScoreChangedMeanwhile",

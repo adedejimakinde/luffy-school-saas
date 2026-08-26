@@ -63,10 +63,24 @@ class Subject(models.Model):
 class Assessment(models.Model):
     """A thing that was scored: a CA, a mid-term test, an exam.
 
-    Belongs to a (term, subject). Deliberately *not* to a class or a stream —
-    there is no class model in this project yet, and inventing one here would
-    be guessing at how a school groups its children. Who was scored is answered
-    by which students have a `Score`, which is enough for a sheet and a total.
+    Belongs to a (term, subject). Deliberately *not* to a class or a stream.
+    Who was scored is answered by which students have a `Score`, which is
+    enough for a sheet and a total.
+
+    **The original reason for that has expired; the decision has not.** This
+    said "there is no class model in this project yet", and `academics.ClassGroup`
+    arrived two days later — read alone, it now sounds like an invitation to add
+    a class group here. It is not one. One paper is sat by every class taught
+    the subject, which is why `results.positions` builds a broadsheet by taking
+    every assessment for the term and slicing it by the class's roster; that
+    slice is only necessary because assessments span classes. Class-scoping this
+    would fragment one paper into a row per arm, make that slice redundant, and
+    leave every existing row needing a value nothing could supply.
+
+    The cost is that a `Score` reaches a class only through
+    `academics.ClassPlacement`, which is why `services._require_the_sheet_is_open()`
+    joins the placement and inherits the hole that join carries. See
+    [issue #27](https://github.com/adedejimakinde/luffy-school-saas/issues/27).
     """
 
     # Both tenant-local, so both are real foreign keys with real integrity.

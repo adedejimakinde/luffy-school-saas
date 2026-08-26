@@ -22,6 +22,24 @@ row as it now stands, so the 409 does too. "Somebody else changed this" is not
 useful to a teacher; "Kemi entered 17 while you were typing" is, and the client
 cannot say the second without being told what the mark now is.
 
+**A closed sheet is a 423, and it is neither of the two codes it looks like.**
+`MarksLocked` says the term has left `draft` — submitted, checked, approved or
+released — so the mark cannot be written now and, for a released term, cannot
+be written ever. It is not a **409**: in this API that code means "somebody
+changed this while you were typing", and the client answers it by reloading the
+cell and sending again. A blur handler doing that against a released sheet
+retries for ever, because nothing it can reload will reopen the term. It is not
+a **403** either: the caller's authority has not changed and is not the
+problem — a teacher who could mark this child an hour ago still can, once the
+sheet is sent back. What changed is the state of the resource, which is what
+423 is for.
+
+The same reasoning applies to `results.ratings.RatingsLocked` and
+`results.comments.CommentsLocked`, which are the same refusal about the other
+two thirds of the same card. Neither has an HTTP surface yet — `results.api`
+exposes one read-only broadsheet route — and when they get one it is this code,
+so that one refusal does not arrive as three.
+
 **No school slug in any path**, unlike the `/api/schools/{slug}/...` invitation
 routes. Those write shared tables, where the school is a row that has to be
 named. The gradebook is a tenant app: its tables live in the school's own
@@ -362,7 +380,13 @@ def marking_sheet(request, assessment_id: int):
 
 @router.put(
     "/assessments/{int:assessment_id}/scores/{int:student_membership_id}/",
-    response={200: ScoreOut, 403: MessageOut, 409: ConflictOut, 422: MessageOut},
+    response={
+        200: ScoreOut,
+        403: MessageOut,
+        409: ConflictOut,
+        422: MessageOut,
+        423: MessageOut,
+    },
 )
 def save_score(
     request, assessment_id: int, student_membership_id: int, payload: SaveIn
@@ -417,6 +441,13 @@ def save_score(
                 )
             ),
         )
+    except services.MarksLocked as exc:
+        # 423, and see the module docstring for why not 409 or 403. Caught
+        # after `ScoreChangedMeanwhile` only because the two cannot both be
+        # raised — the state guard runs first and this is a sibling under
+        # `GradebookError`, so the order between them is readability, not
+        # dispatch.
+        return 423, MessageOut(detail=str(exc))
     except services.NotThisSchoolsStudent:
         # Unreachable through `_student_here()`, which has already scoped the
         # lookup. Kept as a backstop, and answered with a bare 404 carrying
@@ -435,7 +466,7 @@ def save_score(
 
 @router.delete(
     "/assessments/{int:assessment_id}/scores/{int:student_membership_id}/",
-    response={200: ScoreOut, 403: MessageOut, 409: ConflictOut},
+    response={200: ScoreOut, 403: MessageOut, 409: ConflictOut, 423: MessageOut},
 )
 def clear_score(
     request, assessment_id: int, student_membership_id: int, expected_version: int
@@ -482,6 +513,12 @@ def clear_score(
                 )
             ),
         )
+    except services.MarksLocked as exc:
+        # As in `save_score()`. Reachable only when there is a mark to take
+        # back: clearing one that is already gone is a no-op at every state,
+        # which is `services.clear_score()`'s idempotency promise and is why
+        # the retried DELETE of an already-cleared mark still answers 200.
+        return 423, MessageOut(detail=str(exc))
     except services.NotThisSchoolsStudent:
         raise Http404("No such student here.")
 

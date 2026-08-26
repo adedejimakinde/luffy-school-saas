@@ -105,6 +105,13 @@ class CommentsLocked(CommentsError):
 
     Carries `state` — where the sheet actually is — so a caller can say whether
     this is "the vice principal has it" or "this went home in March".
+
+    **Over HTTP this is a 423.** Not a 409, which in this codebase means "the
+    row moved while you were typing" and is answered by reloading and sending
+    again — a released term never reopens, so that client retries for ever. Not
+    a 403, which is a refusal of the caller's authority, and the caller's
+    authority has not changed; the resource's state has.
+    `gradebook.api` implements it and states the case in full.
     """
 
     def __init__(self, message, state=None):
