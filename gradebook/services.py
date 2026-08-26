@@ -37,6 +37,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.utils import timezone
 
+from academics.services import placement_of
 from accounts.models import Role
 from accounts.students import why_not_a_student_here
 
@@ -90,6 +91,20 @@ class ScoreChangedMeanwhile(GradebookError):
         self.current = current
 
 
+class MarksLocked(GradebookError):
+    """The sheet has left `draft`, so its marks are part of what is being checked.
+
+    Carries `state` — where the sheet actually is — so the caller can say
+    whether this is "the vice principal has it" or "this went home in March".
+    The same shape as `results.ratings.RatingsLocked`, deliberately: the two
+    halves of one report card should not refuse in two different vocabularies.
+    """
+
+    def __init__(self, message, state=None):
+        super().__init__(message)
+        self.state = state
+
+
 class _AnyVersion:
     """Sentinel type. See `ANY_VERSION`."""
 
@@ -123,6 +138,83 @@ def _require_student_of_this_school(membership):
     if reason:
         raise NotThisSchoolsStudent(reason)
     return membership
+
+
+def _require_the_sheet_is_open(assessment, membership):
+    """Marks are editable while the sheet is in `draft`, and not after.
+
+    The seam this closes: the approval chain and the gradebook were built in the
+    right order and never introduced, so a mark could be changed at any point
+    after the chain left `draft` — including after release, which means a parent
+    holding a card the database now disagrees with, with no revision and no
+    audit row. `results` makes release terminal for the sheet's *state*; this is
+    what makes it terminal for its *contents*.
+
+    **A late import, and it is not stylistic.** `results` already imports this
+    app — `results/api.py` for `Subject`, `results/positions.py` for `Score` —
+    so a module-level import here would make the two apps mutually dependent at
+    the package level. It happens to work today because `results/services.py`
+    imports nothing from `gradebook`, but that is a fact about which module the
+    edge lands on rather than a layering that holds. Deferring it to call time
+    keeps the import graph honest at module scope and costs one dict lookup on
+    a path that is already doing a locking query.
+
+    Moving `ResultSheet` down into `academics` would resolve it properly and is
+    a larger change than the bug being fixed; a released result is editable
+    today, and a cleanliness concern should not gate a correctness fix. The
+    import is reversible where the model move is not.
+
+    **The sheet is locked, not merely read**, and the caller writes the mark in
+    the same transaction — `results.services.locked_sheet_for()` is the same
+    `SELECT ... FOR UPDATE` that `ratings._require_the_sheet_is_open()` takes.
+    Unlocked, this is a check followed by an act on what it checked: a teacher
+    pressing save while the vice principal presses submit would find the sheet
+    in `draft` and commit a mark into a document submitted a millisecond later,
+    leaving the signature attached to a sheet nobody signed.
+
+    **A child with no placement is not refused.** Entering a mark has never
+    required one, and adding that requirement here would be a different change
+    with its own argument; no placement means no class, which means no sheet
+    governs the mark. It is also the honest answer: there is nothing this
+    function could be checking against.
+
+    **The hole, stated rather than left to be found:** `Score` reaches a class
+    only through the placement, because an assessment belongs to a `(term,
+    subject)` and is sat by every class taught that subject. So this asks where
+    the child sits *today*, which `0010` and `0011` have just finished removing
+    from the guards on remarks and ratings. They could stop asking it because a
+    frozen per-child artefact existed to ask instead; nothing freezes marks
+    until task 3. A child moved after release is looked up against the new
+    class's draft and permitted, while the child who stayed put is refused —
+    and that closes with the per-child release marker required by
+    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34).
+    """
+    # Deferred on purpose. See the docstring — `results` imports this app.
+    from results.models import SheetState
+    from results import services as results_services
+
+    placement = placement_of(membership.pk, assessment.term)
+    if placement is None:
+        return None
+
+    sheet = results_services.locked_sheet_for(placement.class_group, assessment.term)
+    if results_services.is_open_for_writing(sheet):
+        return sheet
+
+    if sheet.state == SheetState.RELEASED:
+        raise MarksLocked(
+            f"{placement.class_group} — {assessment.term} has been released to "
+            f"parents. Its marks are part of a card somebody is holding, and "
+            f"correcting one is a revision rather than an edit.",
+            state=sheet.state,
+        )
+    raise MarksLocked(
+        f"{placement.class_group} — {assessment.term} is "
+        f"{sheet.get_state_display().lower()}, so its marks are part of what is "
+        f"being reviewed and cannot be changed. Ask for the sheet to be sent "
+        f"back if one is wrong.",
+        state=sheet.state,
+    )
 
 
 def _require_a_mark_this_assessment_can_hold(assessment, value):
@@ -211,13 +303,22 @@ def set_score(assessment, membership, value, *, expected_version=None, by=None):
     _require_student_of_this_school(membership)
     _require_a_mark_this_assessment_can_hold(assessment, value)
 
-    if expected_version is ANY_VERSION:
-        return _write_regardless(assessment, membership.pk, value, by)
-    if expected_version is None:
-        return _insert_first_mark(assessment, membership.pk, value, by)
-    return _update_the_mark_shown(
-        assessment, membership.pk, value, expected_version, by
-    )
+    # The state check is *inside* the transaction that writes, holding the
+    # sheet's row lock across it — see `_require_the_sheet_is_open()`. Checking
+    # outside and writing inside is two transactions with a submission free to
+    # land between them. The helpers below open their own atomic blocks, which
+    # become savepoints here, which is exactly what their note asks for: an
+    # `IntegrityError` still rolls back only the failed write.
+    with transaction.atomic():
+        _require_the_sheet_is_open(assessment, membership)
+
+        if expected_version is ANY_VERSION:
+            return _write_regardless(assessment, membership.pk, value, by)
+        if expected_version is None:
+            return _insert_first_mark(assessment, membership.pk, value, by)
+        return _update_the_mark_shown(
+            assessment, membership.pk, value, expected_version, by
+        )
 
 
 def _insert_first_mark(assessment, membership_id, value, by):
@@ -359,13 +460,16 @@ def clear_score(assessment, membership, *, expected_version, by=None):
     """
     _require_student_of_this_school(membership)
 
-    rows = Score.objects.filter(
-        assessment=assessment, student_membership_id=membership.pk
-    )
-    if expected_version is not ANY_VERSION:
-        rows = rows.filter(version=expected_version)
+    with transaction.atomic():
+        _require_the_sheet_is_open(assessment, membership)
 
-    deleted, _ = rows.delete()
+        rows = Score.objects.filter(
+            assessment=assessment, student_membership_id=membership.pk
+        )
+        if expected_version is not ANY_VERSION:
+            rows = rows.filter(version=expected_version)
+
+        deleted, _ = rows.delete()
     if deleted:
         return
 
@@ -485,6 +589,7 @@ __all__ = [
     "MARK_ENTERING_ROLES",
     "GradebookError",
     "InvalidScore",
+    "MarksLocked",
     "NotAllowedToMark",
     "NotThisSchoolsStudent",
     "ScoreChangedMeanwhile",
