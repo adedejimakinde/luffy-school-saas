@@ -756,3 +756,271 @@ class ReleasedTraitRating(models.Model):
             f"Frozen rating {self.pk} cannot be deleted. The card has to keep "
             f"saying what it said."
         )
+
+
+class CommentAuthor(models.TextChoices):
+    """The two people who sign a report card, and the order they print in.
+
+    A Nigerian card carries the class teacher's remark and the principal's, one
+    under the other, each labelled with whose it is. They are not two rows of
+    one list: they are written by different people, refused to different
+    people, and read as two different judgements — the teacher's about the term
+    they taught, the principal's about the card as a whole.
+
+    Declaration order is print order. Not the alphabetical order of the stored
+    values, which agrees today and would stop agreeing the first time a third
+    signatory is added.
+    """
+
+    CLASS_TEACHER = "class_teacher", "Class teacher's remark"
+    PRINCIPAL = "principal", "Principal's remark"
+
+
+#: How long a remark may be. A limit rather than a `TextField`, because a report
+#: card has a box of a fixed size on it and a remark that does not fit is a
+#: layout problem discovered at print time. 250 characters is about three lines
+#: in the space these cards leave.
+#:
+#: Published as a constant so the screen can count down against the same number
+#: the database enforces. A form that says "250 characters" while the column
+#: takes 200 is a truncation nobody sees until a parent reads half a sentence.
+MAX_COMMENT_LENGTH = 250
+
+
+class CommentPhraseQuerySet(models.QuerySet):
+    def for_author(self, author):
+        return self.filter(author=CommentAuthor(author).value)
+
+
+class CommentPhrase(models.Model):
+    """One canned remark a school offers, for one of the two signatories.
+
+    "Clickable to insert, then edit": a teacher picks a phrase, it lands in the
+    box, and they change it. So a phrase is a **starting point for typing**, not
+    a value a comment refers to — which is why `ReportCardComment` keeps no
+    foreign key back here and stores the text the teacher actually left. Editing
+    or deleting a phrase therefore cannot reach a comment already written, let
+    alone one on a card that has gone home. The release freeze guards the other
+    direction: edits to the comment itself.
+
+    **The two sets are separate, not one pool filtered.** `author` is mandatory
+    and every read goes through `for_author()`; there is deliberately no
+    accessor that returns both. A teacher choosing a remark must never be shown
+    "Has performed creditably this term and should maintain the standard"
+    written for a principal to sign, and the way to guarantee that is for the
+    question "which phrases exist" to be unanswerable without saying whose.
+
+    Unlike `Trait`, a phrase is **deleted rather than hidden**. Hiding exists
+    there because ratings and released cards name the trait row, so removing it
+    would take evidence with it. Nothing names a phrase — the text is copied at
+    write time — so a school that no longer offers a remark can simply stop
+    offering it.
+    """
+
+    author = models.CharField(max_length=16, choices=CommentAuthor)
+
+    text = models.CharField(max_length=MAX_COMMENT_LENGTH)
+
+    #: Where it sits in the list the screen shows. Explicit, and not unique per
+    #: author, for `Trait.position`'s reasons: swapping two entries round must
+    #: not need a temporary value, and `Meta.ordering` breaks the tie.
+    position = models.PositiveSmallIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = CommentPhraseQuerySet.as_manager()
+
+    class Meta:
+        # `id` last, so the order is total: two phrases sharing a position and a
+        # text cannot swap places between two renders of the same list.
+        ordering = ["author", "position", "text", "id"]
+        constraints = [
+            # Per author, not per school. The same sentence can reasonably be
+            # offered to both signatories; two identical entries in *one* list
+            # is the real problem, because the screen then shows the same line
+            # twice and a teacher has two identical things to click.
+            models.UniqueConstraint(
+                fields=["author", "text"], name="uniq_comment_phrase_per_author"
+            ),
+            models.CheckConstraint(
+                condition=Q(text__regex=r"\S"), name="a_comment_phrase_says_something"
+            ),
+        ]
+
+    def __str__(self):
+        return self.text
+
+
+class ReportCardCommentQuerySet(models.QuerySet):
+    def for_student(self, membership_id, term):
+        return self.filter(term=term, student_membership_id=membership_id)
+
+    def for_students(self, membership_ids, term):
+        return self.filter(term=term, student_membership_id__in=membership_ids)
+
+
+class ReportCardComment(models.Model):
+    """One signatory's remark about one child, this term.
+
+    Keyed on **(term, student, author)** and storing no class group, for
+    `TraitRating`'s reasons: `academics.ClassPlacement` already holds exactly
+    one answer per child per term, and a second copy strands the remark on the
+    arm the child left in January.
+
+    **No row means no remark**, and that is the whole of how "empty" is spelled.
+    There is no blank body: `a_comment_says_something` refuses whitespace, and
+    clearing a comment deletes the row. A card with no teacher's remark prints
+    no teacher's remark — not a labelled box with nothing in it, which is what a
+    nullable body would eventually render as.
+
+    The two authors are written by two different people and neither may write
+    the other's — `comments.write_as()` refuses — but they are one table because
+    they are one thing: a remark about a child on a card, differing only in
+    whose it is. Two tables would be the same four columns twice, and every
+    read, freeze and card render would do its work twice to put them back
+    together.
+    """
+
+    term = models.ForeignKey(
+        "academics.Term", related_name="report_card_comments", on_delete=models.PROTECT
+    )
+
+    # A bare id into the shared membership table — docs/tenancy.md's policy.
+    # `comments.write()` checks the id names a student of *this* school before
+    # anything is written; see `accounts.students.why_not_a_student_here()`.
+    student_membership_id = models.PositiveBigIntegerField()
+
+    author = models.CharField(max_length=16, choices=CommentAuthor)
+
+    #: What the teacher actually left, phrase-derived or typed from nothing.
+    #: See `CommentPhrase` for why there is no key back to the phrase.
+    body = models.CharField(max_length=MAX_COMMENT_LENGTH)
+
+    # Bare ids again, nullable for `Score.recorded_by_id`'s reason: a comment
+    # can arrive from an import of last year's cards with nobody behind it, and
+    # naming a fictional author is worse than naming none.
+    #
+    # Two columns because they answer two questions. `written_by_id` is stamped
+    # once, at the insert, and names whose remark this is; `updated_by_id` moves
+    # on every correction. Stamped with the same value the first time, which is
+    # why only a later correction tells them apart.
+    #
+    # **These hold `User` ids, not `Membership` ids** — `write_as()` stamps the
+    # actor, and the actor is a user. The column above holds a membership id,
+    # and both are small dense integers, so a screen resolving the wrong one
+    # would confidently name an unrelated person rather than fail.
+    # `TraitRating.rated_by_id` carries the same note, added after review read
+    # this comment's ancestor as saying the opposite.
+    written_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    updated_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    objects = ReportCardCommentQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["term_id", "student_membership_id", "author"]
+        # No declared index. The card read — both remarks for one child this
+        # term — is the leading pair of the unique constraint below, so a
+        # declared one answers nothing extra and is a second btree per tenant
+        # schema, per school, maintained on every write. `TraitRating.Meta` and
+        # `ResultSheetTransition.Meta` make the same call, the second of them
+        # after review caught the first.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["term", "student_membership_id", "author"],
+                name="one_comment_per_author_per_student_per_term",
+            ),
+            # Non-whitespace, not merely non-empty — `a_send_back_says_why` in
+            # this same app records why the two are different rules. A remark of
+            # three spaces is a labelled empty box with extra steps.
+            models.CheckConstraint(
+                condition=Q(body__regex=r"\S"), name="a_comment_says_something"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{CommentAuthor(self.author).label}: {self.body[:40]}"
+
+
+class CommentsAreFrozenAtRelease(Exception):
+    """Something tried to edit or delete a remark a parent is already holding."""
+
+
+class ReleasedComment(models.Model):
+    """The remarks on one child's card, as they read at the moment of release.
+
+    The same half-of-the-snapshot `ReleasedTraitRating` is, and the same
+    reasoning: a released card does not change, and every route back to the live
+    row is a route a later edit can take. A teacher correcting a remark next
+    term must not rewrite the sentence a parent read in March.
+
+    **A child with no remark gets no row**, which is the difference from the
+    frozen ratings. There, a row is written even for a trait nobody rated,
+    because what is frozen is the *section* — which lines existed and in what
+    order — and that survives only if it is recorded. Here there is no list to
+    preserve: two authors, fixed in code, and an absent remark prints as absent.
+    A row carrying an empty body would be the labelled empty box this design
+    refuses everywhere else.
+
+    Append-only, enforced the two ways `ResultSheetTransition`,
+    `fees.FeeLedgerEntry` and `ReleasedTraitRating` are: `save()` and `delete()`
+    refuse, which is the error a developer sees, and a trigger refuses, which is
+    the error a `psql` session, an import or a bulk `.update()` runs into.
+    """
+
+    sheet = models.ForeignKey(
+        ResultSheet,
+        related_name="released_comments",
+        # PROTECT for `ResultSheetTransition.sheet`'s reason: a sheet whose
+        # release froze a card is not a row to delete from under it.
+        on_delete=models.PROTECT,
+    )
+
+    student_membership_id = models.PositiveBigIntegerField()
+
+    author = models.CharField(max_length=16, choices=CommentAuthor)
+
+    body = models.CharField(max_length=MAX_COMMENT_LENGTH)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns, and total. Print order is `CommentAuthor`'s declaration
+        # order, decided in `comments.card_comments()` rather than by sorting
+        # the stored string — which agrees today and would stop agreeing the
+        # first time a signatory is added whose value sorts wrong.
+        ordering = ["sheet_id", "student_membership_id", "author", "id"]
+        # No declared index, for the reason above: the unique constraint below
+        # already leads with `(sheet, student_membership_id)`.
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sheet", "student_membership_id", "author"],
+                name="one_frozen_comment_per_author_per_student",
+            ),
+            models.CheckConstraint(
+                condition=Q(body__regex=r"\S"),
+                name="a_frozen_comment_says_something",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{CommentAuthor(self.author).label}: {self.body[:40]}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise CommentsAreFrozenAtRelease(
+                f"Frozen comment {self.pk} is part of a card that has been "
+                f"released. It cannot be changed — correcting a released result "
+                f"is a revision, which makes a new version and leaves this one "
+                f"standing."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CommentsAreFrozenAtRelease(
+            f"Frozen comment {self.pk} cannot be deleted. The card has to keep "
+            f"saying what it said."
+        )

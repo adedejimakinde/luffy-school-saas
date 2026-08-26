@@ -57,14 +57,20 @@ from .models import (
     RatingScalePoint,
     ReleasedTraitRating,
     ReportCardSettings,
-    ResultSheet,
     SheetState,
     Trait,
     TraitGroup,
     TraitRating,
     HIGHEST_RATING,
 )
-from .services import ResultsError, school_on_this_connection
+from .services import (
+    ResultsError,
+    as_ids,
+    is_open_for_writing,
+    locked_sheet_for,
+    school_on_this_connection,
+    sheet_for,
+)
 
 
 class RatingsError(ResultsError):
@@ -343,29 +349,6 @@ def set_trait_hidden(trait, hidden: bool = True) -> Trait:
     return trait
 
 
-def _as_ids(values):
-    """Whatever the screen sent, as integers. Anything else is dropped.
-
-    A drag-and-drop posts JSON, and JSON has no integers in a URL or a form:
-    `["12", "9", "7"]` is what arrives. Matched against a dict keyed by `pk`,
-    every one of those misses, `reorder()` renumbers the group into the order it
-    was already in, and returns 0 — a silent no-op the screen reports as
-    success, and one the "ids of rows that no longer exist" rule makes
-    indistinguishable from a legitimate one.
-
-    Coerced here rather than at each call site so the two `reorder` paths cannot
-    disagree, and non-numeric junk is dropped rather than raising: the function's
-    contract is already "ids it does not recognise are ignored".
-    """
-    ids = []
-    for value in values:
-        try:
-            ids.append(int(value))
-        except (TypeError, ValueError):
-            continue
-    return ids
-
-
 def reorder(group, trait_ids) -> int:
     """Put this group's traits in this order. Returns how many rows moved.
 
@@ -399,7 +382,7 @@ def reorder(group, trait_ids) -> int:
     known = {trait.pk: trait for trait in Trait.objects.in_group(group)}
 
     named, seen = [], set()
-    for trait_id in _as_ids(trait_ids):
+    for trait_id in as_ids(trait_ids):
         trait = known.get(trait_id)
         if trait is None or trait.pk in seen:
             continue
@@ -537,48 +520,6 @@ def _require_a_score_on_the_scale(score):
         )
 
 
-def sheet_for(class_group, term):
-    """The chain's sheet for this group and term, or `None` if never opened.
-
-    The read path's copy, taking no lock: `card_sections()` asks it to decide
-    whether to render the freeze or live configuration, and rendering a card
-    must not lock the row a principal is trying to release.
-
-    `.order_by()` before `.first()`, and it is not decoration.
-    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
-    and `.filter().first()` keeps it, so this compiled to a three-table join
-    sorted by the term's session and the class's level, once per child, for a
-    row `one_result_sheet_per_class_term` guarantees is unique. `_locked_sheet_for()`
-    below documents the same hazard and uses `.get()`, which clears ordering
-    itself; this is the spelling that does not.
-    """
-    return (
-        ResultSheet.objects.filter(class_group=class_group, term=term)
-        .order_by()
-        .first()
-    )
-
-
-def _locked_sheet_for(class_group, term):
-    """The same sheet, re-read under a row lock. `None` if the chain has not started.
-
-    `.get()`, not `.filter().first()`, and that is not a style choice.
-    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations — so
-    a `select_for_update()` that inherits it compiles to a three-table join and
-    Postgres locks a row in `academics_term` and `academics_classgroup` too,
-    neither of which a rating writes. `QuerySet.get()` clears ordering itself,
-    which is the property `results.services._locked()` documents and
-    `test_approval_concurrency.LockScopeTests` pins.
-
-    Must be called inside `transaction.atomic()`; Django refuses `FOR UPDATE`
-    outside one.
-    """
-    try:
-        return ResultSheet.objects.select_for_update().get(
-            class_group=class_group, term=term
-        )
-    except ResultSheet.DoesNotExist:
-        return None
 
 
 def _require_the_sheet_is_open(class_group, term):
@@ -604,8 +545,13 @@ def _require_the_sheet_is_open(class_group, term):
     [issue #30](https://github.com/adedejimakinde/luffy-school-saas/issues/30).
 
     **The sheet is locked, not merely read**, and the caller writes the rating
-    in the same transaction. Unlocked, this is a check followed by an act on
-    what it checked — the stale-read shape this codebase has been bitten by in
+    in the same transaction. The lock and the predicate both live in
+    `results.services` now, because `comments` asks the identical question and
+    the two must not be able to disagree about what "open" means; the refusals
+    stay here, because a teacher reads them and the vocabulary is local.
+
+    Unlocked, this is a check followed by an act on what it checked — the
+    stale-read shape this codebase has been bitten by in
     `schools.Invitation.accept()` and again in `_require_class_teacher_scope()`.
     A teacher pressing save while the vice principal presses submit would find
     the sheet in `draft`, and commit a rating into a document that was submitted
@@ -624,8 +570,8 @@ def _require_the_sheet_is_open(class_group, term):
     filed rather than fixed here because it is a change to the gradebook's write
     path with its own design question about which way the dependency runs.
     """
-    sheet = _locked_sheet_for(class_group, term)
-    if sheet is None or sheet.state == SheetState.DRAFT:
+    sheet = locked_sheet_for(class_group, term)
+    if is_open_for_writing(sheet):
         return sheet
 
     if sheet.state == SheetState.RELEASED:

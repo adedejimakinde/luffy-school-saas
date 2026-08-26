@@ -49,6 +49,8 @@ which is where that used to raise `School.DoesNotExist` out of the module's own
 exception hierarchy.
 """
 
+from collections.abc import Iterable
+
 from django.db import connection, transaction
 from django_tenants.utils import get_public_schema_name
 
@@ -204,6 +206,126 @@ def _named(roles) -> str:
     scanning the sentence sees.
     """
     return ", ".join(sorted(Role(role).label for role in roles))
+
+
+def as_ids(values):
+    """Whatever the screen sent, as integers. Anything else is dropped.
+
+    Here rather than in `ratings` — where it was written — for
+    `locked_sheet_for()`'s reason one paragraph down: `comments.reorder_phrases()`
+    asks the identical question of the identical kind of input, and a second
+    copy is a second thing to forget when the next reorder path is added.
+
+    A drag-and-drop posts JSON, and JSON has no integers in a URL or a form:
+    `["12", "9", "7"]` is what arrives. Matched against a dict keyed by `pk`,
+    every one of those misses, the list is renumbered into the order it was
+    already in, and the caller is told 0 rows changed — a silent no-op the
+    screen reports as success, and one the "ids of rows that no longer exist"
+    rule makes indistinguishable from a legitimate one.
+
+    Non-numeric junk *inside* the sequence is dropped rather than raising: every
+    caller's contract is already "ids it does not recognise are ignored".
+
+    A **string** is refused rather than iterated, and that is the case worth
+    naming. `as_ids("12,9")` iterates characters, so `int()` succeeds on "1",
+    "2" and "9" and skips the comma — yielding `[1, 2, 9]`, three ids the school
+    never named, against which the list is cheerfully renumbered and the call
+    reports success. It is the same silent no-op this function was extracted to
+    prevent, wearing different clothes. So is a non-sequence: `None` would raise
+    a bare `TypeError`, outside `ResultsError`, arriving at a screen as a 500.
+    """
+    if isinstance(values, (str, bytes)) or not isinstance(values, Iterable):
+        raise ResultsError(
+            f"A list of ids is a sequence of numbers, not {values!r}. A single "
+            f"id still arrives as a list of one."
+        )
+    ids = []
+    for value in values:
+        try:
+            ids.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def locked_sheet_for(class_group, term):
+    """The sheet for this group and term, re-read under a row lock. `None` if none.
+
+    **Public, and here rather than in the two modules that call it**, because it
+    is the same lock twice and the tricky part is not the locking. `ratings` and
+    `comments` both have to answer "may I write against this sheet right now",
+    and both have to hold the answer across their write; what neither should
+    have to know is *how* to lock a sheet without taking rows it never writes.
+
+    That is what `.get()` buys, and it is not a style choice.
+    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations — so
+    a `select_for_update()` that inherits it compiles to a three-table join and
+    Postgres locks a row in `academics_term` and `academics_classgroup` too.
+    `QuerySet.get()` clears ordering itself, which is the property `_locked()`
+    documents at length and `test_approval_concurrency.LockScopeTests` pins on
+    the captured SQL.
+
+    Deliberately **not** paired with a shared refusal. The two callers phrase
+    theirs differently — "its ratings are part of what is being reviewed" and
+    "its remarks are" — and those sentences are read by a teacher, so they stay
+    where the vocabulary is. What is shared is the lock and the predicate below,
+    which are the parts that must not differ.
+
+    Must be called inside `transaction.atomic()`; Django refuses `FOR UPDATE`
+    outside one.
+    """
+    try:
+        return ResultSheet.objects.select_for_update().get(
+            class_group=class_group, term=term
+        )
+    except ResultSheet.DoesNotExist:
+        return None
+
+
+def sheet_for(class_group, term):
+    """The chain's sheet for this group and term, or `None` if never opened.
+
+    The read path's counterpart to `locked_sheet_for()`, **taking no lock**:
+    `comments.card_comments()` and `ratings.card_sections()` each ask it whether
+    to render the freeze or the live rows, and rendering a card must not lock the
+    row a principal is trying to release.
+
+    `.order_by()` before `.first()`, and it is not decoration.
+    `ResultSheet.Meta.ordering` is `["term", "class_group"]` — two relations —
+    and `.filter().first()` keeps it, so this compiled to a three-table join
+    sorted by the term's session and the class's level, once per child, for a
+    row `one_result_sheet_per_class_term` guarantees is unique.
+    `locked_sheet_for()` above documents the same hazard and uses `.get()`,
+    which clears ordering itself; this is the spelling that does not.
+    `ratings.sheet_for()` shipped without the call and was corrected on it.
+
+    **Here rather than copied into both modules**, unlike the refusals
+    `locked_sheet_for()` deliberately leaves local. Those stay local because
+    their wording is read by a teacher and the two callers phrase them
+    differently. This has no wording and no refusal — it is one query and one
+    trap — so two copies bought nothing and meant maintaining the `.order_by()`
+    note in two places, which is the state a review found it in.
+    """
+    return (
+        ResultSheet.objects.filter(class_group=class_group, term=term)
+        .order_by()
+        .first()
+    )
+
+
+def is_open_for_writing(sheet) -> bool:
+    """Can what this sheet is reckoned from still be changed?
+
+    Two states say yes and they are the same state: `draft`, and a sheet nobody
+    has opened yet. A send-back returns a sheet to `draft`, which is the whole
+    reason the test is the state rather than "has never been submitted" — a
+    teacher told to fix a rating or rewrite a remark has to be able to.
+
+    Anything past `draft` says no, because ratings and remarks are part of what
+    the vice principal checked and the principal approved. If they could change
+    afterwards, the signatures would be attached to a document that moved.
+    """
+    return sheet is None or sheet.state == SheetState.DRAFT
 
 
 def _require_authority(actor, allowed, step):
@@ -552,12 +674,27 @@ def release(sheet, actor):
     and the attendance the same way: another function called from here, inside
     this transaction, not another branch in `_move()`.
 
+    Task 5 adds the second half: `comments.freeze_for_release()` copies the
+    class teacher's and the principal's remarks the same way. Both run inside
+    this one transaction, in the order they print, so a sheet that says
+    `released` has the whole card behind it rather than part of one.
+
     Imported inside the function rather than at the top of the module, because
-    `ratings` imports this one — it needs `school_on_this_connection()` and
-    `ResultsError`, which are the chain's own — and a module-level import here
-    would close the circle.
+    both modules import this one — they need `school_on_this_connection()`,
+    `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
+    module-level import here would close the circle.
     """
-    from . import ratings
+    from . import comments, ratings
+
+    def freeze_the_card(locked):
+        """Everything the card is made of, copied at the moment of release.
+
+        A named function rather than two `freeze=` parameters or a list: what
+        gets frozen is a growing list — task 3's scores, averages and attendance
+        join it — and `_move()` should go on knowing nothing about any of it.
+        """
+        ratings.freeze_for_release(locked)
+        comments.freeze_for_release(locked)
 
     return _move(
         sheet,
@@ -566,7 +703,7 @@ def release(sheet, actor):
         to_state=SheetState.RELEASED,
         roles=RELEASING_ROLES,
         step="release",
-        freeze=ratings.freeze_for_release,
+        freeze=freeze_the_card,
     )
 
 
@@ -602,6 +739,17 @@ def history(sheet):
     return ResultSheetTransition.objects.filter(sheet=sheet)
 
 
+# Includes the shared plumbing `ratings` and `comments` import — the lock, the
+# predicate, the id coercion and the school lookup. Each says "public" in its own
+# docstring and both docs name them as the shared surface; leaving them out let
+# the module's stated API and its declared one disagree, which is worse than
+# either answer on its own.
+#
+# `sheet_for` earns its place by being defined here, which it was not when this
+# list first named it: a name listed in `__all__` that the module does not define
+# is not inert — it raises `AttributeError` on `from results.services import *`,
+# at import time. The entry was removed for that reason and is back because the
+# function moved, not because the rule softened.
 __all__ = [
     "APPROVING_ROLES",
     "CHECKING_ROLES",
@@ -615,10 +763,15 @@ __all__ = [
     "ResultsError",
     "WrongState",
     "approve",
+    "as_ids",
     "check",
     "history",
+    "is_open_for_writing",
+    "locked_sheet_for",
     "open_sheet",
     "release",
+    "school_on_this_connection",
     "send_back",
+    "sheet_for",
     "submit",
 ]

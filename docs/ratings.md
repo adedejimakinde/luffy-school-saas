@@ -223,6 +223,14 @@ neither of which a rating writes. `QuerySet.get()` clears ordering itself, the
 property `results.services._locked()` documents and
 `test_ratings_concurrency.TheRatingLockTests` pins on the captured SQL.
 
+The lock, the predicate and the unlocked read now live in `results.services` —
+`locked_sheet_for()`, `is_open_for_writing()` and `sheet_for()` — because task
+5's remarks ask the identical questions and the two must not be able to disagree
+about what "open" means. `sheet_for()` moved last, after a review found this
+module's copy and task 5's had already begun to drift apart. The refusals stay
+here: a teacher reads them, and the vocabulary is local. See
+[docs/comments.md](comments.md#one-lock-shared-with-the-ratings).
+
 ### And the database holds the terminal case
 
 Migration `0007` adds a trigger refusing INSERT, UPDATE **and** DELETE on
