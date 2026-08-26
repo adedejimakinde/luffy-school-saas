@@ -1381,3 +1381,331 @@ class UnratedTests(RatingsSetUp):
             sheet = self.walk_to_released()
 
         self.assertEqual(sheet.state, "released")
+
+
+class ARatingOutlivesTheChildsClassMoveTests(RatingsSetUp):
+    """Issue #33: the guard asked where the child sits, not what went home.
+
+    Both halves of it did. `rate()` reached the sheet through
+    `placement.class_group`, and `0007`'s trigger joined through
+    `academics_classplacement` — so releasing JSS 1A, moving Ada to JSS 3B and
+    rating her again found JSS 3B's untouched draft and permitted the write, in
+    the service *and* in the database. There was no frozen-row check at all;
+    unlike comments there was nothing merely keyed wrong, there was nothing.
+
+    **It is an inconsistency, not a policy question.** Bisi stayed in JSS 1A and
+    was refused that identical write the whole time, because for her the
+    placement join still pointed at the released sheet. Two children, one card
+    each, the same school, the same term, the same trait, the same score — and
+    the answer turned on whether the office had moved them. The pair of tests
+    below is that contradiction written down; the fix makes the moved child
+    agree with the one who stayed.
+
+    **One check does the work, not two.** `freeze_for_release()` writes a row for
+    every child on the roster × every visible trait, unrated ones included, so
+    every child of a ratings-enabled release has rows for the frozen-row check to
+    find. The sheet-state check is kept for a per-*school* gap instead — a school
+    with the section off at release freezes nothing for anybody — and that gap,
+    and the one case neither check sees, are what the last two tests pin.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.enable(self.stmarys, TraitGroup.AFFECTIVE)
+
+    # -- scene setting -------------------------------------------------------
+
+    def released_with_both_children_rated(self):
+        """JSS 1A goes home. Ada and Bisi are both on it, both rated.
+
+        Both deliberately: the pair is what turns the finding from a judgement
+        call into a contradiction.
+        """
+        self.rate("Punctuality", 5)
+        self.rate("Punctuality", 3, student=self.bisi)
+        return self.walk_to_released()
+
+    def move_ada_to_jss3b(self):
+        academics.move_student(
+            ClassGroup.objects.get(pk=self.jss3b_id),
+            self.term(),
+            self.membership_of(self.ada),
+        )
+
+    def rates_them_late(self, student, teacher):
+        return ratings.rate_as(
+            teacher,
+            self.term(),
+            self.trait("Punctuality"),
+            self.membership_of(student),
+            1,
+        )
+
+    def live_score(self, student):
+        return (
+            TraitRating.objects.filter(
+                term=self.term(),
+                student_membership_id=self.membership_of(student).pk,
+                trait=self.trait("Punctuality"),
+            )
+            .values_list("score", flat=True)
+            .first()
+        )
+
+    def frozen_scores(self, student):
+        return sorted(
+            ReleasedTraitRating.objects.filter(
+                sheet__term=self.term(),
+                student_membership_id=self.membership_of(student).pk,
+            ).values_list("trait_name", "score")
+        )
+
+    def sections_through(self, class_group_id, student=None):
+        return ratings.card_sections(
+            self.membership_of(student or self.ada).pk,
+            ClassGroup.objects.get(pk=class_group_id),
+            self.term(),
+        )
+
+    def rendered(self, sections):
+        return [
+            (s.heading, [(line.name, line.score) for line in s.lines]) for s in sections
+        ]
+
+    def churn_the_configuration(self):
+        """An edit a school legitimately makes after a card has gone home.
+
+        **Without it the read tests below prove nothing**, and they were written
+        without it first: the freeze copies the live rows exactly, so straight
+        after a release the frozen rendering and the live one are identical and
+        no assertion can tell which source was read. Measured — every read test
+        here passed against the unfixed code until this was added.
+
+        Renaming a trait and hiding another moves the *live* section and leaves
+        the frozen rows untouched, which is what makes reading the wrong source
+        visible. Both are ordinary configuration, refused by nothing: the freeze
+        exists precisely so that they cannot reach backwards.
+        """
+        ratings.rename_trait_as(self.principal, self.trait("Neatness"), "Tidiness")
+        ratings.set_trait_hidden_as(self.principal, self.trait("Honesty"))
+
+    # -- the write side ------------------------------------------------------
+
+    def test_the_moved_child_may_not_be_rated_after_her_card_went_home(self):
+        """The finding. Sade rates Ada in JSS 3B; her card is already out."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(ratings.RatingsLocked) as caught:
+                self.rates_them_late(self.ada, self.sade)
+
+        self.assertEqual(caught.exception.state, "released")
+        self.assertIn("released to a parent", str(caught.exception))
+
+    def test_the_child_who_stayed_is_refused_the_identical_write(self):
+        """The control, and the reason this is a bug rather than a decision."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(ratings.RatingsLocked):
+                self.rates_them_late(self.bisi, self.kemi)
+
+    def test_the_move_is_what_used_to_decide_it_and_now_decides_nothing(self):
+        """Same card, same trait, same score — and the move no longer matters."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            for student, teacher in ((self.ada, self.sade), (self.bisi, self.kemi)):
+                with self.subTest(student=student.username):
+                    with self.assertRaises(ratings.RatingsLocked):
+                        self.rates_them_late(student, teacher)
+
+    def test_clearing_a_rating_after_the_move_is_refused_too(self):
+        """`clear_rating_as()` deletes rather than overwrites, and #33 says so."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(ratings.RatingsLocked):
+                ratings.clear_rating_as(
+                    self.sade,
+                    self.term(),
+                    self.trait("Punctuality"),
+                    self.membership_of(self.ada),
+                )
+
+    def test_the_database_refuses_the_late_rating_too(self):
+        """Reached by `.update()`, which no service guard sees.
+
+        The service refusal above is one of two independent guarantees; this is
+        the other. `0011` replaced `0007`'s body, and a rewrite that only fixed
+        the service would leave the table permitting what the module refuses.
+        """
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            row = TraitRating.objects.get(
+                term=self.term(),
+                student_membership_id=self.membership_of(self.ada).pk,
+                trait=self.trait("Punctuality"),
+            )
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    TraitRating.objects.filter(pk=row.pk).update(score=1)
+
+    def test_the_frozen_card_is_untouched_by_the_attempt(self):
+        """The refusals are worth nothing if the row moved anyway."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            frozen_before = self.frozen_scores(self.ada)
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(ratings.RatingsLocked):
+                self.rates_them_late(self.ada, self.sade)
+
+            self.assertEqual(self.frozen_scores(self.ada), frozen_before)
+            self.assertEqual(self.live_score(self.ada), 5)
+
+    # -- the read side -------------------------------------------------------
+
+    def test_the_reprint_after_a_move_is_the_card_the_parent_holds(self):
+        """`card_sections()` decided its source from the class it was handed."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            through_jss1a = self.rendered(self.sections_through(self.jss1a_id))
+            self.move_ada_to_jss3b()
+            self.churn_the_configuration()
+
+            self.assertEqual(
+                self.rendered(self.sections_through(self.jss3b_id)), through_jss1a
+            )
+
+    def test_the_reprint_does_not_depend_on_which_class_it_is_asked_through(self):
+        """The same card, asked for two ways, twice over."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+            self.churn_the_configuration()
+
+            self.assertEqual(
+                self.rendered(self.sections_through(self.jss3b_id)),
+                self.rendered(self.sections_through(self.jss1a_id)),
+            )
+
+    def test_the_moved_child_and_the_one_who_stayed_print_the_same_card(self):
+        """Both were rated 5 and 3; both cards must survive the move intact."""
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            before = {
+                s.username: self.rendered(self.sections_through(self.jss1a_id, s))
+                for s in (self.ada, self.bisi)
+            }
+            self.move_ada_to_jss3b()
+            self.churn_the_configuration()
+
+            self.assertEqual(
+                self.rendered(self.sections_through(self.jss3b_id, self.ada)),
+                before["ada"],
+            )
+            self.assertEqual(
+                self.rendered(self.sections_through(self.jss1a_id, self.bisi)),
+                before["bisi"],
+            )
+
+    def test_a_child_with_nothing_frozen_still_reads_the_live_rows(self):
+        """The control for the read: no freeze anywhere means the draft card.
+
+        Asserted on the scores rather than on the whole section, because a live
+        section carries a line for every visible trait — the unrated ones with a
+        null score — and pinning the seeded trait list here would make this fail
+        the next time somebody adds one.
+        """
+        with connected_to(self.stmarys):
+            self.rate("Punctuality", 5)
+            self.assertEqual(self.live_lines()["Punctuality"], 5)
+
+            # And it goes on following the live rows, which is what makes this
+            # the draft path and not a freeze that happens to agree.
+            self.rate("Neatness", 4)
+            self.assertEqual(self.live_lines()["Neatness"], 4)
+
+    def live_lines(self, student=None):
+        return {
+            line.name: line.score
+            for section in self.sections_through(self.jss1a_id, student)
+            for line in section.lines
+        }
+
+    def test_a_second_release_in_the_same_term_does_not_double_the_lines(self):
+        """A moved child can be frozen twice, and the card is still one card.
+
+        `freeze_for_release()` writes for the roster it finds, so releasing JSS
+        3B after Ada has moved into it freezes her a second time. Reading every
+        frozen row for the term would print each trait twice — which is why
+        `_frozen_sheet_id_for()` chooses one sheet instead.
+        """
+        with connected_to(self.stmarys):
+            self.released_with_both_children_rated()
+            self.move_ada_to_jss3b()
+
+            sheet = services.open_sheet(
+                ClassGroup.objects.get(pk=self.jss3b_id), self.term(), self.principal
+            )
+            services.submit(sheet, self.sade)
+            services.check(sheet, self.vp)
+            services.approve(sheet, self.principal)
+            services.release(sheet, self.principal)
+
+            for class_group_id in (self.jss1a_id, self.jss3b_id):
+                with self.subTest(asked_through=class_group_id):
+                    sections = self.sections_through(class_group_id)
+                    names = [line.name for s in sections for line in s.lines]
+                    self.assertEqual(len(names), len(set(names)), names)
+
+    # -- the gap that is left, and the gap that is not ------------------------
+
+    def test_a_released_class_still_shuts_a_child_it_froze_nothing_for(self):
+        """The per-school gap: section off at release, so nothing was frozen.
+
+        `rate()` is unreachable while the section is off, but switching it on
+        afterwards makes it reachable and the frozen-row check finds nothing.
+        The sheet-state check is what refuses it, which is why `0011` keeps it.
+        """
+        with connected_to(self.stmarys):
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, False)
+            self.walk_to_released()
+            self.assertFalse(
+                ReleasedTraitRating.objects.filter(sheet__term=self.term()).exists()
+            )
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, True)
+
+            with self.assertRaises(ratings.RatingsLocked) as caught:
+                self.rates_them_late(self.bisi, self.kemi)
+
+        self.assertEqual(caught.exception.state, "released")
+
+    def test_the_case_neither_check_sees_is_the_one_issue_34_closes(self):
+        """Written down rather than denied, the way `0010` writes down its own.
+
+        Section off at release freezes nothing, and the child then moves — so the
+        frozen-row check finds nothing and the sheet-state check is looking at
+        the new class. This asserts the hole exists, so that the day #34's marker
+        lands this test fails and is deleted rather than quietly going stale.
+        """
+        with connected_to(self.stmarys):
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, False)
+            self.walk_to_released()
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, True)
+            self.move_ada_to_jss3b()
+
+            self.rates_them_late(self.ada, self.sade)
+            self.assertEqual(self.live_score(self.ada), 1)
+
+            # And the card the parent holds still prints no section, because
+            # nothing was frozen and JSS 3B's sheet is a draft is not what is
+            # asked — `card_sections()` through the released JSS 1A returns [].
+            self.assertEqual(self.sections_through(self.jss1a_id), [])

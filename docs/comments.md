@@ -239,26 +239,46 @@ The frozen card then says one thing and the school's screen another, which is
 exactly what `0009`'s own docstring says it exists to prevent. It prevented it
 for a child who stayed put.
 
-Migration `0010` asks the frozen row directly instead: a `ReleasedComment` for
-this `(term, student, author)` means released, wherever the child is now.
-`_require_this_remark_has_not_gone_home()` is the service half of the same
+Migration `0010` asks the frozen rows directly instead: a `ReleasedComment` for
+this `(term, student)` means released, wherever the child is now.
+`_require_this_card_has_not_gone_home()` is the service half of the same
 question.
 
-Both checks stay, because they answer different things. A card released with no
-principal's remark freezes no row for the principal, so the frozen-row check
-finds nothing and the sheet-state check is what stops a principal writing one
-onto a released sheet. Each covers a case the other cannot see.
+**Keyed on the child and the term, and not on the author** — which the first
+draft of `0010` got wrong in the same shape one level down. Keying on
+`(term, student, author)` meant a card released carrying only the class
+teacher's remark froze no principal's row, so the principal's write found
+nothing and, after a move, found the new class's draft below. It landed a remark
+on a card already in a parent's hand, while the child who stayed put was
+refused. Both were measured before either was changed.
 
-> The same join is in `results/0007` for `TraitRating`, and
-> `ratings._require_the_sheet_is_open()` asks through `placement.class_group`
-> too, so **released ratings have this hole today**. Not fixed here — it is
-> merged task 4 code with its own tests to write. It is
-> [issue #33](https://github.com/adedejimakinde/luffy-school-saas/issues/33),
-> which notes that ratings freeze a row even for an unrated trait and so
-> probably needs the frozen-row check *alone* rather than this module's two.
-> The rule above is what that fix should be built on, and so should
-> [issue #27](https://github.com/adedejimakinde/luffy-school-saas/issues/27)'s
-> write guard on live marks, rather than a third copy of the placement join.
+Both checks stay, because they answer different things — but not the difference
+the first draft claimed. The frozen rows now cover every signatory of a card
+that went home; what they cannot cover is a card released carrying no remark of
+*either* kind, which freezes nothing at all for that child. The sheet-state
+check is what refuses a write onto that released sheet.
+
+The case neither sees is that same empty card, for a child who is then moved.
+Closing it needs a per-child record that a card was released, independent of
+what was on it — a requirement on task 3, tracked in
+[issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34).
+
+> The same join was in `results/0007` for `TraitRating`, and
+> `ratings._require_the_sheet_is_open()` asked through `placement.class_group`
+> too. Fixed in
+> [issue #33](https://github.com/adedejimakinde/luffy-school-saas/issues/33) by
+> migration `0011`, on the rule above.
+>
+> That issue expected the frozen-row check to suffice *alone* there, since
+> ratings freeze a row even for an unrated trait, so the per-child gap this
+> module has does not exist. That much held. It still keeps two checks, for a
+> per-*school* gap instead: `ratings.freeze_for_release()` writes nothing when
+> no group is enabled or no trait is visible, and a school that turns the
+> section on after a term was released makes rating reachable again.
+>
+> [Issue #27](https://github.com/adedejimakinde/luffy-school-saas/issues/27)'s
+> write guard on live marks should be built on the same rule, rather than a
+> third copy of the placement join.
 
 ### Only the remarks that exist
 

@@ -240,9 +240,20 @@ Migration `0007` adds a trigger refusing INSERT, UPDATE **and** DELETE on
 batch may legitimately need to work around. A guard broader than its rule is one
 somebody eventually turns off wholesale.
 
-Because `TraitRating` stores no class group, the trigger joins through
-`academics_classplacement` to find the sheet. The alternative was a denormalised
-`class_group_id` on every rating, kept correct by nothing.
+`0011` replaced that body. The trigger now asks
+`results_releasedtraitrating` first — has a card for this child, this term,
+already been frozen and sent home — and only then falls back to the placement
+join. Keying on placement alone was the bug in issue #33: it asks where the
+child sits *today*, and releasing JSS 1A then moving the child to JSS 3B left
+the trigger looking at JSS 3B's untouched draft. **A guard on a released
+artefact keys off the artefact, not off the child's current placement.**
+
+The placement join stays because it answers what the frozen rows cannot: a
+school with the section off at release freezes nothing for anybody, and a child
+who stayed put must still be refused. Because `TraitRating` stores no class
+group, that fallback joins through `academics_classplacement` to find the sheet;
+the alternative was a denormalised `class_group_id` on every rating, kept
+correct by nothing.
 
 It fires on INSERT as well, unlike the append-only trigger below: a *new* rating
 for a released term is as wrong as an edited one, and likelier — a teacher
@@ -331,9 +342,22 @@ the one thing a frozen row is allowed to do.
 ### A school with the section off freezes nothing
 
 No enabled group means no rows, which is what makes such a school's released
-card render with no section rather than an empty one — for ever, however the
-school later configures itself. Turning the section on in April does not
-retrofit a heading onto a card that went home in March.
+card render with no section rather than an empty one. Turning the section on in
+April does not retrofit a heading onto a card that went home in March.
+
+**With one exception, and it is the one gap the guards do not close.** Because
+nothing was frozen, the frozen-row check has nothing to find, so a child who is
+*moved* after such a release can still be rated: the remaining check is looking
+at the new class, whose sheet is a draft. The child who stayed put is still
+refused. Closing it needs a per-child record that a card went home, written at
+release whatever the configuration says — a **requirement** on task 3, tracked
+in [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34).
+It cannot be reconstructed from placement, because
+`one_class_placement_per_student_per_term` means a move rewrites the row rather
+than adding one, and the record of where the child sat at release is destroyed.
+
+The card itself still prints no section either way: a child with no frozen rows
+whose class sheet is released renders none.
 
 ## Refusals say what actually happened
 

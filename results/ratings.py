@@ -522,6 +522,58 @@ def _require_a_score_on_the_scale(score):
 
 
 
+def _require_this_card_has_not_gone_home(term, membership):
+    """Has a card for this child, this term, already been frozen and sent home?
+
+    Asked of the frozen rows, and **placement never enters into it**. The check
+    below reaches the sheet through `placement.class_group` — the class the child
+    is in *today* — so releasing JSS 1A and then moving the child to JSS 3B
+    leaves it looking at JSS 3B's untouched draft and permitting a rating onto a
+    card already in a parent's hand. Migration `0011` states the case in full,
+    and `comments._require_this_card_has_not_gone_home()` is the same guard one
+    table over: **a guard on a released artefact keys off the artefact, not off
+    the child's current placement**, because placement is a live fact that
+    changes while release is an event that happened.
+
+    **One check does almost all the work here, unlike comments.** That module
+    needs its sheet-state check for a per-child gap — a card released carrying
+    only the class teacher's remark freezes no principal's row — and this module
+    has no such gap: `freeze_for_release()` writes a row for every child on the
+    roster × every visible trait, including the traits nobody rated. So for any
+    child of a ratings-enabled release, this alone is sufficient, and the check
+    below is not the second half of a pair.
+
+    **What the check below is still for** is a per-*school* gap, not a per-child
+    one. `freeze_for_release()` returns early when no group is enabled and again
+    when no trait is visible, so such a release freezes nothing for anybody.
+    `rate()` cannot be reached while the feature is off — `_require_a_ratable_trait()`
+    raises `SectionNotEnabled` first — but a school that switches the section on
+    *after* a term was released makes it reachable, and this finds nothing to
+    refuse it with. The child who stayed put is refused there; dropping it would
+    make the two children disagree again, which is the whole bug.
+
+    **The case neither sees**, written down rather than denied: that same
+    ratings-disabled release, for a child who is then *moved*. Nothing is frozen,
+    so this finds nothing, and the check below is looking at the new class.
+    Closing it needs a per-child record that a card went home, written at release
+    whatever the configuration says — recorded as a requirement on task 3 in
+    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34),
+    and deliberately not built here.
+    """
+    # Through `sheet__term`, because `ReleasedTraitRating` stores the sheet and
+    # not the term — the sheet is what was released, and it carries the term.
+    if ReleasedTraitRating.objects.filter(
+        sheet__term=term,
+        student_membership_id=membership.pk,
+    ).exists():
+        raise RatingsLocked(
+            f"{membership.name or membership.user}'s report card for {term} has "
+            f"been released to a parent. Its conduct section has to keep saying "
+            f"what it said, and correcting it is a revision rather than an edit.",
+            state=SheetState.RELEASED,
+        )
+
+
 def _require_the_sheet_is_open(class_group, term):
     """Ratings are editable while the sheet is in `draft`, and not after.
 
@@ -648,6 +700,7 @@ def rate(term, trait, membership, score, *, by=None, placement=None) -> TraitRat
     # write — see `_require_the_sheet_is_open()`. Checking outside and writing
     # inside is two transactions with a submission free to land between them.
     with transaction.atomic():
+        _require_this_card_has_not_gone_home(term, membership)
         _require_the_sheet_is_open(placement.class_group, term)
         rating, _ = TraitRating.objects.update_or_create(
             term=term,
@@ -686,6 +739,7 @@ def clear_rating(term, trait, membership, *, placement=None) -> bool:
     placement = placement or _require_placed(membership, term)
 
     with transaction.atomic():
+        _require_this_card_has_not_gone_home(term, membership)
         _require_the_sheet_is_open(placement.class_group, term)
         deleted, _ = TraitRating.objects.filter(
             term=term, student_membership_id=membership.pk, trait=trait
@@ -765,11 +819,20 @@ class CardSection:
 def card_sections(membership_id, class_group, term) -> list[CardSection]:
     """The conduct section of one child's card, as it should print.
 
-    **Two sources, and which one is used is not a preference.** If the sheet has
-    been released, this reads the frozen rows and nothing else: the card is what
-    was published, and no later edit to the school's configuration may reach it.
-    If it has not, it composes from live configuration, because a draft card is
-    supposed to follow the school's current sheet.
+    **Two sources, and which one is used is not a preference.** If a card for
+    this child has been released, this reads the frozen rows and nothing else:
+    the card is what was published, and no later edit to the school's
+    configuration may reach it. If none has, it composes from live
+    configuration, because a draft card is supposed to follow the school's
+    current sheet.
+
+    **Which source is decided by the child's frozen rows, not by the class
+    passed in** — see `_frozen_sheet_id_for()` below, and
+    `_require_this_card_has_not_gone_home()` above for the same key on the write
+    side. `class_group` is still taken and still consulted for a child with no
+    frozen rows at all: it is the only thing separating a draft card from one
+    released by a school that froze nothing, and the frozen rows cannot tell
+    those two apart.
 
     A group that is off produces **no section**. Not a section with no lines —
     the caller loops over what it is given, so an empty section is a heading and
@@ -777,15 +840,60 @@ def card_sections(membership_id, class_group, term) -> list[CardSection]:
     that does not print conduct must not see. A group that is on but has no
     visible traits produces no section either, for the same reason.
     """
+    frozen_sheet_id = _frozen_sheet_id_for(membership_id, class_group, term)
+    if frozen_sheet_id is not None:
+        return _frozen_sections(frozen_sheet_id, membership_id)
+
     sheet = sheet_for(class_group, term)
     if sheet is not None and sheet.is_released:
-        return _frozen_sections(sheet, membership_id)
+        # Released, and it froze nothing for this child. No section, not an
+        # empty one — and not the live rows either, which is what reading them
+        # here would print onto a card that has already gone home.
+        return []
     return _live_sections(membership_id, term)
 
 
-def _frozen_sections(sheet, membership_id) -> list[CardSection]:
+def _frozen_sheet_id_for(membership_id, class_group, term):
+    """Which released sheet's rows are this child's card, or `None` if none are.
+
+    **Decided on the child's frozen rows, not on the class passed in**, which is
+    the read-side half of what `_require_this_card_has_not_gone_home()` fixes on
+    the write side. Asking `sheet_for(class_group, term)` asks about the class
+    the caller resolved from the child's placement — where the child sits
+    *today* — so releasing JSS 1A and moving the child to JSS 3B rendered the
+    released card from JSS 3B's draft, and the parent's copy and the reprint
+    disagreed.
+
+    **A child can hold frozen rows under two sheets in one term**, which is why
+    this returns an id rather than reading every row for the term: released in
+    JSS 1A, moved to JSS 3B, and JSS 3B released in its turn freezes the child a
+    second time, because `freeze_for_release()` writes for the roster it finds.
+    Reading both would print each trait twice — a duplication the comments read
+    cannot suffer, since a `dict` keyed on author collapses it, and this one
+    would show on the card as repeated lines.
+
+    So one sheet is chosen, and deliberately: **the sheet for the class asked
+    about, when the child has rows there**, which keeps every already-correct
+    reprint rendering exactly what it rendered before. Failing that, the lowest
+    sheet id the child has rows under — arbitrary between two cards that both
+    went home, but fixed, so the same card does not depend on when it is asked.
+    """
+    pairs = set(
+        ReleasedTraitRating.objects.filter(
+            sheet__term=term, student_membership_id=membership_id
+        ).values_list("sheet_id", "sheet__class_group_id")
+    )
+    if not pairs:
+        return None
+    for sheet_id, group_id in pairs:
+        if group_id == getattr(class_group, "pk", class_group):
+            return sheet_id
+    return min(sheet_id for sheet_id, _ in pairs)
+
+
+def _frozen_sections(sheet_id, membership_id) -> list[CardSection]:
     rows = ReleasedTraitRating.objects.filter(
-        sheet=sheet, student_membership_id=membership_id
+        sheet_id=sheet_id, student_membership_id=membership_id
     )
     by_group = {}
     for row in rows:
