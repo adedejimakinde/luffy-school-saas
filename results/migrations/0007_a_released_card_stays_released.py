@@ -85,12 +85,25 @@ FOR EACH ROW EXECUTE FUNCTION results_frozen_ratings_are_append_only();
 # wrong one is a null-guarded no-op, which is a trigger that silently permits
 # the thing it was written to refuse.
 #
-# Existence is decided by FOUND rather than by testing the selected value for
-# NULL. `SELECT g.name INTO released_group` followed by `IF released_group IS
-# NOT NULL` is the same null-guarded no-op one level down: it happens to work
-# only because `academics_classgroup.name` is NOT NULL today, and a nullable
-# column there would turn this guard off silently. The name is still selected,
-# because the refusal quotes it.
+# **This body is not the live one any more.** `0011` replaced it, and both of
+# the things it was careful about have moved on:
+#
+# The join to `academics_classplacement` below asks where the child sits today,
+# which is a different question from whether a card was released. The two part
+# company the moment the office moves anybody, and `0011` asks the frozen rows
+# instead.
+#
+# The `IF FOUND` spelling is also gone. The reasoning that used to stand here
+# was right that testing `released_group IS NOT NULL` is a null-guarded no-op —
+# it works only while `academics_classgroup.name` is NOT NULL — but wrong to
+# conclude `FOUND` was therefore the answer: `FOUND` is global to the block and
+# reset by the most recent query, `PERFORM` included, so the adjacency that
+# makes it correct is something a comment asks for and nothing enforces. `0011`
+# selects a literal `TRUE` into a named boolean, which is immune to both. The
+# name is still selected either way, because the refusal quotes it.
+#
+# Nothing here is edited beyond this comment: the body survives verbatim as
+# `0011`'s `reverse_sql`, so a rollback restores exactly what shipped.
 LIVE_FUNCTION = """
 CREATE OR REPLACE FUNCTION results_ratings_stop_at_release() RETURNS trigger AS $$
 DECLARE
