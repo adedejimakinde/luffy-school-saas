@@ -1268,6 +1268,15 @@ class TheCardReadTakesNoJoinItDoesNotNeedTests(CommentsSetUp):
     Asserted on the SQL, so an ordering added later fails here first.
     `ratings.sheet_for()` shipped with exactly this and was corrected on it;
     `test_approval_concurrency.LockScopeTests` holds the same rule for the lock.
+
+    **Selected on `FROM`, not on the table name appearing anywhere.** The card
+    read asks a second question that reaches the sheet deliberately — the frozen
+    rows are found through `sheet__term`, because `ReleasedComment` stores the
+    sheet and the sheet carries the term — and that one joins because it has to.
+    Matching the bare table name caught it too and read as a regression in a
+    query this test has nothing to say about. What is asserted here is the
+    *lookup*: the query that reads `results_resultsheet` as its own table is the
+    one `sheet_for()` issues, and that one has no business joining anything.
     """
 
     def test_reading_a_card_does_not_join_the_term_and_the_class(self):
@@ -1280,8 +1289,354 @@ class TheCardReadTakesNoJoinItDoesNotNeedTests(CommentsSetUp):
         looked_up = [
             query["sql"]
             for query in captured.captured_queries
-            if "results_resultsheet" in query["sql"]
+            if 'FROM "results_resultsheet"' in query["sql"]
         ]
         self.assertTrue(looked_up, "the card never looked its sheet up")
         for sql in looked_up:
             self.assertNotIn("JOIN", sql, f"this read joins what it never uses:\n{sql}")
+
+
+class ACardGoesHomeWholeNotRemarkByRemarkTests(CommentsSetUp):
+    """Round two of the review, two findings, and they are one hole seen twice.
+
+    `0010` closed the case where the *same* signatory's remark had been frozen:
+    release JSS 1A with Ada's teacher's remark in it, move her to JSS 3B, and
+    the rewrite is refused. What it left open was the signatory whose remark was
+    **not** frozen. A card released carrying only the class teacher's remark
+    freezes no principal's row, so a frozen-row check keyed on the author found
+    nothing for the principal — and the placement check below it was looking at
+    JSS 3B's untouched draft. The principal's remark landed on a card already in
+    a parent's hand.
+
+    **It is an inconsistency, not a policy question**, and that is what settles
+    it without anyone having to rule on what a school ought to be allowed to do.
+    Bisi stayed in JSS 1A and was refused that identical write the whole time,
+    by the placement check, because for her the placement check still pointed at
+    the released sheet. Two children, one card each, the same school, the same
+    term, the same signatory, the same sentence — and the answer turned on
+    whether the office had moved them. The fix makes the moved child agree with
+    the one who stayed, and the pair of tests below is the assertion that would
+    have caught it: they are the same scenario twice, differing only in the
+    move.
+
+    So the guard asks the child and the term, and asks neither who is writing
+    nor where the child is sitting now.
+
+    The read side is the same hole from the other end, and it compounded: with
+    the write let through, re-printing Ada's card through JSS 3B rendered
+    `[class teacher, principal]` while the copy in the parent's hand — and the
+    same card printed through JSS 1A — said `[class teacher]`.
+    """
+
+    @contextlib.contextmanager
+    def table_unguarded(self):
+        """Write the way something that never calls the service would.
+
+        The read fix defends against rows the write guard did not put there: an
+        import, a management command, a `.update()`, or — until this branch —
+        `write_as()` itself. Now that the trigger refuses all of those, that
+        state is not reachable through Django at all, which is the trigger doing
+        its job and also why observing the read fix needs it stood down for the
+        one statement that sets the scene. The refusals are asserted with the
+        trigger *on*, above; this only builds a card that has already diverged.
+        """
+        with connection.cursor() as cursor:
+            # Django declares its foreign keys `DEFERRABLE INITIALLY DEFERRED`,
+            # so the release above leaves constraint-trigger events queued on
+            # this table and Postgres refuses to `ALTER` a table that has any.
+            # Firing them early is what clears the queue; they are the checks
+            # the transaction would have run at commit anyway.
+            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            cursor.execute(
+                "ALTER TABLE results_reportcardcomment "
+                "DISABLE TRIGGER results_comments_stop_at_release"
+            )
+        try:
+            yield
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                cursor.execute(
+                    "ALTER TABLE results_reportcardcomment "
+                    "ENABLE TRIGGER results_comments_stop_at_release"
+                )
+
+    def released_carrying_only_the_teachers_remark(self):
+        """JSS 1A goes home. Ada and Bisi each have a teacher's remark, no more.
+
+        Both children, deliberately: the pair is what turns the finding from a
+        judgement call into a contradiction.
+        """
+        self.write(self.kemi, TEACHER, "Written in JSS 1A.")
+        self.write(self.kemi, TEACHER, "Also written in JSS 1A.", student=self.bisi)
+        return self.walk_to_released()
+
+    def move_ada_to_jss3b(self):
+        academics.move_student(
+            ClassGroup.objects.get(pk=self.jss3b_id),
+            self.term(),
+            self.membership_of(self.ada),
+        )
+
+    def signs_it_late(self, student):
+        return comments.write_as(
+            self.principal,
+            self.term(),
+            self.membership_of(student),
+            PRINCIPAL,
+            "Promoted to the next class.",
+        )
+
+    def principals_row(self, student):
+        return ReportCardComment.objects.filter(
+            term=self.term(),
+            student_membership_id=self.membership_of(student).pk,
+            author=PRINCIPAL.value,
+        )
+
+    # -- the write side ------------------------------------------------------
+
+    def test_the_principal_may_not_sign_a_card_that_has_gone_home(self):
+        """The finding. Nothing of the principal's was frozen, and it is still no."""
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(comments.CommentsLocked) as refused:
+                self.signs_it_late(self.ada)
+
+            self.assertIn("released", str(refused.exception))
+            self.assertFalse(
+                self.principals_row(self.ada).exists(),
+                "the refusal let the row through anyway",
+            )
+
+    def test_the_child_who_stayed_is_refused_the_identical_write(self):
+        """The control, and the half that was passing before the fix.
+
+        Its value is not that it passes — it is that it passes *for the same
+        reason* now. Delete it and the test above is a rule somebody could read
+        as a new restriction rather than as the removal of an exemption.
+        """
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(comments.CommentsLocked) as refused:
+                self.signs_it_late(self.bisi)
+
+            self.assertIn("released", str(refused.exception))
+            self.assertFalse(self.principals_row(self.bisi).exists())
+
+    def test_the_move_is_what_used_to_decide_it_and_now_decides_nothing(self):
+        """Both children, one assertion: the answers agree.
+
+        This is the finding written down as a test. It fails on the old guard at
+        the first child and passes at the second.
+        """
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            answers = {}
+            for child, who in ((self.ada, "moved"), (self.bisi, "stayed")):
+                try:
+                    self.signs_it_late(child)
+                except comments.CommentsLocked:
+                    answers[who] = "refused"
+                else:
+                    answers[who] = "accepted"
+
+            self.assertEqual(
+                answers,
+                {"moved": "refused", "stayed": "refused"},
+                "a class move changed the answer to a question about a released card",
+            )
+
+    def test_clearing_it_after_the_move_is_refused_too(self):
+        """`clear_as()` shares the guard, so it shares the fix."""
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(comments.CommentsLocked):
+                comments.clear_as(
+                    self.principal, self.term(), self.membership_of(self.ada), PRINCIPAL
+                )
+
+            with self.assertRaises(comments.CommentsLocked):
+                comments.clear_as(
+                    self.sade, self.term(), self.membership_of(self.ada), TEACHER
+                )
+
+    def test_the_database_refuses_the_late_signature_too(self):
+        """The trigger half. An import does not call the service, so the table asks.
+
+        `0010`'s rewrite carries the same change: the first check dropped
+        `rc.author = subject.author`, and both of its `IF FOUND`s became named
+        booleans.
+        """
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(IntegrityError) as refused:
+                with transaction.atomic():
+                    ReportCardComment.objects.create(
+                        term=self.term(),
+                        student_membership_id=self.membership_of(self.ada).pk,
+                        author=PRINCIPAL.value,
+                        body="Written straight at the table.",
+                    )
+
+            self.assertIn("released", str(refused.exception))
+
+    def test_the_frozen_card_is_untouched_by_the_attempt(self):
+        """A refusal that still moved something is not a refusal."""
+        with connected_to(self.stmarys):
+            sheet = self.released_carrying_only_the_teachers_remark()
+            before = sorted(
+                ReleasedComment.objects.filter(sheet=sheet).values_list(
+                    "student_membership_id", "author", "body"
+                )
+            )
+            self.move_ada_to_jss3b()
+
+            with self.assertRaises(comments.CommentsLocked):
+                self.signs_it_late(self.ada)
+
+            self.assertEqual(
+                sorted(
+                    ReleasedComment.objects.filter(sheet=sheet).values_list(
+                        "student_membership_id", "author", "body"
+                    )
+                ),
+                before,
+            )
+
+    # -- the read side -------------------------------------------------------
+
+    def test_the_reprint_after_a_move_is_the_card_the_parent_holds(self):
+        """Finding 3. The frozen rows decide, not the class the caller resolved.
+
+        The live row is put there with the trigger stood down, because that is
+        the state the write hole used to produce and the read has to be right
+        about it independently — the two fixes are not one fix asserted twice.
+        """
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.table_unguarded():
+                ReportCardComment.objects.create(
+                    term=self.term(),
+                    student_membership_id=self.membership_of(self.ada).pk,
+                    author=PRINCIPAL.value,
+                    body="Never went home.",
+                )
+
+            printed = comments.card_comments(
+                self.membership_of(self.ada).pk,
+                ClassGroup.objects.get(pk=self.jss3b_id),
+                self.term(),
+            )
+
+            self.assertEqual(
+                [(line.author, line.body) for line in printed],
+                [(TEACHER.value, "Written in JSS 1A.")],
+                "the reprint published a remark the parent's copy never carried",
+            )
+
+    def test_the_reprint_does_not_depend_on_which_class_it_is_asked_through(self):
+        """JSS 1A and JSS 3B are the same card, because it is the same card."""
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            with self.table_unguarded():
+                ReportCardComment.objects.create(
+                    term=self.term(),
+                    student_membership_id=self.membership_of(self.ada).pk,
+                    author=PRINCIPAL.value,
+                    body="Never went home.",
+                )
+
+            through = {
+                name: [
+                    (line.author, line.body)
+                    for line in comments.card_comments(
+                        self.membership_of(self.ada).pk,
+                        ClassGroup.objects.get(pk=group_id),
+                        self.term(),
+                    )
+                ]
+                for name, group_id in (
+                    ("JSS 1A", self.jss1a_id),
+                    ("JSS 3B", self.jss3b_id),
+                )
+            }
+
+            self.assertEqual(through["JSS 3B"], through["JSS 1A"])
+
+    def test_the_moved_child_and_the_one_who_stayed_print_the_same_card(self):
+        """The read-side twin of the write-side pair above."""
+        with connected_to(self.stmarys):
+            self.released_carrying_only_the_teachers_remark()
+            self.move_ada_to_jss3b()
+
+            moved = comments.card_comments(
+                self.membership_of(self.ada).pk,
+                ClassGroup.objects.get(pk=self.jss3b_id),
+                self.term(),
+            )
+            stayed = comments.card_comments(
+                self.membership_of(self.bisi).pk, self.jss1a(), self.term()
+            )
+
+            self.assertEqual(
+                [line.author for line in moved], [line.author for line in stayed]
+            )
+
+    def test_a_child_with_nothing_frozen_still_reads_the_live_rows(self):
+        """The over-fix control: not every card renders from the freeze.
+
+        Without this, "read the frozen rows" could be implemented as "read the
+        frozen rows and nothing else" and every draft card in the school would
+        print blank with the suite still green.
+        """
+        with connected_to(self.stmarys):
+            self.write(self.kemi, TEACHER, "A diligent term.")
+            self.move_ada_to_jss3b()
+
+            self.assertEqual(
+                [
+                    (line.author, line.body)
+                    for line in comments.card_comments(
+                        self.membership_of(self.ada).pk,
+                        ClassGroup.objects.get(pk=self.jss3b_id),
+                        self.term(),
+                    )
+                ],
+                [(TEACHER.value, "A diligent term.")],
+                "a draft card in the new class printed nothing",
+            )
+
+    def test_a_released_class_still_shuts_a_child_it_froze_nothing_for(self):
+        """The check the frozen rows cannot replace, kept honest.
+
+        Bisi's card carries no remark at all, so the release freezes no row for
+        her and the first check finds nothing. The placement check is what
+        refuses, and dropping it because the frozen rows "already cover it" is
+        the mistake this asserts against.
+        """
+        with connected_to(self.stmarys):
+            self.walk_to_released()
+
+            with self.assertRaises(comments.CommentsLocked):
+                comments.write_as(
+                    self.kemi,
+                    self.term(),
+                    self.membership_of(self.bisi),
+                    TEACHER,
+                    "Written after the card went home.",
+                )

@@ -398,42 +398,58 @@ def _require_placed(membership, term):
     return placement
 
 
-
-
-def _require_this_remark_has_not_gone_home(term, membership, author):
-    """Has *this* remark been frozen and released, wherever the child sits now?
+def _require_this_card_has_not_gone_home(term, membership):
+    """Has a card for this child, this term, already been frozen and sent home?
 
     A different question from the one below, and it has to be asked separately
     because the one below answers it wrong after a class move.
     `_require_the_sheet_is_open()` reaches the sheet through
     `placement.class_group` — the class the child is in **today** — so releasing
     JSS 1A and then moving the child to JSS 3B leaves the guard looking at JSS
-    3B's untouched draft and permitting a rewrite of a remark already in a
+    3B's untouched draft and permitting a write onto a card already in a
     parent's hand. Migration `0010` states the case in full.
 
-    So this asks the frozen row directly: a `ReleasedComment` for this
-    `(term, student, author)` means released, and placement never enters into
-    it. The rule generalises past this module — **a guard on a released artefact
+    So this asks the frozen rows directly, and placement never enters into it.
+    The rule generalises past this module — **a guard on a released artefact
     keys off the artefact, not off the child's current placement**, because
     placement is a live fact that changes while release is an event that
     happened.
 
-    It does not replace the sheet-state check. A card released with no
-    principal's remark freezes no row for the principal, so this finds nothing
-    and the check below is what refuses a principal writing one onto a released
-    sheet. Each covers a case the other cannot see.
+    **Keyed on the child and the term, not on the author.** It asked
+    `author=author` first, which was the same mistake one level down: a card
+    released carrying only the class teacher's remark freezes no principal's
+    row, so the principal's write found nothing here, and after a move found
+    JSS 3B's draft below — and landed a remark on a card that had gone home.
+    Measured before it was changed. The child who stayed in JSS 1A was refused
+    that write by the check below, so the two answers disagreed on where the
+    child was sitting rather than on what had happened, and this is what makes
+    them agree.
+
+    It does not replace the sheet-state check, which still answers what the
+    frozen rows cannot: a class released while a child's card carries no remark
+    at all freezes nothing for that child, and a remark must still not be
+    written onto that released sheet.
+
+    **The one case neither sees**, written down because the docstring here used
+    to claim there was none: a child whose card went home with *no* remark of
+    either kind, who is then moved. Nothing was frozen for them, so this finds
+    nothing, and the check below is looking at the new class. Closing it needs a
+    per-child record that a card was released — which is what the frozen rows
+    are for every other child, and which task 3's card work would add. Until
+    then the divergence is bounded to a card that published no remarks: the
+    parent's copy still prints none, because `card_comments()` reads the frozen
+    rows for a child that has them and an empty freeze for one that does not.
     """
     # Through `sheet__term`, because `ReleasedComment` stores the sheet and not
     # the term — the sheet is what was released, and it carries the term with it.
     if ReleasedComment.objects.filter(
         sheet__term=term,
         student_membership_id=membership.pk,
-        author=author,
     ).exists():
         raise CommentsLocked(
-            f"{membership.name or membership.user}'s {CommentAuthor(author).label} "
-            f"for {term} has been released to a parent. It has to keep saying "
-            f"what it said, and correcting it is a revision rather than an edit.",
+            f"{membership.name or membership.user}'s report card for {term} has "
+            f"been released to a parent. It has to keep saying what it said, and "
+            f"correcting it is a revision rather than an edit.",
             state=SheetState.RELEASED,
         )
 
@@ -545,7 +561,7 @@ def write(
     # write. Checking outside and writing inside is two transactions with a
     # submission free to land between them.
     with transaction.atomic():
-        _require_this_remark_has_not_gone_home(term, membership, author)
+        _require_this_card_has_not_gone_home(term, membership)
         _require_the_sheet_is_open(placement.class_group, term)
         comment, _ = ReportCardComment.objects.update_or_create(
             term=term,
@@ -580,7 +596,7 @@ def clear(term, membership, author, *, placement=None) -> bool:
     author = _author(author)
 
     with transaction.atomic():
-        _require_this_remark_has_not_gone_home(term, membership, author)
+        _require_this_card_has_not_gone_home(term, membership)
         _require_the_sheet_is_open(placement.class_group, term)
         deleted, _ = ReportCardComment.objects.filter(
             term=term, student_membership_id=membership.pk, author=author
@@ -650,25 +666,38 @@ class CommentLine:
 def card_comments(membership_id, class_group, term) -> list[CommentLine]:
     """The remarks on one child's card, as they should print.
 
-    **Two sources, and which one is used is not a preference.** If the sheet has
-    been released this reads the frozen rows and nothing else, because the card
-    is what was published. If it has not, it reads the live rows, because a
-    draft card follows what the school has written today.
+    **Two sources, and which one is used is not a preference.** If a card for
+    this child has been released this reads the frozen rows and nothing else,
+    because the card is what was published. If none has, it reads the live rows,
+    because a draft card follows what the school has written today.
+
+    **Which source is decided by the child's frozen rows, not by the class
+    passed in** — the same rule the write guard keys on, and for the same
+    reason. Asking `sheet_for(class_group, term)` asks about the class the
+    caller resolved from the child's placement, which is where the child sits
+    *today*: release JSS 1A, move the child to JSS 3B, and re-printing the
+    released card renders it from JSS 3B's draft, so the parent's copy and the
+    reprint disagree. Measured before it was changed, and it is the read-side
+    half of the write hole migration `0010` describes.
+
+    `class_group` is still taken, and still consulted for a child with no frozen
+    rows: it is what distinguishes a draft card from one released carrying no
+    remark for this child, and the frozen rows cannot tell those apart.
 
     A remark nobody wrote produces **no line**. Not a line with an empty body —
     the caller loops over what it is given, so an empty line is a heading and a
     rule across the page with nothing under it, which is the labelled empty box
     this design refuses everywhere.
     """
-    sheet = sheet_for(class_group, term)
-    if sheet is not None and sheet.is_released:
-        bodies = dict(
-            ReleasedComment.objects.filter(
-                sheet=sheet, student_membership_id=membership_id
-            ).values_list("author", "body")
-        )
+    frozen = ReleasedComment.objects.filter(
+        sheet__term=term, student_membership_id=membership_id
+    ).values_list("author", "body")
+    if frozen:
+        bodies = dict(frozen)
     else:
-        bodies = comments_for(membership_id, term)
+        sheet = sheet_for(class_group, term)
+        released = sheet is not None and sheet.is_released
+        bodies = {} if released else comments_for(membership_id, term)
 
     # `CommentAuthor`'s declaration order, not the alphabetical order of the
     # stored value — which agrees today and would stop agreeing the first time a
