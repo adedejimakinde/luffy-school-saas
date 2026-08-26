@@ -679,22 +679,37 @@ def release(sheet, actor):
     this one transaction, in the order they print, so a sheet that says
     `released` has the whole card behind it rather than part of one.
 
+    Task 9 adds the last line: `sessions.freeze_for_release()` copies the three
+    terms' averages and the year they add up to. **It writes nothing except at
+    third term**, and decides that for itself rather than being called
+    conditionally from here — a caller that has to remember which freezes apply
+    to which term is one that will eventually forget, and the fact "a session
+    average is only a thing once the year is over" belongs to the module that
+    owns session averages.
+
     Imported inside the function rather than at the top of the module, because
-    both modules import this one — they need `school_on_this_connection()`,
+    all three modules import this one — they need `school_on_this_connection()`,
     `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
     module-level import here would close the circle.
     """
-    from . import comments, ratings
+    from . import comments, ratings, sessions
 
     def freeze_the_card(locked):
         """Everything the card is made of, copied at the moment of release.
 
-        A named function rather than two `freeze=` parameters or a list: what
+        A named function rather than three `freeze=` parameters or a list: what
         gets frozen is a growing list — task 3's scores, averages and attendance
         join it — and `_move()` should go on knowing nothing about any of it.
+
+        In the order they print, so that a partial failure leaves a card
+        truncated at the bottom rather than hollowed out in the middle. Nothing
+        depends on that today — the whole block is one transaction and either
+        all of it lands or none does — but the order a reader sees here should
+        be the order on the page.
         """
         ratings.freeze_for_release(locked)
         comments.freeze_for_release(locked)
+        sessions.freeze_for_release(locked)
 
     return _move(
         sheet,

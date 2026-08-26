@@ -123,12 +123,22 @@ FULL_MARKS = Decimal(100)
 #:
 #: 28 digits is CPython's own default, so this pins the arithmetic to what it
 #: already does rather than changing any number — what it removes is the
-#: possibility of somebody else changing it. `_round()` still names `ROUNDING`
+#: possibility of somebody else changing it. `round_percentage()` still names `ROUNDING`
 #: explicitly, which is belt and braces and costs nothing.
 CONTEXT = Context(prec=28, rounding=ROUNDING)
 
 
-def _round(value: Decimal) -> Decimal:
+def round_percentage(value: Decimal) -> Decimal:
+    """Quantise to the two places every percentage here is compared at.
+
+    **Public, and the single place any percentage in this app is rounded.**
+    `results.sessions` combines these numbers into a session average and has to
+    round the result the same way; a second `quantize()` over there would be a
+    second rounding policy, which is exactly the divergence `_mean()` below was
+    extracted to end. The module docstring's argument — that this number is
+    exact, and cannot outsource its last step to thread-local ambient state —
+    is not an argument about *this* module, it is an argument about the number.
+    """
     with localcontext(CONTEXT):
         return value.quantize(PLACES, rounding=ROUNDING)
 
@@ -140,7 +150,7 @@ def _mean(values) -> Decimal:
     rounded differently — see `class_average()`.
     """
     with localcontext(CONTEXT):
-        return _round(sum(values) / Decimal(len(values)))
+        return round_percentage(sum(values) / Decimal(len(values)))
 
 
 def _percentage(scored: int, available: int) -> Decimal | None:
@@ -154,7 +164,7 @@ def _percentage(scored: int, available: int) -> Decimal | None:
     if not available:
         return None
     with localcontext(CONTEXT):
-        return _round(Decimal(scored) * FULL_MARKS / Decimal(available))
+        return round_percentage(Decimal(scored) * FULL_MARKS / Decimal(available))
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -339,7 +349,7 @@ def dense_positions(values: Mapping[int, Decimal]) -> dict[int, int]:
 
     Ties are found by equality on the `Decimal` handed in, so a caller that
     quantises differently would get a different answer — which is why every
-    value this module produces goes through `_round()`, and why `_round()` is
+    value this module produces goes through `round_percentage()`, and why it is
     the only place a rounding mode is named.
     """
     ordered = sorted(set(values.values()), reverse=True)
@@ -395,6 +405,7 @@ __all__ = [
     "class_results",
     "dense_positions",
     "overall_percentages",
+    "round_percentage",
     "roster_ids",
     "subject_percentages",
     "subject_positions",

@@ -386,16 +386,26 @@ description of the chain: what gets frozen is not the mover's business, and the
 next thing to freeze is added by extending one release-time step rather than by
 editing the step that walks the chain.
 
-Two things hang there today, and they run in the order they print:
+Three things hang there today, and they run in the order they print:
 `ratings.freeze_for_release()`, which copies every child's conduct section as it
-reads at that moment, then `comments.freeze_for_release()`, which copies the
-class teacher's and the principal's remarks. See
-[docs/ratings.md](ratings.md#the-freeze-a-released-card-does-not-change) and
-[docs/comments.md](comments.md#the-freeze-a-released-card-does-not-change) for
-what each copies and why a join would not do. Task 3's scores, averages and
-attendance join them the same way.
+reads at that moment; `comments.freeze_for_release()`, which copies the class
+teacher's and the principal's remarks; and `sessions.freeze_for_release()`,
+which copies the three terms' averages and the year they add up to. See
+[docs/ratings.md](ratings.md#the-freeze-a-released-card-does-not-change),
+[docs/comments.md](comments.md#the-freeze-a-released-card-does-not-change) and
+[docs/sessions.md](sessions.md#the-freeze-third-term-only) for what each copies
+and why a join would not do. Task 3's scores, averages and attendance join them
+the same way.
 
-They hang off a **named function** rather than two `freeze=` parameters or a
+The third is the one that does not always write. A session average is not a
+thing until the year it averages is over, so `sessions.freeze_for_release()`
+writes nothing except at third term — and **decides that for itself** rather
+than being called conditionally from `release()`. A caller that has to remember
+which freezes apply to which term is one that will eventually forget, and
+"when is a session average a thing" belongs to the module that owns session
+averages.
+
+They hang off a **named function** rather than three `freeze=` parameters or a
 list, so `_move()` goes on knowing nothing about any of it: what gets frozen is
 a growing list, and the mover is a description of the chain.
 
