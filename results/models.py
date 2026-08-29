@@ -1618,3 +1618,108 @@ class PromotionDecision(models.Model):
             f"Promotion decision {self.pk} cannot be deleted. A record of who "
             f"decided what has to keep saying it."
         )
+
+
+# ---------------------------------------------------------------------------
+# The grading scale: what letter a percentage prints as.
+#
+# Report-card configuration, the same class of thing as `Trait` and
+# `RatingScalePoint` — rows a school edits on a Tuesday afternoon, not choices
+# that need a deploy. See `docs/grades.md`.
+# ---------------------------------------------------------------------------
+
+
+class GradeBand(models.Model):
+    """One band of this school's grading scale: "A1, 75 and above, Excellent".
+
+    Per schema, because scales genuinely differ: a school running the WAEC
+    nine-point scale and one running a five-letter scale are both ordinary, and
+    the letter is printed on a card a parent keeps.
+
+    ## A band stores where it *starts*, and nothing else
+
+    There is no `maximum` column. A band runs from its `minimum` up to the next
+    band's `minimum`, and the highest band runs to 100.
+
+    That is not a saving of one column, it is the requirement being met by
+    construction rather than by inspection. The brief was "bands neither overlap
+    nor leave gaps across 0–100", and those are two invariants that cannot both
+    be written as row-level `CHECK`s — a gap is a fact about a *pair* of rows,
+    and Postgres will not look at another row from inside a check. Written the
+    obvious way, with `minimum` and `maximum` on each row, the honest options are
+    an `EXCLUDE` constraint for the overlap half (which needs `btree_gist`) plus
+    a trigger or a service-level sweep for the gap half — and a checked invariant
+    is one that can be false between checks.
+
+    Stored this way, both are **unrepresentable**:
+
+    | the hazard | what it would take | why it cannot happen |
+    | --- | --- | --- |
+    | two bands overlapping | two bands covering one mark | a mark resolves to exactly one band — the greatest `minimum` at or below it |
+    | a gap between bands | a mark covered by none | every mark at or above the lowest `minimum` is covered by that rule |
+
+    What is left is a single **coverage** question — is there a band at zero? —
+    and that is genuinely a fact about the table rather than about a row, so it
+    lives in `grades.set_scale()`, which replaces the scale wholesale and refuses
+    a scale that does not start at nought.
+
+    ## The cost, stated
+
+    Deleting a band silently widens the one below it: drop "B2 at 70" and "B3 at
+    65" now runs to 74. With explicit maxima that deletion would leave a gap
+    instead. A widened band is the better failure — it is what the school asked
+    for by removing the row, and every mark still prints something — but it is a
+    real difference from what a reader of an explicit-range table would expect,
+    which is why `set_scale()` replaces the whole scale rather than offering a
+    per-band delete.
+
+    ## Seeded, and the seed is not a promise
+
+    Migration `0015` seeds the WAEC nine-point scale, which is what most
+    Nigerian secondary schools start from. Every row is editable, nothing in the
+    code names a band, and a school that grades differently replaces the lot.
+    """
+
+    #: The lowest percentage that earns this band, inclusive. Two places,
+    #: because it is compared against percentages `positions.round_percentage()`
+    #: produced and an equality at the boundary has to land.
+    minimum = models.DecimalField(max_digits=5, decimal_places=2)
+
+    #: What prints. "A1", "B2", "C", "F9" — a school's own vocabulary.
+    letter = models.CharField(max_length=4)
+
+    #: The word beside it: "Excellent", "Credit", "Fail". Blank is allowed —
+    #: plenty of schools print the letter alone.
+    remark = models.CharField(max_length=32, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Highest band first, which is the order a scale is read and printed in.
+        # `letter` then `id` so the order is total: `minimum` is unique below,
+        # so the tail never actually decides anything, and it is there so that
+        # it cannot start deciding if that constraint is ever relaxed.
+        ordering = ["-minimum", "letter", "id"]
+        constraints = [
+            # The structural half of "no overlaps": two bands starting at the
+            # same mark would be two answers for that mark, which is the only
+            # way this shape can express an overlap at all.
+            models.UniqueConstraint(
+                fields=["minimum"], name="one_grade_band_starts_at_each_mark"
+            ),
+            # A scale that prints "C" twice is a scale a parent cannot read.
+            models.UniqueConstraint(
+                fields=["letter"], name="uniq_grade_band_letter"
+            ),
+            models.CheckConstraint(
+                condition=Q(minimum__gte=0) & Q(minimum__lte=100),
+                name="a_grade_band_starts_within_the_percentage_range",
+            ),
+            models.CheckConstraint(
+                condition=Q(letter__regex=r"\S"), name="a_grade_band_has_a_letter"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.letter} ({self.minimum} and above)"
