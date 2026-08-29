@@ -70,8 +70,10 @@ Only *advancing* steps count as signatures on that index — see
 deliberately not signatures, and what breaks if a send-back is counted as one.
 """
 
+from decimal import Decimal
+
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q, Value
 
 
 class SheetState(models.TextChoices):
@@ -1023,4 +1025,596 @@ class ReleasedComment(models.Model):
         raise CommentsAreFrozenAtRelease(
             f"Frozen comment {self.pk} cannot be deleted. The card has to keep "
             f"saying what it said."
+        )
+
+
+# ---------------------------------------------------------------------------
+# The session: three terms, one average, and one decision about a child's year.
+#
+# Everything above this line is reckoned per *term*. A Nigerian report card's
+# last line is not: it is the average of the year and what the school decided
+# to do about it, and both are the school's own arithmetic rather than a
+# universal one. See `docs/sessions.md`.
+# ---------------------------------------------------------------------------
+
+
+class SessionAveraging(models.TextChoices):
+    """How a school reckons a session average out of its three terms.
+
+    Both are real, and the choice decides promotions, so neither can be
+    hardcoded. `EQUAL` is the default because it is the one a school that has
+    never thought about it means.
+    """
+
+    EQUAL = "equal", "Straight mean of the terms sat"
+    WEIGHTED = "weighted", "Weighted (for example 20/20/60)"
+
+
+class TermAbsence(models.TextChoices):
+    """Why a term contributed nothing to a session average.
+
+    **The arithmetic does not branch on this and the reader does.** All three
+    causes renormalise identically — an absent term is never a zero, because a
+    zero invents a failing grade the child never earned and would drive a wrong
+    promotion suggestion. What differs is what a member of staff should do
+    about it:
+
+    | cause | what it means | what staff do |
+    | --- | --- | --- |
+    | `NOT_ENROLLED` | the child was not here that term | nothing; a transfer |
+    | `UNMARKED` | the child was here and nobody entered marks | enter the marks |
+    | `NO_TERM` | the school has no such term this session | create the term |
+
+    Collapsing them into a bare `None` would make a marking backlog look
+    exactly like a mid-session transfer, which is the one thing a head of year
+    reading a session sheet most needs to tell apart.
+
+    **Never printed on a parent's card.** It is staff-only, the same rule
+    position lives under: a parent reading "no marks were entered" is being
+    shown the school's filing, not their child's year.
+    """
+
+    NOT_ENROLLED = "not_enrolled", "Not enrolled this term"
+    UNMARKED = "unmarked", "Enrolled, but no marks were entered"
+    NO_TERM = "no_term", "The school has no such term this session"
+
+
+class PromotionStatus(models.TextChoices):
+    """What the school decided about a child's year.
+
+    There is deliberately **no `UNDECIDED` member**. Undecided is the absence
+    of a `PromotionDecision` row, not a value one can hold — the same way
+    "not marked" is the absence of a `Score`. A stored `UNDECIDED` would be a
+    default somebody could write by accident, and the whole point of the
+    recorded/suggested split is that nothing writes a decision except a person.
+    """
+
+    PROMOTED = "promoted", "Promoted"
+    ON_TRIAL = "on_trial", "Promoted on trial"
+    REPEATED = "repeated", "Repeating the class"
+    WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+#: The mark a session average has to reach for `PROMOTED` to be *suggested*.
+#: Fifty is the common Nigerian default. It decides a suggestion and never a
+#: decision — see `PromotionDecision`.
+DEFAULT_PASS_MARK = Decimal("50.00")
+
+
+def _a_term_is_present_or_explained(prefix):
+    """One term's three columns agree, or the row is refused.
+
+    An average, the weight actually applied to it, and a reason it is missing:
+    exactly one of "present" and "explained" is true. A row with an average and
+    an absence reason is two answers to one question; a row with neither is a
+    term that vanished with no account of itself, which is precisely the state
+    `TermAbsence` exists to prevent.
+
+    Built by a function because it is the same constraint three times and the
+    only thing that differs is which term. Written out longhand it is fifteen
+    lines of near-identical `Q`, which is fifteen lines for a reviewer to
+    diff by eye.
+    """
+    average, weight, absence = (
+        f"{prefix}_average",
+        f"{prefix}_weight_used",
+        f"{prefix}_absence",
+    )
+    return models.CheckConstraint(
+        condition=(
+            Q(**{f"{average}__isnull": False, f"{weight}__isnull": False, absence: ""})
+            | (
+                Q(**{f"{average}__isnull": True, f"{weight}__isnull": True})
+                & ~Q(**{absence: ""})
+            )
+        ),
+        name=f"the_{prefix}_term_is_present_or_explained",
+    )
+
+
+def _the_term_carried_weight(prefix):
+    """`prefix`'s applied weight is a number above nought. **NULL-safe.**
+
+    `weight_used > 0` on its own is NULL for a term the child did not sit, and
+    a CHECK whose condition evaluates to NULL *passes* — so the null test is
+    not decoration. Without it, a session average with no weighting at all
+    behind it, which is the one thing
+    `a_session_average_has_a_term_behind_it` exists to refuse, would sail
+    through on an unknown.
+    """
+    field = f"{prefix}_weight_used"
+    return Q(**{f"{field}__isnull": False, f"{field}__gt": 0})
+
+
+def _the_term_carried_nothing(prefix):
+    """The exact complement of `_the_term_carried_weight()`: null, or nought.
+
+    Written out rather than negating the other one, for the same NULL reason:
+    `~Q(...)` over a nullable column is a three-valued expression that has to
+    be read twice to be believed, and this is read by whoever is debugging a
+    refused release.
+    """
+    field = f"{prefix}_weight_used"
+    return Q(**{f"{field}__isnull": True}) | Q(**{field: 0})
+
+
+class SessionSettings(models.Model):
+    """How this school reckons a session. One row per schema.
+
+    Two numbers that a school owns and the platform must not assume: how the
+    three terms combine into a year's average, and the mark that average has to
+    reach before promotion is *suggested*.
+
+    ## The weights are null in `EQUAL` mode, not zero and not 33.33
+
+    A straight mean of three terms is not expressible as three integers summing
+    to 100, and 33.33/33.33/33.34 is not a straight mean — it is a weighting
+    that quietly favours third term by a hundredth. So the mode is stored, and
+    the weights are **absent** when it is `EQUAL`.
+
+    Absent rather than left at their old values, because a stale 20/20/60
+    sitting in a row whose mode says `EQUAL` is a field that lies to the next
+    reader: it looks like configuration and is not read by anything. The same
+    reasoning as `TraitRating` having no row for an unrated child.
+
+    ## Sum to a hundred, in the database
+
+    A weighting that sums to 90 is a school that typed one number wrong, and
+    every session average it produces is wrong by a factor nobody would notice
+    — the numbers all still look like percentages. `weights_sum_to_one_hundred`
+    refuses it, so an import and a `psql` session are refused too.
+
+    Note this is the *configured* weighting. What actually produced any given
+    average is the **renormalised** one, which depends on which terms the child
+    sat, and is recorded per child on `ReleasedSessionResult`.
+    """
+
+    #: Pinned to 1 for `ReportCardSettings`' reason: "the settings" is one row,
+    #: not a table somebody appends a second opinion to.
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+
+    averaging = models.CharField(
+        max_length=16,
+        choices=SessionAveraging,
+        default=SessionAveraging.EQUAL,
+        help_text="How the three terms combine into a session average.",
+    )
+
+    #: All three null in `EQUAL` mode, all three set and summing to 100 in
+    #: `WEIGHTED`. Enforced below; there is no half-configured weighting.
+    first_weight = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    second_weight = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    third_weight = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    pass_mark = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=DEFAULT_PASS_MARK,
+        help_text=(
+            "The session average at which promotion is suggested. A suggestion "
+            "only — the decision is a person's."
+        ),
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "session settings"
+        constraints = [
+            models.CheckConstraint(condition=Q(id=1), name="one_session_settings_row"),
+            models.CheckConstraint(
+                condition=Q(pass_mark__gte=0) & Q(pass_mark__lte=100),
+                name="a_pass_mark_is_a_percentage",
+            ),
+            # `EQUAL` carries no weights; `WEIGHTED` carries three that sum to
+            # a hundred. The arithmetic is expressed against `first_weight`
+            # rather than as a three-way sum because a CHECK comparing a column
+            # to an expression of the other two is one Postgres can evaluate
+            # per row with no function call.
+            models.CheckConstraint(
+                condition=(
+                    Q(
+                        averaging=SessionAveraging.EQUAL,
+                        first_weight__isnull=True,
+                        second_weight__isnull=True,
+                        third_weight__isnull=True,
+                    )
+                    | (
+                        Q(averaging=SessionAveraging.WEIGHTED)
+                        & Q(
+                            first_weight__isnull=False,
+                            second_weight__isnull=False,
+                            third_weight__isnull=False,
+                        )
+                        & Q(
+                            first_weight=Value(Decimal(100))
+                            - F("second_weight")
+                            - F("third_weight")
+                        )
+                    )
+                ),
+                name="weights_sum_to_one_hundred",
+            ),
+        ]
+
+    def __str__(self):
+        if self.averaging == SessionAveraging.EQUAL:
+            return f"Session average: straight mean, pass at {self.pass_mark}"
+        return (
+            f"Session average: {self.first_weight}/{self.second_weight}/"
+            f"{self.third_weight}, pass at {self.pass_mark}"
+        )
+
+
+class SessionResultsAreFrozenAtRelease(Exception):
+    """A frozen session line was edited or deleted. See `ReleasedSessionResult`."""
+
+
+class ReleasedSessionResult(models.Model):
+    """One child's year, as it read at the moment the third term went home.
+
+    The session half of the freeze `ReleasedTraitRating` does for conduct and
+    `ReleasedReportCardComment` does for remarks, written by
+    `sessions.freeze_for_release()` inside the transaction that releases the
+    **third** term's sheet. First and second term releases write nothing here:
+    a session average is not a thing until the year it averages is over.
+
+    ## Why a copy, when the terms are all still in the database
+
+    Because a session average reaches backwards through two years of rows that
+    a school may legitimately change:
+
+    | the school does this | the session average would |
+    | --- | --- |
+    | switches from 20/20/60 to a straight mean | move, on every past session |
+    | revises a first-term result (task 8) | move, after the card went home |
+    | corrects a placement for a term long closed | gain or lose a whole term |
+
+    None of those are misuse. Every one of them silently rewrites a number a
+    parent is holding, and the last line of a report card is the one they read
+    first. So the terms' averages, the weighting actually applied and the
+    result are copied here, and a released session line is rendered from this
+    row and nothing else.
+
+    ## The weighting recorded is the one applied, not the one configured
+
+    A child who sat two terms had the school's weights **renormalised** over the
+    terms they actually sat, so `SessionSettings`' configured pair is not what
+    produced this number and recording it would misdescribe the arithmetic.
+    The `*_weight_used` columns hold what was applied, and they sum to a
+    hundred across the present terms — except where the school weights every
+    term this child sat at nothing, where they are all `0.00` and there is no
+    session average to have weighted. See the columns below.
+
+    They are the weighting **as applied, rounded to two places for reading**,
+    and the average is not recomputed from them: it is calculated at full
+    precision and rounded once, so a straight mean of three terms is a true
+    third each rather than 33.33/33.33/33.34. Recomputing from the stored pair
+    can therefore differ in the last penny, and that is the deliberate trade —
+    a session average that decides promotions should be the exact mean, not the
+    mean of three rounded weights. What the row is a record of is *the
+    weighting*, which is what a school changing its mind next session must not
+    be able to alter.
+
+    ## An absent term says why
+
+    Not merely that it is absent. `TermAbsence` has the argument; the short
+    version is that a marking backlog and a mid-session transfer produce
+    identical arithmetic and need opposite responses from staff.
+    """
+
+    sheet = models.ForeignKey(
+        ResultSheet,
+        related_name="released_session_results",
+        # PROTECT, like every other frozen table here: the sheet whose release
+        # wrote this row is not one to delete from under it.
+        on_delete=models.PROTECT,
+    )
+
+    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+
+    #: Copied off the term rather than reached through `sheet.term.session`, so
+    #: the row answers "which year is this?" without a join — and goes on
+    #: answering it if a term is ever re-labelled.
+    session = models.CharField(max_length=9)
+
+    #: Each term's own overall average, as `positions.overall_percentages()`
+    #: read it at release. Null exactly when the term contributed nothing, in
+    #: which case the matching `*_absence` says why and `*_weight_used` is null
+    #: too — `the_*_term_is_present_or_explained` enforces the three agreeing.
+    first_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    second_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    third_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    first_absence = models.CharField(max_length=16, choices=TermAbsence, blank=True)
+    second_absence = models.CharField(max_length=16, choices=TermAbsence, blank=True)
+    third_absence = models.CharField(max_length=16, choices=TermAbsence, blank=True)
+
+    #: The weighting **actually applied**, after renormalising over the terms
+    #: the child sat. Sums to 100 across the present terms; all three are null
+    #: when the child sat none; and all of the present ones are `0.00` when the
+    #: school weights every term this child sat at nothing, which is the one
+    #: case with no session average beside a recorded weighting. See
+    #: `sessions._weigh()`.
+    first_weight_used = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    second_weight_used = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    third_weight_used = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    #: The school's mode at release, copied for the same reason the weights are.
+    averaging = models.CharField(max_length=16, choices=SessionAveraging)
+
+    #: Null when the child sat no term of this session with any mark in it.
+    #: A card printing a blank there is the honest rendering, and it is the
+    #: reason this is nullable rather than defaulted to zero.
+    session_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns only. `ResultSheet.Meta.ordering` names two relations
+        # and has cost this codebase a three-table join in four separate
+        # places; nothing here reaches past its own row.
+        ordering = ["sheet_id", "student_membership_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sheet", "student_membership_id"],
+                name="one_frozen_session_line_per_student",
+            ),
+            _a_term_is_present_or_explained("first"),
+            _a_term_is_present_or_explained("second"),
+            _a_term_is_present_or_explained("third"),
+            # There is an average exactly when some term carried weight. Both
+            # directions matter: an average with nothing behind it is the
+            # arithmetic having invented a number, and a term weighted 60 with
+            # no average is one the arithmetic dropped.
+            #
+            # **Weight above zero, not weight recorded.** A term the school
+            # counts for nothing is recorded with a `0.00` weight rather than a
+            # null — it was sat, it was marked, and the weight applied to it
+            # was nought, which is a different fact from "no such term" and the
+            # `*_absence` column is where that one is said. So a child whose
+            # every sat term is weighted nothing has three weights on the row
+            # and no average, and reading "is any weight recorded?" would call
+            # that row a lie. Migration `0014` has the release this refused.
+            models.CheckConstraint(
+                condition=(
+                    (
+                        Q(session_average__isnull=False)
+                        & (
+                            _the_term_carried_weight("first")
+                            | _the_term_carried_weight("second")
+                            | _the_term_carried_weight("third")
+                        )
+                    )
+                    | (
+                        Q(session_average__isnull=True)
+                        & _the_term_carried_nothing("first")
+                        & _the_term_carried_nothing("second")
+                        & _the_term_carried_nothing("third")
+                    )
+                ),
+                name="a_session_average_has_a_term_behind_it",
+            ),
+            models.CheckConstraint(
+                condition=Q(session_average__isnull=True)
+                | (Q(session_average__gte=0) & Q(session_average__lte=100)),
+                name="a_frozen_session_average_is_a_percentage",
+            ),
+        ]
+
+    def __str__(self):
+        shown = "—" if self.session_average is None else f"{self.session_average}"
+        return f"{self.session}: {shown}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise SessionResultsAreFrozenAtRelease(
+                f"Frozen session line {self.pk} is part of a card that has been "
+                f"released. It cannot be changed — correcting a released result "
+                f"is a revision, which makes a new version and leaves this one "
+                f"standing."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise SessionResultsAreFrozenAtRelease(
+            f"Frozen session line {self.pk} cannot be deleted. The card has to "
+            f"keep saying what it said."
+        )
+
+
+class PromotionDecisionsAreAppendOnly(Exception):
+    """A decision row was edited or deleted. See `PromotionDecision`."""
+
+
+class PromotionDecision(models.Model):
+    """One recorded decision about one child's year. Written once, never changed.
+
+    ## Undecided is the absence of a row
+
+    There is no `UNDECIDED` status and no current-status column anywhere. A
+    child nobody has decided about has no row here, and every reader has to
+    handle that — which is the point. The alternative, a status column
+    defaulting to something, is a school-wide promotion performed by a default
+    value: a principal who reviews nothing would promote four hundred children
+    without an act, and the audit would show it as decided.
+
+    ## Suggested and recorded are two columns, and the gap between them is the record
+
+    `suggested` is what the arithmetic proposed; `status` is what a person
+    decided. They are usually equal and the interesting rows are the ones where
+    they are not — a child the numbers promote and the school holds back, or
+    the reverse.
+
+    **`suggested` is stored, not recomputed on read**, and that is load-bearing.
+    It is a function of the session average, which is a function of a weighting
+    the school may change. Recompute it and the same row reads as agreement or
+    override depending on when it is asked: a school switching from 20/20/60 to
+    a straight mean would retroactively invent overrides no principal ever
+    performed, on exactly the rows kept to prove who decided what. So the
+    suggestion is frozen with the two things that produced it — the session
+    average and the pass mark in force — and the row can be read on its own.
+
+    The *weighting* behind that average is deliberately not copied here. It
+    lives on `ReleasedSessionResult`, which is where the arithmetic is
+    auditable; this row's job is to explain the suggestion, and the average is
+    the suggestion's whole input. Copying the weights too would put a second
+    answer to "how was this year averaged?" in a table that is not the
+    authority on it.
+
+    ## Append-only, and the latest row wins
+
+    A principal changing their mind writes a second row; both stand. That is
+    the approval chain's argument reused: a decision record that edits itself
+    has silently forgotten that it was ever different, who changed it and when,
+    which is the one thing an appeal from a parent turns on.
+
+    Enforced the two ways this codebase always does it — `save()` and
+    `delete()` refuse, which is the error a developer sees, and a trigger
+    refuses, which is the error the import and the `psql` session run into.
+    """
+
+    student_membership_id = models.PositiveBigIntegerField()
+
+    #: The session decided about, as `Term.session` spells it. A string rather
+    #: than a key, because `Term` is per-term and a session is three of them —
+    #: there is no session row to point at, which is the same reason
+    #: `Term.session` is a string in the first place.
+    session = models.CharField(max_length=9)
+
+    #: What the school decided. This is the only column that prints.
+    status = models.CharField(max_length=16, choices=PromotionStatus)
+
+    #: What the arithmetic proposed at the moment of the decision. Blank when
+    #: no suggestion could be made — a child with no marks in any term of the
+    #: session has no average, so there is nothing to compare to a pass mark,
+    #: and blank says that rather than guessing `REPEATED`.
+    suggested = models.CharField(max_length=16, choices=PromotionStatus, blank=True)
+
+    #: The two inputs to `suggested`, frozen beside it. Null together with a
+    #: blank `suggested`.
+    session_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+    pass_mark_used = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    #: Why, in the principal's words. Not required — most decisions agree with
+    #: the suggestion and need no explanation — but the place an override says
+    #: what it saw that the arithmetic did not.
+    note = models.TextField(blank=True)
+
+    # A bare id, and nullable, for `TraitRating.rated_by_id`'s reasons: a
+    # decision can arrive from an import of last year's records with nobody
+    # behind it, and naming a fictional principal is worse than naming none.
+    #
+    # **This holds a `User` id, not a `Membership` id** — `decide_as()` stamps
+    # the actor, and the actor is a user. The column above holds a membership
+    # id, and both are small dense integers, so a screen resolving the wrong
+    # one would confidently name an unrelated person rather than fail.
+    decided_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Newest first, and `-id` is not decoration: `auto_now_add` is a
+        # timestamp, two decisions in one request can share it to the
+        # microsecond, and "the latest decision" resolving arbitrarily between
+        # two rows is a promotion status that changes when nothing changed.
+        ordering = ["student_membership_id", "session", "-decided_at", "-id"]
+        indexes = [
+            # The read this table exists for: the latest row for one child in
+            # one session. Leading pair is the lookup, and the descending tail
+            # is the ordering, so the index answers both halves.
+            models.Index(
+                fields=["student_membership_id", "session", "-decided_at", "-id"],
+                name="the_latest_decision_per_child",
+            ),
+        ]
+        constraints = [
+            # Deliberately **no** unique constraint on (student, session): more
+            # than one row is the feature, not a fault.
+            models.CheckConstraint(
+                condition=(
+                    Q(suggested="", session_average__isnull=True, pass_mark_used__isnull=True)
+                    | (
+                        ~Q(suggested="")
+                        & Q(session_average__isnull=False, pass_mark_used__isnull=False)
+                    )
+                ),
+                name="a_suggestion_carries_what_produced_it",
+            ),
+            models.CheckConstraint(
+                condition=Q(session_average__isnull=True)
+                | (Q(session_average__gte=0) & Q(session_average__lte=100)),
+                name="a_decided_session_average_is_a_percentage",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.session}: {PromotionStatus(self.status).label}"
+
+    @property
+    def overrode_the_suggestion(self) -> bool:
+        """Did a person decide against the arithmetic? Staff-only, like position.
+
+        Blank `suggested` is not an override: nothing was proposed, so nothing
+        was gone against.
+        """
+        return bool(self.suggested) and self.suggested != self.status
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise PromotionDecisionsAreAppendOnly(
+                f"Promotion decision {self.pk} has been recorded and cannot be "
+                f"changed. Record a new decision instead — both stand, and the "
+                f"later one is what holds."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PromotionDecisionsAreAppendOnly(
+            f"Promotion decision {self.pk} cannot be deleted. A record of who "
+            f"decided what has to keep saying it."
         )
