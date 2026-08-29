@@ -1002,9 +1002,24 @@ def freeze_for_release(sheet) -> int:
         for row in TraitRating.objects.for_students(students, sheet.term)
     }
 
+    # Every frozen row hangs off the card its release wrote. `cards` runs first
+    # inside this same transaction — see `services.release()` — so a card exists
+    # for every child on the roster. One answer to "did a card go home", not
+    # four; `ReleasedCard` has the argument.
+    #
+    # "Every child on the roster" is read twice, though, and issue #43 is the
+    # gap between the two reads: the lock is on the `ResultSheet` row and not on
+    # `ClassPlacement`, so a placement committed between them leaves a child
+    # here that `cards` never saw. `.get()` then returns `None` and the NOT NULL
+    # on `card_id` aborts the release for the whole class.
+    from . import cards as cards_module
+
+    card_by_student = cards_module.cards_by_student(sheet)
+
     rows = [
         ReleasedTraitRating(
             sheet=sheet,
+            card=card_by_student.get(student_id),
             student_membership_id=student_id,
             trait=trait,
             group=trait.group,

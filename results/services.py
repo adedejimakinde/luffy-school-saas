@@ -687,26 +687,41 @@ def release(sheet, actor):
     average is only a thing once the year is over" belongs to the module that
     owns session averages.
 
+    Task 3 adds `cards.freeze_for_release()`, which goes **first** — see below.
+
     Imported inside the function rather than at the top of the module, because
-    all three modules import this one — they need `school_on_this_connection()`,
+    all four modules import this one — they need `school_on_this_connection()`,
     `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
     module-level import here would close the circle.
     """
-    from . import comments, ratings, sessions
+    from . import cards, comments, ratings, sessions
 
     def freeze_the_card(locked):
         """Everything the card is made of, copied at the moment of release.
 
-        A named function rather than three `freeze=` parameters or a list: what
-        gets frozen is a growing list — task 3's scores, averages and attendance
-        join it — and `_move()` should go on knowing nothing about any of it.
+        A named function rather than four `freeze=` parameters or a list: what
+        gets frozen is a growing list and `_move()` should go on knowing nothing
+        about any of it.
 
-        In the order they print, so that a partial failure leaves a card
-        truncated at the bottom rather than hollowed out in the middle. Nothing
-        depends on that today — the whole block is one transaction and either
-        all of it lands or none does — but the order a reader sees here should
-        be the order on the page.
+        **`cards` runs first, and that is now structural rather than tidy.** It
+        writes the `ReleasedCard` each of the other three hangs its section off,
+        so the order is a dependency: the sections cannot be written before
+        their parent row exists.
+
+        The rest follow in the order they print, so that a reader sees the page.
+        That used to be the whole rule here, and the note it replaced said a
+        partial failure would leave a card truncated at the bottom rather than
+        hollowed out in the middle. That was never load-bearing — the block is
+        one transaction and either all of it lands or none does — and it is less
+        so now, because the first call is required rather than merely first.
+
+        `cards.freeze_for_release()` is **unconditional**: it writes a row for
+        every child on the roster whatever else is true, including a school with
+        the conduct section off, no marks and nothing decided. That is the
+        guarantee issues #31, #33 and #34 all asked for, and no constraint can
+        hold it — see `results.cards`.
         """
+        cards.freeze_for_release(locked, by=actor)
         ratings.freeze_for_release(locked)
         comments.freeze_for_release(locked)
         sessions.freeze_for_release(locked)

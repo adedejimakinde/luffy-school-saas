@@ -235,11 +235,27 @@ class ClassResults:
     #: Only subjects this class was actually marked in this term — see
     #: `class_results()` for why the full `Subject` table is the wrong list.
     subject_ids: list[int]
+    #: `(student, subject) -> (scored, available)`, the marks themselves before
+    #: any percentage was taken of them. Kept rather than discarded because a
+    #: report card prints "58/70" beside the percentage, and `results.cards`
+    #: freezes both — re-reading the scores to recover the numerator would be a
+    #: second read at a second instant, which is the whole failure this dataclass
+    #: exists to prevent.
+    #:
+    #: `available` is the total this child was actually assessed on, not the
+    #: subject's full mark scheme: a child who missed a CA has a smaller
+    #: denominator, and their percentage is over what they sat. See
+    #: `_subject_totals()`.
+    totals: dict[tuple[int, int], tuple[int, int]]
     percentages: dict[tuple[int, int], Decimal]
     subject_positions: dict[tuple[int, int], int]
     averages: dict[int, Decimal]
     positions: dict[int, int]
     class_average: Decimal | None
+
+    def scored_and_available(self, student_id, subject_id) -> tuple[int, int]:
+        """`(0, 0)` for a subject this child has no mark in, which prints blank."""
+        return self.totals.get((student_id, subject_id), (0, 0))
 
     def percentage(self, student_id, subject_id) -> Decimal | None:
         return self.percentages.get((student_id, subject_id))
@@ -295,6 +311,7 @@ def class_results(class_group, term) -> ClassResults:
     return ClassResults(
         student_ids=students,
         subject_ids=sorted(subject_ids),
+        totals=totals,
         percentages=percentages,
         subject_positions=subject_positions,
         averages=averages,
