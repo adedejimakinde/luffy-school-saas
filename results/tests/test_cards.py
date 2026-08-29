@@ -447,12 +447,67 @@ class TheCopyTests(CardSetUp):
 
         self.assertEqual(card.student_name, "Ada Obi")
 
+    def test_the_school_own_name_for_the_child_is_the_one_frozen(self):
+        """`display_name` beats the login name, as `Membership.name` has it.
+
+        A school that admitted a child under an admission name and got the login
+        name printed on the card would be reading the wrong name off a row it
+        cannot edit — the table is append-only, so the correction is a whole
+        revision rather than a typo fix.
+
+        The two names differ here on purpose. Freezing `user.full_name` and
+        freezing `Membership.name` are the same string for every other child in
+        this file, so no other test in it can tell the two apart.
+        """
+        known_as = enroll_student(
+            User.objects.create_user("tunde", PASSWORD, full_name="Babatunde Ade"),
+            self.stmarys,
+            display_name="Tunde Ade",
+        )
+        with connected_to(self.stmarys):
+            place_student(
+                self.group(self.stmarys),
+                self.term(self.stmarys, "first"),
+                known_as,
+            )
+            self.release_the_term()
+            card = cards.card_for(known_as, self.term(self.stmarys, "first"))
+
+        self.assertEqual(card.student_name, "Tunde Ade")
+
     def test_the_card_records_the_school_it_was_released_by(self):
         with connected_to(self.stmarys):
             self.release_the_term()
             card = cards.card_for(self.ada, self.term(self.stmarys, "first"))
 
         self.assertEqual(card.school_name, "St Mary's")
+
+    def test_the_card_records_the_person_who_released_it(self):
+        """A `User` id, and it can never be filled in afterwards.
+
+        `released_by_id` was hard-coded to `None` while the field's own docstring
+        said `release()` stamped the actor — so every card would have gone out
+        with no releaser on it, permanently: `ReleasedCard` is append-only, and
+        an empty column on an append-only table is not a gap that can be closed
+        later.
+
+        It is a `User` id and not a `Membership` id — the field says so, and
+        **this test cannot tell them apart**, which is worth stating rather than
+        implying. Both are small dense integers and in this fixture the
+        principal's two ids may well be the same number, so a stamp of the wrong
+        one would pass here and then name an unrelated person on a real school's
+        card. What the assertion does hold is that the column is filled at all,
+        which is the part that was broken.
+        """
+        with connected_to(self.stmarys):
+            self.release_the_term()
+            written = list(
+                ReleasedCard.objects.order_by("student_name").values_list(
+                    "released_by_id", flat=True
+                )
+            )
+
+        self.assertEqual(written, [self.principal.pk] * 2)
 
 
 class TheGradeIsCopiedTests(CardSetUp):
@@ -642,7 +697,18 @@ class TheConstraintsTests(CardSetUp):
         super().setUp()
         self.mark(self.stmarys, "first", self.ada, "maths", "Exam", 80)
 
-    def _a_card(self, **overrides):
+    def _a_card(self, refused_by, **overrides):
+        """Write a card the code would never write, and name what refuses it.
+
+        `refused_by` is the constraint's own name, and asserting on it rather
+        than on `IntegrityError` alone is the point. `IntegrityError` is what a
+        unique index, a NOT NULL column and a foreign key all raise, so a row
+        that is bad in two ways passes this test while the constraint it names
+        is dead code and nobody finds out. Not hypothetical: it is what
+        `test_a_score_above_its_paper_is_refused` below was doing, and what
+        three tests in `test_sessions` started doing the moment `0017` made
+        `card` NOT NULL.
+        """
         with connected_to(self.stmarys):
             sheet = self.release_the_term()
             defaults = dict(
@@ -658,40 +724,82 @@ class TheConstraintsTests(CardSetUp):
                 student_name="Nobody",
             )
             defaults.update(overrides)
-            with self.assertRaises(IntegrityError):
+            with self.assertRaises(IntegrityError) as refused:
                 with transaction.atomic():
                     ReleasedCard.objects.create(**defaults)
+            refusal = str(refused.exception)
+
+        self.assertIn(refused_by, refusal)
 
     def test_an_average_with_no_marks_behind_it_is_refused(self):
-        self._a_card(own_average=Decimal("70.00"), total_available=0)
+        self._a_card(
+            "a_card_average_has_marks_behind_it",
+            own_average=Decimal("70.00"),
+            total_available=0,
+        )
 
     def test_marks_with_no_average_are_refused(self):
-        self._a_card(own_average=None, total_scored=10, total_available=20)
+        self._a_card(
+            "a_card_average_has_marks_behind_it",
+            own_average=None,
+            total_scored=10,
+            total_available=20,
+        )
 
     def test_scoring_above_what_was_available_is_refused(self):
         self._a_card(
-            own_average=Decimal("70.00"), total_scored=30, total_available=20
+            "a_card_cannot_score_above_what_was_available",
+            own_average=Decimal("70.00"),
+            total_scored=30,
+            total_available=20,
         )
 
     def test_a_version_below_one_is_refused(self):
-        self._a_card(version=0)
+        self._a_card("a_card_version_starts_at_one", version=0)
 
     def test_a_score_above_its_paper_is_refused(self):
+        """Twenty-one out of twenty, and the refusal has to name that.
+
+        Two things were wrong with the version of this that only asserted
+        `IntegrityError`, and a control run separates them.
+
+        The paper is now a **new** assessment rather than the one already frozen
+        onto this card, because reusing that one made the row a duplicate
+        `(card, assessment)` pair as well. That on its own turns out **not** to
+        change which error comes back — Postgres evaluates a CHECK as the tuple
+        is formed, before it inserts into the unique index, so
+        `a_frozen_score_fits_its_paper` still fired. It matters for the case
+        that motivated it: delete that check constraint and the duplicate pair
+        would have kept the test green on `one_score_cell_per_card` instead.
+
+        Naming the constraint is what actually closes that, and the separate
+        assessment is what keeps the row bad in exactly one way. Neither is
+        redundant, and only the second is load-bearing.
+        """
         with connected_to(self.stmarys):
             self.release_the_term()
-            card = cards.card_for(self.ada, self.term(self.stmarys, "first"))
-            cell = card.assessment_scores.first()
-            with self.assertRaises(IntegrityError):
+            first = self.term(self.stmarys, "first")
+            card = cards.card_for(self.ada, first)
+            another_paper = Assessment.objects.create(
+                term=first,
+                subject_id=self.subject_ids["english"],
+                name="Bad",
+                max_score=20,
+            )
+            with self.assertRaises(IntegrityError) as refused:
                 with transaction.atomic():
                     ReleasedAssessmentScore.objects.create(
                         card=card,
                         subject_id=self.subject_ids["english"],
-                        assessment=cell.assessment,
+                        assessment=another_paper,
                         assessment_name="Bad",
                         max_score=20,
                         position=9,
                         score=21,
                     )
+            refusal = str(refused.exception)
+
+        self.assertIn("a_frozen_score_fits_its_paper", refusal)
 
 
 class EveryFrozenSectionHangsOffTheCardTests(CardSetUp):
@@ -725,6 +833,26 @@ class TwoSchoolsTests(CardSetUp):
         self.grace = make_school("Grace Academy", "grace", "grace")
         self.their_staff = self._staff_for(self.grace)
         self.their_teacher = self.their_staff[Role.TEACHER]
+
+        # Grace gets a real session, a real class and a real child on its
+        # roster, because #38's finding 10 is a fixture that builds a second
+        # tenant and then asks it nothing. Grace never releases: that is the
+        # point of it, and a school with nobody in it could not tell "no card
+        # here" from "nobody to have one".
+        self.their_terms, their_group_id, _ = self._academics(self.grace)
+        self.their_child = enroll_student(
+            User.objects.create_user("chidi", PASSWORD, full_name="Chidi Nwosu"),
+            self.grace,
+        )
+        with connected_to(self.grace):
+            their_group = ClassGroup.objects.get(pk=their_group_id)
+            for name in TermName:
+                place_student(
+                    their_group,
+                    Term.objects.get(pk=self.their_terms[name.value]),
+                    self.their_child,
+                )
+
         self.mark(self.stmarys, "first", self.ada, "maths", "Exam", 80)
 
     def test_a_release_at_one_school_writes_no_card_at_the_other(self):
@@ -737,10 +865,30 @@ class TwoSchoolsTests(CardSetUp):
             self.assertEqual(ReleasedSubjectResult.objects.count(), 0)
 
     def test_a_card_went_home_is_false_at_the_other_school(self):
+        """St Mary's releases; Grace is asked, in Grace's schema, and says no.
+
+        The half that was missing is the second half. Asserting only that the
+        answer is `True` where the release happened leaves the function free to
+        answer `True` everywhere — a release guard keyed on it would then refuse
+        every school's edits the moment any one school released a term.
+
+        Grace's own child and Grace's own term, because `a_card_went_home` takes
+        a term and a membership and both of those are the wrong objects to reach
+        for across a tenant boundary.
+        """
         with connected_to(self.stmarys):
             self.release_the_term()
             first = self.term(self.stmarys, "first")
-            self.assertTrue(cards.a_card_went_home(self.ada, first))
+            went_home_here = cards.a_card_went_home(self.ada, first)
+
+        with connected_to(self.grace):
+            their_first = Term.objects.get(pk=self.their_terms[TermName.FIRST.value])
+            went_home_there = cards.a_card_went_home(self.their_child, their_first)
+            cards_at_grace = ReleasedCard.objects.count()
+
+        self.assertTrue(went_home_here)
+        self.assertFalse(went_home_there)
+        self.assertEqual(cards_at_grace, 0)
 
 
 class ABackfilledDatabase(CardSetUp):

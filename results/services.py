@@ -721,7 +721,7 @@ def release(sheet, actor):
         guarantee issues #31, #33 and #34 all asked for, and no constraint can
         hold it — see `results.cards`.
         """
-        cards.freeze_for_release(locked)
+        cards.freeze_for_release(locked, by=actor)
         ratings.freeze_for_release(locked)
         comments.freeze_for_release(locked)
         sessions.freeze_for_release(locked)

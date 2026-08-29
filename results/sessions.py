@@ -591,6 +591,12 @@ def freeze_for_release(sheet) -> int:
     # inside this same transaction — see `services.release()` — so a card exists
     # for every child on the roster. One answer to "did a card go home", not
     # four; `ReleasedCard` has the argument.
+    #
+    # "Every child on the roster" is read twice, though, and issue #43 is the
+    # gap between the two reads: the lock is on the `ResultSheet` row and not on
+    # `ClassPlacement`, so a placement committed between them leaves a child
+    # here that `cards` never saw. `.get()` then returns `None` and the NOT NULL
+    # on `card_id` aborts the release for the whole class.
     from . import cards as cards_module
 
     card_by_student = cards_module.cards_by_student(sheet)

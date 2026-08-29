@@ -36,7 +36,7 @@ from academics.services import assign_class_teacher, move_student, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook.models import Assessment, Score, Subject
-from results import sessions
+from results import cards, sessions
 from results import services as results_services
 from results.models import (
     PromotionDecision,
@@ -647,6 +647,32 @@ class TheFreezeTests(SessionSetUp):
         )
         self.assertIsNone(frozen.average)
 
+    def _refusal_of(self, **row):
+        """Insert a deliberately bad frozen session line; return what refused it.
+
+        Two failures this exists to stop, and both had already happened here.
+
+        **The row needs a card.** `0017` made `ReleasedSessionResult.card` NOT
+        NULL, and Postgres tests a column's NOT NULL before it tests a CHECK, so
+        a row built without one is rejected on `card_id` and never reaches the
+        constraint the test is named after. All three of these went on passing
+        while proving nothing about the constraint they name. The card is
+        `self.ada`'s and is deliberately mismatched with the invented
+        `student_membership_id` these rows carry to dodge the unique index —
+        nothing ties the two columns together, and the row has to be nonsense in
+        exactly one respect at a time or it is not a test of that one respect.
+
+        **And the assertion is on the constraint's name.** `IntegrityError` is
+        what a unique index, a null column and a foreign key all raise too, so
+        `assertRaises(IntegrityError)` alone cannot tell the constraint under
+        test from the three ways of never reaching it.
+        """
+        card = cards.cards_by_student(row["sheet"])[self.ada.pk]
+        with self.assertRaises(IntegrityError) as refused:
+            with transaction.atomic():
+                ReleasedSessionResult.objects.create(card=card, **row)
+        return str(refused.exception)
+
     def test_the_database_still_refuses_an_average_the_arithmetic_dropped(self):
         """`0014` relaxed one direction of that constraint and not the other.
 
@@ -656,24 +682,24 @@ class TheFreezeTests(SessionSetUp):
         """
         with connected_to(self.stmarys):
             sheet = self.release_the_third_term()
-            with self.assertRaises(IntegrityError):
-                with transaction.atomic():
-                    ReleasedSessionResult.objects.create(
-                        sheet=sheet,
-                        student_membership_id=self.ada.pk + 9999,
-                        session=SESSION,
-                        averaging=SessionAveraging.WEIGHTED,
-                        first_average=Decimal("60.00"),
-                        first_absence="",
-                        first_weight_used=Decimal("60.00"),
-                        second_average=None,
-                        second_absence=TermAbsence.NOT_ENROLLED,
-                        second_weight_used=None,
-                        third_average=None,
-                        third_absence=TermAbsence.NOT_ENROLLED,
-                        third_weight_used=None,
-                        session_average=None,  # a term carried 60 and produced nothing
-                    )
+            refusal = self._refusal_of(
+                sheet=sheet,
+                student_membership_id=self.ada.pk + 9999,
+                session=SESSION,
+                averaging=SessionAveraging.WEIGHTED,
+                first_average=Decimal("60.00"),
+                first_absence="",
+                first_weight_used=Decimal("60.00"),
+                second_average=None,
+                second_absence=TermAbsence.NOT_ENROLLED,
+                second_weight_used=None,
+                third_average=None,
+                third_absence=TermAbsence.NOT_ENROLLED,
+                third_weight_used=None,
+                session_average=None,  # a term carried 60 and produced nothing
+            )
+
+        self.assertIn("a_session_average_has_a_term_behind_it", refusal)
 
     def test_the_database_still_refuses_an_average_with_nothing_behind_it(self):
         """The other direction, and the one the null-safety in `0014` protects.
@@ -685,24 +711,24 @@ class TheFreezeTests(SessionSetUp):
         """
         with connected_to(self.stmarys):
             sheet = self.release_the_third_term()
-            with self.assertRaises(IntegrityError):
-                with transaction.atomic():
-                    ReleasedSessionResult.objects.create(
-                        sheet=sheet,
-                        student_membership_id=self.ada.pk + 9998,
-                        session=SESSION,
-                        averaging=SessionAveraging.EQUAL,
-                        first_average=None,
-                        first_absence=TermAbsence.NOT_ENROLLED,
-                        first_weight_used=None,
-                        second_average=None,
-                        second_absence=TermAbsence.NOT_ENROLLED,
-                        second_weight_used=None,
-                        third_average=None,
-                        third_absence=TermAbsence.NOT_ENROLLED,
-                        third_weight_used=None,
-                        session_average=Decimal("70.00"),  # out of nothing
-                    )
+            refusal = self._refusal_of(
+                sheet=sheet,
+                student_membership_id=self.ada.pk + 9998,
+                session=SESSION,
+                averaging=SessionAveraging.EQUAL,
+                first_average=None,
+                first_absence=TermAbsence.NOT_ENROLLED,
+                first_weight_used=None,
+                second_average=None,
+                second_absence=TermAbsence.NOT_ENROLLED,
+                second_weight_used=None,
+                third_average=None,
+                third_absence=TermAbsence.NOT_ENROLLED,
+                third_weight_used=None,
+                session_average=Decimal("70.00"),  # out of nothing
+            )
+
+        self.assertIn("a_session_average_has_a_term_behind_it", refusal)
 
     def test_a_frozen_line_cannot_be_edited_or_deleted(self):
         with connected_to(self.stmarys):
@@ -735,24 +761,24 @@ class TheFreezeTests(SessionSetUp):
         """A term that vanished with no account of itself is refused by the table."""
         with connected_to(self.stmarys):
             sheet = self.release_the_third_term()
-            with self.assertRaises(IntegrityError):
-                with transaction.atomic():
-                    ReleasedSessionResult.objects.create(
-                        sheet=sheet,
-                        student_membership_id=self.ada.pk + 9999,
-                        session=SESSION,
-                        averaging=SessionAveraging.EQUAL,
-                        first_average=None,
-                        first_absence="",  # neither a number nor a reason
-                        first_weight_used=None,
-                        second_average=Decimal("70.00"),
-                        second_absence="",
-                        second_weight_used=Decimal("100.00"),
-                        third_average=None,
-                        third_absence=TermAbsence.NOT_ENROLLED,
-                        third_weight_used=None,
-                        session_average=Decimal("70.00"),
-                    )
+            refusal = self._refusal_of(
+                sheet=sheet,
+                student_membership_id=self.ada.pk + 9999,
+                session=SESSION,
+                averaging=SessionAveraging.EQUAL,
+                first_average=None,
+                first_absence="",  # neither a number nor a reason
+                first_weight_used=None,
+                second_average=Decimal("70.00"),
+                second_absence="",
+                second_weight_used=Decimal("100.00"),
+                third_average=None,
+                third_absence=TermAbsence.NOT_ENROLLED,
+                third_weight_used=None,
+                session_average=Decimal("70.00"),
+            )
+
+        self.assertIn("the_first_term_is_present_or_explained", refusal)
 
 
 class ThePromotionDecisionTests(SessionSetUp):

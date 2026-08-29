@@ -80,17 +80,28 @@ def _student_names(membership_ids) -> dict[int, str]:
 
     A dictionary rather than a per-child lookup because release calls this for a
     whole roster, and because the name is copied — see the module docstring.
+
+    **The school's name for the child comes first.** `Membership.display_name`
+    exists because "a school may know a [person] by a different name than the one
+    on their login", and `Membership.name` prefers it; this is the same
+    expression, and it belongs on a card more than on any screen. A school that
+    admitted a child under an admission name and then had the login name frozen
+    onto the card would be reading the wrong name off a row it cannot edit —
+    `ReleasedCard` is append-only, so the correction is a whole revision.
+
     Falls back to the empty string rather than raising: a membership whose user
     row has gone is a data problem that must not stop a release, and a card with
     a blank name is fixable while a refused release is a school unable to
-    publish results.
+    publish results. Deliberately not falling back to the username the way
+    `results.api` does — a username on a screen a teacher reads is a hint, and
+    on a card a parent reads it is a mistake in print.
     """
     from accounts.models import Membership
 
     return {
-        row["pk"]: row["user__full_name"] or ""
+        row["pk"]: row["display_name"] or row["user__full_name"] or ""
         for row in Membership.objects.filter(pk__in=membership_ids).values(
-            "pk", "user__full_name"
+            "pk", "display_name", "user__full_name"
         )
     }
 
@@ -130,12 +141,20 @@ def _scores_for(assessments, student_ids) -> dict[tuple[int, int], int]:
     }
 
 
-def freeze_for_release(sheet) -> int:
+def freeze_for_release(sheet, *, by=None) -> int:
     """Copy this class's cards as they read now. Returns the number written.
 
     Called by `results.services.release()` **first**, inside the transaction
     that writes the release row, so that the section freezes underneath it have
     a parent to hang off.
+
+    `by` is the **user** who released, stamped onto every card in the class.
+    Passed down rather than read off the connection because the actor is already
+    an argument to `release()` and a second opinion about who is acting is the
+    thing `services.school_on_this_connection()` exists to refuse. Optional only
+    so that the backfilled cards of `0017`, which had no actor, are describable
+    by the same column; a card written by this function always has one, and it
+    can never be filled in afterwards because the table is append-only.
 
     Reads everything from `positions.class_results()` — one roster read and one
     aggregate read — so that every number on every card in the class comes from
@@ -159,8 +178,11 @@ def freeze_for_release(sheet) -> int:
     assessments = _assessments_for(term, results.subject_ids)
     scores = _scores_for(assessments, roster)
 
+    released_by_id = getattr(by, "pk", by)
     cards = [
-        _card_for(sheet, term, school_name, names, results, student_id)
+        _card_for(
+            sheet, term, school_name, names, results, student_id, released_by_id
+        )
         for student_id in roster
     ]
     ReleasedCard.objects.bulk_create(cards)
@@ -202,7 +224,9 @@ def _subjects_in_print_order(subject_ids):
     return list(Subject.objects.filter(pk__in=subject_ids).order_by("name", "pk"))
 
 
-def _card_for(sheet, term, school_name, names, results, student_id) -> ReleasedCard:
+def _card_for(
+    sheet, term, school_name, names, results, student_id, released_by_id
+) -> ReleasedCard:
     """One child's card row. **Never conditional** — see the module docstring."""
     scored = available = 0
     for subject_id in results.subject_ids:
@@ -228,7 +252,7 @@ def _card_for(sheet, term, school_name, names, results, student_id) -> ReleasedC
         own_average=results.averages.get(student_id),
         position=results.positions.get(student_id),
         roster_size=len(results.student_ids),
-        released_by_id=None,
+        released_by_id=released_by_id,
     )
 
 
