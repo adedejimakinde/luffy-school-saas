@@ -89,6 +89,22 @@ proportion of nothing is a hundred. That child has **no session average**, which
 is the truthful answer, and it leaves the promotion suggestion blank so that a
 person decides rather than the arithmetic inventing a `REPEATED`.
 
+The terms they *did* sit still carry the weight that was applied to them, and it
+is **nought** — not an absent weight. The distinction is the whole content of
+the two columns:
+
+| the row says | it means |
+| --- | --- |
+| an average, and a weight of `0.00` | the child sat this term, and the school counts it for nothing |
+| no average, no weight, an absence reason | there was no term here for this child |
+
+So a frozen line under `0/0/100` reads `60.00 @ 0.00`, `70.00 @ 0.00`, `— (not
+marked)`, and no session average. The weights on such a line sum to nought
+rather than to a hundred, and a null average is how a reader tells that case
+from a real weighting. Migration `0014` has the release this cost: recording
+the zero and dropping it were each refused by one of the two check constraints,
+so a third-term release under that configuration failed for the **whole class**.
+
 ## The exact mean, and the weights you can read
 
 The stored weights are rounded to two places and adjusted so they add to exactly

@@ -165,6 +165,11 @@ WEIGHT_FIELD_FOR = {
 
 FULL_WEIGHT = Decimal(100)
 
+#: The weight applied to a term the school counts for nothing. Two places, so
+#: that it reads the same as every other weight on the row rather than as a
+#: bare `0` — these columns are `decimal(5, 2)` and are compared by equality.
+NO_WEIGHT = Decimal("0.00")
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -315,6 +320,12 @@ class SessionLine:
     `weights` holds only the terms that contributed, keyed by term name, and
     sums to a hundred. It is the weighting **as applied** — renormalised over
     the terms actually sat — and not the school's configured pair.
+
+    The one exception is the school that weights every term this child sat at
+    nothing (`0/0/100`, and a child who left before the third term): there is
+    no proportion of nothing, so the shares stay at nought and sum to nought
+    rather than a hundred. `average` is `None` on exactly those lines, which is
+    how a reader tells that case from a real weighting. See `_weigh()`.
     """
 
     session: str
@@ -406,30 +417,19 @@ def _lines_for(student_ids, session) -> dict[int, tuple[TermLine, ...]]:
 
 
 def _applied_weights(sat, config) -> dict[str, Decimal]:
-    """Renormalise the school's weighting over the terms actually sat.
+    """The school's weight for each term actually sat, before renormalising.
 
-    Returns the raw (unnormalised) weights, keyed by term name, for the terms
-    that contributed. Empty when nothing can be weighed — which is either "no
-    term contributed" or the reachable oddity below.
-
-    **A weighting may legitimately give a term zero.** `0/0/100` is a school
-    that counts the third term alone, and `_require_a_weighting()` allows it
-    because it sums to a hundred. A child who sat only the first two terms of
-    such a session therefore has a total weight of zero, and there is nothing to
-    renormalise: no proportion of nothing is a hundred. That child has no
-    session average, which is the truthful answer — the school has said those
-    terms count for nothing — and it leaves the promotion suggestion blank so a
-    person has to decide rather than the arithmetic inventing a `REPEATED`.
+    Keyed by term name, and **including the terms the school weights at
+    nothing**. Whether they add up to anything is `_weigh()`'s question, not
+    this one: a term sat under a `0/0/100` weighting still had a weight
+    applied to it, and that weight was nought.
     """
     if config.averaging == SessionAveraging.EQUAL:
-        raw = {line.term_name: Decimal(1) for line in sat}
-    else:
-        raw = {
-            line.term_name: getattr(config, WEIGHT_FIELD_FOR[line.term_name])
-            or Decimal(0)
-            for line in sat
-        }
-    return {} if sum(raw.values()) <= 0 else raw
+        return {line.term_name: Decimal(1) for line in sat}
+    return {
+        line.term_name: getattr(config, WEIGHT_FIELD_FOR[line.term_name]) or Decimal(0)
+        for line in sat
+    }
 
 
 def _as_percentages(raw) -> dict[str, Decimal]:
@@ -481,14 +481,47 @@ def _as_percentages(raw) -> dict[str, Decimal]:
 
 
 def _weigh(terms, config, session) -> SessionLine:
-    """Combine the term lines into a session line under this configuration."""
+    """Combine the term lines into a session line under this configuration.
+
+    **A weighting may legitimately give a term zero.** `0/0/100` is a school
+    that counts the third term alone, and `_require_a_weighting()` allows it
+    because it sums to a hundred. A child who sat only the terms such a school
+    weights at nothing has a total weight of zero, and there is nothing to
+    renormalise: no proportion of nothing is a hundred. That child has no
+    session average, which is the truthful answer — the school has said those
+    terms count for nothing — and it leaves the promotion suggestion blank so a
+    person has to decide rather than the arithmetic inventing a `REPEATED`.
+
+    **The terms they sat still carry the weight that was applied, and it is
+    nought.** Not an absent weight: the child sat the term, it was marked, and
+    the school's configuration counted it for nothing — which is a different
+    statement from "there was no term here", and the frozen row has a column
+    for each. Dropping the weight instead of recording the zero produced a row
+    saying a term was both present (an average) and unaccounted for (no weight
+    and no absence reason), which `the_*_term_is_present_or_explained` refuses
+    — so the whole third-term release failed on an `IntegrityError`, for every
+    child on the roster, because one school counts one term.
+
+    Note the same row is written with a `0.00` weight already whenever *some
+    other* term carries weight — `0/40/60` has always frozen `first_weight_used
+    = 0.00` beside a first-term average. The all-zero case was the one path
+    that spelled the same fact a second way.
+    """
     sat = [line for line in terms if line.was_sat]
     raw = _applied_weights(sat, config)
-
-    if not raw:
-        return SessionLine(session, tuple(terms), None, config.averaging, {})
-
     total = sum(raw.values())
+
+    if total <= 0:
+        # Either the child sat no term at all — nothing to weight, and the
+        # dictionary is empty — or every term they sat is weighted nothing.
+        return SessionLine(
+            session,
+            tuple(terms),
+            None,
+            config.averaging,
+            {name: NO_WEIGHT for name in raw},
+        )
+
     with localcontext(CONTEXT):
         weighted = sum(line.average * raw[line.term_name] for line in sat)
         average = round_percentage(weighted / total)

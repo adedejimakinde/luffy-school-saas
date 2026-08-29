@@ -1132,6 +1132,32 @@ def _a_term_is_present_or_explained(prefix):
     )
 
 
+def _the_term_carried_weight(prefix):
+    """`prefix`'s applied weight is a number above nought. **NULL-safe.**
+
+    `weight_used > 0` on its own is NULL for a term the child did not sit, and
+    a CHECK whose condition evaluates to NULL *passes* — so the null test is
+    not decoration. Without it, a session average with no weighting at all
+    behind it, which is the one thing
+    `a_session_average_has_a_term_behind_it` exists to refuse, would sail
+    through on an unknown.
+    """
+    field = f"{prefix}_weight_used"
+    return Q(**{f"{field}__isnull": False, f"{field}__gt": 0})
+
+
+def _the_term_carried_nothing(prefix):
+    """The exact complement of `_the_term_carried_weight()`: null, or nought.
+
+    Written out rather than negating the other one, for the same NULL reason:
+    `~Q(...)` over a nullable column is a three-valued expression that has to
+    be read twice to be believed, and this is read by whoever is debugging a
+    refused release.
+    """
+    field = f"{prefix}_weight_used"
+    return Q(**{f"{field}__isnull": True}) | Q(**{field: 0})
+
+
 class SessionSettings(models.Model):
     """How this school reckons a session. One row per schema.
 
@@ -1283,7 +1309,9 @@ class ReleasedSessionResult(models.Model):
     terms they actually sat, so `SessionSettings`' configured pair is not what
     produced this number and recording it would misdescribe the arithmetic.
     The `*_weight_used` columns hold what was applied, and they sum to a
-    hundred across the present terms.
+    hundred across the present terms — except where the school weights every
+    term this child sat at nothing, where they are all `0.00` and there is no
+    session average to have weighted. See the columns below.
 
     They are the weighting **as applied, rounded to two places for reading**,
     and the average is not recomputed from them: it is calculated at full
@@ -1336,8 +1364,11 @@ class ReleasedSessionResult(models.Model):
     third_absence = models.CharField(max_length=16, choices=TermAbsence, blank=True)
 
     #: The weighting **actually applied**, after renormalising over the terms
-    #: the child sat. Sums to 100 across the present terms, or all three are
-    #: null when the child sat none.
+    #: the child sat. Sums to 100 across the present terms; all three are null
+    #: when the child sat none; and all of the present ones are `0.00` when the
+    #: school weights every term this child sat at nothing, which is the one
+    #: case with no session average beside a recorded weighting. See
+    #: `sessions._weigh()`.
     first_weight_used = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True
     )
@@ -1373,23 +1404,34 @@ class ReleasedSessionResult(models.Model):
             _a_term_is_present_or_explained("first"),
             _a_term_is_present_or_explained("second"),
             _a_term_is_present_or_explained("third"),
-            # No term present means no average. The converse — an average with
-            # no term behind it — is the arithmetic having invented a number.
+            # There is an average exactly when some term carried weight. Both
+            # directions matter: an average with nothing behind it is the
+            # arithmetic having invented a number, and a term weighted 60 with
+            # no average is one the arithmetic dropped.
+            #
+            # **Weight above zero, not weight recorded.** A term the school
+            # counts for nothing is recorded with a `0.00` weight rather than a
+            # null — it was sat, it was marked, and the weight applied to it
+            # was nought, which is a different fact from "no such term" and the
+            # `*_absence` column is where that one is said. So a child whose
+            # every sat term is weighted nothing has three weights on the row
+            # and no average, and reading "is any weight recorded?" would call
+            # that row a lie. Migration `0014` has the release this refused.
             models.CheckConstraint(
                 condition=(
-                    Q(session_average__isnull=False)
-                    & (
-                        Q(first_weight_used__isnull=False)
-                        | Q(second_weight_used__isnull=False)
-                        | Q(third_weight_used__isnull=False)
+                    (
+                        Q(session_average__isnull=False)
+                        & (
+                            _the_term_carried_weight("first")
+                            | _the_term_carried_weight("second")
+                            | _the_term_carried_weight("third")
+                        )
                     )
-                )
-                | (
-                    Q(session_average__isnull=True)
-                    & Q(
-                        first_weight_used__isnull=True,
-                        second_weight_used__isnull=True,
-                        third_weight_used__isnull=True,
+                    | (
+                        Q(session_average__isnull=True)
+                        & _the_term_carried_nothing("first")
+                        & _the_term_carried_nothing("second")
+                        & _the_term_carried_nothing("third")
                     )
                 ),
                 name="a_session_average_has_a_term_behind_it",

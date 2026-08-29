@@ -432,6 +432,14 @@ class WhyATermIsAbsentTests(SessionSetUp):
         No proportion of nothing is a hundred, so there is no average — which is
         the truthful answer, and it leaves the suggestion blank so that a person
         decides rather than the arithmetic inventing a REPEATED.
+
+        **The terms sat still carry a weight, and it is nought.** Not an absent
+        weight: the child sat those terms and was marked in them, and the school
+        counted them for nothing. That is a different statement from "there was
+        no term here", which is what a null weight beside a `*_absence` reason
+        says, and the freeze has a column for each — see
+        `test_a_release_survives_a_weighting_that_zeroes_the_terms_sat`, which
+        is the release this distinction was costing.
         """
         left_early = self.child(self.stmarys, "early", "Early Leaver", ["first", "second"])
         self.mark(self.stmarys, "first", left_early, 90)
@@ -442,8 +450,25 @@ class WhyATermIsAbsentTests(SessionSetUp):
             line = sessions.session_line(left_early, SESSION)
 
         self.assertIsNone(line.average)
-        self.assertEqual(line.weights, {})
+        self.assertEqual(
+            line.weights, {"first": Decimal("0.00"), "second": Decimal("0.00")}
+        )
         self.assertIsNone(sessions.suggested_status(line.average))
+
+    def test_a_child_who_sat_nothing_has_no_weights_at_all(self):
+        """The other half of the pair above, and the reason they are two cases.
+
+        Nought weight and no weight are different answers: this child sat no
+        term, so there is no term to have weighted, and the frozen row's
+        `*_weight_used` columns are null beside a `*_absence` reason. The child
+        above sat two terms that were counted for nothing.
+        """
+        with connected_to(self.stmarys):
+            sessions.use_a_weighting(0, 0, 100)
+            line = sessions.session_line(self.ada, SESSION)
+
+        self.assertIsNone(line.average)
+        self.assertEqual(line.weights, {})
 
 
 class ConfiguringTheSessionTests(SessionSetUp):
@@ -561,6 +586,123 @@ class TheFreezeTests(SessionSetUp):
         self.assertIsNone(frozen.first_average)
         self.assertIsNone(frozen.first_weight_used)
         self.assertEqual(frozen.third_weight_used, Decimal("100.00"))
+
+    def test_a_release_survives_a_weighting_that_zeroes_the_terms_sat(self):
+        """The whole class's release used to fail on one school's averaging.
+
+        `0/0/100`, and a child on the third-term roster whose third term nobody
+        marked. The two terms they *did* sit have averages, so they cannot claim
+        an absence reason, and `the_first_term_is_present_or_explained` demands a
+        weight beside an average — while the old
+        `a_session_average_has_a_term_behind_it` demanded that a null average
+        carry no weights at all. There was no row the code could write, so
+        `bulk_create()` raised `IntegrityError` inside the release transaction
+        and took the release of **every child on the roster** down with it.
+
+        Migration `0014` has the argument. The weight applied to a term the
+        school counts for nothing is nought, and the row records it.
+        """
+        unmarked_third = self.child(self.stmarys, "quiet", "Quiet Third")
+        self.mark(self.stmarys, "first", unmarked_third, 60)
+        self.mark(self.stmarys, "second", unmarked_third, 70)
+        # deliberately no third-term mark
+
+        with connected_to(self.stmarys):
+            sessions.use_a_weighting(0, 0, 100)
+            self.release_the_third_term()
+            frozen = sessions.released_session_line(unmarked_third, SESSION)
+
+            # The rest of the roster froze too, rather than being rolled back
+            # with it: `self.ada` is on the same sheet.
+            self.assertIsNotNone(sessions.released_session_line(self.ada, SESSION))
+
+        self.assertIsNone(frozen.session_average)
+        self.assertEqual(frozen.first_average, Decimal("60.00"))
+        self.assertEqual(frozen.first_weight_used, Decimal("0.00"))
+        self.assertEqual(frozen.first_absence, "")
+        self.assertEqual(frozen.second_weight_used, Decimal("0.00"))
+        self.assertIsNone(frozen.third_weight_used)
+        self.assertEqual(frozen.third_absence, TermAbsence.UNMARKED)
+
+    def test_the_card_reads_that_line_back_the_same_way(self):
+        """A nought weight has to survive the round trip through the freeze.
+
+        `card_session_line()` reads the frozen row once one exists, and a reader
+        that got `{}` back from the freeze and `{'first': 0.00}` from the live
+        computation would be looking at two different answers to one question.
+        """
+        unmarked_third = self.child(self.stmarys, "quiet", "Quiet Third")
+        self.mark(self.stmarys, "first", unmarked_third, 60)
+        self.mark(self.stmarys, "second", unmarked_third, 70)
+
+        with connected_to(self.stmarys):
+            sessions.use_a_weighting(0, 0, 100)
+            live = sessions.session_line(unmarked_third, SESSION)
+            self.release_the_third_term()
+            frozen = sessions.card_session_line(unmarked_third, SESSION)
+
+        self.assertEqual(frozen.weights, live.weights)
+        self.assertEqual(
+            frozen.weights, {"first": Decimal("0.00"), "second": Decimal("0.00")}
+        )
+        self.assertIsNone(frozen.average)
+
+    def test_the_database_still_refuses_an_average_the_arithmetic_dropped(self):
+        """`0014` relaxed one direction of that constraint and not the other.
+
+        A term weighted 60 with no session average beside it is an average that
+        went missing, and it is still refused — the relaxation is only that a
+        weight of **nought** no longer counts as a term behind an average.
+        """
+        with connected_to(self.stmarys):
+            sheet = self.release_the_third_term()
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    ReleasedSessionResult.objects.create(
+                        sheet=sheet,
+                        student_membership_id=self.ada.pk + 9999,
+                        session=SESSION,
+                        averaging=SessionAveraging.WEIGHTED,
+                        first_average=Decimal("60.00"),
+                        first_absence="",
+                        first_weight_used=Decimal("60.00"),
+                        second_average=None,
+                        second_absence=TermAbsence.NOT_ENROLLED,
+                        second_weight_used=None,
+                        third_average=None,
+                        third_absence=TermAbsence.NOT_ENROLLED,
+                        third_weight_used=None,
+                        session_average=None,  # a term carried 60 and produced nothing
+                    )
+
+    def test_the_database_still_refuses_an_average_with_nothing_behind_it(self):
+        """The other direction, and the one the null-safety in `0014` protects.
+
+        `weight_used > 0` is NULL for a null column and a CHECK that evaluates
+        to NULL passes, so a condition written without the `IS NOT NULL` tests
+        would let this row — an average invented out of no weighting at all —
+        straight through.
+        """
+        with connected_to(self.stmarys):
+            sheet = self.release_the_third_term()
+            with self.assertRaises(IntegrityError):
+                with transaction.atomic():
+                    ReleasedSessionResult.objects.create(
+                        sheet=sheet,
+                        student_membership_id=self.ada.pk + 9998,
+                        session=SESSION,
+                        averaging=SessionAveraging.EQUAL,
+                        first_average=None,
+                        first_absence=TermAbsence.NOT_ENROLLED,
+                        first_weight_used=None,
+                        second_average=None,
+                        second_absence=TermAbsence.NOT_ENROLLED,
+                        second_weight_used=None,
+                        third_average=None,
+                        third_absence=TermAbsence.NOT_ENROLLED,
+                        third_weight_used=None,
+                        session_average=Decimal("70.00"),  # out of nothing
+                    )
 
     def test_a_frozen_line_cannot_be_edited_or_deleted(self):
         with connected_to(self.stmarys):
