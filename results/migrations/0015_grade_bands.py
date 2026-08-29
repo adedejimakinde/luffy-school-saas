@@ -72,15 +72,22 @@ def seed_the_scale(apps, schema_editor):
 
 
 def unseed(apps, schema_editor):
-    """Remove only the seeded letters, and only if they are untouched.
+    """Remove only the seeded bands, and only the ones still as seeded.
 
-    A school that replaced the scale has rows this does not name, and reversing
-    a migration is not licence to delete a school's configuration.
+    Matched on all three columns, not on the letter alone. A school that kept
+    the seeded letters and moved a boundary — A1 from 75 to 80, the most
+    ordinary edit there is — has configured its scale, and reversing a migration
+    is not licence to delete a school's configuration. Filtering by letter would
+    have taken all nine of those rows.
+
+    `0006`'s `unseed()` makes the same distinction from the other direction, by
+    refusing to delete a trait anything points at.
     """
     GradeBand = apps.get_model("results", "GradeBand")
-    GradeBand.objects.filter(
-        letter__in=[letter for _, letter, _ in WAEC_NINE_POINT]
-    ).delete()
+    for minimum, letter, remark in WAEC_NINE_POINT:
+        GradeBand.objects.filter(
+            letter=letter, minimum=Decimal(minimum), remark=remark
+        ).delete()
 
 
 class Migration(migrations.Migration):

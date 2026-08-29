@@ -30,16 +30,24 @@ from results.tests.test_positions import PASSWORD, connected_to, make_school
 
 
 class GradeSetUp(TestCase):
-    """Two schools, each seeded with the default scale by migration `0015`."""
+    """One school, seeded with the default scale by migration `0015`.
+
+    **One school, deliberately.** Per-test tenant schema creation is most of this
+    suite's runtime, and a fixture that builds a second school every test so that
+    four of them can use it is the exact pattern
+    [#38](https://github.com/adedejimakinde/luffy-school-saas/issues/38) has
+    filed against `test_release_guard.py`. The project rule is to prove
+    behaviour against 2+ tenants, and the way to honour it is a second school
+    that is *used* — `TwoSchoolSetUp` below builds one, and every class that
+    inherits it asserts something across the pair.
+    """
 
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
-        self.grace = make_school("Grace Academy", "grace", "grace")
 
         self.principal = self._staff(self.stmarys, "sm-principal", Role.PRINCIPAL)
         self.admin = self._staff(self.stmarys, "sm-admin", Role.ADMIN)
         self.teacher = self._staff(self.stmarys, "sm-teacher", Role.TEACHER)
-        self.their_principal = self._staff(self.grace, "ga-principal", Role.PRINCIPAL)
 
     def _staff(self, school, username, role):
         user = User.objects.create_user(
@@ -47,6 +55,15 @@ class GradeSetUp(TestCase):
         )
         grant_membership(user, school, role)
         return user
+
+
+class TwoSchoolSetUp(GradeSetUp):
+    """A second school, for the tests whose whole subject is the pair."""
+
+    def setUp(self):
+        super().setUp()
+        self.grace = make_school("Grace Academy", "grace", "grace")
+        self.their_principal = self._staff(self.grace, "ga-principal", Role.PRINCIPAL)
 
 
 class TheSeededScaleTests(GradeSetUp):
@@ -115,6 +132,25 @@ class TheBoundariesTests(GradeSetUp):
         """
         with connected_to(self.stmarys):
             self.assertIsNone(grades.grade_for(None))
+
+    def test_a_caller_supplied_band_list_may_be_in_any_order(self):
+        """`bands=` is public, and the wrong order must not silently grade everyone F.
+
+        Walking the list and taking the first band at or below the mark is
+        correct only for a highest-first list. A caller passing
+        `order_by("minimum")` would get the lowest qualifying band every time —
+        every child on the page an F, no exception, nothing to notice.
+        """
+        with connected_to(self.stmarys):
+            lowest_first = list(GradeBand.objects.order_by("minimum"))
+            self.assertEqual(lowest_first[0].letter, "F9")
+
+            self.assertEqual(
+                grades.grade_for(Decimal("95.00"), bands=lowest_first).letter, "A1"
+            )
+            self.assertEqual(
+                grades.grade_for(Decimal("62.00"), bands=lowest_first).letter, "C4"
+            )
 
     def test_a_mark_below_every_band_grades_blank_rather_than_raising(self):
         """A hole a `psql` session can still make, answered without an exception.
@@ -197,6 +233,52 @@ class SettingTheScaleTests(GradeSetUp):
             with self.assertRaises(grades.InvalidGradeScale):
                 grades.set_scale([(0, "  ", "Fail")])
 
+    def test_a_letter_too_long_for_the_column_is_refused_as_a_sentence(self):
+        """`DataError` is not a refusal — it is a 500 with a poisoned transaction.
+
+        `letter` is `varchar(4)`, and "Fail" fits while "Merit" does not, which
+        is exactly the kind of scale a school types. The service has to refuse
+        what the table would refuse, or the caller gets a raw `DataError` from
+        inside `set_scale()`'s own `atomic()` — outside `ResultsError`, so every
+        `except ResultsError` misses it. `ratings._require_a_trait_name()` states
+        the rule.
+        """
+        with connected_to(self.stmarys):
+            with self.assertRaises(grades.InvalidGradeScale) as refused:
+                grades.set_scale([(0, "Fail", ""), (50, "Merit", "")])
+            self.assertIn("fits 4 characters", str(refused.exception))
+            # And the scale it refused is still the one in force.
+            self.assertEqual(grades.grade_for(Decimal("72.00")).letter, "B2")
+
+    def test_a_remark_too_long_for_the_column_is_refused_as_a_sentence(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(grades.InvalidGradeScale) as refused:
+                grades.set_scale([(0, "F", "x" * 33)])
+            self.assertIn("fits 32 characters", str(refused.exception))
+
+    def test_two_bands_that_collide_only_after_rounding_are_refused(self):
+        """The column stores two places, so 49.996 and 50.001 are one band.
+
+        Checking the typed value rather than the stored one lets the pair
+        through the service and collides on the unique constraint instead —
+        an `IntegrityError` outside `ResultsError`, for a scale the school
+        could reasonably have typed.
+        """
+        with connected_to(self.stmarys):
+            with self.assertRaises(grades.InvalidGradeScale) as refused:
+                grades.set_scale(
+                    [(0, "F", ""), ("49.996", "C", ""), ("50.001", "B", "")]
+                )
+            self.assertIn("only earn one grade", str(refused.exception))
+
+    def test_a_minimum_is_stored_at_the_precision_it_is_compared_at(self):
+        """A boundary that moves on save is one no test at the edge would catch."""
+        with connected_to(self.stmarys):
+            grades.set_scale([(0, "F", ""), ("74.996", "A", "")])
+            self.assertEqual(grades.scale()[0].minimum, Decimal("75.00"))
+            self.assertEqual(grades.grade_for(Decimal("75.00")).letter, "A")
+            self.assertEqual(grades.grade_for(Decimal("74.99")).letter, "F")
+
     def test_bands_may_be_offered_in_any_order(self):
         """A school types its scale bottom-up as readily as top-down."""
         with connected_to(self.stmarys):
@@ -237,7 +319,7 @@ class TheDatabaseRefusesItTooTests(GradeSetUp):
                     GradeBand.objects.create(minimum=Decimal("99.00"), letter="   ")
 
 
-class WhoMaySetTheScaleTests(GradeSetUp):
+class WhoMaySetTheScaleTests(TwoSchoolSetUp):
     """The pair who already decide what the card prints, and nobody else."""
 
     def test_the_principal_may(self):
@@ -266,7 +348,7 @@ class WhoMaySetTheScaleTests(GradeSetUp):
                 grades.set_scale_as(self.their_principal, [(0, "F", "Fail")])
 
 
-class TwoSchoolsTests(GradeSetUp):
+class TwoSchoolsTests(TwoSchoolSetUp):
     """A scale is a tenant table, and one school's grading is not the other's."""
 
     def test_a_scale_is_one_schools_and_not_the_others(self):

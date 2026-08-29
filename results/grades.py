@@ -12,6 +12,10 @@ the two things done to it: reading a grade, and replacing the scale.
 the whole scale in a transaction — see below for why it is wholesale rather
 than per band.
 
+**A released card is not yet protected from a scale change.** The protection is
+the copy task 3's snapshot will take at release, and it does not exist here —
+`set_scale()` has that written out rather than implied.
+
 ## Why the scale is replaced whole
 
 A band records where it *starts*, so the bands are only meaningful as a set:
@@ -74,6 +78,20 @@ BOTTOM = Decimal(0)
 
 FULL_MARKS = Decimal(100)
 
+#: What the columns hold. Read off the fields so the refusals below and the
+#: table agree about one number — `ratings.MAX_TRAIT_NAME`'s reason exactly: a
+#: service that leaves a width to the column hands the caller a raw `DataError`
+#: from inside its own `atomic()`, which is outside `ResultsError`, missed by
+#: every `except ResultsError`, and fatal to the enclosing transaction.
+MAX_LETTER = GradeBand._meta.get_field("letter").max_length
+MAX_REMARK = GradeBand._meta.get_field("remark").max_length
+
+#: The precision `GradeBand.minimum` actually stores. Two bands offered as
+#: 49.996 and 50.001 are one band once the column has rounded them, so the
+#: duplicate check has to compare what will be *stored* rather than what was
+#: typed — otherwise the refusal arrives as an `IntegrityError` from the insert.
+PLACES = Decimal(10) ** -GradeBand._meta.get_field("minimum").decimal_places
+
 
 def scale() -> list[GradeBand]:
     """This school's bands, highest first. **Never writes.**
@@ -99,14 +117,22 @@ def grade_for(percentage, *, bands=None) -> GradeBand | None:
     grade is a better answer than an exception thrown while a parent waits.
 
     `bands` is accepted so a caller rendering forty-five cards reads the scale
-    once rather than once per subject line.
+    once rather than once per subject line. **It may be in any order.** The
+    obvious implementation walks the list and returns the first band at or below
+    the mark, which is correct only for a highest-first list — and `bands` is a
+    public parameter, so a caller passing `order_by("minimum")` or a hand-built
+    list would get the *lowest* band for every mark. Every child on the page
+    graded F, no exception, nothing to notice. Taking the greatest qualifying
+    minimum instead is the same cost and cannot be held wrong.
     """
     if percentage is None:
         return None
-    for band in bands if bands is not None else scale():
-        if percentage >= band.minimum:
-            return band
-    return None
+    qualifying = [
+        band
+        for band in (bands if bands is not None else scale())
+        if percentage >= band.minimum
+    ]
+    return max(qualifying, key=lambda band: band.minimum, default=None)
 
 
 def _require_a_scale(bands):
@@ -137,7 +163,7 @@ def _require_a_scale(bands):
             ) from None
 
         try:
-            minimum = Decimal(str(minimum))
+            minimum = Decimal(str(minimum)).quantize(PLACES)
         except (TypeError, ValueError, ArithmeticError, InvalidOperation):
             raise InvalidGradeScale(
                 f"A band starts at a percentage. Got {minimum!r} for {letter!r}."
@@ -153,6 +179,19 @@ def _require_a_scale(bands):
             raise InvalidGradeScale(
                 f"A band needs a letter. The one starting at {minimum} has none."
             )
+        if len(letter) > MAX_LETTER:
+            raise InvalidGradeScale(
+                f"A grade letter fits {MAX_LETTER} characters and {letter!r} is "
+                f"{len(letter)}. A band is labelled, not described — the words go "
+                f"in the remark."
+            )
+
+        remark = str(remark or "").strip()
+        if len(remark) > MAX_REMARK:
+            raise InvalidGradeScale(
+                f"A remark fits {MAX_REMARK} characters and {letter!r}'s is "
+                f"{len(remark)}."
+            )
 
         if minimum in seen_minima:
             raise InvalidGradeScale(
@@ -165,7 +204,7 @@ def _require_a_scale(bands):
             )
         seen_minima.add(minimum)
         seen_letters.add(letter)
-        cleaned.append((minimum, letter, str(remark or "").strip()))
+        cleaned.append((minimum, letter, remark))
 
     if BOTTOM not in seen_minima:
         lowest = min(seen_minima)
@@ -190,10 +229,22 @@ def set_scale(bands) -> list[GradeBand]:
     existing one and update it in place: there is no stable identity to match on
     — a school moving "B2" from 70 to 72 has edited a band, and a school
     replacing "B2 at 70" with "B at 70" has replaced one — and guessing which
-    produces a scale nobody asked for. `GradeBand` is not referenced by a
-    foreign key anywhere, deliberately: what a card prints is the letter and the
-    remark **copied** at release, exactly as `ReleasedTraitRating` copies a
-    trait's name, so replacing the scale cannot reach a card that has gone home.
+    produces a scale nobody asked for.
+
+    ## Nothing points at a band yet, and released cards are **not** protected yet
+
+    `GradeBand` is deliberately not the target of any foreign key, so that task
+    3's snapshot can **copy** the letter and remark at release the way
+    `ReleasedTraitRating` copies a trait's name.
+
+    Until that snapshot exists, this is a plan and not a guarantee, and it is
+    written as one on purpose: there is no released-grade table, nothing in the
+    repo calls `grade_for()`, and `set_scale()` deletes every band with no check
+    for released usage. **The moment a renderer grades a frozen percentage
+    live, replacing the scale silently rewrites the letters on cards already in
+    parents' hands** — precisely the failure `ReleasedTraitRating`'s docstring
+    table enumerates for trait names. Task 3 closes it by copying; anything
+    reaching for `grade_for()` before then is reaching past a hole.
     """
     cleaned = _require_a_scale(bands)
     with transaction.atomic():
