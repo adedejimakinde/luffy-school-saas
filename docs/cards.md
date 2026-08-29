@@ -142,6 +142,48 @@ The cost is paid on the read path, where it is cheap — `cards.card_lines()` an
 `cards.cards_on()` fetch by `card_id` in a bounded number of queries, because
 task 7 renders forty-five of these in one Celery job.
 
+## Migrating a database that already has results
+
+`0017` gives `ReleasedTraitRating`, `ReleasedComment` and `ReleasedSessionResult`
+a non-null `card` FK and backfills it, inventing a card for any historical
+`(sheet, student)` pair that has a frozen section — a frozen rating *is* the
+record that a card went home, so the row is not fabricated, it is that fact
+written where it now belongs. Those cards carry the sections and nothing else:
+the marks behind them were never frozen, and reconstructing a past card from
+today's live scores is the exact thing this snapshot exists to prevent.
+
+**Filling that column in means writing to three append-only tables.** Each has
+carried a `BEFORE UPDATE OR DELETE` trigger that raises unconditionally since
+`0007`, `0009` and `0013`, so the backfill drops the three triggers, writes, and
+recreates them. That is safe in a way it does not look: Postgres DDL is
+transactional and a migration is one transaction, so no session ever observes
+the guards missing, and the write only ever touches `card_id` — no card changes
+what it says. The functions are never dropped, only the triggers, so those three
+migrations remain the single definition of what a guard says.
+
+**An empty database cannot exercise any of this.** With nothing released there
+are no pairs to link and the backfill returns before it writes, so a green test
+suite and a clean fresh install say nothing about it. The coverage that counts
+releases a term and then walks it back to the pre-`0016` shape before running the
+migration's own `backfill()` against it — `TheBackfillMeetsTheAppendOnlyGuardsTests`
+for a database whose cards exist and only need linking, and
+`TheBackfillInventsTheMissingCardsTests` for the case any school that has
+released anything actually has: frozen sections and no cards at all.
+
+**A migration's models carry fields, not methods, and that is the third bug this
+found.** `apps.get_model()` inside a `RunPython` hands back a model rebuilt from
+migration state, so `ClassGroup.__str__` is not on it and `str(class_group)`
+returns `ClassGroup object (3)` where the live model returns `JSS 1A`.
+`cards._card_for()` is right to use `str()`; the backfill beside it was not, and
+the difference is invisible to any test that hands the backfill
+`django.apps.apps` — it agrees with the code for a reason production does not
+share. The tests build the registry from `0017`'s own declared `dependencies`
+instead, which is the one Django passes. The same slip is what left `school_name`
+empty on every invented card.
+
+The rule that falls out of it: **inside a migration, read attributes, never call
+methods** — including `__str__` through `str()`, `f""` or `format()`.
+
 ## Known gap: assessment column order
 
 `Assessment` has no explicit print order and its `Meta.ordering` ends in `name`,

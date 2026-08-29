@@ -26,6 +26,24 @@ as they read *now*. That is not a copy at release — the release has already
 happened and the moment is gone — and it is the honest best available. Nothing
 downstream may treat a backfilled card's name as evidence of what was printed.
 
+## It has to switch the append-only guards off to do it
+
+`results_releasedtraitrating`, `results_releasedcomment` and
+`results_releasedsessionresult` each carry a `BEFORE UPDATE OR DELETE` trigger
+whose entire body is `RAISE EXCEPTION` — `0007`, `0009` and `0013`. Filling in
+`card_id` on rows that pre-date the column is an UPDATE, so without suspending
+them this migration cannot run at all on any database that has ever released a
+card. It fails at the first `bulk_update` with `restrict_violation`.
+
+**An empty database hides this completely**, which is why it is worth spelling
+out here: with no released rows there are no pairs to link, the backfill returns
+before it writes anything, and every test suite and every fresh install migrates
+cleanly. The only databases it breaks are the ones with results in them.
+
+The suspension is narrow and it is honest: this migration writes `card_id` and
+nothing else, so no card changes what it says. See `_suspend_append_only()` for
+why the drop is safe in a way it does not look.
+
 ## Reversing
 
 `0016` will drop the column, so this leaves the invented cards behind rather
@@ -37,6 +55,64 @@ table exists to refuse. Reversing is therefore not symmetric, deliberately.
 from django.db import migrations, models
 import django.db.models.deletion
 
+#: The three frozen tables this migration fills in, each with the append-only
+#: trigger that guards it and the function that trigger calls.
+#:
+#: `0007`, `0009` and `0013` each put a `BEFORE UPDATE OR DELETE` trigger on one
+#: of these tables whose whole body is `RAISE EXCEPTION` — a released card keeps
+#: saying what it said, and the database refuses any UPDATE rather than trusting
+#: the application not to try one. **This migration is the one legitimate
+#: exception**, and it is legitimate because it changes nothing a card says: it
+#: writes `card_id`, a column that did not exist until `0016`, onto rows that
+#: pre-date it. Every other column is left exactly as released.
+#:
+#: The functions are left alone and only the triggers are dropped and recreated,
+#: so the definitions here stay in step with `0007`, `0009` and `0013` without
+#: copying their bodies.
+APPEND_ONLY_GUARDS = (
+    (
+        "results_releasedtraitrating",
+        "results_frozen_ratings_append_only",
+        "results_frozen_ratings_are_append_only",
+    ),
+    (
+        "results_releasedcomment",
+        "results_frozen_comments_append_only",
+        "results_frozen_comments_are_append_only",
+    ),
+    (
+        "results_releasedsessionresult",
+        "results_frozen_sessions_append_only",
+        "results_frozen_sessions_are_append_only",
+    ),
+)
+
+
+def _suspend_append_only(cursor):
+    """Drop the three frozen-table triggers. Only ever with `_restore` after it.
+
+    Safe despite how it reads, and the reason is Postgres-specific: DDL is
+    transactional, and a Django migration runs inside one transaction. No other
+    session ever observes a moment when these triggers are missing — the drop
+    and the recreate commit together with the UPDATE between them, or none of
+    them do. Doing this as two sibling `RunSQL` operations around the
+    `RunPython` would be the same transaction and read more conventionally, but
+    it would let a later edit reorder the three; keeping them in one function
+    means the window cannot be widened by accident.
+    """
+    for table, trigger, _ in APPEND_ONLY_GUARDS:
+        cursor.execute(f"DROP TRIGGER IF EXISTS {trigger} ON {table};")
+
+
+def _restore_append_only(cursor):
+    """Put them back, pointing at the functions `0007`, `0009` and `0013` wrote."""
+    for table, trigger, function in APPEND_ONLY_GUARDS:
+        cursor.execute(
+            f"CREATE TRIGGER {trigger} "
+            f"BEFORE UPDATE OR DELETE ON {table} "
+            f"FOR EACH ROW EXECUTE FUNCTION {function}();"
+        )
+
 
 def backfill(apps, schema_editor):
     """One card per (sheet, student) that has any frozen section, then link them.
@@ -44,6 +120,10 @@ def backfill(apps, schema_editor):
     Ordered so the reads are cheap and the writes are two `bulk_create`-shaped
     passes rather than a query per row: a school with three years of releases
     behind it has hundreds of thousands of frozen ratings.
+
+    The linking pass runs with the three append-only triggers suspended, because
+    they refuse UPDATE unconditionally and linking is an UPDATE. The module
+    docstring has the argument for why that is allowed here.
     """
     ReleasedCard = apps.get_model("results", "ReleasedCard")
     ReleasedTraitRating = apps.get_model("results", "ReleasedTraitRating")
@@ -51,6 +131,7 @@ def backfill(apps, schema_editor):
     ReleasedSessionResult = apps.get_model("results", "ReleasedSessionResult")
     ResultSheet = apps.get_model("results", "ResultSheet")
     Membership = apps.get_model("accounts", "Membership")
+    School = apps.get_model("schools", "School")
 
     tables = (ReleasedTraitRating, ReleasedComment, ReleasedSessionResult)
 
@@ -80,6 +161,20 @@ def backfill(apps, schema_editor):
         ).values("pk", "user__full_name")
     }
 
+    # The school this schema belongs to, read once. `cards._school_name()` does
+    # the same lookup at release; it is not imported here because a data
+    # migration that calls application code starts failing the day that code
+    # moves, and the whole point of `apps.get_model` is to be immune to that.
+    #
+    # Defensive about finding nothing rather than raising. A schema with no
+    # `School` row is not a state this migration can fix, and refusing to
+    # migrate over it would block the deploy on a row that has nothing to do
+    # with report cards. An empty name is what `0016` would have left anyway.
+    school = School.objects.filter(
+        schema_name=schema_editor.connection.schema_name
+    ).first()
+    school_name = school.name if school else ""
+
     missing = []
     for sheet_id, student_id in sorted(pairs):
         if (sheet_id, student_id) in known:
@@ -100,8 +195,15 @@ def backfill(apps, schema_editor):
                 session=sheet.term.session,
                 term_name=sheet.term.name,
                 class_group_id=sheet.class_group_id,
-                class_group_name=str(sheet.class_group),
-                school_name="",
+                # `.name`, not `str(...)`. `cards._card_for()` uses `str()`
+                # and is right to: on the live model `ClassGroup.__str__`
+                # returns the name. The model here is not that model — a
+                # migration's models are rebuilt from migration state and carry
+                # fields, not methods — so `str()` here is
+                # `Model.__str__`, and every backfilled card in the country
+                # would have gone home saying `ClassGroup object (3)`.
+                class_group_name=sheet.class_group.name,
+                school_name=school_name,
                 student_name=names.get(student_id, ""),
             )
         )
@@ -113,18 +215,34 @@ def backfill(apps, schema_editor):
         (card.sheet_id, card.student_membership_id): card.pk
         for card in ReleasedCard.objects.filter(version=1)
     }
-    for table in tables:
-        rows = []
-        for row in table.objects.filter(card__isnull=True).only(
-            "id", "sheet_id", "student_membership_id"
-        ):
-            card_pk = known.get((row.sheet_id, row.student_membership_id))
-            if card_pk is None:
-                continue
-            row.card_id = card_pk
-            rows.append(row)
-        if rows:
-            table.objects.bulk_update(rows, ["card_id"], batch_size=500)
+
+    # Linking a frozen row to its card is an UPDATE, and all three of these
+    # tables refuse UPDATE outright — see `APPEND_ONLY_GUARDS`. Suspend the
+    # triggers for the width of these writes and put them straight back.
+    #
+    # Deliberately not wrapped in `try`/`finally`. The whole migration is one
+    # transaction, so a failure here rolls the `DROP TRIGGER` back with
+    # everything else and the guards are never really gone; a `finally` would
+    # only issue more SQL on an already-aborted transaction and replace the real
+    # error with "current transaction is aborted", which is the error that
+    # explains nothing.
+    with schema_editor.connection.cursor() as cursor:
+        _suspend_append_only(cursor)
+
+        for table in tables:
+            rows = []
+            for row in table.objects.filter(card__isnull=True).only(
+                "id", "sheet_id", "student_membership_id"
+            ):
+                card_pk = known.get((row.sheet_id, row.student_membership_id))
+                if card_pk is None:
+                    continue
+                row.card_id = card_pk
+                rows.append(row)
+            if rows:
+                table.objects.bulk_update(rows, ["card_id"], batch_size=500)
+
+        _restore_append_only(cursor)
 
 
 def leave_the_cards(apps, schema_editor):
@@ -136,6 +254,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("results", "0016_the_report_card_snapshot"),
         ("accounts", "0001_initial"),
+        ("schools", "0001_initial"),
     ]
 
     operations = [
