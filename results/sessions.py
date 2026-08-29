@@ -587,6 +587,14 @@ def freeze_for_release(sheet) -> int:
     session = sheet.term.session
     lines = _lines_for(roster, session)
 
+    # Every frozen row hangs off the card its release wrote. `cards` runs first
+    # inside this same transaction — see `services.release()` — so a card exists
+    # for every child on the roster. One answer to "did a card go home", not
+    # four; `ReleasedCard` has the argument.
+    from . import cards as cards_module
+
+    card_by_student = cards_module.cards_by_student(sheet)
+
     rows = []
     for student_id in roster:
         line = _weigh(lines[student_id], config, session)
@@ -600,6 +608,7 @@ def freeze_for_release(sheet) -> int:
         rows.append(
             ReleasedSessionResult(
                 sheet=sheet,
+                card=card_by_student.get(student_id),
                 student_membership_id=student_id,
                 session=session,
                 averaging=line.averaging,

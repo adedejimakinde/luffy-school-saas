@@ -738,9 +738,18 @@ def freeze_for_release(sheet) -> int:
     if not students:
         return 0
 
+    # Every frozen row hangs off the card its release wrote. `cards` runs first
+    # inside this same transaction — see `services.release()` — so a card exists
+    # for every child on the roster. One answer to "did a card go home", not
+    # four; `ReleasedCard` has the argument.
+    from . import cards as cards_module
+
+    card_by_student = cards_module.cards_by_student(sheet)
+
     rows = [
         ReleasedComment(
             sheet=sheet,
+            card=card_by_student.get(row.student_membership_id),
             student_membership_id=row.student_membership_id,
             author=row.author,
             body=row.body,

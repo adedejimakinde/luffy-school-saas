@@ -72,6 +72,7 @@ deliberately not signatures, and what breaks if a send-back is counted as one.
 
 from decimal import Decimal
 
+from academics.models import TermName
 from django.db import models
 from django.db.models import F, Q, Value
 
@@ -708,6 +709,19 @@ class ReleasedTraitRating(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    #: **Every frozen row hangs off the card it was frozen for.** Added by task
+    #: 3 and backfilled by migration `0017`. Before it there were four ways to
+    #: ask "did a card go home for this child?" — this table, two others, and a
+    #: placement join — and four answers to one question is the condition that
+    #: produced issue #27's guard reading the child's *current* class. There is
+    #: one answer now, and it is `ReleasedCard`.
+    #:
+    #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
+    #: backfill has to run between the two. **Required from `0017` onwards.**
+    card = models.ForeignKey(
+        "ReleasedCard", related_name="trait_ratings", on_delete=models.PROTECT
+    )
+
     class Meta:
         # Local columns, and total. The section order is decided by
         # `TraitGroup`'s declaration order in `ratings.card_sections()`, not by
@@ -988,6 +1002,19 @@ class ReleasedComment(models.Model):
     body = models.CharField(max_length=MAX_COMMENT_LENGTH)
 
     created_at = models.DateTimeField(auto_now_add=True)
+
+    #: **Every frozen row hangs off the card it was frozen for.** Added by task
+    #: 3 and backfilled by migration `0017`. Before it there were four ways to
+    #: ask "did a card go home for this child?" — this table, two others, and a
+    #: placement join — and four answers to one question is the condition that
+    #: produced issue #27's guard reading the child's *current* class. There is
+    #: one answer now, and it is `ReleasedCard`.
+    #:
+    #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
+    #: backfill has to run between the two. **Required from `0017` onwards.**
+    card = models.ForeignKey(
+        "ReleasedCard", related_name="comments", on_delete=models.PROTECT
+    )
 
     class Meta:
         # Local columns, and total. Print order is `CommentAuthor`'s declaration
@@ -1391,6 +1418,19 @@ class ReleasedSessionResult(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
 
+    #: **Every frozen row hangs off the card it was frozen for.** Added by task
+    #: 3 and backfilled by migration `0017`. Before it there were four ways to
+    #: ask "did a card go home for this child?" — this table, two others, and a
+    #: placement join — and four answers to one question is the condition that
+    #: produced issue #27's guard reading the child's *current* class. There is
+    #: one answer now, and it is `ReleasedCard`.
+    #:
+    #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
+    #: backfill has to run between the two. **Required from `0017` onwards.**
+    card = models.ForeignKey(
+        "ReleasedCard", related_name="session_results", on_delete=models.PROTECT
+    )
+
     class Meta:
         # Local columns only. `ResultSheet.Meta.ordering` names two relations
         # and has cost this codebase a three-table join in four separate
@@ -1723,3 +1763,460 @@ class GradeBand(models.Model):
 
     def __str__(self):
         return f"{self.letter} ({self.minimum} and above)"
+
+
+# ---------------------------------------------------------------------------
+# The report card snapshot: what one child's card said, at the moment it said it.
+#
+# Task 3, and the table everything else in this app keys off. `ReleasedCard` is
+# the **artefact** — the per-child record that a card went home — and the two
+# tables under it are what was printed on it. See `docs/cards.md`.
+# ---------------------------------------------------------------------------
+
+
+class CardsAreFrozenAtRelease(Exception):
+    """A frozen card, subject line or score was edited or deleted."""
+
+
+class ReleasedCard(models.Model):
+    """One child's report card, as it read at the moment it went home.
+
+    **This row is the artefact.** Every guard in this app that asks "has a card
+    gone home for this child?" keys off it, and the answer is one lookup rather
+    than four.
+
+    ## It is written unconditionally, and that is the whole point
+
+    One row for **every child on the roster at release**, inside the release
+    transaction, whatever else is or is not true: no marks, no ratings, the
+    conduct section switched off school-wide, no comments, nothing decided. A
+    card went home for that child, and this row is what says so.
+
+    That is a requirement rather than a convenience, and it was arrived at the
+    hard way. Issue #27's first draft needed to answer *has a card gone home for
+    this child?* and reasoned: the snapshot has not shipped, so nothing freezes
+    the marks, so there is no artefact to key on — therefore key on
+    `academics.ClassPlacement`. The premise was false: `ReleasedTraitRating`
+    already answered exactly that question. *"The marks are not frozen"* and
+    *"no artefact records the release"* are different claims and the first does
+    not imply the second.
+
+    Keying on placement instead cost a real guarantee. `ClassPlacement` holds one
+    group per child per term, so a mid-term move **rewrites** the row — the
+    record of where the child sat at release is destroyed, not superseded.
+    Release JSS 1A, move the child to JSS 3B whose sheet is an untouched draft,
+    and a released remark could be rewritten. The child who stayed put was
+    protected and the child who moved was not, on the same term, by the same
+    guard.
+
+    `0010` and `0011` fixed that by keying on the frozen rows. What was left was
+    a **per-school** hole rather than a per-child one: a school with the conduct
+    section off freezes nothing for anybody, so nothing recorded its releases at
+    all. Issues #31, #33 and #34 each arrived at this row from a different
+    direction. It closes that hole by being unconditional.
+
+    **The unconditional-ness is a property of the code, not of a constraint.**
+    No check can express "a row exists for every child on a roster this
+    transaction has already moved on from". It is held by
+    `cards.freeze_for_release()` and pinned by a test that releases a school
+    with everything switched off and no marks anywhere, and by the control that
+    shows that test failing when the write is made conditional.
+
+    ## Everything the card prints is copied here
+
+    Not joined to. A released card does not change, and every join out of this
+    row goes through something a school may legitimately edit next term — its
+    own name, the class's name, the child's name, the grading scale, the trait
+    list. `ReleasedTraitRating`'s docstring tabulates the same argument for
+    trait names; this is that argument applied to the rest of the page.
+
+    `student_name` and `school_name` are the two most easily missed, and both
+    reach a released card through `accounts`, which is a **shared** schema whose
+    rows change for reasons that have nothing to do with this school.
+
+    ## What is deliberately *not* frozen
+
+    **`class_average`.** Position is frozen and the class average is computed on
+    demand, and the asymmetry is deliberate rather than an oversight:
+
+    | | what it is a statement about |
+    | --- | --- |
+    | `position` | *this* child — where they came, which is fixed at release |
+    | class average | the other forty-four children |
+
+    Freeze the class average and one child's revision (task 8) leaves
+    forty-four unrevised cards asserting a number that disagrees with the
+    revised one — the school's-screen-versus-card disagreement this whole phase
+    exists to kill. Both are staff-only and neither prints on a parent's card,
+    so nothing about reproducibility is lost by computing it. Position cannot be
+    recomputed later without changing, because it depends on everybody else's
+    marks at the moment of release; the class average can, and should be.
+
+    **The promotion decision.** Read live from `PromotionDecision`, which is
+    append-only and already freezes its own inputs at decision time. A decision
+    usually does not exist at release, and the hazard that drives freezing
+    everything else — a later configuration edit reaching backwards — cannot
+    apply to a table nothing edits.
+
+    ## Which row is *the* card
+
+    There can be more than one, in two ways that compose:
+
+        two sheets, one term    release JSS 1A, move the child, release JSS 3B
+        two versions, one sheet a revision (task 8)
+
+    The card is the **earliest** `(created_at, id)` among `version=1` rows for
+    the term, and then the **highest version** of that sheet. Task 9 settled the
+    first half — a released card keeps saying what it said, and a later release
+    cannot reach backwards into one already in a parent's hand. `cards.card_for()`
+    orders explicitly and never leaves it to `Meta.ordering`, because a "which
+    card is this" that resolves arbitrarily between two rows is one that changes
+    when nothing changed.
+    """
+
+    sheet = models.ForeignKey(
+        ResultSheet,
+        related_name="released_cards",
+        # PROTECT, like every frozen table here: the sheet whose release wrote
+        # this row is not one to delete from under it.
+        on_delete=models.PROTECT,
+    )
+
+    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+
+    #: A real key rather than a reach through `sheet.term`, because the question
+    #: this table exists to answer is *has a card gone home for this (child,
+    #: term)?* and a guard asking it should not need a join to find out.
+    term = models.ForeignKey(
+        "academics.Term", related_name="released_cards", on_delete=models.PROTECT
+    )
+
+    #: Task 8's. `1` for a first release; a revision writes a new row at the
+    #: next number and both stand. Here from the start so that task 8 needs no
+    #: migration on the two content tables — a revision is a new parent row.
+    version = models.PositiveSmallIntegerField(default=1)
+
+    # -- copied, because every one of these is editable next term ------------
+
+    session = models.CharField(max_length=9)
+    term_name = models.CharField(max_length=16, choices=TermName)
+    class_group = models.ForeignKey(
+        "academics.ClassGroup", related_name="released_cards", on_delete=models.PROTECT
+    )
+    class_group_name = models.CharField(max_length=64)
+    school_name = models.CharField(max_length=255)
+    #: From a **shared** schema. A name corrected in `accounts` next year must
+    #: not rewrite the card a parent is holding.
+    student_name = models.CharField(max_length=255)
+
+    # -- the child's own numbers ---------------------------------------------
+
+    total_scored = models.PositiveIntegerField(default=0)
+    total_available = models.PositiveIntegerField(default=0)
+
+    #: The child's **own** average across the subjects they were marked in — not
+    #: a class average, and not total-scored-over-total-available. See
+    #: `positions`' module docstring for the worked example separating the two
+    #: readings. Null where they were marked in nothing, which prints blank.
+    own_average = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    #: **Staff-only.** Never on a parent card and never in a parent- or
+    #: student-facing payload — excluded at the serializer, not merely at the
+    #: template, because a field omitted from the page but sitting in the JSON
+    #: has not been omitted. Null where the child had no marks to be ranked on.
+    position = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    #: How many children the position was out of. Staff-only for the same
+    #: reason, and stored because "4th" means nothing without it.
+    roster_size = models.PositiveSmallIntegerField(default=0)
+
+    # -- attendance: nullable until Phase 2, and blank on the card ------------
+
+    days_present = models.PositiveSmallIntegerField(null=True, blank=True)
+    days_absent = models.PositiveSmallIntegerField(null=True, blank=True)
+    days_open = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    # -- the release itself ---------------------------------------------------
+
+    #: A `User` id, not a `Membership` id — `services.release()` stamps the
+    #: actor and the actor is a user. `PromotionDecision.decided_by_id` carries
+    #: the same warning: both are small dense integers, so a screen resolving
+    #: the wrong one names an unrelated person rather than failing.
+    released_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns only. `ResultSheet.Meta.ordering` names two relations and
+        # has cost this codebase a three-table join in four places.
+        ordering = ["sheet_id", "student_membership_id", "version", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["sheet", "student_membership_id", "version"],
+                name="one_card_per_student_per_release",
+            ),
+            models.CheckConstraint(
+                condition=Q(version__gte=1), name="a_card_version_starts_at_one"
+            ),
+            models.CheckConstraint(
+                condition=Q(own_average__isnull=True)
+                | (Q(own_average__gte=0) & Q(own_average__lte=100)),
+                name="a_card_average_is_a_percentage",
+            ),
+            # A total scored above the total available is a mark scheme that
+            # does not add up, and every percentage taken of it is wrong in a
+            # way that still looks like a percentage.
+            models.CheckConstraint(
+                condition=Q(total_scored__lte=F("total_available")),
+                name="a_card_cannot_score_above_what_was_available",
+            ),
+            # An average with nothing behind it is the arithmetic having
+            # invented a number; marks with no average is one it dropped.
+            models.CheckConstraint(
+                condition=(
+                    Q(own_average__isnull=False, total_available__gt=0)
+                    | Q(own_average__isnull=True, total_available=0)
+                ),
+                name="a_card_average_has_marks_behind_it",
+            ),
+        ]
+
+    def __str__(self):
+        shown = "—" if self.own_average is None else f"{self.own_average}"
+        return f"{self.student_name}, {self.class_group_name} {self.term_name}: {shown}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise CardsAreFrozenAtRelease(
+                f"Card {self.pk} has been released. It cannot be changed — "
+                f"correcting a released result is a revision, which makes a new "
+                f"version and leaves this one standing."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CardsAreFrozenAtRelease(
+            f"Card {self.pk} cannot be deleted. The card has to keep saying what "
+            f"it said."
+        )
+
+
+class ReleasedSubjectResult(models.Model):
+    """One subject line of one card: "Mathematics 58/70, 82.86%, A1, 3rd".
+
+    One row per (card, subject) for **every subject the class was marked in**,
+    including the ones this child has no mark in — the frozen thing is the
+    *line*, and "this subject was on the card and this child had no mark in it"
+    is something the card has to go on saying. `ReleasedTraitRating` writes a
+    row for every visible trait on the same argument.
+
+    ## The grade letter is copied, and a renderer must never re-derive it
+
+    `grade_letter` and `grade_remark` are copied from `results.grades` at
+    release. **Nothing may call `grades.grade_for()` on a frozen percentage.**
+
+    The hazard is the one `GradeBand`'s own docstring names: a school replacing
+    its scale — an ordinary Tuesday-afternoon act — would otherwise rewrite the
+    letters on every card already in a parent's hand, silently, with the
+    percentages beside them unchanged. A card that said B2 would begin saying B3
+    with no record that it had ever said anything else.
+
+    A blank `grade_letter` beside a **present** percentage is legal and means
+    the scale had no band covering that mark at release. It is not the same as a
+    blank beside a null percentage, which is a subject nobody marked, and the
+    constraint below keeps the two apart.
+    """
+
+    card = models.ForeignKey(
+        ReleasedCard, related_name="subject_results", on_delete=models.PROTECT
+    )
+
+    subject = models.ForeignKey(
+        "gradebook.Subject", related_name="released_results", on_delete=models.PROTECT
+    )
+
+    #: Copied. A subject renamed or retired next session must not relabel a line
+    #: on a card that has gone home. The key stays for provenance, and answers
+    #: "which subject is this line, today".
+    subject_name = models.CharField(max_length=100)
+    subject_code = models.CharField(max_length=16)
+
+    #: Where it prints, smallest first. Frozen because the order is part of the
+    #: page: a school reordering its subject list must not reshuffle a card.
+    position = models.PositiveSmallIntegerField()
+
+    total_scored = models.PositiveIntegerField(default=0)
+    #: What this child was actually assessed on in this subject, not the
+    #: subject's full mark scheme — a child who missed a CA has a smaller
+    #: denominator. See `positions._subject_totals()`.
+    total_available = models.PositiveIntegerField(default=0)
+
+    #: Null where the child has no mark in this subject: the line printed blank,
+    #: and the frozen card has to print it blank again. Not zero — a zero is a
+    #: failing mark the child never earned.
+    percentage = models.DecimalField(
+        max_digits=5, decimal_places=2, null=True, blank=True
+    )
+
+    #: Copied from the scale in force at release. Blank beside a present
+    #: percentage means no band covered that mark.
+    grade_letter = models.CharField(max_length=4, blank=True)
+    grade_remark = models.CharField(max_length=32, blank=True)
+
+    #: **Staff-only**, like `ReleasedCard.position`. Null where unmarked.
+    subject_position = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["card_id", "position", "subject_name", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["card", "subject"], name="one_subject_line_per_card"
+            ),
+            models.CheckConstraint(
+                condition=Q(percentage__isnull=True)
+                | (Q(percentage__gte=0) & Q(percentage__lte=100)),
+                name="a_subject_percentage_is_a_percentage",
+            ),
+            models.CheckConstraint(
+                condition=Q(total_scored__lte=F("total_available")),
+                name="a_subject_cannot_score_above_what_was_available",
+            ),
+            # A percentage exactly when there were marks to take one of.
+            models.CheckConstraint(
+                condition=(
+                    Q(percentage__isnull=False, total_available__gt=0)
+                    | Q(percentage__isnull=True, total_available=0)
+                ),
+                name="a_subject_percentage_has_marks_behind_it",
+            ),
+            # An unmarked line carries no grade and no position. A *marked* line
+            # may still carry a blank letter — that is a scale with no band for
+            # the mark, which is a different fact.
+            models.CheckConstraint(
+                condition=Q(percentage__isnull=False)
+                | Q(grade_letter="", grade_remark="", subject_position__isnull=True),
+                name="an_unmarked_subject_line_carries_no_grade",
+            ),
+        ]
+
+    def __str__(self):
+        shown = "—" if self.percentage is None else f"{self.percentage}"
+        return f"{self.subject_name}: {shown} {self.grade_letter}".strip()
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise CardsAreFrozenAtRelease(
+                f"Frozen subject line {self.pk} is part of a card that has been released. It "
+                f"cannot be changed — correcting a released result is a revision, "
+                f"which makes a new version and leaves this one standing."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CardsAreFrozenAtRelease(
+            f"Frozen subject line {self.pk} cannot be deleted. The card has to keep saying "
+            f"what it said."
+        )
+
+
+
+class ReleasedAssessmentScore(models.Model):
+    """One mark behind one subject line: "First CA, 18/20".
+
+    The finest grain on the card, and the columns a Nigerian report card prints
+    across before the total: each CA, then the exam. One row per (card,
+    assessment) for every assessment of every subject the class was marked in,
+    **including the ones this child has no score for** — a blank cell is part of
+    the line and has to go on being blank.
+
+    ## Rows rather than a JSON column on the subject line
+
+    A class of forty-five with ten subjects and three assessments each writes
+    about 1,350 of these per release. That is the deliberate trade:
+    `ReleasedTraitRating`'s docstring already made it once — one table means a
+    released card is exactly "these rows, in this order", which is a property
+    that can be looked at, indexed, and asserted against. A JSON blob on the
+    subject row is a second shape that can disagree with the columns beside it,
+    and nothing would notice.
+
+    The cost is paid on the read path instead, where it is cheap: everything for
+    a card is fetched by `card_id` in a bounded number of queries. See
+    `cards.card_lines()`.
+
+    ## The column order is creation order, and `Assessment` has no better answer
+
+    There is no explicit print order on `Assessment`, and its `Meta.ordering`
+    ends in `name` — which is alphabetical, so a card would print "Exam, First
+    CA, Second CA". Schools create assessments in the order they are sat, so the
+    freeze orders by `(subject name, assessment id)` and stores the result.
+    That is closer to right than alphabetical and is still a guess; the fix is a
+    `position` field on `Assessment`, filed rather than smuggled into this PR.
+    """
+
+    card = models.ForeignKey(
+        ReleasedCard, related_name="assessment_scores", on_delete=models.PROTECT
+    )
+
+    #: Denormalised off the assessment so the card's cells can be grouped under
+    #: their subject line without a join out to `gradebook`.
+    subject = models.ForeignKey(
+        "gradebook.Subject", related_name="released_scores", on_delete=models.PROTECT
+    )
+
+    assessment = models.ForeignKey(
+        "gradebook.Assessment", related_name="released_scores", on_delete=models.PROTECT
+    )
+
+    #: Copied. An assessment renamed or re-weighted next term must not relabel a
+    #: column on a card that has gone home.
+    assessment_name = models.CharField(max_length=64)
+    max_score = models.PositiveSmallIntegerField()
+
+    position = models.PositiveSmallIntegerField()
+
+    #: Null where the child has no score for this assessment. The cell printed
+    #: blank. Not zero.
+    score = models.PositiveSmallIntegerField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["card_id", "position", "assessment_name", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["card", "assessment"], name="one_score_cell_per_card"
+            ),
+            models.CheckConstraint(
+                condition=Q(max_score__gte=1),
+                name="a_frozen_assessment_is_worth_at_least_one_mark",
+            ),
+            # A mark above the paper's own maximum is a percentage over 100 on
+            # the line above it.
+            models.CheckConstraint(
+                condition=Q(score__isnull=True) | Q(score__lte=F("max_score")),
+                name="a_frozen_score_fits_its_paper",
+            ),
+        ]
+
+    def __str__(self):
+        shown = "—" if self.score is None else f"{self.score}"
+        return f"{self.assessment_name}: {shown}/{self.max_score}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise CardsAreFrozenAtRelease(
+                f"Frozen score cell {self.pk} is part of a card that has been released. It "
+                f"cannot be changed — correcting a released result is a revision, "
+                f"which makes a new version and leaves this one standing."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CardsAreFrozenAtRelease(
+            f"Frozen score cell {self.pk} cannot be deleted. The card has to keep saying "
+            f"what it said."
+        )
+
