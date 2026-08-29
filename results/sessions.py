@@ -552,7 +552,7 @@ def session_line(membership, session, *, config=None) -> SessionLine:
 # ---------------------------------------------------------------------------
 
 
-def freeze_for_release(sheet) -> int:
+def freeze_for_release(sheet, card_by_student) -> int:
     """Copy this class's session lines as they read now. Returns rows written.
 
     Called by `results.services.release()` **inside the transaction that writes
@@ -575,11 +575,15 @@ def freeze_for_release(sheet) -> int:
     every visible trait including the ones nobody rated — what is being frozen
     is the *line*, and "there was nothing here" is a thing the line has to be
     able to go on saying.
+
+    `card_by_student` is `cards.freeze_for_release()`'s return value, and **it is
+    the roster** — see #43 and the note on `ratings.freeze_for_release()`. One
+    read decides who is on this release; a second one is a second answer.
     """
     if sheet.term.name != TermName.THIRD:
         return 0
 
-    roster = positions.roster_ids(sheet.class_group, sheet.term)
+    roster = list(card_by_student)
     if not roster:
         return 0
 
@@ -591,15 +595,7 @@ def freeze_for_release(sheet) -> int:
     # inside this same transaction — see `services.release()` — so a card exists
     # for every child on the roster. One answer to "did a card go home", not
     # four; `ReleasedCard` has the argument.
-    #
-    # "Every child on the roster" is read twice, though, and issue #43 is the
-    # gap between the two reads: the lock is on the `ResultSheet` row and not on
-    # `ClassPlacement`, so a placement committed between them leaves a child
-    # here that `cards` never saw. `.get()` then returns `None` and the NOT NULL
-    # on `card_id` aborts the release for the whole class.
     from . import cards as cards_module
-
-    card_by_student = cards_module.cards_by_student(sheet)
 
     rows = []
     for student_id in roster:
@@ -614,7 +610,7 @@ def freeze_for_release(sheet) -> int:
         rows.append(
             ReleasedSessionResult(
                 sheet=sheet,
-                card=card_by_student.get(student_id),
+                card=cards_module.the_card_for(card_by_student, student_id),
                 student_membership_id=student_id,
                 session=session,
                 averaging=line.averaging,

@@ -721,12 +721,16 @@ def card_comments(membership_id, class_group, term) -> list[CommentLine]:
 # ---------------------------------------------------------------------------
 
 
-def freeze_for_release(sheet) -> int:
+def freeze_for_release(sheet, card_by_student) -> int:
     """Copy this class's remarks as they read now. Returns rows written.
 
     Called by `results.services.release()` **inside the transaction that writes
     the release row**, so a sheet that says `released` always has the card that
     was released sitting behind it.
+
+    `card_by_student` is `cards.freeze_for_release()`'s return value, and **it is
+    the roster** — see #43 and the note on `ratings.freeze_for_release()`. One
+    read decides who is on this release; a second one is a second answer.
 
     A row per remark that exists, and **no row where a remark does not** — the
     difference from the frozen ratings, which record even the traits nobody
@@ -734,7 +738,7 @@ def freeze_for_release(sheet) -> int:
     list to preserve: two signatories, fixed in code, and an absent remark
     prints as absent whether the card is live or frozen.
     """
-    students = positions.roster_ids(sheet.class_group, sheet.term)
+    students = list(card_by_student)
     if not students:
         return 0
 
@@ -742,20 +746,14 @@ def freeze_for_release(sheet) -> int:
     # inside this same transaction — see `services.release()` — so a card exists
     # for every child on the roster. One answer to "did a card go home", not
     # four; `ReleasedCard` has the argument.
-    #
-    # "Every child on the roster" is read twice, though, and issue #43 is the
-    # gap between the two reads: the lock is on the `ResultSheet` row and not on
-    # `ClassPlacement`, so a placement committed between them leaves a child
-    # here that `cards` never saw. `.get()` then returns `None` and the NOT NULL
-    # on `card_id` aborts the release for the whole class.
     from . import cards as cards_module
-
-    card_by_student = cards_module.cards_by_student(sheet)
 
     rows = [
         ReleasedComment(
             sheet=sheet,
-            card=card_by_student.get(row.student_membership_id),
+            card=cards_module.the_card_for(
+                card_by_student, row.student_membership_id
+            ),
             student_membership_id=row.student_membership_id,
             author=row.author,
             body=row.body,

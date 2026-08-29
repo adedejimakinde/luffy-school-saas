@@ -720,11 +720,20 @@ def release(sheet, actor):
         the conduct section off, no marks and nothing decided. That is the
         guarantee issues #31, #33 and #34 all asked for, and no constraint can
         hold it — see `results.cards`.
+
+        **And it returns the roster, which the other three then use.** They each
+        used to read `positions.roster_ids()` for themselves, so a release read
+        the roster four times. The lock `_move()` holds is on the `ResultSheet`
+        row and reaches no further, and under READ COMMITTED every statement here
+        takes a fresh snapshot — so a placement committed by the office between
+        the first read and the second put a child in the conduct section who had
+        no card, and the release died on a NOT NULL naming `card_id`. Issue #43.
+        One read now, and everything frozen agrees about who was on this release.
         """
-        cards.freeze_for_release(locked, by=actor)
-        ratings.freeze_for_release(locked)
-        comments.freeze_for_release(locked)
-        sessions.freeze_for_release(locked)
+        card_by_student = cards.freeze_for_release(locked, by=actor)
+        ratings.freeze_for_release(locked, card_by_student)
+        comments.freeze_for_release(locked, card_by_student)
+        sessions.freeze_for_release(locked, card_by_student)
 
     return _move(
         sheet,
