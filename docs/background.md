@@ -55,11 +55,34 @@ Three consequences worth stating:
 - **An unknown schema is `UnknownSchool`, raised before the body.** A typo, a
   deleted school, a message that has outlived the school it names. Not retried:
   a schema that does not exist now will not exist in sixty seconds.
-- **`"public"` is refused by construction.** No `School` row carries that schema
-  name, so a task written for a school cannot be pointed at the portal.
-  Platform-wide work is an ordinary `@shared_task` with no base and no schema
-  argument — which is also the control test in `test_background.py`, showing
-  what every task would do if the base class were doing nothing.
+- **`"public"` is refused by a line of code, and the first draft of this page
+  said "by construction", which was wrong.** The claim was that no `School` row
+  carries that schema name, so the portal could not be reached. This codebase
+  creates a `School(name="Portal", schema_name="public")` in four of its own
+  test modules, and `results.services.school_on_this_connection()` had already
+  written down why that matters: where the row exists, the lookup *succeeds* and
+  hands back the portal, so a task pointed at `"public"` ran its body on the
+  public schema — the silent platform-wide write of the table above, reached
+  through the guard rather than around it. `school_for()` now refuses the portal
+  before it queries. Platform-wide work is an ordinary `@shared_task` with no
+  base and no schema argument — which is also the control test in
+  `test_background.py`, showing what every task would do if the base class were
+  doing nothing.
+- **The handlers run inside the school too, not only the body.** Celery calls
+  `before_start` before the traced call and `on_success` / `on_retry` /
+  `on_failure` / `after_return` after it, all outside the `with` block
+  `__call__` opens. A task that records its own failure — exactly what task 7's
+  PDF job wants — would write that record on `public`.
+
+  **Overriding those five on the base class does not fix it**, which is what the
+  first attempt did. The tracer calls the *most derived* method, so a subclass's
+  `on_failure` runs its own body to completion before its `super()` call reaches
+  any context manager — the guard sits behind the line it exists to protect. So
+  `__init_subclass__` *wraps* whatever handlers a subclass brings, by definition
+  or by mixin, and the school is cached on `self.request` rather than on `self`,
+  because a worker reuses one task instance across messages. The control test
+  puts the identical handler bodies on Celery's own base and watches them record
+  `public`.
 - **The school is looked up on `public` explicitly**, not from wherever the last
   job left the connection. A worker reuses its connection between jobs.
 
@@ -101,11 +124,19 @@ and the prefetch count, which no environment variable reaches.
 - **JSON only.** The worker can reach every school's schema; `pickle` in
   `accept_content` would make anybody who can write to the broker able to run
   code inside it.
-- **Acknowledge late, prefetch one.** A worker killed mid-render — a deploy, an
-  OOM kill — leaves the job on the queue instead of dropping it. The price is
-  that a task must be safe to run twice, which "render this frozen snapshot"
-  is, because the snapshot cannot have changed. A task that is *not* idempotent
-  must say so in its docstring.
+- **Acknowledge late, prefetch one — and two more switches without which that
+  sentence is not true.** `acks_late` alone does not survive the case it is
+  named for: when the *child process* is killed by a signal, which is what an
+  OOM kill and most deploy stops actually do, Celery acknowledges the message
+  anyway and marks the task `WorkerLostError`. `task_reject_on_worker_lost` is
+  what returns it to the queue. And Redis has no broker-side notion of an
+  unacknowledged delivery — kombu emulates one on a timer whose default is 3600
+  seconds, so "another worker picks it up" would mean a parent waiting an hour;
+  `visibility_timeout` is 300, which must stay comfortably above task 7's
+  measured render or a job still running is redelivered alongside itself. The
+  price of all three is that a task must be safe to run twice, which "render
+  this frozen snapshot" is, because the snapshot cannot have changed. A task
+  that is *not* idempotent must say so in its docstring.
 
 **No time limits and no retry policy.** Both want a measurement rather than a
 guess, and task 7 is where the measurement happens — 45 cards, timed.
@@ -137,5 +168,9 @@ celery -A celery_app worker --loglevel=info
 ```
 
 `BrokerConnectivityTests` skips, with a message naming the URL, where no broker
-is running. CI runs a Redis service so that it does not skip there — a broker
-nothing can reach is the failure with no other symptom.
+is running — that is a developer's machine before `docker compose up`, and not
+a fault. **Under `CI` it fails instead**, because a broker nothing can reach is
+the failure with no other symptom, and a skip hands that same silence back: a
+redis service that fails to start, a broken image tag or a wrong port in
+`tests.yml` would every one of them have gone green, since `manage.py test` does
+not fail on skips.

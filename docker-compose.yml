@@ -56,8 +56,23 @@ services:
     volumes:
       - .:/workspace:cached
     working_dir: /workspace
-    command: sh -c "pip install --quiet --root-user-action=ignore -r requirements.txt && celery -A celery_app worker --loglevel=info"
-    environment: *django-environment
+    # `exec` on the celery line, and it is load-bearing rather than style.
+    # Without it the shell stays PID 1 and celery is its child, so the SIGTERM
+    # that `docker compose stop|restart|down` sends to PID 1 never reaches the
+    # worker: compose waits out its grace period and then SIGKILLs the whole
+    # container mid-render. That drops the job on an ordinary restart — the
+    # exact case CELERY_TASK_ACKS_LATE and CELERY_TASK_REJECT_ON_WORKER_LOST
+    # exist to survive, defeated by the process tree in front of them. `exec`
+    # replaces the shell, so celery *is* PID 1 and warm-shuts-down.
+    command: sh -c "pip install --quiet --root-user-action=ignore -r requirements.txt && exec celery -A celery_app worker --loglevel=info"
+    environment:
+      <<: *django-environment
+      # This container runs as root (the base image sets no USER) against a
+      # bind mount owned by uid 1000, so any bytecode it writes lands in the
+      # working tree as root-owned `__pycache__` that the `vscode` user then
+      # cannot clean up. The worker gains nothing from caching bytecode into a
+      # mount that is rebuilt from the host anyway.
+      PYTHONDONTWRITEBYTECODE: "1"
     restart: unless-stopped
     depends_on:
       db:

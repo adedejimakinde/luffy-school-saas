@@ -469,8 +469,13 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
 #: answer in a second place, in a key that expires, and make a task's success
 #: something the broker remembers rather than something the database does.
 #:
-#: Left overridable because `flower` and any other operational tool that wants
-#: to watch task states needs one, and turning it on is a deployment's call.
+#: Turning it on is a deployment's call — `flower` and any other tool that
+#: watches task states needs one — and **the switch is the environment variable
+#: rather than this line.** Celery reads `CELERY_RESULT_BACKEND` from the
+#: environment itself and that value outranks anything configured here, so this
+#: assignment cannot override a set variable and evaluates to `None` when the
+#: variable is unset, which is already the default. It is kept because it is
+#: where a reader looks for the decision, not because it is the mechanism.
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND") or None
 
 #: JSON only, in both directions. Celery 5 already defaults to this, and it is
@@ -493,6 +498,30 @@ CELERY_ENABLE_UTC = True
 #: the same bytes over the first. A task that is *not* idempotent must not be
 #: written under this setting without saying so in its docstring.
 CELERY_TASK_ACKS_LATE = True
+
+#: **`acks_late` alone does not deliver the sentence above, and this is the
+#: half that makes it true.** When the *child process* running a task is killed
+#: by a signal — which is what an OOM kill and most deploy stops actually do —
+#: Celery acknowledges the message anyway, marks the task `WorkerLostError`, and
+#: the job is gone. `task_reject_on_worker_lost` is what sends it back to the
+#: queue instead. It is a separate switch precisely because redelivering a task
+#: whose process died is only safe when the task is idempotent, which is the
+#: condition already stated above.
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+#: The other half. Redis has no broker-side notion of an unacknowledged
+#: delivery, so kombu emulates one: a message reserved and not acked comes back
+#: only after `visibility_timeout`, whose default is 3600 seconds. With that
+#: default a parent waiting for a re-rendered card waits an hour, which is not
+#: "another worker picks it up" in any sense a school would recognise. Five
+#: minutes is longer than task 7's measured render by a wide margin and short
+#: enough to be a retry rather than an outage.
+#:
+#: It must stay comfortably *above* the longest task runtime: a task still
+#: running when its visibility timeout expires is redelivered to a second
+#: worker while the first is still going, which is the duplicate-execution
+#: failure the idempotence rule above is what saves us from.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 300}
 
 #: With `acks_late` on, a worker that reserved ten long jobs and died would
 #: hand all ten back at once. One at a time, so a redelivery is one job.

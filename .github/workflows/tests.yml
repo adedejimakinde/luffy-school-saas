@@ -79,12 +79,16 @@ jobs:
       # these the package installs and every import of it raises OSError — so
       # the suite would fail on the PDF tests with a message about a missing
       # shared library, a long way from the requirements file that asked for it.
-      # The same list as .devcontainer/Dockerfile, which says more about why.
+      # The same WeasyPrint list as .devcontainer/Dockerfile, which says more
+      # about why. That file installs `postgresql-client` alongside these and
+      # this one deliberately does not: the client is for reaching the database
+      # by hand from a devcontainer shell, and CI talks to the `postgres`
+      # service through psycopg2. Everything WeasyPrint needs is in both.
       - name: WeasyPrint system libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fonts-dejavu-core
+            libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libffi8 fonts-dejavu-core
 
       - run: pip install -r requirements.txt
 
