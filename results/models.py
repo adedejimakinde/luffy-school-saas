@@ -729,15 +729,25 @@ class ReleasedTraitRating(models.Model):
         # agreeing the first time a group is added whose value sorts wrong.
         ordering = ["sheet_id", "student_membership_id", "position", "trait_name", "id"]
         # No declared index, for the reason `TraitRating.Meta` gives: the unique
-        # constraint below is already a btree on `(sheet, student_membership_id,
-        # trait)`, and the card read — every frozen line for one child on one
-        # sheet — is its leading pair. `freeze_for_release()` bulk-inserts about
-        # five hundred rows per class per release, and each index is paid for on
+        # constraint below is already a btree on `(card, trait)`, and the card
+        # read — every frozen line of one card — is its leading column. It used
+        # to lead with `(sheet, student_membership_id)`, which stopped being
+        # either correct or sufficient when task 8 made a second version of a
+        # card possible; see the constraint. `freeze_for_release()` bulk-inserts
+        # about five hundred rows per class per release, and each index is paid for on
         # every one of them.
         constraints = [
             models.UniqueConstraint(
-                fields=["sheet", "student_membership_id", "trait"],
-                name="one_frozen_rating_per_student_per_trait",
+                # **Keyed on the card, not on `(sheet, student)`.** Task 8:
+                # a revision writes a second `ReleasedCard` for the same child
+                # on the same sheet, and the old key refused its conduct
+                # section outright. Nothing is weakened by the swap —
+                # `one_card_per_student_per_release` already makes a card
+                # unique per `(sheet, student, version)`, so "one row per trait
+                # per card" still implies one per student per trait per
+                # release. It only stops being blind to which version.
+                fields=["card", "trait"],
+                name="one_frozen_rating_per_card_per_trait",
             ),
             models.CheckConstraint(
                 condition=Q(score__isnull=True)
@@ -1023,11 +1033,13 @@ class ReleasedComment(models.Model):
         # first time a signatory is added whose value sorts wrong.
         ordering = ["sheet_id", "student_membership_id", "author", "id"]
         # No declared index, for the reason above: the unique constraint below
-        # already leads with `(sheet, student_membership_id)`.
+        # already leads with `card`, which is how a card's remarks are read.
         constraints = [
             models.UniqueConstraint(
-                fields=["sheet", "student_membership_id", "author"],
-                name="one_frozen_comment_per_author_per_student",
+                # Keyed on the card — see `ReleasedTraitRating`'s constraint
+                # for the argument. One remark per signatory per *version*.
+                fields=["card", "author"],
+                name="one_frozen_comment_per_card_per_author",
             ),
             models.CheckConstraint(
                 condition=Q(body__regex=r"\S"),
@@ -1438,8 +1450,9 @@ class ReleasedSessionResult(models.Model):
         ordering = ["sheet_id", "student_membership_id", "id"]
         constraints = [
             models.UniqueConstraint(
-                fields=["sheet", "student_membership_id"],
-                name="one_frozen_session_line_per_student",
+                # Keyed on the card — see `ReleasedTraitRating`'s constraint.
+                fields=["card"],
+                name="one_frozen_session_line_per_card",
             ),
             _a_term_is_present_or_explained("first"),
             _a_term_is_present_or_explained("second"),
@@ -1892,8 +1905,17 @@ class ReleasedCard(models.Model):
     )
 
     #: Task 8's. `1` for a first release; a revision writes a new row at the
-    #: next number and both stand. Here from the start so that task 8 needs no
-    #: migration on the two content tables — a revision is a new parent row.
+    #: next number and both stand.
+    #:
+    #: It was added early on the reasoning that task 8 would then need no
+    #: migration on the content tables, since a revision is a new parent row
+    #: plus new children. **That was wrong, and task 8 found out.** Three of the
+    #: five content tables were unique on `(sheet, student_membership_id, ...)`
+    #: rather than on `card`, so a second version's conduct section, remarks and
+    #: session line were refused outright by keys that predate `card` existing.
+    #: They are keyed on the card now; see `ReleasedTraitRating.Meta`. The column
+    #: being here early still bought something — the parent table needed no
+    #: change — just not what the note claimed.
     version = models.PositiveSmallIntegerField(default=1)
 
     # -- copied, because every one of these is editable next term ------------
@@ -1985,6 +2007,30 @@ class ReleasedCard(models.Model):
     def __str__(self):
         shown = "—" if self.own_average is None else f"{self.own_average}"
         return f"{self.student_name}, {self.class_group_name} {self.term_name}: {shown}"
+
+    @property
+    def is_revised(self) -> bool:
+        """Whether this card prints "Revised". **The only source of that word.**
+
+        Task 8. A card is a revision when it supersedes an earlier version of
+        itself, which is exactly `version > 1` — and that is deliberately *not*
+        "a `CardRevision` row points at this card", although both are written by
+        the same act and it is tempting to read the audit instead.
+
+        The two disagree on one real case, and it is the case task 8 exists to
+        open. A child placed into a term after it was released (issue #31) gets
+        her first card **from the revision path**, at version 1, with a
+        `CardRevision` row recording who gave it to her and why. Keying on the
+        audit row would stamp "Revised" across the only card she has ever been
+        given, telling her family a correction was made to something they never
+        received. Keying on the version says what is true: this is her card.
+
+        On the row rather than through a join, because task 7's PDF job walks
+        forty-five of these and a join per card is forty-five round trips inside
+        a Celery task. `card_api` and the renderer both read this property, so
+        there is one place that decides and no second opinion to drift from it.
+        """
+        return self.version > 1
 
     def save(self, *args, **kwargs):
         if self.pk is not None and not self._state.adding:
@@ -2220,3 +2266,121 @@ class ReleasedAssessmentScore(models.Model):
             f"what it said."
         )
 
+
+
+class RevisionsAreAppendOnly(Exception):
+    """Something tried to edit or delete the record of a revision."""
+
+
+class CardRevision(models.Model):
+    """Who reissued a released card, when, and why. One row per new version.
+
+    Task 8. `ReleasedCard` is append-only, so a correction to a card that has
+    gone home is not an edit — it is a **new version**, and both stand. This is
+    the row that says a person decided to make one, which the card itself cannot
+    say: `version = 2` records that a second card exists, not who asked for it or
+    what was wrong with the first.
+
+    ## Why the reason is required rather than nice to have
+
+    A revision is the one act on this platform that changes what a family has
+    already been told. `ResultSheetTransition` makes a send-back carry its reason
+    for the same argument one step earlier in the chain, and the same argument
+    holds harder here, because by this point the wrong number is not on a screen
+    in the office — it is on paper in somebody's hand. A revision with no stated
+    reason is indistinguishable, six months later, from a mistake.
+
+    ## `previous_card` is nullable, and the null is not an absence of care
+
+    A revision normally supersedes a card: `previous_card` is the version this
+    one replaces, and the pair is the whole audit. But the revision path is also
+    how a child **placed into a term after it was released** is finally given a
+    card at all — issue #31, and issue #47's dead end reached by another road.
+    That child's card is a first version superseding nothing, and forcing a
+    `previous_card` there would mean either inventing a row that never existed or
+    refusing her a card. The null says "there was nothing before this", which is
+    the fact.
+
+    It is also why `ReleasedCard.is_revised` reads `version > 1` rather than the
+    existence of a row here: her card carries a `CardRevision` and must not
+    print "Revised".
+
+    ## Two ways in, and only one of them is a school's own act
+
+    `revised_by_id` is a `User` id, like `ReleasedCard.released_by_id` and
+    `PromotionDecision.decided_by_id` — and it carries the same warning all three
+    do: these are small dense integers, so a screen resolving one against the
+    wrong table names an unrelated person rather than failing.
+
+    `by_platform_staff` separates the principal's revision from the one taken by
+    somebody at this platform on a school's behalf. That path exists because a
+    school locked out of its own correction has no other recourse, and it is
+    recorded as a different thing rather than as a principal-shaped act, because
+    a school reading its own audit should never be told that its principal did
+    something its principal did not do.
+    """
+
+    #: The version this revision produced. `OneToOne` because a card is made by
+    #: exactly one act; two rows pointing at one card would be two answers to
+    #: "why does this exist".
+    card = models.OneToOneField(
+        ReleasedCard, related_name="revision", on_delete=models.PROTECT
+    )
+
+    #: The version it supersedes, or null where it supersedes nothing — see the
+    #: docstring. `PROTECT` like every other reach into a frozen table.
+    previous_card = models.ForeignKey(
+        ReleasedCard,
+        related_name="superseded_by",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+
+    reason = models.TextField()
+
+    #: A `User` id, not a `Membership` id. See the docstring.
+    revised_by_id = models.PositiveBigIntegerField()
+
+    by_platform_staff = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns only, for the reason `ReleasedCard.Meta` gives.
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            # A blank reason is the same as no reason, and `TextField` accepts
+            # both. `ResultSheetTransition` guards its send-back reason the same
+            # way and for the same reason.
+            models.CheckConstraint(
+                condition=Q(reason__regex=r"\S"), name="a_revision_says_why"
+            ),
+            # A card cannot supersede itself. Cheap to state, and the shape of
+            # bug that produces it — passing the new card where the old one was
+            # meant — is silent otherwise.
+            models.CheckConstraint(
+                condition=Q(previous_card__isnull=True)
+                | ~Q(previous_card=F("card")),
+                name="a_revision_supersedes_a_different_card",
+            ),
+        ]
+
+    def __str__(self):
+        who = "platform staff" if self.by_platform_staff else "the school"
+        return f"v{self.card.version} of {self.card_id}, by {who}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise RevisionsAreAppendOnly(
+                f"Revision {self.pk} cannot be changed. It is the record of a "
+                f"card being reissued, and a record that can be rewritten is "
+                f"not one."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise RevisionsAreAppendOnly(
+            f"Revision {self.pk} cannot be deleted. The card it produced is "
+            f"still in somebody's hand."
+        )
