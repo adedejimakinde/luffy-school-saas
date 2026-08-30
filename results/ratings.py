@@ -969,12 +969,19 @@ def _label_for(score, labels) -> str:
 # ---------------------------------------------------------------------------
 
 
-def freeze_for_release(sheet) -> int:
+def freeze_for_release(sheet, card_by_student) -> int:
     """Copy this class's conduct sections as they read now. Returns rows written.
 
     Called by `results.services.release()` **inside the transaction that writes
     the release row**, so a sheet that says `released` always has the card that
     was released sitting behind it.
+
+    `card_by_student` is `cards.freeze_for_release()`'s return value, and **it is
+    the roster** — this used to call `positions.roster_ids()` for itself, which
+    is a second read of a table the sheet's lock does not cover. Issue #43: a
+    placement committed between the two reads put a child in this roster who had
+    no card, and the release then died on a NOT NULL naming a column. One read
+    now decides who is on this release, and everything frozen agrees with it.
 
     Writes a row for every child on the roster × every visible trait of every
     enabled group — including the traits nobody rated, whose row carries a null
@@ -992,7 +999,7 @@ def freeze_for_release(sheet) -> int:
         return 0
 
     printable = list(traits().filter(group__in=groups))
-    students = positions.roster_ids(sheet.class_group, sheet.term)
+    students = list(card_by_student)
     if not printable or not students:
         return 0
 
@@ -1006,20 +1013,12 @@ def freeze_for_release(sheet) -> int:
     # inside this same transaction — see `services.release()` — so a card exists
     # for every child on the roster. One answer to "did a card go home", not
     # four; `ReleasedCard` has the argument.
-    #
-    # "Every child on the roster" is read twice, though, and issue #43 is the
-    # gap between the two reads: the lock is on the `ResultSheet` row and not on
-    # `ClassPlacement`, so a placement committed between them leaves a child
-    # here that `cards` never saw. `.get()` then returns `None` and the NOT NULL
-    # on `card_id` aborts the release for the whole class.
     from . import cards as cards_module
-
-    card_by_student = cards_module.cards_by_student(sheet)
 
     rows = [
         ReleasedTraitRating(
             sheet=sheet,
-            card=card_by_student.get(student_id),
+            card=cards_module.the_card_for(card_by_student, student_id),
             student_membership_id=student_id,
             trait=trait,
             group=trait.group,

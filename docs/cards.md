@@ -58,6 +58,41 @@ has already moved past". It is held by `cards.freeze_for_release()` and pinned
 by `TheUnconditionalMarkerTests`, with a control run behind it. **Delete those
 tests and the guarantee is gone with nothing to say so.**
 
+### One roster read, and it is the card freeze's
+
+`cards.freeze_for_release()` returns `student_id -> card`, and **that map is the
+roster**. `ratings`, `comments` and `sessions` take it as an argument instead of
+calling `positions.roster_ids()` for themselves.
+
+That is issue #43 and it is not tidiness. The lock `services._move()` holds is on
+the **`ResultSheet` row** and reaches no further: `ClassPlacement` is not locked,
+not joined to it, and not covered by anything else. Under READ COMMITTED every
+statement in the release takes a fresh snapshot, so the office placing a child
+into the class mid-release made the second roster read return somebody the first
+had never seen. `card_by_student.get()` gave `None`, and the whole class's
+release died on
+
+    IntegrityError: null value in column "card_id" ... violates not-null constraint
+
+— a column named, a cause not, on the screen of a principal who pressed release.
+
+Four reads became one, so the question "who is on this release?" now has a single
+answer and everything frozen agrees with it. A child placed while the release
+runs is simply **not on it** — no card and therefore no sections, which is the
+truthful outcome and avoids the empty-card shape #31 complains about.
+
+`cards.the_card_for()` and `TheRosterMovedDuringRelease` are the belt to that
+braces: nothing on the release path can now reach for a child the cards never
+saw, so the exception exists for the paths that do not go through `release()`,
+and for the fourth section somebody adds next year reaching for
+`positions.roster_ids()` out of habit. It says what happened and that nothing was
+saved, rather than naming a column.
+
+`results/tests/test_release_roster_race.py` proves it with a real second
+connection committing a real placement, timed deterministically rather than
+raced for — a test that raced for luck would pass most runs, which is worse than
+not having it.
+
 ## Everything the card prints is copied
 
 Not joined to. Every join out of a frozen row goes through something a school

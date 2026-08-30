@@ -75,6 +75,50 @@ class CardsError(ResultsError):
     """A card could not be frozen or read as asked."""
 
 
+class TheRosterMovedDuringRelease(CardsError):
+    """A section freeze reached for a child the card freeze never saw.
+
+    Issue #43. The freezes below take their roster from `freeze_for_release()`'s
+    own return value precisely so this cannot happen on the ordinary path — one
+    read, one roster, one set of cards. This exists for the paths that read the
+    roster some other way, and for the day somebody adds a fourth section and
+    reaches for `positions.roster_ids()` again out of habit.
+
+    **It is the difference between a sentence and a 500.** Without it the same
+    condition surfaces as `null value in column "card_id" violates not-null
+    constraint`, which names a column and not a cause, on a screen belonging to a
+    principal who pressed release and has no idea a placement landed underneath
+    them. Retrying is the right answer and the message says so; the release rolls
+    back whole, so there is nothing to clean up first.
+
+    Carries `student_membership_id` so a caller can name the child.
+    """
+
+    def __init__(self, message, student_membership_id=None):
+        super().__init__(message)
+        self.student_membership_id = student_membership_id
+
+
+def the_card_for(card_by_student, student_id):
+    """The card this child's frozen section hangs off, or a sentence saying why not.
+
+    Indexing rather than `.get()`, deliberately: `card_by_student.get(...)`
+    returns `None` for a child the card freeze never saw, and `None` then travels
+    two more statements before the database rejects it on a NOT NULL — by which
+    point the error names `card_id` and nothing about a roster. See
+    `TheRosterMovedDuringRelease`.
+    """
+    try:
+        return card_by_student[student_id]
+    except KeyError:
+        raise TheRosterMovedDuringRelease(
+            f"The class roster changed while this term was being released, so "
+            f"student {student_id} has a frozen section with no card behind it. "
+            f"Nothing has been saved — release the term again.",
+            student_membership_id=student_id,
+        ) from None
+
+
 def _student_names(membership_ids) -> dict[int, str]:
     """`membership_id -> the child's name`, in one query across the shared schema.
 
@@ -141,8 +185,16 @@ def _scores_for(assessments, student_ids) -> dict[tuple[int, int], int]:
     }
 
 
-def freeze_for_release(sheet, *, by=None) -> int:
-    """Copy this class's cards as they read now. Returns the number written.
+def freeze_for_release(sheet, *, by=None) -> dict[int, ReleasedCard]:
+    """Copy this class's cards as they read now. Returns `student_id -> card`.
+
+    **The return value is the roster**, and that is the point of it rather than a
+    convenience. `ratings`, `comments` and `sessions` freeze their sections
+    against exactly these children and take the roster from here rather than
+    reading `positions.roster_ids()` a second time — issue #43. Two reads under
+    READ COMMITTED are two answers, the lock is on the `ResultSheet` row and not
+    on `ClassPlacement`, and the second answer used to be the one that decided
+    who got a conduct section. In insertion order, which is roster order.
 
     Called by `results.services.release()` **first**, inside the transaction
     that writes the release row, so that the section freezes underneath it have
@@ -165,7 +217,7 @@ def freeze_for_release(sheet, *, by=None) -> int:
     results = positions.class_results(sheet.class_group, sheet.term)
     roster = results.student_ids
     if not roster:
-        return 0
+        return {}
 
     term = sheet.term
     school_name = _school_name()
@@ -199,7 +251,13 @@ def freeze_for_release(sheet, *, by=None) -> int:
 
     ReleasedSubjectResult.objects.bulk_create(lines)
     ReleasedAssessmentScore.objects.bulk_create(cells)
-    return len(cards)
+
+    # Built from the list just written rather than by re-reading through
+    # `cards_by_student()`: that would be a third query answering a question this
+    # function already knows the answer to, and — the part that matters — it
+    # would put the roster back at the mercy of a read, which is the whole
+    # complaint in #43.
+    return {card.student_membership_id: card for card in cards}
 
 
 def _school_name() -> str:
@@ -355,9 +413,17 @@ def a_card_went_home(membership, term) -> bool:
 def cards_by_student(sheet) -> dict[int, ReleasedCard]:
     """`student_membership_id -> the card this release wrote`, for one sheet.
 
-    How `ratings`, `comments` and `sessions` find the row to hang their frozen
-    sections off. They run **after** `freeze_for_release()` inside the same
-    transaction, so every child on the roster has one.
+    **The release path does not call this, and must not start.** It used to be
+    how `ratings`, `comments` and `sessions` found the row to hang their frozen
+    sections off, and that was the second roster read issue #43 is about: a read
+    against a table the sheet's lock does not cover, answering a question
+    `freeze_for_release()` had already answered. The three of them now take that
+    function's return value as an argument instead. Reaching for this inside a
+    freeze puts the gap straight back — `the_card_for()` is the thing to reach
+    for, and `TheRosterMovedDuringRelease` says why.
+
+    This is a **read** helper: the cards of a sheet, after the fact, for a caller
+    that has a sheet and wants its cards.
 
     Version 1 only. A revision (task 8) freezes its own sections against its own
     card, and reaching for "the latest version" here would attach a first
@@ -402,6 +468,8 @@ def cards_on(sheet):
 
 __all__ = [
     "CardsError",
+    "TheRosterMovedDuringRelease",
+    "the_card_for",
     "a_card_went_home",
     "cards_by_student",
     "card_for",
