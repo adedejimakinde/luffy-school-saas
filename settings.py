@@ -443,3 +443,92 @@ TIME_ZONE = os.environ.get("TIME_ZONE", "Africa/Lagos")
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
+
+# ---------------------------------------------------------------------------
+# Background work
+#
+# The reasoning — why a worker needs to be told which school it is working for,
+# and what happens when it is not — is in `schools/tasks.py` and
+# `docs/background.md`. These are the settings, which are the part a deployment
+# changes.
+#
+# Everything Celery reads is namespaced `CELERY_` and comes from here rather
+# than from a config file of its own, so a worker and a web process cannot
+# disagree about the platform they are part of. See `celery_app.py`.
+# ---------------------------------------------------------------------------
+
+#: The broker. Defaults to the compose service name for the same reason
+#: `POSTGRES_HOST` defaults to `db`: inside docker-compose that is the address,
+#: and anywhere else this has to be set anyway.
+CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
+
+#: **Deliberately off.** A result backend is where `AsyncResult.get()` reads a
+#: return value from, and nothing on this platform asks a task what it returned:
+#: the PDF job's answer is a file plus a row recording it, which is in Postgres
+#: where a parent's next request can find it. A backend would put the same
+#: answer in a second place, in a key that expires, and make a task's success
+#: something the broker remembers rather than something the database does.
+#:
+#: Turning it on is a deployment's call — `flower` and any other tool that
+#: watches task states needs one — and **the switch is the environment variable
+#: rather than this line.** Celery reads `CELERY_RESULT_BACKEND` from the
+#: environment itself and that value outranks anything configured here, so this
+#: assignment cannot override a set variable and evaluates to `None` when the
+#: variable is unset, which is already the default. It is kept because it is
+#: where a reader looks for the decision, not because it is the mechanism.
+CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND") or None
+
+#: JSON only, in both directions. Celery 5 already defaults to this, and it is
+#: pinned anyway because the failure it prevents is not a bug — it is remote
+#: code execution: `pickle` in `accept_content` means anybody who can write to
+#: the broker can hand the worker an object that runs on unpickling, and the
+#: worker runs as the process that can reach every school's schema.
+CELERY_TASK_SERIALIZER = "json"
+CELERY_RESULT_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+
+#: Acknowledge a job when it is *finished*, not when it is picked up, so a
+#: worker killed mid-render — a deploy, an OOM kill — leaves the job on the
+#: queue for another worker instead of silently dropping it. The price is that
+#: a task must be safe to run twice, which for "render this frozen snapshot to
+#: a file" it is: the snapshot cannot have changed, so the second run writes
+#: the same bytes over the first. A task that is *not* idempotent must not be
+#: written under this setting without saying so in its docstring.
+CELERY_TASK_ACKS_LATE = True
+
+#: **`acks_late` alone does not deliver the sentence above, and this is the
+#: half that makes it true.** When the *child process* running a task is killed
+#: by a signal — which is what an OOM kill and most deploy stops actually do —
+#: Celery acknowledges the message anyway, marks the task `WorkerLostError`, and
+#: the job is gone. `task_reject_on_worker_lost` is what sends it back to the
+#: queue instead. It is a separate switch precisely because redelivering a task
+#: whose process died is only safe when the task is idempotent, which is the
+#: condition already stated above.
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+
+#: The other half. Redis has no broker-side notion of an unacknowledged
+#: delivery, so kombu emulates one: a message reserved and not acked comes back
+#: only after `visibility_timeout`, whose default is 3600 seconds. With that
+#: default a parent waiting for a re-rendered card waits an hour, which is not
+#: "another worker picks it up" in any sense a school would recognise. Five
+#: minutes is longer than task 7's measured render by a wide margin and short
+#: enough to be a retry rather than an outage.
+#:
+#: It must stay comfortably *above* the longest task runtime: a task still
+#: running when its visibility timeout expires is redelivered to a second
+#: worker while the first is still going, which is the duplicate-execution
+#: failure the idempotence rule above is what saves us from.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 300}
+
+#: With `acks_late` on, a worker that reserved ten long jobs and died would
+#: hand all ten back at once. One at a time, so a redelivery is one job.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+#: A worker started before Redis is accepting connections — which is the normal
+#: order in docker-compose and in most orchestrators — should wait rather than
+#: exit. Celery 6 makes this the default and warns when it is unset; setting it
+#: here is what silences the warning as well as choosing the behaviour.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True

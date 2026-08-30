@@ -1,4 +1,32 @@
 version: '3.8'
+
+# The configuration the application processes share. Held in one place because
+# there are now two of them — the web/dev container and the Celery worker — and
+# a worker that disagrees with the web process about which database it is
+# talking to is a bug that only shows up as missing work.
+x-django-environment: &django-environment
+  # Development only, and deliberately explicit. settings.py defaults to
+  # SMTP so that a deploy which never sets this fails loudly instead of
+  # printing live invitation tokens to the application log.
+  EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+  # Where the invitation accept page lives. settings.py has no default for
+  # this on purpose — every candidate default is wrong somewhere, and the
+  # one it replaced (build it from the issuing admin's request host) is the
+  # bug the setting exists to remove. There is no frontend in this repo yet,
+  # so the development value is a placeholder origin that is obviously not a
+  # real one; it makes the link deterministic and inspectable in the console
+  # backend's output without pretending to resolve.
+  INVITATION_ACCEPT_URL: http://localhost:3000/invitations/{token}/
+  # Also development only, and explicit for the same reason. settings.py
+  # defaults DEBUG to off and refuses to start without a real
+  # DJANGO_SECRET_KEY, so a deploy that sets neither fails loudly instead
+  # of serving tracebacks signed with a key that is public in this repo.
+  DJANGO_DEBUG: "1"
+  # Matches settings.py's own default; written out anyway, because the worker
+  # and the web process must agree about the queue and this is the file where
+  # somebody changing it would look.
+  CELERY_BROKER_URL: redis://redis:6379/0
+
 services:
   app:
     build: 
@@ -8,27 +36,50 @@ services:
       - .:/workspace:cached
       - claude-config:/home/vscode/.claude
     command: sleep infinity
-    environment:
-      # Development only, and deliberately explicit. settings.py defaults to
-      # SMTP so that a deploy which never sets this fails loudly instead of
-      # printing live invitation tokens to the application log.
-      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
-      # Where the invitation accept page lives. settings.py has no default for
-      # this on purpose — every candidate default is wrong somewhere, and the
-      # one it replaced (build it from the issuing admin's request host) is the
-      # bug the setting exists to remove. There is no frontend in this repo yet,
-      # so the development value is a placeholder origin that is obviously not a
-      # real one; it makes the link deterministic and inspectable in the console
-      # backend's output without pretending to resolve.
-      INVITATION_ACCEPT_URL: http://localhost:3000/invitations/{token}/
-      # Also development only, and explicit for the same reason. settings.py
-      # defaults DEBUG to off and refuses to start without a real
-      # DJANGO_SECRET_KEY, so a deploy that sets neither fails loudly instead
-      # of serving tracebacks signed with a key that is public in this repo.
-      DJANGO_DEBUG: "1"
+    environment: *django-environment
     depends_on:
       - db
-    
+      - redis
+
+  # What runs a report card PDF: off the request cycle, against one school's
+  # schema, told which school by the job itself. See schools/tasks.py.
+  #
+  # The pip install is not ceremony. Dependencies reach the `app` container
+  # through devcontainer.json's postCreateCommand, which runs for the
+  # devcontainer's own service and for nothing else — so this container shares
+  # the image and none of the installation. A deployment image would install at
+  # build time and this command would be the `celery` line alone.
+  worker:
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - .:/workspace:cached
+    working_dir: /workspace
+    # `exec` on the celery line, and it is load-bearing rather than style.
+    # Without it the shell stays PID 1 and celery is its child, so the SIGTERM
+    # that `docker compose stop|restart|down` sends to PID 1 never reaches the
+    # worker: compose waits out its grace period and then SIGKILLs the whole
+    # container mid-render. That drops the job on an ordinary restart — the
+    # exact case CELERY_TASK_ACKS_LATE and CELERY_TASK_REJECT_ON_WORKER_LOST
+    # exist to survive, defeated by the process tree in front of them. `exec`
+    # replaces the shell, so celery *is* PID 1 and warm-shuts-down.
+    command: sh -c "pip install --quiet --root-user-action=ignore -r requirements.txt && exec celery -A celery_app worker --loglevel=info"
+    environment:
+      <<: *django-environment
+      # This container runs as root (the base image sets no USER) against a
+      # bind mount owned by uid 1000, so any bytecode it writes lands in the
+      # working tree as root-owned `__pycache__` that the `vscode` user then
+      # cannot clean up. The worker gains nothing from caching bytecode into a
+      # mount that is rebuilt from the host anyway.
+      PYTHONDONTWRITEBYTECODE: "1"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_healthy
+
   db:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -39,6 +90,30 @@ services:
       POSTGRES_USER: luffy_admin
       POSTGRES_PASSWORD: changeme
 
+  # The broker. Given a volume for the same reason the database has one: what
+  # Redis is holding here is jobs that have been accepted and not yet run, so a
+  # restart that forgets them is a parent who asked for a PDF and never gets one
+  # — with nothing anywhere saying why.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Append-only, because the default is periodic snapshots and a snapshot
+    # window is exactly the set of jobs a restart would drop while the volume
+    # above made it look as though nothing could be lost.
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    # `worker` waits on this rather than on the container merely existing.
+    # Celery would retry the connection anyway (CELERY_BROKER_CONNECTION_
+    # RETRY_ON_STARTUP), but a worker whose first ten seconds of log are
+    # connection errors is one a developer reasonably reads as broken.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   postgres-data:
+  redis-data:
   claude-config:

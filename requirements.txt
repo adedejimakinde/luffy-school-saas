@@ -3,3 +3,18 @@ psycopg2-binary>=2.9
 django-tenants>=3.6
 phonenumbers>=8.13
 django-ninja>=1.6
+
+# Background work. A report card PDF is minutes of rendering for a class of
+# forty-five, which is not a thing to do inside a request: Celery moves it off
+# the web process, Redis is the broker it hands the job to (settings.py says why
+# there is no result backend), and WeasyPrint is what turns the card's HTML into
+# the file a parent keeps. See docs/background.md.
+#
+# WeasyPrint is not pure Python — its text layout is Pango's, so it needs Pango,
+# HarfBuzz and a font family from the operating system. It installs from a wheel
+# perfectly happily without them and fails at the first import. Both places that
+# build an environment for this project install them explicitly:
+# .devcontainer/Dockerfile and .github/workflows/tests.yml.
+celery>=5.4
+redis>=5.0
+weasyprint>=62
