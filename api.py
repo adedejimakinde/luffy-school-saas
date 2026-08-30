@@ -48,6 +48,7 @@ from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
+from results.card_api import router as report_card_router
 from schools import invitations as invitation_service
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.models import (
@@ -66,6 +67,13 @@ api.add_router("/gradebook/", gradebook_router, tags=["gradebook"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.
 api.add_router("/results/", results_router, tags=["results"])
+# The family-facing half of the same tenant app, mounted from its own module
+# rather than added to `results/api.py`. That file serves the broadsheet, whose
+# subject is `position`; this one serves a card to the child it is about. Issue
+# #21 asks that the two never share a schema, and keeping them in separate
+# modules is what makes that structural instead of a convention — there is
+# nothing importable in `card_api` that carries a staff-only field.
+api.add_router("/results/", report_card_router, tags=["results"])
 
 
 @api.exception_handler(AuthenticationError)
