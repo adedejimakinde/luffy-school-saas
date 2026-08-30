@@ -77,5 +77,16 @@ jobs:
           SESSION_COOKIE_DOMAIN: .example.test
         run: python manage.py check --deploy
 
+      # `--parallel` splits the suite across worker processes, each with its own
+      # clone of the test database. The clone is cheap here for a reason worth
+      # knowing: no tenant schema is baked into the test database — every one is
+      # built at runtime by whichever test needs it — so the template being
+      # copied is about 8 MB and a clone costs ~0.11s per worker. Cloning
+      # therefore does *not* multiply the suite's real cost, which is ~1.65s of
+      # CREATE SCHEMA plus migrations per tenant, about 1,479 times per run.
+      #
+      # That per-test schema build is still the thing to fix and this flag does
+      # not touch it. This is the free half: the same work, spread over the
+      # runner's cores.
       - name: Run tests
-        run: python manage.py test --verbosity 2
+        run: python manage.py test --verbosity 2 --parallel
