@@ -58,7 +58,7 @@ from datetime import date
 from unittest import mock
 
 from django.db import connection, connections
-from django.test import TransactionTestCase
+from django.test import SimpleTestCase, TransactionTestCase
 from django_tenants.utils import schema_context
 
 from academics import services as academics
@@ -73,6 +73,7 @@ from results.models import (
     ReleasedCard,
     ReleasedComment,
     ReleasedSessionResult,
+    ReleasedSubjectResult,
     ReleasedTraitRating,
     SheetState,
     TraitGroup,
@@ -132,14 +133,28 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
 
         # Grace, built the same way and released never. The placing thread must
         # not be able to reach it.
+        #
+        # Ngozi is placed *and* marked *and* remarked, so Grace holds everything
+        # a release would freeze. A second school with nothing in it can only
+        # prove that nothing was written where there was nothing to write; this
+        # one has a card's worth of content sitting there, and the assertion that
+        # no `ReleasedCard`, `ReleasedSubjectResult` or `ReleasedComment` exists
+        # in Grace is therefore about the release and not about the fixture.
         self.their_teacher = self._staff(
             "chika", "Chika Obi", self.other_school, Role.TEACHER
         )
-        self.their_child = self._student("ngozi", "Ngozi Eze", self.other_school)
-        self.their_terms, self.their_group_id, _ = self._academics(
-            self.other_school, self.their_teacher
+        self.their_principal = self._staff(
+            "amaka", "Amaka Udo", self.other_school, Role.PRINCIPAL
         )
+        self.their_child = self._student("ngozi", "Ngozi Eze", self.other_school)
+        (
+            self.their_terms,
+            self.their_group_id,
+            self.their_subject_id,
+        ) = self._academics(self.other_school, self.their_teacher)
         self._place(self.other_school, self.their_child, every_term=True)
+        self._mark(self.other_school, TermName.THIRD.value, self.their_child, 91)
+        self._remark(self.other_school, TermName.THIRD.value, self.their_child)
 
     # -- fixtures ------------------------------------------------------------
 
@@ -186,11 +201,24 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
                 )
 
     def _mark(self, school, term_name, membership, value):
+        """A mark for this child, in *this* school's term and subject.
+
+        The branch is not decoration. Each tenant schema has its own sequences,
+        so `Term.objects.get(pk=self.terms[...])` inside Grace's schema resolves
+        to a different, existing Grace term with the same id rather than raising
+        — a helper that took `school` and then read St Mary's ids would mark the
+        wrong term in the wrong school and every assertion would stay green.
+        `_place()` branches for the same reason.
+        """
+        terms = self.terms if school == self.school else self.their_terms
+        subject_id = (
+            self.subject_id if school == self.school else self.their_subject_id
+        )
         with connected_to(school):
-            term = Term.objects.get(pk=self.terms[term_name])
+            term = Term.objects.get(pk=terms[term_name])
             assessment, _ = Assessment.objects.get_or_create(
                 term=term,
-                subject_id=self.subject_id,
+                subject_id=subject_id,
                 name="Exam",
                 defaults={"max_score": 100},
             )
@@ -201,10 +229,15 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
             )
 
     def _remark(self, school, term_name, membership):
+        """A principal's remark for this child. Branches as `_mark()` does."""
+        terms = self.terms if school == self.school else self.their_terms
+        principal = (
+            self.principal if school == self.school else self.their_principal
+        )
         with connected_to(school):
             comments.write_as(
-                self.principal,
-                Term.objects.get(pk=self.terms[term_name]),
+                principal,
+                Term.objects.get(pk=terms[term_name]),
                 membership,
                 CommentAuthor.PRINCIPAL,
                 "A good term's work.",
@@ -362,6 +395,50 @@ class TheRosterIsReadOnceTests(ReleaseUnderARosterChangeSetUp):
 
         self.assertEqual(hers, {"cards": 0, "ratings": 0, "comments": 0, "sessions": 0})
 
+    def test_the_omission_is_written_down_instead_of_passing_in_silence(self):
+        """She is off the release, and the release says so somewhere.
+
+        Being off it is the truthful outcome; being off it *quietly* is not. The
+        principal sees a release that succeeded, and one child has no card, no
+        sections, and — until task 8's revision path exists — no way to be given
+        them, because `_move()` refuses a released sheet and the correction paths
+        reach it through her current placement, which is now this released class.
+        Issue #31 is that dead end and #47 is putting this in front of a person
+        rather than only in a log.
+        """
+        self.approve_the_third_term()
+
+        with self.assertLogs("results.services", level="WARNING") as logged:
+            self.release_while_the_roster_moves()
+
+        said = "\n".join(logged.output)
+        self.assertIn(str(self.bola.pk), said, "the log does not name the child")
+        self.assertIn("JSS 1A", said)
+        self.assertIn("no released card", said)
+
+    def test_an_undisturbed_release_says_nothing(self):
+        """The control. A warning logged every time would pass the test above.
+
+        `assertNoLogs` and not an absent `assertLogs`: the point is that the
+        quiet case is quiet, and a release nobody interfered with is the case
+        that runs every day.
+        """
+        self.approve_the_third_term()
+
+        with self.assertNoLogs("results.services", level="WARNING"):
+            with connected_to(self.school):
+                sheet = services.sheet_for(self.group(), self.term())
+                services.release(sheet, self.principal)
+
+        with connected_to(self.school):
+            self.assertEqual(
+                ReleasedCard.objects.filter(
+                    student_membership_id=self.ada.pk
+                ).count(),
+                1,
+                "the undisturbed release did not actually release anything",
+            )
+
     def test_the_child_who_was_on_the_roster_got_the_whole_card(self):
         """The other half. A release that froze nothing would pass the test above.
 
@@ -440,6 +517,8 @@ class TheRosterIsReadOnceTests(ReleaseUnderARosterChangeSetUp):
             theirs = {
                 "cards": ReleasedCard.objects.count(),
                 "ratings": ReleasedTraitRating.objects.count(),
+                "subject_results": ReleasedSubjectResult.objects.count(),
+                "comments": ReleasedComment.objects.count(),
                 "placements": ClassPlacement.objects.roster(
                     ClassGroup.objects.get(pk=self.their_group_id),
                     Term.objects.get(pk=self.their_terms[TermName.THIRD.value]),
@@ -448,10 +527,14 @@ class TheRosterIsReadOnceTests(ReleaseUnderARosterChangeSetUp):
 
         self.assertEqual(theirs["cards"], 0, "a release leaked into the other school")
         self.assertEqual(theirs["ratings"], 0)
+        # Ngozi has a mark and a remark, so these two are zero because nothing
+        # released her, not because there was nothing of hers to release.
+        self.assertEqual(theirs["subject_results"], 0)
+        self.assertEqual(theirs["comments"], 0)
         self.assertEqual(theirs["placements"], 1, "the other school's roster moved")
 
 
-class TheRosterMovedIsNamedTests(ReleaseUnderARosterChangeSetUp):
+class TheRosterMovedIsNamedTests(SimpleTestCase):
     """Belt and braces: the failure has a sentence even where it cannot happen.
 
     The roster is read once now, so nothing on the release path can reach for a
@@ -462,19 +545,33 @@ class TheRosterMovedIsNamedTests(ReleaseUnderARosterChangeSetUp):
     Asserted directly rather than through a release, because a test that can only
     fire this by breaking the release path is a test that will be deleted the
     first time somebody reads it.
+
+    **`SimpleTestCase`, and deliberately not the fixture above.** `the_card_for()`
+    is a dict lookup and a raise; it takes a mapping and an integer and touches
+    no database at all. Inheriting `ReleaseUnderARosterChangeSetUp` would build
+    two tenant schemas, six users, six terms and two class groups — the most
+    expensive thing this suite does, paid three times — to supply two numbers
+    that can be written down. `ON_ROSTER` and `NOT_ON_ROSTER` are those numbers.
     """
+
+    #: Two membership ids. Any two distinct integers do; these are named so the
+    #: assertions read as what they are about rather than as arithmetic.
+    ON_ROSTER = 11
+    NOT_ON_ROSTER = 22
 
     def test_a_missing_card_raises_something_a_caller_can_catch(self):
         with self.assertRaises(cards.TheRosterMovedDuringRelease) as refused:
-            cards.the_card_for({self.ada.pk: object()}, self.bola.pk)
+            cards.the_card_for({self.ON_ROSTER: object()}, self.NOT_ON_ROSTER)
 
         self.assertIsInstance(refused.exception, services.ResultsError)
-        self.assertEqual(refused.exception.student_membership_id, self.bola.pk)
+        self.assertEqual(
+            refused.exception.student_membership_id, self.NOT_ON_ROSTER
+        )
 
     def test_the_sentence_says_what_happened_and_what_to_do(self):
         """Not `null value in column "card_id"`, which names neither."""
         with self.assertRaises(cards.TheRosterMovedDuringRelease) as refused:
-            cards.the_card_for({}, self.bola.pk)
+            cards.the_card_for({}, self.NOT_ON_ROSTER)
 
         said = str(refused.exception)
         self.assertIn("roster changed", said)
@@ -484,4 +581,6 @@ class TheRosterMovedIsNamedTests(ReleaseUnderARosterChangeSetUp):
     def test_it_finds_the_card_when_the_child_is_on_the_roster(self):
         """The control. A function that always raised would pass both above."""
         card = object()
-        self.assertIs(cards.the_card_for({self.ada.pk: card}, self.ada.pk), card)
+        self.assertIs(
+            cards.the_card_for({self.ON_ROSTER: card}, self.ON_ROSTER), card
+        )

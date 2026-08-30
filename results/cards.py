@@ -413,9 +413,17 @@ def a_card_went_home(membership, term) -> bool:
 def cards_by_student(sheet) -> dict[int, ReleasedCard]:
     """`student_membership_id -> the card this release wrote`, for one sheet.
 
-    How `ratings`, `comments` and `sessions` find the row to hang their frozen
-    sections off. They run **after** `freeze_for_release()` inside the same
-    transaction, so every child on the roster has one.
+    **The release path does not call this, and must not start.** It used to be
+    how `ratings`, `comments` and `sessions` found the row to hang their frozen
+    sections off, and that was the second roster read issue #43 is about: a read
+    against a table the sheet's lock does not cover, answering a question
+    `freeze_for_release()` had already answered. The three of them now take that
+    function's return value as an argument instead. Reaching for this inside a
+    freeze puts the gap straight back — `the_card_for()` is the thing to reach
+    for, and `TheRosterMovedDuringRelease` says why.
+
+    This is a **read** helper: the cards of a sheet, after the fact, for a caller
+    that has a sheet and wants its cards.
 
     Version 1 only. A revision (task 8) freezes its own sections against its own
     card, and reaching for "the latest version" here would attach a first

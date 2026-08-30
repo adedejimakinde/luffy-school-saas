@@ -376,6 +376,11 @@ def _lines_for(student_ids, session) -> dict[int, tuple[TermLine, ...]]:
                 lines[student_id][name] = TermLine(name, None, None, TermAbsence.NO_TERM)
             continue
 
+        # Read live, including for a term being released as this runs. Nothing
+        # here is covered by the `ResultSheet` lock, so a placement deleted or
+        # moved mid-release is seen by this line and not by the card frozen a
+        # moment earlier — issue #46. `student_ids` is the frozen roster, so a
+        # child *arriving* cannot get in; it is departures and moves that bite.
         placements = {
             placement.student_membership_id: placement
             for placement in ClassPlacement.objects.filter(
@@ -579,6 +584,18 @@ def freeze_for_release(sheet, card_by_student) -> int:
     `card_by_student` is `cards.freeze_for_release()`'s return value, and **it is
     the roster** — see #43 and the note on `ratings.freeze_for_release()`. One
     read decides who is on this release; a second one is a second answer.
+
+    **That guarantee is about *who*, and it stops there.** `_lines_for()` below
+    reads `ClassPlacement` again for each term of the session — including the
+    term being released — to find which class group each child sat in, and that
+    read is no better covered by the sheet's lock than the one #43 removed. A
+    placement deleted or moved between the card freeze and this line therefore
+    still writes a session row that contradicts the card written moments earlier
+    in the same transaction: the card carries the child's third-term marks and
+    the session line calls her `NOT_ENROLLED` for third term, renormalised over
+    two. Issue #46. Passing the roster down does not reach it — the fix is either
+    a lock covering `ClassPlacement` or threading that term's placements through
+    from the same read, and both are wider than #43.
     """
     if sheet.term.name != TermName.THIRD:
         return 0
