@@ -2,11 +2,14 @@
 
 Task 7. `ReleasedCardPdf` holds the PDF a school prints and a family keeps.
 
-**Renumber this if task 8 lands first.** It is `0019` because it was cut from a
-`main` whose last results migration was `0018`; `card-revision` carries a
-different `0019`. Two branches off one parent is the no-stacking rule working as
-intended, and the collision is the visible cost of it — resolved by renaming,
-not by merging the two.
+**This was `0019` and was renumbered.** It was cut from a `main` whose last
+results migration was `0018`, and so was task 8's `0019_a_card_can_be_reissued`;
+task 8 landed first, bringing `0020_no_index_is_built_twice` with it. Two
+branches off one parent is the no-stacking rule working as intended, and the
+collision is the visible cost of it — resolved by renaming this file and moving
+its dependency onto `0020`, not by merging the two. Nothing here was applied to
+any database under the old number, so the rename costs nobody a fake-applied
+row.
 
 The model docstring carries the two decisions worth arguing about: the bytes
 live in a Postgres column because this platform configures no object storage and
@@ -27,7 +30,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("results", "0018_a_frozen_card_is_append_only"),
+        ("results", "0020_no_index_is_built_twice"),
     ]
 
     operations = [

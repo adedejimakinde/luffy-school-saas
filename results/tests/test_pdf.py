@@ -598,15 +598,22 @@ class AttendanceOfNoughtTests(ReportCardApiSetUp):
 class TheRevisedBadgeTests(ReportCardApiSetUp):
     """A reissued card has to say so, and the first draft's flag did not exist.
 
-    The template asked for `card.is_revised`. `ReportCardOut` has no such field
-    and nothing in the repository sets one, so Django resolved it to the
-    invalid-variable default and the branch was unreachable — the badge could
-    never print. That is invisible until task 8 issues a second version, at
-    which point the reprinted card is indistinguishable from the one already in
-    a parent's hand, which is the single thing the badge exists to prevent.
+    The template asked for `card.is_revised` when this branch was cut, and
+    `ReportCardOut` had no such field — Django resolved it to the
+    invalid-variable default and the branch was unreachable, so the badge could
+    never print. That is invisible until a second version exists, at which point
+    the reprinted card is indistinguishable from the one already in a parent's
+    hand, which is the single thing the badge exists to prevent. Task 8 has
+    since landed and `is_revised` is now real, on the model and on the payload;
+    the template asks for it again, and these two tests are what stands between
+    that and the same silence returning.
 
-    Driven through the payload rather than through `revise()`, because the
-    defect is in the template and because a version-2 card is task 8's to make.
+    Driven through the payload rather than through `revise()`, because what is
+    under test is the template. That the payload's `is_revised` follows a real
+    revision is task 8's, proven in `test_card_api` and `test_revision` — so
+    the override here sets `version` and `is_revised` together, exactly as
+    `card_payload()` emits them, rather than moving one and leaving the page
+    reading the other.
     """
 
     def setUp(self):
@@ -620,7 +627,9 @@ class TheRevisedBadgeTests(ReportCardApiSetUp):
             card = cards.card_for(
                 self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
             )
-            payload = card_payload(card).model_copy(update={"version": version})
+            payload = card_payload(card).model_copy(
+                update={"version": version, "is_revised": version > 1}
+            )
             with patch("results.pdf.card_payload", return_value=payload):
                 return " ".join(pdf.html_for(card).split())
 

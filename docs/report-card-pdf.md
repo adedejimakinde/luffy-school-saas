@@ -2,7 +2,7 @@
 
 Task 7. Code: `results/pdf.py`, `results/tasks.py`,
 `results/templates/results/report_card.html`, `ReleasedCardPdf` in
-`results/models.py`, migration `0019_the_rendered_card`, tests in
+`results/models.py`, migration `0021_the_rendered_card`, tests in
 `results/tests/test_pdf.py`. The queue underneath it is
 [background.md](background.md).
 
