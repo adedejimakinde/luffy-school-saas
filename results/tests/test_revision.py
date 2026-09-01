@@ -26,7 +26,7 @@ from accounts.models import Role, User
 from accounts.services import enroll_student
 from gradebook.models import Assessment
 from gradebook import services as gradebook_services
-from results import cards, comments, positions, ratings, revision
+from results import cards, comments, positions, ratings, revision, sessions
 from results import services as results_services
 from results.models import (
     CardRevision,
@@ -44,7 +44,7 @@ from results.models import (
     TraitGroup,
 )
 from results.services import NotAllowedToActOnResults
-from results.tests.test_cards import CardSetUp
+from results.tests.test_cards import SESSION, CardSetUp
 from results.tests.test_positions import PASSWORD, connected_to, make_school
 
 
@@ -893,3 +893,111 @@ class WhatARevisionCannotFixTests(RevisionSetUp):
             # And the one thing it *can* fix is proven separately, in
             # `WhatActuallyChangesTests` — a name, from a table nothing here
             # gates on sheet state.
+
+
+class WhatTheOtherReadersSawTests(RevisionSetUp):
+    """Three readers that agreed with themselves until a second version existed.
+
+    `cards.card_for()` states the rule for the whole card — **the earliest
+    release, then its highest version** — and each of these implemented half of
+    it or none, which was invisible while a sheet could hold only one card per
+    child. Migration `0019` is what makes the second version possible, so this
+    PR is what breaks them, and these are the tests that say so.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, True)
+            self.trait = Trait.objects.filter(group=TraitGroup.AFFECTIVE).first()
+            ratings.rate(self.first_term(), self.trait, self.ada, 4)
+
+    def sections(self):
+        return ratings.card_sections(
+            self.ada.pk, self.group(self.stmarys), self.first_term()
+        )
+
+    def test_the_conduct_section_is_not_printed_twice_after_a_revision(self):
+        """`_frozen_sections()` filtered on `(sheet, student)`.
+
+        That pair was unique per child while
+        `one_frozen_rating_per_student_per_trait` held it, so it could only ever
+        select one card's worth of rows. `0019` re-keys that constraint onto the
+        card, a revision writes a second set on the same sheet, and the filter
+        returned **both** — every trait appended into `by_group` twice and the
+        whole section printed doubled on the card a family reads.
+        """
+        self.release_first_term()
+        with connected_to(self.stmarys):
+            before = [line.name for section in self.sections() for line in section.lines]
+
+            revision.revise(self.ada, self.first_term(), self.principal, "Reissued.")
+
+            after = [line.name for section in self.sections() for line in section.lines]
+
+        # The control. Every assertion below passes against a school that froze
+        # no conduct section at all, which is why the rating is set up above.
+        self.assertGreater(len(before), 0)
+        self.assertEqual(len(after), len(before))
+        self.assertEqual(sorted(after), sorted(set(after)), "A trait printed twice.")
+
+    def test_the_frozen_session_line_read_back_is_the_revisions_not_the_first(self):
+        """`released_session_line()` took the *earliest* row, always.
+
+        Right between sheets — a released card keeps saying what it said — and
+        wrong between versions of one sheet, where a revision is the whole
+        point. `decide()` freezes `session_average` and the promotion
+        *suggestion* off this row, so it read version 1 while `card_api` served
+        version 2 to the family, and the two can genuinely differ: the line is
+        recomputed from live first- and second-term marks and live weights.
+        """
+        for name in (TermName.SECOND.value, TermName.THIRD.value):
+            self.mark(self.stmarys, name, self.ada, "maths", "Exam", 70)
+            self.mark(self.stmarys, name, self.bola, "maths", "Exam", 60)
+
+        with connected_to(self.stmarys):
+            self.release_the_term(TermName.SECOND.value)
+            self.release_the_term(TermName.THIRD.value)
+            third = self.term(self.stmarys, TermName.THIRD.value)
+
+            was = sessions.released_session_line(self.ada, SESSION)
+            revised = revision.revise(
+                self.ada, third, self.principal, "Third-term reissue."
+            )
+            now = sessions.released_session_line(self.ada, SESSION)
+
+            # Asserted **inside** the context. `.card` is a lazy relation, so
+            # reading it after `connected_to()` has landed the connection back
+            # on `public` queries a schema where the table does not exist —
+            # issue #58, which this test hit while being written.
+            self.assertIsNotNone(was)
+            self.assertEqual(was.card.version, 1)
+            self.assertEqual(now.card_id, revised.pk)
+            self.assertEqual(now.card.version, 2)
+
+    def test_a_class_of_two_is_still_two_cards_on_the_sheet_after_a_revision(self):
+        """`cards_on()` had no version filter at all.
+
+        Its docstring names task 7's batch as the caller, so a forty-five child
+        class coming back as forty-six is a superseded card rendered to PDF and
+        sent home beside the one that replaced it.
+        """
+        sheet = self.release_first_term()
+        with connected_to(self.stmarys):
+            before = cards.cards_on(sheet)
+            revised = revision.revise(
+                self.ada, self.first_term(), self.principal, "Reissued."
+            )
+            after = cards.cards_on(sheet)
+
+        self.assertEqual(len(before), 2)
+        self.assertEqual(len(after), 2, "The superseded version came back as well.")
+        self.assertEqual(
+            {card.student_membership_id for card in after},
+            {self.ada.pk, self.bola.pk},
+        )
+        self.assertIn(revised.pk, [card.pk for card in after])
+        self.assertEqual(
+            next(card for card in after if card.student_membership_id == self.ada.pk).version,
+            2,
+        )

@@ -1143,15 +1143,26 @@ class TheChildWhoMovedAfterReleaseTests(SessionSetUp):
             with CaptureQueriesContext(connection) as captured:
                 sessions.released_session_line(self.ada, SESSION)
 
-        # The one query against the frozen table. The context also captures
-        # the schema-switching statement `connected_to()` issues, so picking by
-        # table name rather than by position is what keeps this from breaking
-        # the day another one joins it.
-        (sql,) = [
+        # **Two** queries against the frozen table since task 8, and that is
+        # the rule rather than an implementation detail: the earliest release,
+        # and then the highest version within it. This test asserted a single
+        # statement and unpacked it, so it failed loudly the moment the second
+        # half arrived — which is the behaviour wanted from it.
+        #
+        # The context also captures the schema-switching statement
+        # `connected_to()` issues, so picking by table name rather than by
+        # position is what keeps this from breaking the day another one joins.
+        statements = [
             query["sql"].upper()
             for query in captured.captured_queries
             if "RESULTS_RELEASEDSESSIONRESULT" in query["sql"].upper()
         ]
+        self.assertEqual(
+            len(statements),
+            2,
+            "Expected the earliest-release query and the highest-version one.",
+        )
+        earliest, highest = statements
 
         # The ORDER BY clause specifically, not the whole statement. Two ways
         # this assertion was wrong before it was this one, both of which passed
@@ -1163,7 +1174,15 @@ class TheChildWhoMovedAfterReleaseTests(SessionSetUp):
         #   - `assertIn("created_at", sql)` — every column is in the SELECT
         #     list, `created_at` among them, so this matched the projection
         #     rather than the ordering.
-        self.assertIn("ORDER BY", sql)
-        ordering = sql.split("ORDER BY", 1)[1]
+        self.assertIn("ORDER BY", earliest)
+        ordering = earliest.split("ORDER BY", 1)[1]
         self.assertIn("CREATED_AT", ordering)
         self.assertNotIn("DESC", ordering)
+
+        # And the second half, asserted the same way and for the same reason.
+        # Ascending here would take the superseded card: `decide()` freezes the
+        # session average and the promotion suggestion off this row.
+        self.assertIn("ORDER BY", highest)
+        ordering = highest.split("ORDER BY", 1)[1]
+        self.assertIn("VERSION", ordering)
+        self.assertIn("DESC", ordering)

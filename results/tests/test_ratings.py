@@ -1118,14 +1118,44 @@ class NoIndexIsBuiltTwiceTests(RatingsSetUp):
         "results_traitrating": [["term_id"], ["trait_id"]],
         "results_releasedtraitrating": [["sheet_id"], ["trait_id"]],
         "results_releasedcomment": [["sheet_id"]],
-        "results_releasedsessionresult": [["sheet_id"], ["term_id"]],
-        "results_releasedsubjectresult": [["sheet_id"], ["subject_id"]],
-        "results_releasedassessmentscore": [
-            ["sheet_id"],
-            ["subject_id"],
-            ["assessment_id"],
-        ],
+        "results_releasedsessionresult": [["sheet_id"]],
+        "results_releasedsubjectresult": [["subject_id"]],
+        "results_releasedassessmentscore": [["subject_id"], ["assessment_id"]],
     }
+
+    def columns_of(self, table):
+        """The table's real columns, read from Postgres rather than listed here.
+
+        A second hand-maintained list would drift in exactly the way the first
+        one did.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s",
+                [self.stmarys.schema_name, table],
+            )
+            return {row[0] for row in cursor.fetchall()}
+
+    def test_every_whitelisted_index_names_a_column_that_exists(self):
+        """A whitelist is only a tripwire if the names in it are real.
+
+        The first draft of the widened `AUTOMATIC` pre-approved `sheet_id` on
+        both subject tables and `term_id` on the session table. **None of those
+        three columns exists.** An entry for an index that cannot be built costs
+        nothing on the day it is written and silently pre-approves the real
+        index the day somebody adds that relation — which is the one thing this
+        list exists to prevent. It went in during the same review that widened
+        the list, so the widening nearly cost more than it bought.
+        """
+        with connected_to(self.stmarys):
+            for table, indexes in self.AUTOMATIC.items():
+                existing = self.columns_of(table)
+                self.assertTrue(existing, f"{table} has no columns at all.")
+                for columns in indexes:
+                    for column in columns:
+                        with self.subTest(table=table, column=column):
+                            self.assertIn(column, existing)
 
     def columns_of_each_index(self, table):
         with connection.cursor() as cursor:

@@ -55,6 +55,7 @@ from . import positions
 from .models import (
     LOWEST_RATING,
     RatingScalePoint,
+    ReleasedCard,
     ReleasedTraitRating,
     ReportCardSettings,
     SheetState,
@@ -917,9 +918,39 @@ def _frozen_sheet_id_for(membership_id, class_group, term):
 
 
 def _frozen_sections(sheet_id, membership_id) -> list[CardSection]:
-    rows = ReleasedTraitRating.objects.filter(
-        sheet_id=sheet_id, student_membership_id=membership_id
+    """The conduct section of the card this sheet holds for this child.
+
+    **Keyed on the card, not on `(sheet, student)`.** Until task 8 those were
+    the same key: `one_frozen_rating_per_student_per_trait` made a second set of
+    rows for one pair impossible, so filtering on the pair could only ever
+    return one card's worth. `0019` re-keys that constraint onto `card` so a
+    revision can write a second version's section on the same sheet — and this
+    filter then returned **both**, appending every trait into `by_group` twice
+    and printing the section duplicated. That is precisely the failure
+    `_frozen_sheet_id_for()` below describes for the two-sheet case, arriving by
+    a second route the day versions became possible.
+
+    The version taken is the **highest**, which is what a revision means and
+    what `cards.card_for()` states as the rule for the whole card.
+    `card_api._sections()` was already right, because it filters on the card it
+    was handed rather than on the pair.
+    """
+    card_id = (
+        ReleasedCard.objects.filter(
+            sheet_id=sheet_id, student_membership_id=membership_id
+        )
+        .order_by("-version")
+        .values_list("pk", flat=True)
+        .first()
     )
+    if card_id is None:
+        # No card on this sheet for this child. Since `0017` every frozen row
+        # hangs off one, so this is unreachable by the caller above — which
+        # only gets here when the child *has* rows — and is here so that a
+        # future caller gets an empty section rather than every version at once.
+        return []
+
+    rows = ReleasedTraitRating.objects.filter(card_id=card_id)
     by_group = {}
     for row in rows:
         by_group.setdefault(row.group, []).append(

@@ -493,17 +493,31 @@ def card_lines(card):
 
 
 def cards_on(sheet):
-    """Every card that sheet's release wrote, with its lines, in few queries.
+    """Every child's **current** card on that sheet, with its lines, in few queries.
 
     `Prefetch` rather than a join per card: task 7's PDF job walks a whole class
     and a per-card query there is forty-five round trips inside a Celery task.
+
+    **One row per child, and that is not what this used to return.** It filtered
+    on the sheet and ordered `("student_membership_id", "version")`, which was
+    exactly right while a sheet could hold one card per child. Task 8 makes a
+    revision a second row on the same sheet, so a forty-five child class came
+    back as forty-six — and the batch that walks it would have rendered the
+    superseded version 1 alongside version 2 and sent both home. Its sibling
+    `cards_by_student()` was given `version=1` for the mirror-image reason;
+    this one is the read side and wants the opposite end.
+
+    `DISTINCT ON` with the version descending, so the row kept per child is the
+    highest — the same rule `card_for()` states. Between *sheets* the earliest
+    release wins, but a sheet is what this takes, so that half does not arise.
     """
     return list(
         ReleasedCard.objects.filter(sheet=sheet)
+        .order_by("student_membership_id", "-version")
+        .distinct("student_membership_id")
         .prefetch_related(
             Prefetch("subject_results"), Prefetch("assessment_scores")
         )
-        .order_by("student_membership_id", "version")
     )
 
 
