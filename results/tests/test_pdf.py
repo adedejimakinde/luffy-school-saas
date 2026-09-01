@@ -34,6 +34,7 @@ from academics.models import Term, TermName
 from academics.services import place_student
 from accounts.models import User
 from accounts.services import enroll_student
+from gradebook.models import Assessment
 from results import cards, pdf
 from results.models import ReleasedCard, ReleasedCardPdf
 from results.tasks import render_card_pdf
@@ -175,9 +176,11 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
 
             columns = pdf._columns(card_payload(card))
 
-        self.assertIn("Exam", columns)
-        self.assertIn("Mid-term", columns)
-        self.assertEqual(len(columns), len(set(columns)), "A column was repeated.")
+        names = [column["name"] for column in columns]
+        self.assertIn("Exam", names)
+        self.assertIn("Mid-term", names)
+        keys = [(column["name"], column["max_score"]) for column in columns]
+        self.assertEqual(len(keys), len(set(keys)), "A column was repeated.")
 
     def test_a_subject_without_one_gets_a_gap_and_not_a_shifted_row(self):
         """The bug this alignment exists to prevent, stated as a row length.
@@ -200,7 +203,8 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
                 self.assertEqual(len(row["cells"]), len(columns))
 
         english = next(r for r in rows if r["line"].subject_name == "English")
-        self.assertIsNone(english["cells"][columns.index("Mid-term")])
+        names = [column["name"] for column in columns]
+        self.assertIsNone(english["cells"][names.index("Mid-term")])
 
 
 class ItReallyProducesAPdfTests(ReportCardApiSetUp):
@@ -498,6 +502,28 @@ class ACardPdfIsAFileOrAReasonTests(ReportCardApiSetUp):
         message = self.refuse(content=None, byte_size=16, error="it failed")
         self.assertIn("a_card_pdf_knows_its_own_size", message)
 
+    def test_a_size_that_is_not_the_size_of_the_file_is_refused(self):
+        """`byte_size` is denormalised, so nothing but this constraint holds it
+        true. The row below is what a `.update(content=...)` that forgot to
+        recompute it leaves behind: a file of one length claiming another."""
+        message = self.refuse(content=b"%PDF-1.7 pretend", byte_size=9999)
+        self.assertIn("a_card_pdf_knows_its_own_size", message)
+
+    def test_a_rewrite_that_forgets_the_size_is_refused(self):
+        """The path that makes the above more than theoretical. This table is
+        deliberately rewritable — that is the argument its model makes — so the
+        queryset `update()` that skips `save()` is a real writer, and the
+        database has to be the thing that catches it."""
+        card = self.card()
+        with connected_to(self.stmarys):
+            ReleasedCardPdf.objects.create(card=card, content=b"12345", byte_size=5)
+            with self.assertRaises(IntegrityError) as caught:
+                with transaction.atomic():
+                    ReleasedCardPdf.objects.filter(card=card).update(
+                        content=b"a much longer pretend document"
+                    )
+        self.assertIn("a_card_pdf_knows_its_own_size", str(caught.exception))
+
     def test_the_control_a_row_that_says_one_thing_is_accepted(self):
         """Without this, every test above passes against a table nothing can insert into."""
         card = self.card()
@@ -552,3 +578,127 @@ class AttendanceOfNoughtTests(ReportCardApiSetUp):
         """The control. Without it the test above passes against a page that
         prints the raw value for everything, dash included."""
         self.assertIn("— of 60 days", self.html_with(days_present=None, days_open=60))
+
+    def test_a_register_kept_without_a_term_length_still_prints_what_is_known(self):
+        """The three columns are independently nullable and no constraint ties
+        them together, so `days_present` set with `days_open` null is a row the
+        database permits. Gating the whole line on `days_open` throws the
+        recorded half away and tells a parent nobody kept a register."""
+        html = self.html_with(days_present=52, days_open=None, days_absent=None)
+        self.assertIn("52 days present", html)
+
+    def test_the_control_nothing_recorded_at_all_is_a_dash(self):
+        """Without this the test above passes against a page that prints
+        "None days present" when there is genuinely nothing to say."""
+        html = self.html_with(days_present=None, days_open=None, days_absent=None)
+        self.assertNotIn("days present", html)
+        self.assertIn("Attendance", html)
+
+
+class TheRevisedBadgeTests(ReportCardApiSetUp):
+    """A reissued card has to say so, and the first draft's flag did not exist.
+
+    The template asked for `card.is_revised`. `ReportCardOut` has no such field
+    and nothing in the repository sets one, so Django resolved it to the
+    invalid-variable default and the branch was unreachable — the badge could
+    never print. That is invisible until task 8 issues a second version, at
+    which point the reprinted card is indistinguishable from the one already in
+    a parent's hand, which is the single thing the badge exists to prevent.
+
+    Driven through the payload rather than through `revise()`, because the
+    defect is in the template and because a version-2 card is task 8's to make.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.release()
+
+    def html_at_version(self, version):
+        from results.card_api import card_payload
+
+        with connected_to(self.stmarys):
+            card = cards.card_for(
+                self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
+            )
+            payload = card_payload(card).model_copy(update={"version": version})
+            with patch("results.pdf.card_payload", return_value=payload):
+                return " ".join(pdf.html_for(card).split())
+
+    def test_a_reissued_card_says_it_is_revised(self):
+        html = self.html_at_version(2)
+        self.assertIn("Revised", html)
+        self.assertIn("version 2", html)
+
+    def test_the_control_a_first_issue_carries_no_badge(self):
+        """Without this the test above passes against a page that says
+        "Revised" on every card ever printed."""
+        self.assertNotIn("Revised", self.html_at_version(1))
+
+
+class TwoSubjectsCanShareANameAndNotATotalTests(ReportCardApiSetUp):
+    """"Exam" out of 120 and "Exam" out of 100 are two assessments, not one.
+
+    `max_score` is per `(term, subject, name)` — `uniq_assessment_term_subject_name`
+    says so — so a school may mark Mathematics out of 120 and English out of 100
+    and call both "Exam". Keyed on the name alone they collapse into a single
+    column, and two equal marks print side by side as equal performance on the
+    document a parent is most likely to take to a teacher, when they are not.
+
+    Mathematics is raised to 120 rather than dropped to 60 for a reason worth
+    keeping: the fixture has already marked Ada 88 there, and 88 out of 60 is a
+    147% subject and a 110% card average, which `a_card_average_is_a_percentage`
+    refuses at release. The differing maximum is what this class is about, and
+    it does not need an impossible mark to demonstrate it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            Assessment.objects.filter(
+                term=self.term_of(self.stmarys, TermName.FIRST.value),
+                subject_id=self.subjects_of(self.stmarys)["maths"],
+                name="Exam",
+            ).update(max_score=120)
+        self.release()
+
+    def payload_and_columns(self):
+        from results.card_api import card_payload
+
+        with connected_to(self.stmarys):
+            card = cards.card_for(
+                self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
+            )
+            payload = card_payload(card)
+            return card, payload, pdf._columns(payload)
+
+    def test_the_same_name_out_of_two_totals_is_two_columns(self):
+        _, _, columns = self.payload_and_columns()
+        exams = [c for c in columns if c["name"] == "Exam"]
+        self.assertEqual(
+            len(exams), 2, f"Two different totals collapsed into one column: {columns}"
+        )
+        self.assertEqual({c["max_score"] for c in exams}, {100, 120})
+
+    def test_each_subject_aligns_under_its_own_total(self):
+        """The alignment half. A second column is no use if the marks still land
+        in the first one."""
+        _, payload, columns = self.payload_and_columns()
+        rows = pdf._rows(payload, columns)
+        keys = [(c["name"], c["max_score"]) for c in columns]
+
+        maths = next(r for r in rows if r["line"].subject_name == "Mathematics")
+        english = next(r for r in rows if r["line"].subject_name == "English")
+
+        self.assertIsNotNone(maths["cells"][keys.index(("Exam", 120))])
+        self.assertIsNone(maths["cells"][keys.index(("Exam", 100))])
+        self.assertIsNotNone(english["cells"][keys.index(("Exam", 100))])
+        self.assertIsNone(english["cells"][keys.index(("Exam", 120))])
+
+    def test_the_page_prints_the_total_a_mark_is_out_of(self):
+        """What the parent actually sees. A bare 45 under a header reading
+        "Exam" does not say whether it was a good one."""
+        card, _, _ = self.payload_and_columns()
+        with connected_to(self.stmarys):
+            html = " ".join(pdf.html_for(card).split())
+        self.assertIn("/120", html)
+        self.assertIn("/100", html)

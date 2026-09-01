@@ -28,10 +28,30 @@ English's marks underneath them. `_columns()` takes the ordered union and
 `_rows()` aligns every line against it, leaving a gap where a subject has no
 such assessment.
 
-The order is the frozen print order, which today is alphabetical because
-`Assessment` has no explicit one — **issue #42**, and it is why that issue is
-must-fix-before-release: this is the surface where the wrong order is visible to
-a parent.
+The order is the frozen print order, which within a subject is **creation
+order**: `cards._assessments_for()` orders by `(subject name, assessment id)`
+and says in as many words that it is deliberately *not* alphabetical, because
+`Assessment.Meta.ordering` ends in `name` and would print "Exam, First CA,
+Second CA". It is still a guess — `Assessment` has no explicit print order,
+which is **issue #42**, and this is the surface that makes it
+must-fix-before-release: it is where the wrong order is visible to a parent.
+
+*Across* subjects the header is first-seen order, so where two subjects disagree
+about the order of names they share, the first subject read wins and the second
+one's row is printed in the header's order rather than its own. One row of
+columns cannot honour two orders at once; #42 is what settles it, by giving
+every assessment a position that does not depend on which subject was read
+first.
+
+## A mark is printed with the total it is out of
+
+`Assessment.max_score` is per `(term, subject, name)` — "a CA is commonly out of
+20 or 30", as its own docstring says — so a bare "45" under a header reading
+"Exam" does not tell a parent whether that was a good one. Columns are therefore
+keyed on `(name, max_score)` rather than the name alone, and the header carries
+the maximum. Keying on the name alone would put Mathematics' Exam out of 60 and
+English's Exam out of 100 in one column headed "Exam", where 45 and 45 read as
+equal performance and are not.
 
 ## No authority question is asked here
 
@@ -76,8 +96,15 @@ def html_for(card) -> str:
     )
 
 
-def _columns(payload) -> list[str]:
-    """Every assessment name on this card, once, in the order first seen.
+def _columns(payload) -> list[dict]:
+    """Every assessment on this card, once, in the order first seen.
+
+    Keyed on `(name, max_score)` and **not on the name alone**. An assessment
+    belongs to a subject — `uniq_assessment_term_subject_name` is per
+    `(term, subject, name)` — so Mathematics' "Exam" and English's "Exam" are
+    two different assessments and may be out of two different totals. One column
+    headed "Exam" would print 45-out-of-60 and 45-out-of-100 as the same mark,
+    on the document a parent is most likely to query with a teacher.
 
     `dict` rather than a `set`: the order is the frozen print order and a set
     would replace it with whatever the hash happened to be, which is the kind of
@@ -86,8 +113,8 @@ def _columns(payload) -> list[str]:
     seen = {}
     for line in payload.subjects:
         for cell in line.assessments:
-            seen.setdefault(cell.assessment_name, None)
-    return list(seen)
+            seen.setdefault((cell.assessment_name, cell.max_score), None)
+    return [{"name": name, "max_score": max_score} for name, max_score in seen]
 
 
 def _rows(payload, columns) -> list[dict]:
@@ -101,9 +128,17 @@ def _rows(payload, columns) -> list[dict]:
     """
     rows = []
     for line in payload.subjects:
-        by_name = {cell.assessment_name: cell for cell in line.assessments}
+        by_key = {
+            (cell.assessment_name, cell.max_score): cell for cell in line.assessments
+        }
         rows.append(
-            {"line": line, "cells": [by_name.get(name) for name in columns]}
+            {
+                "line": line,
+                "cells": [
+                    by_key.get((column["name"], column["max_score"]))
+                    for column in columns
+                ],
+            }
         )
     return rows
 

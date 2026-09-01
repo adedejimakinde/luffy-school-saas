@@ -33,10 +33,22 @@ different thing from a cell whose `score` is null, which is an assessment the
 child was not marked in and prints as a dash. Two absences meaning different
 things must not look the same on a page somebody will ask a teacher about.
 
-The order is the frozen print order, which today is alphabetical because
-`Assessment` has no explicit one. That is **issue #42**, and this is the surface
-that makes it must-fix-before-release: it is where the wrong order becomes
-visible to a parent.
+The order is the frozen print order, which within a subject is **creation
+order** — the freeze orders by `(subject name, assessment id)` and deliberately
+not by `Assessment.Meta.ordering`, which ends in `name`. It is still a guess,
+because `Assessment` has no explicit print order. That is **issue #42**, and
+this is the surface that makes it must-fix-before-release: it is where the wrong
+order becomes visible to a parent.
+
+Across subjects the header is first-seen order, so where two subjects disagree
+about the order of names they share, the first subject read wins. One row of
+columns cannot honour two orders at once, and #42 is what settles it.
+
+Columns are keyed on `(name, max_score)`, not on the name alone, and the header
+carries the maximum. `Assessment.max_score` is per `(term, subject, name)`, so
+Mathematics' Exam out of 60 and English's Exam out of 100 are different
+assessments; collapsed into one column, 45 and 45 read as equal performance and
+are not. The subject total prints its denominator for the same reason.
 
 ## `ReleasedCardPdf` is a cache, and is deliberately not append-only
 

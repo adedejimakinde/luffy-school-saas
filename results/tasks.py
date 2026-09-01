@@ -121,7 +121,12 @@ def _record_the_failure(card_id, exc):
             defaults={
                 "content": None,
                 "byte_size": None,
-                "error": f"{type(exc).__name__}: {exc}"[:2000] or "unknown error",
+                # No `or "unknown error"` fallback. The f-string always
+                # carries at least "<TypeName>: ", so a fallback for an empty
+                # `error` could never fire — it would read as protection
+                # against tripping the file-or-a-reason constraint while
+                # protecting nothing.
+                "error": f"{type(exc).__name__}: {exc}"[:2000],
             },
         )
 

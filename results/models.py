@@ -75,6 +75,7 @@ from decimal import Decimal
 from academics.models import TermName
 from django.db import models
 from django.db.models import F, Q, Value
+from django.db.models.functions import Length
 
 
 class SheetState(models.TextChoices):
@@ -2489,7 +2490,11 @@ class ReleasedCardPdf(models.Model):
     content = models.BinaryField(null=True, blank=True)
 
     #: Denormalised off `content` so that "how big is a card" is answerable
-    #: without reading every card's bytes out of the database to find out.
+    #: without reading every card's bytes out of the database to find out. The
+    #: constraint below holds it to the actual length rather than to merely
+    #: being set, because a denormalised number nothing checks is a number that
+    #: eventually lies — and this table is deliberately rewritable, so a
+    #: `.update(content=...)` that forgets `byte_size` is a real path to it.
     byte_size = models.PositiveIntegerField(null=True, blank=True)
 
     #: Why there is no file. The task's own exception, as text.
@@ -2509,8 +2514,19 @@ class ReleasedCardPdf(models.Model):
                 name="a_card_pdf_is_a_file_or_a_reason_and_not_both",
             ),
             models.CheckConstraint(
+                # `byte_size__isnull=False` is not redundant beside the
+                # `Length` comparison, and removing it silently reopens the
+                # hole. With `byte_size` NULL the comparison is NULL, not
+                # false, and Postgres counts a CHECK that evaluates to NULL as
+                # satisfied — so the length test alone would accept the very
+                # row this constraint was first written to refuse. An explicit
+                # `IS NOT NULL` in the same AND makes that branch false.
                 condition=Q(content__isnull=True, byte_size__isnull=True)
-                | Q(content__isnull=False, byte_size__isnull=False),
+                | Q(
+                    content__isnull=False,
+                    byte_size__isnull=False,
+                    byte_size=Length("content"),
+                ),
                 name="a_card_pdf_knows_its_own_size",
             ),
         ]

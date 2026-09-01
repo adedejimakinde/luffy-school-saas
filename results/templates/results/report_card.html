@@ -61,12 +61,18 @@ millimetres per element.
   .remark .rule { border-bottom: .6px dotted #999; margin-top: 10px; }
 
   .blank { color: #888; }
+  .max { color: #777; font-size: 7.5pt; }
 </style>
 
 <div class="masthead">
   <h1>{{ card.school_name }}</h1>
   <div class="term">{{ card.term_label }} &middot; {{ card.academic_session }}</div>
-  {% if card.is_revised %}<div class="revised">Revised</div>{% endif %}
+  {# `card.version`, not an `is_revised` flag: `ReportCardOut` carries the
+     version and nothing else says "revised". A missing attribute resolves to
+     the invalid-variable default and makes this branch quietly unreachable,
+     which is exactly how a reissued card would print identical to the one a
+     parent already has. #}
+  {% if card.version > 1 %}<div class="revised">Revised &middot; version {{ card.version }}</div>{% endif %}
 </div>
 
 <table class="who">
@@ -86,6 +92,12 @@ millimetres per element.
         {% endcomment %}
         {% if card.days_open is not None %}
           {{ card.days_present|default_if_none:"—" }} of {{ card.days_open }} days
+        {% elif card.days_present is not None %}
+          {# The three columns are independently nullable with no constraint
+             tying them together, so a register kept without a term length is a
+             real row. Printing a bare dash for it would say "nobody recorded
+             this" about a child whose attendance *was* recorded. #}
+          {{ card.days_present }} days present
         {% else %}<span class="blank">&mdash;</span>{% endif %}
       </td></tr>
 </table>
@@ -94,7 +106,7 @@ millimetres per element.
   <thead>
     <tr>
       <th>Subject</th>
-      {% for column in columns %}<th class="n">{{ column }}</th>{% endfor %}
+      {% for column in columns %}<th class="n">{{ column.name }}<span class="max">/{{ column.max_score }}</span></th>{% endfor %}
       <th class="n">Total</th><th class="n">%</th><th class="n">Grade</th><th>Remark</th>
     </tr>
   </thead>
@@ -105,7 +117,7 @@ millimetres per element.
       {% for cell in row.cells %}
         <td class="n">{% if cell is None %}<span class="blank">&middot;</span>{% elif cell.score is None %}<span class="blank">&mdash;</span>{% else %}{{ cell.score }}{% endif %}</td>
       {% endfor %}
-      <td class="n">{{ row.line.total_scored }}</td>
+      <td class="n">{{ row.line.total_scored }}<span class="max">/{{ row.line.total_available }}</span></td>
       <td class="n">{% if row.line.percentage %}{{ row.line.percentage }}{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
       <td class="n">{{ row.line.grade_letter }}</td>
       <td>{{ row.line.grade_remark }}</td>
