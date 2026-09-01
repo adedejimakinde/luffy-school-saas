@@ -240,6 +240,21 @@ class ReportCardOut(Schema):
     term_label: str
     version: int
 
+    #: Task 8. **The word "Revised" on the page, and the only source of it.**
+    #: `ReleasedCard.is_revised` decides — `version > 1`, not "an audit row
+    #: exists" — so that a child placed into a term after it was released, whose
+    #: only card is issued through the revision path at version 1, is not told
+    #: her card is a correction of something she never received.
+    #:
+    #: Sent to families as well as staff, deliberately. It is not a staff-only
+    #: field like `position`: a parent holding two cards for one term has to be
+    #: able to tell which one supersedes the other, and being told that in the
+    #: office rather than on the page is how the wrong card gets believed. What
+    #: is *not* here is the reason or who signed it — `CardRevision` is the
+    #: school's audit, and "why was this corrected" is a conversation, not a
+    #: field on a page a child carries home.
+    is_revised: bool
+
     total_scored: int
     total_available: int
     own_average: Optional[str]
@@ -498,6 +513,7 @@ def report_card(request, student_membership_id: int, term_id: int):
         term_name=card.term_name,
         term_label=TermName(card.term_name).label,
         version=card.version,
+        is_revised=card.is_revised,
         total_scored=card.total_scored,
         total_available=card.total_available,
         own_average=_as_text(card.own_average),

@@ -789,7 +789,14 @@ class RatingsFollowTheChainTests(RatingsSetUp):
                 self.rate("Punctuality", 3)
 
         self.assertEqual(refused.exception.state, "released")
-        self.assertIn("revision", str(refused.exception))
+        # **Not `assertIn("revision", ...)`.** That is what this asserted until
+        # task 8 was built and found the promise false: a revision re-freezes
+        # from tables a released term refuses to write, so reissuing reproduces
+        # the value exactly. The message now names the remedy *and* its limit,
+        # and this pins both — the `assertNotIn` so it cannot quietly go back to
+        # sending a teacher after a correction that does not exist. Issue #54.
+        self.assertIn("reissuing cannot yet reach", str(refused.exception))
+        self.assertNotIn("revision rather than an edit", str(refused.exception))
 
     def test_another_classs_sheet_does_not_shut_ours(self):
         """The lock is per class group, not per term."""
@@ -1096,10 +1103,59 @@ class NoIndexIsBuiltTwiceTests(RatingsSetUp):
     #: The columns Django indexes on its own, one per `ForeignKey`. Listed
     #: rather than detected, so adding a relation to either table makes this
     #: test fail until somebody has looked at what it costs.
+    #: Indexes Django builds for a foreign key that nothing here objects to,
+    #: because no unique constraint leads with that column. Anything *not*
+    #: listed has to justify itself against every other index on the table.
+    #:
+    #: The five frozen tables below hang off `ReleasedCard`, and every one of
+    #: them is unique on a key **leading with `card_id`** — so the automatic
+    #: index on that foreign key is a second btree over one answer, and none of
+    #: them appears here. Three were re-keyed onto the card by task 8 and this
+    #: test caught them the same afternoon; the other two had carried the same
+    #: redundancy since `0016` and were invisible because this test named only
+    #: the two trait tables. Naming all five is most of the point of widening it.
     AUTOMATIC = {
         "results_traitrating": [["term_id"], ["trait_id"]],
         "results_releasedtraitrating": [["sheet_id"], ["trait_id"]],
+        "results_releasedcomment": [["sheet_id"]],
+        "results_releasedsessionresult": [["sheet_id"]],
+        "results_releasedsubjectresult": [["subject_id"]],
+        "results_releasedassessmentscore": [["subject_id"], ["assessment_id"]],
     }
+
+    def columns_of(self, table):
+        """The table's real columns, read from Postgres rather than listed here.
+
+        A second hand-maintained list would drift in exactly the way the first
+        one did.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = %s AND table_name = %s",
+                [self.stmarys.schema_name, table],
+            )
+            return {row[0] for row in cursor.fetchall()}
+
+    def test_every_whitelisted_index_names_a_column_that_exists(self):
+        """A whitelist is only a tripwire if the names in it are real.
+
+        The first draft of the widened `AUTOMATIC` pre-approved `sheet_id` on
+        both subject tables and `term_id` on the session table. **None of those
+        three columns exists.** An entry for an index that cannot be built costs
+        nothing on the day it is written and silently pre-approves the real
+        index the day somebody adds that relation — which is the one thing this
+        list exists to prevent. It went in during the same review that widened
+        the list, so the widening nearly cost more than it bought.
+        """
+        with connected_to(self.stmarys):
+            for table, indexes in self.AUTOMATIC.items():
+                existing = self.columns_of(table)
+                self.assertTrue(existing, f"{table} has no columns at all.")
+                for columns in indexes:
+                    for column in columns:
+                        with self.subTest(table=table, column=column):
+                            self.assertIn(column, existing)
 
     def columns_of_each_index(self, table):
         with connection.cursor() as cursor:
@@ -1117,7 +1173,7 @@ class NoIndexIsBuiltTwiceTests(RatingsSetUp):
         return found
 
     def test_no_index_leads_with_the_columns_another_already_leads_with(self):
-        for table in ("results_traitrating", "results_releasedtraitrating"):
+        for table in self.AUTOMATIC:
             with self.subTest(table=table):
                 with connected_to(self.stmarys):
                     indexes = self.columns_of_each_index(table)

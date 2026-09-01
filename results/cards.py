@@ -215,27 +215,68 @@ def freeze_for_release(sheet, *, by=None) -> dict[int, ReleasedCard]:
     failure `ClassResults` was extracted to prevent.
     """
     results = positions.class_results(sheet.class_group, sheet.term)
-    roster = results.student_ids
-    if not roster:
+    if not results.student_ids:
         return {}
+    return _freeze(sheet, results, results.student_ids, versions={}, by=by)
 
+
+def freeze_a_revision(sheet, student_id, *, version, by) -> dict[int, ReleasedCard]:
+    """Task 8. One child's card again, at a new version, from live data.
+
+    Returns the same `student_id -> card` mapping `freeze_for_release()` does,
+    with one entry — because `ratings`, `comments` and `sessions` take that
+    mapping *as the roster* and iterate it, so a one-child dict re-freezes
+    exactly one child's sections with no argument any of them has to learn.
+
+    **The class is read whole even though one card is written.** `position` and
+    `roster_size` are statements about the other forty-four children, and a
+    revision computed against a roster of one would put every revised card
+    first out of one. `positions.class_results()` is called for the class and
+    only the write is narrowed.
+
+    That is also the honest reason a revision is per-card rather than per-class:
+    a correction that changes a mark changes everyone's *position*, so the
+    revised card's rank may now disagree with the forty-four unrevised cards
+    around it. `position` is staff-only and prints on nobody's card — see
+    `ReleasedCard` — so the disagreement is between two staff screens rather
+    than between two families' cards, which is the trade this takes knowingly.
+    Issue #55, rather than a silent choice.
+    """
+    results = positions.class_results(sheet.class_group, sheet.term)
+    return _freeze(sheet, results, [student_id], versions={student_id: version}, by=by)
+
+
+def _freeze(sheet, results, whose, *, versions, by) -> dict[int, ReleasedCard]:
+    """The card rows and their two content tables, for `whose`.
+
+    Split out of `freeze_for_release()` when task 8 needed the same freeze for
+    one child at a new version. `whose` is who gets a card written; `results` is
+    the whole class, because the numbers on a card are partly about the class.
+    """
     term = sheet.term
     school_name = _school_name()
-    names = _student_names(roster)
+    names = _student_names(whose)
     # Once per release, not once per child: a class's cards have to agree with
     # each other about what 72.00 is worth.
     bands = grades.scale()
 
     subjects = _subjects_in_print_order(results.subject_ids)
     assessments = _assessments_for(term, results.subject_ids)
-    scores = _scores_for(assessments, roster)
+    scores = _scores_for(assessments, whose)
 
     released_by_id = getattr(by, "pk", by)
     cards = [
         _card_for(
-            sheet, term, school_name, names, results, student_id, released_by_id
+            sheet,
+            term,
+            school_name,
+            names,
+            results,
+            student_id,
+            released_by_id,
+            versions.get(student_id, 1),
         )
-        for student_id in roster
+        for student_id in whose
     ]
     ReleasedCard.objects.bulk_create(cards)
 
@@ -283,7 +324,7 @@ def _subjects_in_print_order(subject_ids):
 
 
 def _card_for(
-    sheet, term, school_name, names, results, student_id, released_by_id
+    sheet, term, school_name, names, results, student_id, released_by_id, version=1
 ) -> ReleasedCard:
     """One child's card row. **Never conditional** — see the module docstring."""
     scored = available = 0
@@ -298,7 +339,7 @@ def _card_for(
         sheet=sheet,
         student_membership_id=student_id,
         term=term,
-        version=1,
+        version=version,
         session=term.session,
         term_name=term.name,
         class_group=sheet.class_group,
@@ -452,17 +493,31 @@ def card_lines(card):
 
 
 def cards_on(sheet):
-    """Every card that sheet's release wrote, with its lines, in few queries.
+    """Every child's **current** card on that sheet, with its lines, in few queries.
 
     `Prefetch` rather than a join per card: task 7's PDF job walks a whole class
     and a per-card query there is forty-five round trips inside a Celery task.
+
+    **One row per child, and that is not what this used to return.** It filtered
+    on the sheet and ordered `("student_membership_id", "version")`, which was
+    exactly right while a sheet could hold one card per child. Task 8 makes a
+    revision a second row on the same sheet, so a forty-five child class came
+    back as forty-six — and the batch that walks it would have rendered the
+    superseded version 1 alongside version 2 and sent both home. Its sibling
+    `cards_by_student()` was given `version=1` for the mirror-image reason;
+    this one is the read side and wants the opposite end.
+
+    `DISTINCT ON` with the version descending, so the row kept per child is the
+    highest — the same rule `card_for()` states. Between *sheets* the earliest
+    release wins, but a sheet is what this takes, so that half does not arise.
     """
     return list(
         ReleasedCard.objects.filter(sheet=sheet)
+        .order_by("student_membership_id", "-version")
+        .distinct("student_membership_id")
         .prefetch_related(
             Prefetch("subject_results"), Prefetch("assessment_scores")
         )
-        .order_by("student_membership_id", "version")
     )
 
 

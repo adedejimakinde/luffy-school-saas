@@ -58,7 +58,7 @@ from academics.services import assign_class_teacher, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership, link_guardian
 from gradebook.models import Assessment, Score, Subject
-from results import cards, sessions
+from results import cards, revision, sessions
 from results import services as results_services
 from results.models import (
     PromotionStatus,
@@ -610,3 +610,92 @@ class TheThirdTermCard(ReportCardApiSetUp):
         )
 
         self.assertIsNone(body["promotion"], "undecided is the absence of a row")
+
+
+class TheRevisedMarkerIsOnThePayload(ReportCardApiSetUp):
+    """Task 8. "Revised" is a word on the page, so it has to be in the JSON.
+
+    The exclusion tests above are all about fields a family must **not** see.
+    This is the opposite claim about the same payload, and it needs its own
+    control: a card that is not a revision must say `false` rather than omit the
+    key, because a client reading a missing key as falsey is a client that will
+    read a missing key as falsey the day the key is dropped by accident.
+    """
+
+    def test_a_first_release_says_it_is_not_revised(self):
+        self.release()
+
+        response = self.fetch(self.mama, self.stmarys, self.ada)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("is_revised", response.json())
+        self.assertFalse(response.json()["is_revised"])
+        self.assertEqual(response.json()["version"], 1)
+
+    def test_a_revised_card_says_so_to_the_family_as_well_as_to_staff(self):
+        """Both callers, because the payload does not branch on who is asking.
+
+        `position` is staff-only and is excluded for everyone; this is the field
+        that goes the other way, and asserting it for the parent alone would
+        leave it free to be a staff-only field that the parent's serializer
+        happened to include.
+        """
+        self.release()
+        with connected_to(self.stmarys):
+            revision.revise(
+                self.ada,
+                self.term_of(self.stmarys, TermName.FIRST.value),
+                self.principal,
+                "Surname misspelled on the first printing.",
+            )
+
+        for who in (self.mama, self.principal):
+            with self.subTest(reader=who.username):
+                payload = self.fetch(who, self.stmarys, self.ada).json()
+                self.assertTrue(payload["is_revised"])
+                self.assertEqual(payload["version"], 2)
+
+    def test_the_reason_and_the_reviser_are_not_on_the_page(self):
+        """The audit is the school's. A child carries home the card, not the file.
+
+        `CardRevision` holds who asked and why, and neither has a slot in any
+        schema here — the same rule task 6 applied to `position` and the
+        promotion *suggestion*, for the same reason: a field omitted from the
+        rendered page but sitting in the JSON has not been omitted.
+        """
+        self.release()
+        with connected_to(self.stmarys):
+            revision.revise(
+                self.ada,
+                self.term_of(self.stmarys, TermName.FIRST.value),
+                self.principal,
+                "A reason nobody outside the office should read.",
+            )
+
+        response = self.fetch(self.mama, self.stmarys, self.ada)
+        payload = response.json()
+
+        self.assertNotIn(
+            "A reason nobody outside the office should read",
+            response.content.decode(),
+        )
+        for absent in ("reason", "revised_by", "by_platform_staff", "previous_card"):
+            with self.subTest(field=absent):
+                self.assertNotIn(absent, payload)
+
+    def test_a_revision_at_one_school_does_not_mark_the_others_card(self):
+        """Grace releases and is asked in Grace's own schema, through its own host."""
+        self.release()
+        self.release(self.grace)
+        with connected_to(self.stmarys):
+            revision.revise(
+                self.ada,
+                self.term_of(self.stmarys, TermName.FIRST.value),
+                self.principal,
+                "St Mary's correction.",
+            )
+
+        theirs = self.fetch(self.their_principal, self.grace, self.ngozi).json()
+
+        self.assertFalse(theirs["is_revised"])
+        self.assertEqual(theirs["version"], 1)

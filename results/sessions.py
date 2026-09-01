@@ -665,12 +665,32 @@ def released_session_line(membership, session) -> ReleasedSessionResult | None:
     `Meta.ordering`: the tie-break matters for the same reason it does on
     `PromotionDecision`, and a "which card is this" that resolves arbitrarily
     between two rows is one that changes when nothing changed.
+
+    ## And then the highest version within it, which is the other half
+
+    "The earliest" is the right rule **between sheets** and the wrong one
+    **between versions of one sheet**, and task 8 made the second case real. A
+    revision writes a second row on the same sheet, later; taking the earliest
+    returned the **superseded** line, so `card_session_line()` — and through it
+    `decide()`, which freezes `session_average` and the promotion *suggestion*
+    off this row — read version 1 while `card_api` served version 2 to the
+    family. The two genuinely differ: the frozen line is recomputed from live
+    first- and second-term marks and live `ReportCardSettings` weights, and a
+    third-term release locks neither.
+
+    So: earliest sheet, then its highest version. Exactly the rule
+    `cards.card_for()` states, and it has to be the same rule or the card and
+    its session line describe different releases.
     """
+    rows = ReleasedSessionResult.objects.filter(
+        session=session, student_membership_id=getattr(membership, "pk", membership)
+    )
+    earliest = rows.order_by("created_at", "id").first()
+    if earliest is None:
+        return None
     return (
-        ReleasedSessionResult.objects.filter(
-            session=session, student_membership_id=getattr(membership, "pk", membership)
-        )
-        .order_by("created_at", "id")
+        rows.filter(sheet_id=earliest.sheet_id)
+        .order_by("-card__version", "-id")
         .first()
     )
 
