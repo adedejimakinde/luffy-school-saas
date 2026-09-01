@@ -789,7 +789,14 @@ class RatingsFollowTheChainTests(RatingsSetUp):
                 self.rate("Punctuality", 3)
 
         self.assertEqual(refused.exception.state, "released")
-        self.assertIn("revision", str(refused.exception))
+        # **Not `assertIn("revision", ...)`.** That is what this asserted until
+        # task 8 was built and found the promise false: a revision re-freezes
+        # from tables a released term refuses to write, so reissuing reproduces
+        # the value exactly. The message now names the remedy *and* its limit,
+        # and this pins both — the `assertNotIn` so it cannot quietly go back to
+        # sending a teacher after a correction that does not exist. Issue #54.
+        self.assertIn("reissuing cannot yet reach", str(refused.exception))
+        self.assertNotIn("revision rather than an edit", str(refused.exception))
 
     def test_another_classs_sheet_does_not_shut_ours(self):
         """The lock is per class group, not per term."""
@@ -1096,9 +1103,28 @@ class NoIndexIsBuiltTwiceTests(RatingsSetUp):
     #: The columns Django indexes on its own, one per `ForeignKey`. Listed
     #: rather than detected, so adding a relation to either table makes this
     #: test fail until somebody has looked at what it costs.
+    #: Indexes Django builds for a foreign key that nothing here objects to,
+    #: because no unique constraint leads with that column. Anything *not*
+    #: listed has to justify itself against every other index on the table.
+    #:
+    #: The five frozen tables below hang off `ReleasedCard`, and every one of
+    #: them is unique on a key **leading with `card_id`** — so the automatic
+    #: index on that foreign key is a second btree over one answer, and none of
+    #: them appears here. Three were re-keyed onto the card by task 8 and this
+    #: test caught them the same afternoon; the other two had carried the same
+    #: redundancy since `0016` and were invisible because this test named only
+    #: the two trait tables. Naming all five is most of the point of widening it.
     AUTOMATIC = {
         "results_traitrating": [["term_id"], ["trait_id"]],
         "results_releasedtraitrating": [["sheet_id"], ["trait_id"]],
+        "results_releasedcomment": [["sheet_id"]],
+        "results_releasedsessionresult": [["sheet_id"], ["term_id"]],
+        "results_releasedsubjectresult": [["sheet_id"], ["subject_id"]],
+        "results_releasedassessmentscore": [
+            ["sheet_id"],
+            ["subject_id"],
+            ["assessment_id"],
+        ],
     }
 
     def columns_of_each_index(self, table):
@@ -1117,7 +1143,7 @@ class NoIndexIsBuiltTwiceTests(RatingsSetUp):
         return found
 
     def test_no_index_leads_with_the_columns_another_already_leads_with(self):
-        for table in ("results_traitrating", "results_releasedtraitrating"):
+        for table in self.AUTOMATIC:
             with self.subTest(table=table):
                 with connected_to(self.stmarys):
                     indexes = self.columns_of_each_index(table)

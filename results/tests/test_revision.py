@@ -24,6 +24,8 @@ from academics.models import ClassGroup, Term, TermName
 from academics.services import move_student, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student
+from gradebook.models import Assessment
+from gradebook import services as gradebook_services
 from results import cards, comments, positions, ratings, revision
 from results import services as results_services
 from results.models import (
@@ -754,3 +756,140 @@ class AChildMovedOutOfTheClassTests(RevisionSetUp):
                 ).version,
                 2,
             )
+
+
+class WhatARevisionCannotFixTests(RevisionSetUp):
+    """The honest limit of this feature, pinned so it cannot be forgotten.
+
+    A revision re-freezes a card from the live tables — and once a term is
+    released, **every one of those tables refuses a write**.
+    `gradebook.services`, `results.ratings` and `results.comments` all gate on
+    `results.services.is_open_for_writing()`, which is false for anything past
+    `draft`. So a revision issued to fix a wrong mark, a wrong rating or a wrong
+    remark reproduces it exactly, and the only thing that can actually differ
+    between two versions is a name copied from a table that is not gated on
+    sheet state.
+
+    That is issue #54. These tests are its shape written down; they go red when
+    it is closed, which is the point of them.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            ratings.set_group_enabled(TraitGroup.AFFECTIVE, True)
+            first = self.first_term()
+            self.trait = Trait.objects.filter(group=TraitGroup.AFFECTIVE).first()
+            ratings.rate(first, self.trait, self.ada, 4)
+            comments.write(
+                first, self.ada, CommentAuthor.CLASS_TEACHER, "A steady term."
+            )
+        self.release_first_term()
+
+    def test_all_three_inputs_refuse_a_write_once_the_term_is_released(self):
+        """Not just the marks, which is what #54 originally said."""
+        with connected_to(self.stmarys):
+            first = self.first_term()
+            assessment = Assessment.objects.filter(term=first).first()
+
+            with self.assertRaises(gradebook_services.MarksLocked):
+                gradebook_services.set_score(
+                    assessment, self.ada, 41, expected_version=1
+                )
+            with self.assertRaises(ratings.RatingsLocked):
+                ratings.rate(first, self.trait, self.ada, 1)
+            with self.assertRaises(comments.CommentsLocked):
+                comments.write(
+                    first, self.ada, CommentAuthor.CLASS_TEACHER, "Rewritten."
+                )
+
+    def test_none_of_the_three_refusals_promises_a_revision_will_fix_it(self):
+        """All six of those messages said "correcting one is a revision rather
+        than an edit" — true of the shape and false of the outcome, because
+        there is no revision that can carry the correction. A teacher reading it
+        went looking for a remedy that does not exist, and once task 8 shipped
+        would have found a button that produces a byte-identical card.
+        """
+        with connected_to(self.stmarys):
+            first = self.first_term()
+            assessment = Assessment.objects.filter(term=first).first()
+
+            refusals = []
+            for attempt in (
+                lambda: gradebook_services.set_score(
+                    assessment, self.ada, 41, expected_version=1
+                ),
+                lambda: ratings.rate(first, self.trait, self.ada, 1),
+                lambda: comments.write(
+                    first, self.ada, CommentAuthor.CLASS_TEACHER, "Rewritten."
+                ),
+            ):
+                with self.assertRaises(Exception) as caught:
+                    attempt()
+                refusals.append(str(caught.exception))
+
+        for message in refusals:
+            with self.subTest(message=message[:48]):
+                self.assertNotIn("revision rather than an edit", message)
+                self.assertIn("reissuing cannot yet reach", message)
+
+    def test_a_revision_reproduces_the_card_because_nothing_upstream_could_move(self):
+        """The consequence, stated as a fact about two rows rather than a mood.
+
+        Everything a family sees is identical across the two versions. This is
+        what #54 costs, and it is why that issue is blocking rather than tidy:
+        the feature works exactly as designed and cannot yet do the thing a
+        school would reach for it to do.
+        """
+        with connected_to(self.stmarys):
+            first = self.first_term()
+            before = cards.card_for(self.ada, first)
+            was = (
+                before.total_scored,
+                before.total_available,
+                before.own_average,
+                before.student_name,
+            )
+            was_ratings = sorted(
+                ReleasedTraitRating.objects.filter(card=before).values_list(
+                    "trait_name", "score"
+                )
+            )
+            was_remarks = sorted(
+                ReleasedComment.objects.filter(card=before).values_list(
+                    "author", "body"
+                )
+            )
+
+            after = revision.revise(
+                self.ada, first, self.principal, "Trying to fix a mark."
+            )
+
+            self.assertEqual(
+                (
+                    after.total_scored,
+                    after.total_available,
+                    after.own_average,
+                    after.student_name,
+                ),
+                was,
+            )
+            self.assertEqual(
+                sorted(
+                    ReleasedTraitRating.objects.filter(card=after).values_list(
+                        "trait_name", "score"
+                    )
+                ),
+                was_ratings,
+            )
+            self.assertEqual(
+                sorted(
+                    ReleasedComment.objects.filter(card=after).values_list(
+                        "author", "body"
+                    )
+                ),
+                was_remarks,
+            )
+            # And the one thing it *can* fix is proven separately, in
+            # `WhatActuallyChangesTests` — a name, from a table nothing here
+            # gates on sheet state.

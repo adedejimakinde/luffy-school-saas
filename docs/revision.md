@@ -59,17 +59,35 @@ which would look right.
 
 ## What can actually differ between the two versions
 
-Everything a card copies rather than joins to: the child's name, the school's
-name, the class's name, the conduct section, the remarks. The commonest real
-correction is a misspelled name — copied at freeze precisely so a rename in
-`accounts` cannot rewrite a card that has gone home, which is the same rule that
-makes a misspelling permanent until somebody reissues.
+**Names, and today nothing else.** The child's name, the school's name and the
+class's name are copied at freeze from tables edited elsewhere — `accounts` is a
+shared schema, and neither `School` nor `ClassGroup` is gated on a sheet's state
+— so a correction there reaches the new version. A misspelt name on a card that
+has gone home is the commonest correction a school asks for, and the copy rule
+that stops a later rename rewriting a released card is exactly what makes the
+misspelling permanent until somebody reissues.
 
-**Not the marks.** A released term refuses a score write for ever
-(`gradebook/api.py`'s 423), so today a revision cannot carry a mark correction.
-That is a real gap, and it is #54. It is deliberately not closed here:
-"may a released term's marks be reopened, and by whom" is a policy decision, and
-the least visible place on the platform is the wrong place to invent one.
+**Marks, ratings and remarks cannot change at all.** `gradebook.services`,
+`results.ratings` and `results.comments` all gate their writes on
+`is_open_for_writing()`, which is false for anything past `draft`. So once a
+term is released, every input a revision re-freezes from is frozen upstream too,
+and a revision issued to fix a wrong mark, rating or remark reproduces it
+exactly.
+
+That is **#54**, and it is wider than the "marks" in its title. It is
+deliberately not closed here: "may a released term be reopened, and by whom" is
+a policy decision, and the least visible place on the platform is the wrong
+place to invent one.
+
+### The six messages that promised otherwise
+
+`MarksLocked`, `RatingsLocked` and `CommentsLocked` each refused a write in two
+places with the sentence "correcting one is a revision rather than an edit."
+True of the shape and false of the outcome: there was no revision that could
+carry the correction, so the message sent a teacher after a remedy that does not
+exist. All six now say the write is refused, that a released card is corrected
+by reissuing it, that reissuing cannot yet reach the value in question, and who
+to raise it with. They go back when #54 lands.
 
 ## "Revised" is said by the version, not by the audit row
 

@@ -719,7 +719,17 @@ class ReleasedTraitRating(models.Model):
     #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
     #: backfill has to run between the two. **Required from `0017` onwards.**
     card = models.ForeignKey(
-        "ReleasedCard", related_name="trait_ratings", on_delete=models.PROTECT
+        "ReleasedCard",
+        related_name="trait_ratings",
+        on_delete=models.PROTECT,
+        # `db_index=False`: the unique constraint in `Meta` already leads with
+        # this column, so Django's automatic index on the foreign key is a
+        # second btree over the same answer — which is what
+        # `NoIndexIsBuiltTwiceTests` refuses, and what it caught the moment this
+        # table was re-keyed onto the card. Every read this index would serve —
+        # a card's rows, and the `PROTECT` check asking whether any child
+        # references a card — is served by that constraint's leading column.
+        db_index=False,
     )
 
     class Meta:
@@ -1023,7 +1033,17 @@ class ReleasedComment(models.Model):
     #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
     #: backfill has to run between the two. **Required from `0017` onwards.**
     card = models.ForeignKey(
-        "ReleasedCard", related_name="comments", on_delete=models.PROTECT
+        "ReleasedCard",
+        related_name="comments",
+        on_delete=models.PROTECT,
+        # `db_index=False`: the unique constraint in `Meta` already leads with
+        # this column, so Django's automatic index on the foreign key is a
+        # second btree over the same answer — which is what
+        # `NoIndexIsBuiltTwiceTests` refuses, and what it caught the moment this
+        # table was re-keyed onto the card. Every read this index would serve —
+        # a card's rows, and the `PROTECT` check asking whether any child
+        # references a card — is served by that constraint's leading column.
+        db_index=False,
     )
 
     class Meta:
@@ -1440,7 +1460,17 @@ class ReleasedSessionResult(models.Model):
     #: Nullable in `0016` and tightened to NOT NULL in `0017`, because the
     #: backfill has to run between the two. **Required from `0017` onwards.**
     card = models.ForeignKey(
-        "ReleasedCard", related_name="session_results", on_delete=models.PROTECT
+        "ReleasedCard",
+        related_name="session_results",
+        on_delete=models.PROTECT,
+        # `db_index=False`: the unique constraint in `Meta` already leads with
+        # this column, so Django's automatic index on the foreign key is a
+        # second btree over the same answer — which is what
+        # `NoIndexIsBuiltTwiceTests` refuses, and what it caught the moment this
+        # table was re-keyed onto the card. Every read this index would serve —
+        # a card's rows, and the `PROTECT` check asking whether any child
+        # references a card — is served by that constraint's leading column.
+        db_index=False,
     )
 
     class Meta:
@@ -2075,7 +2105,17 @@ class ReleasedSubjectResult(models.Model):
     """
 
     card = models.ForeignKey(
-        ReleasedCard, related_name="subject_results", on_delete=models.PROTECT
+        ReleasedCard,
+        related_name="subject_results",
+        on_delete=models.PROTECT,
+        # `db_index=False`: the unique constraint in `Meta` already leads with
+        # this column, so Django's automatic index on the foreign key is a
+        # second btree over the same answer — which is what
+        # `NoIndexIsBuiltTwiceTests` refuses, and what it caught the moment this
+        # table was re-keyed onto the card. Every read this index would serve —
+        # a card's rows, and the `PROTECT` check asking whether any child
+        # references a card — is served by that constraint's leading column.
+        db_index=False,
     )
 
     subject = models.ForeignKey(
@@ -2203,7 +2243,17 @@ class ReleasedAssessmentScore(models.Model):
     """
 
     card = models.ForeignKey(
-        ReleasedCard, related_name="assessment_scores", on_delete=models.PROTECT
+        ReleasedCard,
+        related_name="assessment_scores",
+        on_delete=models.PROTECT,
+        # `db_index=False`: the unique constraint in `Meta` already leads with
+        # this column, so Django's automatic index on the foreign key is a
+        # second btree over the same answer — which is what
+        # `NoIndexIsBuiltTwiceTests` refuses, and what it caught the moment this
+        # table was re-keyed onto the card. Every read this index would serve —
+        # a card's rows, and the `PROTECT` check asking whether any child
+        # references a card — is served by that constraint's leading column.
+        db_index=False,
     )
 
     #: Denormalised off the assessment so the card's cells can be grouped under

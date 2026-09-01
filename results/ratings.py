@@ -573,10 +573,19 @@ def _require_this_card_has_not_gone_home(term, membership):
         sheet__term=term,
         student_membership_id=membership.pk,
     ).exists():
+        # **Not "correcting one is a revision rather than an edit".** That
+        # is what this said until task 8 was built and found it false: a
+        # revision re-freezes a card from these tables, and these tables
+        # refuse a write once the term is released — so reissuing reproduces
+        # the same rating and the message sent the reader after a remedy that
+        # does not exist. Issue #54 holds the decision that would make it
+        # true; until then the honest thing is to name who can act.
         raise RatingsLocked(
             f"{membership.name or membership.user}'s report card for {term} has "
             f"been released to a parent. Its conduct section has to keep saying "
-            f"what it said, and correcting it is a revision rather than an edit.",
+            f"what it said, so this cannot be changed here. A released card is "
+            f"corrected by reissuing it, and reissuing cannot yet reach a "
+            f"rating — so a wrong one has to be raised with the principal.",
             state=SheetState.RELEASED,
         )
 
@@ -634,10 +643,19 @@ def _require_the_sheet_is_open(class_group, term):
         return sheet
 
     if sheet.state == SheetState.RELEASED:
+        # **Not "correcting one is a revision rather than an edit".** That
+        # is what this said until task 8 was built and found it false: a
+        # revision re-freezes a card from these tables, and these tables
+        # refuse a write once the term is released — so reissuing reproduces
+        # the same rating and the message sent the reader after a remedy that
+        # does not exist. Issue #54 holds the decision that would make it
+        # true; until then the honest thing is to name who can act.
         raise RatingsLocked(
             f"{class_group} — {term} has been released to parents. Its ratings "
-            f"are part of a card somebody is holding, and correcting one is a "
-            f"revision rather than an edit.",
+            f"are part of a card somebody is holding, so this one cannot be "
+            f"changed here. A released card is corrected by reissuing it, and "
+            f"reissuing cannot yet reach a rating — so a wrong one has to be "
+            f"raised with the principal.",
             state=sheet.state,
         )
     raise RatingsLocked(

@@ -582,7 +582,14 @@ class RemarksFollowTheChainTests(CommentsSetUp):
                 self.write(self.kemi, TEACHER, "On second thoughts.")
 
         self.assertEqual(refused.exception.state, "released")
-        self.assertIn("revision", str(refused.exception))
+        # **Not `assertIn("revision", ...)`.** That is what this asserted until
+        # task 8 was built and found the promise false: a revision re-freezes
+        # from tables a released term refuses to write, so reissuing reproduces
+        # the value exactly. The message now names the remedy *and* its limit,
+        # and this pins both — the `assertNotIn` so it cannot quietly go back to
+        # sending a teacher after a correction that does not exist. Issue #54.
+        self.assertIn("reissuing cannot yet reach", str(refused.exception))
+        self.assertNotIn("revision rather than an edit", str(refused.exception))
 
     def test_another_classs_sheet_does_not_shut_ours(self):
         with connected_to(self.stmarys):

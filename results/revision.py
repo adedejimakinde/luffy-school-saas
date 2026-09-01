@@ -29,15 +29,32 @@ cards, and stamping "Revised" on forty-four families' cards over a change to
 somebody else's child — is worse in the place it matters. Issue #55, rather
 than a silent choice.
 
-## What may actually change between the two versions
+## What may actually change between the two versions, which is less than it looks
 
-Everything a card copies rather than joins to: the child's name, the school's
-name, the class's name, the conduct section, the remarks. **Not the marks** — a
-released term refuses a score write for ever (`gradebook.api`'s 423), so today a
-revision cannot carry a mark correction. That is a real gap, and it is #54;
-it is not this module's to close, because the decision "may a released term's
-marks be reopened, and by whom" is exactly the sort of policy that must not be
-invented in the least visible place on the platform.
+**Names, and today nothing else.** The child's name, the school's name and the
+class's name are copied at freeze from tables edited elsewhere — `accounts` is a
+shared schema, and neither `School` nor `ClassGroup` is gated on a sheet's state
+— so a misspelling corrected there reaches the new version. That is not a small
+case: a misspelt child's name on a card that has gone home is the commonest
+correction a school actually asks for, and the copy rule that protects a
+released card from a later rename is exactly what makes it permanent until
+somebody reissues.
+
+**Marks, ratings and remarks cannot change at all**, and the first draft of this
+module said two of the three could. `gradebook.services`, `results.ratings` and
+`results.comments` all gate their writes on
+`results.services.is_open_for_writing()`, which is false for anything past
+`draft` — so once a term is released every input this function re-freezes from
+is frozen upstream too, and a revision issued to fix a wrong mark, a wrong
+rating or a wrong remark reproduces it exactly.
+
+That is **#54**, and it is wider than the "marks" its title says. It is not this
+module's to close: "may a released term be reopened, and by whom, and does that
+reopening leave its own audit row" is precisely the sort of policy that must not
+be invented in the least visible place on the platform. What *was* fixed here is
+the six refusals across those three modules that told the reader "correcting one
+is a revision rather than an edit" — true of the shape, false of the outcome,
+and it sent people after a remedy that does not exist.
 
 ## Two ways in
 

@@ -190,10 +190,19 @@ def _require_this_card_has_not_gone_home(assessment, membership):
         sheet__term=assessment.term,
         student_membership_id=membership.pk,
     ).exists():
+        # **Not "correcting one is a revision rather than an edit".** That
+        # is what this said until task 8 was built and found it false: a
+        # revision re-freezes a card from these tables, and these tables
+        # refuse a write once the term is released — so reissuing reproduces
+        # the same mark and the message sent the reader after a remedy that
+        # does not exist. Issue #54 holds the decision that would make it
+        # true; until then the honest thing is to name who can act.
         raise MarksLocked(
             f"{membership.name}'s report card for {assessment.term} has been "
             f"released to a parent. Its marks are part of what that card says, "
-            f"and correcting one is a revision rather than an edit.",
+            f"so this one cannot be changed here. A released card is corrected "
+            f"by reissuing it, and reissuing cannot yet reach a mark — so a "
+            f"wrong one has to be raised with the principal.",
             state=SheetState.RELEASED,
         )
 
@@ -275,10 +284,19 @@ def _require_the_sheet_is_open(assessment, membership):
         return
 
     if sheet.state == SheetState.RELEASED:
+        # **Not "correcting one is a revision rather than an edit".** That
+        # is what this said until task 8 was built and found it false: a
+        # revision re-freezes a card from these tables, and these tables
+        # refuse a write once the term is released — so reissuing reproduces
+        # the same mark and the message sent the reader after a remedy that
+        # does not exist. Issue #54 holds the decision that would make it
+        # true; until then the honest thing is to name who can act.
         raise MarksLocked(
             f"{placement.class_group} — {assessment.term} has been released to "
-            f"parents. Its marks are part of a card somebody is holding, and "
-            f"correcting one is a revision rather than an edit.",
+            f"parents. Its marks are part of a card somebody is holding, so this "
+            f"one cannot be changed here. A released card is corrected by "
+            f"reissuing it, and reissuing cannot yet reach a mark — so a wrong "
+            f"one has to be raised with the principal.",
             state=sheet.state,
         )
     raise MarksLocked(

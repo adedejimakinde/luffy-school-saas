@@ -202,12 +202,23 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
                 self.mark_ada()
             self.assertIn("being reviewed", str(refused.exception))
 
-    def test_a_released_sheet_says_revision_not_review(self):
+    def test_a_released_sheet_says_reissuing_not_review(self):
+        """Renamed with the message. It used to say "revision", and that word
+        was a promise the platform does not keep — see the comment below."""
         with connected_to(self.stmarys):
             self.walk_to("released")
             with self.assertRaises(services.MarksLocked) as refused:
                 self.mark_ada()
-            self.assertIn("revision", str(refused.exception))
+            # **Not `assertIn("revision", ...)`.** That is what this asserted until
+            # task 8 was built and found the promise false: a revision re-freezes
+            # from tables a released term refuses to write, so reissuing reproduces
+            # the value exactly. The message now names the remedy *and* its limit,
+            # and this pins both — the `assertNotIn` so it cannot quietly go back to
+            # sending a teacher after a correction that does not exist. Issue #54.
+            self.assertIn("reissuing cannot yet reach", str(refused.exception))
+            self.assertNotIn(
+                "revision rather than an edit", str(refused.exception)
+            )
 
     def test_a_send_back_opens_the_marks_again(self):
         """The reason the test is `draft` and not "has never been submitted"."""
@@ -601,7 +612,14 @@ class TheApiSaysLockedRatherThanCrashingTests(ReleaseGuardSetUp):
 
         response = self.save(15)
         self.assertEqual(response.status_code, 423)
-        self.assertIn("revision", response.json()["detail"])
+        # **Not `assertIn("revision", ...)`.** That is what this asserted until
+        # task 8 was built and found the promise false: a revision re-freezes
+        # from tables a released term refuses to write, so reissuing reproduces
+        # the value exactly. The message now names the remedy *and* its limit,
+        # and this pins both — the `assertNotIn` so it cannot quietly go back to
+        # sending a teacher after a correction that does not exist. Issue #54.
+        self.assertIn("reissuing cannot yet reach", response.json()["detail"])
+        self.assertNotIn("revision rather than an edit", response.json()["detail"])
 
     def test_saving_into_a_term_under_review_answers_423_as_well(self):
         """Not only the terminal state: the vice principal is holding this one."""
