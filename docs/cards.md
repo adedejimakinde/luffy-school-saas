@@ -175,7 +175,15 @@ it and nothing would notice.
 
 The cost is paid on the read path, where it is cheap — `cards.card_lines()` and
 `cards.cards_on()` fetch by `card_id` in a bounded number of queries, because
-task 7 renders forty-five of these in one Celery job.
+task 7 renders forty-five of these in a batch.
+
+That line used to say "in one Celery job", written before the job existed.
+[report-card-pdf.md](report-card-pdf.md) explains why it became **one job per
+card** instead: `acks_late` means a worker killed on the forty-fourth card hands
+the message back, and a per-class job would then re-render the whole class,
+while `visibility_timeout` is 300 seconds and a per-class job has to finish
+inside it. A per-card job makes both problems disappear and lets a second worker
+help.
 
 ## Migrating a database that already has results
 
