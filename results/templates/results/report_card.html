@@ -1,0 +1,191 @@
+{% comment %}
+One released card, as a family reads it. Rendered by `results.pdf.render()`.
+
+**Everything here comes off `card`, which is a `ReportCardOut`** — the same
+object `card_api` serves the page from — and never off a `ReleasedCard` row.
+That is the whole reason the payload builder was extracted: `position`,
+`roster_size`, `subject_position`, the term-absence reasons and the promotion
+suggestion are staff-only, and they are kept off this page by having no slot in
+the schema rather than by a template remembering not to print them. A template
+handed the model row would have all five in scope.
+
+Print rules live in the `@page` block: WeasyPrint honours real CSS paged media,
+so A4 and its margins are stated once and are not a stack of hard-coded
+millimetres per element.
+{% endcomment %}
+<meta charset="utf-8">
+<title>{{ card.student_name }} — {{ card.term_label }} {{ card.academic_session }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 14mm 13mm 16mm 13mm;
+    @bottom-center {
+      /* A card that goes home on paper and loses page 2 should say so. */
+      content: "Page " counter(page) " of " counter(pages);
+      font: 8pt "DejaVu Sans", sans-serif;
+      color: #667;
+    }
+  }
+
+  body { font: 9.5pt "DejaVu Sans", sans-serif; color: #111; }
+  h1, h2, h3 { margin: 0; font-weight: 600; }
+
+  .masthead { text-align: center; border-bottom: 2px solid #111; padding-bottom: 6px; }
+  .masthead h1 { font-size: 15pt; letter-spacing: .4px; }
+  .masthead .term { font-size: 10pt; color: #333; margin-top: 2px; }
+
+  .revised {
+    display: inline-block; margin-top: 4px; padding: 1px 7px;
+    border: 1px solid #900; color: #900; border-radius: 8px;
+    font-size: 8pt; letter-spacing: .8px; text-transform: uppercase;
+  }
+
+  .who { width: 100%; margin: 8px 0 10px; border-collapse: collapse; }
+  .who td { padding: 2px 0; vertical-align: top; }
+  .who .label { color: #555; width: 22%; }
+
+  table.grid { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+  table.grid th, table.grid td { border: .6px solid #999; padding: 3px 5px; }
+  table.grid th { background: #f0f0f2; font-weight: 600; font-size: 8.5pt; }
+  table.grid td.n, table.grid th.n { text-align: center; width: 8%; }
+  /* A long subject list must break across pages with its header repeated. */
+  table.grid thead { display: table-header-group; }
+  table.grid tr { page-break-inside: avoid; }
+
+  .section { margin-bottom: 10px; page-break-inside: avoid; }
+  .section h3 { font-size: 9.5pt; margin-bottom: 3px; }
+
+  .remark { margin-bottom: 8px; page-break-inside: avoid; }
+  .remark .by { color: #555; font-size: 8.5pt; }
+  .remark .body { margin-top: 2px; }
+  .remark .rule { border-bottom: .6px dotted #999; margin-top: 10px; }
+
+  .blank { color: #888; }
+  .max { color: #777; font-size: 7.5pt; }
+</style>
+
+<div class="masthead">
+  <h1>{{ card.school_name }}</h1>
+  <div class="term">{{ card.term_label }} &middot; {{ card.academic_session }}</div>
+  {% comment %}
+  `{% comment %}`, and never the brace-hash form for a comment this long.
+  Django's lexer matches that form with a non-greedy `.` and **no** `re.DOTALL`,
+  so one spanning more than a single line is never recognised as a comment at
+  all: every line of it is emitted as text — here, directly under the school
+  name, on the card a family reads. This block and the attendance one below both
+  did exactly that. Single-line brace-hash comments are fine; this file simply
+  does not use them, so that the rule needs no judgement to follow.
+
+  `card.is_revised`, which task 8 makes the only source of this word — not
+  `card.version > 1` spelled out again here. The two agree today, because that
+  is exactly what `ReleasedCard.is_revised` computes; stating the rule a second
+  time in a template is how they stop agreeing, and the model's docstring names
+  the case it is protecting (a child placed into a term after release gets her
+  first card through the revision path, at version 1, and must not be told it
+  corrects something she never received).
+
+  Whichever name is used, the failure mode is silence: a missing attribute
+  resolves to the invalid-variable default, so this branch goes quietly
+  unreachable and a reissued card prints identical to the one already in a
+  parent's hand. That is what happened to the first draft of this page, and it
+  is why the tests assert both the badge and its absence.
+  {% endcomment %}
+  {% if card.is_revised %}<div class="revised">Revised &middot; version {{ card.version }}</div>{% endif %}
+</div>
+
+<table class="who">
+  <tr><td class="label">Name</td><td><strong>{{ card.student_name }}</strong></td>
+      <td class="label">Class</td><td>{{ card.class_group_name }}</td></tr>
+  <tr><td class="label">Average</td>
+      <td>{% if card.own_average %}{{ card.own_average }}%{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      <td class="label">Attendance</td>
+      <td>
+        {% comment %}
+        `is not None` and `default_if_none`, not truthiness and not `default`.
+        Attendance is nullable *and* legitimately nought: a child who was
+        present on none of the days open is `0`, which is falsy, and `default`
+        would print the same dash that means "nobody recorded it". This card
+        already refuses to let two different absences look alike one table down,
+        and nought-versus-null is the same mistake this project has made before.
+        {% endcomment %}
+        {% if card.days_open is not None %}
+          {{ card.days_present|default_if_none:"—" }} of {{ card.days_open }} days
+        {% elif card.days_present is not None %}
+          {% comment %}
+          The three columns are independently nullable with no constraint tying
+          them together, so a register kept without a term length is a real row.
+          Printing a bare dash for it would say "nobody recorded this" about a
+          child whose attendance *was* recorded.
+          {% endcomment %}
+          {{ card.days_present }} days present
+        {% else %}<span class="blank">&mdash;</span>{% endif %}
+      </td></tr>
+</table>
+
+<table class="grid">
+  <thead>
+    <tr>
+      <th>Subject</th>
+      {% for column in columns %}<th class="n">{{ column.name }}<span class="max">/{{ column.max_score }}</span></th>{% endfor %}
+      <th class="n">Total</th><th class="n">%</th><th class="n">Grade</th><th>Remark</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.line.subject_name }}</td>
+      {% for cell in row.cells %}
+        <td class="n">{% if cell is None %}<span class="blank">&middot;</span>{% elif cell.score is None %}<span class="blank">&mdash;</span>{% else %}{{ cell.score }}{% endif %}</td>
+      {% endfor %}
+      <td class="n">{{ row.line.total_scored }}<span class="max">/{{ row.line.total_available }}</span></td>
+      <td class="n">{% if row.line.percentage %}{{ row.line.percentage }}{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      <td class="n">{{ row.line.grade_letter }}</td>
+      <td>{{ row.line.grade_remark }}</td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="{{ columns|length|add:5 }}" class="blank">No subjects were marked this term.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if card.session %}
+<table class="grid">
+  <thead><tr><th>Session</th><th class="n">First</th><th class="n">Second</th><th class="n">Third</th><th class="n">Year</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>{{ card.session.session }}</td>
+      <td class="n">{{ card.session.first_average|default:"—" }}</td>
+      <td class="n">{{ card.session.second_average|default:"—" }}</td>
+      <td class="n">{{ card.session.third_average|default:"—" }}</td>
+      <td class="n"><strong>{{ card.session.session_average|default:"—" }}</strong></td>
+    </tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% for section in card.sections %}
+<div class="section">
+  <h3>{{ section.group_label }}</h3>
+  <table class="grid">
+    <tbody>
+      {% for trait in section.traits %}
+      <tr><td>{{ trait.trait_name }}</td>
+          <td class="n">{% if trait.score is not None %}{{ trait.score }}{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+          <td>{{ trait.score_label }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endfor %}
+
+{% for remark in card.comments %}
+<div class="remark">
+  <div class="by">{{ remark.author_label }}</div>
+  <div class="body">{{ remark.body }}</div>
+  <div class="rule"></div>
+</div>
+{% endfor %}
+
+{% if card.promotion %}
+<p><strong>{{ card.promotion.status_label }}</strong></p>
+{% endif %}

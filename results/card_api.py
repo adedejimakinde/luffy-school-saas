@@ -505,6 +505,27 @@ def report_card(request, student_membership_id: int, term_id: int):
     if card is None:
         raise Http404("No such report card.")
 
+    return card_payload(card)
+
+
+def card_payload(card) -> ReportCardOut:
+    """One released card as the family sees it. **The only assembly of one.**
+
+    Extracted from the view above when task 7 needed the same thing to render a
+    PDF from. It is deliberately not "the view's version and the renderer's
+    version": every staff-only exclusion this module argues for — `position`,
+    `roster_size`, `subject_position`, the term-absence reasons, the promotion
+    *suggestion* — is held by there being no slot for them in these schemas, and
+    a second assembly is a second place for a slot to appear. A template that
+    reached into `ReleasedCard` directly would have every one of those fields in
+    hand and nothing but care standing between them and the page.
+
+    Takes no `request` and asks no authority question. Who may read a card is
+    `_require_may_read()`'s, asked by each caller against the surface it is
+    serving — a Celery worker rendering a PDF has no request to ask it of, and a
+    payload builder that pretended otherwise would be answering with whatever
+    the last caller happened to leave behind.
+    """
     return ReportCardOut(
         school_name=card.school_name,
         student_name=card.student_name,
@@ -528,4 +549,4 @@ def report_card(request, student_membership_id: int, term_id: int):
     )
 
 
-__all__ = ["router", "CARD_VIEWING_ROLES"]
+__all__ = ["router", "CARD_VIEWING_ROLES", "card_payload"]

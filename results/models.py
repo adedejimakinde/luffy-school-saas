@@ -75,6 +75,7 @@ from decimal import Decimal
 from academics.models import TermName
 from django.db import models
 from django.db.models import F, Q, Value
+from django.db.models.functions import Length
 
 
 class SheetState(models.TextChoices):
@@ -2317,7 +2318,6 @@ class ReleasedAssessmentScore(models.Model):
         )
 
 
-
 class RevisionsAreAppendOnly(Exception):
     """Something tried to edit or delete the record of a revision."""
 
@@ -2434,3 +2434,104 @@ class CardRevision(models.Model):
             f"Revision {self.pk} cannot be deleted. The card it produced is "
             f"still in somebody's hand."
         )
+
+
+class ReleasedCardPdf(models.Model):
+    """The rendered file for one released card. Task 7.
+
+    One row per `ReleasedCard`, holding the PDF a school prints and a family
+    keeps, plus — when a render failed — the reason it does not hold one.
+
+    ## Rebuildable, and therefore *not* append-only
+
+    Every other frozen table in this app refuses a second write, because what it
+    holds is what a card **said** and that must never move. This one is
+    different in kind: it holds a *rendering* of a card, and the card it renders
+    is already immutable. Re-rendering after a template fix changes the layout
+    and cannot change a number, because every number comes from rows that refuse
+    to be written twice. So a rebuild is safe in a way that rewriting
+    `ReleasedSubjectResult` never is, and the guard that protects those tables
+    would here only mean a typo in the stylesheet could never be corrected.
+
+    `built_at` is `auto_now` rather than `auto_now_add` for the same reason: it
+    records when this file was made, not when the card was released.
+
+    ## The bytes are in Postgres, and that is a decision with a ceiling
+
+    This platform configures no object storage and no `MEDIA_ROOT`, and a
+    schema-per-school layout would need a per-tenant path convention invented
+    to go with them. A card is tens of kilobytes; a class of forty-five is a
+    couple of megabytes; a school's year is perhaps forty. That fits in a column
+    with room to spare, and it comes with tenant isolation, transactional
+    writes and backups already solved, none of which a directory does.
+
+    It does not scale to a platform of a thousand schools keeping every year for
+    ever, and the row to move first is this one. Issue for that rather than a
+    `FileField` pointing at a path nothing has configured.
+
+    ## A failed render is a row, not a silence
+
+    `error` holds what went wrong, written by the task's `on_failure` — which
+    runs inside the school's schema only because `schools.tasks.TenantTask`
+    wraps the handlers a subclass brings. Without that this write would land on
+    `public`, which for a tenant table is a `ProgrammingError` naming a missing
+    relation, a long way from the card that failed to render.
+
+    Exactly one of `content` and `error` is set, which the constraint below
+    holds: a row with neither is a job that reported nothing, and a row with
+    both is two answers to what happened.
+    """
+
+    card = models.OneToOneField(
+        ReleasedCard, related_name="pdf", on_delete=models.PROTECT
+    )
+
+    #: The PDF itself. Null where the render failed — see `error`.
+    content = models.BinaryField(null=True, blank=True)
+
+    #: Denormalised off `content` so that "how big is a card" is answerable
+    #: without reading every card's bytes out of the database to find out. The
+    #: constraint below holds it to the actual length rather than to merely
+    #: being set, because a denormalised number nothing checks is a number that
+    #: eventually lies — and this table is deliberately rewritable, so a
+    #: `.update(content=...)` that forgets `byte_size` is a real path to it.
+    byte_size = models.PositiveIntegerField(null=True, blank=True)
+
+    #: Why there is no file. The task's own exception, as text.
+    error = models.TextField(blank=True, default="")
+
+    built_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # Local columns only, for the reason `ReleasedCard.Meta` gives.
+        ordering = ["-built_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(content__isnull=False, error="")
+                    | Q(content__isnull=True) & ~Q(error="")
+                ),
+                name="a_card_pdf_is_a_file_or_a_reason_and_not_both",
+            ),
+            models.CheckConstraint(
+                # `byte_size__isnull=False` is not redundant beside the
+                # `Length` comparison, and removing it silently reopens the
+                # hole. With `byte_size` NULL the comparison is NULL, not
+                # false, and Postgres counts a CHECK that evaluates to NULL as
+                # satisfied — so the length test alone would accept the very
+                # row this constraint was first written to refuse. An explicit
+                # `IS NOT NULL` in the same AND makes that branch false.
+                condition=Q(content__isnull=True, byte_size__isnull=True)
+                | Q(
+                    content__isnull=False,
+                    byte_size__isnull=False,
+                    byte_size=Length("content"),
+                ),
+                name="a_card_pdf_knows_its_own_size",
+            ),
+        ]
+
+    def __str__(self):
+        if self.content is None:
+            return f"{self.card_id}: no file — {self.error[:40]}"
+        return f"{self.card_id}: {self.byte_size} bytes"
