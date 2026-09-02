@@ -94,8 +94,19 @@ at the measured rate fits today, with no margin to speak of for a school with
 more subjects, more children or a slower machine.
 
 Per card, redelivery costs one render, the timeout is never close, and a second
-worker can take half the class. The cost is forty-five messages per release
-instead of one, which Redis does not notice.
+worker can take half the class. The cost would be forty-five messages per
+release instead of one, which Redis does not notice.
+
+**Would be, because nothing enqueues anything yet.** `render_card_pdf` has no
+caller outside its own tests: `results.services.release()` does not enqueue it,
+and no route serves the file back. That is [issue #56][56], and it is deliberate
+for this task — both halves are decisions with consequences that should not be
+made inside a rendering PR. So read this section as the shape the enqueuer has
+to take, not as a description of what happens at release today, and note that
+`cards.cards_on()` is a *reader* built for the walk that enqueues, not evidence
+that the walk exists.
+
+[56]: https://github.com/adedejimakinde/luffy-school-saas/issues/56
 
 ## Idempotent, because `acks_late` requires it
 

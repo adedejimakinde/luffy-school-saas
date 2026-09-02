@@ -77,6 +77,34 @@ class TheRenderedPageTests(ReportCardApiSetUp):
         with connected_to(self.stmarys):
             return pdf.html_for(self._card())
 
+    def test_no_template_source_reaches_the_page(self):
+        """No comment, tag or variable delimiter survives into the output.
+
+        Two multi-line `{# … #}` blocks in this template were **not comments**.
+        Django's lexer matches that form with a non-greedy `.` and no
+        `re.DOTALL`, so one spanning more than a single line is never recognised
+        as a comment token and every line of it is emitted as text. One sat
+        inside the masthead, so about fifteen lines of developer prose printed
+        directly under the school name on the card a family reads; the other was
+        in the attendance cell and leaked on exactly the row shape its branch
+        was written for.
+
+        Every other test here asserts that something expected is **present**,
+        which is why none of them saw it: the leaked prose happened to contain
+        none of the strings they look for, and the staff-only tests look for
+        `position` and `Rank`, which developer prose about a badge does not use.
+        A page can be wrong by containing something, not only by missing
+        something, and this is the assertion for that direction.
+        """
+        html = self.html()
+
+        for delimiter in ("{#", "#}", "{%", "{{", "}}"):
+            self.assertNotIn(
+                delimiter,
+                html,
+                f"Template source {delimiter!r} reached the rendered card.",
+            )
+
     def test_the_page_carries_the_things_a_family_reads(self):
         """Asserted through `escape()`, and that is not a workaround.
 

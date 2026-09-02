@@ -67,19 +67,29 @@ millimetres per element.
 <div class="masthead">
   <h1>{{ card.school_name }}</h1>
   <div class="term">{{ card.term_label }} &middot; {{ card.academic_session }}</div>
-  {# `card.is_revised`, which task 8 makes the only source of this word — not
-     `card.version > 1` spelled out again here. The two agree today, because
-     that is exactly what `ReleasedCard.is_revised` computes; stating the rule a
-     second time in a template is how they stop agreeing, and the model's
-     docstring names the case it is protecting (a child placed into a term after
-     release gets her first card through the revision path, at version 1, and
-     must not be told it corrects something she never received).
+  {% comment %}
+  `{% comment %}`, and never the brace-hash form for a comment this long.
+  Django's lexer matches that form with a non-greedy `.` and **no** `re.DOTALL`,
+  so one spanning more than a single line is never recognised as a comment at
+  all: every line of it is emitted as text — here, directly under the school
+  name, on the card a family reads. This block and the attendance one below both
+  did exactly that. Single-line brace-hash comments are fine; this file simply
+  does not use them, so that the rule needs no judgement to follow.
 
-     Whichever name is used, the failure mode is silence: a missing attribute
-     resolves to the invalid-variable default, so this branch goes quietly
-     unreachable and a reissued card prints identical to the one already in a
-     parent's hand. That is what happened to the first draft of this page, and
-     it is why the tests below assert both the badge and its absence. #}
+  `card.is_revised`, which task 8 makes the only source of this word — not
+  `card.version > 1` spelled out again here. The two agree today, because that
+  is exactly what `ReleasedCard.is_revised` computes; stating the rule a second
+  time in a template is how they stop agreeing, and the model's docstring names
+  the case it is protecting (a child placed into a term after release gets her
+  first card through the revision path, at version 1, and must not be told it
+  corrects something she never received).
+
+  Whichever name is used, the failure mode is silence: a missing attribute
+  resolves to the invalid-variable default, so this branch goes quietly
+  unreachable and a reissued card prints identical to the one already in a
+  parent's hand. That is what happened to the first draft of this page, and it
+  is why the tests assert both the badge and its absence.
+  {% endcomment %}
   {% if card.is_revised %}<div class="revised">Revised &middot; version {{ card.version }}</div>{% endif %}
 </div>
 
@@ -101,10 +111,12 @@ millimetres per element.
         {% if card.days_open is not None %}
           {{ card.days_present|default_if_none:"—" }} of {{ card.days_open }} days
         {% elif card.days_present is not None %}
-          {# The three columns are independently nullable with no constraint
-             tying them together, so a register kept without a term length is a
-             real row. Printing a bare dash for it would say "nobody recorded
-             this" about a child whose attendance *was* recorded. #}
+          {% comment %}
+          The three columns are independently nullable with no constraint tying
+          them together, so a register kept without a term length is a real row.
+          Printing a bare dash for it would say "nobody recorded this" about a
+          child whose attendance *was* recorded.
+          {% endcomment %}
           {{ card.days_present }} days present
         {% else %}<span class="blank">&mdash;</span>{% endif %}
       </td></tr>
