@@ -68,6 +68,7 @@ from results.models import (
     TraitGroup,
 )
 from schools.models import Domain, School
+from schools.tests.tenants import make_school
 
 PASSWORD = "correct-horse-battery"
 SESSION = "2025/2026"
@@ -152,8 +153,10 @@ class ReportCardApiSetUp(TestCase):
     # -- fixtures ------------------------------------------------------------
 
     def _school(self, name, slug, schema_name, host):
-        school = School(name=name, slug=slug, schema_name=schema_name)
-        school.save()
+        # Two of these per test, thirty tests. Migrating them was ~1.65s each;
+        # `make_school()` copies the template instead. `School` is still used
+        # directly in `setUp` for the portal, which has no schema of its own.
+        school = make_school(name, slug, schema_name)
         Domain.objects.create(tenant=school, domain=host, is_primary=True)
         return school
 

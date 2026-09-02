@@ -1,9 +1,10 @@
 """What has to stay true for `make_school()` to be allowed to clone.
 
-Every tenant test in this repository now runs against a schema copied from
-`tenant_template` rather than one built by `migrate_schemas`. Two properties
-make that substitution safe, neither of them obvious, and nothing else in the
-suite would notice if either stopped holding:
+Every tenant `TestCase` in this repository now runs against a schema copied
+from `tenant_template` rather than one built by `migrate_schemas`; the three
+`TransactionTestCase` modules still migrate, and `schools/tests/tenants.py` says
+why. Two properties make that substitution safe, neither of them obvious, and
+nothing else in the suite would notice if either stopped holding:
 
 **A clone is undone by the per-test rollback.** `docs/tenancy.md` depends on
 tenant tests being `TestCase` and not `TransactionTestCase`. Postgres DDL is

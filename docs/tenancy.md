@@ -193,7 +193,10 @@ traits, no rating scale and no grade bands, while the suite went green.
 `AClonedSchemaIsTheSameSchemaTests` compares a clone against a freshly migrated
 schema on every kind of object rather than on the subset the copy happens to
 make. The four modules that set `auto_create_schema = False` are untouched:
-everything they read is in the public schema, so they never paid the cost.
+everything they read is in the public schema, so they never paid the cost. The
+three `TransactionTestCase` modules still migrate too — nothing they do is
+rolled back, so they commit real schemas and drop them in teardown, and their
+flush between tests would empty a cloned schema's seeded rows.
 
 `django_tenants.test.cases.TenantTestCase` exists and works, but it creates
 exactly one tenant (schema `test`), which makes it structurally unable to prove

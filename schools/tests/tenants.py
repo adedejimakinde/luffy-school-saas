@@ -30,13 +30,21 @@ which is slower than the migration this replaces and completely silent. That is
 the failure mode `scripts/run-tests.sh` exists to refuse, so a missing template
 raises and says what to fix.
 
-## Two things that are deliberately not cloned
+## Three things that are deliberately not cloned
 
 `accounts.tests.test_membership`, `accounts.tests.test_transfers`,
 `accounts.tests.test_transfer_concurrency` and `schools.tests.test_invitations`
 set `auto_create_schema = False` because every model they touch is in the public
 schema. They never paid the cost and they keep their own `make_school()`;
 cloning would hand them a schema they deliberately do without.
+
+`results.tests.test_approval_concurrency`,
+`results.tests.test_ratings_concurrency` and
+`results.tests.test_release_roster_race` are `TransactionTestCase`, so nothing
+they do is rolled back: they build schemas that really commit and drop them in
+teardown, and their flush between tests would empty a cloned schema's seeded
+rows anyway. Twenty-one tests still migrate for that reason. Converting them is
+a separate question about their teardown, not about this function.
 
 `make_school_by_migrating()` below is the real path, kept for the tests whose
 subject *is* the real path — `RealSchemaCreationTests` asserts that saving a
