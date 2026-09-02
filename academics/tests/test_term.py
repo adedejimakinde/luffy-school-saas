@@ -21,16 +21,9 @@ from django.test import TestCase
 from django_tenants.utils import schema_context
 
 from academics.models import Term, TermName
-from schools.models import School
+from schools.tests.tenants import make_school
 
 SESSION = "2025/2026"
-
-
-def make_school(name, slug, schema_name):
-    """A real tenant, schema and all — `academics_term` lives nowhere else."""
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 @contextlib.contextmanager

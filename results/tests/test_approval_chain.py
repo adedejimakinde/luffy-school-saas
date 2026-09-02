@@ -37,14 +37,9 @@ from results.models import (
     TransitionsAreAppendOnly,
 )
 from schools.models import School
+from schools.tests.tenants import make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-def make_school(name, slug, schema_name):
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 @contextlib.contextmanager

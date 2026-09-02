@@ -33,19 +33,13 @@ from fees.models import (
     KOBO_PER_NAIRA,
     LedgerIsAppendOnly,
 )
-from schools.models import School
+from schools.tests.tenants import make_school
 
 PASSWORD = "correct-horse-battery"
 
 #: ₦150,000 as the column stores it. Spelled out once so the tests below read as
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
-
-
-def make_school(name, slug, schema_name):
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 @contextlib.contextmanager
