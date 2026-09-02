@@ -9,6 +9,17 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    defaults:
+      run:
+        # `bash` rather than the default, which is `bash -e` **without**
+        # pipefail: in that shell `a | b` reports b's exit code, so a failing
+        # command feeding a successful one passes. Naming the shell explicitly
+        # gets `-eo pipefail`, which is the difference between a step that
+        # fails and a step that lies. No step here pipes today; the point is
+        # that adding one later must not silently re-open the hole. Issue #61,
+        # and `scripts/run-tests.sh` carries the argument in full.
+        shell: bash
+
     # The suite is not runnable without a real Postgres, and deliberately so:
     # schools/tests/test_tenant_isolation.py asserts against pg_namespace,
     # pg_tables and pg_constraint, and every make_school() issues a real
@@ -123,5 +134,16 @@ jobs:
       # That per-test schema build is still the thing to fix and this flag does
       # not touch it. This is the free half: the same work, spread over the
       # runner's cores.
+      #
+      # Through `scripts/run-tests.sh` rather than calling `manage.py` directly,
+      # so that CI and a developer's terminal apply the same two guards — and
+      # so "green locally" and "green in CI" are the same claim. With no
+      # arguments the script runs exactly the invocation this step used to:
+      # `--verbosity 2 --parallel`.
+      #
+      # The guard that matters here is the one for a zero exit with no `OK`
+      # line. A suite that returns success without completing would otherwise
+      # be a green tick, which is the same failure-with-no-symptom this file
+      # already refuses for an unreachable broker a few steps up.
       - name: Run tests
-        run: python manage.py test --verbosity 2 --parallel
+        run: scripts/run-tests.sh
