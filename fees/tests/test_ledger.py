@@ -1,9 +1,12 @@
 """The fee ledger: what it stores, what it refuses, and what it cannot forget.
 
-Tenant-scoped, so every test runs inside a real school schema created the
-production way — `CREATE SCHEMA` followed by a real `migrate_schemas`, which is
-also what installs the append-only trigger. See docs/tenancy.md for why a plain
-`TestCase` is the right harness for that.
+Tenant-scoped, so every test runs inside a real school schema with the real
+tables, copied from one migrated once for the run rather than migrated again
+per test. The append-only trigger this module leans on comes across with the
+copy — `schools/tests/clone_tenant_schema.sql` carries functions and triggers
+for exactly this reason, and an earlier version of it that did not was caught
+by `schools/tests/test_tenant_template.py`. See docs/tenancy.md for why a plain
+`TestCase` is the right harness for any of it.
 
 Three properties are worth more than the rest, and each has a section:
 
@@ -33,19 +36,13 @@ from fees.models import (
     KOBO_PER_NAIRA,
     LedgerIsAppendOnly,
 )
-from schools.models import School
+from schools.tests.tenants import make_school
 
 PASSWORD = "correct-horse-battery"
 
 #: ₦150,000 as the column stores it. Spelled out once so the tests below read as
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
-
-
-def make_school(name, slug, schema_name):
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 @contextlib.contextmanager

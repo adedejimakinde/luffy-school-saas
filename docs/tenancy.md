@@ -31,9 +31,13 @@ exists there.
 ## What was actually tested
 
 `schools/tests/test_tenant_isolation.py` — 23 tests. Nothing is mocked and
-nothing skips schema creation: every `make_school()` leaves `auto_create_schema`
-alone, so each one really does run `CREATE SCHEMA` followed by the full
-`migrate_schemas` pass for `TENANT_APPS`. The assertions read `pg_namespace`,
+nothing skips schema creation. `RealSchemaCreationTests` calls
+`make_school_by_migrating()`, which leaves `auto_create_schema` alone and really
+does run `CREATE SCHEMA` followed by the full `migrate_schemas` pass for
+`TENANT_APPS` — that path is what those tests are about, so they keep exercising
+it directly. The rest of the file, and the rest of the suite, use
+`make_school()`, which copies a schema migrated once per test database; see
+"One migrated schema per run" below. The assertions read `pg_namespace`,
 `pg_tables`, `pg_indexes` and `pg_constraint` rather than taking Django's word.
 
 `academics/tests/test_term.py` — 16 tests over the `Term` record itself, each
@@ -157,6 +161,42 @@ transaction, and roll back completely — DDL is transactional in Postgres, so
 the schema list returns to `['public']` with no cleanup code and no leaked
 schemas. A `TransactionTestCase` is not needed, and plain `TestCase` also lets
 you create *two* schools, which is the only way to test isolation at all.
+
+Copying a schema rolls back the same way, which is what allows the section
+below. That is asserted rather than assumed: `SchemaFromACloneIsRolledBackTests`
+in `schools/tests/test_tenant_template.py` is four tests that each check the
+previous test's clone is gone before making their own. If it were untrue every
+test would leak a schema, and the first symptom would be an unrelated test
+failing on a name that was supposed to be free.
+
+## One migrated schema per run
+
+`make_school()` does not migrate. `schools/tests/runner.py` — wired up as
+`settings.TEST_RUNNER` — migrates one schema called `tenant_template` per test
+database, and `make_school()` copies it. The migration cost was about **1.65s**,
+and because most tenant tests build their schools in `setUp` rather than
+`setUpTestData` the suite paid it roughly **1,479 times a run**: around 90% of
+its wall clock, none of it assertion work.
+
+The template is built between Django creating the test database and Django
+cloning that database for the `--parallel` workers, so each worker inherits it
+through `CREATE DATABASE ... TEMPLATE ...` and none of them migrates anything.
+`schools/tests/runner.py` explains why that window is the only one that works.
+
+A copy is only allowed to stand in for the real thing while it is
+indistinguishable from it, and that is a stronger requirement than it sounds.
+An earlier version of the copy carried tables, indexes and constraints and
+**none of the 13 triggers, none of the 13 functions and none of the seeded
+rows** — so every `append_only` rule was absent and every school started with no
+traits, no rating scale and no grade bands, while the suite went green.
+`schools/tests/clone_tenant_schema.sql` now carries all of it, and
+`AClonedSchemaIsTheSameSchemaTests` compares a clone against a freshly migrated
+schema on every kind of object rather than on the subset the copy happens to
+make. The four modules that set `auto_create_schema = False` are untouched:
+everything they read is in the public schema, so they never paid the cost. The
+three `TransactionTestCase` modules still migrate too — nothing they do is
+rolled back, so they commit real schemas and drop them in teardown, and their
+flush between tests would empty a cloned schema's seeded rows.
 
 `django_tenants.test.cases.TenantTestCase` exists and works, but it creates
 exactly one tenant (schema `test`), which makes it structurally unable to prove

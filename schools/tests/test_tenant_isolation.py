@@ -1,10 +1,19 @@
 """Proof that schema-per-school is real, against a real Postgres.
 
-Nothing here is mocked and nothing skips schema creation. Every `make_school()`
-below runs the production path — `CREATE SCHEMA` followed by the full
-`migrate_schemas` run for TENANT_APPS — and the assertions read from
-`pg_namespace`, `pg_tables` and `pg_constraint` rather than taking Django's
-word for any of it.
+Nothing here is mocked and nothing skips schema creation. `RealSchemaCreationTests`
+runs the production path in full — `CREATE SCHEMA` followed by the whole
+`migrate_schemas` run for TENANT_APPS — because that path is its subject: it is
+the test that would have to fail if saving a School stopped building a schema.
+It therefore keeps calling `make_school_by_migrating()` and keeps paying the
+~1.65s, and the assertions read from `pg_namespace`, `pg_tables` and
+`pg_constraint` rather than taking Django's word for any of it.
+
+The classes below it use the ordinary `make_school()`, which copies a schema
+that was migrated once for the run. What they are about is isolation between
+two schemas, not the manner of either one's construction, and
+`schools/tests/test_tenant_template.py` is what proves a copied schema is the
+same schema — including the append-only triggers this file's neighbours rely
+on.
 
 The claim being defended is the one the whole product rests on: a school's
 records are not *filtered* away from other schools, they are in a different
@@ -27,22 +36,9 @@ from django_tenants.test.cases import TenantTestCase
 from academics.models import Term, TermName
 from accounts.models import Membership, Role, User
 from schools.models import Domain, School
+from schools.tests.tenants import make_school, make_school_by_migrating
 
 PASSWORD = "correct-horse-battery"
-
-
-def make_school(name, slug, schema_name):
-    """A real tenant, the real way.
-
-    `auto_create_schema` is deliberately left alone (it defaults to True), so
-    saving this really does issue CREATE SCHEMA and really does migrate
-    TENANT_APPS into it. accounts/tests/test_membership.py switches that off
-    because those tests only care about public-schema rows; these tests exist
-    precisely to exercise what that flag turns off.
-    """
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 def make_term(session="2025/2026", name=TermName.FIRST, **extra):
@@ -101,16 +97,16 @@ class RealSchemaCreationTests(TestCase):
 
     def test_saving_a_school_creates_a_real_postgres_schema(self):
         self.assertNotIn("st_marys", schema_names())
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         self.assertIn("st_marys", schema_names())
 
     def test_the_new_schema_holds_the_tenant_apps_tables(self):
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         self.assertIn("academics_term", tables_in("st_marys"))
 
     def test_the_tenant_table_is_never_created_in_public(self):
         """TENANT_APPS must not leak into the shared schema."""
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         self.assertNotIn("academics_term", tables_in("public"))
 
     def test_shared_tables_are_not_created_in_the_tenant_schema(self):
@@ -119,7 +115,7 @@ class RealSchemaCreationTests(TestCase):
         there. They are not: TenantSyncRouter skips the operations and only the
         django_migrations bookkeeping row is written. Pin the truth.
         """
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         tenant_tables = tables_in("st_marys")
         self.assertNotIn("accounts_user", tenant_tables)
         self.assertNotIn("accounts_membership", tenant_tables)
@@ -138,7 +134,7 @@ class RealSchemaCreationTests(TestCase):
         unique index instead, so `one_current_term` is only ever in pg_indexes.
         It is enforced either way; it just is not a table constraint.
         """
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         constraints = {
             row[0]
             for row in query(
@@ -159,8 +155,8 @@ class RealSchemaCreationTests(TestCase):
 
     def test_the_partial_unique_index_is_enforced_inside_the_schema(self):
         """Enforced per schema, so each school may have its own current term."""
-        stmarys = make_school("St Mary's", "st-marys", "st_marys")
-        grace = make_school("Grace Academy", "grace", "grace")
+        stmarys = make_school_by_migrating("St Mary's", "st-marys", "st_marys")
+        grace = make_school_by_migrating("Grace Academy", "grace", "grace")
 
         with connected_to(stmarys):
             make_term(is_current=True)
@@ -177,12 +173,12 @@ class RealSchemaCreationTests(TestCase):
         with set_schema_to_public(), so you are NOT left inside the school you
         just created. Anything that assumes otherwise writes to public.
         """
-        make_school("St Mary's", "st-marys", "st_marys")
+        make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         self.assertEqual(connection.schema_name, "public")
         self.assertEqual(search_path(), "public")
 
     def test_a_domain_routes_to_the_school(self):
-        school = make_school("St Mary's", "st-marys", "st_marys")
+        school = make_school_by_migrating("St Mary's", "st-marys", "st_marys")
         Domain.objects.create(tenant=school, domain="stmarys.luffy.school", is_primary=True)
         self.assertEqual(
             Domain.objects.get(domain="stmarys.luffy.school").tenant, school

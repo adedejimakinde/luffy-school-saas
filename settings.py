@@ -109,6 +109,15 @@ INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_
 TENANT_MODEL = "schools.School"
 TENANT_DOMAIN_MODEL = "schools.Domain"
 
+# Builds one migrated tenant schema per test database and lets `make_school()`
+# clone it, instead of running `migrate_schemas` once per test method — which
+# was about 90% of the suite's wall clock. It subclasses Django's own runner and
+# changes nothing about discovery, selection or reporting; the only thing it
+# adds is *when* that schema is built, which has to be after the test database
+# exists and before Django clones it for the `--parallel` workers.
+# `schools/tests/runner.py` says why that window is the only one that works.
+TEST_RUNNER = "schools.tests.runner.TenantTemplateRunner"
+
 MIDDLEWARE = [
     # First, as Django asks: it is the one that can end a request before the
     # rest of the stack has done any work. What it buys here is the header set

@@ -3,9 +3,11 @@
 `Term` is tenant-scoped, so these run inside a real school schema rather than
 against `public` — `academics_term` does not exist there at all, which is the
 whole point of `docs/tenancy.md` and is asserted directly in
-`schools/tests/test_tenant_isolation.py`. `make_school()` here therefore leaves
-`auto_create_schema` alone, the way that module does: saving really does issue
-`CREATE SCHEMA` and really does migrate TENANT_APPS into it.
+`schools/tests/test_tenant_isolation.py`. `make_school()` here therefore builds
+a real schema with the real tables — copied from a schema migrated once for the
+run rather than migrated again for each of these tests, which is the same
+structure for a fraction of the time. `schools/tests/test_tenant_template.py`
+is what holds "the same structure" up.
 
 Every rule below is a database constraint rather than a `clean()` check, for the
 reason `docs/tenancy.md` already gives about the one-current-term index: a rule
@@ -21,16 +23,9 @@ from django.test import TestCase
 from django_tenants.utils import schema_context
 
 from academics.models import Term, TermName
-from schools.models import School
+from schools.tests.tenants import make_school
 
 SESSION = "2025/2026"
-
-
-def make_school(name, slug, schema_name):
-    """A real tenant, schema and all — `academics_term` lives nowhere else."""
-    school = School(name=name, slug=slug, schema_name=schema_name)
-    school.save()
-    return school
 
 
 @contextlib.contextmanager

@@ -22,9 +22,11 @@ jobs:
 
     # The suite is not runnable without a real Postgres, and deliberately so:
     # schools/tests/test_tenant_isolation.py asserts against pg_namespace,
-    # pg_tables and pg_constraint, and every make_school() issues a real
-    # CREATE SCHEMA followed by a real migrate_schemas run. SQLite or a mocked
-    # backend would turn the isolation proof into a tautology.
+    # pg_tables and pg_constraint; `tenant_template` is built by a real
+    # migrate_schemas run; and every make_school() issues a real CREATE SCHEMA
+    # and copies that template with catalogue SQL — pg_constraint,
+    # pg_get_triggerdef and the rest — which nothing but Postgres has. SQLite
+    # or a mocked backend would turn the isolation proof into a tautology.
     services:
       postgres:
         # Matched to docker-compose.yml so CI and the devcontainer agree.
@@ -124,16 +126,22 @@ jobs:
         run: python manage.py check --deploy
 
       # `--parallel` splits the suite across worker processes, each with its own
-      # clone of the test database. The clone is cheap here for a reason worth
-      # knowing: no tenant schema is baked into the test database — every one is
-      # built at runtime by whichever test needs it — so the template being
-      # copied is about 8 MB and a clone costs ~0.11s per worker. Cloning
-      # therefore does *not* multiply the suite's real cost, which is ~1.65s of
-      # CREATE SCHEMA plus migrations per tenant, about 1,479 times per run.
+      # clone of the test database. Both halves of the suite's cost are now
+      # addressed here, and they interact, so it is worth stating the order.
       #
-      # That per-test schema build is still the thing to fix and this flag does
-      # not touch it. This is the free half: the same work, spread over the
-      # runner's cores.
+      # One tenant schema *is* baked into the test database — `tenant_template`,
+      # migrated once by `schools/tests/runner.py`. It is built before Django
+      # clones the database for the workers, which is deliberate: each worker
+      # inherits it through `CREATE DATABASE ... TEMPLATE ...` and none of them
+      # migrates anything. Built the other way round, every worker would pay
+      # for its own. The database being copied is larger than the ~8 MB it was
+      # when nothing was baked in, and that is the trade: one bigger clone per
+      # worker, against ~1,479 schema migrations that no longer happen.
+      #
+      # `make_school()` then copies that schema per test — the ~1.65s of CREATE
+      # SCHEMA plus migrations that used to run once per test method, and was
+      # about 90% of this job's wall clock. `--parallel` remains the other half:
+      # the same work, spread over the runner's cores.
       #
       # Through `scripts/run-tests.sh` rather than calling `manage.py` directly,
       # so that CI and a developer's terminal apply the same two guards — and
