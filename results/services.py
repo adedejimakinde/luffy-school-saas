@@ -695,7 +695,7 @@ def release(sheet, actor):
     `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
     module-level import here would close the circle.
     """
-    from . import cards, comments, ratings, sessions
+    from . import cards, comments, ratings, renders, sessions
 
     def freeze_the_card(locked):
         """Everything the card is made of, copied at the moment of release.
@@ -747,6 +747,17 @@ def release(sheet, actor):
         then simply not on the release, which is truthful and is #31's dead end
         rather than this block's problem.
 
+        **The last line is not a freeze.** `renders.mark_and_enqueue()` writes
+        one `ReleasedCardPdf` per card, `PENDING`, and asks for the renders
+        after the commit. It is here rather than in `_move()` for the reason
+        everything else here is: `_move()` knows nothing about what a release
+        freezes, and this is one more thing a release owes. It is *inside* the
+        transaction because the marker is part of the release — a release that
+        commits without it is a class of cards with no record that they owe a
+        file, which is issue #56's whole complaint — and the enqueue it
+        registers is outside, because a broker must never be able to fail a
+        release that has already happened. `results.renders` argues both.
+
         **What used to be here and is deliberately gone.** A
         `_say_if_the_roster_moved()` logged a warning naming any child the
         roster gained while the release ran. It worked by reading the roster a
@@ -763,6 +774,7 @@ def release(sheet, actor):
         ratings.freeze_for_release(locked, card_by_student)
         comments.freeze_for_release(locked, card_by_student)
         sessions.freeze_for_release(locked, card_by_student, results)
+        renders.mark_and_enqueue(card_by_student.values())
 
     return _move(
         sheet,

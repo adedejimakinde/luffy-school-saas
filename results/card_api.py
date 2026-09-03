@@ -52,6 +52,20 @@ said was nothing.
 
 `positions` is not imported at all. Nothing on this page is recomputed.
 
+## The same card as a file, and why the file route is here rather than anywhere else
+
+`report_card_pdf()` serves the PDF of the card `report_card()` serves as JSON.
+It asks the identical authority question — the same four calls, in the same
+order — because **a PDF of a card you may read is not a second permission**.
+Inventing one would mean two answers to "may this person have this card", and
+the day they disagreed the wrong one would be the one nobody had tested.
+
+It does not render anything. The file is made by a worker (`results.tasks`) and
+the route hands over what is stored, or says what state the card is in and how
+that state came about. Rendering in the request was the alternative and it is
+refused in `results.tasks`: WeasyPrint takes a few hundred milliseconds a card,
+and results week is every parent of a class arriving at once.
+
 **The one live read, and the model sanctions it.** `PromotionDecision` is not
 part of the snapshot and is deliberately not frozen — it is append-only and
 already freezes its own inputs at decision time, so the hazard that drives
@@ -65,17 +79,19 @@ half of why freezing it would be wrong: the card would permanently say
 from decimal import Decimal
 from typing import List, Optional
 
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
 from ninja import Router, Schema
 
 from academics.models import Term, TermName
 from accounts.models import Guardianship, Membership, Role
 from accounts.session import session_auth
 
-from . import cards
+from . import cards, renders
 from .models import (
     CommentAuthor,
+    PdfState,
     PromotionDecision,
     ReleasedComment,
     ReleasedSessionResult,
@@ -210,6 +226,28 @@ class PromotionOut(Schema):
 
     status: str
     status_label: str
+
+
+class CardPdfNotReadyOut(Schema):
+    """The 202 body: this card exists and its file does not, and why.
+
+    Not a 404, which would say the card is not there when it is — the JSON of
+    the very same card is being served from the route beside this one. Not a
+    500, because nothing has gone wrong from the caller's side. 202 is the code
+    for "accepted, not finished", and the body says which of the two unfinished
+    states this is, because they need different things from the reader: one
+    needs a minute, the other needs somebody at the school.
+
+    **`error` is deliberately not a field here.** It holds a Python exception's
+    class and message, written by a worker for whoever debugs the render, and a
+    parent reading `TemplateSyntaxError` learns nothing they can act on. This
+    module's other rule applies as well — the payload does not branch on who is
+    asking — so it is absent for staff too, who can read the row.
+    """
+
+    state: str
+    state_label: str
+    detail: str
 
 
 class ReportCardOut(Schema):
@@ -546,6 +584,113 @@ def card_payload(card) -> ReportCardOut:
         comments=_comments(card),
         session=_session_line(card),
         promotion=_promotion(card),
+    )
+
+
+# -- the same card as a file -------------------------------------------------
+
+
+#: What a caller who cannot have the file is told, by the state of the row.
+#:
+#: Two sentences with two different readers. `PENDING` is addressed to somebody
+#: who should simply come back — the render is owed and asking again is what
+#: recovers a job that never ran. `FAILED` is addressed to somebody who will
+#: wait for ever if they are not told to stop: nothing re-queues a failed card,
+#: because what it needs is a person reading `error` off the row.
+_NOT_READY = {
+    PdfState.PENDING: (
+        "This card's file is still being prepared. Try again in a minute."
+    ),
+    PdfState.FAILED: (
+        "This card's file could not be made. The school has a record of what "
+        "went wrong — ask the school office."
+    ),
+}
+
+
+def _the_pdf(card, marker) -> HttpResponse:
+    """The stored bytes, named for the child rather than for a primary key.
+
+    `inline` rather than `attachment`, because a parent following a link wants
+    to look at the card; a frontend that wants a save dialog can ask for one.
+    The name is what a browser writes into a Downloads folder, so it is the
+    child, the term and the session rather than `48213.pdf`.
+
+    `slugify` does two jobs here and the second is the one that matters:
+    `class_group_name` and `student_name` are typed by a school, and this string
+    is going inside a quoted header value. What comes out of `slugify` is ASCII
+    letters, digits and hyphens, so there is no quote to close and no newline to
+    inject — the filename cannot be a way to write a second header.
+
+    The version appears only when there is more than one, which is exactly the
+    case where two files for the same child and term can sit in one folder and
+    the superseded one must not be mistaken for the card that stands.
+    """
+    parts = [
+        card.student_name,
+        TermName(card.term_name).label,
+        # A session reads "2025/2026", and a slug of that is "20252026". The
+        # hyphen is put in before `slugify` can take the slash out.
+        card.session.replace("/", "-"),
+    ]
+    if card.version > 1:
+        parts.append(f"v{card.version}")
+
+    response = HttpResponse(bytes(marker.content), content_type="application/pdf")
+    response["Content-Disposition"] = (
+        f'inline; filename="{slugify(" ".join(parts))}.pdf"'
+    )
+    return response
+
+
+@router.get(
+    "/cards/{int:student_membership_id}/{int:term_id}/pdf/",
+    response={200: None, 202: CardPdfNotReadyOut},
+    tags=["results"],
+)
+def report_card_pdf(request, student_membership_id: int, term_id: int):
+    """One child's released card for one term, as the file a family keeps.
+
+    The four lines of authority below are `report_card()`'s — the same calls in
+    the same order — because a PDF of a card you may read is not a second
+    permission. Every refusal is that route's flat 404, including "no card for
+    this term": a file route that answered otherwise would be the existence
+    oracle the JSON route refuses to be, reachable by adding four characters to
+    a URL.
+
+    **`200: None` in the declaration does not mean an empty body.** django-ninja
+    hands a view's `HttpResponse` back untouched, so the PDF goes out as itself;
+    the declaration is only what the schema says, and there is no way to spell
+    "some hundreds of kilobytes of application/pdf" as a pydantic model. The 202
+    beside it is a real schema and is validated like any other.
+
+    **Nothing is rendered here**, which is the decision issue #56 left open and
+    the reason this is three lines rather than a call into `results.pdf`.
+    WeasyPrint takes a few hundred milliseconds a card and results week is every
+    parent of a class arriving at once; putting that in the request path is what
+    moving the render to a worker was for. What this route does instead is ask
+    again — `renders.enqueue_if_pending()` holds the debounce — so a card whose
+    release-time job never reached a worker is recovered by the person who
+    actually wants the file, rather than by a sweep nobody wrote.
+    """
+    school = _school_of(request)
+    child = _the_child(school, student_membership_id)
+    _require_may_read(request.user, school, child)
+
+    term = get_object_or_404(Term, pk=term_id)
+    card = cards.card_for(child, term)
+    if card is None:
+        raise Http404("No such report card.")
+
+    marker = renders.marker_for(card)
+    if marker.state == PdfState.BUILT:
+        return _the_pdf(card, marker)
+
+    renders.enqueue_if_pending(marker)
+    return 202, CardPdfNotReadyOut(
+        state=marker.state,
+        state_label=PdfState(marker.state).label,
+        detail=_NOT_READY[marker.state],
     )
 
 
