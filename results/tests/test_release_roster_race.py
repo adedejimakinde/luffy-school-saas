@@ -46,6 +46,42 @@ error. Reverting `ratings`/`comments`/`sessions` to `positions.roster_ids()` and
 `.get()` fails the first with the `IntegrityError` above; the control run is in
 the PR.
 
+## The other direction: a child *leaving* mid-release. Issues #46, #59, #60
+
+#43 is about a child arriving, and the roster travelling down as a set of ids
+closed it. A child **leaving** is the harder half, because the ids were never the
+whole question: `sessions._lines_for()` needs each child's *placement* for the
+term being released — which group she sat in — and `positions.overall_percentages()`
+re-derives that class's averages. Both used to be fresh reads inside the locked
+block.
+
+So a placement deleted between the card freeze and the session freeze wrote two
+rows in one transaction that contradicted each other: the card carrying her
+third-term marks, and the session line calling her `NOT_ENROLLED` for third term
+and renormalising her year over two. `TheChildWhoLeftMidReleaseTests` is that,
+timed the same deterministic way.
+
+`TheRevisionGuardAndTheFreezeAgreeTests` is the same defect on the revision path
+(#59), where it is worse: the guard said she was on the roster, the freeze read
+again and found she was not, and a **blank version 2** — no marks, no totals, no
+position, no average — landed on top of a card that had all four. Every value
+individually legal, so nothing objected, and both versions append-only, so
+neither could be taken back.
+
+Both are closed by one read per locked block, passed down — `positions.class_results()`
+carries the placements it was built from. Not by a wider lock: that would
+serialise the office against every release, and it would make the two reads
+*agree* rather than removing the second one.
+
+**What is deliberately no longer asserted here.** Two tests used to check that a
+release logged a warning naming the child the roster gained. The warning came
+from `services._say_if_the_roster_moved()`, which read the roster a second time
+at the end and compared. Under one read per block it compares the snapshot with
+itself and can only report "nothing moved", so it was deleted rather than kept
+as a guard that guards nothing. The platform has no detector of a mid-release
+move now; issue #47, which was about putting its output in front of a person,
+records what went with it.
+
 Two schools, and Grace is used rather than built and ignored: the placing thread
 resolves its own school from `connection.schema_name`, so a thread whose
 `search_path` were wrong would write into the other school's schema and no
@@ -55,6 +91,7 @@ single-tenant test could tell that apart from working.
 import contextlib
 import threading
 from datetime import date
+from decimal import Decimal
 from unittest import mock
 
 from django.db import connection, connections
@@ -66,7 +103,7 @@ from academics.models import ClassGroup, ClassPlacement, Term, TermName
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook.models import Assessment, Score, Subject
-from results import cards, comments, services
+from results import cards, comments, revision, services
 from results import ratings
 from results.models import (
     CommentAuthor,
@@ -315,6 +352,62 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
 
         self.assertEqual(landed, [True], "the placement never landed mid-release")
 
+    def unplace_ada_from_another_connection(self):
+        """Take Ada out of the class being released, committed from its own session.
+
+        The mirror of `place_bola_from_another_connection()`, and the same
+        machinery for the same reason: this has to be another session's
+        *committed* work landing between two statements of the releasing
+        transaction, which a `TestCase` cannot produce.
+
+        `academics.remove_placement()` rather than a queryset delete, because the
+        office's own path is what the release has to survive.
+        """
+        failed = []
+
+        def run():
+            try:
+                with connected_to(self.school):
+                    academics.remove_placement(
+                        Term.objects.get(pk=self.terms[TermName.THIRD.value]),
+                        self.ada,
+                    )
+            except Exception as exc:  # noqa: BLE001 — reported, never swallowed
+                failed.append(exc)
+            finally:
+                connections.close_all()
+
+        thread = threading.Thread(target=run)
+        thread.start()
+        thread.join(15)
+        self.assertFalse(thread.is_alive(), "the unplacing thread never finished")
+        self.assertEqual(failed, [], f"the unplacing thread failed: {failed}")
+
+    def release_while_ada_leaves(self):
+        """Release, with Ada's placement deleted after the cards are written.
+
+        Wrapped on `cards.freeze_for_release` like its sibling, so the deletion
+        lands after the class was read and after the cards exist, and before the
+        session freeze — the gap #46 lived in. Deterministic, not raced.
+        """
+        real = cards.freeze_for_release
+        landed = []
+
+        def freeze_then_let_the_office_in(*args, **kwargs):
+            card_by_student = real(*args, **kwargs)
+            self.unplace_ada_from_another_connection()
+            landed.append(True)
+            return card_by_student
+
+        with connected_to(self.school):
+            sheet = services.sheet_for(self.group(), self.term())
+            with mock.patch.object(
+                cards, "freeze_for_release", freeze_then_let_the_office_in
+            ):
+                services.release(sheet, self.principal)
+
+        self.assertEqual(landed, [True], "the placement was never removed mid-release")
+
     def tearDown(self):
         connection.set_schema_to_public()
         # Drop the schemas, not just the rows. `TransactionTestCase` flushes the
@@ -394,50 +487,6 @@ class TheRosterIsReadOnceTests(ReleaseUnderARosterChangeSetUp):
             }
 
         self.assertEqual(hers, {"cards": 0, "ratings": 0, "comments": 0, "sessions": 0})
-
-    def test_the_omission_is_written_down_instead_of_passing_in_silence(self):
-        """She is off the release, and the release says so somewhere.
-
-        Being off it is the truthful outcome; being off it *quietly* is not. The
-        principal sees a release that succeeded, and one child has no card, no
-        sections, and — until task 8's revision path exists — no way to be given
-        them, because `_move()` refuses a released sheet and the correction paths
-        reach it through her current placement, which is now this released class.
-        Issue #31 is that dead end and #47 is putting this in front of a person
-        rather than only in a log.
-        """
-        self.approve_the_third_term()
-
-        with self.assertLogs("results.services", level="WARNING") as logged:
-            self.release_while_the_roster_moves()
-
-        said = "\n".join(logged.output)
-        self.assertIn(str(self.bola.pk), said, "the log does not name the child")
-        self.assertIn("JSS 1A", said)
-        self.assertIn("no released card", said)
-
-    def test_an_undisturbed_release_says_nothing(self):
-        """The control. A warning logged every time would pass the test above.
-
-        `assertNoLogs` and not an absent `assertLogs`: the point is that the
-        quiet case is quiet, and a release nobody interfered with is the case
-        that runs every day.
-        """
-        self.approve_the_third_term()
-
-        with self.assertNoLogs("results.services", level="WARNING"):
-            with connected_to(self.school):
-                sheet = services.sheet_for(self.group(), self.term())
-                services.release(sheet, self.principal)
-
-        with connected_to(self.school):
-            self.assertEqual(
-                ReleasedCard.objects.filter(
-                    student_membership_id=self.ada.pk
-                ).count(),
-                1,
-                "the undisturbed release did not actually release anything",
-            )
 
     def test_the_child_who_was_on_the_roster_got_the_whole_card(self):
         """The other half. A release that froze nothing would pass the test above.
@@ -532,6 +581,176 @@ class TheRosterIsReadOnceTests(ReleaseUnderARosterChangeSetUp):
         self.assertEqual(theirs["subject_results"], 0)
         self.assertEqual(theirs["comments"], 0)
         self.assertEqual(theirs["placements"], 1, "the other school's roster moved")
+
+
+class TheChildWhoLeftMidReleaseTests(ReleaseUnderARosterChangeSetUp):
+    """Ada is taken out of the class after her card is written. Issues #46, #60.
+
+    The arriving child (#43) is not on the release at all, which is truthful. A
+    child who *leaves* is already on it — her card is written, with her marks,
+    her total and her position — so the only question is whether the rest of the
+    release goes on agreeing with that card. It used to not: the session freeze
+    read `ClassPlacement` again, did not find her, and wrote a line calling her
+    `NOT_ENROLLED` for the term whose marks were on the card beside it.
+
+    Both rows land in one transaction. Neither is recoverable afterwards: they
+    are append-only, and the card has gone home.
+    """
+
+    def test_the_precondition_ada_really_does_leave_mid_release(self):
+        """The control for everything below. Without it the rest proves nothing."""
+        self.approve_the_third_term()
+        self.release_while_ada_leaves()
+
+        with connected_to(self.school):
+            still_placed = ClassPlacement.objects.filter(
+                class_group_id=self.group_id,
+                term_id=self.terms[TermName.THIRD.value],
+                student_membership_id=self.ada.pk,
+            ).exists()
+
+        self.assertFalse(still_placed, "the placement was not actually removed")
+
+    def test_the_card_still_carries_her_marks(self):
+        """She was on the class when it was read, so she is on the release."""
+        self.approve_the_third_term()
+        self.release_while_ada_leaves()
+
+        with connected_to(self.school):
+            card = ReleasedCard.objects.get(student_membership_id=self.ada.pk)
+            subjects = ReleasedSubjectResult.objects.filter(card=card).count()
+
+        self.assertEqual(card.total_scored, 80)
+        self.assertEqual(subjects, 1, "her subject line did not survive the release")
+
+    def test_the_session_line_does_not_call_her_not_enrolled(self):
+        """The two rows this release wrote have to describe the same child.
+
+        This is #46 exactly. The card says she sat third term and scored 80; the
+        session line used to say she was not enrolled in third term, because it
+        asked `ClassPlacement` a second time after the office had answered
+        differently.
+        """
+        self.approve_the_third_term()
+        self.release_while_ada_leaves()
+
+        with connected_to(self.school):
+            line = ReleasedSessionResult.objects.get(
+                student_membership_id=self.ada.pk
+            )
+
+        self.assertEqual(
+            line.third_absence,
+            "",
+            "the session line contradicts the card written beside it in the "
+            "same transaction",
+        )
+        self.assertEqual(line.third_average, Decimal("80.00"))
+
+    def test_her_year_is_not_renormalised_over_the_terms_she_did_sit(self):
+        """The consequence that reaches the family, rather than the mechanism.
+
+        A third term dropped from the line is not only a wrong cell: the year is
+        then averaged over the terms that are left, so the number printed as her
+        session average is arithmetically sound and about a different child's
+        year. Under a straight mean of one sat term it is her third-term mark
+        that goes missing from the average entirely.
+        """
+        self.approve_the_third_term()
+        self.release_while_ada_leaves()
+
+        with connected_to(self.school):
+            line = ReleasedSessionResult.objects.get(
+                student_membership_id=self.ada.pk
+            )
+
+        self.assertIsNotNone(
+            line.third_weight_used,
+            "third term carried no weight in her year, so it was dropped from "
+            "the weighting rather than counted",
+        )
+        self.assertEqual(line.session_average, Decimal("80.00"))
+
+
+class TheRevisionGuardAndTheFreezeAgreeTests(ReleaseUnderARosterChangeSetUp):
+    """The same defect on the revision path, where it overwrites a real card. #59.
+
+    `revise()` checked that the child was still on the roster and then froze a
+    new version. Two reads, one lock that covers neither, and between them the
+    office can remove the placement — so the guard passed and the freeze found an
+    empty class. The result was a **blank version 2** written over a version 1
+    that had marks, a total, an average and a position: every column
+    individually legal, so no constraint objected, and both versions append-only,
+    so neither could be withdrawn.
+
+    One read decides both now. Whichever answer it gives, the guard and the
+    freeze give the same one.
+    """
+
+    def _release_normally(self):
+        self.approve_the_third_term()
+        with connected_to(self.school):
+            sheet = services.sheet_for(self.group(), self.term())
+            services.release(sheet, self.principal)
+
+    def _revise_while_ada_leaves(self):
+        """Revise, with the placement removed after the guard has run.
+
+        Wrapped on the guard rather than on the freeze, because the gap #59 is
+        about is precisely between those two.
+        """
+        real = revision._require_still_on_this_roster
+        landed = []
+
+        def check_then_let_the_office_in(*args, **kwargs):
+            outcome = real(*args, **kwargs)
+            self.unplace_ada_from_another_connection()
+            landed.append(True)
+            return outcome
+
+        with connected_to(self.school):
+            with mock.patch.object(
+                revision,
+                "_require_still_on_this_roster",
+                check_then_let_the_office_in,
+            ):
+                card = revision.revise(
+                    self.ada,
+                    Term.objects.get(pk=self.terms[TermName.THIRD.value]),
+                    self.principal,
+                    "Mathematics was marked out of the wrong paper.",
+                )
+
+        self.assertEqual(landed, [True], "the placement was never removed mid-revision")
+        return card
+
+    def test_the_revision_is_a_real_card_and_not_a_blank_one(self):
+        self._release_normally()
+        card = self._revise_while_ada_leaves()
+
+        with connected_to(self.school):
+            fresh = ReleasedCard.objects.get(pk=card.pk)
+            subjects = ReleasedSubjectResult.objects.filter(card=fresh).count()
+
+        self.assertEqual(fresh.version, 2)
+        self.assertEqual(fresh.total_scored, 80, "version 2 was written blank")
+        self.assertEqual(fresh.position, 1)
+        self.assertEqual(fresh.roster_size, 1)
+        self.assertEqual(subjects, 1, "the revised card has no subject lines")
+
+    def test_the_version_that_went_home_is_still_there_beside_it(self):
+        """Both versions, and the earlier one unchanged. Append-only either way."""
+        self._release_normally()
+        self._revise_while_ada_leaves()
+
+        with connected_to(self.school):
+            versions = list(
+                ReleasedCard.objects.filter(student_membership_id=self.ada.pk)
+                .order_by("version")
+                .values_list("version", "total_scored")
+            )
+
+        self.assertEqual(versions, [(1, 80), (2, 80)])
 
 
 class TheRosterMovedIsNamedTests(SimpleTestCase):

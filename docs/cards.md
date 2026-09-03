@@ -58,11 +58,14 @@ has already moved past". It is held by `cards.freeze_for_release()` and pinned
 by `TheUnconditionalMarkerTests`, with a control run behind it. **Delete those
 tests and the guarantee is gone with nothing to say so.**
 
-### One roster read, and it is the card freeze's
+### One read of the class, and it belongs to the locked block
 
+`services.release()` calls `positions.class_results()` **once**, at the top of
+the block holding the sheet lock, and hands the result to everything below it.
 `cards.freeze_for_release()` returns `student_id -> card`, and **that map is the
-roster**. `ratings`, `comments` and `sessions` take it as an argument instead of
-calling `positions.roster_ids()` for themselves.
+roster** for `ratings` and `comments`; `sessions` additionally takes the
+`ClassResults` itself, because it needs each child's *placement* for the term
+being released and not merely their id.
 
 That is issue #43 and it is not tidiness. The lock `services._move()` holds is on
 the **`ResultSheet` row** and reaches no further: `ClassPlacement` is not locked,
@@ -80,6 +83,31 @@ Four reads became one, so the question "who is on this release?" now has a singl
 answer and everything frozen agrees with it. A child placed while the release
 runs is simply **not on it** — no card and therefore no sections, which is the
 truthful outcome and avoids the empty-card shape #31 complains about.
+
+**#43 left one read behind, and #60 removed it.** Passing the roster down as a
+set of ids answered *who*, and `sessions._lines_for()` needed *where*: which
+group each child sat in for the term being released. So it went back to
+`ClassPlacement` inside the same locked block, and a placement deleted or moved
+between the card freeze and the session freeze wrote two rows in one transaction
+that contradicted each other — the card carrying her third-term marks while the
+session line called her `NOT_ENROLLED` for third term and renormalised her year
+over two. `ClassResults` therefore carries the placement rows it was built from,
+and the same object answers both questions.
+
+The alternative was a lock covering `ClassPlacement` for the class and term. It
+was rejected on two grounds, the second the stronger: it serialises the office
+against every release during the one week of the year when both happen
+constantly, and it makes two reads *agree* rather than removing the second one —
+leaving the next reader two reads and no reason to trust either.
+
+Gone with it: `services._say_if_the_roster_moved()`, which logged the children a
+release finished without by reading the roster once more at the end and
+comparing. Against a single snapshot it can only ever report "nothing moved", so
+it was a guard that guarded nothing whose log line read as evidence somebody had
+checked. Deleting it takes away the platform's only detector of a mid-release
+move, unreliable as that was — it could not tell "the office moved a child"
+from "my own second read raced the first" — and it is what issue #47 was
+reporting on.
 
 `cards.the_card_for()` and `TheRosterMovedDuringRelease` are the belt to that
 braces: nothing on the release path can now reach for a child the cards never

@@ -158,14 +158,19 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
 
         previous = cards.card_for(student_id, term)
         version = 1 if previous is None else previous.version + 1
-        _require_still_on_this_roster(locked, student_id)
+
+        # One read of the class inside this lock, and everything below is
+        # decided against it — the guard, the freeze and the session line.
+        # Issue #60; `_require_still_on_this_roster()` says what two reads cost.
+        results = positions.class_results(locked.class_group, locked.term)
+        _require_still_on_this_roster(locked, results, student_id)
 
         frozen = cards.freeze_a_revision(
-            locked, student_id, version=version, by=actor
+            locked, results, student_id, version=version, by=actor
         )
         ratings.freeze_for_release(locked, frozen)
         comments.freeze_for_release(locked, frozen)
-        sessions.freeze_for_release(locked, frozen)
+        sessions.freeze_for_release(locked, frozen, results)
 
         card = frozen[student_id]
         CardRevision.objects.create(
@@ -207,13 +212,23 @@ def _require_the_authority_to_revise(actor, by_platform_staff):
     return school
 
 
-def _require_still_on_this_roster(sheet, student_id):
+def _require_still_on_this_roster(sheet, results, student_id):
     """Refuse rather than write a blank card. See `TheChildHasLeftThisClass`.
 
-    Read inside the lock, because "who is on this roster" is precisely the
-    question issue #43 showed two reads give two answers to.
+    **Checked against the snapshot the freeze is about to use, not a read of its
+    own — issue #59.** Being inside the lock was never enough: the lock is on
+    the `ResultSheet` row and reaches no further, so this guard's read and
+    `freeze_a_revision()`'s read were two statements under READ COMMITTED and
+    two answers to one question. A placement moving between them passed the
+    guard and then wrote a **blank version 2** — no marks, no totals, no
+    position, no average — over a card that had all four. Every value
+    individually legal, so no constraint objected, and both versions
+    append-only, so neither could be taken back.
+
+    Asking the same object the freeze will use makes the guard's answer and the
+    freeze's answer the same answer by construction.
     """
-    if student_id in positions.roster_ids(sheet.class_group, sheet.term):
+    if student_id in results.placements:
         return
     raise TheChildHasLeftThisClass(
         f"This child's card was released with {sheet.class_group} for "
