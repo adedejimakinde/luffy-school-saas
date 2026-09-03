@@ -22,9 +22,11 @@ jobs:
 
     # The suite is not runnable without a real Postgres, and deliberately so:
     # schools/tests/test_tenant_isolation.py asserts against pg_namespace,
-    # pg_tables and pg_constraint, and every make_school() issues a real
-    # CREATE SCHEMA followed by a real migrate_schemas run. SQLite or a mocked
-    # backend would turn the isolation proof into a tautology.
+    # pg_tables and pg_constraint; `tenant_template` is built by a real
+    # migrate_schemas run; and every make_school() issues a real CREATE SCHEMA
+    # and copies that template with catalogue SQL — pg_constraint,
+    # pg_get_triggerdef and the rest — which nothing but Postgres has. SQLite
+    # or a mocked backend would turn the isolation proof into a tautology.
     services:
       postgres:
         # Matched to docker-compose.yml so CI and the devcontainer agree.
