@@ -62,7 +62,7 @@ both arguments in full.
 
 from django.db.models import Prefetch
 
-from . import grades, positions
+from . import grades
 from .models import (
     ReleasedAssessmentScore,
     ReleasedCard,
@@ -185,16 +185,21 @@ def _scores_for(assessments, student_ids) -> dict[tuple[int, int], int]:
     }
 
 
-def freeze_for_release(sheet, *, by=None) -> dict[int, ReleasedCard]:
+def freeze_for_release(sheet, results, *, by=None) -> dict[int, ReleasedCard]:
     """Copy this class's cards as they read now. Returns `student_id -> card`.
 
     **The return value is the roster**, and that is the point of it rather than a
-    convenience. `ratings`, `comments` and `sessions` freeze their sections
-    against exactly these children and take the roster from here rather than
-    reading `positions.roster_ids()` a second time — issue #43. Two reads under
-    READ COMMITTED are two answers, the lock is on the `ResultSheet` row and not
-    on `ClassPlacement`, and the second answer used to be the one that decided
-    who got a conduct section. In insertion order, which is roster order.
+    convenience. `ratings` and `comments` freeze their sections against exactly
+    these children and take the roster from here rather than reading
+    `positions.roster_ids()` a second time — issue #43. Two reads under READ
+    COMMITTED are two answers, the lock is on the `ResultSheet` row and not on
+    `ClassPlacement`, and the second answer used to be the one that decided who
+    got a conduct section. In insertion order, which is roster order.
+
+    `sessions` takes this map *and* the `results` below, because it needs each
+    child's placement for the term being released and not only her id — issue
+    #60, and the note on `sessions.freeze_for_release()` says what asking twice
+    was writing.
 
     Called by `results.services.release()` **first**, inside the transaction
     that writes the release row, so that the section freezes underneath it have
@@ -208,19 +213,27 @@ def freeze_for_release(sheet, *, by=None) -> dict[int, ReleasedCard]:
     by the same column; a card written by this function always has one, and it
     can never be filled in afterwards because the table is append-only.
 
-    Reads everything from `positions.class_results()` — one roster read and one
-    aggregate read — so that every number on every card in the class comes from
-    the same instant. Reading them per child would let a mark landing mid-freeze
-    put one child's position above another's higher percentage, which is the
-    failure `ClassResults` was extracted to prevent.
+    `results` is a `positions.ClassResults` — one roster read and one aggregate
+    read — so that every number on every card in the class comes from the same
+    instant. Reading them per child would let a mark landing mid-freeze put one
+    child's position above another's higher percentage, which is the failure
+    `ClassResults` was extracted to prevent.
+
+    **It is an argument rather than a read, and that is issue #60.** This used
+    to call `positions.class_results()` itself, which made it the single read
+    #43 asked for and left the *other* freezes to ask again — `sessions` still
+    read `ClassPlacement` for the term being released, inside the same locked
+    block, and could disagree with the card written a moment earlier. The read
+    now happens once at the top of the locked block in `services.release()` and
+    everything that needs it is handed the same snapshot. What the sheet lock
+    cannot give, passing one answer down can.
     """
-    results = positions.class_results(sheet.class_group, sheet.term)
     if not results.student_ids:
         return {}
     return _freeze(sheet, results, results.student_ids, versions={}, by=by)
 
 
-def freeze_a_revision(sheet, student_id, *, version, by) -> dict[int, ReleasedCard]:
+def freeze_a_revision(sheet, results, student_id, *, version, by) -> dict[int, ReleasedCard]:
     """Task 8. One child's card again, at a new version, from live data.
 
     Returns the same `student_id -> card` mapping `freeze_for_release()` does,
@@ -231,8 +244,8 @@ def freeze_a_revision(sheet, student_id, *, version, by) -> dict[int, ReleasedCa
     **The class is read whole even though one card is written.** `position` and
     `roster_size` are statements about the other forty-four children, and a
     revision computed against a roster of one would put every revised card
-    first out of one. `positions.class_results()` is called for the class and
-    only the write is narrowed.
+    first out of one. `results` is the whole class's and only the write is
+    narrowed.
 
     That is also the honest reason a revision is per-card rather than per-class:
     a correction that changes a mark changes everyone's *position*, so the
@@ -241,8 +254,15 @@ def freeze_a_revision(sheet, student_id, *, version, by) -> dict[int, ReleasedCa
     `ReleasedCard` — so the disagreement is between two staff screens rather
     than between two families' cards, which is the trade this takes knowingly.
     Issue #55, rather than a silent choice.
+
+    **`results` is passed in, not read here — issue #60.** `revise()` reads the
+    class once inside its lock and checks the child is still on that roster
+    against the very snapshot this freeze then uses. Read here instead, the
+    guard and the freeze asked the same question twice: a placement moving
+    between them passed the guard and then wrote a blank version 2 — no marks,
+    no totals, no position, no average — over a card that had all four. Every
+    value individually legal, so nothing objected. Issue #59.
     """
-    results = positions.class_results(sheet.class_group, sheet.term)
     return _freeze(sheet, results, [student_id], versions={student_id: version}, by=by)
 
 

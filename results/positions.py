@@ -81,7 +81,7 @@ from typing import Mapping
 
 from django.db.models import Sum
 
-from academics.models import ClassPlacement
+from academics.models import ClassGroup, ClassPlacement, Term
 from gradebook.models import Score
 
 #: Two decimal places, which is what a report card prints. Ranking compares the
@@ -168,8 +168,32 @@ def _percentage(scored: int, available: int) -> Decimal | None:
 
 
 def roster_ids(class_group, term) -> list[int]:
-    """Who sat in this class this term. The set a position is out of."""
+    """Who sat in this class this term. The set a position is out of.
+
+    For a caller inside a `ResultSheet`-locked block this is the wrong function:
+    the lock reaches the sheet row and not `ClassPlacement`, so a second call
+    here is a second answer. Those callers take `class_results()` once and read
+    `student_ids` and `placements` off it — issues #43 and #60.
+    """
     return ClassPlacement.objects.student_ids(class_group, term)
+
+
+def roster(class_group, term) -> dict[int, ClassPlacement]:
+    """The roster as the placement rows themselves, keyed by membership id.
+
+    `class_group` is selected in the same query because the one caller that
+    needs the rows — `sessions._lines_for()` — asks each placement which group
+    the child sat in, and a lazy load there would be one query per child.
+
+    Insertion order is the queryset's order, which `ClassPlacement.Meta` makes
+    `student_membership_id` within a group, so `list(roster(...))` is
+    `roster_ids(...)`.
+    """
+    return {
+        placement.student_membership_id: placement
+        for placement in ClassPlacement.objects.roster(class_group, term)
+        .select_related("class_group")
+    }
 
 
 def _subject_totals(term, student_ids) -> dict[tuple[int, int], tuple[int, int]]:
@@ -232,6 +256,19 @@ class ClassResults:
     """
 
     student_ids: list[int]
+    #: The placement rows `student_ids` came from, keyed by membership id, and
+    #: the class group and term they were read for.
+    #:
+    #: They travel with the numbers because of issue #60. A caller holding the
+    #: `ResultSheet` lock has asked "who sat here this term" exactly once, and
+    #: anything downstream that asks again gets a *different* answer under READ
+    #: COMMITTED — the lock is on the sheet row and not on `ClassPlacement`.
+    #: `sessions._lines_for()` needed the placements and not merely the ids
+    #: (it asks each one which group the child sat in), so carrying only the
+    #: ids would have relabelled #46 rather than closed it.
+    placements: dict[int, ClassPlacement]
+    class_group: ClassGroup
+    term: Term
     #: Only subjects this class was actually marked in this term — see
     #: `class_results()` for why the full `Subject` table is the wrong list.
     subject_ids: list[int]
@@ -276,7 +313,8 @@ def class_results(class_group, term) -> ClassResults:
     other year groups. What a broadsheet should show is the subjects this class
     was marked in, which the aggregate already knows.
     """
-    students = roster_ids(class_group, term)
+    placements = roster(class_group, term)
+    students = list(placements)
     totals = _subject_totals(term, students)
 
     percentages: dict[tuple[int, int], Decimal] = {}
@@ -310,6 +348,9 @@ def class_results(class_group, term) -> ClassResults:
 
     return ClassResults(
         student_ids=students,
+        placements=placements,
+        class_group=class_group,
+        term=term,
         subject_ids=sorted(subject_ids),
         totals=totals,
         percentages=percentages,

@@ -49,7 +49,6 @@ which is where that used to raise `School.DoesNotExist` out of the module's own
 exception hierarchy.
 """
 
-import logging
 from collections.abc import Iterable
 
 from django.db import connection, transaction
@@ -66,10 +65,6 @@ from .models import (
     ResultSheetTransition,
     SheetState,
 )
-
-#: `schools.logging.SchoolContextFilter` puts the school on every record, so a
-#: line from here already answers "which school?" without being told.
-logger = logging.getLogger(__name__)
 
 
 class ResultsError(Exception):
@@ -667,54 +662,6 @@ def approve(sheet, actor):
     )
 
 
-def _say_if_the_roster_moved(sheet, card_by_student):
-    """Log the children a release finished without, if the roster moved under it.
-
-    **This read decides nothing, and that is the whole of why it is allowed.**
-    Issue #43 was two reads producing two answers about who is on a release;
-    the fix was to let `cards.freeze_for_release()` give the only answer. This
-    reads the roster a second time on purpose — *after* everything is written,
-    with nothing left to decide — to compare the answer that was used against
-    what the table says now. It cannot reintroduce #43 because no row hangs off
-    what it returns.
-
-    **Why anything at all.** The outcome for a child placed mid-release is that
-    she is simply not on it, which is truthful — she was not in the class when
-    the cards were written — but on its own it is also *silent*. The release
-    succeeds, the principal sees success, and one child has no card, no sections,
-    and no obvious way to be given them: `_move()` refuses a released sheet, and
-    the correction paths reach the sheet through her *current* placement, which
-    is now this released class. That is issue #31's dead end, arrived at by a new
-    road, and task 8's revision path is what eventually opens it. Until then the
-    least this can do is not happen quietly.
-
-    A warning and not an exception. Raising would abort the release for the whole
-    class because one child arrived during it, which is the behaviour #43 exists
-    to remove — forty-five children's cards held back by one placement, and the
-    retry racing the same office. The card that is wrong is one child's; the log
-    line says whose.
-
-    Logged rather than returned because `release()`'s answer is the sheet, and
-    every caller of it would have to learn a second return value to pass this on.
-    Putting it in front of the principal is worth doing and is issue #47.
-    """
-    moved_in = set(positions.roster_ids(sheet.class_group, sheet.term)) - set(
-        card_by_student
-    )
-    if not moved_in:
-        return
-
-    logger.warning(
-        "Release of %s %s finished without %d child(ren) placed into the class "
-        "while it ran: membership id(s) %s. They have no released card and no "
-        "frozen sections. Issue #31 covers what they need next.",
-        sheet.class_group,
-        sheet.term,
-        len(moved_in),
-        ", ".join(str(student_id) for student_id in sorted(moved_in)),
-    )
-
-
 def release(sheet, actor):
     """Publish to parents. The last thing that happens to this version.
 
@@ -775,27 +722,47 @@ def release(sheet, actor):
         guarantee issues #31, #33 and #34 all asked for, and no constraint can
         hold it — see `results.cards`.
 
-        **And it returns the roster, which the other three then use.** They each
-        used to read `positions.roster_ids()` for themselves, so a release read
-        the roster four times. The lock `_move()` holds is on the `ResultSheet`
-        row and reaches no further, and under READ COMMITTED every statement here
-        takes a fresh snapshot — so a placement committed by the office between
-        the first read and the second put a child in the conduct section who had
-        no card, and the release died on a NOT NULL naming `card_id`. Issue #43.
+        **One read of the class, at the top, passed to everything.** The four
+        freezes each used to read the roster for themselves, so a release read
+        it four times. The lock `_move()` holds is on the `ResultSheet` row and
+        reaches no further, and under READ COMMITTED every statement here takes
+        a fresh snapshot — so a placement committed by the office between the
+        first read and the second put a child in the conduct section who had no
+        card, and the release died on a NOT NULL naming `card_id`. Issue #43.
 
-        **What one read buys, stated exactly.** *Who* is on this release is
-        decided once, and every frozen section agrees about that set. It is not
-        the wider claim that nothing underneath the release moves: the session
-        line re-reads `ClassPlacement` for the term being released, inside
-        `sessions._lines_for()`, and that read is not covered by the sheet lock
-        either — issue #46. This block closes the gap that aborted the release;
-        it does not close the one that can make two frozen rows disagree.
+        #43 removed three of the four reads by letting `cards` answer for the
+        others. **Issue #60 removed the fourth**, which was the one #43's fix
+        could not reach: `sessions._lines_for()` needs each child's *placement*
+        for the term being released and not merely their id, so the roster
+        travelling down as a set of ids left it asking `ClassPlacement` again.
+        A placement deleted or moved between the two wrote a session row
+        contradicting the card written moments earlier in the same transaction.
+        `positions.class_results()` is now called once here and carries that
+        term's placements with it.
+
+        **What one read buys, stated exactly.** Every frozen row in this block
+        describes the class as one read found it: who was on it, and which group
+        each of them sat in. It is still not the claim that nothing moves — the
+        office can place a child a millisecond after this returns, and she is
+        then simply not on the release, which is truthful and is #31's dead end
+        rather than this block's problem.
+
+        **What used to be here and is deliberately gone.** A
+        `_say_if_the_roster_moved()` logged a warning naming any child the
+        roster gained while the release ran. It worked by reading the roster a
+        second time, after everything was written, and comparing. Under one read
+        per block it would compare the snapshot against itself and could only
+        ever report "nothing moved" — a guard that guards nothing, with a log
+        line that reads as evidence somebody checked. It is deleted rather than
+        kept with a docstring admitting it. The platform's only detector of a
+        mid-release move goes with it, unreliable as it was; issue #47, which
+        was about putting its output in front of a person, is noted.
         """
-        card_by_student = cards.freeze_for_release(locked, by=actor)
+        results = positions.class_results(locked.class_group, locked.term)
+        card_by_student = cards.freeze_for_release(locked, results, by=actor)
         ratings.freeze_for_release(locked, card_by_student)
         comments.freeze_for_release(locked, card_by_student)
-        sessions.freeze_for_release(locked, card_by_student)
-        _say_if_the_roster_moved(locked, card_by_student)
+        sessions.freeze_for_release(locked, card_by_student, results)
 
     return _move(
         sheet,

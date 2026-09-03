@@ -349,8 +349,16 @@ def _terms_of(session) -> dict[str, Term]:
     return {term.name: term for term in Term.objects.filter(session=session)}
 
 
-def _lines_for(student_ids, session) -> dict[int, tuple[TermLine, ...]]:
+def _lines_for(student_ids, session, snapshot=None) -> dict[int, tuple[TermLine, ...]]:
     """Every named child's three term lines. Batched, because release calls it.
+
+    `snapshot` is the `positions.ClassResults` a release or a revision read
+    under its lock, or `None` for the ordinary live reads. Where it is given,
+    **the term it was read for is answered from it** rather than by querying
+    `ClassPlacement` again — issues #46 and #60, and the note on
+    `freeze_for_release()` below says what that was costing. The other two terms
+    of the session are historical and are read live either way: no lock covers
+    them and no snapshot was taken of them.
 
     **The query count is per (term, class group), not per child.** The obvious
     implementation asks `positions.overall_percentages()` once per child per
@@ -366,6 +374,7 @@ def _lines_for(student_ids, session) -> dict[int, tuple[TermLine, ...]]:
     """
     lines = {student_id: {} for student_id in student_ids}
     terms = _terms_of(session)
+    wanted = set(student_ids)
 
     for term_name in TERM_ORDER:
         name = term_name.value
@@ -376,22 +385,47 @@ def _lines_for(student_ids, session) -> dict[int, tuple[TermLine, ...]]:
                 lines[student_id][name] = TermLine(name, None, None, TermAbsence.NO_TERM)
             continue
 
-        # Read live, including for a term being released as this runs. Nothing
-        # here is covered by the `ResultSheet` lock, so a placement deleted or
-        # moved mid-release is seen by this line and not by the card frozen a
-        # moment earlier — issue #46. `student_ids` is the frozen roster, so a
-        # child *arriving* cannot get in; it is departures and moves that bite.
-        placements = {
-            placement.student_membership_id: placement
-            for placement in ClassPlacement.objects.filter(
-                term=term, student_membership_id__in=student_ids
-            ).select_related("class_group")
-        }
+        from_snapshot = snapshot is not None and term.pk == snapshot.term.pk
+
+        if from_snapshot:
+            # The term being released, answered from the read the locked block
+            # already made. This line and the card now come from one instant,
+            # which is the whole of #46: a placement deleted or moved between
+            # the two used to write a session row contradicting the card written
+            # moments earlier in the same transaction — the card carrying her
+            # third-term marks and the line calling her NOT_ENROLLED for third
+            # term, renormalised over two.
+            placements = {
+                student_id: placement
+                for student_id, placement in snapshot.placements.items()
+                if student_id in wanted
+            }
+        else:
+            # Live, and correctly so: a term nobody is releasing is not covered
+            # by any lock or any snapshot, and its placements are history.
+            placements = {
+                placement.student_membership_id: placement
+                for placement in ClassPlacement.objects.filter(
+                    term=term, student_membership_id__in=student_ids
+                ).select_related("class_group")
+            }
 
         # One broadsheet per class group any of these children sat in that term.
+        #
+        # `positions.overall_percentages()` *is* `class_results().averages`, so
+        # for the term being released it is the same read the locked block
+        # already made — a third answer to the question the card was written
+        # from. Taking the averages off the snapshot is the other half of #60:
+        # without it a placement deleted mid-release drops the child out of this
+        # fresh read and the line calls her `UNMARKED` instead of
+        # `NOT_ENROLLED`, which is a different sentence and the same lie.
         percentages = {}
         for placement in placements.values():
-            if placement.class_group_id not in percentages:
+            if placement.class_group_id in percentages:
+                continue
+            if from_snapshot and placement.class_group_id == snapshot.class_group.pk:
+                percentages[placement.class_group_id] = snapshot.averages
+            else:
                 percentages[placement.class_group_id] = positions.overall_percentages(
                     placement.class_group, term
                 )
@@ -557,7 +591,7 @@ def session_line(membership, session, *, config=None) -> SessionLine:
 # ---------------------------------------------------------------------------
 
 
-def freeze_for_release(sheet, card_by_student) -> int:
+def freeze_for_release(sheet, card_by_student, results) -> int:
     """Copy this class's session lines as they read now. Returns rows written.
 
     Called by `results.services.release()` **inside the transaction that writes
@@ -585,17 +619,20 @@ def freeze_for_release(sheet, card_by_student) -> int:
     the roster** — see #43 and the note on `ratings.freeze_for_release()`. One
     read decides who is on this release; a second one is a second answer.
 
-    **That guarantee is about *who*, and it stops there.** `_lines_for()` below
-    reads `ClassPlacement` again for each term of the session — including the
-    term being released — to find which class group each child sat in, and that
-    read is no better covered by the sheet's lock than the one #43 removed. A
-    placement deleted or moved between the card freeze and this line therefore
-    still writes a session row that contradicts the card written moments earlier
-    in the same transaction: the card carries the child's third-term marks and
-    the session line calls her `NOT_ENROLLED` for third term, renormalised over
-    two. Issue #46. Passing the roster down does not reach it — the fix is either
-    a lock covering `ClassPlacement` or threading that term's placements through
-    from the same read, and both are wider than #43.
+    **`results` is the second half of that guarantee, and it is issue #60.**
+    Knowing *who* is on the release was never enough here: `_lines_for()` also
+    has to know which class group each child sat in for the term being released,
+    and it used to ask `ClassPlacement` again — a read the sheet's lock covers
+    no better than the one #43 removed. A placement deleted or moved between the
+    card freeze and this line wrote a session row contradicting the card written
+    moments earlier in the same transaction.
+
+    So the `positions.ClassResults` the release read under its lock is passed in
+    and carries that term's placements with it. The fix considered and rejected
+    was a lock covering `ClassPlacement` for the class and term: it serialises
+    the office against every release during the one week both happen constantly,
+    and it makes the two reads *agree* rather than removing the second one,
+    leaving the next reader two reads and no reason to trust either.
     """
     if sheet.term.name != TermName.THIRD:
         return 0
@@ -606,7 +643,7 @@ def freeze_for_release(sheet, card_by_student) -> int:
 
     config = settings()
     session = sheet.term.session
-    lines = _lines_for(roster, session)
+    lines = _lines_for(roster, session, snapshot=results)
 
     # Every frozen row hangs off the card its release wrote. `cards` runs first
     # inside this same transaction — see `services.release()` — so a card exists
