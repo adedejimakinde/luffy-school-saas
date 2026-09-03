@@ -962,8 +962,17 @@ class ABackfilledDatabase(CardSetUp):
             self._make_it_look_pre_0016()
 
     def _make_it_look_pre_0016(self):
-        """Every frozen row unlinked, `card_id` nullable and null, guards live."""
+        """Every frozen row unlinked, `card_id` nullable and null, guards live.
+
+        The rendered-card rows go too, and not for tidiness: `ReleasedCardPdf`
+        arrived in `0021` and every released card has carried one since `0022`,
+        so a database from before `0016` has neither the table nor a row in it —
+        and the `card` foreign key would refuse the `DELETE FROM
+        results_releasedcard` the subclass below does to stage a schema that
+        never had cards at all.
+        """
         with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM results_releasedcardpdf;")
             # The release that just ran is still in this test's transaction with
             # its deferred foreign-key checks queued, and Postgres refuses to
             # ALTER a table that has pending trigger events. Flushing them is a

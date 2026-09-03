@@ -65,7 +65,10 @@ the block holding the sheet lock, and hands the result to everything below it.
 `cards.freeze_for_release()` returns `student_id -> card`, and **that map is the
 roster** for `ratings` and `comments`; `sessions` additionally takes the
 `ClassResults` itself, because it needs each child's *placement* for the term
-being released and not merely their id.
+being released and not merely their id. `renders.mark_and_enqueue()` takes the
+same map's values — the cards it writes a `PENDING` marker for are exactly the
+cards this release froze, which is what makes "every released card owes a file"
+a claim about one transaction rather than about a query run afterwards.
 
 That is issue #43 and it is not tidiness. The lock `services._move()` holds is on
 the **`ResultSheet` row** and reaches no further: `ClassPlacement` is not locked,
@@ -201,17 +204,24 @@ score cells per release. Deliberate: one table means a released card is exactly
 against. A JSON blob is a second shape that can disagree with the columns beside
 it and nothing would notice.
 
-The cost is paid on the read path, where it is cheap — `cards.card_lines()` and
-`cards.cards_on()` fetch by `card_id` in a bounded number of queries, because
-task 7 renders forty-five of these in a batch.
+The cost is paid on the read path, where it is cheap — `cards.card_lines()`
+fetches by `card_id` in a bounded number of queries.
 
-That line used to say "in one Celery job", written before the job existed.
-[report-card-pdf.md](report-card-pdf.md) explains why it became **one job per
-card** instead: `acks_late` means a worker killed on the forty-fourth card hands
-the message back, and a per-class job would then re-render the whole class,
-while `visibility_timeout` is 300 seconds and a per-class job has to finish
-inside it. A per-card job makes both problems disappear and lets a second worker
-help.
+That paragraph twice named a batch that does not exist. It said "task 7 renders
+forty-five of these in one Celery job", written before the job existed; then "in
+a batch", after [report-card-pdf.md](report-card-pdf.md) settled that it is
+**one job per card** — `acks_late` means a worker killed on the forty-fourth
+card hands the message back, and `visibility_timeout` is 300 seconds, so a
+per-class job risks redelivery alongside itself.
+
+`cards.cards_on()` is the sibling reader built for that batch, and issue #56's
+enqueuer did not want it either: it takes ids straight off the release's
+`card_by_student` rather than prefetching every line and cell of forty-five
+cards to throw them away. So it has **no caller**, which its own docstring now
+says. It is kept for the `DISTINCT ON (student_membership_id) … ORDER BY version
+DESC` rule, which any future batch reader needs and which is easy to get wrong:
+without it a forty-five child class with one revision reads as forty-six, and
+the superseded version goes home beside the one that replaced it.
 
 ## Migrating a database that already has results
 

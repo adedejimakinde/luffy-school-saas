@@ -71,7 +71,7 @@ from django.db import transaction
 
 from academics.models import ClassPlacement
 
-from . import cards, comments, positions, ratings, sessions
+from . import cards, comments, positions, ratings, renders, sessions
 from .models import CardRevision, ResultSheet, SheetState
 # `_locked` and `_require_authority` are private to `services`, and are
 # imported rather than reimplemented on purpose: the lock carries a load-bearing
@@ -180,6 +180,13 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
             revised_by_id=actor.pk,
             by_platform_staff=by_platform_staff,
         )
+        # A revision is a card, so it owes a file exactly as a release does —
+        # and this path is the *only* way a child placed into a term after it
+        # was released (issue #31) gets one at all. Marking only at release
+        # would leave her card the one case with no marker and no render, which
+        # is precisely the case issue #56 is about. `results.renders` holds the
+        # ordering: the row inside this transaction, the queue after it.
+        renders.mark_and_enqueue([card])
 
     return card
 
