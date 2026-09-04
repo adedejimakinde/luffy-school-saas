@@ -23,7 +23,7 @@ Academy's broadsheet" is a question about the middleware and the authority check
 together, and neither one alone answers it.
 """
 
-from django.db import connection
+from django.db import IntegrityError, connection, transaction
 
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Role, User
@@ -94,6 +94,66 @@ class BroadsheetApiSetUp(PositionSetUp):
             HTTP_HOST=host,
         )
 
+    def release_the_term(self):
+        """JSS 1A's first term, all the way through the chain. Returns the sheet.
+
+        A class teacher first, because the chain refuses to move without one:
+        "JSS 1A has no class teacher for First term, so nobody may submit its
+        results yet."
+        """
+        from academics.services import assign_class_teacher
+        from accounts.models import Membership
+        from results import services as results_services
+
+        with connected_to(self.stmarys):
+            assign_class_teacher(
+                ClassGroup.objects.get(pk=self.group_id),
+                Term.objects.get(pk=self.term_id),
+                Membership.objects.get(
+                    user=self.teacher, school=self.stmarys, role=Role.TEACHER
+                ),
+            )
+            sheet = results_services.open_sheet(
+                ClassGroup.objects.get(pk=self.group_id),
+                Term.objects.get(pk=self.term_id),
+                self.principal,
+            )
+            results_services.submit(sheet, self.teacher)
+            results_services.check(sheet, self.vp)
+            results_services.approve(sheet, self.principal)
+            results_services.release(sheet, self.principal)
+            return sheet
+
+    def transfer_out(self, membership):
+        """Move one child into a second group, the way a mid-term transfer does.
+
+        This is the roster lever the tests below need, and it is the *only* one
+        release leaves open: `gradebook`'s `0002` trigger refuses a mark on a
+        released term outright, while nothing refuses a placement. Which is
+        issue #55 in one sentence — the marks lock and the roster does not.
+        """
+        from academics.services import move_student
+
+        with connected_to(self.stmarys):
+            other = ClassGroup.objects.filter(name="JSS 1B").first() or (
+                ClassGroup.objects.create(name="JSS 1B", level=1)
+            )
+            move_student(other, Term.objects.get(pk=self.term_id), membership)
+            return other
+
+    def live_results(self):
+        """What `positions` says about JSS 1A *now* — the other of the two answers."""
+        from results import positions
+
+        with connected_to(self.stmarys):
+            return positions.class_results(
+                ClassGroup.objects.get(pk=self.group_id),
+                Term.objects.get(pk=self.term_id),
+            )
+
+    def rows_of(self, payload):
+        return {row["student_membership_id"]: row for row in payload["rows"]}
+
 
 class StaffCanSeeThePositionTests(BroadsheetApiSetUp):
     def test_each_admitted_role_gets_the_broadsheet(self):
@@ -104,8 +164,8 @@ class StaffCanSeeThePositionTests(BroadsheetApiSetUp):
                 self.assertEqual(response.status_code, 200, response.content)
                 body = response.json()
                 rows = {r["student_membership_id"]: r for r in body["rows"]}
-                self.assertEqual(rows[self.child.pk]["position"], 1)
-                self.assertEqual(rows[self.classmate.pk]["position"], 2)
+                self.assertEqual(rows[self.child.pk]["current_rank"], 1)
+                self.assertEqual(rows[self.classmate.pk]["current_rank"], 2)
 
     def test_the_class_average_is_staff_visible_and_computed_not_stored(self):
         response = self.signed_in(self.principal)
@@ -117,7 +177,7 @@ class StaffCanSeeThePositionTests(BroadsheetApiSetUp):
         maths = [
             s for s in rows[self.child.pk]["subjects"] if s["subject_id"] == self.maths_id
         ][0]
-        self.assertEqual(maths["position"], 1)
+        self.assertEqual(maths["current_subject_rank"], 1)
         self.assertEqual(maths["percentage"], "88.00")
 
     def test_the_columns_are_the_subjects_the_class_was_marked_in(self):
@@ -165,7 +225,7 @@ class StaffCanSeeThePositionTests(BroadsheetApiSetUp):
         rows = {r["student_membership_id"]: r for r in response.json()["rows"]}
 
         self.assertIsNone(rows[absent.pk]["average"])
-        self.assertIsNone(rows[absent.pk]["position"])
+        self.assertIsNone(rows[absent.pk]["current_rank"])
 
 
 class PositionNeverReachesAFamilyTests(BroadsheetApiSetUp):
@@ -275,7 +335,7 @@ class ARosterRowNamingAnotherSchoolsChildTests(BroadsheetApiSetUp):
         self.assertIn(self.their_child.pk, rows)
         self.assertEqual(rows[self.their_child.pk]["student"], "—")
         self.assertIsNone(rows[self.their_child.pk]["average"])
-        self.assertIsNone(rows[self.their_child.pk]["position"])
+        self.assertIsNone(rows[self.their_child.pk]["current_rank"])
 
     def test_our_own_children_are_still_named(self):
         """The control on the control: narrowing must not blank the whole sheet."""
@@ -352,17 +412,21 @@ class OneSchoolsStaffCannotReadAnothersTests(BroadsheetApiSetUp):
         self.assertEqual(response.status_code, 404)
 
 
-class TheEndpointReadsLiveMarksForNowTests(BroadsheetApiSetUp):
+class AnUnreleasedTermStillReadsLiveMarksTests(BroadsheetApiSetUp):
     def test_a_new_mark_changes_the_position_immediately(self):
-        """Stated so the *absence* of freezing is a recorded fact rather than an
-        assumption. Once task 3 lands, a released term must be served from the
-        snapshot instead — a position recomputed after release can silently
-        disagree with the card a parent is holding.
+        """An unreleased term has no snapshot to serve, so it reads live marks —
+        and must keep doing so, or a teacher would not see their own marking.
+
+        This class used to be `TheEndpointReadsLiveMarksForNowTests` and its
+        docstring said "once task 3 lands, a released term must be served from
+        the snapshot instead". Task 3 landed in #44 and the switch was not made;
+        issue #55 is what that cost. The "for now" is gone because the other
+        half now exists — see `AReleasedTermIsServedFromTheSnapshotTests`.
         """
         before = self.signed_in(self.principal).json()
         rows = {r["student_membership_id"]: r for r in before["rows"]}
-        self.assertEqual(rows[self.child.pk]["position"], 1)
-        self.assertEqual(rows[self.classmate.pk]["position"], 2)
+        self.assertEqual(rows[self.child.pk]["current_rank"], 1)
+        self.assertEqual(rows[self.classmate.pk]["current_rank"], 2)
 
         # Maths stands at 88 and 61. English flips it: the child averages
         # (88 + 30) / 2 = 59, the classmate (61 + 100) / 2 = 80.5.
@@ -371,8 +435,8 @@ class TheEndpointReadsLiveMarksForNowTests(BroadsheetApiSetUp):
 
         after = self.signed_in(self.principal).json()
         rows = {r["student_membership_id"]: r for r in after["rows"]}
-        self.assertEqual(rows[self.classmate.pk]["position"], 1)
-        self.assertEqual(rows[self.child.pk]["position"], 2)
+        self.assertEqual(rows[self.classmate.pk]["current_rank"], 1)
+        self.assertEqual(rows[self.child.pk]["current_rank"], 2)
 
 
 class TheSchemaComesFromTheHostNotThePathTests(BroadsheetApiSetUp):
@@ -408,3 +472,263 @@ class TheSchemaComesFromTheHostNotThePathTests(BroadsheetApiSetUp):
             {r["student_membership_id"] for r in theirs_response.json()["rows"]},
             {theirs.pk},
         )
+
+
+class AReleasedTermIsServedFromTheSnapshotTests(BroadsheetApiSetUp):
+    """Issue #55. A released term's broadsheet is the frozen cards, not the marks.
+
+    The endpoint's docstring promised this — "once there is [a snapshot], a
+    *released* term must be served from it rather than from here" — and task 3
+    shipped in #44 without it being done.
+
+    **What that cost is the roster.** Marks lock at release: `gradebook`'s
+    `0002` trigger refuses an INSERT for a released term, and the second test
+    below asserts that refusal rather than assuming it. Nothing refuses a
+    *placement*, so the live roster kept moving under a frozen ranking, and the
+    page and the cards answered two different questions in the same shape.
+    """
+
+    def test_the_page_says_which_question_it_answered(self):
+        """`from_snapshot` exists so two broadsheets can be told apart. Without
+        it, a released page and a live one are the same shape saying different
+        things."""
+        self.assertFalse(self.signed_in(self.principal).json()["from_snapshot"])
+
+        self.release_the_term()
+
+        self.assertTrue(self.signed_in(self.principal).json()["from_snapshot"])
+
+    def test_a_placement_made_after_release_is_not_on_the_page(self):
+        """The failure that made #55 live today, with no revision and no #54.
+
+        The live roster gains her — asserted below, so this is a statement about
+        the two answers rather than about one — and the page does not, because a
+        child with no card was not in what went home. The revision path is what
+        gives her one (issue #31), and she appears here once it has.
+        """
+        self.release_the_term()
+        before = self.rows_of(self.signed_in(self.principal).json())
+
+        latecomer = self.enrol(
+            self.stmarys, "zainab", "Zainab Z", self.group_id, self.term_id
+        )
+
+        # The mark she would need to be *ranked* is refused outright, which is
+        # why the roster is the whole of this bug: `restrict_violation` from
+        # `gradebook_scores_stop_at_release()`, arriving as `IntegrityError`.
+        # Its own atomic block — an IntegrityError marks the enclosing
+        # transaction unusable, and this test goes on to make more queries.
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                self.mark(self.stmarys, self.term_id, self.maths_id, latecomer, 99)
+
+        self.assertIn(
+            latecomer.pk,
+            self.live_results().student_ids,
+            "the live roster did not move, so this test proves nothing",
+        )
+
+        after = self.rows_of(self.signed_in(self.principal).json())
+        self.assertNotIn(latecomer.pk, after, "a child with no card is on the page")
+        self.assertEqual(after.keys(), before.keys())
+        self.assertEqual(after[self.child.pk]["current_rank"], 1)
+        self.assertEqual(after[self.classmate.pk]["current_rank"], 2)
+
+    def test_a_child_who_transfers_out_after_release_keeps_her_row(self):
+        """The mirror of the test above, and the one a school actually meets.
+
+        Ada's card went home. A transfer in the last week of term takes her off
+        JSS 1A's live roster — asserted, again, so the divergence is a fact of
+        this test — and the released page must still show the class that was
+        released, or forty-five cards are in parents' hands with no page that
+        agrees with them.
+        """
+        self.release_the_term()
+        before = self.rows_of(self.signed_in(self.principal).json())
+
+        self.transfer_out(self.child)
+
+        self.assertNotIn(
+            self.child.pk,
+            self.live_results().student_ids,
+            "the transfer did not move the live roster",
+        )
+
+        after = self.rows_of(self.signed_in(self.principal).json())
+        self.assertEqual(after.keys(), before.keys())
+        self.assertEqual(after[self.child.pk]["current_rank"], 1)
+        self.assertEqual(after[self.child.pk]["average"], "88.00")
+
+    def test_the_class_average_is_the_mean_of_the_frozen_cards(self):
+        """Derived from the rows displayed beside it, and still never stored.
+
+        88 and 61 average to 74.50. After Ada transfers out, the live figure is
+        61.00 over the one child left — both numbers are asserted here, because
+        the point is that the page keeps saying the one its own rows add up to.
+        """
+        self.release_the_term()
+        self.assertEqual(
+            self.signed_in(self.principal).json()["class_average"], "74.50"
+        )
+
+        self.transfer_out(self.child)
+
+        self.assertEqual(str(self.live_results().class_average), "61.00")
+        self.assertEqual(
+            self.signed_in(self.principal).json()["class_average"], "74.50"
+        )
+
+    def test_the_released_page_is_still_per_school(self):
+        """Two schools, one released term, and colliding class ids.
+
+        The snapshot is reached by a **new branch into new code**, so the
+        isolation the live path is held to has to be asserted of this path
+        separately rather than inherited by argument. `ReleasedCard` is a tenant
+        table, and a reader that got the schema from anywhere but the connection
+        would hand St Mary's frozen class to Grace Academy under the same id.
+        """
+        theirs = self.enrol(
+            self.grace, "uche", "Uche U", self.their_group_id, self.their_term_id
+        )
+        self.mark(self.grace, self.their_term_id, self.their_maths_id, theirs, 95)
+
+        self.release_the_term()  # St Mary's only.
+        self.assertEqual(self.group_id, self.their_group_id)
+
+        ours = self.signed_in(self.principal).json()
+        self.client.logout()
+        self.client.force_login(self.their_principal)
+        theirs_page = self.get(
+            host=THEIR_HOST, group_id=self.group_id, term_id=self.term_id
+        ).json()
+
+        # Each host answered a different question about the same class id.
+        self.assertTrue(ours["from_snapshot"])
+        self.assertFalse(theirs_page["from_snapshot"])
+        self.assertEqual(
+            {r["student_membership_id"] for r in ours["rows"]},
+            {self.child.pk, self.classmate.pk},
+        )
+        self.assertEqual(
+            {r["student_membership_id"] for r in theirs_page["rows"]},
+            {theirs.pk},
+        )
+
+    def test_the_rank_is_derived_and_not_read_off_the_card(self):
+        """`current_rank` comes from `dense_positions()` over the frozen
+        `own_average` values, so it is a fact about the page. It happens to
+        equal `ReleasedCard.position` when every card was frozen together —
+        which is this case, and is what makes `TheRevisedChildTests` below
+        meaningful rather than a coincidence."""
+        from results.models import ReleasedCard
+
+        self.release_the_term()
+        rows = self.rows_of(self.signed_in(self.principal).json())
+
+        with connected_to(self.stmarys):
+            frozen = {
+                card.student_membership_id: card.position
+                for card in ReleasedCard.objects.all()
+            }
+
+        self.assertEqual(rows[self.child.pk]["current_rank"], 1)
+        self.assertEqual(frozen[self.child.pk], 1)
+        self.assertEqual(rows[self.classmate.pk]["current_rank"], 2)
+        self.assertEqual(frozen[self.classmate.pk], 2)
+
+
+class TheRevisedChildTests(BroadsheetApiSetUp):
+    """The page rank and the card's stored `position` disagree, on purpose.
+
+    **This class is the documentation for why `current_rank` is not called
+    `position`.** They are two different numbers and both are correct:
+
+    - `ReleasedCard.position` records where the child came **at that card's own
+      freeze**. `revise()` reads the whole class as it stands at revision time,
+      so a revised card's position is a statement about a later moment than the
+      rest of the class.
+    - `current_rank` is where the child comes **among the cards on this page**,
+      derived from their frozen `own_average` values.
+
+    Read the frozen positions off forty-five cards and the page can put two
+    children at the same rank, because the numbers were not all computed against
+    the same roster. That is why the page derives its own.
+
+    The setup makes them differ by exactly one step: Ada transfers out after
+    release, and then Bisi's card is corrected. The revision ranks Bisi against
+    the one child left in JSS 1A; the page ranks her against the two cards that
+    exist. It does **not** inherit from the class above — that would re-run
+    every test in it under a second name for no second question asked.
+    """
+
+    def revise_the_classmate(self):
+        from results import revision
+
+        with connected_to(self.stmarys):
+            return revision.revise(
+                self.classmate,
+                Term.objects.get(pk=self.term_id),
+                self.principal,
+                "Re-issued after a placement change.",
+            )
+
+    def test_the_page_rank_and_the_cards_stored_position_disagree(self):
+        from results.models import ReleasedCard
+
+        self.release_the_term()
+        self.transfer_out(self.child)
+        self.revise_the_classmate()
+
+        with connected_to(self.stmarys):
+            cards_now = {
+                card.student_membership_id: card
+                for card in ReleasedCard.objects.order_by(
+                    "student_membership_id", "-version"
+                ).distinct("student_membership_id")
+            }
+
+        rows = self.rows_of(self.signed_in(self.principal).json())
+
+        # Bisi's own card, re-frozen against the one child left in the class.
+        self.assertEqual(cards_now[self.classmate.pk].version, 2)
+        self.assertEqual(cards_now[self.classmate.pk].position, 1)
+        self.assertEqual(cards_now[self.classmate.pk].roster_size, 1)
+
+        # The page, ranking the two cards that exist.
+        self.assertEqual(rows[self.classmate.pk]["current_rank"], 2)
+
+        # Both stated together, because the point is that they differ.
+        self.assertNotEqual(
+            rows[self.classmate.pk]["current_rank"],
+            cards_now[self.classmate.pk].position,
+        )
+
+        # And Ada, unrevised, still agrees with her own card — so the divergence
+        # belongs to the revision rather than to the derivation.
+        self.assertEqual(rows[self.child.pk]["current_rank"], 1)
+        self.assertEqual(cards_now[self.child.pk].position, 1)
+
+    def test_the_page_never_repeats_a_rank(self):
+        """What reading the frozen positions off the cards would have produced
+        here: **two children at rank 1**, because each card was ranked against a
+        different roster. The derivation cannot do that, because it ranks the
+        set it displays."""
+        from results.models import ReleasedCard
+
+        self.release_the_term()
+        self.transfer_out(self.child)
+        self.revise_the_classmate()
+
+        with connected_to(self.stmarys):
+            frozen = sorted(
+                card.position
+                for card in ReleasedCard.objects.order_by(
+                    "student_membership_id", "-version"
+                ).distinct("student_membership_id")
+            )
+
+        rows = self.rows_of(self.signed_in(self.principal).json())
+        derived = sorted(row["current_rank"] for row in rows.values())
+
+        self.assertEqual(frozen, [1, 1], "the setup no longer collides two firsts")
+        self.assertEqual(derived, [1, 2])

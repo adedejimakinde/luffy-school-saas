@@ -134,20 +134,26 @@ def round_percentage(value: Decimal) -> Decimal:
     **Public, and the single place any percentage in this app is rounded.**
     `results.sessions` combines these numbers into a session average and has to
     round the result the same way; a second `quantize()` over there would be a
-    second rounding policy, which is exactly the divergence `_mean()` below was
-    extracted to end. The module docstring's argument — that this number is
-    exact, and cannot outsource its last step to thread-local ambient state —
-    is not an argument about *this* module, it is an argument about the number.
+    second rounding policy, which is exactly the divergence that
+    `mean_percentage()` below was extracted to end. The module docstring's
+    argument — that this number is exact, and cannot outsource its last step to
+    thread-local ambient state — is not an argument about *this* module, it is
+    an argument about the number.
     """
     with localcontext(CONTEXT):
         return value.quantize(PLACES, rounding=ROUNDING)
 
 
-def _mean(values) -> Decimal:
+def mean_percentage(values) -> Decimal:
     """The mean of some already-quantised percentages, quantised again.
 
     One function because two callers used to do this inline and one of them
     rounded differently — see `class_average()`.
+
+    **Public**, for the same reason `round_percentage()` is: a released term's
+    broadsheet averages the *frozen* cards rather than live marks (issue #55),
+    and computing that mean anywhere else would be a second rounding policy —
+    which is the exact divergence this function was extracted to end.
     """
     with localcontext(CONTEXT):
         return round_percentage(sum(values) / Decimal(len(values)))
@@ -331,7 +337,7 @@ def class_results(class_group, term) -> ClassResults:
             subject_ids.append(subject_id)
 
     averages = {
-        student_id: _mean(marks)
+        student_id: mean_percentage(marks)
         for student_id, marks in per_student.items()
         if marks
     }
@@ -358,7 +364,7 @@ def class_results(class_group, term) -> ClassResults:
         averages=averages,
         positions=dense_positions(averages),
         class_average=(
-            _mean(averages.values()) if averages else None
+            mean_percentage(averages.values()) if averages else None
         ),
     )
 
@@ -462,6 +468,7 @@ __all__ = [
     "class_positions",
     "class_results",
     "dense_positions",
+    "mean_percentage",
     "overall_percentages",
     "round_percentage",
     "roster_ids",

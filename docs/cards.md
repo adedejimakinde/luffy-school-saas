@@ -176,6 +176,40 @@ It usually does not exist at release, and the hazard that drives freezing
 everything else — a later configuration edit reaching backwards — cannot apply
 to a table nothing edits.
 
+## "On the card" does two jobs, and that is what took three rounds to pin down
+
+**Neither `position` nor the class average is ever shown to a parent.** Both are
+staff-only. Say that first, because everything below is a refinement of it.
+
+The confusion is the phrase *on the card*, which names two different artefacts:
+
+| "the card" | what it is | carries `position`? |
+| --- | --- | --- |
+| the `ReleasedCard` **row** | the frozen artefact, the audit record | **yes** |
+| the **page that goes home** | `ReportCardOut`, and the PDF built from it | **no** |
+
+So "`position` is on the card" is true of the row and false of the page, and
+read as the second it says the opposite of what is meant.
+
+**`position` is frozen for staff and audit recoverability, not for printing.**
+It cannot be recomputed later without changing — the roster and the marks it
+ranked against have both moved on — so if the rank as at release is ever to be
+answerable, it has to be written down at release. That is the whole reason the
+column exists. It is not evidence that anybody outside the school sees it.
+
+The parent-facing exclusion is enforced at the serializer and confirmed at four
+surfaces: `ReportCardOut` has no slot for `position`, `roster_size` or
+`subject_position`; the PDF is built from `card_payload()`, the same object the
+page is served from, so the omission is structural rather than repeated in a
+template; the template carries no position field; and the broadsheet — the one
+place a rank is shown at all — is behind `_require_position_authority`.
+
+**The broadsheet does not display the frozen field.** For a released term it
+derives `current_rank` from the cards' `own_average` values, deliberately named
+so that it cannot be mistaken for `ReleasedCard.position`. See issue #55: the
+frozen positions on forty-five cards need not come from one freeze, so reading
+them off the rows could put two children at the same rank on one page.
+
 ## Staff-only, at the serializer
 
 `position`, `roster_size`, `subject_position`. Excluded at the **serializer**,
