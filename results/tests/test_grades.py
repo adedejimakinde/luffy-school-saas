@@ -26,7 +26,8 @@ from accounts.models import Role, User
 from accounts.services import grant_membership
 from results import grades
 from results.models import GradeBand
-from results.tests.test_positions import PASSWORD, connected_to, make_school
+from results.tests.test_positions import PASSWORD, make_school
+from schools.tests.tenants import connected_to
 
 
 class GradeSetUp(TestCase):

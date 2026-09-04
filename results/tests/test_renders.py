@@ -40,7 +40,7 @@ from results import cards, renders, revision, services
 from results.models import PdfState, ReleasedCard, ReleasedCardPdf
 from results.tests.test_card_api import HOST, THEIR_HOST, ReportCardApiSetUp
 from results.tests.test_release_roster_race import ReleaseUnderARosterChangeSetUp
-from schools.tests.test_tenant_isolation import connected_to
+from schools.tests.tenants import connected_to
 
 #: `0022`'s own backfill, imported by path because a module name starting with a
 #: digit is not an identifier. `TheBackfillTests` runs the real function rather

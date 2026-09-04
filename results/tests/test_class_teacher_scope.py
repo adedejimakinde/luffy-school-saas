@@ -21,12 +21,10 @@ The sections:
   the same membership id.
 """
 
-import contextlib
 from datetime import date
 
 from django.db import connection
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, ClassTeacher, Term, TermName
@@ -34,15 +32,9 @@ from accounts.models import MembershipStatus, Role, User
 from accounts.services import grant_membership
 from results import services
 from results.models import ResultSheet, ResultSheetTransition, SheetState
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class ClassTeacherSetUp(TestCase):

@@ -18,7 +18,6 @@ The properties, one section each:
   are separated by an incoming mark.
 """
 
-import contextlib
 import decimal
 from datetime import date
 from decimal import Decimal
@@ -26,7 +25,6 @@ from decimal import Decimal
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
-from django_tenants.utils import schema_context
 
 from academics.models import ClassGroup, Term, TermName
 from academics.services import place_student
@@ -34,15 +32,9 @@ from accounts.models import Membership, Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook.models import Assessment, Score, Subject
 from results import positions
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class PositionSetUp(TestCase):

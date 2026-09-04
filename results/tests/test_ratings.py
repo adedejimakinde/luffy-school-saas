@@ -30,12 +30,10 @@ and two tabs rating at once — are in `test_ratings_concurrency.py`, which need
 `TransactionTestCase` and real threads to say anything at all.
 """
 
-import contextlib
 from datetime import date
 
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
@@ -50,15 +48,9 @@ from results.models import (
     TraitGroup,
     TraitRating,
 )
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class RatingsSetUp(TestCase):
