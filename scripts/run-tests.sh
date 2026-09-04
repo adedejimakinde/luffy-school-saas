@@ -42,9 +42,14 @@
 # end and reads like a configuration problem, so this script names it and prints
 # the recovery instead of leaving it to be rediscovered.
 #
-# This does *not* terminate the stale backend for you. Doing that automatically
-# is a real change to how the suite behaves and belongs to #61 with a decision
-# behind it, not to a wrapper whose job is to report accurately.
+# This script does not terminate the stale backend itself, and still should not:
+# that is a real change to how the suite behaves, and it belongs to the runner
+# rather than to a wrapper whose job is to report accurately. It now happens
+# one level down — `schools/tests/runner.py` clears those backends before
+# asking for the test database — so in the ordinary case the diagnosis below
+# no longer gets a chance to fire. It is kept because the runner only clears
+# what it can name: a backend held by something outside this project, or on a
+# database Django is not about to create, still lands here.
 #
 # ## Usage
 #
