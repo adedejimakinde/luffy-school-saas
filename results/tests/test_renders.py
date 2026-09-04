@@ -314,15 +314,15 @@ class TheDebounceTests(MarkerSetUp):
     def ask(self, marker=None):
         """Read the row and ask for it, **inside one connection block**.
 
-        `connected_to()` does not nest — it always lands back on `public`, which
-        is issue #58 — so calling `marker()` from inside another one of its
-        blocks leaves the ask running on the portal schema, where this table
-        does not exist. That is a real trap rather than a test detail: the same
-        shape in application code is a query against the wrong school.
+        `marker()` opens a block of its own inside this one, which is safe since
+        issue #58: an inner exit restores the schema it found rather than
+        forcing `public`. The outer block is still the load-bearing part.
+        Nesting fixes an inner block inside an outer one; it does not conjure
+        the outer one, and `enqueue_if_pending` reads the row's lazy relations.
         """
         with connected_to(self.stmarys):
             if marker is None:
-                marker = ReleasedCardPdf.objects.get(card=self.card)
+                marker = self.marker()
             return renders.enqueue_if_pending(marker)
 
     def age_the_request(self, by=renders.RE_ENQUEUE_AFTER + timedelta(seconds=1)):
