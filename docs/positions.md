@@ -175,15 +175,47 @@ which carries what has to be true when they do. Building a placeholder now would
 mean building it against live tables, which task 6 is explicitly forbidden from
 doing.
 
-## Read from live marks, for now
+## Live marks before release, the snapshot after
 
-The broadsheet reads live `Score` rows, and there is a test asserting a new mark
-changes a position immediately — stated so the *absence* of freezing is a
-recorded fact rather than an assumption.
+**An unreleased term reads live `Score` rows**, and there is a test asserting a
+new mark changes a rank immediately. It has to: a teacher who could not see
+their own marking on this page would be reading a stale sheet all term.
 
-Once task 3 lands, **a released term must be served from the snapshot instead**.
-A position recomputed after release can silently disagree with the card a parent
-is holding, which is the whole reason position is the number that gets frozen.
+**A released term is served from the frozen cards.** This section used to end
+"once task 3 lands, a released term must be served from the snapshot instead",
+and the endpoint's own docstring made the same promise. Task 3 shipped in #44
+and the switch was not made, which is
+[issue #55](https://github.com/adedejimakinde/luffy-school-saas/issues/55): the
+two rankings then drifted apart in production shape, because marks lock at
+release but the **roster does not**. A child placed into a released term (#31)
+made this page rank forty-six children while all forty-five frozen cards still
+said forty-five, and nothing in the data said which page was current.
+
+### The page derives its ranks; it does not read the frozen ones
+
+For a released term, `current_rank` is `dense_positions()` over the cards'
+frozen `own_average` values, and `class_average` is `mean_percentage()` over
+those same numbers. Both are therefore facts about the rows being displayed.
+
+**It is deliberately not `ReleasedCard.position`.** That field records where the
+child came *at that card's own freeze*, and a revision re-freezes one card
+against the class as it reads at that later moment. Read forty-five such numbers
+off forty-five cards and one page can show two children at rank three, or nobody
+second — the numbers were never computed against one roster.
+`TheRevisedChildTests` asserts a page rank and a stored `position` disagreeing,
+with both values written out, because they are two correct answers to two
+different questions.
+
+### The field is named `current_rank`, not `position`
+
+The response used to call it `position`, which made three meanings of that word
+in one codebase — the rank in the class, the rank in a subject
+(`subject_position`), and *where a line prints*
+(`ReleasedSubjectResult.position`). The broadsheet's fields are now
+`current_rank` and `current_subject_rank`, and `from_snapshot` says which of the
+two questions above the page answered. Nothing in the repository consumed the
+old names; a released page and a live one are otherwise the same shape saying
+different things, which is what `from_snapshot` exists to prevent.
 
 ## One read of the marks for the whole page
 
@@ -258,13 +290,24 @@ The method as ever: break one thing deliberately, re-run, read the failure.
 | dense ranking → standard competition ranking | `{1: 1, 2: 2, 3: 2, 4: 4} != {1: 1, 2: 2, 3: 2, 4: 3}` | the tie rule is actually asserted, not assumed |
 | `_percentage(0, 0)` returns `Decimal(0)` instead of `None` | only **one** of four "not marked" tests failed | the first control was in the wrong place — `overall_percentages()` never calls it for a child with no rows at all. A passing control is information too. |
 | unmarked children given an average of `0` in `overall_percentages()` | three tests fail; the class average moves **80.00 → 40.00** | the plausible wrong version *is* caught, and the cost of getting it wrong is a number on every card in the class |
-| `Role.PARENT` added to `POSITION_VIEWING_ROLES` | parent gets `200` with `"position": 1` and `"class_average": "74.50"` in the body | the visibility rule is enforced where the tests say it is |
+| `Role.PARENT` added to `POSITION_VIEWING_ROLES` | parent gets `200` with the rank and `"class_average": "74.50"` in the body | the visibility rule is enforced where the tests say it is |
+| the released-term branch removed, so a released term keeps reading live marks | `FAILED (failures=10)` | every claim in this PR rests on that one dispatch; nothing else in the module compensates for it |
+| `current_rank` read off `ReleasedCard.position` instead of `dense_positions()` over the frozen averages | `FAILED (failures=2)`, both in `TheRevisedChildTests` | the derivation is what those two tests pin. The other eight pass either way, because a class frozen together agrees with itself — which is why the revised child is the case that had to be written |
+| `class_average` recomputed by `class_results()` from live marks | `FAILED (failures=1)` | the number beside the rows is the mean *of* the rows, not a second answer that happens to sit next to them |
+| the columns taken from `Subject.objects` instead of the cards' frozen lines | **`OK`. 28 tests, nothing broke.** After the missing tests: `FAILED (failures=2)` | the whole subject half of a released page was documented and asserted nowhere, so `TheColumnsAreTheFrozenSubjectLinesTests` had to be written before this control could say anything. Issue #55 |
+| `current_subject_rank` read off `ReleasedSubjectResult.subject_position` | `FAILED (failures=1)` | the per-subject rank is derived for the same reason `current_rank` is, and now has the revised-child case to prove it |
 
-The second row is the one worth keeping. The first attempt at that control
-passed three tests it should have broken, which said nothing about the code and
-everything about where the control was aimed — the naive-zero bug lives in the
-aggregation, not in the percentage helper. A control that fails to break
-anything is a result, not a formality.
+**Two rows here passed, and both times the pass was the finding.** The
+`_percentage(0, 0)` control broke three tests fewer than it should have, which
+said nothing about the code and everything about where the control was aimed —
+the naive-zero bug lives in the aggregation, not in the percentage helper. The
+`Subject.objects` control broke nothing at all, because the columns, their
+frozen names, their print order and `current_subject_rank` were carried by
+docstrings and by no test: the same failure this endpoint's own docstring had
+already committed, one paragraph up. An unasserted docstring is an open
+question, not a description.
+
+A control that fails to break anything is a result, not a formality.
 
 ### The self-review round
 

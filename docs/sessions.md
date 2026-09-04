@@ -257,7 +257,10 @@ card that omits a field whose value is sitting in the JSON has not omitted it.
 - **The read API.** `results/api.py` exposes one broadsheet route today; the
   session view and the promotion sheet are not on it yet, and the serializer
   rules above are what that PR has to hold.
-- **Task 3's snapshot.** Per-term averages are computed from live tables here.
-  `docs/positions.md` records that once task 3 lands, a released term must be
-  served from its snapshot instead — `_lines_for()` is the one place that
-  changes.
+- **Task 3's snapshot.** The broadsheet has since been switched — a released
+  term is served from the frozen cards, issue #55 — but the other two terms of a
+  session are still read live by `_lines_for()`. That is safe for the one number
+  it takes: `TermLine.average` is the child's own, and marks lock at release, so
+  it cannot move the way a *rank* can. It would stop being safe the moment a
+  session line carried a position, which is the reason to record it here rather
+  than to leave it as an unstated assumption.
