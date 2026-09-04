@@ -515,8 +515,19 @@ def card_lines(card):
 def cards_on(sheet):
     """Every child's **current** card on that sheet, with its lines, in few queries.
 
-    `Prefetch` rather than a join per card: task 7's PDF job walks a whole class
-    and a per-card query there is forty-five round trips inside a Celery task.
+    `Prefetch` rather than a join per card, for any reader that wants a whole
+    class at once: a per-card query is forty-five round trips.
+
+    **It said "task 7's PDF job walks a whole class", and that was never true.**
+    Task 7 renders one card per job, deliberately — `results/tasks.py` gives the
+    two reasons, both of them about redelivery — and issue #56's enqueuer, which
+    is the walk that was actually missing, does not call this either: it hands
+    ids straight off `card_by_student`, which is already one card per child at
+    release time, rather than prefetching every line and cell of forty-five
+    cards to throw them away. So this function has no caller today. It is kept
+    because the `DISTINCT ON` below is the rule any future batch reader needs,
+    and rewriting that rule from memory later is how a superseded version gets
+    sent home.
 
     **One row per child, and that is not what this used to return.** It filtered
     on the sheet and ordered `("student_membership_id", "version")`, which was

@@ -2436,11 +2436,49 @@ class CardRevision(models.Model):
         )
 
 
-class ReleasedCardPdf(models.Model):
-    """The rendered file for one released card. Task 7.
+class PdfState(models.TextChoices):
+    """Where one card's file has got to. Three states, and deliberately no fourth.
 
-    One row per `ReleasedCard`, holding the PDF a school prints and a family
-    keeps, plus — when a render failed — the reason it does not hold one.
+    `PENDING` is written **at release**, inside the release transaction, before
+    any job has run. That is the whole of issue #56's hardest half: a render
+    that failed was always visible, because `RenderACard.on_failure` writes the
+    reason down — but a render nobody ever asked for looked exactly like a card
+    released a second ago, and the first person to find out was a parent who
+    could not open their child's report card weeks later. A row written at
+    release makes "released and never rendered" a positive fact somebody can
+    query for, rather than an absence that has to be inferred.
+
+    **There is no `QUEUED` between `PENDING` and `BUILT`**, and leaving it out
+    is the decision worth arguing. A state written by the enqueuer and cleared
+    by the worker would say whether a job is in flight — and a worker that died
+    between the two would leave that card stuck in it for ever, with nothing to
+    move it on, because the recovery path for a lost job is precisely "a GET on
+    a `PENDING` card enqueues one" and a fourth state switches that path off for
+    the cards that need it most. The cost is that `PENDING` cannot distinguish
+    "queued a second ago" from "queued never"; `last_enqueued_at` and the
+    debounce it drives are what stop that costing anything.
+    """
+
+    PENDING = "pending", "Not built yet"
+    BUILT = "built", "Built"
+    FAILED = "failed", "Failed"
+
+
+class ReleasedCardPdf(models.Model):
+    """The rendered file for one released card, or the record that there is none.
+
+    Task 7 built it; task 10 (issue #56) gave it its first state. One row per
+    `ReleasedCard`, holding the PDF a school prints and a family keeps — or,
+    where a render failed, the reason it does not hold one, or, before any
+    render has been attempted, the fact that one is owed.
+
+    ## The row is written at release, not by the job
+
+    `results.renders.mark_and_enqueue()` writes it `PENDING` inside the release
+    transaction, so **every released card has a row from the moment it is
+    released**. `PdfState` argues the three states; the consequence for this
+    table is that the absence of a row is no longer a state the platform has to
+    interpret. It means a card that was never released.
 
     ## Rebuildable, and therefore *not* append-only
 
@@ -2477,9 +2515,16 @@ class ReleasedCardPdf(models.Model):
     `public`, which for a tenant table is a `ProgrammingError` naming a missing
     relation, a long way from the card that failed to render.
 
-    Exactly one of `content` and `error` is set, which the constraint below
-    holds: a row with neither is a job that reported nothing, and a row with
-    both is two answers to what happened.
+    ## What the constraint holds, which is not what it used to hold
+
+    It used to say: exactly one of `content` and `error` is set — a row with
+    neither being "a job that reported nothing", and a row with both being two
+    answers to what happened. The first half of that is now the ordinary state
+    of a card between its release and its render, so the constraint is written
+    per state instead, and it refuses the three lies the states can tell:
+    `BUILT` with no bytes, `FAILED` with no reason, and `PENDING` already
+    carrying either. `state` is the column readers branch on; `content` and
+    `error` are what it promises about.
     """
 
     card = models.OneToOneField(
@@ -2500,6 +2545,29 @@ class ReleasedCardPdf(models.Model):
     #: Why there is no file. The task's own exception, as text.
     error = models.TextField(blank=True, default="")
 
+    #: Which of the three this row is, and the only thing a reader should branch
+    #: on. Defaulted to `PENDING` so that creating a row for a card *is* the
+    #: marker — the release writes `ReleasedCardPdf(card=card)` and nothing else.
+    state = models.CharField(
+        max_length=16, choices=PdfState.choices, default=PdfState.PENDING
+    )
+
+    #: When a render for this card was last **put on the queue**, or null if one
+    #: never has been.
+    #:
+    #: A separate column rather than a reading of `built_at`, which means when
+    #: the file was made and must go on meaning only that. The two differ for
+    #: every card that is enqueued and not yet rendered, which during results
+    #: week is every card in the school for a minute or two, and a column whose
+    #: name stops describing what it holds is how a stale claim survives review.
+    #:
+    #: Read by `renders.enqueue_if_pending()`, which will not queue a second job
+    #: for a card queued inside `RE_ENQUEUE_AFTER`. Written by the enqueuer and
+    #: by nothing else: a render that succeeds writes `built_at` through
+    #: `auto_now` and leaves this alone, so "asked for at 09:00, made at 09:01"
+    #: stays legible afterwards.
+    last_enqueued_at = models.DateTimeField(null=True, blank=True)
+
     built_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -2508,10 +2576,11 @@ class ReleasedCardPdf(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    Q(content__isnull=False, error="")
-                    | Q(content__isnull=True) & ~Q(error="")
+                    Q(state=PdfState.PENDING, content__isnull=True, error="")
+                    | Q(state=PdfState.BUILT, content__isnull=False, error="")
+                    | (Q(state=PdfState.FAILED, content__isnull=True) & ~Q(error=""))
                 ),
-                name="a_card_pdf_is_a_file_or_a_reason_and_not_both",
+                name="a_card_pdf_is_pending_a_file_or_a_reason",
             ),
             models.CheckConstraint(
                 # `byte_size__isnull=False` is not redundant beside the
@@ -2532,6 +2601,8 @@ class ReleasedCardPdf(models.Model):
         ]
 
     def __str__(self):
+        if self.state == PdfState.PENDING:
+            return f"{self.card_id}: not built yet"
         if self.content is None:
             return f"{self.card_id}: no file — {self.error[:40]}"
         return f"{self.card_id}: {self.byte_size} bytes"

@@ -20,6 +20,13 @@ submit → check → approve. The revision re-freezes one child's card through t
 same functions the release used, so a revised card and a first release can never
 be two different kinds of thing.
 
+That symmetry is why `revise()` also writes the new card's `ReleasedCardPdf`
+marker and asks for its render, exactly as a release does — see
+[report-card-pdf.md](report-card-pdf.md). Marking only at release would leave a
+corrected card, and every card belonging to a child placed into the term after
+it was released, as the one kind of card on the platform that owes a file
+nothing records and nothing renders.
+
 ## The three keys that refused a second version
 
 `version` has been on `ReleasedCard` since `0016`, added on the reasoning that a

@@ -24,7 +24,11 @@ and some other worker runs it again — so a task that is not safe to run twice
 has to say so. This one is safe, and not by luck. It renders a **frozen**
 snapshot: every number comes from rows that refuse a second write, so two runs a
 week apart produce the same card. The write is an upsert keyed on the card, so
-the second run replaces the first's row rather than adding to it.
+the second run replaces the first's row rather than adding to it — and since
+issue #56 that row usually exists before the job starts, `PENDING`, written by
+`results.renders` inside the release. This job moves it to `BUILT` or, through
+`on_failure`, to `FAILED`. It never writes `PENDING`: that word means "released
+and not yet rendered", and a job that has run is past it either way.
 
 ## The failure handler is why `TenantTask` wraps handlers at all
 
@@ -82,16 +86,28 @@ def render_card_pdf(schema_name, card_id):
     (`settings.py` says why it is off), so nothing reads a return value except
     the worker's own log, where "48213" is a useful line and a PDF is not.
     """
-    from .models import ReleasedCard, ReleasedCardPdf
+    from .models import PdfState, ReleasedCard, ReleasedCardPdf
     from . import pdf
 
     card = ReleasedCard.objects.get(pk=card_id)
     content = pdf.render(card)
 
     with transaction.atomic():
+        # `update_or_create` rather than `create`, and the row it updates is
+        # now the normal case rather than the redelivery case: `renders`
+        # writes a `PENDING` marker for every card at release, so this job
+        # almost always finds one waiting and moves it to `BUILT`. Every field
+        # is written explicitly — a `state` left behind by a partial update is
+        # a row claiming to owe a file it is holding, which the check
+        # constraint refuses outright.
         ReleasedCardPdf.objects.update_or_create(
             card=card,
-            defaults={"content": content, "byte_size": len(content), "error": ""},
+            defaults={
+                "content": content,
+                "byte_size": len(content),
+                "error": "",
+                "state": PdfState.BUILT,
+            },
         )
     return len(content)
 
@@ -112,8 +128,13 @@ def _record_the_failure(card_id, exc):
     fails today must end up saying it has no file now, not carrying a stale
     success beside a fresh failure. The constraint on the model refuses a row
     that claims both.
+
+    The row it meets is usually the `PENDING` marker `results.renders` wrote at
+    release, and moving that to `FAILED` is what takes the card out of the
+    download route's enqueue path: a `FAILED` card is not asked for again by
+    anybody reloading a page, because what it needs is a person reading `error`.
     """
-    from .models import ReleasedCardPdf
+    from .models import PdfState, ReleasedCardPdf
 
     with transaction.atomic():
         ReleasedCardPdf.objects.update_or_create(
@@ -121,6 +142,7 @@ def _record_the_failure(card_id, exc):
             defaults={
                 "content": None,
                 "byte_size": None,
+                "state": PdfState.FAILED,
                 # No `or "unknown error"` fallback. The f-string always
                 # carries at least "<TypeName>: ", so a fallback for an empty
                 # `error` could never fire — it would read as protection

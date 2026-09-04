@@ -1,10 +1,13 @@
 # The report card as a file
 
-Task 7. Code: `results/pdf.py`, `results/tasks.py`,
-`results/templates/results/report_card.html`, `ReleasedCardPdf` in
-`results/models.py`, migration `0021_the_rendered_card`, tests in
-`results/tests/test_pdf.py`. The queue underneath it is
-[background.md](background.md).
+Task 7, and then issue #56, which gave it a way in and a way out. Code:
+`results/pdf.py`, `results/tasks.py`, `results/renders.py`,
+`report_card_pdf()` in `results/card_api.py`,
+`results/templates/results/report_card.html`, `ReleasedCardPdf` and `PdfState`
+in `results/models.py`, migrations `0021_the_rendered_card` and
+`0022_a_card_owes_a_file_from_the_moment_it_is_released`, tests in
+`results/tests/test_pdf.py` and `results/tests/test_renders.py`. The queue
+underneath it is [background.md](background.md).
 
 ## Built from the family payload, never from the row
 
@@ -66,7 +69,9 @@ a class a couple of megabytes, so it fits — but it does not scale to a thousan
 schools keeping every year for ever, and this is the row to move first.
 
 A failed render writes the **reason** into the same row rather than leaving
-silence, and a constraint refuses a row claiming both a file and an error.
+silence, and the check constraint refuses the three lies the states can tell: a
+row that says it is built and holds nothing, one that says it failed and gives
+no reason, and one that says a file is still owed while carrying either.
 
 ## The failure handler is the first real user of `TenantTask`'s handler wrapping
 
@@ -97,16 +102,96 @@ Per card, redelivery costs one render, the timeout is never close, and a second
 worker can take half the class. The cost would be forty-five messages per
 release instead of one, which Redis does not notice.
 
-**Would be, because nothing enqueues anything yet.** `render_card_pdf` has no
-caller outside its own tests: `results.services.release()` does not enqueue it,
-and no route serves the file back. That is [issue #56][56], and it is deliberate
-for this task — both halves are decisions with consequences that should not be
-made inside a rendering PR. So read this section as the shape the enqueuer has
-to take, not as a description of what happens at release today, and note that
-`cards.cards_on()` is a *reader* built for the walk that enqueues, not evidence
-that the walk exists.
+Forty-five messages per release, published one per card by
+`renders.mark_and_enqueue()`. That was [issue #56][56], and what it took is the
+next three sections.
 
 [56]: https://github.com/adedejimakinde/luffy-school-saas/issues/56
+
+## The marker is written at release, before anything is rendered
+
+The half of #56 that produces silent missing files was never the failed render.
+A failure was always visible — `on_failure` writes the reason into the school's
+own table. It was the render **nobody ever asked for**: a Redis that was down, a
+worker that never came back, a message lost between the two. `ReleasedCardPdf`
+would then have no row at all, and *no row* is also the normal state of a card
+before it is released. The absence could not be interrogated, and the first
+person to find out was a parent, weeks later, who could not open their child's
+report card.
+
+So `renders.mark_and_enqueue()` writes a `PENDING` row for every card **inside
+the transaction that freezes it**, and asks for the render only after that
+transaction commits. A school's database now says "this card owes a file" from
+the moment the card exists. `PdfState` argues why there are three states and not
+four: a `QUEUED` written by the enqueuer and cleared by the worker would say
+whether a job is in flight, and a worker that died between the two would strand
+a card in it for ever — because the recovery path for a lost job is exactly "a
+download of a `PENDING` card asks again", and a fourth state switches that path
+off for the cards that need it most.
+
+Both card-writing paths call it: `services.release()` for a class and
+`revision.revise()` for one child. The second is not an afterthought — it is the
+only path by which a child placed into a term after it was released
+([revision.md](revision.md), issue #31) gets a card at all, so marking at
+release alone would leave hers the one card on the platform with no marker and
+no file.
+
+Migration `0022` gives every card released before all this a `PENDING` row too,
+per schema, so the invariant holds on real data rather than only on data written
+from today. Without that backfill the download route would need a "no row"
+branch for ever, and `ReleasedCardPdf`'s own docstring — *every released card
+has a row* — would be false everywhere it mattered.
+
+## `transaction.on_commit`, and a publish that cannot fail the release
+
+A worker is a different process on a different connection. A message published
+before the release commits can be picked up immediately, and under READ
+COMMITTED that worker sees no card: it raises, `on_failure` writes a `FAILED`
+row saying the card does not exist, and the card is fine three milliseconds
+later. The failure is indistinguishable from a real one and it is permanent,
+because nothing retries a `FAILED` card. So the publish is registered with
+`transaction.on_commit` and a bare `.delay()` here is a bug rather than a style.
+
+And `on_commit` callbacks run *after* the commit, which means an exception in
+one reaches the caller with the release already durable — a 500 for a principal
+whose cards have gone home. Every publish is caught per card and logged, and
+`retry=False` keeps a dead broker from holding the request open through Celery's
+three retries per card, forty-five times over, to arrive at the same place.
+
+What makes swallowing that exception defensible is the marker: the row is still
+there afterwards, saying the file is owed, and the next download asks again.
+
+## The way out, and what it does when there is no file yet
+
+`GET /api/results/cards/{student_membership_id}/{term_id}/pdf/` asks the
+identical authority question as the JSON route beside it — the same four calls
+in the same order — because a PDF of a card you may read is not a second
+permission, and two answers to one question is one answer nobody tested. Every
+refusal is that route's flat 404, including "no card for this term", so adding
+four characters to a URL cannot turn it into an existence oracle.
+
+A card whose file exists is served as `application/pdf`, named for the child,
+the term and the session rather than a primary key, and carrying its version
+when there is more than one.
+
+A card whose file does not exist yet is a **202** with the state and a sentence,
+and the two states need different sentences: `PENDING` is told to come back,
+`FAILED` is told to ask the school. The exception text is deliberately not in
+the body — it is a Python class and message written for whoever debugs the
+render, and a parent reading `TemplateSyntaxError` learns nothing they can act
+on. Nothing renders in the request: WeasyPrint takes a few hundred milliseconds
+a card and results week is every parent of a class arriving at once, which is
+what moving the render to a worker was for.
+
+The 202 path also **asks again**, which is the recovery for a job that never
+reached a worker, driven by the person who actually wants the file rather than
+by a sweep nobody wrote. `renders.enqueue_if_pending()` holds the debounce that
+keeps that from being a stampede: a card asked for within `RE_ENQUEUE_AFTER` (a
+minute, longer than a render) is left alone. **The debounce is a conditional
+`UPDATE`, not an `if`** — two requests arriving together would both read
+`PENDING` and both enqueue, but Postgres re-evaluates the `WHERE` clause against
+the newer row version, so exactly one of the two updates matches and one job is
+queued. The check and the claim are one statement.
 
 ## Idempotent, because `acks_late` requires it
 
@@ -152,6 +237,23 @@ run replaces the row rather than adding one, that a render which dies leaves a
 reason, and that a failure handler which itself dies does not replace the real
 error with its own.
 
-`ACardPdfIsAFileOrAReasonTests` asserts both check constraints **by name**. A
-bare `IntegrityError` cannot tell the constraint under test from the several
-ways of never reaching it, and Postgres evaluates NOT NULL and uniqueness first.
+`ACardPdfIsPendingAFileOrAReasonTests` asserts both check constraints **by
+name**. A bare `IntegrityError` cannot tell the constraint under test from the
+several ways of never reaching it, and Postgres evaluates NOT NULL and
+uniqueness first. Those tests write with `update()` rather than `create()`,
+because since #56 the row already exists when they start and a `create()` would
+be refused by the `OneToOne` before any check constraint was consulted. One of
+them is an inversion pinned on purpose: the row with neither a file nor a
+reason, which the old constraint's headline case called "a job that reported
+nothing", is now what a release writes for every card it freezes.
+
+`results/tests/test_renders.py` covers the way in and the way out: that a
+release marks every card in the school that released and no other, that no
+released card anywhere is left without a marker, that nothing is published
+before the release commits and the message names the schema and one card, that a
+broker refusing connections leaves the release standing and the markers
+`PENDING` with a line per card in the log, that a `BUILT` or `FAILED` card is
+never re-queued, that two callers reading the same stale row enqueue once, and
+that the route serves bytes, 202s with a state, and refuses exactly as the JSON
+route does. Two schools throughout, because a publish naming the wrong school
+still satisfies a count of one.

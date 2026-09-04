@@ -36,7 +36,7 @@ from accounts.models import User
 from accounts.services import enroll_student
 from gradebook.models import Assessment
 from results import cards, pdf
-from results.models import ReleasedCard, ReleasedCardPdf
+from results.models import PdfState, ReleasedCard, ReleasedCardPdf
 from results.tasks import render_card_pdf
 from results.tests.test_card_api import PASSWORD, ReportCardApiSetUp
 from schools.tests.test_tenant_isolation import connected_to
@@ -395,8 +395,11 @@ class TheStoredFileTests(TheJobSetUp):
             row = ReleasedCardPdf.objects.get()
             self.assertEqual(row.card.student_name, "Ngozi Ade")
         with connected_to(self.stmarys):
+            # Not `exists()` any more: since issue #56 every released card
+            # carries a `PENDING` marker, so St Mary's has rows either way.
+            # What must not be here is a row a *job* wrote.
             self.assertFalse(
-                ReleasedCardPdf.objects.exists(),
+                ReleasedCardPdf.objects.exclude(state=PdfState.PENDING).exists(),
                 "Grace's file was written into St Mary's schema.",
             )
 
@@ -437,7 +440,7 @@ class AFailedRenderIsARowTests(TheJobSetUp):
             self.assertEqual(row.card.student_name, "Ngozi Ade")
         with connected_to(self.stmarys):
             self.assertFalse(
-                ReleasedCardPdf.objects.exists(),
+                ReleasedCardPdf.objects.exclude(state=PdfState.PENDING).exists(),
                 "Grace's failure was recorded in St Mary's schema.",
             )
 
@@ -484,12 +487,27 @@ class AFailedRenderIsARowTests(TheJobSetUp):
         self.assertIn("no fonts", str(result.result))
 
 
-class ACardPdfIsAFileOrAReasonTests(ReportCardApiSetUp):
+class ACardPdfIsPendingAFileOrAReasonTests(ReportCardApiSetUp):
     """The two check constraints, asserted **by name**.
 
     A bare `assertRaises(IntegrityError)` cannot tell the constraint under test
     from the several ways of never reaching it — a NOT NULL, a unique violation,
     a foreign key. Postgres checks those first, so the name is the assertion.
+
+    **These write with `update()` where they used to `create()`.** Issue #56
+    gave every released card a `PENDING` row inside the release itself, so the
+    row is already there when a test here starts, and a `create()` would now be
+    refused by the `OneToOne` on `card` before any check constraint was
+    consulted — a test that still fails, for a reason it does not name, having
+    stopped asserting the thing it was written for. `update()` is also the
+    writer that matters: `render_card_pdf` upserts, and the queryset update is
+    the path that skips `save()` entirely.
+
+    The constraint gained a third legal shape and lost one it used to refuse:
+    the row with neither a file nor a reason, which the old name called "a job
+    that reported nothing", is now what a release writes for every card it
+    freezes. `test_the_row_a_release_writes_is_the_one_that_used_to_be_refused`
+    is that inversion, pinned so it cannot be undone by accident.
     """
 
     def setUp(self):
@@ -505,33 +523,71 @@ class ACardPdfIsAFileOrAReasonTests(ReportCardApiSetUp):
         with connected_to(self.stmarys):
             with self.assertRaises(IntegrityError) as caught:
                 with transaction.atomic():
-                    ReleasedCardPdf.objects.create(card=card, **fields)
+                    ReleasedCardPdf.objects.filter(card=card).update(**fields)
         return str(caught.exception)
+
+    def accept(self, **fields):
+        card = self.card()
+        with connected_to(self.stmarys):
+            ReleasedCardPdf.objects.filter(card=card).update(**fields)
+            return ReleasedCardPdf.objects.get(card=card)
+
+    # -- what the state promises about the other two columns -----------------
 
     def test_a_row_claiming_both_a_file_and_an_error_is_refused(self):
         message = self.refuse(
-            content=b"%PDF-1.7 pretend", byte_size=16, error="and it also failed"
+            state=PdfState.BUILT,
+            content=b"%PDF-1.7 pretend",
+            byte_size=16,
+            error="and it also failed",
         )
-        self.assertIn("a_card_pdf_is_a_file_or_a_reason_and_not_both", message)
+        self.assertIn("a_card_pdf_is_pending_a_file_or_a_reason", message)
 
-    def test_a_row_that_is_neither_a_file_nor_a_reason_is_refused(self):
-        """A job that reported nothing at all. Silence is the failure mode here."""
-        message = self.refuse(content=None, byte_size=None, error="")
-        self.assertIn("a_card_pdf_is_a_file_or_a_reason_and_not_both", message)
+    def test_a_row_that_says_it_is_built_and_holds_nothing_is_refused(self):
+        """The lie the old constraint could not tell, because there was no `state`.
+
+        A partial update — `.update(state=BUILT)` from a job that wrote the
+        state and lost the bytes — is a row answering "is there a file" with
+        yes and holding none.
+        """
+        message = self.refuse(state=PdfState.BUILT)
+        self.assertIn("a_card_pdf_is_pending_a_file_or_a_reason", message)
+
+    def test_a_row_that_says_it_failed_and_gives_no_reason_is_refused(self):
+        message = self.refuse(state=PdfState.FAILED)
+        self.assertIn("a_card_pdf_is_pending_a_file_or_a_reason", message)
+
+    def test_a_card_still_owed_a_file_cannot_already_hold_one(self):
+        """`PENDING` means *not built yet*, and a row holding bytes is past that.
+
+        This is the one a job that forgot to move the state off `PENDING` would
+        write, and it is refused rather than silently leaving the download route
+        telling a parent to come back for a file it is sitting on.
+        """
+        message = self.refuse(content=b"%PDF-1.7 pretend", byte_size=16)
+        self.assertIn("a_card_pdf_is_pending_a_file_or_a_reason", message)
+
+    def test_a_card_still_owed_a_file_cannot_already_carry_a_reason(self):
+        message = self.refuse(error="it failed")
+        self.assertIn("a_card_pdf_is_pending_a_file_or_a_reason", message)
+
+    # -- and what the size promises about the file ---------------------------
 
     def test_a_file_that_does_not_know_its_own_size_is_refused(self):
-        message = self.refuse(content=b"%PDF-1.7 pretend", byte_size=None)
+        message = self.refuse(state=PdfState.BUILT, content=b"%PDF-1.7 pretend")
         self.assertIn("a_card_pdf_knows_its_own_size", message)
 
     def test_a_size_without_a_file_is_refused(self):
-        message = self.refuse(content=None, byte_size=16, error="it failed")
+        message = self.refuse(state=PdfState.FAILED, byte_size=16, error="it failed")
         self.assertIn("a_card_pdf_knows_its_own_size", message)
 
     def test_a_size_that_is_not_the_size_of_the_file_is_refused(self):
         """`byte_size` is denormalised, so nothing but this constraint holds it
         true. The row below is what a `.update(content=...)` that forgot to
         recompute it leaves behind: a file of one length claiming another."""
-        message = self.refuse(content=b"%PDF-1.7 pretend", byte_size=9999)
+        message = self.refuse(
+            state=PdfState.BUILT, content=b"%PDF-1.7 pretend", byte_size=9999
+        )
         self.assertIn("a_card_pdf_knows_its_own_size", message)
 
     def test_a_rewrite_that_forgets_the_size_is_refused(self):
@@ -541,7 +597,9 @@ class ACardPdfIsAFileOrAReasonTests(ReportCardApiSetUp):
         database has to be the thing that catches it."""
         card = self.card()
         with connected_to(self.stmarys):
-            ReleasedCardPdf.objects.create(card=card, content=b"12345", byte_size=5)
+            ReleasedCardPdf.objects.filter(card=card).update(
+                state=PdfState.BUILT, content=b"12345", byte_size=5
+            )
             with self.assertRaises(IntegrityError) as caught:
                 with transaction.atomic():
                     ReleasedCardPdf.objects.filter(card=card).update(
@@ -549,22 +607,33 @@ class ACardPdfIsAFileOrAReasonTests(ReportCardApiSetUp):
                     )
         self.assertIn("a_card_pdf_knows_its_own_size", str(caught.exception))
 
+    # -- the controls --------------------------------------------------------
+
     def test_the_control_a_row_that_says_one_thing_is_accepted(self):
-        """Without this, every test above passes against a table nothing can insert into."""
+        """Without this, every test above passes against a table nothing can write to."""
+        built = self.accept(
+            state=PdfState.BUILT, content=b"%PDF-1.7 pretend", byte_size=16, error=""
+        )
+        self.assertEqual(built.error, "")
+        self.assertEqual(bytes(built.content[:5]), b"%PDF-")
+
+        failed = self.accept(
+            state=PdfState.FAILED, content=None, byte_size=None, error="It failed."
+        )
+        self.assertIsNone(failed.content)
+
+    def test_the_row_a_release_writes_is_the_one_that_used_to_be_refused(self):
+        """The inversion, pinned. This shape was `a_card_pdf_is_a_file_or_a_reason_and_not_both`'s
+        headline refusal — *"a job that reported nothing"* — and is now what a
+        release writes for every card, before any job has run at all."""
         card = self.card()
         with connected_to(self.stmarys):
-            row = ReleasedCardPdf.objects.create(
-                card=card, content=b"%PDF-1.7 pretend", byte_size=16
-            )
-            self.assertEqual(row.error, "")
-            self.assertEqual(bytes(ReleasedCardPdf.objects.get().content[:5]), b"%PDF-")
+            marker = ReleasedCardPdf.objects.get(card=card)
 
-            # And the other legal shape. Deleted first because `card` is a
-            # `OneToOne` — this table is a rebuildable cache, not an
-            # append-only record, which is the difference the model argues.
-            row.delete()
-            ReleasedCardPdf.objects.create(card=card, error="It failed.")
-            self.assertIsNone(ReleasedCardPdf.objects.get().content)
+        self.assertEqual(marker.state, PdfState.PENDING)
+        self.assertIsNone(marker.content)
+        self.assertIsNone(marker.byte_size)
+        self.assertEqual(marker.error, "")
 
 
 class AttendanceOfNoughtTests(ReportCardApiSetUp):
