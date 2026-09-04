@@ -49,33 +49,30 @@ class TheRenderedPageTests(ReportCardApiSetUp):
         super().setUp()
         self.release()
 
-    def _card(self):
-        """The lookup, with **no context of its own**. Read the note below.
-
-        `connected_to` always lands back on `public` — it says so, and for a
-        good reason: a test left connected to a schema that has been dropped
-        fails somewhere else entirely. The price is that it does not nest, and a
-        `ReleasedCard` is a lazy object whose subject lines, sections and
-        remarks are all still unread. A card fetched inside one context and
-        rendered outside it therefore queries `public` and dies on
-        `relation "results_releasedsubjectresult" does not exist` — which is
-        what the first version of these helpers did, by calling `self.card()`
-        from inside `html()`.
-
-        So every helper here does the whole job inside a single context, and
-        this one exists to be called from inside somebody else's.
-        """
-        return cards.card_for(
-            self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
-        )
-
     def card(self):
+        """The lookup, in a context of its own — safe to call from inside one.
+
+        This is the obvious way to write the helper, and until issue #58 it was
+        the broken one. `connected_to` forced `public` on the way out, so a card
+        fetched here and rendered by a caller that had opened its own block died
+        on `relation "results_releasedsubjectresult" does not exist`: a
+        `ReleasedCard` is a lazy object whose subject lines, sections and
+        remarks are all still unread, and they were read after the inner block
+        had already dropped the connection. This module worked around it by
+        keeping a second, context-free lookup and repeating the block in every
+        helper. The helper nests now, so there is one lookup again.
+        """
         with connected_to(self.stmarys):
-            return self._card()
+            return cards.card_for(
+                self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
+            )
 
     def html(self):
+        """And this is the nesting: `card()` opens and closes a block of its own
+        inside this one, and the lazy reads `html_for` makes afterwards still
+        land on St Mary's. Before issue #58 they landed on `public`."""
         with connected_to(self.stmarys):
-            return pdf.html_for(self._card())
+            return pdf.html_for(self.card())
 
     def test_no_template_source_reaches_the_page(self):
         """No comment, tag or variable delimiter survives into the output.
@@ -130,7 +127,7 @@ class TheRenderedPageTests(ReportCardApiSetUp):
         kept for as long as the card exists.
         """
         with connected_to(self.stmarys):
-            card = self._card()
+            card = self.card()
             card.student_name = "<script>Ada</script>"
             html = pdf.html_for(card)
 
@@ -172,7 +169,7 @@ class TheRenderedPageTests(ReportCardApiSetUp):
         from results.card_api import card_payload
 
         with connected_to(self.stmarys):
-            payload = card_payload(self._card())
+            payload = card_payload(self.card())
         for absent in ("position", "roster_size"):
             with self.subTest(absent=absent):
                 self.assertFalse(
