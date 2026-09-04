@@ -40,7 +40,7 @@ from gradebook.models import Subject
 
 from . import cards as released_cards
 from . import positions
-from .models import ResultSheet, SheetState
+from . import services
 
 router = Router(auth=session_auth)
 
@@ -228,8 +228,13 @@ def broadsheet(request, class_group_id: int, term_id: int):
     class_group = get_object_or_404(ClassGroup, pk=class_group_id)
     term = get_object_or_404(Term, pk=term_id)
 
-    sheet = ResultSheet.objects.filter(class_group=class_group, term=term).first()
-    if sheet is not None and sheet.state == SheetState.RELEASED:
+    # `services.sheet_for()` rather than a fourth inline copy of this filter.
+    # It carries the `.order_by()` that keeps `ResultSheet.Meta.ordering` —
+    # two relations — from compiling a lookup of one unique row into a
+    # three-table join; `ratings.sheet_for()` shipped without that call once
+    # and was corrected on it, and its docstring asks not to be copied again.
+    sheet = services.sheet_for(class_group, term)
+    if sheet is not None and sheet.is_released:
         return _from_the_snapshot(class_group, term, sheet)
 
     # One read of the marks for the whole page. Asking per row or per subject

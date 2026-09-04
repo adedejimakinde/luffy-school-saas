@@ -732,3 +732,149 @@ class TheRevisedChildTests(BroadsheetApiSetUp):
 
         self.assertEqual(frozen, [1, 1], "the setup no longer collides two firsts")
         self.assertEqual(derived, [1, 2])
+
+    def test_the_subject_rank_disagrees_with_the_frozen_line_too(self):
+        """The per-subject half of the same divergence, and the reason
+        `current_subject_rank` is derived rather than copied off
+        `ReleasedSubjectResult.subject_position`.
+
+        That field is frozen against the roster the card was frozen against, so
+        Bisi's revision ranks her maths mark among the one child left in JSS 1A
+        and writes `1`. The page ranks the two frozen maths lines it is showing
+        and says `2`. Both are right about different questions, exactly as with
+        `position` above.
+        """
+        from results.models import ReleasedCard
+
+        self.release_the_term()
+        self.transfer_out(self.child)
+        self.revise_the_classmate()
+
+        with connected_to(self.stmarys):
+            revised = (
+                ReleasedCard.objects.filter(student_membership_id=self.classmate.pk)
+                .order_by("-version")
+                .first()
+            )
+            frozen_line = revised.subject_results.get(subject_id=self.maths_id)
+
+        rows = self.rows_of(self.signed_in(self.principal).json())
+        served = next(
+            line
+            for line in rows[self.classmate.pk]["subjects"]
+            if line["subject_id"] == self.maths_id
+        )
+
+        self.assertEqual(frozen_line.subject_position, 1)
+        self.assertEqual(served["current_subject_rank"], 2)
+        self.assertNotEqual(
+            served["current_subject_rank"], frozen_line.subject_position
+        )
+
+
+class TheColumnsAreTheFrozenSubjectLinesTests(BroadsheetApiSetUp):
+    """The subject half of a released page, which nothing above here touches.
+
+    Every test in the two classes above asks about a rank or an average, and a
+    control that replaced the frozen columns with `Subject.objects` broke none
+    of them — so the columns, their frozen names, their print order and
+    `current_subject_rank` were all claimed in a docstring and asserted nowhere.
+    This class is that control's answer.
+
+    The promise being kept is not new. `ReleasedSubjectResult.subject_name` is
+    copied at release because "a subject renamed or retired next session must
+    not relabel a line on a card that has gone home", and the broadsheet is read
+    beside those cards: a page that relabelled the column would disagree with
+    every card in the class over what the subject is called.
+    """
+
+    def columns_of(self, payload):
+        """Ada's subject lines, as `(id, name)`, in the order they were served."""
+        return [
+            (line["subject_id"], line["subject"])
+            for line in self.rows_of(payload)[self.child.pk]["subjects"]
+        ]
+
+    def maths_line(self, row):
+        return next(
+            line for line in row["subjects"] if line["subject_id"] == self.maths_id
+        )
+
+    def test_a_subject_renamed_after_release_keeps_the_name_it_went_home_with(self):
+        self.release_the_term()
+        self.assertEqual(
+            self.columns_of(self.signed_in(self.principal).json()),
+            [(self.maths_id, "Mathematics")],
+        )
+
+        with connected_to(self.stmarys):
+            Subject.objects.filter(pk=self.maths_id).update(name="Further Maths")
+            self.assertEqual(
+                Subject.objects.get(pk=self.maths_id).name,
+                "Further Maths",
+                "the rename did not land, so this test proves nothing",
+            )
+
+        self.assertEqual(
+            self.columns_of(self.signed_in(self.principal).json()),
+            [(self.maths_id, "Mathematics")],
+            "a live subject name reached a page that is served from the freeze",
+        )
+
+    def test_a_subject_the_class_was_never_marked_in_is_not_a_column(self):
+        """English is taught and nobody in JSS 1A was marked in it, so no card
+        carries a line for it — `cards.release()` freezes `subject_ids`, the
+        subjects the class was actually marked in.
+
+        `Subject.objects` is the wrong list here for the reason `broadsheet()`
+        already gives on the live path, and for a second one that only applies
+        after release: it is not what went home.
+        """
+        self.release_the_term()
+
+        self.assertEqual(
+            [
+                name
+                for _, name in self.columns_of(
+                    self.signed_in(self.principal).json()
+                )
+            ],
+            ["Mathematics"],
+        )
+        with connected_to(self.stmarys):
+            self.assertTrue(
+                Subject.objects.filter(pk=self.english_id).exists(),
+                "the subject that must not be a column no longer exists",
+            )
+
+    def test_the_subject_rank_is_derived_from_the_lines_on_the_page(self):
+        """`current_subject_rank` is a dense ranking over the frozen
+        percentages on this page, by the same argument `current_rank` makes: a
+        `subject_position` copied off a card records what was true at *that
+        card's* freeze.
+
+        Ada transfers out afterwards, which moves the live roster and leaves the
+        ranking alone — the columns are ranked over the rows being displayed.
+        """
+        self.release_the_term()
+        rows = self.rows_of(self.signed_in(self.principal).json())
+
+        self.assertEqual(self.maths_line(rows[self.child.pk])["percentage"], "88.00")
+        self.assertEqual(
+            self.maths_line(rows[self.child.pk])["current_subject_rank"], 1
+        )
+        self.assertEqual(
+            self.maths_line(rows[self.classmate.pk])["percentage"], "61.00"
+        )
+        self.assertEqual(
+            self.maths_line(rows[self.classmate.pk])["current_subject_rank"], 2
+        )
+
+        self.transfer_out(self.child)
+
+        after = self.rows_of(self.signed_in(self.principal).json())
+        self.assertEqual(
+            self.maths_line(after[self.classmate.pk])["current_subject_rank"],
+            2,
+            "the ranking followed the live roster instead of the frozen rows",
+        )

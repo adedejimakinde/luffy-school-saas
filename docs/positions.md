@@ -291,12 +291,23 @@ The method as ever: break one thing deliberately, re-run, read the failure.
 | `_percentage(0, 0)` returns `Decimal(0)` instead of `None` | only **one** of four "not marked" tests failed | the first control was in the wrong place — `overall_percentages()` never calls it for a child with no rows at all. A passing control is information too. |
 | unmarked children given an average of `0` in `overall_percentages()` | three tests fail; the class average moves **80.00 → 40.00** | the plausible wrong version *is* caught, and the cost of getting it wrong is a number on every card in the class |
 | `Role.PARENT` added to `POSITION_VIEWING_ROLES` | parent gets `200` with the rank and `"class_average": "74.50"` in the body | the visibility rule is enforced where the tests say it is |
+| the released-term branch removed, so a released term keeps reading live marks | `FAILED (failures=10)` | every claim in this PR rests on that one dispatch; nothing else in the module compensates for it |
+| `current_rank` read off `ReleasedCard.position` instead of `dense_positions()` over the frozen averages | `FAILED (failures=2)`, both in `TheRevisedChildTests` | the derivation is what those two tests pin. The other eight pass either way, because a class frozen together agrees with itself — which is why the revised child is the case that had to be written |
+| `class_average` recomputed by `class_results()` from live marks | `FAILED (failures=1)` | the number beside the rows is the mean *of* the rows, not a second answer that happens to sit next to them |
+| the columns taken from `Subject.objects` instead of the cards' frozen lines | **`OK`. 28 tests, nothing broke.** After the missing tests: `FAILED (failures=2)` | the whole subject half of a released page was documented and asserted nowhere, so `TheColumnsAreTheFrozenSubjectLinesTests` had to be written before this control could say anything. Issue #55 |
+| `current_subject_rank` read off `ReleasedSubjectResult.subject_position` | `FAILED (failures=1)` | the per-subject rank is derived for the same reason `current_rank` is, and now has the revised-child case to prove it |
 
-The second row is the one worth keeping. The first attempt at that control
-passed three tests it should have broken, which said nothing about the code and
-everything about where the control was aimed — the naive-zero bug lives in the
-aggregation, not in the percentage helper. A control that fails to break
-anything is a result, not a formality.
+**Two rows here passed, and both times the pass was the finding.** The
+`_percentage(0, 0)` control broke three tests fewer than it should have, which
+said nothing about the code and everything about where the control was aimed —
+the naive-zero bug lives in the aggregation, not in the percentage helper. The
+`Subject.objects` control broke nothing at all, because the columns, their
+frozen names, their print order and `current_subject_rank` were carried by
+docstrings and by no test: the same failure this endpoint's own docstring had
+already committed, one paragraph up. An unasserted docstring is an open
+question, not a description.
+
+A control that fails to break anything is a result, not a formality.
 
 ### The self-review round
 
