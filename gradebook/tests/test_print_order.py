@@ -38,7 +38,7 @@ from gradebook.models import Assessment
 from results import cards, revision
 from results.models import ReleasedCard
 from results.tests.test_card_api import ReportCardApiSetUp
-from schools.tests.test_tenant_isolation import connected_to
+from schools.tests.tenants import connected_to
 
 from academics.models import TermName
 
