@@ -153,12 +153,18 @@ def _student_names(membership_ids) -> dict[int, str]:
 def _assessments_for(term, subject_ids):
     """Every assessment of these subjects, in the order the card prints them.
 
-    Ordered by `(subject name, id)` and **not** by `Assessment.Meta.ordering`,
-    which ends in `name` — alphabetical, so a card would print "Exam, First CA,
-    Second CA". Schools create assessments in the order they are sat, so
-    creation order is closer to right. It is still a guess: `Assessment` has no
-    explicit print order, and the fix is a `position` field on it, filed rather
-    than smuggled in here.
+    Ordered by `(subject name, position, id)`. `position` is the school's own
+    answer to where a paper prints, added for issue #42; before it this sorted
+    by `(subject name, id)` — creation order — because `Assessment.Meta.ordering`
+    ended in `name` and would have printed "Exam, First CA, Second CA".
+
+    `id` stays on the end, and is not decoration: `position` is deliberately not
+    unique, so two papers can share one, and without a total order they could
+    swap places between two reads of the same card. It is also what makes this
+    ordering identical to the old one for every school that has not set a
+    position yet — `0003` numbered existing papers *by* `id`, so the two agree
+    row for row. Cards already in parents' hands do not disagree with cards
+    released tomorrow.
     """
     from gradebook.models import Assessment
 
@@ -167,7 +173,7 @@ def _assessments_for(term, subject_ids):
     return list(
         Assessment.objects.filter(term=term, subject_id__in=subject_ids)
         .select_related("subject")
-        .order_by("subject__name", "id")
+        .order_by("subject__name", "position", "id")
     )
 
 

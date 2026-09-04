@@ -2233,14 +2233,20 @@ class ReleasedAssessmentScore(models.Model):
     a card is fetched by `card_id` in a bounded number of queries. See
     `cards.card_lines()`.
 
-    ## The column order is creation order, and `Assessment` has no better answer
+    ## The column order is the school's own, and it is frozen here
 
-    There is no explicit print order on `Assessment`, and its `Meta.ordering`
-    ends in `name` — which is alphabetical, so a card would print "Exam, First
-    CA, Second CA". Schools create assessments in the order they are sat, so the
-    freeze orders by `(subject name, assessment id)` and stores the result.
-    That is closer to right than alphabetical and is still a guess; the fix is a
-    `position` field on `Assessment`, filed rather than smuggled into this PR.
+    `Assessment.position` says where a paper prints — issue #42, and the reason
+    it was a `must-fix-before-release` is this class: the order is copied onto
+    each line at release, so a card already in a parent's hand keeps the order
+    it went out with and no later edit can correct it.
+
+    Before `position` existed the freeze ordered by `(subject name, assessment
+    id)` — creation order — because `Meta.ordering` ended in `name`, which is
+    alphabetical and would have printed "Exam, First CA, Second CA". Migration
+    `gradebook.0003` numbered existing papers *by* creation order for that
+    reason, so cards released after it agree row for row with cards released
+    before it. What changed is that a school can now say what the order should
+    be; what did not change is any order already frozen.
     """
 
     card = models.ForeignKey(

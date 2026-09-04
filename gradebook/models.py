@@ -94,6 +94,23 @@ class Assessment(models.Model):
     )
     name = models.CharField(max_length=64, help_text='e.g. "First CA", "Exam".')
 
+    #: Where it prints on the card, smallest first. **Explicit, never
+    #: alphabetical** — `name` sorts "Exam, First CA, Second CA", which is
+    #: neither the order the papers were sat nor the order a Nigerian report
+    #: card prints its columns in. Issue #42.
+    #:
+    #: The same shape as `results.Trait.position`, including the part that looks
+    #: like an oversight: deliberately **not** unique per `(term, subject)`. A
+    #: unique constraint there reads tidier and makes the ordinary edit — swap
+    #: two papers round — impossible without a temporary value or a deferred
+    #: constraint. Duplicates are legal and `Meta.ordering` breaks the tie, so
+    #: two papers sharing a position still print in the same order every time.
+    #:
+    #: Existing rows were numbered by creation order in `0003`, in tens. The
+    #: gaps are so that a paper can be inserted between two others without
+    #: renumbering the rest.
+    position = models.PositiveSmallIntegerField(default=0)
+
     #: What a perfect score is. Stored per assessment rather than assumed to be
     #: 100, because a CA is commonly out of 20 or 30 and a total that treated
     #: it as a percentage would be wrong by a factor of five.
@@ -102,7 +119,13 @@ class Assessment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ["term", "subject__name", "name"]
+        # `position` ahead of `name`, which is the whole of issue #42: the last
+        # component used to be alphabetical. `id` last so the order is total —
+        # `position` is not unique and two papers sharing one, with the same
+        # name across subjects, could otherwise swap places between two reads
+        # of the same card. `results.Trait.Meta` ends the same way, for the
+        # same reason.
+        ordering = ["term", "subject__name", "position", "name", "id"]
         constraints = [
             models.UniqueConstraint(
                 fields=["term", "subject", "name"],
