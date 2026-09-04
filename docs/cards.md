@@ -265,11 +265,21 @@ empty on every invented card.
 The rule that falls out of it: **inside a migration, read attributes, never call
 methods** — including `__str__` through `str()`, `f""` or `format()`.
 
-## Known gap: assessment column order
+## Assessment column order
 
-`Assessment` has no explicit print order and its `Meta.ordering` ends in `name`,
-which is alphabetical — a card would print "Exam, First CA, Second CA". The
-freeze orders by `(subject name, assessment id)` instead, on the grounds that
-schools create assessments in the order they are sat. That is closer to right
-and still a guess. The fix is a `position` field on `Assessment`, filed rather
-than smuggled into this PR.
+`Assessment.position` says where a paper prints — smallest first, explicit,
+never alphabetical. Issue #42, now closed. The freeze orders by
+`(subject name, position, id)`.
+
+Before it, `Meta.ordering` ended in `name` and a card would have printed "Exam,
+First CA, Second CA", so the freeze sorted by `(subject name, assessment id)` —
+creation order — as the closer guess.
+
+`gradebook.0003` numbered existing papers by that same creation order rather
+than trying to improve on it. The order is frozen onto every released card, and
+a frozen order cannot be corrected on cards already issued: a backfill that
+reshuffled would leave newly released cards disagreeing with cards already in
+parents' hands, for the same child and the same term. A name heuristic was
+considered and rejected for exactly that — it is right only for the names it
+recognises and silently reorders "Test 1", "CA1", "Mid-Term" and anything not
+in English.

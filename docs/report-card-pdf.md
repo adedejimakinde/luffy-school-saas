@@ -36,16 +36,19 @@ different thing from a cell whose `score` is null, which is an assessment the
 child was not marked in and prints as a dash. Two absences meaning different
 things must not look the same on a page somebody will ask a teacher about.
 
-The order is the frozen print order, which within a subject is **creation
-order** — the freeze orders by `(subject name, assessment id)` and deliberately
-not by `Assessment.Meta.ordering`, which ends in `name`. It is still a guess,
-because `Assessment` has no explicit print order. That is **issue #42**, and
-this is the surface that makes it must-fix-before-release: it is where the wrong
-order becomes visible to a parent.
+The order is the frozen print order, which within a subject is
+`Assessment.position` — explicit, set by the school, smallest first. This is the
+surface that made **issue #42** must-fix-before-release: it is where a wrong
+order becomes visible to a parent, and where it can no longer be corrected once
+the card has gone home. Before `position` the freeze sorted by
+`(subject name, assessment id)` — creation order — because `Meta.ordering` ended
+in `name` and would otherwise have printed "Exam, First CA, Second CA".
 
 Across subjects the header is first-seen order, so where two subjects disagree
 about the order of names they share, the first subject read wins. One row of
-columns cannot honour two orders at once, and #42 is what settles it.
+columns cannot honour two orders at once, and `position` is what settles it —
+two subjects that disagree are two subjects whose papers were given different
+positions.
 
 Columns are keyed on `(name, max_score)`, not on the name alone, and the header
 carries the maximum. `Assessment.max_score` is per `(term, subject, name)`, so
