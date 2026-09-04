@@ -15,29 +15,21 @@ Three properties carry the module, and each has a section:
   teachers with one sheet open cannot silently overwrite each other.
 """
 
-import contextlib
 from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.utils import ProgrammingError
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics.models import Term, TermName
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook import services
 from gradebook.models import Assessment, Score, Subject
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class GradebookSetUp(TestCase):

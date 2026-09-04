@@ -88,7 +88,6 @@ resolves its own school from `connection.schema_name`, so a thread whose
 single-tenant test could tell that apart from working.
 """
 
-import contextlib
 import threading
 from datetime import date
 from decimal import Decimal
@@ -96,7 +95,6 @@ from unittest import mock
 
 from django.db import connection, connections
 from django.test import SimpleTestCase, TransactionTestCase
-from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term, TermName
@@ -116,6 +114,7 @@ from results.models import (
     TraitGroup,
 )
 from schools.models import School
+from schools.tests.tenants import connected_to
 
 PASSWORD = "correct-horse-battery"
 SESSION = "2025/2026"
@@ -125,12 +124,6 @@ TERM_DATES = {
     TermName.SECOND.value: (date(2026, 1, 12), date(2026, 4, 2)),
     TermName.THIRD.value: (date(2026, 4, 27), date(2026, 7, 24)),
 }
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class ReleaseUnderARosterChangeSetUp(TransactionTestCase):

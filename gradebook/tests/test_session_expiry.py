@@ -25,7 +25,7 @@ from django.contrib.sessions.models import Session
 from accounts.session import SESSION_EXPIRED
 from gradebook.models import Score
 from gradebook.tests.test_api import GradebookApiSetUp
-from gradebook.tests.test_scores import connected_to
+from schools.tests.tenants import connected_to
 
 
 class MarkingThroughASessionExpiryTests(GradebookApiSetUp):

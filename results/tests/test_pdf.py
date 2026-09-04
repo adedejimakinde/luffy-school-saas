@@ -39,7 +39,7 @@ from results import cards, pdf
 from results.models import PdfState, ReleasedCard, ReleasedCardPdf
 from results.tasks import render_card_pdf
 from results.tests.test_card_api import PASSWORD, ReportCardApiSetUp
-from schools.tests.test_tenant_isolation import connected_to
+from schools.tests.tenants import connected_to
 
 
 class TheRenderedPageTests(ReportCardApiSetUp):
