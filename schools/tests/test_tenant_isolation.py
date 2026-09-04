@@ -32,6 +32,7 @@ from datetime import date
 from django.db import IntegrityError, ProgrammingError, connection, transaction
 from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import tenant_context
 
 from academics.models import Term, TermName
 from accounts.models import Membership, Role, User
@@ -82,14 +83,24 @@ def search_path():
 def connected_to(school):
     """Scope the connection to `school`'s schema, as the middleware would.
 
-    Always lands back on public, because leaving a test connected to a dropped
-    schema makes the *next* test fail in a thoroughly confusing place.
+    Restores whatever schema was current on the way out, so this nests. It used
+    to force `public` instead, which is the same thing at the outermost level —
+    the schema it found there *is* public — and a trap one level in: the inner
+    block's exit dropped the outer block onto public, and the next lazy read in
+    the outer block went looking for tenant tables in the shared schema. See
+    `ConnectedToNestsTests` below for what that costs to diagnose (issue #58).
+
+    Restoring keeps the guarantee the old version was written for. A test still
+    cannot leave the connection inside a schema that is about to be dropped,
+    because unwinding the outermost block still lands on public.
+
+    `tenant_context` rather than `schema_context`: it hands `connection.tenant`
+    the real `School`, so `schools.logging.current_school()` can print the
+    school's name. `schema_context` sets a `FakeTenant`, which knows a schema
+    name and no display name.
     """
-    connection.set_tenant(school)
-    try:
+    with tenant_context(school):
         yield
-    finally:
-        connection.set_schema_to_public()
 
 
 class RealSchemaCreationTests(TestCase):
@@ -274,6 +285,123 @@ class SchemaIsolationTests(TestCase):
         self.assertIn("st_marys", schema_names())
         with connected_to(self.stmarys):
             self.assertEqual(Term.objects.count(), 1)
+
+
+class ConnectedToNestsTests(TestCase):
+    """`connected_to` restores the schema it found, so it nests.
+
+    It used to end in `set_schema_to_public()` unconditionally, and at the
+    outermost level that is invisible: the schema it found *was* public, so
+    forcing public and restoring public are the same thing. One level in they
+    are not. The inner block's exit drops the *outer* block onto public, and
+    every read after it in the outer block asks a schema where the tenant
+    tables do not exist.
+
+    What makes it expensive is that the failure never mentions a schema. It
+    arrives as `relation "academics_term" does not exist` from whichever line
+    touched the object next — often frames away from either `with`, inside a
+    payload builder or a serialiser — and the helper that produced the object
+    works perfectly when called on its own. Task 7 lost a test run to exactly
+    that, and `results/tests/test_pdf.py` carried a workaround for it until
+    this change. Issue #58.
+
+    The old guarantee is kept rather than dropped: restoring what was current
+    still lands the outermost block back on public, so no test can leave the
+    connection inside a schema that is about to be dropped.
+    """
+
+    def setUp(self):
+        self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
+    def test_leaving_an_inner_block_returns_to_the_outer_school(self):
+        with connected_to(self.stmarys):
+            with connected_to(self.grace):
+                self.assertEqual(connection.schema_name, "grace")
+            self.assertEqual(connection.schema_name, "st_marys")
+            self.assertEqual(search_path(), "st_marys, public")
+
+    def test_the_outer_block_can_still_read_its_own_rows(self):
+        """The same thing said in the terms a caller would notice it in."""
+        with connected_to(self.stmarys):
+            make_term()
+
+        with connected_to(self.stmarys):
+            with connected_to(self.grace):
+                self.assertEqual(Term.objects.count(), 0)
+            self.assertEqual(Term.objects.count(), 1)
+
+    def test_an_object_fetched_in_an_inner_block_is_read_in_the_outer_one(self):
+        """The shape that actually bit: a lazy read after somebody else's block.
+
+        `fetch()` opens a context of its own, which is the ordinary way to write
+        a helper. Nothing about the call site says a `with` is closing inside
+        it, and the object it returns has not read `session` yet — that query
+        runs on the line below, on whatever schema the connection is left on.
+        """
+
+        with connected_to(self.stmarys):
+            make_term(session="2025/2026")
+
+        def fetch():
+            with connected_to(self.stmarys):
+                return Term.objects.only("id").get()
+
+        with connected_to(self.stmarys):
+            term = fetch()
+            self.assertEqual(term.session, "2025/2026")
+
+    def test_three_levels_unwind_one_at_a_time(self):
+        """Restoring the previous schema, not "the outer school" — the same
+        school twice over must come back to itself as well."""
+        with connected_to(self.stmarys):
+            with connected_to(self.grace):
+                with connected_to(self.stmarys):
+                    self.assertEqual(connection.schema_name, "st_marys")
+                self.assertEqual(connection.schema_name, "grace")
+            self.assertEqual(connection.schema_name, "st_marys")
+        self.assertEqual(connection.schema_name, "public")
+
+    def test_an_exception_inside_an_inner_block_still_restores_the_outer_one(self):
+        """The restore is in a `finally`, so the unwinding path gets it too."""
+        with connected_to(self.stmarys):
+            with self.assertRaises(ZeroDivisionError):
+                with connected_to(self.grace):
+                    raise ZeroDivisionError("something in the inner block")
+            self.assertEqual(connection.schema_name, "st_marys")
+        self.assertEqual(connection.schema_name, "public")
+
+    def test_the_outermost_block_still_lands_on_public(self):
+        """The guarantee the old version was written for, kept.
+
+        This is the assertion that says the change is invisible to the 800-odd
+        existing call sites: not one of them nests, so for every one of them
+        the schema restored is the public schema they were already given.
+        """
+        with connected_to(self.stmarys):
+            make_term()
+        self.assertEqual(connection.schema_name, "public")
+        self.assertEqual(search_path(), "public")
+
+    def test_the_connection_carries_the_school_itself_not_a_stand_in(self):
+        """Why `tenant_context` and not `schema_context`.
+
+        `schema_context(name)` sets a `FakeTenant`, which has a schema name and
+        no display name. `schools.logging.current_school()` reads
+        `connection.tenant.name`, so every log line that reads `[St Mary's]`
+        today would read `[st_marys]` instead — `schools/tests/test_logging.py`
+        asserts the display name and imports this helper. The other thirteen
+        `connected_to` definitions in this repo do wrap `schema_context`, so
+        that difference is real rather than stylistic; issue #67 covers it.
+
+        The restore has to bring the `School` back too, not merely its schema
+        name, or a nested block would quietly downgrade the outer one.
+        """
+        with connected_to(self.stmarys):
+            self.assertIs(connection.tenant, self.stmarys)
+            with connected_to(self.grace):
+                self.assertIs(connection.tenant, self.grace)
+            self.assertIs(connection.tenant, self.stmarys)
 
 
 class SharedModelsResolveFromInsideATenantTests(TestCase):
