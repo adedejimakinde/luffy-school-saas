@@ -48,7 +48,8 @@ from results.models import (
     SessionSettings,
     TermAbsence,
 )
-from results.tests.test_positions import PASSWORD, connected_to, make_school
+from results.tests.test_positions import PASSWORD, make_school
+from schools.tests.tenants import connected_to
 
 SESSION = "2025/2026"
 

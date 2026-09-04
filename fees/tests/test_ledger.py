@@ -16,7 +16,6 @@ Three properties are worth more than the rest, and each has a section:
 - a correction is a new row that names what it undoes.
 """
 
-import contextlib
 from datetime import date
 from decimal import Decimal
 
@@ -24,7 +23,6 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.utils import ProgrammingError
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics.models import Term, TermName
 from accounts.models import Role, User
@@ -36,19 +34,13 @@ from fees.models import (
     KOBO_PER_NAIRA,
     LedgerIsAppendOnly,
 )
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
 
 #: ₦150,000 as the column stores it. Spelled out once so the tests below read as
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class LedgerSetUp(TestCase):

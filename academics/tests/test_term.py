@@ -15,23 +15,15 @@ that lives only in Python is a rule a data import, a shell session or a future
 service function walks straight around.
 """
 
-import contextlib
 from datetime import date
 
 from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics.models import Term, TermName
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 SESSION = "2025/2026"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 def make_term(**extra):

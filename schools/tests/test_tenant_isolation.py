@@ -26,18 +26,16 @@ Note these are plain `TestCase`s, not `TenantTestCase`. See the harness notes
 in docs/tenancy.md and `TenantTestCaseHarnessTests` at the bottom of this file.
 """
 
-import contextlib
 from datetime import date
 
 from django.db import IntegrityError, ProgrammingError, connection, transaction
 from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
-from django_tenants.utils import tenant_context
 
 from academics.models import Term, TermName
 from accounts.models import Membership, Role, User
 from schools.models import Domain, School
-from schools.tests.tenants import make_school, make_school_by_migrating
+from schools.tests.tenants import connected_to, make_school, make_school_by_migrating
 
 PASSWORD = "correct-horse-battery"
 
@@ -77,30 +75,6 @@ def tables_in(schema):
 
 def search_path():
     return query("show search_path")[0][0]
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    """Scope the connection to `school`'s schema, as the middleware would.
-
-    Restores whatever schema was current on the way out, so this nests. It used
-    to force `public` instead, which is the same thing at the outermost level —
-    the schema it found there *is* public — and a trap one level in: the inner
-    block's exit dropped the outer block onto public, and the next lazy read in
-    the outer block went looking for tenant tables in the shared schema. See
-    `ConnectedToNestsTests` below for what that costs to diagnose (issue #58).
-
-    Restoring keeps the guarantee the old version was written for. A test still
-    cannot leave the connection inside a schema that is about to be dropped,
-    because unwinding the outermost block still lands on public.
-
-    `tenant_context` rather than `schema_context`: it hands `connection.tenant`
-    the real `School`, so `schools.logging.current_school()` can print the
-    school's name. `schema_context` sets a `FakeTenant`, which knows a schema
-    name and no display name.
-    """
-    with tenant_context(school):
-        yield
 
 
 class RealSchemaCreationTests(TestCase):
@@ -285,6 +259,71 @@ class SchemaIsolationTests(TestCase):
         self.assertIn("st_marys", schema_names())
         with connected_to(self.stmarys):
             self.assertEqual(Term.objects.count(), 1)
+
+
+class MakeSchoolInsideABlockTests(TestCase):
+    """`make_school()` leaves the caller's block where it found it. Issue #67.
+
+    The other half of #67, and the same bug as #58 three lines away from the
+    helper that fixes it. `make_school()` calls `clone_template()`, and
+    `clone_template()` — like `build_template()` — used to *end* on public
+    rather than restore. Both genuinely need public for the DDL they run; what
+    they did not need was to leave it there.
+
+    So `connected_to` could nest perfectly and a block could still be silently
+    dropped onto public by a `make_school()` in the middle of it — and the
+    failure arrives exactly as #58's did, as
+    `relation "academics_term" does not exist` from whatever read the block did
+    next, with nothing naming a schema.
+
+    Nothing else pins this: every existing caller makes its schools in `setUp`
+    before opening any block, which is why it survived a fix to `connected_to`
+    that was otherwise about precisely this.
+    """
+
+    def setUp(self):
+        self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
+
+    def test_a_block_still_holds_its_schema_after_make_school_returns(self):
+        with connected_to(self.stmarys):
+            make_school("Grace Academy", "grace", "grace")
+
+            self.assertEqual(connection.schema_name, "st_marys")
+
+    def test_a_read_after_make_school_still_lands_on_the_block_s_schema(self):
+        """The assertion above is the mechanism; this is the symptom.
+
+        A schema name is one thing, a query is another — under the old code this
+        raised `ProgrammingError` looking for `academics_term` in `public`.
+        """
+        with connected_to(self.stmarys):
+            Term.objects.create(
+                session="2025/2026",
+                name=TermName.FIRST.value,
+                starts_on=date(2025, 9, 15),
+                ends_on=date(2025, 12, 12),
+            )
+            make_school("Grace Academy", "grace", "grace")
+
+            self.assertEqual(Term.objects.count(), 1)
+
+    def test_the_outermost_block_still_lands_on_public(self):
+        """The guarantee restoring was written to keep, with a `make_school()`
+        in the middle of it: a test must not leave the connection inside a
+        schema that is about to be dropped."""
+        with connected_to(self.stmarys):
+            make_school("Grace Academy", "grace", "grace")
+
+        self.assertEqual(connection.schema_name, "public")
+
+    def test_make_school_outside_any_block_still_ends_on_public(self):
+        """The ordinary case, unchanged: called from public, it returns to
+        public. Every existing `setUp` in this repo depends on that."""
+        self.assertEqual(connection.schema_name, "public")
+
+        make_school("Grace Academy", "grace", "grace")
+
+        self.assertEqual(connection.schema_name, "public")
 
 
 class ConnectedToNestsTests(TestCase):

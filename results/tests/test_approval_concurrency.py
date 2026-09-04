@@ -45,14 +45,12 @@ authorise against one school and write into another's schema, and no
 single-tenant test can tell that apart from working correctly.
 """
 
-import contextlib
 import threading
 from datetime import date
 
 from django.db import OperationalError, connection, connections, transaction
 from django.test import TransactionTestCase
 from django.test.utils import CaptureQueriesContext
-from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
@@ -61,14 +59,9 @@ from accounts.services import grant_membership
 from results import services
 from results.models import ResultSheet, ResultSheetTransition, SheetState
 from schools.models import School
+from schools.tests.tenants import connected_to
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class TwoSchoolsSetUp(TransactionTestCase):

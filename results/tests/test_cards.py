@@ -106,7 +106,8 @@ def historical_apps():
         _historical_apps = loader.project_state(migration.dependencies).apps
     return _historical_apps
 
-from results.tests.test_positions import PASSWORD, connected_to, make_school
+from results.tests.test_positions import PASSWORD, make_school
+from schools.tests.tenants import connected_to
 
 SESSION = "2025/2026"
 

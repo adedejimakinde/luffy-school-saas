@@ -18,28 +18,20 @@ a placement written on the wrong connection. St Mary's and Grace Academy are
 both real schemas, created the production way.
 """
 
-import contextlib
 import threading
 from datetime import date
 
 from django.db import IntegrityError, connection, connections, transaction
 from django.test import TestCase, TransactionTestCase
-from django_tenants.utils import schema_context
 
 from academics import services
 from academics.models import ClassGroup, ClassPlacement, Term, TermName
 from accounts.models import MembershipStatus, Role, User
 from accounts.services import enroll_student, grant_membership
 from schools.models import School
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
-
-
-@contextlib.contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 def a_term(session="2025/2026", name=TermName.FIRST, starts=None, ends=None):

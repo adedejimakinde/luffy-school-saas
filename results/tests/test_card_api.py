@@ -46,12 +46,10 @@ connection happened to be left on.
 """
 
 import json
-from contextlib import contextmanager
 from datetime import date
 
 from django.db import connection
 from django.test import TestCase
-from django_tenants.utils import schema_context
 
 from academics.models import ClassGroup, Term, TermName
 from academics.services import assign_class_teacher, place_student
@@ -68,7 +66,7 @@ from results.models import (
     TraitGroup,
 )
 from schools.models import Domain, School
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 
 PASSWORD = "correct-horse-battery"
 SESSION = "2025/2026"
@@ -81,12 +79,6 @@ TERM_DATES = {
     TermName.SECOND.value: (date(2026, 1, 12), date(2026, 4, 2)),
     TermName.THIRD.value: (date(2026, 4, 27), date(2026, 7, 24)),
 }
-
-
-@contextmanager
-def connected_to(school):
-    with schema_context(school.schema_name):
-        yield
 
 
 class ReportCardApiSetUp(TestCase):

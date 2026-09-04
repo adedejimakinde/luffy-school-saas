@@ -45,7 +45,8 @@ from results.models import (
 )
 from results.services import NotAllowedToActOnResults
 from results.tests.test_cards import SESSION, CardSetUp
-from results.tests.test_positions import PASSWORD, connected_to, make_school
+from results.tests.test_positions import PASSWORD, make_school
+from schools.tests.tenants import connected_to
 
 
 class RevisionSetUp(CardSetUp):

@@ -39,7 +39,8 @@ from schools.tasks import (
     school_for,
 )
 from schools.models import School
-from schools.tests.test_tenant_isolation import connected_to, make_school
+from schools.tests.test_tenant_isolation import make_school
+from schools.tests.tenants import connected_to
 
 import celery_app
 
