@@ -50,6 +50,39 @@ class CannotReverse(FeeLedgerError):
     """That entry is not one that can be undone."""
 
 
+class NotThisTermsLine(FeeLedgerError):
+    """The schedule line named belongs to a different term than the charge.
+
+    `a_schedule_line_charges_a_child_once` is keyed on
+    `(student_membership_id, source_line)` and carries no term, on the argument
+    that a line belongs to a schedule which belongs to exactly one term, so the
+    pair is already term-scoped. That is true of the *line* and false of the
+    *caller*: nothing stopped a hand-typed charge naming this term and last
+    term's line. The index then reads that entry as this line's charge for the
+    child, and the next `apply_to_class()` run reports their tuition as
+    **skipped** and never bills it -- silent under-billing, discovered when a
+    parent asks why their invoice is short.
+
+    No constraint can express this: the rule spans `FeeLedgerEntry`,
+    `FeeScheduleLine` and `FeeSchedule`, so it has to be asked in code.
+    """
+
+
+class NotThisStudentsConcession(FeeLedgerError):
+    """The concession named belongs to a different child than the discount.
+
+    The mirror of `NotThisTermsLine` on the other new column, and the one that
+    corrupts a *question* rather than a balance:
+    `a_concession_discounts_a_child_once_per_term` is keyed per student, so
+    Chidi's bursary posted against Ada's account is accepted by the index, and
+    "everything this concession did" then answers with two children -- while
+    Chidi's own discount still posts later, because that pair is untaken.
+
+    `_require_student_of_this_school()` already guards the child half of every
+    entry this carefully. This is the same guard for the source half.
+    """
+
+
 class NotThisSchoolsStudent(FeeLedgerError):
     """The membership named is not a student of the school whose books these are.
 
@@ -154,7 +187,22 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
     writers can both pass a skip-check and one will meet the index. Today this
     module has exactly one such caller, so the race is not reachable; the note is
     here because the second caller is the one that will not know.
+
+    Raises `NotThisTermsLine` if the line belongs to another term's bill.
     """
+    # Asked here rather than left to a constraint, because no constraint can
+    # reach across three tables to ask it. Free in the hot path:
+    # `apply_to_class()` reads its lines through `locked.lines.all()`, and a
+    # reverse manager primes each line's `schedule` from the instance it came
+    # from, so this compares two integers already in memory.
+    if source_line is not None and source_line.schedule.term_id != term.pk:
+        raise NotThisTermsLine(
+            f"Line {source_line.pk} belongs to {source_line.schedule}, which is "
+            f"another term's bill; this charge is for {term}. Charging it here "
+            f"would fill that child's slot in "
+            f"a_schedule_line_charges_a_child_once, and the run that should "
+            f"bill them would report a skip instead."
+        )
     return _post(
         membership=membership,
         term=term,
@@ -192,7 +240,19 @@ def discount(membership, term, amount_kobo, *, narration, effective_on=None,
     A bursary, a staff child's concession, a sibling discount. Its own kind
     rather than a negative charge, because "we waived it" and "they paid it" are
     different facts and a school's books have to be able to tell them apart.
+
+    Raises `NotThisStudentsConcession` if the concession is another child's.
     """
+    if (
+        source_concession is not None
+        and source_concession.student_membership_id != membership.pk
+    ):
+        raise NotThisStudentsConcession(
+            f"Concession {source_concession.pk} belongs to membership "
+            f"{source_concession.student_membership_id}, not to {membership.pk}. "
+            f"The index is keyed per student, so this would post, and "
+            f"'everything this concession did' would answer with two children."
+        )
     return _post(
         membership=membership,
         term=term,
@@ -237,6 +297,33 @@ def refund(membership, term, amount_kobo, *, narration="Refund", effective_on=No
     )
 
 
+#: The narration column's own width, read from the field so the two cannot
+#: drift apart.
+_NARRATION_MAX = FeeLedgerEntry._meta.get_field("narration").max_length
+
+
+def _inherited_narration(narration):
+    """`"Reversal of: X"`, trimmed to the column rather than failing to save.
+
+    `FeeScheduleLine.description` and `FeeLedgerEntry.narration` are both 255,
+    and `apply_to_class()` copies one into the other verbatim -- so a line
+    described in 243 characters or more posts a charge whose reversal is
+    thirteen characters too long. That was unreachable while every narration was
+    hand-typed, and this PR made it reachable.
+
+    It matters more than a truncation usually would, because of *how* it failed:
+    `full_clean()` raises `ValidationError`, which is not a `FeeLedgerError`. A
+    caller writing `except FeeLedgerError` -- the contract this module's
+    docstring insists on -- would not have caught it, and the charge simply
+    could not be undone. Trimming keeps the prefix, which is the part a reader
+    needs, and marks the cut so nobody reads the tail as the whole description.
+    """
+    inherited = f"Reversal of: {narration}"
+    if len(inherited) <= _NARRATION_MAX:
+        return inherited
+    return inherited[: _NARRATION_MAX - 1] + "\u2026"
+
+
 @transaction.atomic
 def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
                   membership=None):
@@ -266,11 +353,18 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
     # on the entry itself; `.order_by()` is not needed here because
     # `FeeLedgerEntry.Meta.ordering` sorts by its own columns and joins nothing —
     # the trap docs/membership.md records for `Membership` does not apply.
-    locked = (
-        FeeLedgerEntry.objects.select_for_update()
-        .select_related("term")
-        .get(pk=entry.pk)
-    )
+    #
+    # **And no `select_related("term")`.** `select_for_update()` locks every
+    # table it joins, so that took `FOR UPDATE` on the `academics_term` row.
+    # Issue #78 scoped the joined lock as waste; `apply_to_class()` is what turns
+    # it into contention. Every entry that run inserts takes `FOR KEY SHARE` on
+    # the same term row for its foreign-key check and holds it to commit, and
+    # `FOR KEY SHARE` conflicts with `FOR UPDATE`: one bursar clicking undo on an
+    # unrelated payment blocks for the length of a forty-five-child billing run,
+    # and in the other order the billing run stalls on its first insert. The
+    # reversal needs the term's *id*, which the locked row already carries, so
+    # the join bought nothing at all.
+    locked = FeeLedgerEntry.objects.select_for_update().get(pk=entry.pk)
 
     if locked.kind == FeeEntryKind.REVERSAL:
         raise CannotReverse(
@@ -296,10 +390,12 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
         snapshot = None
 
     reversal = FeeLedgerEntry(
-        term=locked.term,
+        # `term_id`, not `term`: the id is already on the locked row, and
+        # touching `.term` would spend a query fetching a row nothing here reads.
+        term_id=locked.term_id,
         kind=FeeEntryKind.REVERSAL,
         amount_kobo=-locked.amount_kobo,
-        narration=narration or f"Reversal of: {locked.narration}",
+        narration=narration or _inherited_narration(locked.narration),
         reference=locked.reference,
         source_line_id=locked.source_line_id,
         source_concession_id=locked.source_concession_id,
@@ -320,6 +416,8 @@ __all__ = [
     "LedgerIsAppendOnly",
     "NotPositive",
     "NotThisSchoolsStudent",
+    "NotThisStudentsConcession",
+    "NotThisTermsLine",
     "charge",
     "discount",
     "record_payment",

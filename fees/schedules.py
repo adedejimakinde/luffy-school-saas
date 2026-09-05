@@ -207,6 +207,21 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # of them inside the transaction holding the schedule lock. Joined once here
     # it is the same two joins the paragraph above declines to pay per *sort*,
     # paid once for a thing actually needed.
+    # **What this read must not lose is `status`, and that is not the join.**
+    # The skip below is `memberships[sid].is_live` -- a Python property that
+    # returns `self.status in LIVE_STATUSES` and reads nothing else. So
+    # `select_related()` buys queries here and not correctness: take it away and
+    # every leaver test stays green. Take away the *loaded* `status` -- an
+    # `.only()` or a `.defer("status")` added by someone tightening this read --
+    # and the property becomes a lazy refetch of a row this function has already
+    # read, issued later and inside the schedule lock. The decision is then taken
+    # on the later of two reads that can disagree, and a child who was enrolled
+    # when the roster was read is silently dropped from the bill: no error, no
+    # row, nobody the wiser until a parent asks why no invoice came.
+    #
+    # This is written out because the instinct when hardening a read is to reach
+    # for `select_related` first, which would leave the actual guard untouched.
+    # `LeaverReadTests` pins it, and its control is that exact failure.
     memberships = {
         m.pk: m
         for m in Membership.objects.filter(pk__in=student_ids)
@@ -237,6 +252,8 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # outcome again: one child having left must not stop the class being billed.
     # Counted, though — `students_skipped` — because a skip nobody is told about
     # is the silent no-op this module refuses everywhere else.
+    # Decided from the read above, whose `status` is loaded -- see that comment
+    # for why the loading, and not the join, is what makes this correct.
     billable_ids = [sid for sid in student_ids if memberships[sid].is_live]
     students_skipped = len(student_ids) - len(billable_ids)
     student_ids = billable_ids
@@ -290,6 +307,16 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     charges_posted = charges_skipped = charged_kobo = 0
     discounts_posted = discounts_skipped = discounted_kobo = 0
 
+    # **This loop opens a savepoint per entry, and that is filed, not fixed.**
+    # `services.charge()` is `@transaction.atomic`, so a 45-child three-line bill
+    # opens ~135 subtransactions inside this one transaction -- past the 64 that
+    # Postgres caches per backend, after which visibility checks fall back to
+    # `pg_subtrans` SLRU lookups and the cost is paid cluster-wide, by every
+    # school, for as long as this transaction stays open. The savepoints are
+    # load-bearing for the *discount* loop below, whose collision handler needs
+    # to roll back to one; for charges they buy nothing. Issue #82,
+    # `must-fix-before-pilot` -- it changes how charges post, so it is a design
+    # decision rather than a patch.
     for student_id in student_ids:
         membership = memberships[student_id]
         for line in lines:

@@ -1525,3 +1525,201 @@ class LeaverReadTests(BillingSetUp):
             1,
             "deferring status should cost one refetch per child, inside the lock",
         )
+
+
+class SourceColumnGuardTests(BillingSetUp):
+    """The two new source columns, and what nothing in the schema can refuse.
+
+    `source_line` and `source_concession` are what make "everything this line of
+    the bill did" answerable, and both are keyed into partial unique indexes.
+    Neither index can check that the source *belongs* where it is being posted:
+    one rule spans three tables and the other spans two rows, so both have to be
+    asked in code or not at all. Left unasked they do not raise; they post, and
+    the damage is a silence.
+    """
+
+    def _other_terms_line(self):
+        """A line on a second term's bill for the same class."""
+        with connected_to(self.stmarys):
+            other_term = Term.objects.create(
+                session="2025/2026",
+                name=TermName.SECOND,
+                starts_on=date(2026, 1, 12),
+                ends_on=date(2026, 4, 3),
+            )
+            other_bill = FeeSchedule.objects.create(
+                term=other_term,
+                class_group=ClassGroup.objects.get(pk=self.group_id),
+            )
+            return FeeScheduleLine.objects.create(
+                schedule=other_bill, description="Tuition", amount_kobo=TUITION
+            )
+
+    def test_a_charge_naming_another_terms_line_is_refused(self):
+        """Silent under-billing, and the index would have accepted it.
+
+        `a_schedule_line_charges_a_child_once` is keyed on `(student, line)` with
+        no term. A hand-typed correction naming this term and last term's line
+        therefore *fills that child's slot*, and the run that should bill them
+        reports a skip instead. Nothing raises, nothing is missing from the
+        ledger to look at, and the child is simply never charged tuition.
+        """
+        line = self._other_terms_line()
+
+        with connected_to(self.stmarys):
+            with self.assertRaises(services.NotThisTermsLine):
+                services.charge(
+                    self.ada,
+                    self.term(),
+                    TUITION,
+                    narration="Tuition correction",
+                    source_line=line,
+                )
+
+            # Nothing posted, so the slot is still free -- which is the half
+            # that matters. A refusal that still consumed the slot would be the
+            # same bug wearing an exception.
+            self.assertEqual(self.balance_of(self.ada), 0)
+            summary = self.apply()
+            self.assertEqual(summary.charges_posted, 4, "the class billed normally")
+            self.assertEqual(summary.charges_skipped, 0)
+            self.assertEqual(self.balance_of(self.ada), TUITION + LEVY)
+
+    def test_the_refusal_is_a_fee_ledger_error(self):
+        """`except FeeLedgerError` has to keep meaning "nothing was posted"."""
+        self.assertTrue(
+            issubclass(services.NotThisTermsLine, services.FeeLedgerError)
+        )
+        self.assertTrue(
+            issubclass(services.NotThisStudentsConcession, services.FeeLedgerError)
+        )
+
+    def test_a_discount_naming_another_childs_concession_is_refused(self):
+        """The index is per student, so this posts and corrupts the question.
+
+        `a_concession_discounts_a_child_once_per_term` is keyed
+        `(student, term, concession)`. Chidi's bursary posted against Ada takes
+        the `(Ada, term, bursary)` pair, which nothing else wanted -- so it is
+        accepted, Chidi's own discount still posts later, and "everything this
+        concession did" answers with two children and twice the money.
+        """
+        with connected_to(self.stmarys):
+            chidis = FeeConcession.objects.create(
+                student_membership_id=self.chidi.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+                granted_by_id=self.bursar.pk,
+            )
+
+            with self.assertRaises(services.NotThisStudentsConcession):
+                services.discount(
+                    self.ada,
+                    self.term(),
+                    TUITION,
+                    narration="Staff child",
+                    source_concession=chidis,
+                )
+
+            self.assertEqual(self.balance_of(self.ada), 0)
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(source_concession=chidis).count(),
+                0,
+                "the concession posted against nobody",
+            )
+
+    def test_a_very_long_line_description_still_produces_a_reversible_charge(self):
+        """The charge and its undo are one feature; half of it is not a feature.
+
+        `FeeScheduleLine.description` and `FeeLedgerEntry.narration` are both
+        255, and the description is copied into the narration verbatim, so a
+        243-character line produced a charge whose reversal was thirteen
+        characters too long. It failed as `ValidationError` -- not a
+        `FeeLedgerError` -- so the documented `except FeeLedgerError` would not
+        have caught it either.
+        """
+        long_description = "Tuition, " + "boarding and incidentals " * 9 + "and books"
+        self.assertEqual(len(long_description), 243, "the shortest that overflows")
+        self.assertGreater(len("Reversal of: " + long_description), 255)
+
+        with connected_to(self.stmarys):
+            FeeScheduleLine.objects.create(
+                schedule=self.schedule(),
+                description=long_description,
+                amount_kobo=LEVY,
+                position=3,
+            )
+            self.apply()
+
+            # Both children are billed the line; one of them is the subject.
+            charge = FeeLedgerEntry.objects.get(
+                narration=long_description, student_membership_id=self.ada.pk
+            )
+            reversal = services.reverse_entry(charge, recorded_by=self.bursar)
+
+            self.assertLessEqual(len(reversal.narration), 255)
+            self.assertTrue(reversal.narration.startswith("Reversal of: Tuition, "))
+            self.assertTrue(
+                reversal.narration.endswith("\u2026"),
+                "the cut is marked, so the tail is not read as the whole thing",
+            )
+            self.assertEqual(reversal.amount_kobo, -charge.amount_kobo)
+
+    def test_the_reversal_lock_does_not_join_the_term(self):
+        """`FOR UPDATE` on a joined term row is what stalls a billing run.
+
+        Every entry `apply_to_class()` inserts takes `FOR KEY SHARE` on the
+        term row for its foreign-key check and holds it to commit, and that
+        conflicts with `FOR UPDATE`. One bursar clicking undo on an unrelated
+        payment would wait out a forty-five-child billing run; in the other
+        order the billing run stalls on its first insert. Asserted against the
+        compiled SQL, because the join is invisible in the Python.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            charge = FeeLedgerEntry.objects.filter(
+                kind=FeeEntryKind.CHARGE
+            ).first()
+
+            with CaptureQueriesContext(connection) as captured:
+                services.reverse_entry(charge, recorded_by=self.bursar)
+
+        locking = [
+            q["sql"] for q in captured.captured_queries if "FOR UPDATE" in q["sql"]
+        ]
+        self.assertEqual(len(locking), 1, "one locking read, on the entry")
+        self.assertNotIn(
+            "academics_term",
+            locking[0],
+            "the lock joins the term again, so it takes FOR UPDATE on that row",
+        )
+
+    def test_the_line_guard_costs_no_query_per_charge(self):
+        """A guard paid 135 times inside the lock would be its own finding.
+
+        `apply_to_class()` reads its lines through `locked.lines.all()`, and a
+        reverse manager primes each line's `schedule` from the instance it came
+        from -- so the check compares two integers already in memory. Asserted
+        rather than assumed, because if that ever stops being true the cost
+        lands inside the transaction holding the schedule lock.
+        """
+        with connected_to(self.stmarys):
+            # Read outside the capture: `self.apply()` fetches the schedule
+            # first, and that read is the fixture's, not the function's.
+            bill = self.schedule()
+            with CaptureQueriesContext(connection) as captured:
+                summary = schedules.apply_to_class(bill, by=self.bursar)
+
+        self.assertEqual(summary.charges_posted, 4, "two children, two lines")
+        schedule_reads = [
+            q["sql"]
+            for q in captured.captured_queries
+            if "fees_feeschedule" in q["sql"]
+            and "fees_feescheduleline" not in q["sql"]
+            and q["sql"].lstrip().upper().startswith("SELECT")
+        ]
+        self.assertEqual(
+            len(schedule_reads),
+            1,
+            "the locking read and nothing else; the guard should be free:\n"
+            + "\n".join(schedule_reads),
+        )
