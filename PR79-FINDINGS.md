@@ -1,7 +1,17 @@
 # PR #79 — independent pass on the two questions
 
-Branch `fee-schedule-billing`, **head `08b40cf`**, base `main` (`c236a18`).
-Worktree clean; `08b40cf` is what PR #79 points at, merge-base `c236a18`, `MERGEABLE`/`CLEAN`.
+Branch `fee-schedule-billing`, base `main` (`c236a18`). Worktree clean.
+
+| commit | what it is |
+|---|---|
+| `426b4b1` | what §1 and §2 below were written against |
+| `08b40cf` | what `/code-review` reviewed |
+| `7b82d4e` | the `is_live` proof — tests only |
+| `60eabf1` | the fixes for findings 1, 3, 4 and 5 |
+| *this commit* | this document; the branch tip |
+
+Stated as a list rather than as one SHA because this document has now spanned five of
+them, and a single "head" line was wrong twice already — see the correction below.
 
 > **Header corrected 2026-09-05.** This document was first published against head
 > `426b4b1` and said so. Two commits landed after it — `405aa54` and `08b40cf` — so that
@@ -326,8 +336,90 @@ between an enrolled child and never being invoiced at all.
 ## Order of operations
 
 1. Report findings — **done**, both this document's own pass and the review
-2. Fix — **your call on scope.** 1 and 5 are contained; 3 and 4 are matching guards
-   worth doing together; 2 is a restructure of how charges post, a design decision
-   rather than a patch
-3. Merge on your word
+2. Fix — **done** for 1, 3, 4 and 5; 2 filed as #82, `must-fix-before-pilot`
+3. Merge on your word — *pending*
 4. `git merge-base --is-ancestor <sha> origin/main`
+
+---
+
+# Acted on the review — 1, 3, 4 and 5 fixed; 2 filed
+
+Finding 2 is deliberately not fixed: it is a design decision about how charges post,
+not a patch, and it is now **[#82](https://github.com/adedejimakinde/luffy-school-saas/issues/82)**,
+labelled `must-fix-before-pilot`. The issue carries the whole analysis — 135
+subtransactions past Postgres's 64-subxid cache, why the savepoints are load-bearing
+for the discount loop and not for the charge loop, and three options with what each
+one costs.
+
+Every fix below is verified load-bearing by mutation: the production change is
+reverted, the test is run, and it goes red on its own.
+
+## 1 — the reversal lock stops joining the term
+
+`reverse_entry()`'s locked read drops `.select_related("term")`, and the reversal is
+built with `term_id=locked.term_id` rather than `term=locked.term`, so the join is
+not replaced by a lazy read. The comment now names the contention rather than the
+waste: `FOR KEY SHARE` from every insert in a billing run versus `FOR UPDATE` from
+one undo, and which one stalls behind the other.
+
+`test_the_reversal_lock_does_not_join_the_term` asserts against **compiled SQL** —
+exactly one `FOR UPDATE` statement, and `academics_term` absent from it. The join is
+invisible in the Python, so the Python is not where it can be checked.
+
+*Mutation:* restore `.select_related("term")` → red.
+
+## 3 — a charge naming another term's line is refused
+
+New `NotThisTermsLine(FeeLedgerError)`. `charge()` compares
+`source_line.schedule.term_id` against `term.pk` when a `source_line` is passed.
+
+**Free in the hot path, and asserted to be.** `apply_to_class()` reads its lines
+through `locked.lines.all()`, and a reverse manager primes each line's `schedule`
+from the instance it came from — so the guard compares two integers already in
+memory. `test_the_line_guard_costs_no_query_per_charge` pins that at one
+`fees_feeschedule` read per run, because a guard paid 135 times inside the schedule
+lock would have been its own finding.
+
+The test asserts the *consequence*, not just the exception: after the refusal the
+child's slot in `a_schedule_line_charges_a_child_once` is still free and the real run
+bills them. A refusal that consumed the slot would be the same bug wearing an
+exception.
+
+*Mutation:* remove the guard → red.
+
+## 4 — a discount naming another child's concession is refused
+
+New `NotThisStudentsConcession(FeeLedgerError)`. `discount()` compares
+`source_concession.student_membership_id` against `membership.pk`.
+
+`_require_student_of_this_school()` already guards the child half of every entry this
+carefully; this is the same guard for the source half. The test asserts both that the
+discount is refused and that **nothing posted against the concession** — the damage
+was never a balance, it was "everything this concession did" answering with two
+children.
+
+*Mutation:* remove the guard → red.
+
+## 5 — a long line description no longer produces an unreversible charge
+
+`_inherited_narration()` builds `"Reversal of: X"` and trims it to the column's own
+`max_length`, read from the field so the two cannot drift, marking the cut with an
+ellipsis.
+
+The test uses the **shortest description that overflows** — 243 characters, asserted
+to be exactly that — rather than a round number that would keep passing if the
+threshold moved.
+
+*Mutation:* restore the raw f-string → red, and red as an **error**, not a failure:
+`ValidationError` escapes uncaught. That is the finding restated by the test — the
+old failure was not merely a save that failed, it was one that `except FeeLedgerError`
+could not catch.
+
+## The `is_live` correction, in the code
+
+`fees/schedules.py` now says the guard is that **`status` is loaded**, at the read
+where someone hardening this would edit, and says in as many words that
+`select_related` is not it — remove the join and every leaver test stays green;
+add `.only()` or `.defer("status")` and a child enrolled at read time is silently
+dropped. The control test that proves it is permanent:
+`test_a_deferred_status_would_drop_an_enrolled_child_from_billing`.
