@@ -261,6 +261,47 @@ for that one is a test that goes red when the promise becomes keepable.
 
 ---
 
+## 8. A decision that produces a frozen artefact needs no log; a decision that produces an absence does
+
+Rule 4 says what an audit must look like once you need one. This one says when
+you need one, because the answer is not "whenever the subject sounds serious" —
+and getting it wrong costs a table in one direction and the whole record in the
+other.
+
+The test is what the act leaves behind.
+
+| the act | what it leaves | its own log? |
+| --- | --- | --- |
+| charging a family | a `FeeLedgerEntry`, append-only | **no** — the entry is the record |
+| applying a fee schedule to a class | forty-five entries, each carrying who posted it and when | **no** — a run table would be a second answer |
+| granting a concession | a dated `DISCOUNT` entry per term | **no** — so the instruction itself may be an editable row |
+| releasing a term's results | a `ReleasedCard` per child, written unconditionally | **no** — the card is the artefact |
+| deciding a child's promotion | nothing else; the status is the only output | **yes** — `PromotionDecision` |
+| withholding a card from a family | **nothing at all** | **yes** |
+
+The last row is what makes the rule sharp. A card that is not served leaves no
+trace anywhere — no row, no file, no absence anyone can point at without already
+knowing to look. If the act is not written down at the moment it happens there is
+no later evidence it happened, and the moment it matters is six months on, when a
+family complains and the school needs to say that the card was withheld on the
+3rd and lifted on the 12th when the fees came in, by these two named people, for
+this stated reason.
+
+**The rule cuts both ways, and the second direction is the one that saves work.**
+An act whose artefact is frozen elsewhere may safely be driven by a plain
+*mutable* row. A fee schedule and a concession are editable templates precisely
+because what they produce is append-only and freezes the amount and the wording
+at the moment of posting. Making the template append-only too would be a second,
+weaker copy of a guarantee the entries already hold, and it would stop a bursar
+from fixing next term's bill.
+
+So: before adding an audit table, ask what the act already writes. Before
+deciding an act needs no audit, ask what it writes *when the answer is no* — a
+refusal, a withholding, a suppression and a skip all produce nothing, and
+nothing is exactly what cannot be reconstructed later.
+
+---
+
 ## Before you open a PR
 
 The short form of everything above, as the checklist actually used this phase:
@@ -277,6 +318,8 @@ The short form of everything above, as the checklist actually used this phase:
       asserts**? (Rule 6)
 - [ ] Did this change make any existing prose **stale**, anywhere — including
       fifty lines away, making a different argument? (Rule 7, item 9)
+- [ ] Does any act I added produce **nothing** when it decides "no" — and if so,
+      does a row record who decided it, when, and why? (Rule 8)
 
 Then the process rules, which are not about code:
 
