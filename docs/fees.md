@@ -209,10 +209,28 @@ carries the measurement that separates them — unlocked, the index still refuse
 every double charge and the losing bursar gets an `IntegrityError` instead of a
 summary.
 
-**A reversed schedule charge is not re-posted by re-running.** The reversed
-original still exists — the ledger is append-only, so it always will — and the
-index still sees it. Deliberately undoing a charge and then wanting it back
-takes an explicit `charge()`, not a second click on the same button.
+**A reversed schedule charge cannot be re-posted against that line, by any
+route.** The reversed original still exists — the ledger is append-only, so it
+always will — and `a_schedule_line_charges_a_child_once` still sees it. The
+index is on the row rather than on the caller, so an explicit `charge()` naming
+the same line is refused exactly as a re-run is; only a charge that does **not**
+name the line will post, and that one is no longer attributable to the line.
+Both halves are pinned by a test, because the first version of this paragraph
+claimed an explicit `charge()` was the escape hatch and nothing contradicted it.
+
+The practical rule that follows: reverse a schedule charge when it should not
+have been raised, not when its *amount* was wrong. A wrong amount is fixed by
+correcting the line and reversing plus re-posting by hand, accepting that the
+new row stands on its own.
+
+**A child who moves class mid-term is charged by both bills and waived once.**
+The charge key is the line and the concession key is `(child, term,
+concession)`, so JSS 1A's bill and JSS 3A's bill both charge them while the
+concession posts once for the term. That is deliberate — a waiver is a fact
+about the term, not about the classroom — and it means the mid-term move needs
+a person either way: somebody has to reverse the bill the child is no longer
+sitting for. Until they do, the family's balance shows two terms' fees and one
+waiver.
 
 **The schedule keys on `ClassGroup`, and `ClassPlacement` rewrites on a
 mid-term move.** A child charged as JSS 1A in week one who moves to JSS 3 in

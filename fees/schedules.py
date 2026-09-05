@@ -28,6 +28,13 @@ instant both pass an unlocked skip-check before either commits, which is
 `reverse_entry()`'s race exactly. `select_for_update()` on the schedule
 serialises applications of *that bill* and nothing else.
 
+**And "nothing else" is a real limit, not a boast.** The charge key is a line,
+and a line belongs to one bill, so every charge collision is inside the bill this
+lock holds. The *concession* key spans the term, so two runs of two different
+bills can collide on it — see the `IntegrityError` handled at the foot of
+`apply_to_class()`, which is the only place this module treats a database refusal
+as an outcome rather than a bug.
+
 **One transaction for the whole class**, because a half-applied bill is worse
 than no bill: nobody can tell by looking whether it finished, and the repair is
 to work out which children were reached. A class is bounded, so the transaction
@@ -45,13 +52,30 @@ no business importing `results`, and `academics` sits under both.
 
 from dataclasses import dataclass
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from academics.models import ClassPlacement
 from accounts.models import Membership
 
 from . import services
 from .models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
+
+
+#: The index a concurrent application of a *different* bill can trip.
+_CONCESSION_COLLISION = "a_concession_discounts_a_child_once_per_term"
+
+
+def _is_the_concession_colliding(exc) -> bool:
+    """Did another bill in this term post this discount, or did something else fail?
+
+    Asked of the failure itself, on `accounts.throttling`'s idiom: Postgres names
+    the constraint that refused the row, and inferring it from "is there a row
+    now?" is wrong in both directions under concurrency. A cause carrying no
+    diagnostics counts as *not* a collision, so an unrecognised failure is raised
+    rather than swallowed.
+    """
+    diag = getattr(getattr(exc, "__cause__", None), "diag", None)
+    return getattr(diag, "constraint_name", None) == _CONCESSION_COLLISION
 
 
 class EmptySchedule(services.FeeLedgerError):
@@ -212,15 +236,37 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         if key in already_discounted:
             discounts_skipped += 1
             continue
-        services.discount(
-            memberships[concession.student_membership_id],
-            term,
-            concession.amount_kobo,
-            narration=concession.reason,
-            effective_on=effective_on,
-            recorded_by=by,
-            source_concession=concession,
-        )
+        try:
+            services.discount(
+                memberships[concession.student_membership_id],
+                term,
+                concession.amount_kobo,
+                narration=concession.reason,
+                effective_on=effective_on,
+                recorded_by=by,
+                source_concession=concession,
+            )
+        except IntegrityError as collision:
+            # **The one race the schedule lock does not cover.** That lock
+            # serialises applications of *this bill*; the concession index spans
+            # every bill in the term. A child who moves class mid-term can be on
+            # one bursar's roster snapshot and another's at the same moment — the
+            # `ClassPlacement` rewrite window issue #43 records — so two runs of
+            # two *different* schedules can both pass this skip-check and both
+            # post the same child's discount.
+            #
+            # Without this, the loser's whole run dies: one transaction for the
+            # class means forty-five children go unbilled because one discount
+            # collided, which is the outcome the skip exists to prevent.
+            #
+            # Treated as a skip, because that is what it is — somebody else
+            # posted it, and the child has their concession either way.
+            # `services.discount()` is itself atomic, so the failure rolls back
+            # to its savepoint and this transaction stays usable.
+            if not _is_the_concession_colliding(collision):
+                raise
+            discounts_skipped += 1
+            continue
         discounts_posted += 1
         discounted_kobo += concession.amount_kobo
 

@@ -172,8 +172,20 @@ Append-only, enforced the two ways this codebase always does it:
   the code that owns it, and refusing INSERT would refuse the write that creates
   the row.
 
-`Meta.ordering = ["student_membership_id", "term", "-decided_at", "-id"]`, and
-the `-id` tiebreak is not decoration: `auto_now_add` can tie to the microsecond,
+`Meta.ordering = ["student_membership_id", "term_id", "-decided_at", "-id"]` —
+**`term_id`, the column, and never `term`, the relation.** Ordering by the
+relation makes Django sort by `Term.Meta.ordering`, which is
+`["-session", "starts_on"]` (`academics/models.py:117`), so every default read
+would join `academics_term` and sort by columns the index below does not
+contain. `ReleasedCard.Meta` records the same rule — *"Local columns only"* — and
+it is the rule the fee schedule follows two sections up. `PromotionDecision`
+escapes it only because its `session` is a `CharField`; putting a real
+ForeignKey there without changing the ordering would reintroduce it.
+
+This matters twice over here, because the same mistake under a lock is issue #78:
+a joined `SELECT ... FOR UPDATE` locks a row in every table it joins.
+
+The `-id` tiebreak is not decoration: `auto_now_add` can tie to the microsecond,
 and "the latest decision" resolving arbitrarily between two rows is a card that
 is served or withheld depending on nothing.
 
@@ -236,6 +248,21 @@ while holding PARENT at a school says only that somebody is *a* parent there.
 That distinction is the whole reason `_may_read()` is a function and not a role
 test, and the new constant must not blur it.
 
+### A guardian who is also staff is spared, and that is a decision
+
+`_may_read()` (`results/card_api.py:343`) checks `CARD_VIEWING_ROLES` **before**
+`Guardianship`, so a parent who also holds a card-viewing role comes back with
+the claim `STAFF` and the gate lets them through. Adding `BURSAR` to that set
+means a bursar can be served their own child's withheld card.
+
+**Ruled, as a consequence of "staff always see a withheld card" rather than as an
+exception to it** — but it has to be written down, because the population it
+affects is precisely §1.2's staff-child families, and a reader who found it
+themselves would reasonably file it as a leak. The claim order decides it today;
+if a school ever wants the other answer, the change is to ask the guardianship
+question first for this one gate, not to reorder `_may_read()` — that would
+change who may read a card, which is a different question from who is served one.
+
 ### The gate is a separate check, not a clause inside `_may_read()`
 
 `_may_read()` answers *does this person have a claim on this child's card*. Fees
@@ -271,7 +298,7 @@ the strongest possible argument for taking it literally.
 same position in the same sequence:
 
 ```
-def _require_servable(claim, child, term):
+def _require_servable(claim, card):
     """403 for a family reader whose school is withholding this card."""
 ```
 
@@ -288,7 +315,7 @@ Identical in both routes:
     child  = _the_child(school, student_membership_id)        # 404
     claim  = _require_may_read(request.user, school, child)   # 404
     card   = cards.card_for(child, term)                      # 404 if none
-    _require_servable(claim, child, term)                     # 403 if withheld
+    _require_servable(claim, card)                            # 403 if withheld
     ...                                                       # then, and only then,
                                                               # the payload or the file
 ```
@@ -339,6 +366,15 @@ everyone it was written for.
 
 ### What the 403 carries, and what it must not
 
+**It takes the `card`, not `(child, term)`**, and that is not a convenience.
+The body below has to carry `school_name` *from the card's frozen copy* — rule 2,
+no live join to `School` — and a helper handed only a child and a term has
+neither the frozen name nor the card row. The alternative is calling
+`cards.card_for()` a second time, which is a second answer to the deliberately
+order-sensitive question of *which* card this is, against the one-read discipline
+this document argues for elsewhere. The caller already holds the card by the time
+the gate runs; pass it. The child and term are on it.
+
 ```
 WithheldOut
     school_name         from the card's frozen copy, not a live join   (rule 2)
@@ -349,6 +385,25 @@ WithheldOut
 The same body on both routes. The PDF route already returns JSON for its 202, so
 a JSON 403 there is not a new shape — and a file route that answered a withheld
 family with anything file-like would be answering a question it was refused.
+
+**And this needs machinery that does not exist yet, which is the part to build
+first.** Every 403 in this codebase today is `ninja.errors.HttpError(403, str)`
+(`api.py:451`, `:511`, `:544`), whose body is `{"detail": "..."}` and cannot
+carry fields. A raising helper cannot return `403, WithheldOut(...)` either, and
+`report_card()` declares a bare `response=ReportCardOut`, so django-ninja raises
+`ConfigError` on an undeclared status. Left as-is, the cheapest path for the
+implementer is a plain-string 403 — which drops `contact`, and `contact` is the
+entire reason `withholding_contact` and its constraint exist.
+
+So the design owes three concrete things, and a review of the withholding PR
+should check for them by name:
+
+1. a `CardWithheld` exception carrying the school name and contact;
+2. an `@api.exception_handler(CardWithheld)` in `api.py` rendering `WithheldOut`;
+3. `403: WithheldOut` added to the response map of **both** routes.
+
+Without (3) the handler is unreachable on the JSON route; without (1) the helper
+cannot both raise and carry a payload.
 
 **Not the amount. Ruled: balances are staff-only in this phase.** A
 parent-facing balance is a support burden and a correctness risk — a family will
@@ -409,7 +464,7 @@ makes "both" safe — a principal lifting what a bursar withheld writes a second
 row, and both acts stand with both names on them.
 
 **Its own constant, never imported from `RELEASING_ROLES`**, and the comment
-should say so in `card_api.py:90`'s shape. The two coincide on `principal` today
+should say so in `card_api.py:105`'s shape. The two coincide on `principal` today
 and answer different questions; tying them means widening one widens the other.
 
 Authority goes through `services._require_authority(actor, WITHHOLDING_ROLES,
@@ -490,12 +545,20 @@ so that PR #76's review comments still point at the same tests.
 4d. The `ReleasedCardPdf` marker is still written at release for a child whose
    school is withholding, and the render still runs.
 4e. **A third serving surface cannot be added ungated — as far as a test can
-   reach.** Enumerate `card_api.router.path_operations` for every operation whose
-   path begins `/cards/{int:student_membership_id}/{int:term_id}`, drive each one
-   as the guardian of a withheld child, and assert every one answers 403. The
-   test **discovers** routes rather than naming them, so a third surface added
-   under that prefix is covered the day it is written and goes red if it does not
-   call the helper. An operation the enumeration cannot drive — a different
+   reach.** Enumerate `card_api.router.path_operations`, drive every operation as
+   the guardian of a withheld child, and assert every one answers 403. The test
+   **discovers** routes rather than naming them, so a third surface is covered
+   the day it is written and goes red if it does not call the helper.
+
+   **It must assert that the enumeration found something**, and specifically that
+   it found the two routes we know about. A discovery test filtered by a path
+   prefix — `/cards/{int:student_membership_id}/{int:term_id}` — passes
+   *vacuously* the moment a new route is spelled differently
+   (`{student_membership_id}` without the converter) or the paths are refactored:
+   the filter matches nothing, the loop runs zero times, and a test named "a
+   third surface cannot be added ungated" goes green having checked nothing. So:
+   enumerate the whole router, and assert the known operations are in what came
+   back before asserting anything about them. An operation the enumeration cannot drive — a different
    signature, a non-GET method — **fails with an explicit message** rather than
    being skipped: an unrecognised serving surface is the finding, not an
    exemption from the finding.

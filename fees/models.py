@@ -539,12 +539,21 @@ class FeeLedgerEntry(models.Model):
             # would collide with the charge it reverses, on the very index meant
             # to stop double-billing.
             #
-            # **A reversed schedule charge cannot be re-posted by re-running the
-            # application**, and that is correct rather than a limitation. The
-            # reversed original still exists — the ledger is append-only, so it
-            # always will — and this index still sees it. Deliberately undoing a
-            # charge and then wanting it back is exceptional and should take an
-            # explicit `charge()`, not a second click on the same button.
+            # **A reversed schedule charge cannot be re-posted against this
+            # line at all**, by any code path. The index is on the row, not on
+            # the caller: the reversed original still exists — the ledger is
+            # append-only, so it always will — and this index still sees it.
+            # An explicit `charge()` naming the same line is refused exactly as
+            # a re-run is, which `test_what_reposting_a_reversed_charge_actually_takes`
+            # pins, because the first version of this comment claimed otherwise
+            # and nothing contradicted it.
+            #
+            # What re-posting actually takes is a charge that does **not** name
+            # the line — which severs the new row from the line that billed it,
+            # so "everything this line produced" no longer returns it. That is
+            # the cost of the corner rather than a workaround for it, and it is
+            # the argument for reversing a charge only when it should not have
+            # been raised at all.
             models.UniqueConstraint(
                 fields=["student_membership_id", "source_line"],
                 condition=Q(source_line__isnull=False, kind=FeeEntryKind.CHARGE),

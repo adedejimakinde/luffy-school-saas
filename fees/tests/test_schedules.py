@@ -21,6 +21,7 @@ that quietly bills the wrong children.
 """
 
 from datetime import date
+from unittest import mock
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
@@ -271,6 +272,49 @@ class IdempotencyTests(BillingSetUp):
             self.assertEqual(second.charges_posted, 0)
             self.assertEqual(self.balance_of(self.ada), LEVY)
 
+    def test_what_reposting_a_reversed_charge_actually_takes(self):
+        """The escape hatch, tested rather than asserted.
+
+        The docs said a reversed charge "takes an explicit `charge()`". That
+        was wrong, and only running it says so: the index is on the *row*, not
+        on the code path, so an explicit charge carrying the same `source_line`
+        is refused exactly as the re-run is. What actually works is a charge
+        that does not name the line — which severs the new row from the line
+        that billed it, and is the cost of the corner rather than a workaround
+        for it.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            line = FeeScheduleLine.objects.get(description="Tuition")
+            charge = FeeLedgerEntry.objects.get(
+                student_membership_id=self.ada.pk, source_line=line
+            )
+            services.reverse_entry(charge)
+
+            # Naming the line: refused, whoever is asking.
+            with self.assertRefusedBy(
+                "a_schedule_line_charges_a_child_once"
+            ), transaction.atomic():
+                services.charge(
+                    self.ada,
+                    self.term(),
+                    TUITION,
+                    narration="Tuition, re-posted",
+                    source_line=line,
+                )
+
+            # Not naming it: posts, and is not attributable to the line.
+            reposted = services.charge(
+                self.ada, self.term(), TUITION, narration="Tuition, re-posted"
+            )
+            self.assertIsNone(reposted.source_line_id)
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(
+                    source_line=line, student_membership_id=self.ada.pk
+                ).count(),
+                2,  # this child's original charge and its reversal. Not the re-post.
+            )
+
     def test_a_reversal_inherits_the_source_line_it_undoes(self):
         """So that "everything this line did" returns the mistake and the fix."""
         with connected_to(self.stmarys):
@@ -424,6 +468,92 @@ class ConcessionTests(BillingSetUp):
                     student_membership_id=self.ngozi.pk
                 ).exists()
             )
+
+
+class ConcessionRaceTests(BillingSetUp):
+    """The one race the schedule lock does not cover, and what it must not cost.
+
+    `select_for_update()` on the schedule serialises applications of *that bill*.
+    `a_concession_discounts_a_child_once_per_term` spans every bill in the term,
+    so two runs of two **different** schedules can both pass the discount
+    skip-check for one child — reachable when a child moves class mid-term and
+    sits in one bursar's roster snapshot and another's at the same moment.
+
+    The collision is not the harm. The harm is that one transaction covers the
+    whole class, so a discount that collides would take forty-five children's
+    charges down with it.
+
+    Forced deterministically rather than raced: the real threading version needs
+    a third actor moving a child between two reads inside a function with no
+    pause point, so this drives the branch by making the write collide.
+    """
+
+    def _racing_discount(self, note="Posted by the other bill"):
+        """The real `discount()`, with another bursar's row landing first."""
+        real = schedules.services.discount
+
+        def racing(membership, term, amount_kobo, **kwargs):
+            FeeLedgerEntry.objects.create(
+                term=term,
+                student_membership_id=membership.pk,
+                student_name=membership.name,
+                kind=FeeEntryKind.DISCOUNT,
+                amount_kobo=-amount_kobo,
+                narration=note,
+                effective_on=date(2025, 9, 20),
+                source_concession=kwargs["source_concession"],
+            )
+            return real(membership, term, amount_kobo, **kwargs)
+
+        return racing
+
+    def test_a_discount_another_bill_posted_is_a_skip_not_a_dead_run(self):
+        with connected_to(self.stmarys):
+            FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+            )
+
+            with mock.patch.object(
+                schedules.services, "discount", self._racing_discount()
+            ):
+                summary = self.apply()
+
+            # The run finished. That is the whole point.
+            self.assertEqual(summary.charges_posted, 4)
+            self.assertEqual(summary.discounts_posted, 0)
+            self.assertEqual(summary.discounts_skipped, 1)
+
+            # And the child has their concession — the other bill posted it.
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(
+                    student_membership_id=self.ada.pk, kind=FeeEntryKind.DISCOUNT
+                ).count(),
+                1,
+            )
+            self.assertEqual(self.balance_of(self.ada), LEVY)
+
+    def test_an_unrecognised_integrity_error_is_raised_and_not_swallowed(self):
+        """The narrowing is the point: only *this* constraint counts as a skip.
+
+        A collision predicate that answered "was there an IntegrityError?" would
+        turn every future constraint on this table into a silent skipped
+        discount, which is the shape of bug that never gets reported.
+        """
+        with connected_to(self.stmarys):
+            FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+            )
+
+            def unrelated(*args, **kwargs):
+                raise IntegrityError("something else entirely")
+
+            with mock.patch.object(schedules.services, "discount", unrelated):
+                with self.assertRaises(IntegrityError):
+                    self.apply()
 
 
 class RefusalTests(BillingSetUp):
