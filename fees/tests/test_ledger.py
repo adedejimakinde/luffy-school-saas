@@ -370,7 +370,14 @@ class CorrectionTests(LedgerSetUp):
 
 
 class ConstraintTests(LedgerSetUp):
-    """The sign, the kind, and the zero — refused by Postgres."""
+    """The sign, the kind, and the zero — refused by Postgres.
+
+    And one thing deliberately **not** refused, at the foot: `reference` carries
+    no unique index, and the test there is what a future reader adding one will
+    hit. A constraint that is absent on purpose needs a test more than a
+    constraint that is present, because nothing else in the schema records the
+    intent.
+    """
 
     def entry(self, **overrides):
         fields = {
@@ -404,6 +411,57 @@ class ConstraintTests(LedgerSetUp):
         with connected_to(self.stmarys):
             with self.assertRaises(IntegrityError), transaction.atomic():
                 self.entry(kind=FeeEntryKind.DISCOUNT, amount_kobo=TUITION)
+
+    def test_two_children_can_share_one_teller_reference(self):
+        """**Non-unique, and it must stay non-unique** — the field's claim, kept.
+
+        A parent with three children at the school makes *one* transfer and the
+        bursar keys that one teller number against each child, because a payment
+        is recorded against a child and not against a payer. Three PAYMENT rows,
+        one reference. This is the ordinary Nigerian case, not a corner of it.
+
+        The field's own comment anticipates the reader who will want a unique
+        index here to stop a receipt being entered twice — and until now nothing
+        would have stopped them. The index would go on, the suite would stay
+        green, and the first thing to break would be a real parent's second
+        child at a real school, at the counter. That is the failure this test
+        exists to move from the counter to CI.
+
+        Through `record_payment()` rather than by inserting rows, because the
+        claim is about the money path: it is the service a bursar's screen
+        calls, and a schema-only assertion would not notice the day it started
+        generating references of its own.
+        """
+        sibling = enroll_student(
+            User.objects.create_user("chidi", PASSWORD, full_name="Chidi Obi"),
+            self.stmarys,
+        )
+
+        with connected_to(self.stmarys):
+            term = self.reload_term()
+            teller = "GTB/2025/0099817"
+
+            for child in (self.membership, sibling):
+                services.charge(child, term, TUITION, narration="First term fees")
+                services.record_payment(child, term, TUITION, reference=teller)
+
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(
+                    reference=teller, kind=FeeEntryKind.PAYMENT
+                ).count(),
+                2,
+                "one teller number could not be recorded against two children",
+            )
+
+            # Both balances, because the point is not merely that two rows
+            # exist: the payments have to have landed against *different*
+            # children. One child paid twice would satisfy the count above.
+            for child in (self.membership, sibling):
+                self.assertEqual(
+                    FeeLedgerEntry.objects.for_student(child.pk).balance(),
+                    0,
+                    f"membership {child.pk} was not credited",
+                )
 
     def test_a_term_with_money_against_it_cannot_be_deleted(self):
         """PROTECT, and it works — `Term` is in the same schema as the ledger."""

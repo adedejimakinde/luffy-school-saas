@@ -64,6 +64,11 @@ from .models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
 #: The index a concurrent application of a *different* bill can trip.
 _CONCESSION_COLLISION = "a_concession_discounts_a_child_once_per_term"
 
+#: Postgres' unique violation. `academics.services` and `gradebook.services`
+#: both check this alongside the name; `accounts.throttling` checks the name
+#: alone. This is the stricter of the two forms, deliberately — see below.
+_UNIQUE_VIOLATION = "23505"
+
 
 def _is_the_concession_colliding(exc) -> bool:
     """Did another bill in this term post this discount, or did something else fail?
@@ -73,9 +78,22 @@ def _is_the_concession_colliding(exc) -> bool:
     now?" is wrong in both directions under concurrency. A cause carrying no
     diagnostics counts as *not* a collision, so an unrecognised failure is raised
     rather than swallowed.
+
+    **Both halves, `pgcode` and the name**, which is the form `academics` and
+    `gradebook` use and the one this copy should have started as. The name alone
+    would also accept a *non*-unique failure that happened to cite this index —
+    a deferred check or a future exclusion constraint carrying the same name —
+    and the whole point of the narrowing is that only the one known race is a
+    skip. Four copies of this predicate now exist with two definitions between
+    them; consolidating them is filed, and until then the stricter form is the
+    one a fifth caller should copy.
     """
-    diag = getattr(getattr(exc, "__cause__", None), "diag", None)
-    return getattr(diag, "constraint_name", None) == _CONCESSION_COLLISION
+    cause = getattr(exc, "__cause__", None)
+    diag = getattr(cause, "diag", None)
+    return (
+        getattr(cause, "pgcode", None) == _UNIQUE_VIOLATION
+        and getattr(diag, "constraint_name", None) == _CONCESSION_COLLISION
+    )
 
 
 class EmptySchedule(services.FeeLedgerError):
@@ -111,6 +129,9 @@ class AppliedSummary:
     """
 
     students: int
+    #: On the roster but not billed, their membership having ended. Counted so
+    #: that the skip is reported rather than silent — see `apply_to_class()`.
+    students_skipped: int
     lines: int
     charges_posted: int
     charges_skipped: int
@@ -120,9 +141,15 @@ class AppliedSummary:
     discounted_kobo: int
 
     def __str__(self):
+        left = (
+            f"; {self.students_skipped} no longer enrolled"
+            if self.students_skipped
+            else ""
+        )
         return (
             f"{self.charges_posted} charged, {self.charges_skipped} skipped; "
             f"{self.discounts_posted} discounts, {self.discounts_skipped} skipped"
+            f"{left}"
         )
 
 
@@ -163,16 +190,28 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # is what lets two runs of the same bill be compared entry for entry.
     student_ids = sorted(ClassPlacement.objects.student_ids(class_group, term))
 
-    # `order_by("pk")` explicitly rather than inheriting `Membership.Meta`,
-    # whose ordering is `["school__name", "role", "user__full_name"]` — two
-    # relations, which compile to an INNER JOIN on `schools_school` and another
-    # on `accounts_user` for a lookup that wants neither. docs/membership.md
-    # records the sharper version of the same fact: those joins under a
-    # `FOR UPDATE` put an exclusive lock on rows the query never writes. There
-    # is no lock here, so this is only two joins of waste — but the fix is the
-    # same one word either way.
+    # `order_by()` rather than inheriting `Membership.Meta`, whose ordering is
+    # `["school__name", "role", "user__full_name"]` — two relations, which
+    # compile to an INNER JOIN on `schools_school` and another on `accounts_user`
+    # for a lookup that wants neither. docs/membership.md records the sharper
+    # version of the same fact: those joins under a `FOR UPDATE` put an exclusive
+    # lock on rows the query never writes. There is no lock here, so this is only
+    # two joins of waste — but the fix is the same one word either way. The dict
+    # discards order anyway, so the ordering is cleared rather than replaced.
+    #
+    # `select_related("user", "school")` because both are read per child and
+    # neither is optional: `snapshot_student()` reads `membership.name`, which
+    # falls through to `user.full_name` whenever `display_name` is blank — its
+    # default — and `why_not_a_student_here()` reads `school.schema_name`. Lazily
+    # that is two queries per child, ninety for a class of forty-five, every one
+    # of them inside the transaction holding the schedule lock. Joined once here
+    # it is the same two joins the paragraph above declines to pay per *sort*,
+    # paid once for a thing actually needed.
     memberships = {
-        m.pk: m for m in Membership.objects.filter(pk__in=student_ids).order_by("pk")
+        m.pk: m
+        for m in Membership.objects.filter(pk__in=student_ids)
+        .select_related("user", "school")
+        .order_by()
     }
     missing = [sid for sid in student_ids if sid not in memberships]
     if missing:
@@ -182,20 +221,60 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             f"class can be billed."
         )
 
+    # **A child whose membership has ended is not billed**, and this is the same
+    # call `academics.services` already made. `place_student()` deliberately
+    # allows an ended child to be placed — entering last term's roster after the
+    # fact is real work and those children have often left — and its docstring
+    # says why the automated path must not follow: it is the one "that would
+    # repeat such a mistake silently across a whole school".
+    # `carry_forward_placements()` filters them out and calls that "a correctness
+    # rule and not a tidiness one". Applying a bill is the same kind of path:
+    # nothing deletes a `ClassPlacement` when a membership ends, so a child
+    # released in December is still on JSS 1A's roster in January, and a bursar
+    # adding one line to that term's bill and re-running would charge them.
+    #
+    # Skipped rather than refused, because refusing is the forty-five-children
+    # outcome again: one child having left must not stop the class being billed.
+    # Counted, though — `students_skipped` — because a skip nobody is told about
+    # is the silent no-op this module refuses everywhere else.
+    billable_ids = [sid for sid in student_ids if memberships[sid].is_live]
+    students_skipped = len(student_ids) - len(billable_ids)
+    student_ids = billable_ids
+
     # Both skip-sets in one query each, and both are read *after* the lock, so a
     # concurrent application of this bill has either not started or has finished.
+    # `order_by()` with no arguments on both: these collapse into a `set()`, and
+    # `FeeLedgerEntry.Meta.ordering` would otherwise have Postgres sort every
+    # matching row by `-effective_on, -id` for an answer that discards the order.
     already_charged = set(
         FeeLedgerEntry.objects.filter(
             kind=FeeEntryKind.CHARGE,
             source_line__in=lines,
             student_membership_id__in=student_ids,
-        ).values_list("student_membership_id", "source_line_id")
+        )
+        .order_by()
+        .values_list("student_membership_id", "source_line_id")
     )
 
+    # **`order_by()` explicitly, because this one carries a concurrency
+    # guarantee.** Two runs of two *different* schedules in one term can both
+    # reach the same `(child, term, concession)` row — that is the collision the
+    # foot of this function handles. If they reach *several* such rows in
+    # different orders, Postgres does not hand back a unique violation; it hands
+    # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError` and
+    # not as `IntegrityError`. The handler below cannot see it, so the loser's
+    # whole transaction dies and the class goes unbilled — the outcome the skip
+    # exists to prevent, reached by the one route the skip cannot cover.
+    #
+    # A total order shared by every run is what makes the cycle impossible. That
+    # order is `FeeConcession.Meta.ordering` and this queryset inherited it
+    # silently, so the guarantee held by accident and one `Meta` edit would have
+    # removed it with nothing going red. Named here, and pinned by
+    # `test_the_concession_read_is_ordered_so_two_bills_cannot_deadlock`.
     concessions = list(
         FeeConcession.objects.filter(
             is_active=True, student_membership_id__in=student_ids
-        )
+        ).order_by("student_membership_id", "id")
     )
     already_discounted = set(
         FeeLedgerEntry.objects.filter(
@@ -203,7 +282,9 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             term=term,
             source_concession__in=concessions,
             student_membership_id__in=student_ids,
-        ).values_list("student_membership_id", "source_concession_id")
+        )
+        .order_by()
+        .values_list("student_membership_id", "source_concession_id")
     )
 
     charges_posted = charges_skipped = charged_kobo = 0
@@ -265,7 +346,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             # to its savepoint and this transaction stays usable.
             #
             # **The narrowing is complete for this path, not merely for the case
-            # that was found.** Of the eleven constraints on `FeeLedgerEntry`,
+            # that was found.** Of the ten constraints on `FeeLedgerEntry`,
             # exactly one is reachable from a concession discount: the amount is
             # a checked magnitude and always negative, `kind` is DISCOUNT,
             # `reverses` is null, and `source_line` is null — which satisfies
@@ -273,6 +354,15 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             # index. What is left is a foreign-key failure, which means the
             # concession was deleted underneath us, and that is not a skip: the
             # predicate refuses it and the run dies, which is correct.
+            #
+            # Ten and not eleven. The eleventh refusal that table can produce is
+            # `fees_ledger_append_only`, migration `0002` — a **trigger** and not
+            # a constraint, which is not a quibble here: it fires `BEFORE UPDATE
+            # OR DELETE` and this is an INSERT, so it is unreachable from this
+            # path. Were it ever to fire it raises `ERRCODE = restrict_violation`
+            # with no `constraint_name` at all, which the predicate reads as "not
+            # a collision" and re-raises — right, and for a reason worth keeping
+            # separate from the count.
             if not _is_the_concession_colliding(collision):
                 raise
             discounts_skipped += 1
@@ -282,6 +372,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
 
     return AppliedSummary(
         students=len(student_ids),
+        students_skipped=students_skipped,
         lines=len(lines),
         charges_posted=charges_posted,
         charges_skipped=charges_skipped,

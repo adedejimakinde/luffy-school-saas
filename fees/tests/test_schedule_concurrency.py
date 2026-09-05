@@ -146,7 +146,11 @@ class TwoSchoolsBillingSetUp(TransactionTestCase):
 
 class ConcurrentApplicationTests(TwoSchoolsBillingSetUp):
     def test_two_simultaneous_applications_charge_each_child_once(self):
-        """Test 10 of the design, and the reason the lock is on the schedule row."""
+        """The reason the lock is on the schedule row.
+
+        Was "Test 10 of the design", a number that no longer resolves: the
+        design doc's list is the withholding half and ends at 7.
+        """
         summaries, unexpected = self._apply_together(
             [
                 (self.stmarys, self.schedule_id, self.bursar),

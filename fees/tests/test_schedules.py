@@ -24,7 +24,6 @@ from datetime import date
 from unittest import mock
 
 from django.db import IntegrityError, connection, transaction
-from django.core.exceptions import FieldDoesNotExist
 from django.db.models import ProtectedError
 from django.test.utils import CaptureQueriesContext
 from django.test import TestCase
@@ -270,7 +269,12 @@ class ApplyTests(BillingSetUp):
 
 
 class IdempotencyTests(BillingSetUp):
-    """Test 8 of the design: re-running is normal, and it charges nobody twice."""
+    """Re-running is normal, and it charges nobody twice.
+
+    Was "Test 8 of the design". The design doc's numbered list is the withholding
+    half now, and it ends at 7 — the billing items moved into `docs/fees.md`, so
+    the number pointed at nothing.
+    """
 
     def test_applying_twice_charges_nobody_twice(self):
         with connected_to(self.stmarys):
@@ -318,12 +322,17 @@ class IdempotencyTests(BillingSetUp):
             )
 
     def test_a_reversed_charge_is_not_reposted_by_rerunning(self):
-        """Test 9, and the corner the design ruled on rather than left to be filed.
+        """The corner the design ruled on rather than left to be filed.
 
         The reversed original still exists — the ledger is append-only, so it
-        always will — and the index still sees it. Deliberately undoing a charge
-        and then wanting it back takes an explicit `charge()`, not a second
-        click on the same button.
+        always will — and the index still sees it, so a re-run posts nothing.
+
+        **Not** "wanting it back takes an explicit `charge()`", which is what
+        this docstring used to say and what the test immediately below disproves:
+        the index is on the row rather than on the caller, so an explicit charge
+        naming the same line is refused exactly as the re-run is. That claim was
+        corrected in the model docstring and in `fees.md` and survived here, in
+        the one file whose own test contradicts it.
         """
         with connected_to(self.stmarys):
             self.apply()
@@ -605,7 +614,19 @@ class LockScopeTests(BillingSetUp):
         terminal call to `.first()`, which is how `academics/services.py:244`
         got its bug. Pinning the ordering means the trap is never armed.
         """
-        for model in (FeeSchedule, FeeScheduleLine, FeeConcession):
+        # `FeeLedgerEntry` included, and it is the one that matters most: it is
+        # the model `reverse_entry()` locks with `select_for_update()`, so a
+        # relation in *its* `Meta.ordering` is not two joins of waste but an
+        # exclusive lock on rows the reversal never writes. The guard that
+        # enumerated only the three new models could not see the one place the
+        # trap actually bites.
+        #
+        # `ClassPlacement` is deliberately absent and is a live violation, not an
+        # oversight: its ordering is `["class_group", ...]`, so the roster read
+        # at the top of `apply_to_class()` joins `academics_classgroup` to sort
+        # by a column it discards. Filed rather than fixed here — it is
+        # `academics`' row and belongs with the audit in #78.
+        for model in (FeeSchedule, FeeScheduleLine, FeeConcession, FeeLedgerEntry):
             for entry in model._meta.ordering:
                 name = entry.lstrip("-")
 
@@ -635,6 +656,107 @@ class LockScopeTests(BillingSetUp):
                     f"{entry!r}; use {field.attname!r} so the query does not "
                     f"join (see issue #78)",
                 )
+
+
+    def test_the_concession_read_is_ordered_so_two_bills_cannot_deadlock(self):
+        """The one ordering in this module that carries a concurrency guarantee.
+
+        Two runs of two *different* schedules in one term can reach the same
+        `(child, term, concession)` rows — that overlap is what
+        `ConcessionRaceTests` below is about. Reaching those rows in a total
+        order every run shares makes a deadlock cycle impossible. Reaching them
+        in different orders is SQLSTATE `40P01`, which Django raises as
+        `OperationalError` — and `apply_to_class()` catches `IntegrityError`.
+        The handler never sees it, so it cannot become a skip: the loser's whole
+        transaction dies and the class goes unbilled. That is the same
+        forty-five-children outcome the skip exists to prevent, reached by the
+        one route the skip cannot cover.
+
+        **Asserted against compiled SQL, because that is where the guarantee
+        lives.** Postgres takes its row locks in the order the rows arrive, so
+        the `ORDER BY` it receives *is* the property; no assertion about Python
+        objects can stand in for it. Before the explicit `.order_by()` this
+        clause was inherited from `FeeConcession.Meta.ordering`, which is the
+        failure mode and not the reassurance it looks like: the guarantee held
+        by accident, one `Meta` edit away from being removed with the whole
+        suite still green. An explicit order that nothing pins is the same shape
+        as a claim nothing tests.
+        """
+        with connected_to(self.stmarys):
+            # Two children with concessions, because a single row cannot be
+            # ordered wrongly and so cannot fail this test for the real reason.
+            for child in (self.ada, self.chidi):
+                FeeConcession.objects.create(
+                    student_membership_id=child.pk,
+                    amount_kobo=LEVY,
+                    reason="Staff child",
+                )
+
+            with CaptureQueriesContext(connection) as captured:
+                self.apply()
+
+            # Matched on a real column rather than on the table name: posting
+            # each discount runs `full_clean()`, whose `ForeignKey.validate()`
+            # probes this same table with `SELECT 1 AS "a" ... LIMIT 1`. Those
+            # probes are single-row lookups by primary key — no ordering to
+            # carry and no lock ordering to get wrong — so counting them here
+            # would make this assertion fail once per concession for a reason
+            # that has nothing to do with what it tests.
+            reads = [
+                q["sql"]
+                for q in captured.captured_queries
+                if '"fees_feeconcession"."amount_kobo"' in q["sql"]
+            ]
+            self.assertEqual(
+                len(reads),
+                1,
+                "expected one concession read, found %d:\n%s"
+                % (len(reads), "\n".join(reads)),
+            )
+
+            # The whole clause and not merely "an ORDER BY is present": the
+            # guarantee is a *total* order, so both columns and their sequence
+            # are the property being pinned. `student_membership_id` alone
+            # leaves two concessions for one child unordered between them, which
+            # is enough for two runs to take the same two locks in opposite
+            # orders.
+            self.assertIn(
+                'ORDER BY "fees_feeconcession"."student_membership_id" ASC, '
+                '"fees_feeconcession"."id" ASC',
+                reads[0],
+                "the concession read no longer pins its order. Two bills "
+                "sharing concessions can now deadlock (SQLSTATE 40P01), which "
+                "arrives as OperationalError and is invisible to the "
+                "IntegrityError handler in apply_to_class():\n" + reads[0],
+            )
+
+            # **And it survives `Meta`.** The assertion above passes just as
+            # happily against an ordering inherited from
+            # `FeeConcession.Meta.ordering`, which is precisely the state this
+            # change was made to leave: a guarantee that holds by accident and
+            # goes away silently the day somebody edits a `Meta` line for
+            # unrelated reasons. Emptying the model's ordering here is that edit,
+            # made in the one place it can be observed, and the clause has to
+            # still be there afterwards. Delete the explicit `.order_by()` from
+            # `apply_to_class()` and this half goes red on its own.
+            with mock.patch.object(FeeConcession._meta, "ordering", []):
+                with CaptureQueriesContext(connection) as without_meta:
+                    self.apply()
+
+            unordered = [
+                q["sql"]
+                for q in without_meta.captured_queries
+                if '"fees_feeconcession"."amount_kobo"' in q["sql"]
+                and "ORDER BY" not in q["sql"]
+            ]
+            self.assertEqual(
+                unordered,
+                [],
+                "the concession read's order comes from FeeConcession.Meta and "
+                "not from apply_to_class(), so a Meta edit removes a "
+                "concurrency guarantee with nothing going red:\n"
+                + "\n".join(unordered),
+            )
 
 
 class ConcessionRaceTests(BillingSetUp):
@@ -723,6 +845,78 @@ class ConcessionRaceTests(BillingSetUp):
                     self.apply()
 
 
+    def test_a_real_violation_of_another_constraint_is_raised_not_swallowed(self):
+        """The predicate arm the test above cannot reach.
+
+        `test_an_unrecognised_integrity_error_is_raised_and_not_swallowed`
+        raises a bare `IntegrityError` with no `__cause__` at all, so it only
+        exercises the **no diagnostics** arm of `_is_the_concession_colliding()`
+        — the arm that answers "not a collision" because there is nothing to
+        read. That arm is real, and it is not the one that matters for the
+        future.
+
+        The one that matters is a genuine Postgres unique violation carrying
+        genuine diagnostics and naming a **different** index. That is what every
+        constraint added to this table from now on looks like the day it first
+        fires, and the branch that re-raises it is the only thing standing
+        between a future constraint and a silently skipped discount. Untested,
+        it was the guard against silent swallowing that was itself unguarded.
+
+        **A real exception rather than a constructed one.** A hand-built stand-in
+        with a fake `.diag` would assert against this test's idea of psycopg
+        rather than psycopg's, and the `pgcode`/`constraint_name` pair is
+        exactly what the predicate reads — so it is forced by making a real
+        second `FeeSchedule` for a class that already has one, and re-raising
+        what Postgres hands back.
+        """
+        with connected_to(self.stmarys):
+            FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+            )
+
+            def a_different_unique_violation(*args, **kwargs):
+                """A real 23505 from a real index — just not this one.
+
+                Inside `atomic()` so the failed statement rolls back to a
+                savepoint: the exception has to travel out of here as a live
+                object on a usable connection, not leave a poisoned transaction
+                behind it.
+                """
+                try:
+                    with transaction.atomic():
+                        FeeSchedule.objects.create(
+                            term=self.term(),
+                            class_group=ClassGroup.objects.get(pk=self.group_id),
+                        )
+                except IntegrityError as real:
+                    raise real
+                raise AssertionError(
+                    "a duplicate schedule was accepted, so this test no longer "
+                    "produces the unique violation it exists to hand back"
+                )
+
+            with mock.patch.object(
+                schedules.services, "discount", a_different_unique_violation
+            ):
+                with self.assertRaises(IntegrityError) as raised:
+                    self.apply()
+
+            # This test is only about the branch it names if the exception it
+            # forced actually carries what the other test's does not. Without
+            # these two, a future refactor could route it down the no-diagnostics
+            # arm and the coverage would silently go back to one branch.
+            cause = raised.exception.__cause__
+            self.assertEqual(cause.pgcode, "23505", "not a unique violation")
+            self.assertEqual(
+                cause.diag.constraint_name,
+                "one_fee_schedule_per_class_per_term",
+                "the diagnostics do not name a different constraint, so the "
+                "different-name branch was not the one exercised",
+            )
+
+
 class RefusalTests(BillingSetUp):
     """What the service will not do, and says so rather than doing nothing."""
 
@@ -748,6 +942,77 @@ class RefusalTests(BillingSetUp):
 
             self.assertEqual(summary.students, 0)
             self.assertEqual(summary.charges_posted, 0)
+
+    def test_a_child_whose_membership_has_ended_is_skipped_and_counted(self):
+        """The roster outlives the enrolment, so billing it blindly bills leavers.
+
+        Nothing deletes a `ClassPlacement` when a membership ends — the
+        placement is last term's record and is supposed to survive — so a child
+        released in December is still on JSS 1A's roster in January. A bursar
+        adding one line to that term's bill and re-running would charge them.
+
+        Skipped rather than refused, because refusing is the forty-five-children
+        outcome again: one child having left must not stop the class being
+        billed. `academics` already made this call — `carry_forward_placements()`
+        filters ended memberships and calls that "a correctness rule and not a
+        tidiness one", while `place_student()` deliberately allows an ended child
+        to be placed by hand, because entering last term's roster after the fact
+        is real work.
+
+        **Counted, and that is the half worth asserting.** A skip nobody is told
+        about is the silent no-op this module refuses everywhere else, and
+        `students` now means "billed" rather than "on the roster" — a change to
+        an existing field's meaning that only `students_skipped` makes legible.
+        """
+        with connected_to(self.stmarys):
+            summary = self.apply()
+            self.assertEqual(summary.students, 2)
+            self.assertEqual(summary.students_skipped, 0)
+
+        self.chidi.end()
+
+        with connected_to(self.stmarys):
+            # A second line, so the re-run has something to post and the ended
+            # child's skip is not confused with ordinary idempotency.
+            FeeScheduleLine.objects.create(
+                schedule=self.schedule(),
+                description="Exam fee",
+                amount_kobo=LEVY,
+                position=3,
+            )
+
+            second = self.apply()
+
+            self.assertEqual(second.students, 1, "the leaver was still billed")
+            self.assertEqual(second.students_skipped, 1)
+            self.assertEqual(second.charges_posted, 1, "only Ada's exam fee")
+
+            # The leaver's books are untouched by the re-run — the charges from
+            # when they *were* enrolled stand, because the ledger is append-only
+            # and last term really did happen.
+            self.assertEqual(self.balance_of(self.chidi), TUITION + LEVY)
+            self.assertEqual(self.balance_of(self.ada), TUITION + 2 * LEVY)
+
+    def test_the_summary_says_so_when_it_skipped_a_leaver(self):
+        """`students_skipped` reaches the bursar's screen, not just the tuple.
+
+        `__str__` is what a management command prints and what an operator
+        reads. A count carried in a field nobody renders is the same silence as
+        not counting it.
+        """
+        with connected_to(self.stmarys):
+            self.assertNotIn("no longer enrolled", str(self.apply()))
+
+        self.chidi.end()
+
+        with connected_to(self.stmarys):
+            FeeScheduleLine.objects.create(
+                schedule=self.schedule(),
+                description="Exam fee",
+                amount_kobo=LEVY,
+                position=3,
+            )
+            self.assertIn("1 no longer enrolled", str(self.apply()))
 
     def test_every_refusal_is_a_fee_ledger_error(self):
         """`except FeeLedgerError` has to keep meaning "nothing was posted"."""
@@ -785,6 +1050,40 @@ class ConstraintTests(BillingSetUp):
                 FeeScheduleLine.objects.create(
                     schedule=self.schedule(), description="Free", amount_kobo=0
                 )
+
+    def test_a_concession_reduces_something(self):
+        """The twin of `test_a_schedule_line_charges_something`, and the gap.
+
+        Two check constraints of identical shape guard the two amounts this
+        module posts; one had a test and one did not, and the asymmetry is the
+        only reason the gap was visible at all.
+
+        It is load-bearing, not decorative. `apply_to_class()` argues that a
+        concession discount's amount is **always** strictly negative — the
+        amount is `-_magnitude(concession.amount_kobo)`, and this constraint is
+        what forces the source above zero. That argument is the first step in
+        narrowing the ten constraints on `FeeLedgerEntry` down to the one the
+        collision handler treats as a skip. A zero-kobo concession would post a
+        zero-amount entry, trip `a_ledger_entry_moves_money` instead, and the
+        predicate would re-raise it — so the narrowing would still be honest,
+        but only by accident rather than because this check holds.
+
+        Both directions, because `gt=0` refuses both and the negative one is
+        the alarming case: `_magnitude()` takes an absolute value, so a
+        concession stored negative would post exactly like a positive one and
+        the sign error would never surface.
+        """
+        for amount_kobo in (0, -TUITION):
+            with self.subTest(amount_kobo=amount_kobo):
+                with connected_to(self.stmarys):
+                    with self.assertRefusedBy(
+                        "a_concession_reduces_something"
+                    ), transaction.atomic():
+                        FeeConcession.objects.create(
+                            student_membership_id=self.ada.pk,
+                            amount_kobo=amount_kobo,
+                            reason="Nothing off",
+                        )
 
     def test_a_concession_says_why_and_whitespace_is_not_a_reason(self):
         with connected_to(self.stmarys):
