@@ -147,6 +147,13 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
     `source_line` is passed by `fees.schedules` and left null by every hand-typed
     charge. It is what makes "everything this line of the bill did" a question
     with an answer, and what the idempotency index keys on.
+
+    **A caller passing `source_line` must hold the schedule's row lock**, the way
+    `schedules.apply_to_class()` does. `a_schedule_line_charges_a_child_once`
+    refuses a second charge for one child and line, and outside that lock two
+    writers can both pass a skip-check and one will meet the index. Today this
+    module has exactly one such caller, so the race is not reachable; the note is
+    here because the second caller is the one that will not know.
     """
     return _post(
         membership=membership,

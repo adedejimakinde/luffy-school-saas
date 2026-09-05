@@ -263,6 +263,16 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             # posted it, and the child has their concession either way.
             # `services.discount()` is itself atomic, so the failure rolls back
             # to its savepoint and this transaction stays usable.
+            #
+            # **The narrowing is complete for this path, not merely for the case
+            # that was found.** Of the eleven constraints on `FeeLedgerEntry`,
+            # exactly one is reachable from a concession discount: the amount is
+            # a checked magnitude and always negative, `kind` is DISCOUNT,
+            # `reverses` is null, and `source_line` is null — which satisfies
+            # every other check and excludes this row from every other partial
+            # index. What is left is a foreign-key failure, which means the
+            # concession was deleted underneath us, and that is not a skip: the
+            # predicate refuses it and the run dies, which is correct.
             if not _is_the_concession_colliding(collision):
                 raise
             discounts_skipped += 1

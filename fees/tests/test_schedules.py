@@ -23,7 +23,10 @@ that quietly bills the wrong children.
 from datetime import date
 from unittest import mock
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
+from django.core.exceptions import FieldDoesNotExist
+from django.db.models import ProtectedError
+from django.test.utils import CaptureQueriesContext
 from django.test import TestCase
 
 from academics import services as academics
@@ -168,6 +171,71 @@ class ApplyTests(BillingSetUp):
                 student_membership_id=self.ada.pk, source_line=line
             )
             self.assertEqual(posted.narration, "PTA levy")
+
+    def test_the_charge_freezes_the_amount_too_not_only_the_wording(self):
+        """`fees.md` claims the entry freezes "the amount and the narration".
+
+        The narration half had a test and the amount half did not, which is how
+        half-true claims survive: the sentence reads as covered.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            line = FeeScheduleLine.objects.get(description="Tuition")
+            line.amount_kobo = 999_000 * KOBO_PER_NAIRA
+            line.save(update_fields=["amount_kobo"])
+
+            posted = FeeLedgerEntry.objects.get(
+                student_membership_id=self.ada.pk, source_line=line
+            )
+            self.assertEqual(posted.amount_kobo, TUITION)
+            self.assertEqual(self.balance_of(self.ada), TUITION + LEVY)
+
+    def test_a_mid_term_move_charges_twice_and_waives_once(self):
+        """The interaction `fees.md` now states, asserted rather than described.
+
+        `ClassPlacement` rewrites on a move, so the child leaves JSS 1A's roster
+        — but JSS 1A's charge is a posted fact and stays. The concession is keyed
+        on the term, so the second bill does not waive again. The family owes two
+        bills less one waiver until a person reverses the one they are no longer
+        sitting for, and that is the sentence a bursar has to be able to act on.
+        """
+        with connected_to(self.stmarys):
+            FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+            )
+            first = self.apply()
+            self.assertEqual(first.discounts_posted, 1)
+
+            # The child moves to another class, in the same term.
+            senior = ClassGroup.objects.create(name="JSS 3A", level=3)
+            academics.move_student(senior, self.term(), self.ada)
+            their_bill = FeeSchedule.objects.create(
+                term=self.term(), class_group=senior
+            )
+            FeeScheduleLine.objects.create(
+                schedule=their_bill, description="Tuition", amount_kobo=TUITION
+            )
+
+            second = schedules.apply_to_class(their_bill, by=self.bursar)
+
+            # Charged again by the new bill...
+            self.assertEqual(second.charges_posted, 1)
+            # ...and not waived again, because the waiver is a fact about the term.
+            self.assertEqual(second.discounts_posted, 0)
+            self.assertEqual(second.discounts_skipped, 1)
+
+            # The old class's charge is still standing. Nothing recomputed it away.
+            self.assertEqual(
+                self.balance_of(self.ada), TUITION + LEVY + TUITION - TUITION
+            )
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(
+                    student_membership_id=self.ada.pk, kind=FeeEntryKind.CHARGE
+                ).count(),
+                3,
+            )
 
     def test_the_other_school_is_untouched(self):
         with connected_to(self.stmarys):
@@ -470,6 +538,105 @@ class ConcessionTests(BillingSetUp):
             )
 
 
+class LockScopeTests(BillingSetUp):
+    """What the module docstring claims about its own lock, asserted.
+
+    Two claims, both of the kind that reads as obviously true and is a fact about
+    compiled SQL: **the roster is read once**, and **the lock joins nothing**.
+    Issue #78 records what the second one costs when it stops holding — a
+    `SELECT ... FOR UPDATE` takes a row lock in every table it joins, so an
+    ordering or a `select_related()` that reaches through a relation quietly
+    locks rows the operation never writes. Three sites in this repo have that
+    bug; this test is why this one cannot join them silently.
+    """
+
+    def test_the_roster_is_read_once(self):
+        """#43's discipline: 'who is being billed' is decided once."""
+        with connected_to(self.stmarys):
+            with CaptureQueriesContext(connection) as captured:
+                self.apply()
+
+            roster_reads = [
+                q["sql"]
+                for q in captured.captured_queries
+                if "academics_classplacement" in q["sql"]
+            ]
+            self.assertEqual(
+                len(roster_reads),
+                1,
+                "the roster was read %d times:\n%s"
+                % (len(roster_reads), "\n".join(roster_reads)),
+            )
+
+    def test_the_schedule_lock_joins_nothing(self):
+        """The lock must reach the schedule row and no other table.
+
+        **This test catches the `select_related()` half only**, and the two
+        halves were checked separately rather than assumed. Adding
+        `select_related("term")` to the locked queryset turns it red:
+
+            AssertionError: 'JOIN' unexpectedly found in
+            '... FROM "fees_feeschedule"
+             INNER JOIN "academics_term" ON (...) WHERE ... FOR UPDATE'
+
+        Changing `Meta.ordering` to name the relation does **not** turn it red,
+        because `.get()` clears ordering — which is exactly why the ordering has
+        its own test below. Assuming this one covered both is the same mistake as
+        crediting the lock with the index's work.
+        """
+        with connected_to(self.stmarys), transaction.atomic():
+            locked = FeeSchedule.objects.select_for_update().filter(
+                pk=self.schedule_id
+            )
+            sql = str(locked.order_by().query)  # what .get() compiles to
+            self.assertNotIn("JOIN", sql, f"the locked query joins:\n{sql}")
+
+    def test_meta_ordering_names_columns_and_not_relations(self):
+        """The property behind the test above, stated where it can be checked.
+
+        A relation in `Meta.ordering` is what puts the join there in two of
+        issue #78's three sites, and it is added by a one-line edit that looks
+        like tidying.
+
+        **This is the half `test_the_schedule_lock_joins_nothing` cannot see.**
+        Rewriting `FeeSchedule.Meta.ordering` to `["class_group", "id"]` turns
+        this test red and leaves that one green, because `.get()` clears
+        ordering — so the join would only appear the day somebody changed the
+        terminal call to `.first()`, which is how `academics/services.py:244`
+        got its bug. Pinning the ordering means the trap is never armed.
+        """
+        for model in (FeeSchedule, FeeScheduleLine, FeeConcession):
+            for entry in model._meta.ordering:
+                name = entry.lstrip("-")
+
+                # `school__name` — ordering that walks a relation explicitly.
+                self.assertNotIn(
+                    "__",
+                    name,
+                    f"{model.__name__}.Meta.ordering walks a relation via {entry!r}",
+                )
+
+                # `class_group` — a bare ForeignKey name, which is the form that
+                # bites: Django sorts by the *related* model's Meta.ordering and
+                # joins to get it. `class_group_id` is the same intent with no
+                # join, and is what this project's Meta lines must say.
+                field = model._meta.get_field(name)
+                if not field.is_relation:
+                    continue
+
+                # `get_field()` resolves both spellings to the same field, so the
+                # field alone cannot say which was written. `attname` is the
+                # column (`class_group_id`) and `name` is the relation
+                # (`class_group`), and only the first orders without a join.
+                self.assertEqual(
+                    name,
+                    field.attname,
+                    f"{model.__name__}.Meta.ordering names the relation "
+                    f"{entry!r}; use {field.attname!r} so the query does not "
+                    f"join (see issue #78)",
+                )
+
+
 class ConcessionRaceTests(BillingSetUp):
     """The one race the schedule lock does not cover, and what it must not cost.
 
@@ -713,6 +880,76 @@ class ConstraintTests(BillingSetUp):
                     effective_on=date(2025, 9, 20),
                     source_concession=concession,
                 )
+
+
+class DeletabilityTests(BillingSetUp):
+    """What a bursar may delete, and what the ledger refuses to let go of.
+
+    These pin claims that were made in docstrings and asserted nowhere. The
+    cascade-versus-PROTECT one is the kind that reads as obviously true and is a
+    statement about Django's collector, not about this schema — the same class of
+    claim as the re-post corner, which was wrong.
+    """
+
+    def test_a_line_that_has_charged_nobody_is_freely_deletable(self):
+        """The rule a bursar actually needs: fix next term's bill."""
+        with connected_to(self.stmarys):
+            line = FeeScheduleLine.objects.create(
+                schedule=self.schedule(), description="Typo", amount_kobo=LEVY
+            )
+            line.delete()
+            self.assertFalse(
+                FeeScheduleLine.objects.filter(description="Typo").exists()
+            )
+
+    def test_a_line_that_has_billed_a_family_cannot_be_deleted(self):
+        with connected_to(self.stmarys):
+            self.apply()
+            line = FeeScheduleLine.objects.get(description="Tuition")
+            with self.assertRaises(ProtectedError):
+                line.delete()
+
+    def test_deleting_the_schedule_does_not_cascade_past_a_posted_charge(self):
+        """The claim: PROTECT on the entry beats CASCADE on the line.
+
+        `FeeScheduleLine.schedule` is CASCADE, so deleting a used schedule would
+        take its lines with it — and each line is PROTECTed by the charges it
+        posted. Which wins is a fact about Django's collector rather than about
+        this schema, so it is asserted rather than reasoned about.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            schedule = self.schedule()
+            with self.assertRaises(ProtectedError):
+                schedule.delete()
+
+            # And nothing was taken down on the way to the refusal.
+            self.assertEqual(FeeScheduleLine.objects.filter(schedule=schedule).count(), 2)
+            self.assertEqual(FeeLedgerEntry.objects.count(), 4)
+
+    def test_an_unused_schedule_deletes_with_its_lines(self):
+        with connected_to(self.stmarys):
+            spare = FeeSchedule.objects.create(
+                term=self.term(),
+                class_group=ClassGroup.objects.create(name="JSS 4A", level=4),
+            )
+            FeeScheduleLine.objects.create(
+                schedule=spare, description="Tuition", amount_kobo=TUITION
+            )
+            spare.delete()
+            self.assertFalse(FeeScheduleLine.objects.filter(schedule_id=spare.pk).exists())
+
+    def test_a_concession_that_has_discounted_a_family_cannot_be_deleted(self):
+        """Which is why it has `is_active` rather than being deleted."""
+        with connected_to(self.stmarys):
+            concession = FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=TUITION,
+                reason="Staff child",
+            )
+            self.apply()
+            with self.assertRaises(ProtectedError):
+                concession.delete()
 
 
 class RefundTests(BillingSetUp):
