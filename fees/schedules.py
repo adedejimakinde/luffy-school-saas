@@ -85,8 +85,8 @@ def _is_the_concession_colliding(exc) -> bool:
     a deferred check or a future exclusion constraint carrying the same name —
     and the whole point of the narrowing is that only the one known race is a
     skip. Four copies of this predicate now exist with two definitions between
-    them; consolidating them is filed, and until then the stricter form is the
-    one a fifth caller should copy.
+    them; consolidating them is issue #81, and until then the stricter form is
+    the one a fifth caller should copy.
     """
     cause = getattr(exc, "__cause__", None)
     diag = getattr(cause, "diag", None)

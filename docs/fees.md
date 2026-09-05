@@ -209,6 +209,24 @@ carries the measurement that separates them — unlocked, the index still refuse
 every double charge and the losing bursar gets an `IntegrityError` instead of a
 summary.
 
+**A child whose membership has ended is skipped, and the summary says so.**
+Nothing deletes a `ClassPlacement` when a membership ends — the placement is last
+term's record and is meant to survive it — so a child released in December is
+still on JSS 1A's roster in January. Applying that term's bill again, which
+happens whenever a bursar adds a line, would charge somebody who has left.
+
+Skipped rather than refused, for the reason the concession collision is a skip:
+one child having left must not stop the class being billed. Counted, though —
+`AppliedSummary.students_skipped`, and `__str__` renders it — because a skip
+nobody is told about is the silent no-op this module refuses everywhere else.
+Note that `students` therefore means "billed", not "on the roster".
+
+`academics` made the same call first: `carry_forward_placements()` filters ended
+memberships and calls it "a correctness rule and not a tidiness one", while
+`place_student()` deliberately allows an ended child to be placed by hand,
+because entering last term's roster after the fact is real work. The automated
+path is the one that must not repeat such a mistake across a whole school.
+
 **A reversed schedule charge cannot be re-posted against that line, by any
 route.** The reversed original still exists — the ledger is append-only, so it
 always will — and `a_schedule_line_charges_a_child_once` still sees it. The
