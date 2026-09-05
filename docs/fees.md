@@ -126,11 +126,13 @@ FeeLedgerEntry
     student_membership_id   int -> accounts.Membership (bare id, indexed)
     student_name            frozen at posting time
     student_reference       frozen at posting time
-    kind                    charge | payment | discount | reversal
+    kind                    charge | payment | discount | reversal | refund
     amount_kobo             signed whole kobo
     narration               what this line is for
     reference               teller / receipt number, free text
     reverses                FK  -> self                (reversals only)
+    source_line             FK  -> FeeScheduleLine     (what billed it, nullable)
+    source_concession       FK  -> FeeConcession       (what discounted it, nullable)
     effective_on            the date it counts for, not the date it was typed
     recorded_at             when it was typed
     recorded_by_id          int -> accounts.User       (bare id, nullable)
@@ -140,19 +142,98 @@ FeeLedgerEntry
 made on Friday and entered on Monday belongs to Friday.
 
 `reference` is free text because every bank and every school reconciles
-differently, and a format guessed now is a format wrong later.
+differently, and a format guessed now is a format wrong later. It is also
+**deliberately non-unique**: payment is against a child, so a parent paying for
+three children in one transfer produces three PAYMENT rows sharing one teller
+number. A unique index there would refuse the ordinary case.
+
+`refund` is the one kind whose sign surprises people. It is **positive**,
+alongside `charge`: a family sitting at −₦50,000 who are handed ₦50,000 in cash
+are square, not −₦100,000. It exists because money handed back and a mistake
+undone are different facts — the same argument that makes `discount` its own
+kind rather than a negative charge. The default answer to a mid-term withdrawal
+is still that money is *carried*, not returned: the credit simply stands against
+the child, which needs no machinery at all.
 
 Ordering is `-effective_on, -id`. The tiebreak is not decorative — two entries
 posted in the same millisecond need a stable order, and a ledger that reorders
 itself between two reads is one nobody can reconcile.
 
+## Billing a class: the schedule, the concession, and one application
+
+Charges no longer have to be posted one at a time. `FeeSchedule` is a class's
+bill for a term, `FeeScheduleLine` is one item on it, and
+`fees.schedules.apply_to_class()` posts the lot.
+
+```
+FeeSchedule                          term + class_group, unique together
+    FeeScheduleLine                  description, amount_kobo, position
+
+FeeConcession                        a standing discount for one child
+    student_membership_id, amount_kobo, reason, is_active
+```
+
+**The template is not the record**, which is the question this document used to
+leave open — *does editing a schedule change past charges?* It does not.
+Applying a schedule posts CHARGE entries that freeze the amount and the
+narration; editing the bill afterwards changes only what a **future**
+application would post. A school that edits after applying and wants the
+difference reflected reverses and re-posts, which the ledger already does.
+
+That is why `FeeSchedule`, `FeeScheduleLine` and `FeeConcession` are plain
+editable rows with no append-only `save()` and no trigger — `operating-rules.md`
+rule 8 in the direction that saves work. The entries they produce are the
+financial record and are already append-only twice over; making the template
+append-only too would be a second, weaker copy of that guarantee, and it would
+stop a bursar fixing next term's bill.
+
+**Lines rather than one lumped amount**, because the ledger's only correction is
+reverse-and-repost. With one ₦140,000 charge, a school that gets the PTA levy
+wrong reverses the whole term for every child in the class; with lines they
+reverse the levy.
+
+**A concession is a DISCOUNT, not an override.** A staff child is charged the
+full fee and given a full concession, not billed nothing — "we waived it" and
+"they paid it" are different facts, and an override amount would erase the
+concession from the record. Fixed amounts only: a percentage needs a rounding
+rule *and* an answer to "a percentage of which lines".
+
+**Applying is idempotent by skipping, not by refusing.** Re-running is the
+normal case — a school charges in week one and three children are admitted in
+week three — so a child who already has a line's charge is skipped and the
+bursar is told "42 skipped, 3 charged". Two mechanisms hold that and they are
+not the same one: the service's skip is what produces a readable summary, and
+the partial unique index `a_schedule_line_charges_a_child_once` is what holds
+when two bursars click at the same instant. `fees/tests/test_schedule_concurrency.py`
+carries the measurement that separates them — unlocked, the index still refuses
+every double charge and the losing bursar gets an `IntegrityError` instead of a
+summary.
+
+**A reversed schedule charge is not re-posted by re-running.** The reversed
+original still exists — the ledger is append-only, so it always will — and the
+index still sees it. Deliberately undoing a charge and then wanting it back
+takes an explicit `charge()`, not a second click on the same button.
+
+**The schedule keys on `ClassGroup`, and `ClassPlacement` rewrites on a
+mid-term move.** A child charged as JSS 1A in week one who moves to JSS 3 in
+week four keeps the JSS 1A charge unless a person acts. That is correct — a
+posted charge is a fact — and it is stated here because the obvious repair is to
+recompute charges from live placement, which is the same class of bug as keying
+a released report card on placement (`operating-rules.md` rule 1).
+
+**No run table.** Who applied a bill and when is already on every entry it
+produced: `recorded_by_id`, `effective_on`, `recorded_at`, `source_line`. A run
+row would be a second answer to a question the entries already answer.
+
 ## Not built
 
 - **No screens, no API.** Deliberate; this pass is the data structure.
-- **No fee schedule.** Charges are posted one at a time. "Every JSS1 student owes
-  ₦150,000 this term" is a template that generates charges, and it is a separate
-  model with its own questions (does editing a schedule change past charges? no —
-  but then what does it change?).
+- **No revocation log for a concession.** Switching `is_active` off records
+  *when* and never who or why, which by rule 8 is an absence that wants a log.
+  Filed as [issue #75](https://github.com/adedejimakinde/luffy-school-saas/issues/75).
+- **No takings report.** What a school actually collected in a term has no home
+  yet; [issue #74](https://github.com/adedejimakinde/luffy-school-saas/issues/74)
+  holds the requirements this shape was built not to foreclose.
 - **No allocation.** A payment reduces the balance; it is not matched against
   particular charges. Schools that need "which term is this ₦50,000 against?"
   need payment allocation, which is a real feature and a bigger one.

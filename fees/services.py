@@ -98,7 +98,8 @@ def snapshot_student(membership):
 
 
 def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
-          reference="", recorded_by=None, reverses=None):
+          reference="", recorded_by=None, reverses=None, source_line=None,
+          source_concession=None):
     """Create one entry. Every public function below funnels through here."""
     _require_student_of_this_school(membership)
     entry = FeeLedgerEntry(
@@ -110,6 +111,8 @@ def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
         effective_on=effective_on or timezone.localdate(),
         recorded_by_id=getattr(recorded_by, "pk", recorded_by),
         reverses=reverses,
+        source_line=source_line,
+        source_concession=source_concession,
         **snapshot_student(membership),
     )
     # `full_clean()` rather than a bare save: the cross-row rules for a reversal
@@ -138,8 +141,13 @@ def _magnitude(amount_kobo):
 
 @transaction.atomic
 def charge(membership, term, amount_kobo, *, narration, effective_on=None,
-           reference="", recorded_by=None):
-    """Bill a student. Increases what the family owes."""
+           reference="", recorded_by=None, source_line=None):
+    """Bill a student. Increases what the family owes.
+
+    `source_line` is passed by `fees.schedules` and left null by every hand-typed
+    charge. It is what makes "everything this line of the bill did" a question
+    with an answer, and what the idempotency index keys on.
+    """
     return _post(
         membership=membership,
         term=term,
@@ -149,6 +157,7 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
         effective_on=effective_on,
         reference=reference,
         recorded_by=recorded_by,
+        source_line=source_line,
     )
 
 
@@ -170,7 +179,7 @@ def record_payment(membership, term, amount_kobo, *, narration="Payment received
 
 @transaction.atomic
 def discount(membership, term, amount_kobo, *, narration, effective_on=None,
-             recorded_by=None):
+             recorded_by=None, source_concession=None):
     """Reduce what is owed without money changing hands.
 
     A bursary, a staff child's concession, a sibling discount. Its own kind
@@ -184,6 +193,39 @@ def discount(membership, term, amount_kobo, *, narration, effective_on=None,
         amount_kobo=-_magnitude(amount_kobo),
         narration=narration,
         effective_on=effective_on,
+        recorded_by=recorded_by,
+        source_concession=source_concession,
+    )
+
+
+@transaction.atomic
+def refund(membership, term, amount_kobo, *, narration="Refund", effective_on=None,
+           reference="", recorded_by=None):
+    """Hand money back. Increases what the family owes, back towards zero.
+
+    The sign is the surprising half and it is right: a family sitting at −₦50,000
+    who are handed ₦50,000 in cash are square, not −₦100,000. A refund moves the
+    balance the same direction a charge does, which is why `INCREASES_DEBT` names
+    both.
+
+    **Not the default answer to a mid-term withdrawal.** Money is carried, not
+    returned: the credit simply stands against the child, which needs no
+    machinery at all and is what most schools do. This exists so that a school
+    which *does* return cash can say so, rather than posting a REVERSAL of a
+    payment that was genuinely received — those are different facts, the same way
+    a discount and a payment are.
+
+    A school that pro-rates a withdrawal posts a REVERSAL or a DISCOUNT by hand.
+    The ledger records what happened; it holds no refund policy.
+    """
+    return _post(
+        membership=membership,
+        term=term,
+        kind=FeeEntryKind.REFUND,
+        amount_kobo=_magnitude(amount_kobo),
+        narration=narration,
+        effective_on=effective_on,
+        reference=reference,
         recorded_by=recorded_by,
     )
 
@@ -204,6 +246,12 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
     unless a `membership` is passed. A reversal is part of the original story and
     should read the way the original read — including when the student has since
     left and their membership has ended.
+
+    **And it inherits the source**, for the same reason it inherits `reference`:
+    a reversal of a schedule charge is still *about* that line of the bill, so
+    "everything this line did" has to return the mistake and the fix together.
+    The uniqueness indexes are conditioned on `kind` precisely so that carrying
+    the source across does not collide with the entry being undone.
     """
     # Locked and re-read before deciding, because "has this been reversed
     # already?" is a question about the present, and two bursars clicking undo
@@ -246,6 +294,8 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
         amount_kobo=-locked.amount_kobo,
         narration=narration or f"Reversal of: {locked.narration}",
         reference=locked.reference,
+        source_line_id=locked.source_line_id,
+        source_concession_id=locked.source_concession_id,
         effective_on=effective_on or timezone.localdate(),
         recorded_by_id=getattr(recorded_by, "pk", recorded_by),
         reverses=locked,
@@ -266,6 +316,7 @@ __all__ = [
     "charge",
     "discount",
     "record_payment",
+    "refund",
     "reverse_entry",
     "snapshot_student",
 ]
