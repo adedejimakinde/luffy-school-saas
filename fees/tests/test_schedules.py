@@ -30,7 +30,7 @@ from django.test import TestCase
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
-from accounts.models import User
+from accounts.models import Membership, MembershipStatus, User
 from accounts.services import enroll_student
 from fees import schedules, services
 from fees.models import (
@@ -1343,3 +1343,185 @@ class SkipIsNotTheIndexTests(BillingSetUp):
                 ).count(),
                 2,
             )
+
+
+class _StatusLeftUnloaded:
+    """`Membership`, but the schedules read leaves `status` unfetched.
+
+    Stands in for `fees.schedules.Membership` so the control below changes one
+    thing only — whether `status` is loaded — while every other part of
+    `apply_to_class()` runs as written. `defer()` rather than `only()` because
+    the read chains `select_related("user", "school")` onto this queryset, and
+    Django refuses a field that is both deferred and traversed.
+    """
+
+    class objects:
+        @staticmethod
+        def filter(*args, **kwargs):
+            return Membership.objects.filter(*args, **kwargs).defer("status")
+
+
+class LeaverReadTests(BillingSetUp):
+    """The leaver skip is a Python property read, so the *object* is the guard.
+
+    `apply_to_class()` decides who is billed with `memberships[sid].is_live`, in
+    memory, over a dict the same commit gave `select_related("user", "school")`.
+    Two things follow, and only the second is load-bearing:
+
+    1. **`select_related` is not what makes the skip right.** `is_live` returns
+       `self.status in LIVE_STATUSES` and reads nothing else, so breaking the
+       join costs queries in `snapshot_student()`, not correctness here. Saying
+       otherwise would be reasoning about the wrong field.
+    2. **A loaded `status` is what makes it right.** Deferred, `.status` becomes
+       a lazy refetch of a row the function already read, issued later and
+       inside the schedule lock — the second-read-per-locked-block shape this
+       project keeps hitting. The two reads can disagree, and the decision is
+       taken on the later one.
+
+    Nothing downstream would catch the disagreement. `why_not_a_student_here()`
+    checks `role` and `school.schema_name` and never `status`, so this filter is
+    the only thing standing between a leaver and a charge — and, the direction
+    that costs money quietly, between an enrolled child and never being invoiced
+    at all. A wrongly-skipped child raises no error and posts no row; the class
+    bills, the summary reads plausibly, and the miss surfaces when a parent asks
+    why no invoice ever came.
+    """
+
+    def _watch_is_live(self, on_first_call=None):
+        """Record what each membership had loaded when `is_live` was consulted.
+
+        Returns the record and the patch, rather than asserting inside the
+        wrapper, so a test that never reaches the property fails on an empty
+        record instead of passing by not looking.
+        """
+        seen = []
+        real = Membership.is_live.fget
+
+        def watched(membership):
+            seen.append((membership.pk, frozenset(membership.get_deferred_fields())))
+            if on_first_call is not None and len(seen) == 1:
+                on_first_call()
+            return real(membership)
+
+        return seen, mock.patch.object(Membership, "is_live", property(watched))
+
+    def _end_mid_flight(self, membership):
+        """End a membership in the database, leaving loaded copies untouched."""
+
+        def change():
+            Membership.objects.filter(pk=membership.pk).update(
+                status=MembershipStatus.ENDED
+            )
+
+        return change
+
+    def test_the_object_is_live_reads_has_its_status_loaded(self):
+        """Proven on the instance, not inferred from the absence of `only()`."""
+        seen, watching = self._watch_is_live()
+        with connected_to(self.stmarys), watching:
+            summary = self.apply()
+
+        self.assertEqual(summary.students, 2)
+        # Non-vacuous: the property is what decided, and for both children.
+        self.assertEqual(
+            sorted(pk for pk, _ in seen),
+            sorted([self.ada.pk, self.chidi.pk]),
+        )
+        for pk, deferred in seen:
+            self.assertEqual(
+                deferred,
+                frozenset(),
+                f"membership {pk} reached is_live with fields unloaded: "
+                f"{sorted(deferred)} — reading one is a second query for a row "
+                f"this function already read",
+            )
+
+    def test_deciding_the_skip_costs_no_second_read_of_the_membership(self):
+        """One read of the row, so there is no later read to disagree with it."""
+        with connected_to(self.stmarys):
+            with CaptureQueriesContext(connection) as captured:
+                self.apply()
+
+        reads = [
+            q["sql"]
+            for q in captured.captured_queries
+            if "accounts_membership" in q["sql"]
+            and q["sql"].lstrip().upper().startswith("SELECT")
+        ]
+        self.assertEqual(
+            len(reads),
+            1,
+            "the memberships are read once and decided from that read; "
+            f"{len(reads)} reads means status can be fetched again later:\n"
+            + "\n".join(reads),
+        )
+
+    def test_a_deferred_status_would_drop_an_enrolled_child_from_billing(self):
+        """The control: same mutation, two fetch strategies, two different bills.
+
+        A membership ends *while* the class is being billed. As written the
+        decision is taken from the read the function already holds, so the child
+        is billed and the change lands on the next application. With `status`
+        deferred the decision is taken from a refetch issued after the change,
+        and the child is skipped — no error, no row, nothing to notice.
+        """
+        # As written: status is loaded, and the mid-flight change cannot reach it.
+        seen, watching = self._watch_is_live(self._end_mid_flight(self.chidi))
+        with connected_to(self.stmarys), watching:
+            loaded = self.apply()
+
+            self.assertEqual(loaded.students, 2, "the enrolled child was billed")
+            self.assertEqual(loaded.students_skipped, 0)
+            self.assertEqual(self.balance_of(self.chidi), TUITION + LEVY)
+        self.assertEqual([deferred for _, deferred in seen], [frozenset(), frozenset()])
+
+        # Put the child back, and give the next run something new to post so a
+        # skip cannot be confused with ordinary idempotency.
+        Membership.objects.filter(pk=self.chidi.pk).update(
+            status=MembershipStatus.ACTIVE
+        )
+        with connected_to(self.stmarys):
+            FeeScheduleLine.objects.create(
+                schedule=self.schedule(),
+                description="Exam fee",
+                amount_kobo=LEVY,
+                position=3,
+            )
+
+        # Deferred: the same change is read back mid-flight and decides the skip.
+        seen, watching = self._watch_is_live(self._end_mid_flight(self.chidi))
+        with connected_to(self.stmarys), watching:
+            with mock.patch.object(schedules, "Membership", _StatusLeftUnloaded):
+                with CaptureQueriesContext(connection) as captured:
+                    deferred_run = self.apply()
+
+            self.assertEqual(
+                deferred_run.students_skipped,
+                1,
+                "a deferred status re-read the row and skipped an enrolled child",
+            )
+            self.assertEqual(deferred_run.students, 1)
+            # The silence is the point: the child is simply not invoiced.
+            self.assertEqual(
+                self.balance_of(self.chidi),
+                TUITION + LEVY,
+                "the exam fee never reached the child who was dropped",
+            )
+            self.assertEqual(self.balance_of(self.ada), TUITION + 2 * LEVY)
+
+        self.assertEqual(
+            [deferred for _, deferred in seen],
+            [frozenset({"status"}), frozenset({"status"})],
+            "the control did not actually defer status",
+        )
+        refetches = [
+            q["sql"]
+            for q in captured.captured_queries
+            if "accounts_membership" in q["sql"]
+            and q["sql"].lstrip().upper().startswith("SELECT")
+        ]
+        self.assertGreater(
+            len(refetches),
+            1,
+            "deferring status should cost one refetch per child, inside the lock",
+        )
