@@ -11,7 +11,7 @@ column. A naira amount is a presentation concern that belongs at the edge, and
 the only safe representation in between is a count of the smallest unit. The
 column is a *signed* `BigIntegerField`, and the sign carries meaning:
 
-    positive  ->  increases what the family owes   (a charge)
+    positive  ->  increases what the family owes   (a charge, a refund)
     negative  ->  reduces it                       (a payment, a discount)
 
 so a balance is `SUM(amount_kobo)` and there is no case analysis to get wrong.
@@ -46,6 +46,12 @@ class FeeEntryKind(models.TextChoices):
     PAYMENT = "payment", "Payment"
     DISCOUNT = "discount", "Discount"
     REVERSAL = "reversal", "Reversal"
+    #: Money handed back. Rare, and deliberately not the default answer to a
+    #: mid-term withdrawal: a family in credit simply stands at a negative
+    #: balance, which needs no machinery at all and is what most schools do.
+    #: This kind exists so that a school which *does* return cash can say so
+    #: rather than posting a charge and calling it something it is not.
+    REFUND = "refund", "Refund"
 
 
 #: Kinds that increase what a family owes, and kinds that reduce it. Stated once
@@ -61,8 +67,245 @@ class FeeEntryKind(models.TextChoices):
 #: different run in a different order, forever. CI runs `makemigrations --check`,
 #: so the symptom is a build that is red at random. Membership tests read the
 #: same either way.
-INCREASES_DEBT = (FeeEntryKind.CHARGE,)
+INCREASES_DEBT = (FeeEntryKind.CHARGE, FeeEntryKind.REFUND)
 REDUCES_DEBT = (FeeEntryKind.PAYMENT, FeeEntryKind.DISCOUNT)
+
+#: Which kinds may name a schedule line, and which may name a concession.
+#:
+#: A `REVERSAL` is in both because it inherits its target's source: undoing a
+#: schedule charge produces a row that is still *about* that line, and asking
+#: "everything this line did" must return the mistake and the fix together. That
+#: is also why the uniqueness constraints below are conditioned on `kind` — see
+#: `a_schedule_line_charges_a_child_once`.
+#:
+#: Tuples, for the reason above. Every one of these goes into a `Q(kind__in=...)`
+#: inside a check constraint.
+SCHEDULE_SOURCED_KINDS = (FeeEntryKind.CHARGE, FeeEntryKind.REVERSAL)
+CONCESSION_SOURCED_KINDS = (FeeEntryKind.DISCOUNT, FeeEntryKind.REVERSAL)
+
+
+class FeeSchedule(models.Model):
+    """One class's bill for one term: what JSS 1A is charged, itemised.
+
+    **A template, not a record.** This is the decision the whole of billing
+    turns on, and `docs/fees.md` left it open: *does editing a schedule change
+    past charges?* It does not. Applying a schedule posts CHARGE entries that
+    freeze the amount and the narration; editing it afterwards changes only what
+    a **future** application would post. A school that edits after applying and
+    wants the difference reflected reverses and re-posts, which the ledger
+    already does.
+
+    So this model and its lines are plain editable rows — no append-only
+    `save()`, no trigger. That is `docs/operating-rules.md` rule 8 read in the
+    direction that saves work: a decision producing a frozen artefact needs no
+    log of its own, and making the template append-only too would be a second,
+    weaker copy of a guarantee the entries already hold. It would also stop a
+    bursar fixing next term's bill, which is the ordinary thing they need to do.
+
+    Both foreign keys are tenant to tenant, so they are real keys that really
+    protect — `FeeLedgerEntry.term` carries the same note. `PROTECT` on both: a
+    term or a class with a bill against it is not a row to delete out from
+    under it.
+    """
+
+    term = models.ForeignKey(
+        "academics.Term",
+        related_name="fee_schedules",
+        on_delete=models.PROTECT,
+        help_text="The term this bill is for.",
+    )
+    class_group = models.ForeignKey(
+        "academics.ClassGroup",
+        related_name="fee_schedules",
+        on_delete=models.PROTECT,
+        help_text="The class this bill is for.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # **Own columns only, and `class_group_id` rather than `class_group`.**
+        # Commit 034b6b3 is the standing lesson: ordering by a relation makes
+        # Django order by the *related* model's `Meta.ordering` and join to get
+        # it, and `ClassGroup.Meta.ordering` is `["level", "name"]`. A joined
+        # ordering would make `select_for_update()` in `fees.schedules` lock the
+        # class group row as well — a billing run taking a lock on a table it
+        # never writes. The `id` tiebreak keeps two bills for one class stable
+        # between reads, which the constraint below makes impossible anyway and
+        # which costs nothing to guarantee.
+        ordering = ["class_group_id", "id"]
+        constraints = [
+            # Two bills for JSS 1A's first term is not a school with options; it
+            # is a school about to charge twice, with nothing to say which bill
+            # is the real one.
+            models.UniqueConstraint(
+                fields=["term", "class_group"],
+                name="one_fee_schedule_per_class_per_term",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.class_group} — {self.term}"
+
+    @property
+    def total_kobo(self) -> int:
+        """What this bill comes to, in kobo. For display; nothing keys off it."""
+        return self.lines.aggregate(total=Sum("amount_kobo"))["total"] or 0
+
+
+class FeeScheduleLine(models.Model):
+    """One item on one bill: "Tuition", "PTA levy", "Uniform".
+
+    **Lines rather than a single amount**, and the argument is not that parents
+    like breakdowns. It is that the ledger's only correction is
+    reverse-and-repost. With one lumped charge, a school that gets the PTA levy
+    wrong must reverse the whole term's charge for every child in the class and
+    post it again; with lines they reverse the levy. Itemisation makes a
+    correction proportionate to the mistake, which is the reason the reversal
+    model exists at all. A school with one line has one line.
+
+    `CASCADE` on `schedule`, because a line has no meaning without its bill.
+    That does **not** make a used schedule deletable: `FeeLedgerEntry.source_line`
+    is `PROTECT`, and Django resolves the protected relation before the cascade
+    completes. A line that has charged nobody stays freely deletable, which is
+    the rule a bursar actually needs.
+    """
+
+    schedule = models.ForeignKey(
+        FeeSchedule, related_name="lines", on_delete=models.CASCADE
+    )
+    description = models.CharField(
+        max_length=255,
+        help_text="What this line is for, in the school's words. Becomes the narration.",
+    )
+    amount_kobo = models.PositiveBigIntegerField(
+        help_text="Whole kobo, a magnitude. The ledger applies the sign."
+    )
+    position = models.PositiveSmallIntegerField(
+        default=0, help_text="Print order on the bill, smallest first."
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        # The `id` tiebreak is not decoration: two lines at the same position
+        # must not swap between two reads of one bill, which is the note
+        # `academics.Trait.position` already carries.
+        ordering = ["position", "id"]
+        constraints = [
+            # Two "PTA levy" lines on one bill is a typo. Forbidding it is also
+            # what makes the idempotency skip in `fees.schedules` legible: the
+            # thing a child is charged once is a *line*, and a bill with two
+            # lines of the same name has no single answer to "were they charged
+            # the levy?".
+            models.UniqueConstraint(
+                fields=["schedule", "description"],
+                name="a_bill_names_each_line_once",
+            ),
+            # Zero is a placeholder somebody meant to fill in. Negative is a
+            # concession wearing a charge's clothes, and concessions have their
+            # own table with their own reason field.
+            models.CheckConstraint(
+                condition=Q(amount_kobo__gt=0),
+                name="a_schedule_line_charges_something",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.description} ({self.amount_kobo} kobo)"
+
+
+class FeeConcession(models.Model):
+    """A standing instruction to discount one child: a staff child, a bursary.
+
+    **Fixed amounts only.** A percentage needs a rounding rule to the kobo *and*
+    an answer to "a percentage of which lines" — two decisions bought for one
+    convenience, when a half-fees scholarship is expressible as a fixed amount
+    today.
+
+    **The exception is a DISCOUNT, not an override.** A staff child is charged
+    the full fee and given a full concession, not billed nothing. `discount()`
+    already made this argument for itself: *"we waived it" and "they paid it"
+    are different facts*, and an override amount would erase the concession from
+    the record entirely. The consequence is the useful part — the per-child
+    exception needs no change to the class's bill at all.
+
+    **A live instruction, not a record**, which is why there is no `student_name`
+    snapshot here. `FeeLedgerEntry` freezes identity because it *is* a record;
+    freezing a name onto this row would be a second, staler answer to a question
+    `accounts` already answers. What actually happened is the dated DISCOUNT
+    entries, one per term, and they stand whatever becomes of this row.
+
+    **No window and no term key.** A concession applies to every application run
+    while `is_active`, and is switched off rather than end-dated. The edge that
+    gives up is a school setting up a *future* term with a concession since
+    withdrawn; the record of what was actually granted is unaffected.
+
+    **Several concessions per child is allowed, deliberately.** A bursary and a
+    sibling discount are two facts and two DISCOUNT entries, so there is no
+    unique constraint on the child here — idempotency is keyed on the concession,
+    in `FeeLedgerEntry.a_concession_discounts_a_child_once_per_term`.
+    """
+
+    # A bare id, pointing at the child's STUDENT membership, for the reason
+    # `FeeLedgerEntry.student_membership_id` sets out at length: `Membership` is
+    # in `public`, and a foreign key from a tenant schema into it does not
+    # protect what it appears to. `fees.schedules` asks
+    # `accounts.students.why_not_a_student_here()` before writing anything.
+    student_membership_id = models.PositiveBigIntegerField(
+        db_index=True,
+        help_text=(
+            "accounts.Membership id of the student's STUDENT membership. A bare "
+            "id and not a ForeignKey — see FeeLedgerEntry and docs/tenancy.md."
+        ),
+    )
+
+    amount_kobo = models.PositiveBigIntegerField(
+        help_text="Whole kobo, a magnitude. The ledger applies the sign."
+    )
+    reason = models.CharField(
+        max_length=255,
+        help_text='Why it was granted — "Staff child", "Bursary 2026". Becomes the narration.',
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text=(
+            "A concession no longer granted. Switched off rather than deleted, "
+            "because the entries it produced name it."
+        ),
+    )
+
+    granted_by_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="accounts.User id of whoever granted it, where there was one.",
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["student_membership_id", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(amount_kobo__gt=0),
+                name="a_concession_reduces_something",
+            ),
+            # A regex and **not** `~Q(reason="")`, which is the form
+            # `results/models.py` records the reason for: a reason of three
+            # spaces passes the empty-string test, is refused by the service,
+            # and renders blank on a screen. The regex is the form that agrees
+            # with the service.
+            models.CheckConstraint(
+                condition=Q(reason__regex=r"\S"),
+                name="a_concession_says_why",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.reason} — membership {self.student_membership_id}"
 
 
 class LedgerIsAppendOnly(Exception):
@@ -168,6 +411,14 @@ class FeeLedgerEntry(models.Model):
     #: Teller number, receipt number, transfer reference — whatever the school
     #: reconciles against. Free text because every bank and every school does
     #: this differently, and a format guessed now is a format wrong later.
+    #:
+    #: **Non-unique, and it must stay non-unique.** A parent paying for three
+    #: children makes one transfer, and payment is against a child — so that is
+    #: three PAYMENT rows sharing one teller number. A future reader will want a
+    #: unique index here to stop a receipt being keyed in twice; it would refuse
+    #: the ordinary Nigerian case. The duplicate-receipt question, if a school
+    #: ever asks it, is a report that finds repeats, not a constraint that
+    #: forbids them.
     reference = models.CharField(max_length=64, blank=True)
 
     # The entry this one undoes. Same table, same schema, so a real foreign key
@@ -180,6 +431,33 @@ class FeeLedgerEntry(models.Model):
         related_name="reversed_by",
         on_delete=models.PROTECT,
         help_text="For a REVERSAL, the entry being undone. Null otherwise.",
+    )
+
+    # What produced this entry, where a machine produced it. Both tenant to
+    # tenant, so both are real keys.
+    #
+    # `PROTECT` for `term`'s reason: a schedule line or a concession that has
+    # moved money is part of the story and cannot be deleted out from under the
+    # rows that name it. The rule this gives a bursar is the one they need — fix
+    # next term's bill freely, and never delete the line that billed forty-five
+    # families.
+    #
+    # Null for everything posted by hand, which is most entries.
+    source_line = models.ForeignKey(
+        FeeScheduleLine,
+        null=True,
+        blank=True,
+        related_name="entries",
+        on_delete=models.PROTECT,
+        help_text="The schedule line that posted this charge, where one did.",
+    )
+    source_concession = models.ForeignKey(
+        FeeConcession,
+        null=True,
+        blank=True,
+        related_name="entries",
+        on_delete=models.PROTECT,
+        help_text="The concession that posted this discount, where one did.",
     )
 
     #: The date the entry counts for, which is not always the date it was typed
@@ -219,8 +497,8 @@ class FeeLedgerEntry(models.Model):
             # this a negative charge and a positive payment both post happily
             # and the balance is quietly wrong in a way no screen would show.
             models.CheckConstraint(
-                condition=~Q(kind=FeeEntryKind.CHARGE) | Q(amount_kobo__gt=0),
-                name="a_charge_increases_what_is_owed",
+                condition=~Q(kind__in=INCREASES_DEBT) | Q(amount_kobo__gt=0),
+                name="a_charge_or_refund_increases_what_is_owed",
             ),
             models.CheckConstraint(
                 condition=~Q(kind__in=REDUCES_DEBT) | Q(amount_kobo__lt=0),
@@ -244,6 +522,77 @@ class FeeLedgerEntry(models.Model):
                 fields=["reverses"],
                 condition=Q(reverses__isnull=False),
                 name="an_entry_is_reversed_at_most_once",
+            ),
+            # **The idempotency backstop.** `fees.schedules.apply_to_class()`
+            # skips a child who already has this line's charge, so a bursar sees
+            # "42 skipped, 3 charged" rather than an error; this is what holds
+            # when two of them click at the same instant and both skip-checks
+            # pass before either commits.
+            #
+            # No `term` in the key, deliberately: a line belongs to a schedule
+            # which belongs to exactly one term, so `(student, line)` is already
+            # term-scoped and adding `term` would be a wider key meaning the
+            # same thing.
+            #
+            # Conditioned on `kind`, which is what lets a reversal keep its
+            # `source_line`. Without that half, reversing a schedule charge
+            # would collide with the charge it reverses, on the very index meant
+            # to stop double-billing.
+            #
+            # **A reversed schedule charge cannot be re-posted against this
+            # line at all**, by any code path. The index is on the row, not on
+            # the caller: the reversed original still exists — the ledger is
+            # append-only, so it always will — and this index still sees it.
+            # An explicit `charge()` naming the same line is refused exactly as
+            # a re-run is, which `test_what_reposting_a_reversed_charge_actually_takes`
+            # pins, because the first version of this comment claimed otherwise
+            # and nothing contradicted it.
+            #
+            # What re-posting actually takes is a charge that does **not** name
+            # the line — which severs the new row from the line that billed it,
+            # so "everything this line produced" no longer returns it. That is
+            # the cost of the corner rather than a workaround for it, and it is
+            # the argument for reversing a charge only when it should not have
+            # been raised at all.
+            models.UniqueConstraint(
+                fields=["student_membership_id", "source_line"],
+                condition=Q(source_line__isnull=False, kind=FeeEntryKind.CHARGE),
+                name="a_schedule_line_charges_a_child_once",
+            ),
+            # The concession key *does* name the term, for the mirror-image
+            # reason: a concession is standing and applies every term, so
+            # without the term a scholarship would be granted once and never
+            # again.
+            models.UniqueConstraint(
+                fields=["student_membership_id", "term", "source_concession"],
+                condition=Q(
+                    source_concession__isnull=False, kind=FeeEntryKind.DISCOUNT
+                ),
+                name="a_concession_discounts_a_child_once_per_term",
+            ),
+            # A source column names what produced the entry, so it has to agree
+            # with what the entry *is*. A payment carrying a schedule line would
+            # read, to anyone asking what that line did, as the school having
+            # billed money it actually received.
+            models.CheckConstraint(
+                condition=Q(source_line__isnull=True)
+                | Q(kind__in=SCHEDULE_SOURCED_KINDS),
+                name="a_schedule_line_only_produces_charges",
+            ),
+            models.CheckConstraint(
+                condition=Q(source_concession__isnull=True)
+                | Q(kind__in=CONCESSION_SOURCED_KINDS),
+                name="a_concession_only_produces_discounts",
+            ),
+            # One source, or none. An entry produced by both a line and a
+            # concession is not a richer record; it is two claims about where
+            # one number came from, and every "what did this produce" query
+            # would count it twice.
+            models.CheckConstraint(
+                condition=~Q(
+                    source_line__isnull=False, source_concession__isnull=False
+                ),
+                name="an_entry_has_one_source",
             ),
         ]
 

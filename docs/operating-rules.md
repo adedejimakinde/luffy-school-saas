@@ -275,11 +275,22 @@ The test is what the act leaves behind.
 | charging a family | a `FeeLedgerEntry`, append-only | **no** — the entry is the record |
 | applying a fee schedule to a class | forty-five entries, each carrying who posted it and when | **no** — a run table would be a second answer |
 | granting a concession | a dated `DISCOUNT` entry per term | **no** — so the instruction itself may be an editable row |
-| releasing a term's results | a `ReleasedCard` per child, written unconditionally | **no** — the card is the artefact |
+| releasing a term's results — the *freeze* | a `ReleasedCard` per child, written unconditionally | **no** — the card is the artefact |
+| releasing a term's results — the *state move* | only a column on `ResultSheet` would change | **yes** — `ResultSheetTransition`, and it exists |
 | deciding a child's promotion | nothing else; the status is the only output | **yes** — `PromotionDecision` |
 | withholding a card from a family | **nothing at all** | **yes** |
 
-The last row is what makes the rule sharp. A card that is not served leaves no
+**Release is split across two rows on purpose, because it is two acts in one
+call** and reading it as one is how the rule gets misapplied. `release()` freezes
+a card per child *and* moves the sheet's state, and `results/services.py:564`
+writes a `ResultSheetTransition` for the second. That is not a counter-example to
+the rule; it is the rule run twice. The freeze leaves an artefact, so it needs no
+log. The state move would leave nothing but an edited column — an absence, in
+rule 4's sense — so it needs one, and has one. A reader who took "releasing a
+term's results" as a single row would conclude the transition row is redundant
+and delete the only record of who released and when.
+
+The withholding row is what makes the rule sharp. A card that is not served leaves no
 trace anywhere — no row, no file, no absence anyone can point at without already
 knowing to look. If the act is not written down at the moment it happens there is
 no later evidence it happened, and the moment it matters is six months on, when a

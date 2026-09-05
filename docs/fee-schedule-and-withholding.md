@@ -1,315 +1,29 @@
-# The fee schedule, and withholding a card for fees
+# Withholding a card for fees
 
-**Design, not built.** No code exists for anything below. This is the document
-to argue with; when it is implemented it splits in two — the billing half joins
-`fees.md`, the withholding half becomes `withholding.md` — and this file goes
-away. It is one file now because the two halves were settled in one pass and one
-of them is only comprehensible next to the other.
+**Half of this document has been built, and that half is gone from it.** The
+billing design — `FeeSchedule`, `FeeScheduleLine`, `FeeConcession`, the two
+source columns, the `REFUND` kind and `fees.schedules.apply_to_class()` — shipped
+and now lives in [`fees.md`](fees.md), which is where it is maintained. Nothing
+about it is repeated here: two copies of one argument is the drift
+`operating-rules.md` rule 7 is about, and the entire reason this file loses a
+section every time a PR lands.
 
-Written against `main` at **`70062c6`**, and every file and line it cites was
-read there. It leans on `operating-rules.md` by number rather than re-arguing:
-**rule 1** (guard on the artefact, not current placement), **rule 2** (content
-copied at write time, never joined to), **rule 3** (immutability lives in the
-database), **rule 4** (an audit is append-only rows), and **rule 8**, which was
-written out of this design.
+**What remains is design, not built.** No code exists for anything below. When it
+ships this file becomes `withholding.md` and this notice goes with it.
 
-Everything here follows from the nine domain answers it was written against,
-plus three questions it originally left open which the review pass has since
-closed — those are listed near the end, under *Settled in review*. Where a
-decision was made *by the school* rather than by the code, it is marked
-**ruled**; where the code chose, the reasoning is given and can be overturned.
+The billing half was written against `main` at `70062c6`; this half has been
+re-read against it since. It leans on `operating-rules.md` by number rather than
+re-arguing: **rule 1** (guard on the artefact, not current placement), **rule 3**
+(immutability lives in the database), **rule 4** (an audit is append-only rows),
+and **rule 8**, which was written out of this design.
 
----
-
-## What is already true, and must stay true
-
-Two of the four billing answers are satisfied by the ledger as built, and the
-value of writing them down is that each names a plausible "improvement" that
-would break them.
-
-**Payment is against a child.** `FeeLedgerEntry.student_membership_id` is a
-STUDENT membership, which pins the child and the school in one value. A parent
-paying for three children produces three sets of entries and three balances, and
-there is no family concept anywhere in `fees/`.
-
-The consequence: one transfer covering three children is **three PAYMENT rows
-sharing one `reference`** — the teller number. `reference` is free text and
-non-unique, and it must stay non-unique. A future reader will want a unique index
-there to stop a receipt being keyed twice; it would refuse the ordinary Nigerian
-case. That belongs in the field's docstring before somebody tries it.
-
-**Part-payment is the common case, and it already is one.** A balance is
-`SUM(amount_kobo)`. Half now and half later is two PAYMENT rows and nothing
-special. The thing to protect is the *absence* of allocation, which `fees.md`
-lists as not built: allocation is the machinery that forces an answer to "which
-charge does this half-payment settle?", and for a term fee the honest answer is
-*none of them specifically — it reduces what is owed*. Part-payment being normal
-is the argument for keeping allocation out, not for building it.
+Decisions made *by the school* are marked **ruled**; where the code chose, the
+reasoning is given and can be overturned. Three questions the first draft left
+open were closed in review — see *Settled in review* near the end.
 
 ---
 
-# Part 1 — Billing
-
-## 1.1 `FeeSchedule` and `FeeScheduleLine`
-
-One bill per class per term, itemised. **Ruled: lines, not a single amount.** The
-argument is not that parents like breakdowns; it is that the ledger's only
-correction is reverse-and-repost. With one lumped ₦140,000 charge, a school that
-gets the PTA levy wrong must reverse the whole term's charge for every child in
-the class and post it again. With lines they reverse the levy. Itemisation makes
-corrections proportionate to the mistake, which is the reason the reversal model
-exists at all. A school with one line has one line.
-
-```
-FeeSchedule                                          tenant schema
-    term            FK -> academics.Term        PROTECT
-    class_group     FK -> academics.ClassGroup  PROTECT
-    created_at
-    updated_at
-
-FeeScheduleLine                                      tenant schema
-    schedule        FK -> FeeSchedule           CASCADE
-    description     what this line is for, in the school's words
-    amount_kobo     positive whole kobo, a magnitude
-    position        print order
-    created_at
-    updated_at
-```
-
-Both foreign keys on `FeeSchedule` are tenant → tenant, so they are real keys
-that really protect — the same reason `FeeLedgerEntry.term` is a `ForeignKey`
-while `student_membership_id` is a bare id. `PROTECT` on both: a term or a class
-with a bill against it is not a row to delete out from under it.
-
-`schedule` is `CASCADE` because a line has no meaning without its bill. That does
-**not** make a used schedule deletable — see `source_line` below, which is
-`PROTECT`, and Django resolves the protected relation before the cascade
-completes.
-
-### The schedule is a template. The entry is the artefact.
-
-`fees.md` asks this and leaves it open: *does editing a schedule change past
-charges? no — but then what does it change?*
-
-The answer is the `ReleasedCard` answer. Applying a schedule posts CHARGE entries
-that freeze the amount and the narration. Editing the schedule afterwards changes
-only what a **future** application would post. A school that edits after applying
-and wants the difference reflected reverses and re-posts, which the ledger
-already does.
-
-So `FeeSchedule` and `FeeScheduleLine` are **plain editable rows** — no
-append-only `save()`, no trigger. They are not financial records. The entries
-they produced are, and those are already append-only twice over.
-
-This is **rule 8** doing its first piece of work: a decision that produces a
-frozen artefact needs no log of its own. It cuts the other way too — because the
-entries are append-only and freeze the amount and the wording, the template that
-produced them is free to stay editable, which is what lets a bursar fix next
-term's bill.
-
-### Constraints
-
-| constraint | what it refuses |
-| --- | --- |
-| `one_fee_schedule_per_class_per_term` | unique `(term, class_group)`. Two bills for JSS1's first term is not a school with options; it is a school about to charge twice |
-| `a_bill_names_each_line_once` | unique `(schedule, description)`. Two "PTA levy" lines on one bill is a typo, and forbidding it is what makes the idempotency skip below legible |
-| `a_schedule_line_charges_something` | `amount_kobo > 0`. Zero is a placeholder somebody meant to fill in; negative is a concession wearing a charge's clothes, and concessions have their own table |
-
-`FeeScheduleLine.Meta.ordering = ["position", "id"]`. The `id` tiebreak is not
-decoration — two lines at the same position must not swap between two reads of
-the same bill, for `Trait.position`'s reason.
-
-## 1.2 `FeeConcession`
-
-**Ruled: fixed amounts only.** A percentage needs a rounding rule to the kobo
-*and*, now that lines exist, an answer to "a percentage of which lines" — two
-decisions bought for one convenience, when a 50% scholarship is expressible as a
-fixed amount today. If schools ask for percentages that is a real feature request
-with real answers, not a guess made now.
-
-**Ruled: the exception is a DISCOUNT, not an override amount.** A staff child is
-charged the full ₦150,000 and given a ₦150,000 concession, not billed ₦0. The
-ledger already made this argument for itself — `discount()` exists as its own
-kind because *"we waived it" and "they paid it" are different facts* — and an
-override amount would erase the concession from the record entirely. The
-consequence is that the per-child exception needs no change to the default shape
-at all.
-
-```
-FeeConcession                                        tenant schema
-    student_membership_id   bare id, indexed  -> accounts.Membership (STUDENT)
-    amount_kobo             positive whole kobo, a magnitude
-    reason                  "Staff child", "Bursary 2026" — becomes the narration
-    is_active               a concession no longer granted. Kept, because entries name it
-    granted_by_id           bare id, nullable -> accounts.User
-    granted_at
-    updated_at
-```
-
-Note what is **not** here: no `student_name` snapshot. The ledger entry freezes
-identity because it is a record; this is a live instruction and freezing a name
-onto it would be a second, staler answer to a question `accounts` already
-answers.
-
-**No window, no term key.** A concession applies to every application run while
-`is_active`, and is switched off rather than end-dated. A school setting up a
-future term with a concession that has since been withdrawn is the edge this
-gives up, and the record of what actually happened is unaffected — that is the
-dated DISCOUNT entries, one per term, which stand whatever happens to this row.
-
-**Several concessions per child is allowed**, deliberately: a bursary and a
-sibling discount are two facts and two DISCOUNT entries. There is therefore no
-unique constraint on `student_membership_id`, and idempotency is keyed on the
-concession rather than the child — see below.
-
-| constraint | what it refuses |
-| --- | --- |
-| `a_concession_reduces_something` | `amount_kobo > 0` |
-| `a_concession_says_why` | `reason` matching `\S`. **Not** `~Q(reason="")` — `results/models.py:285` records why: a reason of three spaces passes the empty-string test, is refused by the service, and renders blank on a screen. The regex is the form that agrees with the service |
-
-## 1.3 Two new columns on `FeeLedgerEntry`, and one new kind
-
-```
-    source_line        FK -> FeeScheduleLine  PROTECT  null=True
-    source_concession  FK -> FeeConcession    PROTECT  null=True
-```
-
-Both tenant → tenant, so real keys. `PROTECT` on both, for `term`'s reason: a
-schedule line or a concession that has moved money is part of the story. A line
-that has charged nobody stays freely deletable, which is the rule a bursar
-actually needs — fix next term's bill freely, and never delete the one that
-billed forty-five families.
-
-**A reversal copies its target's source.** The reversal of a schedule charge
-carries the same `source_line`, so "everything this line produced" returns the
-mistake and the fix together, exactly as `reference` is already copied by
-`reverse_entry()`.
-
-### `REFUND`, the new kind
-
-**Ruled: money is carried, not returned, as the default — and the ledger does not
-enforce that.** A mid-term withdrawal posts entries like anything else; the
-credit simply stands as a negative balance against the child, which requires no
-machinery at all. What is new is that a school which *does* hand cash back has a
-way to say so:
-
-```
-    REFUND = "refund", "Refund"
-```
-
-Its sign is **positive**, alongside `CHARGE`: a family in credit at −₦50,000 who
-are handed ₦50,000 return to zero. So:
-
-```
-    INCREASES_DEBT = (FeeEntryKind.CHARGE, FeeEntryKind.REFUND)
-```
-
-and the existing check constraint generalises from `~Q(kind=CHARGE) | ...` to
-`~Q(kind__in=INCREASES_DEBT) | ...`, renamed
-`a_charge_or_refund_increases_what_is_owed`. The tuple-of-one was written to be
-extended and this is the extension.
-
-> **The tuple trap applies to every new `kind__in` constraint below.**
-> `fees/models.py` records it: a `frozenset` in a `Q(kind__in=...)` inside a
-> check constraint serialises in hash order, Python randomises string hashes per
-> process, and `makemigrations --check` then goes red on a random subset of CI
-> runs forever. `INCREASES_DEBT` and `REDUCES_DEBT` are tuples for that reason
-> and any new constant here must be too.
-
-A school that pro-rates a withdrawal posts a REVERSAL or a DISCOUNT by hand. The
-ledger records what happened; it does not hold a refund policy.
-
-### Constraints
-
-| constraint | what it refuses |
-| --- | --- |
-| `a_schedule_line_charges_a_child_once` | unique `(student_membership_id, source_line)` where `source_line` is not null **and** `kind = CHARGE`. This is the idempotency backstop |
-| `a_concession_discounts_a_child_once_per_term` | unique `(student_membership_id, term, source_concession)` where `source_concession` is not null **and** `kind = DISCOUNT` |
-| `a_schedule_line_only_produces_charges` | `source_line` set on anything but a CHARGE or a REVERSAL |
-| `a_concession_only_produces_discounts` | `source_concession` set on anything but a DISCOUNT or a REVERSAL |
-| `an_entry_has_one_source` | both source columns set at once |
-
-Two details in the first two rows carry weight.
-
-**The schedule key needs no `term`; the concession key does.** A line belongs to
-a schedule which belongs to exactly one term, so `(student, source_line)` is
-already term-scoped and adding `term` would be a wider key that means the same
-thing. A concession is standing and applies every term, so its key must name the
-term or a scholarship would be granted once and never again.
-
-**Both are conditioned on `kind`, and that is what lets a reversal keep its
-source.** Without the `kind` half, reversing a schedule charge would collide with
-the charge it reverses on the very index meant to stop double-billing.
-
-### The re-post corner, stated so it is not filed as a bug
-
-**Ruled.** A schedule charge that has been reversed **cannot be re-posted by
-re-running the application.** The reversed original still exists — the ledger is
-append-only, so it always will — and `a_schedule_line_charges_a_child_once` still
-sees it.
-
-That is correct rather than a limitation: deliberately undoing a charge and then
-wanting it back is exceptional, and should require an explicit `charge()` rather
-than being reachable by clicking the same button twice. It goes in the
-constraint's own docstring, because the next reader will otherwise file it.
-
-## 1.4 Applying a schedule — `fees/schedules.py`
-
-```
-apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary
-```
-
-**Idempotent by skipping, not by refusing.** Re-running is normal: a school
-charges in week one, three children are admitted in week three, they run it again
-and only the three are charged. So the service skips any child who already has a
-CHARGE for `(child, line)`, and any child who already has a DISCOUNT for
-`(child, term, concession)`.
-
-The unique indexes are the backstop, not the mechanism. The service is what gives
-a bursar "42 skipped, 3 charged" instead of an `IntegrityError`.
-
-**One roster read.** The roster comes from `academics.ClassPlacement` for
-`(class_group, term)`, read **once** and reused for both the charges and the
-concessions. Issue #43 is the lesson: a release read the roster four times, the
-office committed a placement between two of them, and the release died. The
-hazard is smaller here — there is no dependent write chain — but "who is being
-billed" should be decided once, and a second read is a second answer.
-
-Read from `academics` directly rather than through `results.positions`; `fees`
-has no business importing `results`, and `academics` sits under both.
-
-**Locked on the schedule row.** Two bursars clicking "Charge JSS1" at the same
-instant both pass an unlocked skip-check before either commits, which is
-`reverse_entry()`'s race exactly. The application takes
-`FeeSchedule.objects.select_for_update().get(pk=...)` first, which serialises
-applications of the same bill and nothing else.
-
-> `FeeSchedule.Meta.ordering` must sort by its own columns only. Commit `034b6b3`
-> is the standing lesson: a joined `Meta.ordering` makes `select_for_update()`
-> lock every joined table, so an ordering that reaches into `Term` would have the
-> billing run locking the term row it never writes.
-
-**One transaction for the whole class.** A half-applied bill is worse than none,
-and a class is bounded.
-
-**No run table.** Who applied a bill and when is already on every entry it
-produced — `recorded_by_id`, `effective_on`, `recorded_at`. A run row would be a
-second answer to a question the entries answer.
-
-## 1.5 The class-keying note
-
-The schedule keys on `ClassGroup`, but `ClassPlacement` is the row that says who
-sits in JSS1, and it **rewrites** on a mid-term move — the premise trap #31, #33
-and #34 all turned on. A child charged as JSS1 in week one who moves to JSS3 in
-week four keeps the JSS1 charge unless a person acts.
-
-That is correct: a posted charge is a fact. It has to be *stated*, because the
-obvious repair is to recompute the charge from live placement, and that
-recomputation is the same class of bug as keying a release on placement.
-
----
-
-# Part 2 — Withholding a card
+## The first line of it
 
 **Ruled: the card is always frozen at release for every child, unconditionally.
 What fees gate is whether the card is SERVED.**
@@ -458,8 +172,20 @@ Append-only, enforced the two ways this codebase always does it:
   the code that owns it, and refusing INSERT would refuse the write that creates
   the row.
 
-`Meta.ordering = ["student_membership_id", "term", "-decided_at", "-id"]`, and
-the `-id` tiebreak is not decoration: `auto_now_add` can tie to the microsecond,
+`Meta.ordering = ["student_membership_id", "term_id", "-decided_at", "-id"]` —
+**`term_id`, the column, and never `term`, the relation.** Ordering by the
+relation makes Django sort by `Term.Meta.ordering`, which is
+`["-session", "starts_on"]` (`academics/models.py:117`), so every default read
+would join `academics_term` and sort by columns the index below does not
+contain. `ReleasedCard.Meta` records the same rule — *"Local columns only"* — and
+it is the rule the fee schedule follows two sections up. `PromotionDecision`
+escapes it only because its `session` is a `CharField`; putting a real
+ForeignKey there without changing the ordering would reintroduce it.
+
+This matters twice over here, because the same mistake under a lock is issue #78:
+a joined `SELECT ... FOR UPDATE` locks a row in every table it joins.
+
+The `-id` tiebreak is not decoration: `auto_now_add` can tie to the microsecond,
 and "the latest decision" resolving arbitrarily between two rows is a card that
 is served or withheld depending on nothing.
 
@@ -522,6 +248,21 @@ while holding PARENT at a school says only that somebody is *a* parent there.
 That distinction is the whole reason `_may_read()` is a function and not a role
 test, and the new constant must not blur it.
 
+### A guardian who is also staff is spared, and that is a decision
+
+`_may_read()` (`results/card_api.py:343`) checks `CARD_VIEWING_ROLES` **before**
+`Guardianship`, so a parent who also holds a card-viewing role comes back with
+the claim `STAFF` and the gate lets them through. Adding `BURSAR` to that set
+means a bursar can be served their own child's withheld card.
+
+**Ruled, as a consequence of "staff always see a withheld card" rather than as an
+exception to it** — but it has to be written down, because the population it
+affects is precisely §1.2's staff-child families, and a reader who found it
+themselves would reasonably file it as a leak. The claim order decides it today;
+if a school ever wants the other answer, the change is to ask the guardianship
+question first for this one gate, not to reorder `_may_read()` — that would
+change who may read a card, which is a different question from who is served one.
+
 ### The gate is a separate check, not a clause inside `_may_read()`
 
 `_may_read()` answers *does this person have a claim on this child's card*. Fees
@@ -557,7 +298,7 @@ the strongest possible argument for taking it literally.
 same position in the same sequence:
 
 ```
-def _require_servable(claim, child, term):
+def _require_servable(claim, card):
     """403 for a family reader whose school is withholding this card."""
 ```
 
@@ -574,7 +315,7 @@ Identical in both routes:
     child  = _the_child(school, student_membership_id)        # 404
     claim  = _require_may_read(request.user, school, child)   # 404
     card   = cards.card_for(child, term)                      # 404 if none
-    _require_servable(claim, child, term)                     # 403 if withheld
+    _require_servable(claim, card)                            # 403 if withheld
     ...                                                       # then, and only then,
                                                               # the payload or the file
 ```
@@ -625,6 +366,15 @@ everyone it was written for.
 
 ### What the 403 carries, and what it must not
 
+**It takes the `card`, not `(child, term)`**, and that is not a convenience.
+The body below has to carry `school_name` *from the card's frozen copy* — rule 2,
+no live join to `School` — and a helper handed only a child and a term has
+neither the frozen name nor the card row. The alternative is calling
+`cards.card_for()` a second time, which is a second answer to the deliberately
+order-sensitive question of *which* card this is, against the one-read discipline
+this document argues for elsewhere. The caller already holds the card by the time
+the gate runs; pass it. The child and term are on it.
+
 ```
 WithheldOut
     school_name         from the card's frozen copy, not a live join   (rule 2)
@@ -635,6 +385,25 @@ WithheldOut
 The same body on both routes. The PDF route already returns JSON for its 202, so
 a JSON 403 there is not a new shape — and a file route that answered a withheld
 family with anything file-like would be answering a question it was refused.
+
+**And this needs machinery that does not exist yet, which is the part to build
+first.** Every 403 in this codebase today is `ninja.errors.HttpError(403, str)`
+(`api.py:451`, `:511`, `:544`), whose body is `{"detail": "..."}` and cannot
+carry fields. A raising helper cannot return `403, WithheldOut(...)` either, and
+`report_card()` declares a bare `response=ReportCardOut`, so django-ninja raises
+`ConfigError` on an undeclared status. Left as-is, the cheapest path for the
+implementer is a plain-string 403 — which drops `contact`, and `contact` is the
+entire reason `withholding_contact` and its constraint exist.
+
+So the design owes three concrete things, and a review of the withholding PR
+should check for them by name:
+
+1. a `CardWithheld` exception carrying the school name and contact;
+2. an `@api.exception_handler(CardWithheld)` in `api.py` rendering `WithheldOut`;
+3. `403: WithheldOut` added to the response map of **both** routes.
+
+Without (3) the handler is unreachable on the JSON route; without (1) the helper
+cannot both raise and carry a payload.
 
 **Not the amount. Ruled: balances are staff-only in this phase.** A
 parent-facing balance is a support burden and a correctness risk — a family will
@@ -695,7 +464,7 @@ makes "both" safe — a principal lifting what a bursar withheld writes a second
 row, and both acts stand with both names on them.
 
 **Its own constant, never imported from `RELEASING_ROLES`**, and the comment
-should say so in `card_api.py:90`'s shape. The two coincide on `principal` today
+should say so in `card_api.py:105`'s shape. The two coincide on `principal` today
 and answer different questions; tying them means widening one widens the other.
 
 Authority goes through `services._require_authority(actor, WITHHOLDING_ROLES,
@@ -718,17 +487,11 @@ modules inside the function, so the shape is precedented.
 
 ## What is enforced where
 
+The billing rows have moved to `fees.md` along with the rest of Part 1 — they are
+now facts about shipped code rather than promises. What is left is this design's.
+
 | rule | database | code |
 | --- | --- | --- |
-| one bill per class per term | unique constraint | — |
-| a bill names each line once | unique constraint | — |
-| a schedule line charges something | check constraint | — |
-| a line charges a child once | partial unique index | service skips first, for a readable result |
-| a concession discounts a child once per term | partial unique index | service skips first |
-| a source column matches its kind | check constraints | — |
-| an entry has one source | check constraint | — |
-| a charge or refund increases what is owed | check constraint | `_magnitude()` refuses a signed amount |
-| a concession says why | check constraint | — |
 | a withholding says why | check constraint | service refuses blank, with a message |
 | a withholding school names who to call | check constraint | — |
 | decisions are append-only | trigger | `save()` / `delete()` refuse |
@@ -744,6 +507,9 @@ for every child on a roster this transaction has moved on from", so the
 unconditional-ness is a property of the code and of the tests that pin it.
 
 ## The tests this design owes
+
+Withholding's, now that billing's have been written. Numbering is kept as it was
+so that PR #76's review comments still point at the same tests.
 
 1. **The fee door does not touch the freeze.** Release a school with
    `withhold_for_fees_enabled` on and every child in arrears; assert a
@@ -779,12 +545,20 @@ unconditional-ness is a property of the code and of the tests that pin it.
 4d. The `ReleasedCardPdf` marker is still written at release for a child whose
    school is withholding, and the render still runs.
 4e. **A third serving surface cannot be added ungated — as far as a test can
-   reach.** Enumerate `card_api.router.path_operations` for every operation whose
-   path begins `/cards/{int:student_membership_id}/{int:term_id}`, drive each one
-   as the guardian of a withheld child, and assert every one answers 403. The
-   test **discovers** routes rather than naming them, so a third surface added
-   under that prefix is covered the day it is written and goes red if it does not
-   call the helper. An operation the enumeration cannot drive — a different
+   reach.** Enumerate `card_api.router.path_operations`, drive every operation as
+   the guardian of a withheld child, and assert every one answers 403. The test
+   **discovers** routes rather than naming them, so a third surface is covered
+   the day it is written and goes red if it does not call the helper.
+
+   **It must assert that the enumeration found something**, and specifically that
+   it found the two routes we know about. A discovery test filtered by a path
+   prefix — `/cards/{int:student_membership_id}/{int:term_id}` — passes
+   *vacuously* the moment a new route is spelled differently
+   (`{student_membership_id}` without the converter) or the paths are refactored:
+   the filter matches nothing, the loop runs zero times, and a test named "a
+   third surface cannot be added ungated" goes green having checked nothing. So:
+   enumerate the whole router, and assert the known operations are in what came
+   back before asserting anything about them. An operation the enumeration cannot drive — a different
    signature, a non-GET method — **fails with an explicit message** rather than
    being skipped: an unrecognised serving surface is the finding, not an
    exemption from the finding.
@@ -806,10 +580,11 @@ unconditional-ness is a property of the code and of the tests that pin it.
    decision, and switching it back on withholds it again without a new decision.
 7. A revision of a withheld child's card is still withheld — the `(child, term)`
    keying, tested directly.
-8. Applying a schedule twice charges nobody twice; applying it after a child is
-   admitted charges only that child.
-9. A reversed schedule charge is not re-posted by re-running the application.
-10. Concurrent applications of one schedule do not double-charge.
+Billing's three — applying twice charges nobody twice, a reversed schedule
+charge is not re-posted, and concurrent applications do not double-charge — were
+written and run with the billing half. They live in `fees/tests/test_schedules.py`
+and `fees/tests/test_schedule_concurrency.py`, and the control run that separates
+the skip from the index is recorded in the latter's module docstring.
 
 ## Settled in review, after the first draft
 
