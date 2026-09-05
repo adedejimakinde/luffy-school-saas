@@ -191,3 +191,143 @@ Two problems with it, both fixed rather than shipped:
   said nothing about this one. Written up, including that `students` now means
   "billed" rather than "on the roster" — a silent change to an existing field's
   meaning.
+
+
+---
+
+# The `/code-review` pass — appended 2026-09-05
+
+Findings below are the second pass, against `08b40cf`. Branch head is now
+**`7b82d4e`** (pushed): the delta from the reviewed commit is three tests and no
+production code — see *The `is_live` read* below.
+
+## The first pass reviewed the wrong branch
+
+Recorded rather than quietly re-run, because it is §5's failure reached twice in one
+PR by two different routes. `/code-review` was launched with `fee-schedule-billing`
+as an argument, but the fork inherits the session's working directory and
+`/workspace` is on `phase-2-fee-design`. Its own scope line: `git diff main...HEAD`
+= "two files, docs only — `docs/fee-schedule-and-withholding.md`,
+`docs/operating-rules.md`". It reviewed the design document. The billing code still
+had no pass — the exact gap this review existed to close.
+
+Relaunched as `/code-review high 79`. A PR number cannot be ambiguous about which
+tree it means; a branch name passed to a fork with its own cwd evidently can.
+
+That pass is not wasted — nine substantive findings against
+`docs/fee-schedule-and-withholding.md`, already on `main` via #76. They belong to
+their own issue and are deliberately not mixed in here.
+
+**Two caveats, both mine.** The reviewer reported: *"I could not complete a local
+test run (the test DB was left in a broken state by an interrupted `--noinput` run,
+and dropping it is blocked)."* That database was mine, from a run I killed on a
+two-minute timeout while building the `is_live` proof — so this is a reading pass,
+not an executed one. And the second pass checked the PR out **in `/workspace`**,
+leaving it on a detached `08b40cf` with the branch's own commit invisible until
+restored. A review that moves the tree it was asked to describe is the same class
+of problem as §5, now on the reviewing side.
+
+## Findings — five
+
+| # | where | sev | the claim |
+|---|---|---|---|
+| 1 | `fees/services.py:270` | **med** | `reverse_entry()`'s `select_for_update().select_related("term")` takes `FOR UPDATE` on the joined `academics_term` row. Every insert in `apply_to_class()` takes `FOR KEY SHARE` on that same row and holds it to commit; the two conflict. Bursar A bills 45 children (135 inserts, one transaction); bursar B clicks undo on an unrelated payment in the same term and blocks for the whole run — reversed, it stalls the billing run on its first insert. #78 scoped this as *waste*; the new long transaction turns it into *contention*. Dropping `select_related("term")` from the locked queryset fixes it — the term is re-read a line later anyway |
+| 2 | `fees/schedules.py:299` | low/med | the charge loop calls `services.charge()`, which is `@transaction.atomic`, so each entry opens a savepoint inside the class-wide transaction — ~135 subtransactions and ~675 statements for a 45-child three-line bill, while holding the schedule lock. Past 64 subxids Postgres overflows the per-backend subtransaction cache into `pg_subtrans` SLRU lookups, degrading visibility checks **cluster-wide** for the life of the transaction. The savepoints are load-bearing for the discount loop; for charges they are not |
+| 3 | `fees/services.py:141` | low | `charge()` takes `source_line` publicly but never checks `source_line.schedule.term_id == term.pk`. `a_schedule_line_charges_a_child_once` is keyed on `(student, source_line)` with no term, and the docstring's justification holds only if no caller mismatches them. A hand-posted correction naming the right line with the wrong term makes the real run report that child's tuition as *skipped* — **silent under-billing no constraint can catch** |
+| 4 | `fees/services.py:187` | low | the same shape on the other column: `discount()` never checks `source_concession.student_membership_id == membership.pk`, so a discount can post on Ada's account attributed to Chidi's concession, and "everything this concession did" then returns two children. The child half is guarded by `_require_student_of_this_school()`; this is the matching guard the new columns lack |
+| 5 | `fees/services.py:302` | low | `narration or f"Reversal of: {locked.narration}"` prepends 13 characters to a `max_length=255` column. Newly reachable, because `apply_to_class()` copies `FeeScheduleLine.description` (also 255) verbatim. A 243+ character line produces a charge that **cannot be reversed**, and it fails as `ValidationError` — not a `FeeLedgerError`, so `except FeeLedgerError` will not catch it |
+
+Checked and cleared: the `an_entry_has_one_source` REVERSAL-only claim; §1's
+concession `order_by` deadlock argument; `_is_the_concession_colliding()` against
+psycopg2's real surface; migration `0003` against the models; that nothing outside
+`fees` switches exhaustively on `kind`.
+
+## Does any finding touch the ended-membership skip?
+
+**No — seven places, seven noes.** Checked one at a time against the surface the
+skip actually occupies, rather than against a general impression of the review.
+
+| # | place | any finding? |
+|---|---|---|
+| 1 | `fees/schedules.py:240-242` — the `is_live` filter, `students_skipped`, `student_ids = billable_ids` | **no** |
+| 2 | `fees/schedules.py:373` — `students=len(student_ids)`, the meaning change | **no** |
+| 3 | `fees/schedules.py:132` — the field and its comment | **no** |
+| 4 | `fees/schedules.py:145` — the `"no longer enrolled"` string | **no** |
+| 5 | `fees/schedules.py:210-215` — the memberships read the filter depends on | **no** |
+| 6 | `docs/fees.md:220` — the written rule | **no** |
+| 7 | `fees/tests/test_schedules.py:960-1015` — the two tests | **no** |
+
+**What that "no" means, and what it does not.** It does not mean the skip was
+examined and cleared. The reviewer's only contact with that surface is one line in
+its cleared list — *"`Membership.objects` has no default filtering, so the
+`UnknownStudent` guard does not misfire on ended memberships"* — which concerns the
+read at place 5 and answers a different question. With no test run completed, the
+behaviour change that arrived last and changed billing is still the least-scrutinised
+thing in this PR *after* the review, which is what was suspected before it ran.
+
+Two adjacencies, named rather than hidden, neither a finding against the skip.
+Finding 2 concerns the loop the skip feeds — the subxid count is
+`len(billable_ids) x lines`, so the skip moves that number without being the defect.
+Finding 3 reaches the **same outcome class** by a different mechanism: a child
+silently not billed, no error, no row. That the review found one such path
+independently is the argument for taking the other one seriously.
+
+## The `is_live` read — proven rather than argued
+
+The open question was whether a partially-loaded membership could make `is_live`
+answer differently, since it is a Python property read in memory over a dict the
+same commit changed the fetch strategy for. Half that premise was wrong, and the
+half that held is worse than it looked.
+
+**`select_related` is not the guard.** Removing `.select_related("user", "school")`
+from the production read leaves all eight leaver and refusal tests **green**.
+`is_live` returns `self.status in LIVE_STATUSES` and reads nothing else, so the join
+costs queries in `snapshot_student()`, not correctness here.
+
+**A loaded `status` is the guard.** Deferred, `.status` becomes a lazy refetch of a
+row the function already read, issued later and inside the schedule lock — two reads
+that can disagree, with the decision taken on the later one. That is the
+second-read-per-locked-block shape, on the money path.
+
+Three tests, `fees/tests/test_schedules.py::LeaverReadTests`:
+
+| test | pins |
+|---|---|
+| `test_the_object_is_live_reads_has_its_status_loaded` | spies on the property and asserts `get_deferred_fields()` is empty **on the instance `is_live` actually read**, and that it was consulted for both children — so it cannot pass by not looking |
+| `test_deciding_the_skip_costs_no_second_read_of_the_membership` | exactly one `accounts_membership` SELECT: one read, so there is no later read to disagree with it |
+| `test_a_deferred_status_would_drop_an_enrolled_child_from_billing` | the control. A membership ends **mid-billing**; same mutation both ways. Loaded → billed, `students_skipped == 0`. Deferred → skipped, `students_skipped == 1`, the exam fee never posts, no error raised |
+
+Verified load-bearing by mutation, not by inspection. Adding `.defer("status")` to
+the production read turns all three red:
+
+```
+AssertionError: 1 != 2 : the enrolled child was billed
+AssertionError: 3 != 1 : the memberships are read once and decided from that read;
+  3 reads means status can be fetched again later:
+  SELECT ... FROM "accounts_membership" WHERE "id" IN (5, 6)
+  SELECT "id", "status" FROM "accounts_membership" WHERE "id" = 5 LIMIT 21
+  SELECT "id", "status" FROM "accounts_membership" WHERE "id" = 6 LIMIT 21
+AssertionError: membership 9 reached is_live with fields unloaded: ['status']
+```
+
+What raises the stakes: **nothing downstream would catch a wrong answer.**
+`why_not_a_student_here()` checks `role` and `school.schema_name` and never
+`status`, so this filter is the entire guard — between a leaver and a charge, and
+between an enrolled child and never being invoiced at all.
+
+`fees`: **96 tests, OK, EXIT=0** (93 at `08b40cf`).
+
+> One retraction from getting there: an intermediate run showed 13 errors across
+> `test_ledger`. That was a test database left behind by a run I killed on a
+> timeout, not a regression — clean `08b40cf` is 93/OK, and the same tree re-run is
+> 96/OK. It is also the database the reviewer could not work around, so it cost
+> this pass its test run.
+
+## Order of operations
+
+1. Report findings — **done**, both this document's own pass and the review
+2. Fix — **your call on scope.** 1 and 5 are contained; 3 and 4 are matching guards
+   worth doing together; 2 is a restructure of how charges post, a design decision
+   rather than a patch
+3. Merge on your word
+4. `git merge-base --is-ancestor <sha> origin/main`
