@@ -217,7 +217,8 @@ Recorded rather than quietly re-run, because it is §5's failure reached twice i
 PR by two different routes. `/code-review` was launched with `fee-schedule-billing`
 as an argument, but the fork inherits the session's working directory and
 `/workspace` is on `phase-2-fee-design`. Its own scope line: `git diff main...HEAD`
-= "two files, docs only — `docs/fee-schedule-and-withholding.md`,
+= "two files, docs only — `docs/withholding.md` (then
+`docs/fee-schedule-and-withholding.md`),
 `docs/operating-rules.md`". It reviewed the design document. The billing code still
 had no pass — the exact gap this review existed to close.
 
@@ -225,7 +226,8 @@ Relaunched as `/code-review high 79`. A PR number cannot be ambiguous about whic
 tree it means; a branch name passed to a fork with its own cwd evidently can.
 
 That pass is not wasted — nine substantive findings against
-`docs/fee-schedule-and-withholding.md`, already on `main` via #76. They belong to
+`docs/withholding.md` — then `docs/fee-schedule-and-withholding.md` — already on
+`main` via #76. They belong to
 their own issue and are deliberately not mixed in here.
 
 **Two caveats, both mine.** The reviewer reported: *"I could not complete a local

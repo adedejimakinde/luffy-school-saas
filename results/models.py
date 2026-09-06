@@ -354,6 +354,20 @@ class ReportCardSettings(models.Model):
     returns no section at all for a group that is off, rather than a section
     with no rows — a distinction that only shows up in the rendered card, which
     is exactly where it matters.
+
+    ## The fee gate is here too, and it is not a trait group
+
+    `withhold_for_fees_enabled` and `withholding_contact` sit **outside
+    `FIELD_FOR`**. That map is a trait-group-indexed API — `enabled(group)`
+    refuses a group it does not know — and neither column is a trait group;
+    `enabled("withhold_for_fees")` must not become a thing.
+
+    They are here rather than in a third settings singleton beside this table
+    and `SessionSettings` because withholding is a property of *how this school
+    handles report cards*, which is what this table is. `SessionSettings` earned
+    its own row by owning an arithmetic, not because settings split by subject,
+    and one boolean plus one string does not earn a table. A third singleton
+    would be a third place to look for "how does this school behave".
     """
 
     #: Pinned to 1 so "the settings" is one row and not a table somebody appends
@@ -368,6 +382,39 @@ class ReportCardSettings(models.Model):
     psychomotor_enabled = models.BooleanField(
         default=False,
         help_text="Print the psychomotor (skills) section on report cards.",
+    )
+
+    #: Does this school hold a released card back from a family over fees?
+    #:
+    #: **Off by default, and that default is load-bearing** for the same reason
+    #: both trait sections default to off: a school that has never heard of this
+    #: feature must see no trace of it. Without it, every existing school
+    #: acquires a fee gate on the day this ships.
+    #:
+    #: It gates whether `WithholdingDecision` rows are *consulted*, not whether
+    #: they exist — see `results.withholding.is_withheld()`. Turning it off
+    #: serves every card immediately without walking back four hundred rows, and
+    #: turning it back on restores the state rather than having lost it.
+    withhold_for_fees_enabled = models.BooleanField(
+        default=False,
+        help_text="Hold a released card back from the family while fees are owed.",
+    )
+
+    #: Who a family should contact about a card being held. **Plain free text**,
+    #: holding what the school would say on the phone — "Call the bursar's
+    #: office on 0803 …".
+    #:
+    #: Required whenever the switch above is on, and by the constraint below
+    #: rather than by a form validator: a validator is a promise kept by one
+    #: code path, and the admin, a shell, a data migration and a test fixture
+    #: are four others. `schools.School` has no contact fields at all, so
+    #: without this the 403 in `results.card_api` would promise a family
+    #: somebody to call that the platform cannot name. A school that enables
+    #: withholding without saying who to call has built a dead end.
+    withholding_contact = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Who a family should contact about a held card. Required to hold one.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -389,6 +436,17 @@ class ReportCardSettings(models.Model):
         constraints = [
             models.CheckConstraint(
                 condition=Q(id=1), name="one_report_card_settings_row"
+            ),
+            # The switch cannot be on without somebody to call. Stated as a
+            # database rule because the promise it keeps is made to a parent
+            # reading a 403, and every path that can turn the switch on has to
+            # keep it — not only the one that goes through a form.
+            models.CheckConstraint(
+                condition=(
+                    ~Q(withhold_for_fees_enabled=True)
+                    | Q(withholding_contact__regex=r"\S")
+                ),
+                name="a_withholding_school_names_who_to_call",
             ),
         ]
 
@@ -1701,6 +1759,170 @@ class PromotionDecision(models.Model):
         raise PromotionDecisionsAreAppendOnly(
             f"Promotion decision {self.pk} cannot be deleted. A record of who "
             f"decided what has to keep saying it."
+        )
+
+
+class WithholdingStatus(models.TextChoices):
+    """Whether the school is holding a child's card, or has stopped.
+
+    **`LIFTED`, not `RELEASED`.** "Released" is taken by the academic act —
+    `SheetState.RELEASED` is what put the card in existence — and a collision
+    here would be genuinely confusing. This is about whether the family gets it,
+    which is a different question from whether it exists.
+
+    There is no `UNDECIDED` and no default, for `PromotionStatus`'s reason:
+    not-withheld is the absence of a row.
+    """
+
+    WITHHELD = "withheld", "Held back from the family"
+    LIFTED = "lifted", "Released to the family"
+
+
+class WithholdingDecisionsAreAppendOnly(Exception):
+    """A withholding row was edited or deleted. See `WithholdingDecision`."""
+
+
+class WithholdingDecision(models.Model):
+    """One recorded decision about one child's card in one term. Written once.
+
+    `PromotionDecision`'s pattern, because this is the same kind of thing: one
+    act by one person about one child, kept so it can be read back in a year.
+
+    ## Keyed on (child, term), not on the card row — and that is a trap
+
+    A revision writes a new `ReleasedCard` at the next version, and there can
+    already be two cards in one term when a child moves class. A decision keyed
+    on the card would not cover a version made after it, so correcting a
+    withheld child's mark would serve the card the school had withheld. The key
+    is the child and the term, and every card either of them has.
+
+    `term` is a **real ForeignKey**, unlike `PromotionDecision.session`. That
+    model stores a string because a session is three terms and there is no
+    session row to point at. Here there is a term row in the same schema, so the
+    key is real and `PROTECT` really protects.
+
+    ## Absence of a row means not withheld
+
+    No `UNDECIDED`, no default status, no current-state column anywhere.
+    `PromotionDecision`'s argument transfers intact: a status column defaulting
+    to something is a school-wide policy performed by a default value.
+
+    ## More than one row per (child, term) is the feature
+
+    So there is deliberately **no unique constraint**. Withheld on the 3rd and
+    lifted on the 12th when the family paid is two rows and both stand — which
+    is the whole reason this is not a boolean. A boolean flipped twice has
+    forgotten that it was ever different, who changed it and when, and that is
+    precisely what a parent's complaint six months later turns on.
+
+    ## The balance is frozen, and it never decides anything
+
+    There is deliberately no `suggested` column, unlike `PromotionDecision`.
+    There the arithmetic really did propose something; here it proposes nothing,
+    because **the balance never gates**. A rule like *withhold while balance > 0*
+    would withhold from a family ₦500 short on a payment plan, and part-payment
+    is the normal case. `balance_kobo_at_decision` is frozen so the row reads on
+    its own in a year — not so it can be checked against the decision, and a
+    `suggested` column would invite exactly that reading.
+
+    ## Append-only
+
+    Enforced the two ways this codebase always does it — `save()` and `delete()`
+    refuse, which is the error a developer sees, and a trigger refuses, which is
+    the error a `psql` session, a data import or a bulk `.update()` runs into.
+    """
+
+    #: A bare id into `accounts.Membership`, as every other per-child column in
+    #: this app is. Cross-app and cross-schema, so not a ForeignKey.
+    student_membership_id = models.PositiveBigIntegerField()
+
+    term = models.ForeignKey(
+        "academics.Term",
+        on_delete=models.PROTECT,
+        related_name="withholding_decisions",
+    )
+
+    status = models.CharField(max_length=16, choices=WithholdingStatus)
+
+    #: Why, in the school's words. **Staff-only** in the sense
+    #: `ReleasedCard.position` is staff-only — excluded at the serializer, not
+    #: merely absent from a template — because a bursar's internal note may be
+    #: unguarded about a family. Required on a withholding by the constraint
+    #: below; a lifting may be silent.
+    reason = models.TextField(blank=True)
+
+    #: What the books said at the moment somebody decided, in kobo, signed —
+    #: positive means the family owed. Frozen so the row explains itself later.
+    #:
+    #: **Everything outstanding, not this term only.** A child carrying arrears
+    #: from last term is exactly who a school withholds over.
+    #:
+    #: Nullable, because a decision can be recorded where the ledger has nothing
+    #: to say and naming a fictional zero would be a claim nobody made.
+    balance_kobo_at_decision = models.BigIntegerField(null=True, blank=True)
+
+    #: A `User` id, not a `Membership` id — the actor is a user, as it is on
+    #: `PromotionDecision.decided_by_id`. Nullable for the same reason: a row
+    #: can arrive from an import with nobody behind it, and naming a fictional
+    #: bursar is worse than naming none.
+    decided_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    decided_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # `term_id`, the column, and never `term`, the relation. Ordering by the
+        # relation makes Django sort by `Term.Meta.ordering`, which is
+        # `["-session", "starts_on"]`, so every default read would join
+        # `academics_term` and sort by columns the index below does not carry.
+        # `ReleasedCard.Meta` records the same rule — local columns only — and
+        # it matters twice over here, because a joined `SELECT ... FOR UPDATE`
+        # locks a row in every table it joins (issue #78).
+        #
+        # `-id` is not decoration: `auto_now_add` can tie to the microsecond,
+        # and "the latest decision" resolving arbitrarily between two rows is a
+        # card that is served or withheld depending on nothing.
+        ordering = ["student_membership_id", "term_id", "-decided_at", "-id"]
+        indexes = [
+            # The read this table exists for: the latest row for one child in
+            # one term. Leading pair is the lookup, descending tail is the
+            # ordering, so one index answers both halves.
+            models.Index(
+                fields=["student_membership_id", "term", "-decided_at", "-id"],
+                name="the_latest_withholding",
+            ),
+        ]
+        constraints = [
+            # Deliberately **no** unique constraint on (student, term): more
+            # than one row is the feature, not a fault.
+            #
+            # A withholding must say why; a lifting may be silent. The shape and
+            # the name follow `a_revision_says_why`, including the regex rather
+            # than `~Q(reason="")` — a reason of one space is not a reason.
+            models.CheckConstraint(
+                condition=~Q(status=WithholdingStatus.WITHHELD)
+                | Q(reason__regex=r"\S"),
+                name="a_withholding_says_why",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{WithholdingStatus(self.status).label} — membership "
+            f"{self.student_membership_id}, term {self.term_id}"
+        )
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise WithholdingDecisionsAreAppendOnly(
+                f"Withholding decision {self.pk} has been recorded and cannot "
+                f"be changed. Record a new decision instead — both stand, and "
+                f"the later one is what holds."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise WithholdingDecisionsAreAppendOnly(
+            f"Withholding decision {self.pk} cannot be deleted. A record of who "
+            f"held a card back, and why, has to keep saying it."
         )
 
 

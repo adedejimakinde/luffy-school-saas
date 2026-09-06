@@ -506,9 +506,35 @@ class WhoMayReadACard(ReportCardApiSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content)["school_name"], "Grace Academy")
 
-    def test_a_bursar_may_not(self):
-        """Staff, but not this kind. A bursar keeps the books."""
-        self.assertEqual(self.fetch(self.bursar, self.stmarys, self.ada).status_code, 404)
+    def test_a_bursar_may(self):
+        """This assertion was inverted by the fee gate, and that is ruled.
+
+        It read "a bursar keeps the books" and asserted 404, which was right
+        for as long as there was no reason for a bursar to open a card. The
+        withholding design gives one: a bursar deciding whether to hold a card
+        back cannot do the job without seeing the document they are holding, and
+        the narrower alternative — a staff screen showing only *that* a card
+        exists and is withheld — is a second surface answering a question the
+        first one already answers. That shape produced four answers to "did a
+        card go home" and the PR #35 bug with them.
+
+        `card_api.CARD_VIEWING_ROLES` carries the widening's full reasoning,
+        including what it must not imply: a bursar must never be added to
+        `results.api.POSITION_VIEWING_ROLES`, and nothing in this module has a
+        slot for a position for this to reach.
+        """
+        self.assertEqual(self.fetch(self.bursar, self.stmarys, self.ada).status_code, 200)
+
+    def test_the_bursar_widening_did_not_reach_positions(self):
+        """The other half of the ruling, and the one worth a test of its own.
+
+        The two constants are deliberately not imported from one another so
+        that a widening of one is not a widening of the other. This is that
+        widening, and it stops here.
+        """
+        from results.api import POSITION_VIEWING_ROLES
+
+        self.assertNotIn(Role.BURSAR.value, POSITION_VIEWING_ROLES)
 
     def test_signing_out_is_a_401_rather_than_a_card(self):
         self.assertEqual(self.fetch(None, self.stmarys, self.ada).status_code, 401)
