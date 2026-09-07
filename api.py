@@ -49,6 +49,7 @@ from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from results.card_api import router as report_card_router
+from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.models import (
@@ -74,6 +75,43 @@ api.add_router("/results/", results_router, tags=["results"])
 # modules is what makes that structural instead of a convention — there is
 # nothing importable in `card_api` that carries a staff-only field.
 api.add_router("/results/", report_card_router, tags=["results"])
+
+
+@api.exception_handler(CardWithheld)
+def card_withheld(request, exc):
+    """A 403 that names somebody to call, which a `{"detail": ...}` cannot.
+
+    Every other 403 in this file is `HttpError(403, str)`, whose body is one
+    string. That is the right shape for a refusal aimed at a member of staff who
+    knows the system; it is the wrong shape here, because this refusal is read by
+    a parent who has done nothing wrong and whose only useful next step is
+    ringing the school. `contact` is the entire reason
+    `ReportCardSettings.withholding_contact` exists and is constrained non-empty,
+    and a plain-string 403 would drop it — which is why this handler is part of
+    the design rather than a nicety.
+
+    It is a handler and not a `return 403, ...` in the views because the gate is
+    a **raising** helper shared by two routes (`card_api._require_servable()`),
+    and a helper cannot return a response on its caller's behalf. Both routes
+    declare `403: WithheldOut`; without that declaration django-ninja would
+    refuse the status and this would be unreachable.
+
+    **No balance and no reason.** See `card_api.WithheldOut` for why each is
+    absent — one is a number the school has not reconciled, the other is a
+    staff note about a family.
+    """
+    return api.create_response(
+        request,
+        {
+            "school_name": exc.school_name,
+            "contact": exc.contact,
+            "detail": (
+                f"{exc.school_name} is holding this report card. Please get in "
+                f"touch with the school: {exc.contact}"
+            ),
+        },
+        status=403,
+    )
 
 
 @api.exception_handler(AuthenticationError)

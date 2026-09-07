@@ -1,19 +1,17 @@
 # Withholding a card for fees
 
-**Half of this document has been built, and that half is gone from it.** The
-billing design — `FeeSchedule`, `FeeScheduleLine`, `FeeConcession`, the two
-source columns, the `REFUND` kind and `fees.schedules.apply_to_class()` — shipped
-and now lives in [`fees.md`](fees.md), which is where it is maintained. Nothing
-about it is repeated here: two copies of one argument is the drift
-`operating-rules.md` rule 7 is about, and the entire reason this file loses a
-section every time a PR lands.
+**This is built.** It shipped as `results/withholding.py`, the gate in
+`results/card_api.py`, `WithholdingDecision` and two columns on
+`ReportCardSettings`, pinned by `results/tests/test_withholding.py`. The file was
+`fee-schedule-and-withholding.md` while it was still a promise; the billing half
+it was named for shipped first and now lives in [`fees.md`](fees.md), which is
+where that half is maintained. Nothing about it is repeated here: two copies of
+one argument is the drift `operating-rules.md` rule 7 is about.
 
-**What remains is design, not built.** No code exists for anything below. When it
-ships this file becomes `withholding.md` and this notice goes with it.
-
-The billing half was written against `main` at `70062c6`; this half has been
-re-read against it since. It leans on `operating-rules.md` by number rather than
-re-arguing: **rule 1** (guard on the artefact, not current placement), **rule 3**
+The billing half was written against `main` at `70062c6`; this half was re-read
+against it before it was built. It leans on `operating-rules.md` by number
+rather than re-arguing: **rule 1** (guard on the artefact, not current
+placement), **rule 3**
 (immutability lives in the database), **rule 4** (an audit is append-only rows),
 and **rule 8**, which was written out of this design.
 
@@ -379,8 +377,16 @@ the gate runs; pass it. The child and term are on it.
 WithheldOut
     school_name         from the card's frozen copy, not a live join   (rule 2)
     contact             ReportCardSettings.withholding_contact
-    message             the school is holding this card; please contact them
+    detail              the school is holding this card; please contact them
 ```
+
+**`detail`, and the first draft of this design said `message`.** Ruled the other
+way when the implementation was checked against this document: every other error
+body in `api.py` is django-ninja's `{"detail": ...}`, and one refusal spelling
+its sentence differently is a client-visible inconsistency for no gain. The two
+fields above it are the ones this design is actually for. The tests assert the
+*substance* — a human-readable sentence carrying the contact — rather than
+pinning the key, so neither name is frozen by them.
 
 The same body on both routes. The PDF route already returns JSON for its 202, so
 a JSON 403 there is not a new shape — and a file route that answered a withheld

@@ -76,6 +76,7 @@ half of why freezing it would be wrong: the card would permanently say
 "undecided" about a year the school later decided.
 """
 
+import enum
 from decimal import Decimal
 from typing import List, Optional
 
@@ -88,7 +89,8 @@ from academics.models import Term, TermName
 from accounts.models import Guardianship, Membership, Role
 from accounts.session import session_auth
 
-from . import cards, renders
+from . import cards, renders, withholding
+from .withholding import CardWithheld
 from .models import (
     CommentAuthor,
     PdfState,
@@ -104,20 +106,61 @@ router = Router(auth=session_auth)
 
 #: Staff who may read any card at their own school.
 #:
-#: The same four as `results.api.POSITION_VIEWING_ROLES` and deliberately not
-#: imported from it: that constant answers "who may see a position", this one
-#: answers "who may see what went home to a family". They coincide today. Tying
-#: them together would mean a later widening of one silently widened the other,
-#: and these are not the same question — a bursar could reasonably be added
-#: here one day and must never be added there.
+#: Deliberately **not** imported from `results.api.POSITION_VIEWING_ROLES`: that
+#: constant answers "who may see a position", this one answers "who may see what
+#: went home to a family". Tying them together would mean a later widening of
+#: one silently widened the other, and these are not the same question.
+#:
+#: **A bursar is here on purpose, and must never be added to
+#: `results.api.POSITION_VIEWING_ROLES`.** The comment this replaces predicted
+#: this edit — "a bursar could reasonably be added here one day and must never
+#: be added there" — and the fee gate is the day. A bursar deciding whether to
+#: hold a card back cannot do the job without seeing the document they are
+#: holding, and the narrower alternative — a staff screen showing only *that* a
+#: card exists and is withheld — is a second surface answering a question the
+#: first one already answers. That shape is what produced four answers to "did a
+#: card go home" and the PR #35 bug with them.
+#:
+#: The widening stops here. Nothing in this module has a slot for a position for
+#: it to reach: `ReportCardOut` carries no position field, so this cannot leak a
+#: rank even by accident. That is the property that makes it a one-line change
+#: rather than a judgement call repeated at every serializer.
 CARD_VIEWING_ROLES = frozenset(
     {
         Role.TEACHER.value,
         Role.VICE_PRINCIPAL_ACADEMIC.value,
         Role.PRINCIPAL.value,
         Role.ADMIN.value,
+        Role.BURSAR.value,
     }
 )
+
+
+class CardClaim(enum.Enum):
+    """*How* a reader has a claim on this card. `None` where they have none.
+
+    The gate needs this and not a boolean, because staff always see a withheld
+    card — a bursar who cannot see what they are withholding cannot do the job —
+    so it has to know which of the three readers is asking.
+
+    Never stored and never serialised. A plain `enum.Enum` rather than
+    `TextChoices` for exactly that reason: nothing here crosses the database, so
+    the values are internal and identity comparison is the safe kind.
+    """
+
+    SELF = "self"
+    GUARDIAN = "guardian"
+    STAFF = "staff"
+
+
+#: The two claims a *family* holds, and the only ones the fee gate applies to.
+#:
+#: **Not `accounts.FAMILY_ROLES`.** A claim is not a role: a guardian's claim
+#: comes from `Guardianship`, which links a login to *one child*, while holding
+#: PARENT at a school says only that somebody is *a* parent there. That
+#: distinction is the whole reason `_may_read()` is a function and not a role
+#: test, and this constant must not blur it.
+FAMILY_CLAIMS = frozenset({CardClaim.SELF, CardClaim.GUARDIAN})
 
 
 # -- what a family sees ------------------------------------------------------
@@ -308,6 +351,34 @@ class ReportCardOut(Schema):
     promotion: Optional[PromotionOut] = None
 
 
+class WithheldOut(Schema):
+    """What a family is told when their school is holding the card. The 403 body.
+
+    Three fields, and the interesting part is the two that are missing.
+
+    **Not the amount.** Balances are staff-only in this phase: a parent-facing
+    number is a support burden and a correctness risk, because a family will
+    dispute a figure the bursar has not reconciled. It is additive later.
+
+    **Not the reason.** `WithholdingDecision.reason` is the bursar's internal
+    note and may be unguarded about a family. It is staff-only in the sense
+    `ReleasedCard.position` is — excluded at the serializer, not merely absent
+    from the page — because a field left out of the template while it sits in
+    the JSON has not been left out.
+
+    `school_name` is the card's **frozen** copy, never a live join to `School`.
+
+    `contact` is the entire reason `withholding_contact` and its constraint
+    exist. A refusal that sends a parent nowhere is the dead end this design is
+    about; the constraint is what makes this field non-empty whenever the switch
+    that produces this response is on.
+    """
+
+    school_name: str
+    contact: str
+    detail: str
+
+
 # -- who may read one --------------------------------------------------------
 
 
@@ -340,7 +411,7 @@ def _the_child(school, student_membership_id: int) -> Membership:
     )
 
 
-def _may_read(actor, school, child: Membership) -> bool:
+def _may_read(actor, school, child: Membership) -> Optional[CardClaim]:
     """The child themselves, a guardian of theirs, or staff at this school.
 
     Three readers, and they are checked cheapest first. The guardian check is a
@@ -349,22 +420,39 @@ def _may_read(actor, school, child: Membership) -> bool:
     there and nothing about *whose*. Guardianship is what links a login to one
     child, and without consulting it every parent at a school could read every
     child's card.
+
+    **Returns which claim, not whether there is one**, so that the fee gate at
+    the serving edge can spare staff without asking any of these questions a
+    second time. The three checks keep their order and their reasoning; only the
+    return type changed.
+
+    A **guardian who is also staff** comes back `STAFF`, because the role check
+    runs before the guardianship query — so a bursar is served their own child's
+    withheld card. That is a consequence of "staff always see a withheld card"
+    rather than an exception to it, and it is written down here because a reader
+    who found it themselves would reasonably file it as a leak. If a school ever
+    wants the other answer, the change is to ask the guardianship question first
+    *for the gate*, not to reorder this function — that would change who may
+    read a card, which is a different question from who is served one.
     """
     if not getattr(actor, "is_authenticated", False):
-        return False
+        return None
 
     # The child reading their own card. `Membership.user_id`, not the child's
     # membership id — a student's login is the thing being compared.
     if child.user_id == actor.pk:
-        return True
+        return CardClaim.SELF
 
     if set(actor.roles_at(school)) & CARD_VIEWING_ROLES:
-        return True
+        return CardClaim.STAFF
 
-    return Guardianship.objects.filter(guardian=actor, student=child).exists()
+    if Guardianship.objects.filter(guardian=actor, student=child).exists():
+        return CardClaim.GUARDIAN
+
+    return None
 
 
-def _require_may_read(actor, school, child: Membership):
+def _require_may_read(actor, school, child: Membership) -> CardClaim:
     """A flat 404 for every refusal, matching this API's disclosure convention.
 
     Not a 403. A 403 says "this card exists and you may not have it", which
@@ -373,9 +461,64 @@ def _require_may_read(actor, school, child: Membership):
     `gradebook.api`'s tests settled for this codebase. The refusal a caller who
     may not read this card gets is indistinguishable from the one they get for a
     child who does not exist.
+
+    Returns the claim, which `_require_servable()` needs.
     """
-    if not _may_read(actor, school, child):
+    claim = _may_read(actor, school, child)
+    if claim is None:
         raise Http404("No such report card.")
+    return claim
+
+
+def _require_servable(claim: CardClaim, card):
+    """403 for a family reader whose school is holding this card over fees.
+
+    **One helper, called identically from both serving surfaces.** It is not a
+    clause bolted into each view, and that is the whole design rather than
+    tidiness: `report_card_pdf()`'s docstring already argued that a PDF of a card
+    you may read is not a second permission, *reachable by adding four
+    characters to a URL*. This makes the same sentence true of being served one,
+    and it stays true only while there is one function to change.
+
+    **It takes the card, not `(child, term)`.** The body has to carry
+    `school_name` from the card's frozen copy — operating rule 2, no live join to
+    `School` — and a helper handed only a child and a term has neither the frozen
+    name nor the card row. The alternative is calling `cards.card_for()` a second
+    time, which is a second answer to the deliberately order-sensitive question
+    of *which* card this is. The caller already holds it by the time this runs;
+    the child and the term are on it.
+
+    **Staff are spared before anything is read.** `withholding.is_withheld()` is
+    two queries, and a staff caller has already been established as one who sees
+    a withheld card, so there is nothing for those queries to decide.
+
+    ## This helper is the only door
+
+    **A new way to put card content in a family's hands is a change to this
+    design rather than an addition to it.** That is the promise, and it is
+    stated here rather than in a test name because a coverage claim in prose
+    goes stale (`operating-rules.md` rule 7) and this is the one place a person
+    adding the third surface is certain to read.
+
+    `test_withholding.AThirdServingSurfaceCannotBeAddedUngated` enumerates
+    `router.path_operations` and drives every one of them as the guardian of a
+    withheld child, so a third route on *this* router is covered the day it is
+    written. Its reach stops at the router: a surface serving card content from
+    somewhere else — a staff export in `results/api.py`, an emailed attachment,
+    a management command — is outside it, because the only thing tying this
+    helper to a route is that the route calls it, and no test can enumerate
+    code in a module it does not know to look at.
+    """
+    if claim not in FAMILY_CLAIMS:
+        return
+
+    if not withholding.is_withheld(card.student_membership_id, card.term_id):
+        return
+
+    raise CardWithheld(
+        school_name=card.school_name,
+        contact=withholding.settings().withholding_contact,
+    )
 
 
 # -- reading the snapshot ----------------------------------------------------
@@ -524,7 +667,7 @@ def _promotion(card) -> Optional[PromotionOut]:
 
 @router.get(
     "/cards/{int:student_membership_id}/{int:term_id}/",
-    response=ReportCardOut,
+    response={200: ReportCardOut, 403: WithheldOut},
     tags=["results"],
 )
 def report_card(request, student_membership_id: int, term_id: int):
@@ -533,15 +676,31 @@ def report_card(request, student_membership_id: int, term_id: int):
     404 for every way this can fail to produce a card — no such child, no card
     released, or a caller with no claim on this one. They are one answer on
     purpose: see `_require_may_read()`.
+
+    The single 403 is the fee gate, and **it runs last on purpose**. The claim
+    check going first is what keeps the flat-404 convention intact for everyone
+    it was written for: a stranger still learns nothing, and a family reader who
+    has already proven a guardianship claim knows their child exists and knows
+    the term happened. Answering *them* with a 404 would be a lie — the school
+    did release the card — and it sends a parent to the school angry about the
+    wrong thing.
+
+    **`403: WithheldOut` has to be declared here**, not only handled in `api.py`.
+    django-ninja raises `ConfigError` on a status the route did not declare, so
+    without it the exception handler is unreachable on this route and the
+    cheapest thing left for an implementer is a plain-string 403 — which drops
+    `contact`.
     """
     school = _school_of(request)
     child = _the_child(school, student_membership_id)
-    _require_may_read(request.user, school, child)
+    claim = _require_may_read(request.user, school, child)
 
     term = get_object_or_404(Term, pk=term_id)
     card = cards.card_for(child, term)
     if card is None:
         raise Http404("No such report card.")
+
+    _require_servable(claim, card)
 
     return card_payload(card)
 
@@ -645,7 +804,7 @@ def _the_pdf(card, marker) -> HttpResponse:
 
 @router.get(
     "/cards/{int:student_membership_id}/{int:term_id}/pdf/",
-    response={200: None, 202: CardPdfNotReadyOut},
+    response={200: None, 202: CardPdfNotReadyOut, 403: WithheldOut},
     tags=["results"],
 )
 def report_card_pdf(request, student_membership_id: int, term_id: int):
@@ -672,15 +831,40 @@ def report_card_pdf(request, student_membership_id: int, term_id: int):
     again — `renders.enqueue_if_pending()` holds the debounce — so a card whose
     release-time job never reached a worker is recovered by the person who
     actually wants the file, rather than by a sweep nobody wrote.
+
+    **The fee gate is the same call in the same position as `report_card()`'s**,
+    and the docstring above is the argument for why it has to be. A withholding
+    fitted to the JSON route alone is exactly the bug this route was written to
+    refuse: a family refused the card appends `/pdf/` and is handed the file.
+    The existing sentence predicted the shape of it before the feature existed,
+    which is the strongest possible reason to take it literally.
+
+    **The gate sits above the marker.** Today's 202 carries `state`,
+    `state_label` and a detail string, so a withheld family reaching that code
+    would learn whether their child's card has been rendered — and be told the
+    file is "still being prepared", which is a worse lie than the 404 this
+    design already rejects, because it promises a document that is never coming.
+
+    **The file is still built for a withheld card.** Nothing in
+    `results.renders` changes and nothing here makes a render conditional:
+    `docs/report-card-pdf.md` writes the marker inside the release transaction
+    precisely so that "released and never rendered" is a positive fact rather
+    than an absence somebody infers, and making it conditional on fees would
+    reintroduce through the fee door the hole that closed. It is also the
+    practical answer — a school that lifts a withholding the morning after a
+    family pays wants the file to exist already, not to start a render the
+    family waits on.
     """
     school = _school_of(request)
     child = _the_child(school, student_membership_id)
-    _require_may_read(request.user, school, child)
+    claim = _require_may_read(request.user, school, child)
 
     term = get_object_or_404(Term, pk=term_id)
     card = cards.card_for(child, term)
     if card is None:
         raise Http404("No such report card.")
+
+    _require_servable(claim, card)
 
     marker = renders.marker_for(card)
     if marker.state == PdfState.BUILT:
@@ -694,4 +878,11 @@ def report_card_pdf(request, student_membership_id: int, term_id: int):
     )
 
 
-__all__ = ["router", "CARD_VIEWING_ROLES", "card_payload"]
+__all__ = [
+    "router",
+    "CARD_VIEWING_ROLES",
+    "CardClaim",
+    "FAMILY_CLAIMS",
+    "WithheldOut",
+    "card_payload",
+]
