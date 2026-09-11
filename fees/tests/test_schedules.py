@@ -1723,3 +1723,123 @@ class SourceColumnGuardTests(BillingSetUp):
             "the locking read and nothing else; the guard should be free:\n"
             + "\n".join(schedule_reads),
         )
+
+
+class SubtransactionCountTests(BillingSetUp):
+    """Issue #82: what the per-charge savepoint cost everybody else.
+
+    `services.charge()` is `@transaction.atomic`, so billing a class through it
+    opened a savepoint per entry — 135 of them for a 45-child three-line bill,
+    against the 64 subtransaction ids Postgres caches per backend. Past that the
+    backend overflows and *other* backends' visibility checks fall back to
+    `pg_subtrans` for as long as the transaction is open.
+
+    Measured on a 45-child class, holding the transaction open and scanning from
+    a second connection: **39.45us per scan and 8,100,003 `Subtrans` SLRU
+    lookups with the savepoints, against 12.29us and 1 without**, with the row
+    count held fixed by a control that wrote the same 135 rows in one statement.
+
+    These tests count savepoints rather than time anything, because the count is
+    the mechanism and a timing here would be a flake. The savepoints below are
+    the ones `apply_to_class()` issues *inside* the test's own transaction.
+    """
+
+    def _savepoints_during(self, work):
+        with CaptureQueriesContext(connection) as captured:
+            result = work()
+        opened = [
+            q["sql"]
+            for q in captured.captured_queries
+            if q["sql"].strip().upper().startswith("SAVEPOINT")
+        ]
+        return result, opened
+
+    def _grant(self, membership, amount_kobo, reason):
+        return FeeConcession.objects.create(
+            student_membership_id=membership.pk,
+            amount_kobo=amount_kobo,
+            reason=reason,
+            granted_by_id=self.bursar.pk,
+        )
+
+    def test_billing_a_class_opens_one_savepoint_not_one_per_charge(self):
+        """Two children, two lines: four charges, and one savepoint for the run."""
+        with connected_to(self.stmarys):
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.charges_posted, 4, "two children, two lines")
+        self.assertEqual(
+            len(opened),
+            1,
+            "one savepoint for apply_to_class()'s own atomic block and no more; "
+            "a savepoint per charge is issue #82:\n" + "\n".join(opened),
+        )
+
+    def test_the_count_does_not_grow_with_the_class(self):
+        """The property, not the number. Half again the children, same savepoints."""
+        with connected_to(self.stmarys):
+            academics.place_student(
+                ClassGroup.objects.get(pk=self.group_id), self.term(), self.kemi
+            )
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.charges_posted, 6, "three children, two lines")
+        self.assertEqual(
+            len(opened),
+            1,
+            "the savepoint count must be flat in the size of the class; that is "
+            "the whole of #82, since 64 is the limit and a class is not:\n"
+            + "\n".join(opened),
+        )
+
+    def test_a_discount_still_opens_one_because_its_handler_needs_one(self):
+        """**Not an oversight.** Removing these reintroduces the collision bug.
+
+        `apply_to_class()`'s concession handler catches `IntegrityError` and
+        needs the failed entry rolled back to a savepoint so the run survives as
+        a skip. That is why the charge loop's savepoints could go and these
+        could not — and why the count is bounded by concessions, which is
+        issue #85.
+        """
+        with connected_to(self.stmarys):
+            self._grant(self.ada, TUITION, "Staff child")
+            self._grant(self.chidi, LEVY, "Bursary")
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.discounts_posted, 2)
+        self.assertEqual(
+            len(opened),
+            3,
+            "one for the run and one per concession; if this ever reads 1 the "
+            "collision handler has lost the savepoint it rolls back to:\n"
+            + "\n".join(opened),
+        )
+
+    def test_charge_still_leaves_an_enclosing_transaction_usable(self):
+        """The guarantee `charge()`'s decorator buys, and why there are two.
+
+        `_charge()` exists for the one caller that provably does not need this.
+        Every other caller does, and finds it under the obvious name.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            line = FeeScheduleLine.objects.filter(
+                schedule_id=self.schedule_id
+            ).first()
+
+            with transaction.atomic():
+                with self.assertRaises(IntegrityError):
+                    services.charge(
+                        self.ada,
+                        self.term(),
+                        line.amount_kobo,
+                        narration=line.description,
+                        recorded_by=self.bursar,
+                        source_line=line,
+                    )
+                # The point: the enclosing transaction is still usable, because
+                # charge() rolled its own failure back to its own savepoint.
+                self.assertEqual(
+                    FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE).count(),
+                    4,
+                )

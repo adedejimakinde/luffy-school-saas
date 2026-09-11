@@ -172,6 +172,59 @@ def _magnitude(amount_kobo):
     return amount_kobo
 
 
+def _charge(membership, term, amount_kobo, *, narration, effective_on=None,
+            reference="", recorded_by=None, source_line=None):
+    """`charge()` without the savepoint. **`fees.schedules` only.**
+
+    Issue #82. `charge()` is `@transaction.atomic`, so every call inside
+    `apply_to_class()`'s one transaction opened and released a savepoint, and a
+    45-child three-line bill opened **135 subtransactions**. PostgreSQL caches
+    64 subtransaction ids per backend; past that the backend overflows and every
+    *other* backend's visibility check against those xids falls back to
+    `pg_subtrans`, for as long as the transaction stays open. Measured on a
+    45-child class, the same 135 rows written this way rather than in 135
+    subtransactions took a concurrent reader from **39.45us to 12.29us per scan
+    — 3.2x — and 8,100,003 `Subtrans` SLRU lookups to 1.**
+
+    **The savepoint bought the charge loop nothing**, and that is structural
+    rather than a judgement: the loop catches nothing, so an `IntegrityError`
+    here rolls back to the savepoint and then keeps propagating out of
+    `apply_to_class()`'s own atomic block, which aborts everything the savepoint
+    was protecting. Rolling back to a savepoint you are about to discard is not
+    a guarantee.
+
+    **`charge()` keeps its decorator, and this is why there are two functions**
+    rather than one with the decorator removed. A caller that is inside a larger
+    transaction, catches `FeeLedgerError` and carries on needs the failed entry
+    rolled back without poisoning what it is wrapped in. `apply_to_class()` does
+    not — it is the transaction — but `charge()`'s docstring has said since the
+    schedule work that *"the second caller is the one that will not know"*, and
+    that caller must find the safe function under the obvious name.
+
+    **`fees.schedules.apply_to_class()` is the only supported caller**, and it
+    holds the schedule row lock. Anything else wanting a charge wants `charge()`.
+    """
+    if source_line is not None and source_line.schedule.term_id != term.pk:
+        raise NotThisTermsLine(
+            f"Line {source_line.pk} belongs to {source_line.schedule}, which is "
+            f"another term's bill; this charge is for {term}. Charging it here "
+            f"would fill that child's slot in "
+            f"a_schedule_line_charges_a_child_once, and the run that should "
+            f"bill them would report a skip instead."
+        )
+    return _post(
+        membership=membership,
+        term=term,
+        kind=FeeEntryKind.CHARGE,
+        amount_kobo=_magnitude(amount_kobo),
+        narration=narration,
+        effective_on=effective_on,
+        reference=reference,
+        recorded_by=recorded_by,
+        source_line=source_line,
+    )
+
+
 @transaction.atomic
 def charge(membership, term, amount_kobo, *, narration, effective_on=None,
            reference="", recorded_by=None, source_line=None):
@@ -189,25 +242,21 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
     here because the second caller is the one that will not know.
 
     Raises `NotThisTermsLine` if the line belongs to another term's bill.
+
+    The savepoint this decorator opens is the whole difference between this and
+    `_charge()`: it is what lets a caller inside a larger transaction catch a
+    refusal and carry on. `apply_to_class()` is the one caller that provably
+    does not need it, and issue #82 is what that savepoint cost. The term check
+    below is asked here rather than left to a constraint, because no constraint
+    can reach across three tables to ask it -- and it is free in the hot path,
+    since `apply_to_class()` reads its lines through `locked.lines.all()` and a
+    reverse manager primes each line's `schedule` from the instance it came
+    from, so this compares two integers already in memory.
     """
-    # Asked here rather than left to a constraint, because no constraint can
-    # reach across three tables to ask it. Free in the hot path:
-    # `apply_to_class()` reads its lines through `locked.lines.all()`, and a
-    # reverse manager primes each line's `schedule` from the instance it came
-    # from, so this compares two integers already in memory.
-    if source_line is not None and source_line.schedule.term_id != term.pk:
-        raise NotThisTermsLine(
-            f"Line {source_line.pk} belongs to {source_line.schedule}, which is "
-            f"another term's bill; this charge is for {term}. Charging it here "
-            f"would fill that child's slot in "
-            f"a_schedule_line_charges_a_child_once, and the run that should "
-            f"bill them would report a skip instead."
-        )
-    return _post(
-        membership=membership,
-        term=term,
-        kind=FeeEntryKind.CHARGE,
-        amount_kobo=_magnitude(amount_kobo),
+    return _charge(
+        membership,
+        term,
+        amount_kobo,
         narration=narration,
         effective_on=effective_on,
         reference=reference,
