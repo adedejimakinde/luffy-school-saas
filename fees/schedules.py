@@ -323,10 +323,15 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # aborting everything the savepoint was protecting.
     #
     # **The discount loop below still opens one per concession, and must.** Its
-    # collision handler needs to roll back to one. That leaves this function
-    # under 64 by margin rather than by construction -- a class cannot have more
-    # concessions than children -- which is issue #85 and is deliberately not
-    # fixed here.
+    # collision handler needs to roll back to one, so those savepoints stay.
+    #
+    # **Nothing bounds how many there are.** Not the roster: `FeeConcession` has
+    # no unique constraint on the child, deliberately -- a bursary and a sibling
+    # discount are two facts and two DISCOUNT entries, and idempotency is keyed
+    # on the concession in `a_concession_discounts_a_child_once_per_term`, not
+    # on the child. So this loop is counted in concessions granted, and forty-
+    # five children holding two apiece is ninety savepoints, past 64 with no
+    # unusual school involved. Issue #85, deliberately not fixed here.
     for student_id in student_ids:
         membership = memberships[student_id]
         for line in lines:

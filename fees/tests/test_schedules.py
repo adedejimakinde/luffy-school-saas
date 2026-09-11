@@ -1798,8 +1798,9 @@ class SubtransactionCountTests(BillingSetUp):
         `apply_to_class()`'s concession handler catches `IntegrityError` and
         needs the failed entry rolled back to a savepoint so the run survives as
         a skip. That is why the charge loop's savepoints could go and these
-        could not — and why the count is bounded by concessions, which is
-        issue #85.
+        could not — and why the count is counted in concessions, which is
+        issue #85. Nothing bounds that count: a child may hold several, by
+        design, so it is not capped by the roster.
         """
         with connected_to(self.stmarys):
             self._grant(self.ada, TUITION, "Staff child")
