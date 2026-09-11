@@ -313,9 +313,11 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # 135 subtransactions inside this one transaction. Postgres caches 64 per
     # backend; past that it overflows and every *other* backend's visibility
     # check against those xids falls back to `pg_subtrans`, for as long as this
-    # transaction stays open. Measured: the same 135 rows cost a concurrent
-    # reader 39.45us per scan and 8,100,003 SLRU lookups written in 135
-    # subtransactions, against 12.29us and 1 written without them.
+    # transaction stays open. Measured: 135 subtransactions cost a concurrent
+    # reader 39.45us per scan and 8,100,003 SLRU lookups, against 12.29us and 1
+    # for a control that wrote the same 135 rows in one statement and so opened
+    # none. The 12.29us is the control's -- it is what held the row count fixed
+    # while the subxid count moved, not a timing of this loop.
     #
     # The savepoints bought this loop nothing, which is structural and not a
     # judgement: it catches nothing, so an `IntegrityError` rolled back to its

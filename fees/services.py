@@ -182,9 +182,17 @@ def _charge(membership, term, amount_kobo, *, narration, effective_on=None,
     64 subtransaction ids per backend; past that the backend overflows and every
     *other* backend's visibility check against those xids falls back to
     `pg_subtrans`, for as long as the transaction stays open. Measured on a
-    45-child class, the same 135 rows written this way rather than in 135
-    subtransactions took a concurrent reader from **39.45us to 12.29us per scan
-    — 3.2x — and 8,100,003 `Subtrans` SLRU lookups to 1.**
+    45-child class, holding the transaction open and scanning from a second
+    connection: **135 subtransactions cost that reader 39.45us per scan and
+    8,100,003 `Subtrans` SLRU lookups; zero cost it 12.29us and 1.**
+
+    **The second row is a control, not this function.** It wrote the same 135
+    rows in one statement, which is how the row count was held fixed while the
+    subxid count changed. This function writes 135 statements and opens no
+    savepoints, and it was not timed -- deliberately: the reader pays per subxid
+    its writer left uncached, and this function leaves none, so the count is the
+    mechanism and the count is what the tests assert. Do not read 12.29us as a
+    measurement of this path.
 
     **The savepoint bought the charge loop nothing**, and that is structural
     rather than a judgement: the loop catches nothing, so an `IntegrityError`
@@ -246,10 +254,14 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
     The savepoint this decorator opens is the whole difference between this and
     `_charge()`: it is what lets a caller inside a larger transaction catch a
     refusal and carry on. `apply_to_class()` is the one caller that provably
-    does not need it, and issue #82 is what that savepoint cost. The term check
-    below is asked here rather than left to a constraint, because no constraint
-    can reach across three tables to ask it -- and it is free in the hot path,
-    since `apply_to_class()` reads its lines through `locked.lines.all()` and a
+    does not need it, and issue #82 is what that savepoint cost.
+
+    **The term check is no longer below.** It moved into `_charge()` with the
+    body, so both functions ask it and the caller that skips this decorator
+    still gets it. It is asked in Python rather than left to a constraint
+    because no constraint can reach across three tables to ask it, and it is
+    free on the hot path -- which is now `_charge()`'s, not this one's:
+    `apply_to_class()` reads its lines through `locked.lines.all()`, and a
     reverse manager primes each line's `schedule` from the instance it came
     from, so this compares two integers already in memory.
     """
