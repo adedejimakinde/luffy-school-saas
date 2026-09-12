@@ -247,13 +247,30 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # different orders, Postgres does not hand back a unique violation; it hands
     # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError`.
     #
-    # **Moving the skip into `ON CONFLICT` did not retire this.** `DO NOTHING`
-    # still takes a row lock on the conflicting tuple and still waits on the
-    # other run to finish, so two runs inserting overlapping sets in different
-    # orders deadlock exactly as they did before — and a deadlock is not a
-    # conflict, so nothing declines it and no skip is reachable. The loser's
-    # whole transaction dies and the class goes unbilled: the outcome the skip
-    # exists to prevent, reached by the one route the skip cannot cover.
+    # ========================================================================
+    # **DO NOT DELETE THIS `order_by()` BECAUSE THE LOOP BELOW "HANDLES
+    # CONFLICTS NOW". IT DOES NOT HANDLE THIS ONE.**
+    #
+    # Issue #85 moved the concession skip from a caught `IntegrityError` into an
+    # `ON CONFLICT DO NOTHING`, and that reads like the end of every collision
+    # worry on this path. It is not, and this is the exception:
+    #
+    # `DO NOTHING` **still takes a row lock** on the conflicting tuple and still
+    # waits for the other run to finish — it declines the row, it does not skip
+    # the lock. So two runs inserting overlapping sets in different orders
+    # deadlock exactly as they did before the fix. And **a deadlock is not a
+    # conflict**: nothing declines it, no `None` comes back, no skip is
+    # reachable. It arrives as `OperationalError`, SQLSTATE `40P01`, and the
+    # loser's whole transaction dies with forty-five children unbilled — the
+    # outcome the skip exists to prevent, reached by the one route the skip has
+    # never been able to cover.
+    #
+    # This clause is therefore **more** load-bearing after #85, not less: it is
+    # now the *only* thing standing between two concurrent bills and that
+    # deadlock, where before it was one of two. Removing it is a silent
+    # regression — nothing goes red at the moment of deletion, and the failure
+    # needs two schedules, one term and overlapping concessions to appear.
+    # ========================================================================
     #
     # A total order shared by every run is what makes the cycle impossible. That
     # order is `FeeConcession.Meta.ordering` and this queryset inherited it

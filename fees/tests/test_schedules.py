@@ -668,11 +668,20 @@ class LockScopeTests(BillingSetUp):
         `ConcessionRaceTests` below is about. Reaching those rows in a total
         order every run shares makes a deadlock cycle impossible. Reaching them
         in different orders is SQLSTATE `40P01`, which Django raises as
-        `OperationalError` — and `apply_to_class()` catches `IntegrityError`.
-        The handler never sees it, so it cannot become a skip: the loser's whole
+        `OperationalError`, and no skip is reachable for it: the loser's whole
         transaction dies and the class goes unbilled. That is the same
         forty-five-children outcome the skip exists to prevent, reached by the
         one route the skip cannot cover.
+
+        **Issue #85 made this test matter more, not less.** The skip used to be a
+        caught `IntegrityError`, and this docstring used to say the handler
+        "never sees" a deadlock — true, and now moot, because there is no
+        handler: the skip is an `ON CONFLICT DO NOTHING` in
+        `services._discount()`. That looks like it retires every collision on
+        this path, and it does not retire this one. `DO NOTHING` still takes a
+        row lock on the conflicting tuple and still waits, so the deadlock is
+        reached exactly as before — and a deadlock is not a conflict, so nothing
+        declines it. This ordering is now the **only** thing preventing it.
 
         **Asserted against compiled SQL, because that is where the guarantee
         lives.** Postgres takes its row locks in the order the rows arrive, so
