@@ -23,6 +23,7 @@ that quietly bills the wrong children.
 from datetime import date
 from unittest import mock
 
+from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection, transaction
 from django.db.models import ProtectedError
 from django.test.utils import CaptureQueriesContext
@@ -35,6 +36,7 @@ from accounts.services import enroll_student
 from fees import schedules, services
 from fees.models import (
     FeeConcession,
+    LedgerIsAppendOnly,
     FeeEntryKind,
     FeeLedgerEntry,
     FeeSchedule,
@@ -778,8 +780,13 @@ class ConcessionRaceTests(BillingSetUp):
     """
 
     def _racing_discount(self, note="Posted by the other bill"):
-        """The real `discount()`, with another bursar's row landing first."""
-        real = schedules.services.discount
+        """The real `_discount()`, with another bursar's row landing first.
+
+        **`_discount` and not `discount`**: issue #85 moved the call site, and a
+        mock still pointed at `discount` would patch a function this path no
+        longer calls — the test would pass without ever reaching the race.
+        """
+        real = schedules.services._discount
 
         def racing(membership, term, amount_kobo, **kwargs):
             FeeLedgerEntry.objects.create(
@@ -805,7 +812,7 @@ class ConcessionRaceTests(BillingSetUp):
             )
 
             with mock.patch.object(
-                schedules.services, "discount", self._racing_discount()
+                schedules.services, "_discount", self._racing_discount()
             ):
                 summary = self.apply()
 
@@ -840,80 +847,215 @@ class ConcessionRaceTests(BillingSetUp):
             def unrelated(*args, **kwargs):
                 raise IntegrityError("something else entirely")
 
-            with mock.patch.object(schedules.services, "discount", unrelated):
+            with mock.patch.object(schedules.services, "_discount", unrelated):
                 with self.assertRaises(IntegrityError):
                     self.apply()
 
 
-    def test_a_real_violation_of_another_constraint_is_raised_not_swallowed(self):
-        """The predicate arm the test above cannot reach.
+    def test_a_different_unique_violation_is_still_raised(self):
+        """The narrowing, now that it lives in SQL instead of in Python.
 
-        `test_an_unrecognised_integrity_error_is_raised_and_not_swallowed`
-        raises a bare `IntegrityError` with no `__cause__` at all, so it only
-        exercises the **no diagnostics** arm of `_is_the_concession_colliding()`
-        — the arm that answers "not a collision" because there is nothing to
-        read. That arm is real, and it is not the one that matters for the
-        future.
+        Until issue #85 this was a predicate reading `pgcode` and the constraint
+        name, so that only *this* index counted as a skip and every other
+        refusal was re-raised. The predicate is gone: `_discount()` asks Postgres
+        to decline the row instead of refusing it, and nothing is caught.
 
-        The one that matters is a genuine Postgres unique violation carrying
-        genuine diagnostics and naming a **different** index. That is what every
-        constraint added to this table from now on looks like the day it first
-        fires, and the branch that re-raises it is the only thing standing
-        between a future constraint and a silently skipped discount. Untested,
-        it was the guard against silent swallowing that was itself unguarded.
+        **The narrowing had to survive that move, and this is where it is
+        proven.** `ON CONFLICT` names the concession index *by inference* rather
+        than saying a bare `DO NOTHING`, and the difference is exactly this test:
+        a bare `DO NOTHING` swallows every unique violation the ledger can raise,
+        so the day a second index becomes reachable from a discount, every row it
+        refuses turns into a silently skipped discount — a family quietly not
+        given their bursary, with nothing red anywhere.
 
-        **A real exception rather than a constructed one.** A hand-built stand-in
-        with a fake `.diag` would assert against this test's idea of psycopg
-        rather than psycopg's, and the `pgcode`/`constraint_name` pair is
-        exactly what the predicate reads — so it is forced by making a real
-        second `FeeSchedule` for a class that already has one, and re-raising
-        what Postgres hands back.
+        **A real index and a real violation, not a constructed exception.** A
+        hand-built stand-in with a fake `.diag` would assert against this test's
+        idea of psycopg rather than psycopg's, and the old version of this test
+        needed a mock precisely because no second index was reachable. One is
+        created here for the length of the test, which is the only way to ask the
+        question the future will ask.
+        """
+        with connected_to(self.stmarys):
+            # One child, two concessions -- so the run posts two DISCOUNT rows
+            # for the same membership and trips the index below on the second.
+            for reason in ("Staff child", "Sibling discount"):
+                FeeConcession.objects.create(
+                    student_membership_id=self.ada.pk,
+                    amount_kobo=LEVY,
+                    reason=reason,
+                )
+
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "CREATE UNIQUE INDEX a_future_index_on_discounts "
+                    "ON fees_feeledgerentry (student_membership_id) "
+                    "WHERE kind = 'discount'"
+                )
+
+            with self.assertRaises(IntegrityError) as raised:
+                self.apply()
+
+        # It must be *this* index that refused, not the concession one: if the
+        # inference clause were ever widened to a bare DO NOTHING this assertion
+        # is what goes red, because the row would have been declined in silence
+        # and no exception would arrive at all.
+        cause = raised.exception.__cause__
+        self.assertEqual(cause.pgcode, "23505", "not a unique violation")
+        self.assertEqual(
+            cause.diag.constraint_name,
+            "a_future_index_on_discounts",
+            "the refusal did not come from the second index, so this test is no "
+            "longer asking whether ON CONFLICT is targeted",
+        )
+
+    def test_a_concession_deleted_underneath_the_run_is_not_a_skip(self):
+        """`ON CONFLICT DO NOTHING` declines duplicates; it must not hide this.
+
+        The asymmetry is deliberate and issue #85 asks for it to survive the
+        fix. A duplicate means somebody else posted this child's discount and
+        the child has it either way, so the run carries on. A *missing*
+        concession means the row this entry claims to have come from is gone,
+        and posting an entry pointing at nothing is not a lesser evil than
+        stopping — so the run dies.
+
+        **It dies one step earlier than the old comment here claimed.** That
+        comment said what was left after the unique violation "is a foreign-key
+        failure"; in fact `_post()` calls `full_clean()` with nothing excluded,
+        and `ForeignKey.validate()` looks the row up and refuses it as an
+        invalid choice before any INSERT is issued. So this arrives as
+        `ValidationError`, not `IntegrityError` — which is the better error, in
+        the caller's language and before the write, but it is not the one the
+        code said it was. The FK is the backstop behind it and is asserted
+        directly by the test below, where it is actually reachable.
+        """
+        with connected_to(self.stmarys):
+            concession = FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=LEVY,
+                reason="Staff child",
+            )
+            stale = FeeConcession.objects.get(pk=concession.pk)
+            FeeConcession.objects.filter(pk=concession.pk).delete()
+
+            with self.assertRaises(ValidationError) as raised:
+                with transaction.atomic():
+                    schedules.services._discount(
+                        self.ada,
+                        self.term(),
+                        LEVY,
+                        narration="Staff child",
+                        source_concession=stale,
+                    )
+
+            self.assertIn(
+                "source_concession",
+                raised.exception.message_dict,
+                "the refusal must name the concession, not some other field",
+            )
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(kind=FeeEntryKind.DISCOUNT).count(),
+                0,
+                "and it must be refused before the write, not after it",
+            )
+
+    def test_the_raw_insert_writes_into_this_schools_schema_only(self):
+        """`_insert_or_skip()` is the one write in this module that is not an ORM
+        `save()`, so its schema scoping is a claim that can be wrong.
+
+        It issues `INSERT INTO "fees_feeledgerentry"` with a bare table name and
+        leans entirely on the `search_path` django_tenants sets. That is the
+        right way to do it — hard-coding a schema would be worse — but it is
+        exactly the shape of write that lands in the wrong school when something
+        upstream forgets to switch, and a single-tenant test cannot tell a
+        correctly scoped INSERT from one quietly discounting another school's
+        children.
+
+        Grace Academy has its own child, its own bill and the same amounts.
         """
         with connected_to(self.stmarys):
             FeeConcession.objects.create(
                 student_membership_id=self.ada.pk,
-                amount_kobo=TUITION,
+                amount_kobo=LEVY,
                 reason="Staff child",
             )
+            summary = self.apply()
+            self.assertEqual(summary.discounts_posted, 1)
+            self.assertEqual(self.balance_of(self.ada), TUITION)
 
-            def a_different_unique_violation(*args, **kwargs):
-                """A real 23505 from a real index — just not this one.
-
-                Inside `atomic()` so the failed statement rolls back to a
-                savepoint: the exception has to travel out of here as a live
-                object on a usable connection, not leave a poisoned transaction
-                behind it.
-                """
-                try:
-                    with transaction.atomic():
-                        FeeSchedule.objects.create(
-                            term=self.term(),
-                            class_group=ClassGroup.objects.get(pk=self.group_id),
-                        )
-                except IntegrityError as real:
-                    raise real
-                raise AssertionError(
-                    "a duplicate schedule was accepted, so this test no longer "
-                    "produces the unique violation it exists to hand back"
-                )
-
-            with mock.patch.object(
-                schedules.services, "discount", a_different_unique_violation
-            ):
-                with self.assertRaises(IntegrityError) as raised:
-                    self.apply()
-
-            # This test is only about the branch it names if the exception it
-            # forced actually carries what the other test's does not. Without
-            # these two, a future refactor could route it down the no-diagnostics
-            # arm and the coverage would silently go back to one branch.
-            cause = raised.exception.__cause__
-            self.assertEqual(cause.pgcode, "23505", "not a unique violation")
+        with connected_to(self.grace):
             self.assertEqual(
-                cause.diag.constraint_name,
-                "one_fee_schedule_per_class_per_term",
-                "the diagnostics do not name a different constraint, so the "
-                "different-name branch was not the one exercised",
+                FeeLedgerEntry.objects.filter(kind=FeeEntryKind.DISCOUNT).count(),
+                0,
+                "a discount landed in the other school's schema, which is what "
+                "a bare table name plus a wrong search_path looks like",
+            )
+            self.assertEqual(
+                FeeLedgerEntry.objects.count(),
+                0,
+                "Grace Academy's bill was never applied; its ledger must be "
+                "empty, discount or otherwise",
+            )
+
+    def test_do_nothing_does_not_hide_a_foreign_key_failure(self):
+        """The claim `_CONCESSION_ONCE_PER_TERM` rests on, asked of Postgres.
+
+        `ON CONFLICT DO NOTHING` covers unique and exclusion violations and
+        **nothing else**, so a dangling foreign key still aborts. The whole skip
+        depends on that: if `DO NOTHING` swallowed every refusal, a discount
+        pointing at a deleted concession would come back as `None` and be counted
+        as a skip, and the run would report a family's bursary as "already
+        posted" when it was posted by nobody.
+
+        **`SET CONSTRAINTS ALL IMMEDIATE`, and the reason is a finding.** Django
+        creates foreign keys `DEFERRABLE INITIALLY DEFERRED`, so this violation
+        does not fire at the INSERT at all — it fires at **COMMIT**. Without the
+        line below this test asserts `IntegrityError` around a statement that
+        raises nothing, and the failure surfaces later in `check_constraints()`
+        during teardown, attributed to whatever ran next.
+
+        That deferral is the real production behaviour and it is still correct
+        for this loop: the whole class is one transaction, so a dangling
+        concession takes the commit down and nobody is billed — not a skip,
+        which is the point. It is simply later than "the INSERT fails", and two
+        comments in this module used to say otherwise.
+
+        `full_clean()` refuses this a step earlier still (see the test above), so
+        this drives `_insert_or_skip()` directly — the point being whether the
+        *insert* is safe on its own, not whether something upstream happens to be
+        covering for it today.
+        """
+        with connected_to(self.stmarys):
+            entry = FeeLedgerEntry(
+                term=self.term(),
+                kind=FeeEntryKind.DISCOUNT,
+                amount_kobo=-LEVY,
+                narration="Staff child",
+                effective_on=date(2025, 9, 20),
+                source_concession_id=987654321,
+                **services.snapshot_student(self.ada),
+            )
+
+            with self.assertRaises(IntegrityError) as raised:
+                with transaction.atomic():
+                    with connection.cursor() as cursor:
+                        cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                    services._insert_or_skip(
+                        entry,
+                        conflict_target=services._CONCESSION_ONCE_PER_TERM,
+                    )
+
+            cause = raised.exception.__cause__
+            self.assertEqual(
+                cause.pgcode,
+                "23503",
+                "a dangling concession must arrive as a foreign-key violation; "
+                "if DO NOTHING ever starts swallowing this, the skip starts "
+                "lying about families who were never given their discount",
+            )
+            self.assertEqual(
+                FeeLedgerEntry.objects.filter(kind=FeeEntryKind.DISCOUNT).count(),
+                0,
+                "and nothing was written",
             )
 
 
@@ -1792,15 +1934,19 @@ class SubtransactionCountTests(BillingSetUp):
             + "\n".join(opened),
         )
 
-    def test_a_discount_still_opens_one_because_its_handler_needs_one(self):
-        """**Not an oversight.** Removing these reintroduces the collision bug.
+    def test_a_discount_no_longer_opens_one_per_concession(self):
+        """Issue #85. This asserted 3 until the skip stopped needing a savepoint.
 
-        `apply_to_class()`'s concession handler catches `IntegrityError` and
-        needs the failed entry rolled back to a savepoint so the run survives as
-        a skip. That is why the charge loop's savepoints could go and these
-        could not — and why the count is counted in concessions, which is
-        issue #85. Nothing bounds that count: a child may hold several, by
-        design, so it is not capped by the roster.
+        The savepoints here were **load-bearing**, which is why #82 removed the
+        charge loop's and left these: the handler at the foot of the discount
+        loop caught the unique violation and needed the failed entry rolled back
+        to a savepoint so the run survived as a skip.
+
+        They go only because the *catch* goes. `services._discount()` asks
+        Postgres to decline the duplicate rather than refuse it, and a row that
+        was never refused needs nothing rolled back. The skip is unchanged --
+        `ConcessionRaceTests` still proves it -- and what is gone is the
+        subtransaction that used to pay for it.
         """
         with connected_to(self.stmarys):
             self._grant(self.ada, TUITION, "Staff child")
@@ -1810,10 +1956,66 @@ class SubtransactionCountTests(BillingSetUp):
         self.assertEqual(summary.discounts_posted, 2)
         self.assertEqual(
             len(opened),
-            3,
-            "one for the run and one per concession; if this ever reads 1 the "
-            "collision handler has lost the savepoint it rolls back to:\n"
-            + "\n".join(opened),
+            1,
+            "one savepoint for apply_to_class()'s own atomic block and no more; "
+            "a savepoint per concession is issue #85:\n" + "\n".join(opened),
+        )
+
+    def test_the_count_does_not_grow_with_the_concessions(self):
+        """The property, not the number — and the one the roster cannot bound.
+
+        `FeeConcession` has no unique constraint on the child, deliberately
+        (`fees/models.py:246`), so this count is measured in concessions granted
+        and **nothing caps it**. Three apiece here rather than one, because a
+        test granting one per child would pass identically against code that had
+        merely been made flat in the *class* -- which is #82's property, not this
+        one.
+        """
+        with connected_to(self.stmarys):
+            for who in (self.ada, self.chidi):
+                for reason in ("Bursary", "Sibling discount", "Staff child"):
+                    self._grant(who, LEVY, reason)
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.discounts_posted, 6, "two children, three each")
+        self.assertEqual(
+            len(opened),
+            1,
+            "the savepoint count must be flat in the number of concessions, "
+            "which is the whole of #85:\n" + "\n".join(opened),
+        )
+
+    def test_a_class_past_the_subxid_cache_opens_one_savepoint(self):
+        """The regression guard at the size that actually overflowed.
+
+        64 is what Postgres caches per backend (`PGPROC_MAX_CACHED_SUBXIDS`);
+        past it the backend overflows and every *other* backend's visibility
+        check against those xids falls back to `pg_subtrans` for as long as this
+        transaction is open. Measured on this hardware with a concurrent reader
+        and a committer thread running, each arm against a control writing the
+        same number of rows in one statement: **66 subtransactions cost that
+        reader 16.36us per scan and 2,640,000 `Subtrans` SLRU lookups, against
+        6.84us and none.** At 45 there was no measurable cost and no lookups at
+        all -- it is a step at 64, not a slope, so a test below the step proves
+        nothing about the step.
+
+        `apply_to_class()` is `@transaction.atomic`, and in production that is
+        the *top-level* transaction, so the one savepoint counted here is an
+        artefact of the test's own atomic block. In production this run opens
+        **no subtransactions at all**.
+        """
+        with connected_to(self.stmarys):
+            for i in range(66):
+                self._grant(self.ada if i % 2 else self.chidi, LEVY, f"Grant {i}")
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.discounts_posted, 66)
+        self.assertEqual(
+            len(opened),
+            1,
+            "66 concessions must still open one savepoint; anything that grows "
+            "with the concession count is past the 64-subxid cache and is "
+            "issue #85 reopened:\n" + "\n".join(opened),
         )
 
     def test_charge_still_leaves_an_enclosing_transaction_usable(self):
@@ -1846,8 +2048,8 @@ class SubtransactionCountTests(BillingSetUp):
                 )
 
 
-class ChargeNeedsATransactionTests(TransactionTestCase):
-    """`_charge()` refuses to run in autocommit, and says so by type.
+class InnerPostersNeedATransactionTests(TransactionTestCase):
+    """`_charge()` and `_discount()` refuse to run in autocommit, by type.
 
     #82 removed the savepoint `charge()`'s decorator opened around every entry,
     which is safe exactly while the caller's own transaction is the thing a
@@ -1869,6 +2071,12 @@ class ChargeNeedsATransactionTests(TransactionTestCase):
     has no schema dimension: there is no query here for a second school's rows
     to leak into. Every claim in this module that *can* be scoped wrong is
     asserted against two schools; this one cannot be.
+
+    **`_discount()` is here for the same reason, not by symmetry.** Issue #85
+    removed its savepoint too, so it carries the same precondition: in autocommit
+    each discount it posts commits as it is written, and a failure part-way down
+    the concession list leaves some families discounted and the rest not, with no
+    transaction left to undo it.
     """
 
     def setUp(self):
@@ -1886,6 +2094,11 @@ class ChargeNeedsATransactionTests(TransactionTestCase):
                 name=TermName.FIRST,
                 starts_on=date(2025, 9, 15),
                 ends_on=date(2025, 12, 12),
+            ).pk
+            self.concession_id = FeeConcession.objects.create(
+                student_membership_id=self.ada.pk,
+                amount_kobo=LEVY,
+                reason="Staff child",
             ).pk
 
     def tearDown(self):
@@ -1951,3 +2164,99 @@ class ChargeNeedsATransactionTests(TransactionTestCase):
             self.assertEqual(entry.kind, FeeEntryKind.CHARGE)
             self.assertEqual(entry.amount_kobo, TUITION)
             self.assertEqual(FeeLedgerEntry.objects.count(), 1)
+
+    def _discount_ada(self):
+        """One discount through the inner function, against a real concession."""
+        return services._discount(
+            self.ada,
+            Term.objects.get(pk=self.term_id),
+            LEVY,
+            narration="Staff child",
+            recorded_by=self.bursar,
+            source_concession=FeeConcession.objects.get(pk=self.concession_id),
+        )
+
+    def test_discounting_outside_a_transaction_is_refused(self):
+        """Issue #85's half of the guard, asserted by type for the same reason."""
+        with connected_to(self.stmarys):
+            self.assertFalse(
+                transaction.get_connection().in_atomic_block,
+                "this test means nothing unless the connection really is in "
+                "autocommit; under TestCase it never is",
+            )
+
+            with self.assertRaises(services.NotInATransaction):
+                self._discount_ada()
+
+            self.assertEqual(
+                FeeLedgerEntry.objects.count(),
+                0,
+                "the guard is the first thing in _discount(), so nothing is "
+                "posted and there is nothing to unpick",
+            )
+
+    def test_the_same_discount_inside_a_transaction_posts(self):
+        """The control, without which the test above passes against `raise`.
+
+        One `atomic()` is the only difference between the two, so it is the only
+        thing either of them can be about.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                entry = self._discount_ada()
+
+            self.assertEqual(entry.kind, FeeEntryKind.DISCOUNT)
+            self.assertEqual(entry.amount_kobo, -LEVY)
+            self.assertEqual(FeeLedgerEntry.objects.count(), 1)
+
+    def test_a_discount_the_other_bill_already_posted_comes_back_as_none(self):
+        """The skip, proven where it is real rather than mocked.
+
+        `_discount()` answers `None` rather than raising, and that is the whole
+        of why the savepoint could go. Here the duplicate is already committed
+        before the call -- no mock, no patched service -- so the `ON CONFLICT`
+        is what declines it.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                first = self._discount_ada()
+            self.assertIsNotNone(first)
+
+            with transaction.atomic():
+                again = self._discount_ada()
+
+            self.assertIsNone(
+                again,
+                "a concession already discounted this term must come back as "
+                "None; anything else means the skip is gone",
+            )
+            self.assertEqual(
+                FeeLedgerEntry.objects.count(),
+                1,
+                "and the declined row must not have been written",
+            )
+
+    def test_the_entry_it_returns_is_append_only_like_any_other(self):
+        """`_insert_or_skip()` goes around `Model.save()`, so it must hand back
+        an object in the state a save would have left it in.
+
+        The append-only guard reads `_state.adding`: an entry that still claims
+        to be unsaved would let `save()` rewrite it, and a ledger row that can
+        be rewritten is the one thing this model exists to prevent. The raw
+        INSERT is the only path in this module that could get this wrong, which
+        is why the assertion is here and not on `discount()`.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                entry = self._discount_ada()
+
+            self.assertIsNotNone(entry.pk, "RETURNING did not come back")
+            self.assertFalse(
+                entry._state.adding,
+                "the entry still claims to be unsaved, so the append-only "
+                "guard below would not fire for it",
+            )
+
+            entry.narration = "Rewritten"
+            with self.assertRaises(LedgerIsAppendOnly):
+                entry.save()
