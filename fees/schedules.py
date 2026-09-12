@@ -307,23 +307,40 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     charges_posted = charges_skipped = charged_kobo = 0
     discounts_posted = discounts_skipped = discounted_kobo = 0
 
-    # **This loop opens a savepoint per entry, and that is filed, not fixed.**
-    # `services.charge()` is `@transaction.atomic`, so a 45-child three-line bill
-    # opens ~135 subtransactions inside this one transaction -- past the 64 that
-    # Postgres caches per backend, after which visibility checks fall back to
-    # `pg_subtrans` SLRU lookups and the cost is paid cluster-wide, by every
-    # school, for as long as this transaction stays open. The savepoints are
-    # load-bearing for the *discount* loop below, whose collision handler needs
-    # to roll back to one; for charges they buy nothing. Issue #82,
-    # `must-fix-before-pilot` -- it changes how charges post, so it is a design
-    # decision rather than a patch.
+    # **`services._charge()`, not `services.charge()`, and the underscore is the
+    # whole of issue #82.** `charge()` is `@transaction.atomic`, so calling it
+    # here opened a savepoint per entry and a 45-child three-line bill opened
+    # 135 subtransactions inside this one transaction. Postgres caches 64 per
+    # backend; past that it overflows and every *other* backend's visibility
+    # check against those xids falls back to `pg_subtrans`, for as long as this
+    # transaction stays open. Measured: 135 subtransactions cost a concurrent
+    # reader 39.45us per scan and 8,100,003 SLRU lookups, against 12.29us and 1
+    # for a control that wrote the same 135 rows in one statement and so opened
+    # none. The 12.29us is the control's -- it is what held the row count fixed
+    # while the subxid count moved, not a timing of this loop.
+    #
+    # The savepoints bought this loop nothing, which is structural and not a
+    # judgement: it catches nothing, so an `IntegrityError` rolled back to its
+    # savepoint and then propagated out of this function's own atomic block,
+    # aborting everything the savepoint was protecting.
+    #
+    # **The discount loop below still opens one per concession, and must.** Its
+    # collision handler needs to roll back to one, so those savepoints stay.
+    #
+    # **Nothing bounds how many there are.** Not the roster: `FeeConcession` has
+    # no unique constraint on the child, deliberately -- a bursary and a sibling
+    # discount are two facts and two DISCOUNT entries, and idempotency is keyed
+    # on the concession in `a_concession_discounts_a_child_once_per_term`, not
+    # on the child. So this loop is counted in concessions granted, and forty-
+    # five children holding two apiece is ninety savepoints, past 64 with no
+    # unusual school involved. Issue #85, deliberately not fixed here.
     for student_id in student_ids:
         membership = memberships[student_id]
         for line in lines:
             if (student_id, line.pk) in already_charged:
                 charges_skipped += 1
                 continue
-            services.charge(
+            services._charge(
                 membership,
                 term,
                 line.amount_kobo,
@@ -370,7 +387,9 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             # Treated as a skip, because that is what it is — somebody else
             # posted it, and the child has their concession either way.
             # `services.discount()` is itself atomic, so the failure rolls back
-            # to its savepoint and this transaction stays usable.
+            # to its savepoint and this transaction stays usable. That savepoint
+            # is why the charge loop's could go and this one's could not; issue
+            # #85 carries what it costs when a class has more than 64 of them.
             #
             # **The narrowing is complete for this path, not merely for the case
             # that was found.** Of the ten constraints on `FeeLedgerEntry`,

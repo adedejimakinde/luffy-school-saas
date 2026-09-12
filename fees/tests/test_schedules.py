@@ -26,7 +26,7 @@ from unittest import mock
 from django.db import IntegrityError, connection, transaction
 from django.db.models import ProtectedError
 from django.test.utils import CaptureQueriesContext
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
@@ -1723,3 +1723,231 @@ class SourceColumnGuardTests(BillingSetUp):
             "the locking read and nothing else; the guard should be free:\n"
             + "\n".join(schedule_reads),
         )
+
+
+class SubtransactionCountTests(BillingSetUp):
+    """Issue #82: what the per-charge savepoint cost everybody else.
+
+    `services.charge()` is `@transaction.atomic`, so billing a class through it
+    opened a savepoint per entry — 135 of them for a 45-child three-line bill,
+    against the 64 subtransaction ids Postgres caches per backend. Past that the
+    backend overflows and *other* backends' visibility checks fall back to
+    `pg_subtrans` for as long as the transaction is open.
+
+    Measured on a 45-child class, holding the transaction open and scanning from
+    a second connection: **39.45us per scan and 8,100,003 `Subtrans` SLRU
+    lookups with the savepoints, against 12.29us and 1 without**, with the row
+    count held fixed by a control that wrote the same 135 rows in one statement.
+
+    These tests count savepoints rather than time anything, because the count is
+    the mechanism and a timing here would be a flake. The savepoints below are
+    the ones `apply_to_class()` issues *inside* the test's own transaction.
+    """
+
+    def _savepoints_during(self, work):
+        with CaptureQueriesContext(connection) as captured:
+            result = work()
+        opened = [
+            q["sql"]
+            for q in captured.captured_queries
+            if q["sql"].strip().upper().startswith("SAVEPOINT")
+        ]
+        return result, opened
+
+    def _grant(self, membership, amount_kobo, reason):
+        return FeeConcession.objects.create(
+            student_membership_id=membership.pk,
+            amount_kobo=amount_kobo,
+            reason=reason,
+            granted_by_id=self.bursar.pk,
+        )
+
+    def test_billing_a_class_opens_one_savepoint_not_one_per_charge(self):
+        """Two children, two lines: four charges, and one savepoint for the run."""
+        with connected_to(self.stmarys):
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.charges_posted, 4, "two children, two lines")
+        self.assertEqual(
+            len(opened),
+            1,
+            "one savepoint for apply_to_class()'s own atomic block and no more; "
+            "a savepoint per charge is issue #82:\n" + "\n".join(opened),
+        )
+
+    def test_the_count_does_not_grow_with_the_class(self):
+        """The property, not the number. Half again the children, same savepoints."""
+        with connected_to(self.stmarys):
+            academics.place_student(
+                ClassGroup.objects.get(pk=self.group_id), self.term(), self.kemi
+            )
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.charges_posted, 6, "three children, two lines")
+        self.assertEqual(
+            len(opened),
+            1,
+            "the savepoint count must be flat in the size of the class; that is "
+            "the whole of #82, since 64 is the limit and a class is not:\n"
+            + "\n".join(opened),
+        )
+
+    def test_a_discount_still_opens_one_because_its_handler_needs_one(self):
+        """**Not an oversight.** Removing these reintroduces the collision bug.
+
+        `apply_to_class()`'s concession handler catches `IntegrityError` and
+        needs the failed entry rolled back to a savepoint so the run survives as
+        a skip. That is why the charge loop's savepoints could go and these
+        could not — and why the count is counted in concessions, which is
+        issue #85. Nothing bounds that count: a child may hold several, by
+        design, so it is not capped by the roster.
+        """
+        with connected_to(self.stmarys):
+            self._grant(self.ada, TUITION, "Staff child")
+            self._grant(self.chidi, LEVY, "Bursary")
+            summary, opened = self._savepoints_during(self.apply)
+
+        self.assertEqual(summary.discounts_posted, 2)
+        self.assertEqual(
+            len(opened),
+            3,
+            "one for the run and one per concession; if this ever reads 1 the "
+            "collision handler has lost the savepoint it rolls back to:\n"
+            + "\n".join(opened),
+        )
+
+    def test_charge_still_leaves_an_enclosing_transaction_usable(self):
+        """The guarantee `charge()`'s decorator buys, and why there are two.
+
+        `_charge()` exists for the one caller that provably does not need this.
+        Every other caller does, and finds it under the obvious name.
+        """
+        with connected_to(self.stmarys):
+            self.apply()
+            line = FeeScheduleLine.objects.filter(
+                schedule_id=self.schedule_id
+            ).first()
+
+            with transaction.atomic():
+                with self.assertRaises(IntegrityError):
+                    services.charge(
+                        self.ada,
+                        self.term(),
+                        line.amount_kobo,
+                        narration=line.description,
+                        recorded_by=self.bursar,
+                        source_line=line,
+                    )
+                # The point: the enclosing transaction is still usable, because
+                # charge() rolled its own failure back to its own savepoint.
+                self.assertEqual(
+                    FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE).count(),
+                    4,
+                )
+
+
+class ChargeNeedsATransactionTests(TransactionTestCase):
+    """`_charge()` refuses to run in autocommit, and says so by type.
+
+    #82 removed the savepoint `charge()`'s decorator opened around every entry,
+    which is safe exactly while the caller's own transaction is the thing a
+    failure rolls back. Until the check below, that precondition was a
+    docstring — and a docstring is what stands between this function and a
+    partly-billed class. A caller in autocommit commits each entry as it writes
+    it, so a failure on the fortieth child leaves thirty-nine families charged
+    and the rest not: the option 3 #82 rejected, arriving with no exception a
+    bursar could see and nothing red.
+
+    **`TransactionTestCase`, and it has to be.** Under `TestCase` every test
+    runs inside the test's own atomic block, so `in_atomic_block` is true, the
+    guard is unreachable, and a test asserting the refusal would pass against no
+    guard at all — the green test `docs/operating-rules.md` rule 5 is about.
+    That is the whole reason this is a class of its own down here rather than
+    four lines added to `SubtransactionCountTests`.
+
+    **One school, deliberately.** The property is a flag on the connection and
+    has no schema dimension: there is no query here for a second school's rows
+    to leak into. Every claim in this module that *can* be scoped wrong is
+    asserted against two schools; this one cannot be.
+    """
+
+    def setUp(self):
+        self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
+        self.bursar = User.objects.create_user(
+            "bursar", PASSWORD, full_name="Bola Bursar"
+        )
+        self.ada = enroll_student(
+            User.objects.create_user("ada", PASSWORD, full_name="Ada Obi"),
+            self.stmarys,
+        )
+        with connected_to(self.stmarys):
+            self.term_id = Term.objects.create(
+                session="2025/2026",
+                name=TermName.FIRST,
+                starts_on=date(2025, 9, 15),
+                ends_on=date(2025, 12, 12),
+            ).pk
+
+    def tearDown(self):
+        # Drop the schema, not just the rows: nothing here is rolled back, and
+        # `TransactionTestCase`'s flush empties the public tables while leaving
+        # the schema standing to be inherited by the next test. Same reason, and
+        # same shape, as `fees/tests/test_schedule_concurrency.py`'s teardown.
+        connection.set_schema_to_public()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'DROP SCHEMA IF EXISTS "{self.stmarys.schema_name}" CASCADE'
+            )
+        super().tearDown()
+
+    def _charge_ada(self):
+        """One hand-typed charge through the inner function. No `source_line`."""
+        return services._charge(
+            self.ada,
+            Term.objects.get(pk=self.term_id),
+            TUITION,
+            narration="Tuition",
+            recorded_by=self.bursar,
+        )
+
+    def test_charging_outside_a_transaction_is_refused(self):
+        """And refused before the write, by name: `NotInATransaction`.
+
+        Not `assertRaises(Exception)` — that passes on a typo in the call above
+        as readily as on the guard, which is issue #84 and thirteen other
+        places. `NotInATransaction` is deliberately outside `FeeLedgerError`,
+        so a caller catching ledger refusals and carrying on cannot turn this
+        into the silent half-bill it exists to prevent.
+        """
+        with connected_to(self.stmarys):
+            self.assertFalse(
+                transaction.get_connection().in_atomic_block,
+                "this test means nothing unless the connection really is in "
+                "autocommit; under TestCase it never is",
+            )
+
+            with self.assertRaises(services.NotInATransaction):
+                self._charge_ada()
+
+            self.assertEqual(
+                FeeLedgerEntry.objects.count(),
+                0,
+                "the guard is the first thing in _charge(), so nothing is "
+                "posted and there is nothing to unpick",
+            )
+
+    def test_the_same_call_inside_a_transaction_posts(self):
+        """The control, without which the test above passes against `raise`.
+
+        Same student, same term, same amount, same connection: one `atomic()`
+        is the only difference between the two tests, so it is the only thing
+        either of them can be about. A guard that refused every caller would be
+        green above and red here.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                entry = self._charge_ada()
+
+            self.assertEqual(entry.kind, FeeEntryKind.CHARGE)
+            self.assertEqual(entry.amount_kobo, TUITION)
+            self.assertEqual(FeeLedgerEntry.objects.count(), 1)
