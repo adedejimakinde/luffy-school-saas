@@ -172,6 +172,25 @@ def _magnitude(amount_kobo):
     return amount_kobo
 
 
+class NotInATransaction(transaction.TransactionManagementError):
+    """`_charge()` was called in autocommit, where its missing savepoint bites.
+
+    **Deliberately not a `FeeLedgerError`.** Every other refusal in this module
+    is one, so that `except FeeLedgerError` means "that entry was not posted,
+    carry on if you can". This is not a refusal of an entry; it is a caller in
+    the wrong shape, and carrying on is the one thing that must not happen -- a
+    loop billing forty-five children in autocommit, catching `FeeLedgerError`
+    and continuing past the failure, is the partly-billed class issue #82
+    rejected as its option 3. Under `FeeLedgerError` this would be swallowed by
+    exactly the handler `charge()`'s docstring sends that caller to.
+
+    `TransactionManagementError` is Django's own type for this mistake --
+    `transaction.set_rollback()` outside an atomic block raises it -- so a
+    caller that already handles transaction misuse handles this, and nothing
+    has to learn a new name to catch it.
+    """
+
+
 def _charge(membership, term, amount_kobo, *, narration, effective_on=None,
             reference="", recorded_by=None, source_line=None):
     """`charge()` without the savepoint. **`fees.schedules` only.**
@@ -211,7 +230,26 @@ def _charge(membership, term, amount_kobo, *, narration, effective_on=None,
 
     **`fees.schedules.apply_to_class()` is the only supported caller**, and it
     holds the schedule row lock. Anything else wanting a charge wants `charge()`.
+
+    **That precondition is checked below, not merely written here.** A docstring
+    cannot stop a caller in autocommit, and in autocommit the missing savepoint
+    stops being a saving and becomes a partly-billed class: each entry commits
+    as it is written, so a failure on the fortieth child leaves thirty-nine
+    families charged and the rest not -- option 3 again, arriving with no
+    exception to catch and nothing red. This is not a new rule, so it is not a
+    behaviour change either: a caller the check refuses was already broken. And
+    `charge()` cannot trip it, its decorator having opened the block before it
+    delegates.
     """
+    if not transaction.get_connection().in_atomic_block:
+        raise NotInATransaction(
+            "_charge() opens no savepoint and has no transaction of its own, so "
+            "in autocommit every entry commits as it is written and a failure "
+            "part-way through a class bills some of it -- the outcome issue #82 "
+            "rejected as option 3. Call it inside a transaction the caller owns "
+            "(`schedules.apply_to_class()` is @transaction.atomic and is the "
+            "only supported caller), or call charge(), which opens one."
+        )
     if source_line is not None and source_line.schedule.term_id != term.pk:
         raise NotThisTermsLine(
             f"Line {source_line.pk} belongs to {source_line.schedule}, which is "

@@ -26,7 +26,7 @@ from unittest import mock
 from django.db import IntegrityError, connection, transaction
 from django.db.models import ProtectedError
 from django.test.utils import CaptureQueriesContext
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
@@ -1844,3 +1844,110 @@ class SubtransactionCountTests(BillingSetUp):
                     FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE).count(),
                     4,
                 )
+
+
+class ChargeNeedsATransactionTests(TransactionTestCase):
+    """`_charge()` refuses to run in autocommit, and says so by type.
+
+    #82 removed the savepoint `charge()`'s decorator opened around every entry,
+    which is safe exactly while the caller's own transaction is the thing a
+    failure rolls back. Until the check below, that precondition was a
+    docstring — and a docstring is what stands between this function and a
+    partly-billed class. A caller in autocommit commits each entry as it writes
+    it, so a failure on the fortieth child leaves thirty-nine families charged
+    and the rest not: the option 3 #82 rejected, arriving with no exception a
+    bursar could see and nothing red.
+
+    **`TransactionTestCase`, and it has to be.** Under `TestCase` every test
+    runs inside the test's own atomic block, so `in_atomic_block` is true, the
+    guard is unreachable, and a test asserting the refusal would pass against no
+    guard at all — the green test `docs/operating-rules.md` rule 5 is about.
+    That is the whole reason this is a class of its own down here rather than
+    four lines added to `SubtransactionCountTests`.
+
+    **One school, deliberately.** The property is a flag on the connection and
+    has no schema dimension: there is no query here for a second school's rows
+    to leak into. Every claim in this module that *can* be scoped wrong is
+    asserted against two schools; this one cannot be.
+    """
+
+    def setUp(self):
+        self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
+        self.bursar = User.objects.create_user(
+            "bursar", PASSWORD, full_name="Bola Bursar"
+        )
+        self.ada = enroll_student(
+            User.objects.create_user("ada", PASSWORD, full_name="Ada Obi"),
+            self.stmarys,
+        )
+        with connected_to(self.stmarys):
+            self.term_id = Term.objects.create(
+                session="2025/2026",
+                name=TermName.FIRST,
+                starts_on=date(2025, 9, 15),
+                ends_on=date(2025, 12, 12),
+            ).pk
+
+    def tearDown(self):
+        # Drop the schema, not just the rows: nothing here is rolled back, and
+        # `TransactionTestCase`'s flush empties the public tables while leaving
+        # the schema standing to be inherited by the next test. Same reason, and
+        # same shape, as `fees/tests/test_schedule_concurrency.py`'s teardown.
+        connection.set_schema_to_public()
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f'DROP SCHEMA IF EXISTS "{self.stmarys.schema_name}" CASCADE'
+            )
+        super().tearDown()
+
+    def _charge_ada(self):
+        """One hand-typed charge through the inner function. No `source_line`."""
+        return services._charge(
+            self.ada,
+            Term.objects.get(pk=self.term_id),
+            TUITION,
+            narration="Tuition",
+            recorded_by=self.bursar,
+        )
+
+    def test_charging_outside_a_transaction_is_refused(self):
+        """And refused before the write, by name: `NotInATransaction`.
+
+        Not `assertRaises(Exception)` — that passes on a typo in the call above
+        as readily as on the guard, which is issue #84 and thirteen other
+        places. `NotInATransaction` is deliberately outside `FeeLedgerError`,
+        so a caller catching ledger refusals and carrying on cannot turn this
+        into the silent half-bill it exists to prevent.
+        """
+        with connected_to(self.stmarys):
+            self.assertFalse(
+                transaction.get_connection().in_atomic_block,
+                "this test means nothing unless the connection really is in "
+                "autocommit; under TestCase it never is",
+            )
+
+            with self.assertRaises(services.NotInATransaction):
+                self._charge_ada()
+
+            self.assertEqual(
+                FeeLedgerEntry.objects.count(),
+                0,
+                "the guard is the first thing in _charge(), so nothing is "
+                "posted and there is nothing to unpick",
+            )
+
+    def test_the_same_call_inside_a_transaction_posts(self):
+        """The control, without which the test above passes against `raise`.
+
+        Same student, same term, same amount, same connection: one `atomic()`
+        is the only difference between the two tests, so it is the only thing
+        either of them can be about. A guard that refused every caller would be
+        green above and red here.
+        """
+        with connected_to(self.stmarys):
+            with transaction.atomic():
+                entry = self._charge_ada()
+
+            self.assertEqual(entry.kind, FeeEntryKind.CHARGE)
+            self.assertEqual(entry.amount_kobo, TUITION)
+            self.assertEqual(FeeLedgerEntry.objects.count(), 1)
