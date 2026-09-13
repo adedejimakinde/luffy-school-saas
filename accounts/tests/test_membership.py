@@ -23,6 +23,7 @@ from accounts.models import (
     is_staff_role,
 )
 from schools.models import School
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -593,29 +594,209 @@ class GuardianshipRulesHoldOnEverySavePathTests(TestCase):
         self.assertEqual(primaries.get().guardian, father)
 
 
+class GuardianshipRulesHoldWhereSaveNeverRunsTests(TestCase, RefusalAssertions):
+    """Issue #96, first slice: the two rules are now the database's, not only `save()`'s.
+
+    `GuardianshipRulesHoldOnEverySavePathTests` above covers everything that
+    instantiates the model. This class covers what does not. `bulk_create()`
+    compiles to a single INSERT and `QuerySet.update()` to an UPDATE; neither
+    calls `save()`, so neither has ever asked `clean()`. Migration
+    `0008_guardianship_rules_are_a_trigger` puts both rules behind
+    `accounts_guardianship_rules`, a `BEFORE INSERT OR UPDATE` row trigger.
+
+    **Two schools, and the bursar is at the second one.** `accounts` is a SHARED
+    app, so `accounts_guardianship` is one table in `public` and one trigger
+    guards every school's rows at once — there is no per-tenant copy. The second
+    school is here because the STUDENT rule reads *through* the FK to a
+    `Membership` that may belong to either school, so "the write was refused"
+    has to mean this row was refused and not merely that the table stayed small.
+
+    **Assertions name the rule, not the sentence.** Each refusal opens with a
+    stable identifier the migration writes deliberately —
+    `guardianship_student_must_be_a_student`,
+    `guardianship_guardian_is_not_the_student` — because a trigger has no
+    constraint name for Postgres to report, and issue #89 is about assertions
+    that cannot tell one refusal from another. `assertRefusedBy` also fixes the
+    type at `IntegrityError`, so a `ValidationError` from `clean()` would fail
+    these rather than pass them. That is the whole point: on these paths
+    `clean()` is never reached, so a green test here means the *database*
+    refused.
+
+    The `transaction.atomic()` blocks are deliberate, not decoration: an
+    `IntegrityError` with no savepoint under it breaks the transaction for every
+    statement after it, which is issue #90.
+    """
+
+    def setUp(self):
+        self.school = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
+        self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
+        self.child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
+        self.sibling = services.enroll_student(
+            make_user("GA/1", "Tunde Ade"), self.grace
+        )
+        self.bursar = services.grant_membership(
+            make_user("bursar@grace.ng", "Bursar Person"), self.grace, Role.BURSAR
+        )
+
+    # -- bulk_create(), which never instantiates the model -----------------
+
+    def test_bulk_create_is_refused_when_the_student_is_not_a_student(self):
+        with self.assertRefusedBy("guardianship_student_must_be_a_student"):
+            with transaction.atomic():
+                Guardianship.objects.bulk_create(
+                    [Guardianship(guardian=self.parent, student=self.bursar)]
+                )
+
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    def test_bulk_create_is_refused_when_the_guardian_is_the_student(self):
+        with self.assertRefusedBy("guardianship_guardian_is_not_the_student"):
+            with transaction.atomic():
+                Guardianship.objects.bulk_create(
+                    [Guardianship(guardian=self.child.user, student=self.child)]
+                )
+
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    # -- QuerySet.update(), which compiles to an UPDATE ---------------------
+
+    def test_update_is_refused_when_it_moves_a_legal_row_into_breach(self):
+        """Written legally through `save()`, then walked past the old guard.
+
+        This is the case that used to succeed *and* carry the row across a
+        school boundary while it did — the bursar is at Grace and the child at
+        St Mary's.
+        """
+        link = services.link_guardian(self.parent, self.child)
+
+        with self.assertRefusedBy("guardianship_student_must_be_a_student"):
+            with transaction.atomic():
+                Guardianship.objects.filter(pk=link.pk).update(student=self.bursar)
+
+        link.refresh_from_db()
+        self.assertEqual(link.student_id, self.child.pk)
+        self.assertEqual(link.school, self.school)
+
+    def test_update_is_refused_when_it_makes_a_child_their_own_guardian(self):
+        link = services.link_guardian(self.parent, self.child)
+
+        with self.assertRefusedBy("guardianship_guardian_is_not_the_student"):
+            with transaction.atomic():
+                Guardianship.objects.filter(pk=link.pk).update(
+                    guardian=self.child.user
+                )
+
+        link.refresh_from_db()
+        self.assertEqual(link.guardian_id, self.parent.pk)
+
+    # -- which layer refused, and that the guard is not wider than its rule --
+
+    def test_it_is_the_database_refusing_and_not_clean(self):
+        """The distinction this whole class exists to make.
+
+        `bulk_create()` does not instantiate the model, so `clean()` cannot have
+        run. Asserting `IntegrityError` *and* the trigger's own rule identifier
+        pins the refusal to the database; a `ValidationError` would mean the ORM
+        had somehow been reached, and a bare `IntegrityError` could be the
+        unique index or either foreign key.
+        """
+        with self.assertRaises(IntegrityError) as caught:
+            with transaction.atomic():
+                Guardianship.objects.bulk_create(
+                    [Guardianship(guardian=self.parent, student=self.bursar)]
+                )
+
+        message = str(caught.exception)
+        self.assertIn("guardianship_student_must_be_a_student", message)
+        self.assertNotIn("uniq_guardianship_guardian_student", message)
+        self.assertNotIn("one_primary_contact_per_student", message)
+
+    def test_legal_rows_still_write_through_both_paths_at_both_schools(self):
+        """A guard broader than its rule is one somebody turns off wholesale.
+
+        Without this, every test above would still pass if the trigger refused
+        *every* insert and update on the table.
+        """
+        Guardianship.objects.bulk_create(
+            [
+                Guardianship(guardian=self.parent, student=self.child),
+                Guardianship(guardian=self.parent, student=self.sibling),
+            ]
+        )
+        self.assertEqual(Guardianship.objects.count(), 2)
+
+        updated = Guardianship.objects.filter(student=self.sibling).update(
+            can_collect=False
+        )
+        self.assertEqual(updated, 1)
+
+        at_stmarys = Guardianship.objects.get(student=self.child)
+        at_grace = Guardianship.objects.get(student=self.sibling)
+        self.assertEqual(at_stmarys.school, self.school)
+        self.assertEqual(at_grace.school, self.grace)
+
+    def test_a_refused_write_leaves_the_other_schools_row_untouched(self):
+        """The refusal is scoped to the row, not to the table.
+
+        One legal link at Grace stands throughout. If the trigger were refusing
+        the statement rather than the row — or if the assertion below were an
+        unscoped `count()` — this would not be able to tell the difference.
+        """
+        at_grace = services.link_guardian(self.parent, self.sibling)
+
+        with self.assertRefusedBy("guardianship_student_must_be_a_student"):
+            with transaction.atomic():
+                Guardianship.objects.bulk_create(
+                    [Guardianship(guardian=self.parent, student=self.bursar)]
+                )
+
+        self.assertTrue(Guardianship.objects.filter(pk=at_grace.pk).exists())
+        self.assertEqual(
+            Guardianship.objects.filter(
+                guardian=self.parent, student=self.sibling
+            ).count(),
+            1,
+        )
+        self.assertFalse(Guardianship.objects.filter(student=self.bursar).exists())
+
+
 class GuardianshipRulesAreStillBypassableTests(TestCase):
-    """The limit of a `save()` guard, pinned rather than described.
+    """The one path left, pinned rather than described.
 
-    `save()` closes the ORM's per-instance write paths. It does not close the
-    ones that never instantiate the model: `bulk_create()` goes straight to a
-    single INSERT, and `QuerySet.update()` compiles to an UPDATE. Neither calls
-    `save()`, so neither asks `clean()`. Only a database trigger would — which is
-    how this codebase enforces the append-only tables, and a larger decision than
-    PR #93 took. **Issue #96** carries it. (#91 was the `save()`-path gap and is
-    closed; PR #93 closed it. Pointing this class at a closed issue would defeat
-    the whole mechanism below.)
+    There were three. Two are closed: `bulk_create()` and `QuerySet.update()`
+    both write to `accounts_guardianship`, and migration
+    `0008_guardianship_rules_are_a_trigger` now refuses either when it would
+    break a rule. Their cases moved to
+    `GuardianshipRulesHoldWhereSaveNeverRunsTests` above, which is where a test
+    that asserts a rule *holds* belongs.
 
-    **These tests assert that the bypass happens.** They are the known-limit
-    kind, not the desired-behaviour kind, so read a failure here the opposite way
-    round to usual:
+    **The third path does not write to this table at all.** The STUDENT rule
+    reads through `Guardianship.student` to `Membership.role`, so changing the
+    role of a membership a guardianship already points at invalidates that
+    guardianship with no write to `accounts_guardianship` for any trigger on it
+    to see. Closing it needs a guard on `accounts_membership` protecting an
+    invariant owned by `accounts_guardianship` — a shape this repository has
+    nowhere, and deliberately its own decision rather than a side effect of this
+    one. **Issue #96** carries it.
 
-        If one of these goes red, somebody closed the gap. That is good news.
-        Update #96, delete the test that went red, and move its case into
-        `GuardianshipRulesHoldOnEverySavePathTests` where it now belongs.
+    **This test asserts that the bypass happens.** It is the known-limit kind,
+    not the desired-behaviour kind — the exception to the control-run rule that
+    `docs/operating-rules.md` rule 5 now sets out. Read a failure here the
+    opposite way round to usual:
 
-    Written this way because a gap recorded only in prose is a gap nobody
-    notices has been closed, and a stale "known limitation" comment is worse
-    than none.
+        If this goes red, somebody closed the gap. That is good news. Update
+        #96, delete the test that went red, and move its case into the class
+        that asserts the rule holds.
+
+    That is not hypothetical housekeeping: it is exactly what happened to the
+    two tests that used to sit here.
+
+    `test_the_ordinary_save_path_is_still_closed` stays as the companion. A
+    known-limit test alone proves nothing — paired with a test of a path that
+    *is* closed, it shows the limit is a boundary and not an absence of any
+    guard at all.
     """
 
     def setUp(self):
@@ -626,11 +807,10 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
         self.child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
 
         # The second school is not scenery. `accounts_guardianship` is one table
-        # in `public` for every school, so a bypass that writes into it writes
-        # alongside other schools' rows — and the STUDENT rule reads through the
-        # FK to a `Membership` that may belong to either. The bursar is at Grace
-        # precisely so the refusals and the bypasses have to name the right row
-        # rather than the only row.
+        # in `public` for every school, and the STUDENT rule reads through the FK
+        # to a `Membership` that may belong to either. The bursar is at Grace
+        # precisely so a refusal has to name the right row rather than the only
+        # row.
         self.bursar = services.grant_membership(
             make_user("bursar@grace.ng", "Bursar Person"), self.grace, Role.BURSAR
         )
@@ -638,93 +818,35 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
             make_user("GA/1", "Tunde Ade"), self.grace
         )
 
-    def test_bulk_create_writes_a_row_that_breaks_the_student_rule(self):
-        legal = services.link_guardian(self.parent, self.child)
-
-        Guardianship.objects.bulk_create(
-            [Guardianship(guardian=self.parent, student=self.bursar)]
-        )
-
-        written = Guardianship.objects.exclude(pk=legal.pk).get()
-        self.assertEqual(written.student_id, self.bursar.pk)
-        self.assertNotEqual(written.student.role, Role.STUDENT)
-
-        # And it landed in the same table as the legal row, pointing at the
-        # other school — which is the shape the one shared table makes possible.
-        self.assertEqual(written.school, self.grace)
-        self.assertEqual(legal.school, self.school)
-        self.assertEqual(Guardianship.objects.count(), 2)
-
-    def test_bulk_create_writes_a_row_that_breaks_the_self_guardian_rule(self):
-        Guardianship.objects.bulk_create(
-            [Guardianship(guardian=self.child.user, student=self.child)]
-        )
-
-        written = Guardianship.objects.get()
-        self.assertEqual(written.guardian_id, written.student.user_id)
-
-    def test_queryset_update_moves_a_valid_row_into_breach(self):
-        """The row is written legally, then updated past the guard.
-
-        With two schools in the table the update also walks the row across a
-        school boundary, which no guard sees either.
-        """
-        link = services.link_guardian(self.parent, self.child)
-        self.assertEqual(link.school, self.school)
-
-        Guardianship.objects.filter(pk=link.pk).update(student=self.bursar)
-
-        link.refresh_from_db()
-        self.assertEqual(link.student_id, self.bursar.pk)
-        self.assertNotEqual(link.student.role, Role.STUDENT)
-        self.assertEqual(link.school, self.grace)
-
-    def test_a_legal_link_at_each_school_is_untouched_by_the_bypasses(self):
-        """Two schools, two legal links, one table — and one bypassed row beside them.
-
-        The contrast that makes the school assertions above mean something: the
-        rows that went through `save()` are correct at both schools, so a wrong
-        row in this table is the bypass and not the ordinary path.
-        """
-        at_stmarys = services.link_guardian(self.parent, self.child)
-        at_grace = services.link_guardian(self.parent, self.sibling)
-
-        Guardianship.objects.bulk_create(
-            [Guardianship(guardian=self.parent, student=self.bursar)]
-        )
-
-        self.assertEqual(at_stmarys.school, self.school)
-        self.assertEqual(at_grace.school, self.grace)
-        self.assertEqual(at_stmarys.student.role, Role.STUDENT)
-        self.assertEqual(at_grace.student.role, Role.STUDENT)
-
-        bypassed = Guardianship.objects.exclude(
-            pk__in=[at_stmarys.pk, at_grace.pk]
-        ).get()
-        self.assertNotEqual(bypassed.student.role, Role.STUDENT)
-
     def test_updating_the_membership_underneath_a_link_breaks_it_too(self):
-        """A third path, and the quietest: nothing touches `Guardianship` at all.
+        """The quietest of the three, and now the only one left.
 
-        The rule reads through to `Membership.role`, so changing the role of a
-        membership a guardianship already points at invalidates that guardianship
-        without any write to its own table. Found while pinning the two above;
-        recorded here because it is the same gap wearing different clothes.
+        Nothing touches `Guardianship`. The role changes on the `Membership`
+        underneath it, and the link that pointed at a STUDENT is left pointing
+        at a bursar. `accounts_guardianship_rules` cannot fire, because no row
+        of `accounts_guardianship` is written.
         """
         link = services.link_guardian(self.parent, self.child)
+        at_grace = services.link_guardian(self.parent, self.sibling)
 
         Membership.objects.filter(pk=self.child.pk).update(role=Role.BURSAR)
 
         link.refresh_from_db()
         self.assertNotEqual(link.student.role, Role.STUDENT)
-        self.assertEqual(Guardianship.objects.count(), 1)
+
+        # Scoped, not a bare count: the other school's link is still legal, so
+        # "a row went bad" has to name which row.
+        at_grace.refresh_from_db()
+        self.assertEqual(at_grace.student.role, Role.STUDENT)
+        self.assertEqual(Guardianship.objects.count(), 2)
 
     def test_the_ordinary_save_path_is_still_closed(self):
-        """The contrast that gives every bypass above its meaning.
+        """The companion, and the control this class cannot perform on itself.
 
-        Same violating row, written through `save()` instead — refused. Without
-        this, a reader cannot tell whether the bypasses above are a gap in the
-        guard or an absence of any guard at all.
+        Same violating row, written through `save()` instead — refused, in
+        Python, before any statement reaches the database. Without this a reader
+        cannot tell whether the bypass above is a gap in the guard or an absence
+        of any guard at all.
         """
         with self.assertRaises(ValidationError) as caught:
             Guardianship.objects.create(guardian=self.parent, student=self.bursar)
@@ -733,8 +855,6 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
             [e.code for e in caught.exception.error_dict["student"]], ["not_a_student"]
         )
         self.assertEqual(Guardianship.objects.count(), 0)
-
-
 class GrantAuthorityStopsAtOwnSchoolTests(TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
