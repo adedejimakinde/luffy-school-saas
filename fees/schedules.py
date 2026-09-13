@@ -31,9 +31,11 @@ serialises applications of *that bill* and nothing else.
 **And "nothing else" is a real limit, not a boast.** The charge key is a line,
 and a line belongs to one bill, so every charge collision is inside the bill this
 lock holds. The *concession* key spans the term, so two runs of two different
-bills can collide on it — see the `IntegrityError` handled at the foot of
+bills can collide on it — see the discount loop at the foot of
 `apply_to_class()`, which is the only place this module treats a database refusal
-as an outcome rather than a bug.
+as an outcome rather than a bug. It no longer *catches* one: `services._discount()`
+asks Postgres to decline the duplicate instead of refusing it, because catching
+needs a savepoint to roll back to and a savepoint per concession is issue #85.
 
 **One transaction for the whole class**, because a half-applied bill is worse
 than no bill: nobody can tell by looking whether it finished, and the repair is
@@ -52,48 +54,13 @@ no business importing `results`, and `academics` sits under both.
 
 from dataclasses import dataclass
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 
 from academics.models import ClassPlacement
 from accounts.models import Membership
 
 from . import services
 from .models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
-
-
-#: The index a concurrent application of a *different* bill can trip.
-_CONCESSION_COLLISION = "a_concession_discounts_a_child_once_per_term"
-
-#: Postgres' unique violation. `academics.services` and `gradebook.services`
-#: both check this alongside the name; `accounts.throttling` checks the name
-#: alone. This is the stricter of the two forms, deliberately — see below.
-_UNIQUE_VIOLATION = "23505"
-
-
-def _is_the_concession_colliding(exc) -> bool:
-    """Did another bill in this term post this discount, or did something else fail?
-
-    Asked of the failure itself, on `accounts.throttling`'s idiom: Postgres names
-    the constraint that refused the row, and inferring it from "is there a row
-    now?" is wrong in both directions under concurrency. A cause carrying no
-    diagnostics counts as *not* a collision, so an unrecognised failure is raised
-    rather than swallowed.
-
-    **Both halves, `pgcode` and the name**, which is the form `academics` and
-    `gradebook` use and the one this copy should have started as. The name alone
-    would also accept a *non*-unique failure that happened to cite this index —
-    a deferred check or a future exclusion constraint carrying the same name —
-    and the whole point of the narrowing is that only the one known race is a
-    skip. Four copies of this predicate now exist with two definitions between
-    them; consolidating them is issue #81, and until then the stricter form is
-    the one a fifth caller should copy.
-    """
-    cause = getattr(exc, "__cause__", None)
-    diag = getattr(cause, "diag", None)
-    return (
-        getattr(cause, "pgcode", None) == _UNIQUE_VIOLATION
-        and getattr(diag, "constraint_name", None) == _CONCESSION_COLLISION
-    )
 
 
 class EmptySchedule(services.FeeLedgerError):
@@ -276,12 +243,34 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # **`order_by()` explicitly, because this one carries a concurrency
     # guarantee.** Two runs of two *different* schedules in one term can both
     # reach the same `(child, term, concession)` row — that is the collision the
-    # foot of this function handles. If they reach *several* such rows in
+    # foot of this function skips. If they reach *several* such rows in
     # different orders, Postgres does not hand back a unique violation; it hands
-    # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError` and
-    # not as `IntegrityError`. The handler below cannot see it, so the loser's
-    # whole transaction dies and the class goes unbilled — the outcome the skip
-    # exists to prevent, reached by the one route the skip cannot cover.
+    # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError`.
+    #
+    # ========================================================================
+    # **DO NOT DELETE THIS `order_by()` BECAUSE THE LOOP BELOW "HANDLES
+    # CONFLICTS NOW". IT DOES NOT HANDLE THIS ONE.**
+    #
+    # Issue #85 moved the concession skip from a caught `IntegrityError` into an
+    # `ON CONFLICT DO NOTHING`, and that reads like the end of every collision
+    # worry on this path. It is not, and this is the exception:
+    #
+    # `DO NOTHING` **still takes a row lock** on the conflicting tuple and still
+    # waits for the other run to finish — it declines the row, it does not skip
+    # the lock. So two runs inserting overlapping sets in different orders
+    # deadlock exactly as they did before the fix. And **a deadlock is not a
+    # conflict**: nothing declines it, no `None` comes back, no skip is
+    # reachable. It arrives as `OperationalError`, SQLSTATE `40P01`, and the
+    # loser's whole transaction dies with forty-five children unbilled — the
+    # outcome the skip exists to prevent, reached by the one route the skip has
+    # never been able to cover.
+    #
+    # This clause is therefore **more** load-bearing after #85, not less: it is
+    # now the *only* thing standing between two concurrent bills and that
+    # deadlock, where before it was one of two. Removing it is a silent
+    # regression — nothing goes red at the moment of deletion, and the failure
+    # needs two schedules, one term and overlapping concessions to appear.
+    # ========================================================================
     #
     # A total order shared by every run is what makes the cycle impossible. That
     # order is `FeeConcession.Meta.ordering` and this queryset inherited it
@@ -361,56 +350,69 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         if key in already_discounted:
             discounts_skipped += 1
             continue
-        try:
-            services.discount(
-                memberships[concession.student_membership_id],
-                term,
-                concession.amount_kobo,
-                narration=concession.reason,
-                effective_on=effective_on,
-                recorded_by=by,
-                source_concession=concession,
-            )
-        except IntegrityError as collision:
-            # **The one race the schedule lock does not cover.** That lock
-            # serialises applications of *this bill*; the concession index spans
-            # every bill in the term. A child who moves class mid-term can be on
-            # one bursar's roster snapshot and another's at the same moment — the
-            # `ClassPlacement` rewrite window issue #43 records — so two runs of
-            # two *different* schedules can both pass this skip-check and both
-            # post the same child's discount.
-            #
-            # Without this, the loser's whole run dies: one transaction for the
-            # class means forty-five children go unbilled because one discount
-            # collided, which is the outcome the skip exists to prevent.
-            #
-            # Treated as a skip, because that is what it is — somebody else
-            # posted it, and the child has their concession either way.
-            # `services.discount()` is itself atomic, so the failure rolls back
-            # to its savepoint and this transaction stays usable. That savepoint
-            # is why the charge loop's could go and this one's could not; issue
-            # #85 carries what it costs when a class has more than 64 of them.
-            #
-            # **The narrowing is complete for this path, not merely for the case
-            # that was found.** Of the ten constraints on `FeeLedgerEntry`,
-            # exactly one is reachable from a concession discount: the amount is
-            # a checked magnitude and always negative, `kind` is DISCOUNT,
-            # `reverses` is null, and `source_line` is null — which satisfies
-            # every other check and excludes this row from every other partial
-            # index. What is left is a foreign-key failure, which means the
-            # concession was deleted underneath us, and that is not a skip: the
-            # predicate refuses it and the run dies, which is correct.
-            #
-            # Ten and not eleven. The eleventh refusal that table can produce is
-            # `fees_ledger_append_only`, migration `0002` — a **trigger** and not
-            # a constraint, which is not a quibble here: it fires `BEFORE UPDATE
-            # OR DELETE` and this is an INSERT, so it is unreachable from this
-            # path. Were it ever to fire it raises `ERRCODE = restrict_violation`
-            # with no `constraint_name` at all, which the predicate reads as "not
-            # a collision" and re-raises — right, and for a reason worth keeping
-            # separate from the count.
-            if not _is_the_concession_colliding(collision):
-                raise
+        # **`services._discount()`, not `services.discount()`, and the underscore
+        # is the whole of issue #85.** `discount()` is `@transaction.atomic`, so
+        # calling it here opened a savepoint per concession, and nothing bounds
+        # how many of those there are: `FeeConcession` has no unique constraint
+        # on the child, deliberately -- `models.py:246` says a bursary and a
+        # sibling discount are two facts and two DISCOUNT entries -- so the count
+        # is concessions granted, not children, and forty-five children holding
+        # two apiece is ninety subtransactions against the 64 Postgres caches.
+        # Measured: 66 subtransactions cost a concurrent reader 16.36us per scan
+        # against 6.84us for a control writing the same 66 rows in one statement,
+        # and 2,640,000 `Subtrans` SLRU lookups against none. **45 cost nothing
+        # at all** -- it is a step at 64, not a slope.
+        #
+        # **The savepoint could not just be deleted the way the charge loop's
+        # was.** It was load-bearing: the handler that used to sit here caught
+        # the unique violation and needed the failed entry rolled back to a
+        # savepoint so the run survived as a skip. It goes only because the catch
+        # goes with it.
+        #
+        # **The one race the schedule lock does not cover.** That lock serialises
+        # applications of *this bill*; the concession index spans every bill in
+        # the term. A child who moves class mid-term can be on one bursar's
+        # roster snapshot and another's at the same moment -- the `ClassPlacement`
+        # rewrite window issue #43 records -- so two runs of two *different*
+        # schedules can both pass the skip-check above and both reach the same
+        # `(child, term, concession)` row.
+        #
+        # `_discount()` asks Postgres to **decline** that row rather than refuse
+        # it, with an `ON CONFLICT` naming
+        # `a_concession_discounts_a_child_once_per_term` by inference, and
+        # answers `None`. A row that was never refused needs nothing rolled back,
+        # so the skip survives with no subtransaction paying for it. Without the
+        # skip, the loser's whole run dies and forty-five children go unbilled
+        # because one discount collided.
+        #
+        # **The narrowing did not soften, it moved into the SQL.** The old
+        # Python predicate read `pgcode` and the constraint name so that only
+        # *this* index counted as a skip; the inference clause does the same job
+        # in the database, and a bare `ON CONFLICT DO NOTHING` would not -- it
+        # swallows every unique violation the table can raise, turning any future
+        # index reachable from a discount into a silently skipped one.
+        # `test_a_different_unique_violation_is_still_raised` holds that line.
+        #
+        # A **foreign-key** failure is not a conflict and is unaffected: a
+        # concession deleted underneath the run still aborts it, which is right
+        # and is deliberately not a skip. It does **not** abort at the INSERT,
+        # though, which is what the comment here used to say. `_post()`'s
+        # `full_clean()` looks the concession up and refuses it as an invalid
+        # choice first, so it arrives as `ValidationError`; and the FK is
+        # `DEFERRABLE INITIALLY DEFERRED` anyway, so bypassing `full_clean()`
+        # would move the failure to COMMIT rather than to this line. The run dies
+        # either way -- one transaction for the class means nobody is billed --
+        # but "the INSERT fails" was never the mechanism.
+        posted = services._discount(
+            memberships[concession.student_membership_id],
+            term,
+            concession.amount_kobo,
+            narration=concession.reason,
+            effective_on=effective_on,
+            recorded_by=by,
+            source_concession=concession,
+        )
+        if posted is None:
             discounts_skipped += 1
             continue
         discounts_posted += 1

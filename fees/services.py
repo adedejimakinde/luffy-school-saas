@@ -14,7 +14,7 @@ call, and keeping the rules here rather than in a view is what makes them true
 for an import and a management command too.
 """
 
-from django.db import transaction
+from django.db import connection, transaction
 from django.utils import timezone
 
 from accounts.students import why_not_a_student_here
@@ -130,10 +130,110 @@ def snapshot_student(membership):
     }
 
 
+#: The partial unique index `a_concession_discounts_a_child_once_per_term`,
+#: written as an `ON CONFLICT` **inference clause** rather than a constraint name.
+#:
+#: `ON CONFLICT ON CONSTRAINT <name>` cannot be used here and the reason is not a
+#: style choice: a Django `UniqueConstraint` carrying a `condition` is created as
+#: a *partial unique index*, not a table constraint, and Postgres answers
+#: `constraint "..." for table "..." does not exist` when asked to name one.
+#: Inference by columns-plus-predicate is the form that reaches a partial index.
+#:
+#: **Naming the index rather than writing a bare `DO NOTHING` is the whole
+#: narrowing**, and it is what `_is_the_concession_colliding()` used to do in
+#: Python. A bare `ON CONFLICT DO NOTHING` swallows *every* unique violation this
+#: table can raise, so the day somebody adds a second index reachable from a
+#: discount, every row it refuses becomes a silently skipped discount — the shape
+#: of bug that never gets reported. Targeted, that row still raises. Proven by
+#: `test_a_different_unique_violation_is_still_raised`, not merely intended.
+#:
+#: Foreign-key failures are **not** conflicts and are unaffected by `DO NOTHING`:
+#: a concession deleted underneath a run still aborts it, which is correct and is
+#: the asymmetry issue #85 asks to preserve. `test_do_nothing_does_not_hide_a_
+#: foreign_key_failure` asks Postgres directly rather than taking it on trust —
+#: if `DO NOTHING` ever covered this, a discount pointing at a deleted concession
+#: would come back as `None` and be counted as a skip, and the run would report a
+#: bursary as already posted when it was posted by nobody.
+#:
+#: Two qualifications, both measured rather than assumed. `full_clean()` refuses
+#: that entry a step earlier — `ForeignKey.validate()` looks the row up before any
+#: INSERT is issued — so in practice it surfaces as `ValidationError`. And the FK
+#: itself is `DEFERRABLE INITIALLY DEFERRED`, as Django creates every foreign key,
+#: so were `full_clean()` ever bypassed the violation would fire at **COMMIT**
+#: rather than at this statement. Both still kill the run, which is the property
+#: that matters: the class is one transaction, so nobody is billed. Neither is
+#: "the INSERT fails", which is what the comments here used to say.
+#:
+#: The backstop is still the one that has to hold: this path is the only one in
+#: the module that writes without going through `Model.save()`.
+_CONCESSION_ONCE_PER_TERM = (
+    '("student_membership_id", "term_id", "source_concession_id") '
+    "WHERE \"source_concession_id\" IS NOT NULL AND \"kind\" = 'discount'"
+)
+
+
+def _insert_or_skip(entry, *, conflict_target):
+    """INSERT one entry; answer False if `conflict_target` already holds its row.
+
+    The point of doing this rather than catching `IntegrityError` is that
+    catching one requires a savepoint to roll back to, and a savepoint per
+    concession is issue #85. Postgres declines the row without raising, so there
+    is nothing to roll back and no subtransaction to open.
+
+    The column list is read from the model rather than written out, so a field
+    added to `FeeLedgerEntry` cannot be silently dropped from this path — which
+    is the failure a hand-written INSERT invites.
+
+    **This goes around `Model.save()`, and that is safe here for one reason
+    only**: the entry is always new. `FeeLedgerEntry.save()` exists to refuse a
+    rewrite of a row that already exists, and an object built two lines above in
+    `_post()` has no pk to rewrite. The rule that actually holds is the
+    `fees_ledger_append_only` trigger, which fires `BEFORE UPDATE OR DELETE` and
+    so is not on this path at all. There are no signals on this model.
+
+    **The `_state` bookkeeping below is not decoration.** `Model.save_base()`
+    sets both after every write, and without them the entry handed back would
+    still claim to be unsaved — so `save()` called on it later would see
+    `_state.adding` and quietly let the rewrite through, defeating the
+    append-only guard on exactly the objects this path returns.
+    """
+    meta = entry._meta
+    fields = [f for f in meta.local_concrete_fields if not f.primary_key]
+    quote = connection.ops.quote_name
+    sql = (
+        f"INSERT INTO {quote(meta.db_table)} "
+        f"({', '.join(quote(f.column) for f in fields)}) "
+        f"VALUES ({', '.join(['%s'] * len(fields))}) "
+        f"ON CONFLICT {conflict_target} DO NOTHING "
+        f"RETURNING {quote(meta.pk.column)}"
+    )
+    values = [
+        f.get_db_prep_save(f.pre_save(entry, True), connection) for f in fields
+    ]
+    with connection.cursor() as cursor:
+        cursor.execute(sql, values)
+        row = cursor.fetchone()
+    if row is None:
+        return False
+    entry.pk = row[0]
+    entry._state.adding = False
+    entry._state.db = connection.alias
+    return True
+
+
 def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
           reference="", recorded_by=None, reverses=None, source_line=None,
-          source_concession=None):
-    """Create one entry. Every public function below funnels through here."""
+          source_concession=None, skip_on_conflict=None):
+    """Create one entry. Every public function below funnels through here.
+
+    `skip_on_conflict` is an `ON CONFLICT` inference clause. Passed, the insert
+    declines rather than raises when that index already holds the row, and this
+    returns `None` instead of an entry — which is how `_discount()` skips a
+    concession another bill already posted without opening a savepoint to roll
+    back to. `full_clean()` still runs either way: the funnel is the invariant,
+    and the conflict-tolerant path is a different *insert*, not a different
+    validation.
+    """
     _require_student_of_this_school(membership)
     entry = FeeLedgerEntry(
         term=term,
@@ -153,6 +253,10 @@ def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
     # opposite to another row". Excluding nothing, so the field-level rules are
     # asked here too rather than only at the database.
     entry.full_clean(exclude=None, validate_unique=False, validate_constraints=False)
+    if skip_on_conflict is not None:
+        if not _insert_or_skip(entry, conflict_target=skip_on_conflict):
+            return None
+        return entry
     entry.save()
     return entry
 
@@ -173,7 +277,8 @@ def _magnitude(amount_kobo):
 
 
 class NotInATransaction(transaction.TransactionManagementError):
-    """`_charge()` was called in autocommit, where its missing savepoint bites.
+    """`_charge()` or `_discount()` was called in autocommit, where the missing
+    savepoint bites.
 
     **Deliberately not a `FeeLedgerError`.** Every other refusal in this module
     is one, so that `except FeeLedgerError` means "that entry was not posted,
@@ -183,6 +288,12 @@ class NotInATransaction(transaction.TransactionManagementError):
     and continuing past the failure, is the partly-billed class issue #82
     rejected as its option 3. Under `FeeLedgerError` this would be swallowed by
     exactly the handler `charge()`'s docstring sends that caller to.
+
+    **`_discount()` raises it for the same reason and not merely by symmetry.**
+    Its skip is an `ON CONFLICT` that declines a row; in autocommit each entry it
+    *does* write commits as it is written, so a failure part-way down the
+    concession list leaves some families discounted and the rest not, with the
+    run's own transaction no longer there to undo it.
 
     `TransactionManagementError` is Django's own type for this mistake --
     `transaction.set_rollback()` outside an atomic block raises it -- so a
@@ -328,6 +439,101 @@ def record_payment(membership, term, amount_kobo, *, narration="Payment received
         effective_on=effective_on,
         reference=reference,
         recorded_by=recorded_by,
+    )
+
+
+def _discount(membership, term, amount_kobo, *, narration, effective_on=None,
+              recorded_by=None, source_concession=None):
+    """`discount()` without the savepoint. **`fees.schedules` only.**
+
+    Issue #85, and the residual issue #82 deliberately left behind. `discount()`
+    is `@transaction.atomic`, so calling it once per concession inside
+    `apply_to_class()`'s one transaction opened one subtransaction per
+    concession. PostgreSQL caches 64 subtransaction ids per backend; past that
+    the backend overflows and every *other* backend's visibility check against
+    those xids falls back to `pg_subtrans` for as long as the transaction is
+    open.
+
+    **The savepoint here was load-bearing, which is why #82 could not simply
+    delete it the way it deleted the charge loop's.** The collision handler at
+    the foot of the discount loop caught the unique violation from
+    `a_concession_discounts_a_child_once_per_term` and needed the failed entry
+    rolled back to a savepoint so the run survived as a skip — without it one
+    collision killed the whole run and a class went unbilled.
+
+    So the savepoint goes only because the *catch* goes: `_insert_or_skip()`
+    asks Postgres to decline the row instead of refusing it, and a row that was
+    never refused needs nothing rolled back. The skip is preserved exactly; what
+    is gone is the subtransaction that used to pay for it.
+
+    Measured on this hardware, a transaction held open while a second backend
+    scanned 20,000 times, with a committer thread running so the subxids sat
+    below the reader's snapshot and each arm paired against a control writing
+    **the same number of rows** in one statement:
+
+    | subxids | reader us/scan | control us/scan | `Subtrans` blks_hit |
+    |---|---|---|---|
+    | 45 | 7.22 | 6.39 | **0** |
+    | 66 | 16.36 | 6.84 | 2,640,000 |
+    | 90 | 19.06 | 8.83 | 3,600,000 |
+    | 135 | 25.48 | 8.63 | 5,400,000 |
+
+    **It is a step at 64, not a slope**: 45 subtransactions cost a concurrent
+    reader nothing measurable and produce no SLRU lookups at all, and 66 cost it
+    2.4x its control. `blks_read` was 0 throughout — these are in-memory SLRU
+    lookups, not disk I/O, and reporting them as I/O overstates the damage.
+
+    **This function was not timed and the control column is not a timing of
+    it.** The control is what held the row count fixed while the subxid count
+    moved. The mechanism is the count, and the count is what the tests assert.
+
+    **How many there can be is bounded by nothing.** `FeeConcession` has no
+    unique constraint on `student_membership_id` and `fees/models.py:246` says so
+    deliberately — a bursary and a sibling discount are two facts and two
+    DISCOUNT entries. So the count is measured in concessions granted, not in
+    children, and the roster caps it no more than it caps anything else. **This
+    fix was chosen against what the schema permits, not against a measured
+    distribution of concessions per child: no school data exists yet.** See
+    issue #85.
+
+    **`discount()` keeps its decorator**, for the reason `_charge()`'s docstring
+    gives: a caller inside a larger transaction that catches `FeeLedgerError` and
+    carries on needs the failed entry rolled back without poisoning what it is
+    wrapped in. `apply_to_class()` does not, because it *is* the transaction.
+
+    Returns the posted entry, or **`None` if another bill in this term already
+    posted this child's discount for this concession** — which is a skip and not
+    a failure. `discount()` cannot return `None`.
+    """
+    if not transaction.get_connection().in_atomic_block:
+        raise NotInATransaction(
+            "_discount() opens no savepoint and has no transaction of its own, "
+            "so in autocommit every entry commits as it is written and a failure "
+            "part-way through a class discounts some of it. Call it inside a "
+            "transaction the caller owns (`schedules.apply_to_class()` is "
+            "@transaction.atomic and is the only supported caller), or call "
+            "discount(), which opens one."
+        )
+    if (
+        source_concession is not None
+        and source_concession.student_membership_id != membership.pk
+    ):
+        raise NotThisStudentsConcession(
+            f"Concession {source_concession.pk} belongs to membership "
+            f"{source_concession.student_membership_id}, not to {membership.pk}. "
+            f"The index is keyed per student, so this would post, and "
+            f"'everything this concession did' would answer with two children."
+        )
+    return _post(
+        membership=membership,
+        term=term,
+        kind=FeeEntryKind.DISCOUNT,
+        amount_kobo=-_magnitude(amount_kobo),
+        narration=narration,
+        effective_on=effective_on,
+        recorded_by=recorded_by,
+        source_concession=source_concession,
+        skip_on_conflict=_CONCESSION_ONCE_PER_TERM,
     )
 
 
