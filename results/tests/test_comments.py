@@ -39,6 +39,7 @@ from results import comments, services
 from results.models import (
     MAX_COMMENT_LENGTH,
     CommentAuthor,
+    CommentsAreFrozenAtRelease,
     CommentPhrase,
     ReleasedComment,
     ReportCardComment,
@@ -828,16 +829,28 @@ class TheFreezeTests(CommentsSetUp):
                     ReleasedComment.objects.filter(sheet=sheet).delete()
 
     def test_the_model_refuses_before_the_database_has_to(self):
+        """The name claims a layer, so the assertion has to name it too.
+
+        `assertRaises(Exception)` plus `assertIn("released", ...)` is satisfied
+        by the trigger one line up — whose sentence also says "released" — so
+        the test could not tell the model refusing from the database refusing,
+        which is the single fact its name promises.
+        """
         with connected_to(self.stmarys):
             self.write(self.kemi, TEACHER, "A diligent term.")
             sheet = self.walk_to_released()
             row = ReleasedComment.objects.filter(sheet=sheet).first()
             row.body = "Rewritten."
 
-            with self.assertRaises(Exception) as refused:
+            with self.assertRaises(CommentsAreFrozenAtRelease) as refused:
                 row.save()
 
-        self.assertIn("released", str(refused.exception))
+        # Not `assertIn("released", ...)`: the trigger underneath says
+        # "released" too, which is how this test stayed green with the guard
+        # deleted. The type pins the layer; this pins the words it uses.
+        self.assertIn(
+            "is part of a card that has been released", str(refused.exception)
+        )
 
     def test_the_other_schools_card_is_untouched_by_our_release(self):
         with connected_to(self.stmarys):

@@ -36,11 +36,12 @@ from results.models import (
 )
 from schools.models import School
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
 
-class ChainSetUp(TestCase):
+class ChainSetUp(RefusalAssertions, TestCase):
     """St Mary's and Grace Academy, each with the four signatories."""
 
     def setUp(self):
@@ -824,12 +825,11 @@ class ReleaseIsTerminalTests(ChainSetUp):
 
             for target in (SheetState.DRAFT, SheetState.APPROVED):
                 with self.subTest(target=target):
-                    with self.assertRaises(Exception) as caught:
+                    with self.assertRefusedBy("results_release_is_final"):
                         with transaction.atomic():
                             ResultSheet.objects.filter(pk=sheet.pk).update(
                                 state=target
                             )
-                    self.assertIn("released to parents", str(caught.exception))
 
             sheet.refresh_from_db()
             self.assertEqual(sheet.state, SheetState.RELEASED)
@@ -874,23 +874,23 @@ class TheLogIsAppendOnlyTests(ChainSetUp):
         with connected_to(self.stmarys):
             sheet = self.walk_to(SheetState.SUBMITTED)
 
-            with self.assertRaises(Exception) as caught:
+            with self.assertRefusedBy(
+                "results_resultsheettransition is append-only"
+            ):
                 with transaction.atomic():
                     ResultSheetTransition.objects.filter(sheet=sheet).update(
                         actor_id=self.principal.pk
                     )
 
-            self.assertIn("append-only", str(caught.exception))
-
     def test_the_database_refuses_a_bulk_delete_that_skips_the_model(self):
         with connected_to(self.stmarys):
             sheet = self.walk_to(SheetState.SUBMITTED)
 
-            with self.assertRaises(Exception) as caught:
+            with self.assertRefusedBy(
+                "results_resultsheettransition is append-only"
+            ):
                 with transaction.atomic():
                     ResultSheetTransition.objects.filter(sheet=sheet).delete()
-
-            self.assertIn("append-only", str(caught.exception))
 
 
 class TwoSchoolsTests(ChainSetUp):
