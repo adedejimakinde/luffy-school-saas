@@ -180,6 +180,33 @@ run that exits 0 without ever printing `OK` or `FAILED` is reported as a failure
 because a run that executed nothing must not be indistinguishable from one that
 passed.
 
+### The one exception: a test that asserts a gap
+
+A control run assumes there is a guard to remove. **A known-limit test has no
+guard**, so the method inverts, and reading one as an ordinary test gets it
+backwards in both directions.
+
+`GuardianshipRulesAreStillBypassableTests` asserts that `bulk_create()`,
+`QuerySet.update()` and a role change underneath a live link each write a
+`Guardianship` row that `clean()` would have refused. There is nothing to break:
+deleting `Guardianship.save()`'s `full_clean()` leaves all five of them green,
+because none of them reaches `save()`. Measured — 1 failure out of 6, and the one
+is the companion.
+
+- **Read a red one the opposite way round.** If one fails, somebody closed the
+  gap. Update the issue it names, delete the test, and move its case into the
+  class that asserts the rule holds.
+- **Each one names a live issue**, per rule 6. A gap recorded only in prose is a
+  gap nobody notices has been closed — and an issue that has since been closed is
+  the same failure wearing the issue's clothes.
+- **Each one carries a companion that does control.** A known-limit test alone
+  proves nothing; paired with a test of the path that *is* closed, it proves the
+  limit is a boundary and not an absence. That companion is the control, and it is
+  the reason `test_the_ordinary_save_path_is_still_closed` is in the class.
+
+Same shape as `WhatARevisionCannotFixTests` in rule 6: written to go red the day
+its issue is closed.
+
 ---
 
 ## 6. A docstring is not a test — an unasserted claim is an open question
