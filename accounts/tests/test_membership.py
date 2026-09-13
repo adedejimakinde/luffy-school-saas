@@ -618,20 +618,40 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
 
     def setUp(self):
         self.school = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
         self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
         self.child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
+
+        # The second school is not scenery. `accounts_guardianship` is one table
+        # in `public` for every school, so a bypass that writes into it writes
+        # alongside other schools' rows — and the STUDENT rule reads through the
+        # FK to a `Membership` that may belong to either. The bursar is at Grace
+        # precisely so the refusals and the bypasses have to name the right row
+        # rather than the only row.
         self.bursar = services.grant_membership(
-            make_user("bursar@stmarys.ng", "Bursar Person"), self.school, Role.BURSAR
+            make_user("bursar@grace.ng", "Bursar Person"), self.grace, Role.BURSAR
+        )
+        self.sibling = services.enroll_student(
+            make_user("GA/1", "Tunde Ade"), self.grace
         )
 
     def test_bulk_create_writes_a_row_that_breaks_the_student_rule(self):
+        legal = services.link_guardian(self.parent, self.child)
+
         Guardianship.objects.bulk_create(
             [Guardianship(guardian=self.parent, student=self.bursar)]
         )
 
-        written = Guardianship.objects.get()
+        written = Guardianship.objects.exclude(pk=legal.pk).get()
         self.assertEqual(written.student_id, self.bursar.pk)
         self.assertNotEqual(written.student.role, Role.STUDENT)
+
+        # And it landed in the same table as the legal row, pointing at the
+        # other school — which is the shape the one shared table makes possible.
+        self.assertEqual(written.school, self.grace)
+        self.assertEqual(legal.school, self.school)
+        self.assertEqual(Guardianship.objects.count(), 2)
 
     def test_bulk_create_writes_a_row_that_breaks_the_self_guardian_rule(self):
         Guardianship.objects.bulk_create(
@@ -642,14 +662,44 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
         self.assertEqual(written.guardian_id, written.student.user_id)
 
     def test_queryset_update_moves_a_valid_row_into_breach(self):
-        """The row is written legally, then updated past the guard."""
+        """The row is written legally, then updated past the guard.
+
+        With two schools in the table the update also walks the row across a
+        school boundary, which no guard sees either.
+        """
         link = services.link_guardian(self.parent, self.child)
+        self.assertEqual(link.school, self.school)
 
         Guardianship.objects.filter(pk=link.pk).update(student=self.bursar)
 
         link.refresh_from_db()
         self.assertEqual(link.student_id, self.bursar.pk)
         self.assertNotEqual(link.student.role, Role.STUDENT)
+        self.assertEqual(link.school, self.grace)
+
+    def test_a_legal_link_at_each_school_is_untouched_by_the_bypasses(self):
+        """Two schools, two legal links, one table — and one bypassed row beside them.
+
+        The contrast that makes the school assertions above mean something: the
+        rows that went through `save()` are correct at both schools, so a wrong
+        row in this table is the bypass and not the ordinary path.
+        """
+        at_stmarys = services.link_guardian(self.parent, self.child)
+        at_grace = services.link_guardian(self.parent, self.sibling)
+
+        Guardianship.objects.bulk_create(
+            [Guardianship(guardian=self.parent, student=self.bursar)]
+        )
+
+        self.assertEqual(at_stmarys.school, self.school)
+        self.assertEqual(at_grace.school, self.grace)
+        self.assertEqual(at_stmarys.student.role, Role.STUDENT)
+        self.assertEqual(at_grace.student.role, Role.STUDENT)
+
+        bypassed = Guardianship.objects.exclude(
+            pk__in=[at_stmarys.pk, at_grace.pk]
+        ).get()
+        self.assertNotEqual(bypassed.student.role, Role.STUDENT)
 
     def test_updating_the_membership_underneath_a_link_breaks_it_too(self):
         """A third path, and the quietest: nothing touches `Guardianship` at all.
@@ -668,7 +718,7 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
         self.assertEqual(Guardianship.objects.count(), 1)
 
     def test_the_ordinary_save_path_is_still_closed(self):
-        """The contrast that gives the four above their meaning.
+        """The contrast that gives every bypass above its meaning.
 
         Same violating row, written through `save()` instead — refused. Without
         this, a reader cannot tell whether the bypasses above are a gap in the
