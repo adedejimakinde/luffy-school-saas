@@ -44,6 +44,7 @@ from fees.models import (
     KOBO_PER_NAIRA,
 )
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -51,7 +52,7 @@ TUITION = 120_000 * KOBO_PER_NAIRA
 LEVY = 15_000 * KOBO_PER_NAIRA
 
 
-class BillingSetUp(TestCase):
+class BillingSetUp(RefusalAssertions, TestCase):
     """Two schools, each with a JSS 1A, a first term, and children in it.
 
     St Mary's is the school under test. Grace Academy exists to be untouched:
@@ -127,18 +128,6 @@ class BillingSetUp(TestCase):
 
     def balance_of(self, membership):
         return FeeLedgerEntry.objects.for_student(membership.pk).balance()
-
-    def assertRefusedBy(self, name):
-        """A context manager asserting *which* constraint refused the write.
-
-        `assertRaises(IntegrityError)` alone is the green test rule 5 warns
-        about: any constraint firing for any reason passes it, including one
-        that has nothing to do with what the test claims to be about. Naming it
-        means the test goes red if the refusal starts coming from somewhere
-        else — which is what happens when a constraint is renamed, dropped, or
-        quietly replaced by a different one.
-        """
-        return self.assertRaisesRegex(IntegrityError, name)
 
 
 class ApplyTests(BillingSetUp):

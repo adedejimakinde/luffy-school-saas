@@ -42,6 +42,7 @@ from accounts.services import grant_membership
 from results import ratings, services
 from results.models import (
     RatingScalePoint,
+    RatingsAreFrozenAtRelease,
     ReleasedTraitRating,
     ReportCardSettings,
     Trait,
@@ -49,11 +50,12 @@ from results.models import (
     TraitRating,
 )
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
 
-class RatingsSetUp(TestCase):
+class RatingsSetUp(RefusalAssertions, TestCase):
     """Two schools. St Mary's teaches JSS 1A (Kemi) and JSS 3B (Sade)."""
 
     def setUp(self):
@@ -366,7 +368,7 @@ class TheScaleTests(RatingsSetUp):
     def test_the_database_refuses_it_too(self):
         """The layer that holds when the service is bypassed."""
         with connected_to(self.stmarys):
-            with self.assertRaises(Exception) as refused:
+            with self.assertRefusedBy("a_rating_is_within_the_scale"):
                 with transaction.atomic():
                     TraitRating.objects.create(
                         term=self.term(),
@@ -374,8 +376,6 @@ class TheScaleTests(RatingsSetUp):
                         trait=self.trait("Punctuality"),
                         score=9,
                     )
-
-        self.assertIn("a_rating_is_within_the_scale", str(refused.exception))
 
     def test_the_stored_integer_renders_as_the_schools_word(self):
         with connected_to(self.stmarys):
@@ -1379,6 +1379,15 @@ class TheFreezeTests(RatingsSetUp):
                     ReleasedTraitRating.objects.filter(sheet=sheet).delete()
 
     def test_the_model_refuses_before_the_database_has_to(self):
+        """The name claims a layer, so the assertion has to name it too.
+
+        `assertRaises(Exception)` plus `assertIn("released", ...)` is satisfied
+        by the trigger one line up — whose sentence also says "released" — so
+        the test could not tell the model refusing from the database refusing,
+        which is the single fact its name promises. `RatingsAreFrozenAtRelease`
+        is raised in Python and never reaches the database; an `IntegrityError`
+        here would mean `save()` had stopped guarding.
+        """
         self.rate_the_class()
 
         with connected_to(self.stmarys):
@@ -1386,7 +1395,7 @@ class TheFreezeTests(RatingsSetUp):
             row = ReleasedTraitRating.objects.filter(sheet=sheet).first()
             row.score = 1
 
-            with self.assertRaises(Exception) as refused:
+            with self.assertRaises(RatingsAreFrozenAtRelease) as refused:
                 row.save()
 
         self.assertIn("released", str(refused.exception))

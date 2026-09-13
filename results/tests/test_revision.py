@@ -810,22 +810,36 @@ class WhatARevisionCannotFixTests(RevisionSetUp):
         there is no revision that can carry the correction. A teacher reading it
         went looking for a remedy that does not exist, and once task 8 shipped
         would have found a button that produces a byte-identical card.
+
+        Each attempt names the type it expects, as the test above does. Reading
+        a message off `assertRaises(Exception)` cannot tell a refusal carrying
+        the right words from a 500 that happens to contain them, and the three
+        assertions below are all about words.
         """
         with connected_to(self.stmarys):
             first = self.first_term()
             assessment = Assessment.objects.filter(term=first).first()
 
             refusals = []
-            for attempt in (
-                lambda: gradebook_services.set_score(
-                    assessment, self.ada, 41, expected_version=1
+            for expected, attempt in (
+                (
+                    gradebook_services.MarksLocked,
+                    lambda: gradebook_services.set_score(
+                        assessment, self.ada, 41, expected_version=1
+                    ),
                 ),
-                lambda: ratings.rate(first, self.trait, self.ada, 1),
-                lambda: comments.write(
-                    first, self.ada, CommentAuthor.CLASS_TEACHER, "Rewritten."
+                (
+                    ratings.RatingsLocked,
+                    lambda: ratings.rate(first, self.trait, self.ada, 1),
+                ),
+                (
+                    comments.CommentsLocked,
+                    lambda: comments.write(
+                        first, self.ada, CommentAuthor.CLASS_TEACHER, "Rewritten."
+                    ),
                 ),
             ):
-                with self.assertRaises(Exception) as caught:
+                with self.assertRaises(expected) as caught:
                     attempt()
                 refusals.append(str(caught.exception))
 

@@ -54,7 +54,7 @@ the balance from one that reads it and finds nothing.
 import json
 import re
 
-from django.db import connection
+from django.db import connection, transaction
 from django.test import TestCase
 
 from academics.models import TermName
@@ -62,16 +62,18 @@ from accounts.models import Membership, Role, User
 from fees import services as fees_services
 from results import cards, revision, withholding
 from results.card_api import CardClaim, router as card_router
-from results.services import ResultsError
+from results.services import NotAllowedToActOnResults, ResultsError
 from results.models import (
     PdfState,
     ReportCardSettings,
     ReleasedCard,
     ReleasedCardPdf,
     WithholdingDecision,
+    WithholdingDecisionsAreAppendOnly,
     WithholdingStatus,
 )
 from schools.tests.tenants import connected_to
+from tests.refusals import RefusalAssertions
 
 from .test_card_api import HOST, PASSWORD, THEIR_HOST, ReportCardApiSetUp
 
@@ -83,7 +85,7 @@ CONTACT = "Call the bursar's office on 0803 555 0100."
 PREFIX = "/api/results"
 
 
-class WithholdingSetUp(ReportCardApiSetUp):
+class WithholdingSetUp(RefusalAssertions, ReportCardApiSetUp):
     """The card fixture, plus arrears, a policy switch and a way to withhold.
 
     Every helper takes the school explicitly. `withhold()` and `set_policy()`
@@ -882,12 +884,13 @@ class TheDecisionRowIsAppendOnly(WithholdingSetUp):
         self.withheld_and_released()
 
     def test_updating_a_decision_is_refused(self):
+        """The model half: `save()` refuses before the database is asked."""
         with connected_to(self.stmarys):
             row = withholding.latest_decision(
                 self.ada.pk, self.term_of(self.stmarys, TermName.FIRST.value)
             )
             row.reason = "Something else."
-            with self.assertRaises(Exception):
+            with self.assertRaises(WithholdingDecisionsAreAppendOnly):
                 row.save()
 
     def test_deleting_a_decision_is_refused(self):
@@ -895,8 +898,35 @@ class TheDecisionRowIsAppendOnly(WithholdingSetUp):
             row = withholding.latest_decision(
                 self.ada.pk, self.term_of(self.stmarys, TermName.FIRST.value)
             )
-            with self.assertRaises(Exception):
+            with self.assertRaises(WithholdingDecisionsAreAppendOnly):
                 row.delete()
+
+    def test_the_database_refuses_a_bulk_update_that_skips_the_model(self):
+        """The trigger half, which this class claimed and nothing asserted.
+
+        `save()` and `delete()` are one code path; `.update()` is four others —
+        the admin, a shell, a data migration, a queryset in a service. The two
+        tests above pass with `0023`'s trigger dropped, because they never
+        reach it. Found by #84's sweep: both said `assertRaises(Exception)`,
+        and widening them to name a layer showed the layer they name is the
+        only one either of them tests.
+        """
+        with connected_to(self.stmarys):
+            term = self.term_of(self.stmarys, TermName.FIRST.value)
+            with self.assertRefusedBy("results_withholdingdecision is append-only"):
+                with transaction.atomic():
+                    WithholdingDecision.objects.filter(
+                        student_membership_id=self.ada.pk, term=term
+                    ).update(reason="Something else.")
+
+    def test_the_database_refuses_a_bulk_delete_that_skips_the_model(self):
+        with connected_to(self.stmarys):
+            term = self.term_of(self.stmarys, TermName.FIRST.value)
+            with self.assertRefusedBy("results_withholdingdecision is append-only"):
+                with transaction.atomic():
+                    WithholdingDecision.objects.filter(
+                        student_membership_id=self.ada.pk, term=term
+                    ).delete()
 
     def test_both_decisions_stand_and_the_latest_holds(self):
         self.lift(self.ada)
@@ -1032,8 +1062,16 @@ class OnlyAPrincipalOrABursarMayDecide(WithholdingSetUp):
         self.assertEqual(row.decided_by_id, self.principal.pk)
 
     def test_a_teacher_may_not_withhold(self):
+        """The authority refusal, and the type is the assertion.
+
+        `assertRaises(Exception)` here was satisfied by a 500 — by an
+        `AttributeError` on the way to the guard as readily as by the guard
+        itself. This is the test standing between a class teacher and the power
+        to hold a family's report card back, so it has to be able to tell those
+        apart. `_require_authority()` raises `NotAllowedToActOnResults`.
+        """
         self.enable_withholding()
-        with self.assertRaises(Exception):
+        with self.assertRaises(NotAllowedToActOnResults):
             self.withhold(self.ada, actor=self.teacher)
 
     def test_the_roles_are_not_borrowed_from_another_constant(self):
@@ -1196,7 +1234,7 @@ class TheRefusalReadsAsASentence(WithholdingSetUp):
     def test_a_teacher_is_refused_in_english(self):
         self.enable_withholding()
         with connected_to(self.stmarys):
-            with self.assertRaises(Exception) as caught:
+            with self.assertRaises(NotAllowedToActOnResults) as caught:
                 withholding.withhold(
                     self.ada.pk,
                     self.term_of(self.stmarys, TermName.FIRST.value),
@@ -1211,7 +1249,7 @@ class TheRefusalReadsAsASentence(WithholdingSetUp):
     def test_a_lift_is_refused_in_english(self):
         self.enable_withholding()
         with connected_to(self.stmarys):
-            with self.assertRaises(Exception) as caught:
+            with self.assertRaises(NotAllowedToActOnResults) as caught:
                 withholding.lift(
                     self.ada.pk,
                     self.term_of(self.stmarys, TermName.FIRST.value),
@@ -1226,7 +1264,7 @@ class TheRefusalReadsAsASentence(WithholdingSetUp):
         """The other template, which reads `to {step} results.`"""
         self.enable_withholding()
         with connected_to(self.stmarys):
-            with self.assertRaises(Exception) as caught:
+            with self.assertRaises(NotAllowedToActOnResults) as caught:
                 withholding.withhold(
                     self.ada.pk,
                     self.term_of(self.stmarys, TermName.FIRST.value),
