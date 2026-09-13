@@ -554,38 +554,43 @@ class Guardianship(models.Model):
         `TransferError` already declines to make below. The service translates
         at its own boundary instead.
 
-        The two flags are spelled as `fees.services._post()` spells them, but
-        only one of them is doing anything here, and it is not the one it looks
-        like. Both were measured — see
-        `accounts/tests/test_guardianship_concurrency.py`, which carries the
-        truth table:
+        `validate_constraints=False` is the one flag here, and it is
+        load-bearing. It keeps a duplicate pair travelling all the way to
+        `uniq_guardianship_guardian_student` in the database, so the failure a
+        losing caller meets is an `IntegrityError`. That matters because
+        `link_guardian()` reaches this through `get_or_create()`, which catches
+        `IntegrityError` and nothing else:
 
-        * `validate_constraints=False` is **load-bearing**. It is what lets a
-          duplicate pair travel all the way to `uniq_guardianship_guardian_student`
-          in the database. `link_guardian()` survives a lost race because
-          `get_or_create()` catches the `IntegrityError` that index raises and
-          re-reads; turn this flag on and the duplicate becomes a
-          `ValidationError` instead, which `get_or_create()` does not catch and
-          the race stops being survivable.
-        * `validate_unique=False` is **inert**, today. This model's uniqueness
-          lives entirely in `Meta.constraints` as a `UniqueConstraint`, and
-          `validate_unique()` has never inspected those — `unique_together` is
-          empty. Setting it either way changes nothing, which is measured rather
-          than assumed. It is kept so that adding a `unique=True` field or a
-          `unique_together` later does not quietly start refusing duplicates in
-          Python; it is named as inert so nobody reads it as the flag guarding
-          the race.
+            except IntegrityError:
+                try:
+                    return self.get(**kwargs), False
+                except self.model.DoesNotExist:
+                    pass
+                raise
 
-        What is *not* a reason, because it was checked and it is not true:
-        `one_primary_contact_per_student` does not need this. `link_guardian()`
-        clears the previous primary before it saves, so by the time this runs
-        there is no second primary to collide with, and constraint validation
-        would not have refused that sequence.
+        Turn the flag on and the same duplicate is refused in Python as a
+        `ValidationError` *before* the INSERT. `get_or_create()` does not catch
+        that, so a caller who simply lost a race stops recovering and starts
+        raising. `test_the_loser_of_a_race_recovers_instead_of_raising` in
+        `accounts/tests/test_guardianship_concurrency.py` arranges exactly that
+        lost race and is the test that goes red if this flag flips.
+
+        Two things that are *not* reasons, both checked rather than assumed:
+
+        * `validate_unique` is not involved and is not passed. This model's
+          uniqueness is a `UniqueConstraint` in `Meta.constraints`, which
+          `validate_unique()` does not inspect — `unique_together` is empty — so
+          it is inert in every combination. It was passed as `False` here and
+          read as if it were doing the work above; it is gone.
+        * `one_primary_contact_per_student` does not need this flag either.
+          `link_guardian()` clears the previous primary before it saves, so the
+          partial index is not in breach by the time validation runs, and
+          constraint validation would not have refused that sequence.
 
         Nothing is excluded, so the field-level rules are asked here too rather
         than only at the database.
         """
-        self.full_clean(exclude=None, validate_unique=False, validate_constraints=False)
+        self.full_clean(exclude=None, validate_constraints=False)
         return super().save(*args, **kwargs)
 
     @property

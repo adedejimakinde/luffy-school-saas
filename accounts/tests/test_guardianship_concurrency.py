@@ -20,21 +20,34 @@ is empty — the pair's uniqueness lives only in `Meta.constraints` as a
 `UniqueConstraint`, and `validate_unique()` has never looked at those.
 `validate_constraints()` does, and that is the flag `save()` passes `False`.
 
-So the window is held open by `validate_constraints=False`, not by
-`validate_unique=False`, and a future edit that "tidies up" the wrong one of the
-two would change nothing while the other would close the path silently. Both
-halves are asserted below.
+So the window is held open by `validate_constraints=False` alone.
+`validate_unique` was passed as `False` alongside it and has since been dropped
+from the call, precisely because a kwarg that changes nothing reads as though it
+were the guard. The table is kept here as the record of why it went, and
+`test_it_is_validate_constraints_and_not_validate_unique_holding_it_open` keeps
+asserting it — so that adding a `unique=True` field or a `unique_together` later,
+which *would* make `validate_unique` bite, fails here rather than silently in a
+race.
+
+What "the window" is worth is its own test, because the two facts are different:
+`test_the_loser_of_a_race_recovers_instead_of_raising` arranges a caller who lost
+the race and shows it recovering through `get_or_create()`'s `IntegrityError`
+branch. That is the test the flag is answerable to.
 
 `TransactionTestCase` and real threads, because this needs two connections whose
 commits are visible to each other. The interleaving is driven by a barrier, not
 by sleeps, so both calls are provably in flight together — the idiom
-`test_transfer_concurrency.py` established.
+`test_transfer_concurrency.py` established. The lost-race test is the deliberate
+exception: it forces the branch instead of racing for it, for the reason its own
+docstring gives.
 """
 
 import threading
+from unittest import mock
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connections, transaction
+from django.db.models.query import QuerySet
 from django.test import TransactionTestCase
 
 from accounts import services
@@ -115,6 +128,48 @@ class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
             [c.name for c in Guardianship._meta.total_unique_constraints],
             ["uniq_guardianship_guardian_student"],
         )
+
+    def test_the_loser_of_a_race_recovers_instead_of_raising(self):
+        """The dependency `validate_constraints=False` actually exists to protect.
+
+        The tests above establish *which layer* refuses a duplicate. This one
+        establishes *why that matters*, which is the question they leave open:
+        `QuerySet.get_or_create()` catches `IntegrityError` and nothing else —
+
+            except IntegrityError:
+                try:
+                    return self.get(**kwargs), False
+                except self.model.DoesNotExist:
+                    pass
+                raise
+
+        — so a caller whose `get()` ran before the winner committed recovers only
+        if the failure it meets is an `IntegrityError`. Constraint validation
+        turns that same duplicate into a `ValidationError` *before* the INSERT,
+        and `get_or_create()` lets it straight through.
+
+        Forced rather than raced, on the precedent in
+        `fees/tests/test_schedules.py`: the lost race is a `get()` that misses
+        while the row exists, so that is what is arranged. Racing it with threads
+        would test the same branch with a timing dependency bolted on — and it is
+        the branch, not the timing, that the flag decides.
+        """
+        winner = Guardianship.objects.create(guardian=self.parent, student=self.child)
+        real_get = QuerySet.get
+        missed_once = []
+
+        def get_that_misses_once(queryset, *args, **kwargs):
+            if not missed_once and queryset.model is Guardianship:
+                missed_once.append(True)
+                raise Guardianship.DoesNotExist()
+            return real_get(queryset, *args, **kwargs)
+
+        with mock.patch.object(QuerySet, "get", get_that_misses_once):
+            link = services.link_guardian(self.parent, self.child)
+
+        self.assertTrue(missed_once, "the lost race was never arranged")
+        self.assertEqual(link.pk, winner.pk)
+        self.assertEqual(Guardianship.objects.count(), 1)
 
     def test_two_concurrent_links_of_one_pair_leave_one_row(self):
         """Both callers succeed and both get the same row.

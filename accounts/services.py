@@ -209,9 +209,7 @@ def link_guardian(
             is_primary_contact=is_primary_contact,
             receives_invoices=receives_invoices,
             can_collect=can_collect,
-        ).full_clean(
-            exclude=None, validate_unique=False, validate_constraints=False
-        )
+        ).full_clean(exclude=None, validate_constraints=False)
     except ValidationError as exc:
         _raise_as_membership_error(exc)
 
