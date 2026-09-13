@@ -513,7 +513,10 @@ class Guardianship(models.Model):
         enforces the append-only tables. That is a larger decision than the one
         this method settles, and it is the remaining gap: `save()` below closes
         the ORM paths, so a bulk `.update()`, a `bulk_create()` or a `psql`
-        session still reaches past both. See issue #91.
+        session still reaches past both. A role change on the `Membership` this
+        row points at reaches past them without writing here at all, which is
+        why the trigger cannot live on this table alone. See issue #96 — #91 is
+        the closed predecessor, and covered only the `save()` path.
 
         Each error carries an explicit `code`. `accounts.services` translates on
         those codes rather than on the message text — a message is shared
