@@ -825,7 +825,7 @@ class ReleaseIsTerminalTests(ChainSetUp):
 
             for target in (SheetState.DRAFT, SheetState.APPROVED):
                 with self.subTest(target=target):
-                    with self.assertRefusedBy("released to parents"):
+                    with self.assertRefusedBy("results_release_is_final"):
                         with transaction.atomic():
                             ResultSheet.objects.filter(pk=sheet.pk).update(
                                 state=target

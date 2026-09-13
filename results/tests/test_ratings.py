@@ -1398,7 +1398,12 @@ class TheFreezeTests(RatingsSetUp):
             with self.assertRaises(RatingsAreFrozenAtRelease) as refused:
                 row.save()
 
-        self.assertIn("released", str(refused.exception))
+        # Not `assertIn("released", ...)`: the trigger underneath says
+        # "released" too, which is how this test stayed green with the guard
+        # deleted. The type pins the layer; this pins the words it uses.
+        self.assertIn(
+            "is part of a card that has been released", str(refused.exception)
+        )
 
     def test_the_other_schools_card_is_untouched_by_our_release(self):
         self.rate_the_class()

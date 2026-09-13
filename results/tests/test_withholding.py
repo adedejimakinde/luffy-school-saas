@@ -913,20 +913,39 @@ class TheDecisionRowIsAppendOnly(WithholdingSetUp):
         """
         with connected_to(self.stmarys):
             term = self.term_of(self.stmarys, TermName.FIRST.value)
+            rows = WithholdingDecision.objects.filter(
+                student_membership_id=self.ada.pk, term=term
+            )
+            before = list(rows.values_list("pk", "reason").order_by("pk"))
+
             with self.assertRefusedBy("results_withholdingdecision is append-only"):
                 with transaction.atomic():
-                    WithholdingDecision.objects.filter(
-                        student_membership_id=self.ada.pk, term=term
-                    ).update(reason="Something else.")
+                    rows.update(reason="Something else.")
+
+            # The refusal is only half the guarantee. A trigger moved to
+            # `AFTER UPDATE` writes first and raises second, so the row would
+            # be saved by the rollback rather than by the guard — and this
+            # class's claim is that the row stands, not that something raised.
+            self.assertEqual(
+                list(rows.values_list("pk", "reason").order_by("pk")), before
+            )
 
     def test_the_database_refuses_a_bulk_delete_that_skips_the_model(self):
         with connected_to(self.stmarys):
             term = self.term_of(self.stmarys, TermName.FIRST.value)
+            rows = WithholdingDecision.objects.filter(
+                student_membership_id=self.ada.pk, term=term
+            )
+            before = list(rows.values_list("pk", flat=True).order_by("pk"))
+            self.assertTrue(before, "nothing to refuse the deletion of")
+
             with self.assertRefusedBy("results_withholdingdecision is append-only"):
                 with transaction.atomic():
-                    WithholdingDecision.objects.filter(
-                        student_membership_id=self.ada.pk, term=term
-                    ).delete()
+                    rows.delete()
+
+            self.assertEqual(
+                list(rows.values_list("pk", flat=True).order_by("pk")), before
+            )
 
     def test_both_decisions_stand_and_the_latest_holds(self):
         self.lift(self.ada)
