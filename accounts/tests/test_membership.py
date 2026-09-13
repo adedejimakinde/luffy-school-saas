@@ -560,17 +560,29 @@ class GuardianshipRulesHoldOnEverySavePathTests(TestCase):
         )
 
     def test_relinking_the_same_pair_is_still_idempotent(self):
-        """`save()` now validates; `validate_unique=False` is what keeps this true."""
+        """`save()` now validates, and a second link still returns the first row.
+
+        Not held up by either `full_clean()` flag, which was checked rather than
+        assumed: `get_or_create()` finds the existing row and never reaches
+        `save()` at all, so flipping `validate_unique` or `validate_constraints`
+        leaves this green. What it pins is that adding validation to `save()`
+        did not disturb the idempotent path.
+        """
         first = services.link_guardian(self.parent, self.ada)
         again = services.link_guardian(self.parent, self.ada)
         self.assertEqual(first.pk, again.pk)
         self.assertEqual(Guardianship.objects.count(), 1)
 
     def test_standing_up_a_new_primary_contact_still_works(self):
-        """`validate_constraints=False` is what keeps this true.
+        """Replacing a primary contact survives validation being added to `save()`.
 
-        `one_primary_contact_per_student` is a partial unique index, and this
-        sequence is momentarily in breach of it between the two calls.
+        An earlier draft of this claimed `validate_constraints=False` was what
+        kept it true. That was wrong, and a control disproved it: with
+        `validate_constraints=True` this test stays green, because
+        `link_guardian()` clears the previous primary *before* it saves, so
+        `one_primary_contact_per_student` is never actually in breach at the
+        moment validation runs. The claim is corrected rather than removed
+        because the sequence is still worth pinning.
         """
         father = make_user("08039999999", "Femi Ade", phone="08039999999")
         services.link_guardian(self.parent, self.ada, is_primary_contact=True)
@@ -579,6 +591,96 @@ class GuardianshipRulesHoldOnEverySavePathTests(TestCase):
         primaries = Guardianship.objects.filter(student=self.ada, is_primary_contact=True)
         self.assertEqual(primaries.count(), 1)
         self.assertEqual(primaries.get().guardian, father)
+
+
+class GuardianshipRulesAreStillBypassableTests(TestCase):
+    """The limit of a `save()` guard, pinned rather than described.
+
+    `save()` closes the ORM's per-instance write paths. It does not close the
+    ones that never instantiate the model: `bulk_create()` goes straight to a
+    single INSERT, and `QuerySet.update()` compiles to an UPDATE. Neither calls
+    `save()`, so neither asks `clean()`. Only a database trigger would — which is
+    how this codebase enforces the append-only tables, and a larger decision than
+    PR #93 took. Issue #91 carries it.
+
+    **These tests assert that the bypass happens.** They are the known-limit
+    kind, not the desired-behaviour kind, so read a failure here the opposite way
+    round to usual:
+
+        If one of these goes red, somebody closed the gap. That is good news.
+        Update #91, delete the test that went red, and move its case into
+        `GuardianshipRulesHoldOnEverySavePathTests` where it now belongs.
+
+    Written this way because a gap recorded only in prose is a gap nobody
+    notices has been closed, and a stale "known limitation" comment is worse
+    than none.
+    """
+
+    def setUp(self):
+        self.school = make_school("St Mary's", "st-marys", "st_marys")
+        self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
+        self.child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
+        self.bursar = services.grant_membership(
+            make_user("bursar@stmarys.ng", "Bursar Person"), self.school, Role.BURSAR
+        )
+
+    def test_bulk_create_writes_a_row_that_breaks_the_student_rule(self):
+        Guardianship.objects.bulk_create(
+            [Guardianship(guardian=self.parent, student=self.bursar)]
+        )
+
+        written = Guardianship.objects.get()
+        self.assertEqual(written.student_id, self.bursar.pk)
+        self.assertNotEqual(written.student.role, Role.STUDENT)
+
+    def test_bulk_create_writes_a_row_that_breaks_the_self_guardian_rule(self):
+        Guardianship.objects.bulk_create(
+            [Guardianship(guardian=self.child.user, student=self.child)]
+        )
+
+        written = Guardianship.objects.get()
+        self.assertEqual(written.guardian_id, written.student.user_id)
+
+    def test_queryset_update_moves_a_valid_row_into_breach(self):
+        """The row is written legally, then updated past the guard."""
+        link = services.link_guardian(self.parent, self.child)
+
+        Guardianship.objects.filter(pk=link.pk).update(student=self.bursar)
+
+        link.refresh_from_db()
+        self.assertEqual(link.student_id, self.bursar.pk)
+        self.assertNotEqual(link.student.role, Role.STUDENT)
+
+    def test_updating_the_membership_underneath_a_link_breaks_it_too(self):
+        """A third path, and the quietest: nothing touches `Guardianship` at all.
+
+        The rule reads through to `Membership.role`, so changing the role of a
+        membership a guardianship already points at invalidates that guardianship
+        without any write to its own table. Found while pinning the two above;
+        recorded here because it is the same gap wearing different clothes.
+        """
+        link = services.link_guardian(self.parent, self.child)
+
+        Membership.objects.filter(pk=self.child.pk).update(role=Role.BURSAR)
+
+        link.refresh_from_db()
+        self.assertNotEqual(link.student.role, Role.STUDENT)
+        self.assertEqual(Guardianship.objects.count(), 1)
+
+    def test_the_ordinary_save_path_is_still_closed(self):
+        """The contrast that gives the four above their meaning.
+
+        Same violating row, written through `save()` instead — refused. Without
+        this, a reader cannot tell whether the bypasses above are a gap in the
+        guard or an absence of any guard at all.
+        """
+        with self.assertRaises(ValidationError) as caught:
+            Guardianship.objects.create(guardian=self.parent, student=self.bursar)
+
+        self.assertEqual(
+            [e.code for e in caught.exception.error_dict["student"]], ["not_a_student"]
+        )
+        self.assertEqual(Guardianship.objects.count(), 0)
 
 
 class GrantAuthorityStopsAtOwnSchoolTests(TestCase):

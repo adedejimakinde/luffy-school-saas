@@ -554,15 +554,33 @@ class Guardianship(models.Model):
         `TransferError` already declines to make below. The service translates
         at its own boundary instead.
 
-        The two flags match `fees.services._post()`, and for its reasons:
+        The two flags are spelled as `fees.services._post()` spells them, but
+        only one of them is doing anything here, and it is not the one it looks
+        like. Both were measured — see
+        `accounts/tests/test_guardianship_concurrency.py`, which carries the
+        truth table:
 
-        * `validate_unique=False` — `link_guardian()` is idempotent through
-          `get_or_create()`, and unique validation here would turn a re-link of
-          an existing pair into a refusal.
-        * `validate_constraints=False` — `one_primary_contact_per_student`
-          above is a *partial* unique index, and `link_guardian()` legitimately
-          stands a new primary contact up by clearing the old one first. Asking
-          the constraint mid-flight would refuse a sequence that ends valid.
+        * `validate_constraints=False` is **load-bearing**. It is what lets a
+          duplicate pair travel all the way to `uniq_guardianship_guardian_student`
+          in the database. `link_guardian()` survives a lost race because
+          `get_or_create()` catches the `IntegrityError` that index raises and
+          re-reads; turn this flag on and the duplicate becomes a
+          `ValidationError` instead, which `get_or_create()` does not catch and
+          the race stops being survivable.
+        * `validate_unique=False` is **inert**, today. This model's uniqueness
+          lives entirely in `Meta.constraints` as a `UniqueConstraint`, and
+          `validate_unique()` has never inspected those — `unique_together` is
+          empty. Setting it either way changes nothing, which is measured rather
+          than assumed. It is kept so that adding a `unique=True` field or a
+          `unique_together` later does not quietly start refusing duplicates in
+          Python; it is named as inert so nobody reads it as the flag guarding
+          the race.
+
+        What is *not* a reason, because it was checked and it is not true:
+        `one_primary_contact_per_student` does not need this. `link_guardian()`
+        clears the previous primary before it saves, so by the time this runs
+        there is no second primary to collide with, and constraint validation
+        would not have refused that sequence.
 
         Nothing is excluded, so the field-level rules are asked here too rather
         than only at the database.
