@@ -493,13 +493,82 @@ class Guardianship(models.Model):
         return f"{self.guardian} → {self.student.name}"
 
     def clean(self):
-        # Cross-table rules Postgres cannot express as a constraint.
+        """The two rules, in the only copy of them there is.
+
+        Both are **cross-table** — each compares a column on this row against a
+        column on the `Membership` row it points at — and that is why neither
+        appears in `Meta.constraints` above. Confirmed against this project's
+        own Django and Postgres rather than assumed, because "there is no
+        constraint here" is the kind of absence a later reader otherwise has to
+        re-derive:
+
+            CheckConstraint(condition=Q(student__role=Role.STUDENT))
+            CheckConstraint(condition=~Q(guardian=F("student__user")))
+            -> FieldError: Joined field references are not permitted in this query
+
+            ALTER TABLE ... CHECK ((SELECT role FROM accounts_membership ...) = 'student')
+            -> NotSupportedError: cannot use subquery in check constraint
+
+        A row-level trigger *could* hold them, which is how this codebase
+        enforces the append-only tables. That is a larger decision than the one
+        this method settles, and it is the remaining gap: `save()` below closes
+        the ORM paths, so a bulk `.update()`, a `bulk_create()` or a `psql`
+        session still reaches past both. See issue #91.
+
+        Each error carries an explicit `code`. `accounts.services` translates on
+        those codes rather than on the message text — a message is shared
+        prose, a code names *which rule* refused.
+        """
         if self.student_id and self.student.role != Role.STUDENT:
             raise ValidationError(
-                {"student": "A guardianship must point at a STUDENT membership."}
+                {
+                    "student": ValidationError(
+                        "A guardianship must point at a STUDENT membership.",
+                        code="not_a_student",
+                    )
+                }
             )
         if self.guardian_id and self.student_id and self.guardian_id == self.student.user_id:
-            raise ValidationError({"guardian": "A student cannot be their own guardian."})
+            raise ValidationError(
+                {
+                    "guardian": ValidationError(
+                        "A student cannot be their own guardian.",
+                        code="self_guardian",
+                    )
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        """Ask `clean()` on the way past, so no write can skip the rules.
+
+        `Model.save()` does not call `full_clean()`, so before this override
+        `Guardianship.objects.create()` wrote a row that violated either rule
+        without complaint. The rules were stated in `clean()` and reached only
+        from the tests; what actually held them in production was a second,
+        hand-written copy of both inside `services.link_guardian()`. Two copies
+        of a rule are one copy and one place for it to drift. Issue #91.
+
+        Raising `ValidationError` rather than a `services.MembershipError`
+        subclass is forced, not chosen: `services` imports this module, so
+        reaching the other way for an exception type is the circular import
+        `TransferError` already declines to make below. The service translates
+        at its own boundary instead.
+
+        The two flags match `fees.services._post()`, and for its reasons:
+
+        * `validate_unique=False` — `link_guardian()` is idempotent through
+          `get_or_create()`, and unique validation here would turn a re-link of
+          an existing pair into a refusal.
+        * `validate_constraints=False` — `one_primary_contact_per_student`
+          above is a *partial* unique index, and `link_guardian()` legitimately
+          stands a new primary contact up by clearing the old one first. Asking
+          the constraint mid-flight would refuse a sequence that ends valid.
+
+        Nothing is excluded, so the field-level rules are asked here too rather
+        than only at the database.
+        """
+        self.full_clean(exclude=None, validate_unique=False, validate_constraints=False)
+        return super().save(*args, **kwargs)
 
     @property
     def school(self):

@@ -415,6 +415,172 @@ class GuardianshipRulesTests(TestCase):
         self.assertEqual(self.parent.children().count(), 1)
 
 
+class GuardianshipRulesHoldOnEverySavePathTests(TestCase):
+    """Issue #91: the rules used to be reachable only through `link_guardian()`.
+
+    `Guardianship.clean()` stated both rules and `Model.save()` never called it,
+    so `Guardianship.objects.create()` wrote whatever it was handed. What held
+    the line in production was a second, hand-written copy of both rules inside
+    `link_guardian()`. These tests pin the two things that had to become true:
+    the model refuses on its own, and the service still refuses in its own
+    vocabulary after that duplicate copy was deleted.
+
+    **Two schools, and one parent reaching both.** Not schema isolation —
+    `accounts` is a SHARED app, so `accounts_guardianship` is a single table in
+    `public` and there is no per-tenant copy of it to isolate. Two schools are
+    here because that is the shape the model's own docstring describes, and
+    because a rule that reads through `Guardianship.student` to a `Membership`
+    row has to keep naming the right row when more than one school's rows share
+    the table.
+
+    Assertions name the **code** `clean()` raised and the leaf exception type
+    the service raised, never a message substring. Per issue #89: prose is
+    shared between refusals, and `MembershipError` is the base of five.
+    """
+
+    def setUp(self):
+        self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
+        self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
+
+        # One child at each school, so both rows live in the one shared table.
+        self.ada = services.enroll_student(make_user("STM/1", "Ada Ade"), self.stmarys)
+        self.tunde = services.enroll_student(
+            make_user("GA/1", "Tunde Ade"), self.grace
+        )
+
+        # A non-STUDENT membership at the second school, for rule 1.
+        self.bursar = services.grant_membership(
+            make_user("bursar@grace.ng", "Bursar Person"), self.grace, Role.BURSAR
+        )
+
+    # -- the model, on the bare save() path -------------------------------
+
+    def test_create_refuses_a_membership_that_is_not_a_student(self):
+        with self.assertRaises(ValidationError) as caught:
+            Guardianship.objects.create(guardian=self.parent, student=self.bursar)
+
+        # Which rule refused, by name — not by message, which rule 2 could
+        # equally have produced had it been the one to fire.
+        self.assertEqual(list(caught.exception.error_dict), ["student"])
+        self.assertEqual(
+            [e.code for e in caught.exception.error_dict["student"]], ["not_a_student"]
+        )
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    def test_create_refuses_a_student_as_their_own_guardian(self):
+        with self.assertRaises(ValidationError) as caught:
+            Guardianship.objects.create(guardian=self.ada.user, student=self.ada)
+
+        self.assertEqual(list(caught.exception.error_dict), ["guardian"])
+        self.assertEqual(
+            [e.code for e in caught.exception.error_dict["guardian"]], ["self_guardian"]
+        )
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    def test_create_still_writes_a_link_that_breaks_neither_rule(self):
+        """The refusals above are the rules firing, not `save()` refusing everything."""
+        link = Guardianship.objects.create(guardian=self.parent, student=self.ada)
+        self.assertEqual(Guardianship.objects.count(), 1)
+        self.assertEqual(link.student.school, self.stmarys)
+
+    def test_the_rule_reads_the_row_it_points_at_and_not_another_school_s(self):
+        """Two schools' rows in one table; the refusal must follow the FK.
+
+        `self.bursar` is at Grace and `self.ada` is at St Mary's. A link to Ada
+        is legal and must be written even though a refusable row for the same
+        parent exists in the same table.
+        """
+        Guardianship.objects.create(guardian=self.parent, student=self.ada)
+        with self.assertRaises(ValidationError) as caught:
+            Guardianship.objects.create(guardian=self.parent, student=self.bursar)
+        self.assertEqual(
+            [e.code for e in caught.exception.error_dict["student"]], ["not_a_student"]
+        )
+
+        # The legal one survived; only the refused one is missing.
+        self.assertEqual(Guardianship.objects.count(), 1)
+        self.assertEqual(
+            Guardianship.objects.get().student_id, self.ada.pk
+        )
+
+    # -- the service, after its duplicate copy of the rules was deleted ----
+
+    def test_link_guardian_still_refuses_a_membership_that_is_not_a_student(self):
+        with self.assertRaises(services.NotAStudent):
+            services.link_guardian(self.parent, self.bursar)
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    def test_link_guardian_still_refuses_a_student_as_their_own_guardian(self):
+        with self.assertRaises(services.SelfGuardianship):
+            services.link_guardian(self.ada.user, self.ada)
+        self.assertEqual(Guardianship.objects.count(), 0)
+
+    def test_a_refused_link_grants_no_parent_membership(self):
+        """The reason the rules are asked before `grant_membership()` runs.
+
+        A refusal that had already granted a PARENT membership would be relying
+        on the rollback to take it back, which is a different guarantee.
+        """
+        with self.assertRaises(services.NotAStudent):
+            services.link_guardian(self.parent, self.bursar)
+        self.assertEqual(
+            Membership.objects.filter(user=self.parent, role=Role.PARENT).count(), 0
+        )
+
+    def test_the_two_service_refusals_are_distinguishable_from_each_other(self):
+        """Per #89: a test that cannot tell two refusals apart proves neither.
+
+        Both are `MembershipError` subclasses, so asserting the base would pass
+        on either — and on `AlreadyEnrolled`, `NotEnrolled` and `NotPermitted`
+        besides. These two assertions are the ones that would not.
+        """
+        with self.assertRaises(services.NotAStudent) as not_a_student:
+            services.link_guardian(self.parent, self.bursar)
+        with self.assertRaises(services.SelfGuardianship) as self_guardian:
+            services.link_guardian(self.ada.user, self.ada)
+
+        self.assertNotIsInstance(not_a_student.exception, services.SelfGuardianship)
+        self.assertNotIsInstance(self_guardian.exception, services.NotAStudent)
+
+    def test_linking_across_two_schools_still_works(self):
+        """The legal path the rules sit beside, with both schools in play."""
+        services.link_guardian(self.parent, self.ada)
+        services.link_guardian(self.parent, self.tunde)
+
+        self.assertEqual(Guardianship.objects.filter(guardian=self.parent).count(), 2)
+        self.assertEqual(
+            set(
+                Membership.objects.filter(
+                    user=self.parent, role=Role.PARENT
+                ).values_list("school__slug", flat=True)
+            ),
+            {"st-marys", "grace"},
+        )
+
+    def test_relinking_the_same_pair_is_still_idempotent(self):
+        """`save()` now validates; `validate_unique=False` is what keeps this true."""
+        first = services.link_guardian(self.parent, self.ada)
+        again = services.link_guardian(self.parent, self.ada)
+        self.assertEqual(first.pk, again.pk)
+        self.assertEqual(Guardianship.objects.count(), 1)
+
+    def test_standing_up_a_new_primary_contact_still_works(self):
+        """`validate_constraints=False` is what keeps this true.
+
+        `one_primary_contact_per_student` is a partial unique index, and this
+        sequence is momentarily in breach of it between the two calls.
+        """
+        father = make_user("08039999999", "Femi Ade", phone="08039999999")
+        services.link_guardian(self.parent, self.ada, is_primary_contact=True)
+        services.link_guardian(father, self.ada, is_primary_contact=True)
+
+        primaries = Guardianship.objects.filter(student=self.ada, is_primary_contact=True)
+        self.assertEqual(primaries.count(), 1)
+        self.assertEqual(primaries.get().guardian, father)
+
+
 class GrantAuthorityStopsAtOwnSchoolTests(TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
