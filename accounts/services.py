@@ -9,6 +9,7 @@ here, so callers never have to remember them:
   * transferring a student carries the guardians across.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -49,8 +50,52 @@ class NotAStudent(MembershipError):
     pass
 
 
+class SelfGuardianship(MembershipError):
+    """A login was offered as the guardian of its own enrolment.
+
+    Its own type rather than a bare `MembershipError`, for the reason issue #89
+    gives about `assertRaises(IntegrityError)`: `MembershipError` is the *base*
+    of this hierarchy, so a test that asserts it cannot tell this refusal from
+    `AlreadyEnrolled`, `NotEnrolled`, `NotAStudent` or `NotPermitted`. A refusal
+    worth having a rule for is worth being nameable on its own.
+
+    Subclasses `MembershipError`, so any caller that was catching the base
+    keeps catching this.
+    """
+
+
 class NotPermitted(MembershipError):
     """The actor has no authority to grant memberships at that school."""
+
+
+#: Maps the codes `Guardianship.clean()` raises onto this module's hierarchy.
+#: Keyed on the code and not the message: the message is prose that may be
+#: reworded, while the code is the rule's name.
+_GUARDIANSHIP_REFUSALS = {
+    "not_a_student": NotAStudent,
+    "self_guardian": SelfGuardianship,
+}
+
+
+def _raise_as_membership_error(exc):
+    """Re-raise a `Guardianship` `ValidationError` in this module's own types.
+
+    Translation at the service boundary rather than letting `ValidationError`
+    out. The rule itself stays in `Guardianship.clean()` — this only restates
+    *which* refusal it was in the vocabulary the rest of `services` speaks, so
+    that `link_guardian()` refuses a non-student with the same `NotAStudent`
+    that `release_student()` and `transfer_student()` already raise for theirs.
+
+    Anything that is not one of the two rules — a bad `relationship` choice, an
+    over-long field — is re-raised untouched. Those are not membership rules and
+    dressing them as one would be the drift this function exists to prevent.
+    """
+    for errors in getattr(exc, "error_dict", {}).values():
+        for error in errors:
+            refusal = _GUARDIANSHIP_REFUSALS.get(error.code)
+            if refusal is not None:
+                raise refusal(error.messages[0]) from exc
+    raise
 
 
 def can_grant_memberships(actor, school) -> bool:
@@ -150,11 +195,23 @@ def link_guardian(
     Also ensures the parent holds a PARENT membership at that child's school —
     this is how one login comes to span several schools: each linked child adds
     the school it belongs to.
+
+    The two rules this used to re-state by hand now come from the one copy in
+    `Guardianship.clean()`. Asked here, ahead of `grant_membership()` below, so
+    that a refused link never grants the PARENT membership in the first place
+    rather than granting one and relying on the rollback to take it back.
     """
-    if student.role != Role.STUDENT:
-        raise NotAStudent("A guardianship must point at a STUDENT membership.")
-    if guardian.pk == student.user_id:
-        raise MembershipError("A student cannot be their own guardian.")
+    try:
+        Guardianship(
+            guardian=guardian,
+            student=student,
+            relationship=relationship,
+            is_primary_contact=is_primary_contact,
+            receives_invoices=receives_invoices,
+            can_collect=can_collect,
+        ).full_clean(exclude=None, validate_constraints=False)
+    except ValidationError as exc:
+        _raise_as_membership_error(exc)
 
     grant_membership(guardian, student.school, Role.PARENT)
 

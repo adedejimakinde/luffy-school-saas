@@ -493,13 +493,105 @@ class Guardianship(models.Model):
         return f"{self.guardian} → {self.student.name}"
 
     def clean(self):
-        # Cross-table rules Postgres cannot express as a constraint.
+        """The two rules, in the only copy of them there is.
+
+        Both are **cross-table** — each compares a column on this row against a
+        column on the `Membership` row it points at — and that is why neither
+        appears in `Meta.constraints` above. Confirmed against this project's
+        own Django and Postgres rather than assumed, because "there is no
+        constraint here" is the kind of absence a later reader otherwise has to
+        re-derive:
+
+            CheckConstraint(condition=Q(student__role=Role.STUDENT))
+            CheckConstraint(condition=~Q(guardian=F("student__user")))
+            -> FieldError: Joined field references are not permitted in this query
+
+            ALTER TABLE ... CHECK ((SELECT role FROM accounts_membership ...) = 'student')
+            -> NotSupportedError: cannot use subquery in check constraint
+
+        A row-level trigger *could* hold them, which is how this codebase
+        enforces the append-only tables. That is a larger decision than the one
+        this method settles, and it is the remaining gap: `save()` below closes
+        the ORM paths, so a bulk `.update()`, a `bulk_create()` or a `psql`
+        session still reaches past both. See issue #91.
+
+        Each error carries an explicit `code`. `accounts.services` translates on
+        those codes rather than on the message text — a message is shared
+        prose, a code names *which rule* refused.
+        """
         if self.student_id and self.student.role != Role.STUDENT:
             raise ValidationError(
-                {"student": "A guardianship must point at a STUDENT membership."}
+                {
+                    "student": ValidationError(
+                        "A guardianship must point at a STUDENT membership.",
+                        code="not_a_student",
+                    )
+                }
             )
         if self.guardian_id and self.student_id and self.guardian_id == self.student.user_id:
-            raise ValidationError({"guardian": "A student cannot be their own guardian."})
+            raise ValidationError(
+                {
+                    "guardian": ValidationError(
+                        "A student cannot be their own guardian.",
+                        code="self_guardian",
+                    )
+                }
+            )
+
+    def save(self, *args, **kwargs):
+        """Ask `clean()` on the way past, so no write can skip the rules.
+
+        `Model.save()` does not call `full_clean()`, so before this override
+        `Guardianship.objects.create()` wrote a row that violated either rule
+        without complaint. The rules were stated in `clean()` and reached only
+        from the tests; what actually held them in production was a second,
+        hand-written copy of both inside `services.link_guardian()`. Two copies
+        of a rule are one copy and one place for it to drift. Issue #91.
+
+        Raising `ValidationError` rather than a `services.MembershipError`
+        subclass is forced, not chosen: `services` imports this module, so
+        reaching the other way for an exception type is the circular import
+        `TransferError` already declines to make below. The service translates
+        at its own boundary instead.
+
+        `validate_constraints=False` is the one flag here, and it is
+        load-bearing. It keeps a duplicate pair travelling all the way to
+        `uniq_guardianship_guardian_student` in the database, so the failure a
+        losing caller meets is an `IntegrityError`. That matters because
+        `link_guardian()` reaches this through `get_or_create()`, which catches
+        `IntegrityError` and nothing else:
+
+            except IntegrityError:
+                try:
+                    return self.get(**kwargs), False
+                except self.model.DoesNotExist:
+                    pass
+                raise
+
+        Turn the flag on and the same duplicate is refused in Python as a
+        `ValidationError` *before* the INSERT. `get_or_create()` does not catch
+        that, so a caller who simply lost a race stops recovering and starts
+        raising. `test_the_loser_of_a_race_recovers_instead_of_raising` in
+        `accounts/tests/test_guardianship_concurrency.py` arranges exactly that
+        lost race and is the test that goes red if this flag flips.
+
+        Two things that are *not* reasons, both checked rather than assumed:
+
+        * `validate_unique` is not involved and is not passed. This model's
+          uniqueness is a `UniqueConstraint` in `Meta.constraints`, which
+          `validate_unique()` does not inspect — `unique_together` is empty — so
+          it is inert in every combination. It was passed as `False` here and
+          read as if it were doing the work above; it is gone.
+        * `one_primary_contact_per_student` does not need this flag either.
+          `link_guardian()` clears the previous primary before it saves, so the
+          partial index is not in breach by the time validation runs, and
+          constraint validation would not have refused that sequence.
+
+        Nothing is excluded, so the field-level rules are asked here too rather
+        than only at the database.
+        """
+        self.full_clean(exclude=None, validate_constraints=False)
+        return super().save(*args, **kwargs)
 
     @property
     def school(self):
