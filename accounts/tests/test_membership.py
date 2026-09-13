@@ -601,14 +601,16 @@ class GuardianshipRulesAreStillBypassableTests(TestCase):
     single INSERT, and `QuerySet.update()` compiles to an UPDATE. Neither calls
     `save()`, so neither asks `clean()`. Only a database trigger would — which is
     how this codebase enforces the append-only tables, and a larger decision than
-    PR #93 took. Issue #91 carries it.
+    PR #93 took. **Issue #96** carries it. (#91 was the `save()`-path gap and is
+    closed; PR #93 closed it. Pointing this class at a closed issue would defeat
+    the whole mechanism below.)
 
     **These tests assert that the bypass happens.** They are the known-limit
     kind, not the desired-behaviour kind, so read a failure here the opposite way
     round to usual:
 
         If one of these goes red, somebody closed the gap. That is good news.
-        Update #91, delete the test that went red, and move its case into
+        Update #96, delete the test that went red, and move its case into
         `GuardianshipRulesHoldOnEverySavePathTests` where it now belongs.
 
     Written this way because a gap recorded only in prose is a gap nobody
