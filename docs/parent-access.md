@@ -70,10 +70,12 @@ practice.
 | If this is wrong | These hold | These break |
 |---|---|---|
 | A1 both parents | D1, D2, D6, D8 | nothing structural |
+| A2 household guardianship | all | nothing structural — it changes who a school is willing to enter as a guardian, not what the system models. `Relationship` already carries GUARDIAN and OTHER |
 | A3 school holds a number | D1, D2, D6, D8 | D3 channel choice only — D9 absorbs it |
 | A4 own numbers | most | sign-in needs disambiguation |
 | A5 paper card goes home | all | risk appetite, not structure |
-| A6 child sees fees | all | rendering only |
+| A6 child sees fees | all, D1 included — its four bullets each stand without A6 | D2's claim that exam surfaces are the *only* divergence between a guardian and a student session. Hiding fees from a student is a second divergence axis, and D2 currently says there is none |
+| A7 students sit exams on their credential | D2, D5, D6, D7, D8, D9, D10, D11, and D1 on its other three bullets | D4's entire reason for a separate mechanism, and D1's exam-credential bullet. With no exam credential, one auth shape might serve both |
 
 The point of D9 (channel-agnostic verification) is to make A3 and A4 cheap to be wrong
 about.
@@ -84,7 +86,8 @@ about.
 
 A guardian authenticates as themselves. They do not sign in as the child.
 
-The reasoning is not privacy — fact 6 removes that argument entirely. It is:
+The reasoning is not privacy, and it does not rest on A6. Each of the four below
+holds whether or not the child sees fee state:
 
 - **The student credential is an exam credential.** A shared login puts an
   exam-taking credential on two or three adults' phones. That is an integrity
@@ -239,7 +242,7 @@ Verified by sweep across `academics`, `fees`, `gradebook` and `results`:
 
 - **Zero** `ForeignKey`, `OneToOneField` or `ManyToManyField` fields in any tenant app
   target a model in `accounts`, `schools` or `django.contrib.auth`.
-- Every relation target in those apps' 37 migration files resolves inside the tenant
+- Every relation target in those apps' 33 migration files resolves inside the tenant
   apps. `grep` for `AUTH_USER_MODEL` and `contenttypes` over those migration dirs
   returns nothing.
 - `Guardianship` itself is in `accounts`, which is in `SHARED_APPS` only. Both its FKs
@@ -269,7 +272,7 @@ piece of work — a migration-time or CI check — not part of this phase.
 
 A guardian stands for a child, not for a position in a class list.
 
-This follows from facts 8 and 9. A guardian link resolved through `ClassGroup` or
+This follows from A8 and A9. A guardian link resolved through `ClassGroup` or
 `ClassPlacement` breaks when a year group drops from six arms to four, and breaks
 again when the child is streamed into science at SSS1. It is the same rule already
 documented for released artefacts — guards key off the artefact, not the child's
