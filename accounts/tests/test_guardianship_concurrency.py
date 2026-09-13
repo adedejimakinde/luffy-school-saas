@@ -71,8 +71,20 @@ def make_user(username, full_name, **extra):
 class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
     def setUp(self):
         self.school = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
         self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
         self.child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
+
+        # A second school with a live link of its own, standing in the same
+        # `public` table throughout. `uniq_guardianship_guardian_student` is one
+        # index over every school's rows, so "the duplicate was refused" has to
+        # mean *this pair* was refused and not merely that the table has a row
+        # in it. The sibling row is what makes that distinguishable.
+        self.sibling = services.enroll_student(
+            make_user("GA/1", "Tunde Ade"), self.grace
+        )
+        self.other_link = services.link_guardian(self.parent, self.sibling)
 
     def test_a_duplicate_is_refused_by_the_index_and_not_by_validate_unique(self):
         """The decisive one: which layer refuses a duplicate pair.
@@ -96,7 +108,16 @@ class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
         # constraints on this table and five more on `Membership`, and #89 is
         # about exactly the assertion that cannot tell them apart.
         self.assertIn("uniq_guardianship_guardian_student", str(caught.exception))
-        self.assertEqual(Guardianship.objects.count(), 1)
+
+        # This pair has exactly one row, and the other school's link is
+        # untouched — the index refused a pair, not the table.
+        self.assertEqual(
+            Guardianship.objects.filter(
+                guardian=self.parent, student=self.child
+            ).count(),
+            1,
+        )
+        self.assertTrue(Guardianship.objects.filter(pk=self.other_link.pk).exists())
 
     def test_it_is_validate_constraints_and_not_validate_unique_holding_it_open(self):
         """Which flag actually guards the window — the two are not interchangeable.
@@ -169,7 +190,13 @@ class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
 
         self.assertTrue(missed_once, "the lost race was never arranged")
         self.assertEqual(link.pk, winner.pk)
-        self.assertEqual(Guardianship.objects.count(), 1)
+        self.assertEqual(
+            Guardianship.objects.filter(
+                guardian=self.parent, student=self.child
+            ).count(),
+            1,
+        )
+        self.assertTrue(Guardianship.objects.filter(pk=self.other_link.pk).exists())
 
     def test_two_concurrent_links_of_one_pair_leave_one_row(self):
         """Both callers succeed and both get the same row.
@@ -205,7 +232,23 @@ class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
 
         self.assertEqual([r[1] for r in results], ["ok", "ok"], results)
         self.assertEqual(len({r[2] for r in results}), 1, results)
-        self.assertEqual(Guardianship.objects.count(), 1)
         self.assertEqual(
-            Membership.objects.filter(user=self.parent, role=Role.PARENT).count(), 1
+            Guardianship.objects.filter(
+                guardian=self.parent, student=self.child
+            ).count(),
+            1,
+        )
+        # Scoped by school: the parent also holds PARENT at Grace from setUp,
+        # so an unscoped count would pass on the wrong row.
+        self.assertEqual(
+            Membership.objects.filter(
+                user=self.parent, school=self.school, role=Role.PARENT
+            ).count(),
+            1,
+        )
+        self.assertEqual(
+            Membership.objects.filter(
+                user=self.parent, school=self.grace, role=Role.PARENT
+            ).count(),
+            1,
         )
