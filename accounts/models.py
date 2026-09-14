@@ -360,6 +360,27 @@ class Membership(models.Model):
     Multiple rows per (user, school) are expected and correct: the maths
     teacher whose daughter attends the same school holds a TEACHER membership
     and a PARENT membership there.
+
+    **Two columns here are held in place by a table this class never mentions.**
+    `role` and `user` are read by `Guardianship.clean()`'s two rules *through*
+    `Guardianship.student`, so changing either underneath a live link
+    invalidates that link without writing a single guardianship row. Migration
+    `0009_a_guardianship_pins_the_membership_under_it` therefore puts
+    `accounts_membership_guardianship_rules` on **this** table — a guard on one
+    table protecting another table's invariant, which is a shape nothing else
+    in this repository has. Issue #96.
+
+    What that means in practice, since nothing in this class would suggest it:
+
+    * A statement that names only `accounts_membership` can be refused by
+      guardianship. Moving a child's membership to another role, or to another
+      user, raises `IntegrityError` while a link stands; the message says which
+      link and tells the caller to call `services.unlink_guardian()` first.
+    * Nothing else is affected. The trigger fires only when `role` or `user`
+      actually changes, which is why `release_student()` can end an enrolment
+      under live links — and must, because those rows are kept.
+    * **Dropping or re-scoping `Guardianship` has to drop a trigger that lives
+      on this table.** There is no third place that is written down.
     """
 
     user = models.ForeignKey(User, related_name="memberships", on_delete=models.CASCADE)
@@ -493,7 +514,10 @@ class Guardianship(models.Model):
         return f"{self.guardian} → {self.student.name}"
 
     def clean(self):
-        """The two rules, in the only copy of them there is.
+        """The two rules, in the copy every Python caller goes through.
+
+        It was "the only copy there is" until #96; the note below says where
+        the other two now live and why they had to exist.
 
         Both are **cross-table** — each compares a column on this row against a
         column on the `Membership` row it points at — and that is why neither
@@ -509,14 +533,24 @@ class Guardianship(models.Model):
             ALTER TABLE ... CHECK ((SELECT role FROM accounts_membership ...) = 'student')
             -> NotSupportedError: cannot use subquery in check constraint
 
-        A row-level trigger *could* hold them, which is how this codebase
-        enforces the append-only tables. That is a larger decision than the one
-        this method settles, and it is the remaining gap: `save()` below closes
-        the ORM paths, so a bulk `.update()`, a `bulk_create()` or a `psql`
-        session still reaches past both. A role change on the `Membership` this
-        row points at reaches past them without writing here at all, which is
-        why the trigger cannot live on this table alone. See issue #96 — #91 is
-        the closed predecessor, and covered only the `save()` path.
+        **This is no longer the only enforcement, and has not been since #96.**
+        Two row-level triggers now carry the same two rules, because `save()`
+        below closes the ORM paths and there were three that never reach it:
+
+        * `accounts_guardianship_rules`
+          (`0008_guardianship_rules_are_a_trigger`) on this table, for
+          `bulk_create()`, `QuerySet.update()` and a `psql` session.
+        * `accounts_membership_guardianship_rules`
+          (`0009_a_guardianship_pins_the_membership_under_it`) on
+          **`accounts_membership`**, for the third: changing the `role` or the
+          `user` of a membership a live link points at breaks that link without
+          writing a row here at all, so no trigger on this table can see it.
+
+        Three copies of two rules, then, and that is the cost of the rules
+        being cross-table — `Meta.constraints` cannot hold them. Keeping them in
+        step is manual: if either rule changes here, both migrations change
+        too, and `GuardianshipRulesHoldOnEverySavePathTests` plus the two
+        classes after it are what go red if only one of the three moves.
 
         Each error carries an explicit `code`. `accounts.services` translates on
         those codes rather than on the message text — a message is shared
