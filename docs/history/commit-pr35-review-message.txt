@@ -1,0 +1,96 @@
+Act on the review: the frozen card this guard said did not exist
+
+Thirteen findings on PR #35; five blocking. The blocking five are here, with
+two one-line corrections that fell inside docstrings these were already
+rewriting. The other five are filed, not fixed.
+
+**The premise was wrong, and it was the load-bearing one.** The first commit
+justified keying the guard on `ClassPlacement` with "nothing freezes marks
+until task 3", and deferred the moved-child case to issue #34 on that basis.
+Two different claims got conflated there. Nothing freezes the *marks* — true,
+and still task 3's. But the guarantee this guard enforces is *a card went home
+for this child*, and `results_releasedtraitrating` answers exactly that: one row
+per child per visible trait, written by `ratings.freeze_for_release()` inside
+the transaction that writes the release row. Whether the marks were frozen has
+no bearing on whether the release is knowable. `0011` was already keying on it
+one table over, which is what makes the miss embarrassing rather than subtle.
+
+So `_require_this_card_has_not_gone_home()` now runs ahead of the placement
+check in both write paths, and the trigger gained the matching branch, spelled
+the way `0011` spells it — the artefact question first, the placement question
+second. Release JSS 1A, move the child to JSS 3B, and the write is refused at
+both layers.
+
+**What is left is a per-school gap, not a per-child one.**
+`freeze_for_release()` returns early when no group is enabled, so a school with
+the conduct section off freezes nothing for anybody and the artefact check finds
+nothing. That residue is what #34 closes, and it is the same residue `ratings`
+carries for the same reason. Two tests hold the line either side of it: the
+moved child of a ratings-enabled school is refused, the moved child of a
+ratings-disabled one is not, and the second asserts its own precondition so it
+cannot start passing for the wrong reason.
+
+**`MarksLocked` was a 500 on both endpoints.** Neither `save_score()` nor
+`clear_score()` caught it, so the entire refusal path — the one part of this a
+teacher ever sees — arrived as an unhandled traceback. It is a **423** now, and
+the reasoning is in `gradebook/api.py` because the choice is not obvious: a 409
+in this API means "the row moved while you were typing", which a blur handler
+answers by reloading the cell and sending again, and against a released term
+that retries for ever; a 403 is a refusal of the caller's *authority*, and the
+caller's authority has not changed — the same teacher may mark the same child
+the moment the sheet is sent back. What changed is the state of the resource.
+`RatingsLocked` and `CommentsLocked` carry the same note, because the same
+refusal about the other two thirds of the same card should not arrive as three
+different codes. Neither has an HTTP surface yet — `results.api` exposes one
+read-only route — so this is written where whoever adds one will read it.
+
+**`clear_score()` had stopped being idempotent.** Its docstring promises a
+retried request will not fail because it succeeded the first time; the guard ran
+before the check for a row to delete, so the second DELETE of an
+already-cleared mark on a submitted sheet was refused — and, before the fix
+above, refused as a 500. The guards now run after that check. Nothing is being
+written in that case, so a closed sheet has nothing to protect. The existence
+check is deliberately unversioned: a row present at some *other* version is
+still a mark on a closed sheet, so it is `MarksLocked` and not
+`ScoreChangedMeanwhile`, which would send that caller round a loop reloading
+something that cannot reopen.
+
+**Migration `0002` justified itself with a feature that does not exist.** It
+argued the trigger could stay narrow because the service "can be told to stand
+down for one import". Nothing implements that: `ANY_VERSION` is a version
+sentinel, and `set_score()` runs the state guard before dispatching on it, so
+the documented bulk-import path is refused with everything else. The claim is
+gone rather than the hatch added — the narrowness stands on its own argument,
+and a bug-fix PR is the wrong place to ship a bypass around the guard it is
+adding.
+
+**Two things I had written into the tests that were not true.** The walk-forward
+loop said `open_sheet()` "refuses a class that already has one"; it is a
+`get_or_create` whose docstring says the opposite, and the real reason to walk
+forward is that the states are a sequence with no way back to `draft` except a
+send-back. And `test_the_database_still_permits_a_draft_terms_marks` walked to
+`submitted` — the named control was not the control performed, and no test
+asserted the trigger permits a write against an actual draft. It is two tests
+now, one per state, and the `submitted` one asserts both halves at once because
+the claim is about the difference: the service refuses, the table does not.
+
+**Asserting the sheet's state found a third.** `walk_to()` returned the instance
+it drove the steps with, and `submit()` and the rest re-read under their own
+lock and update the row rather than the caller's object — so `sheet.state` was
+`draft` however far the chain had gone, and the new assertion failed against it.
+It returns a re-read now. Nothing had noticed because nothing had asked.
+
+**Fourteen new tests, and four controls, one per fix.** Each control reverts
+exactly that fix and nothing else, so a fix nothing tests shows up as a control
+that stays green. Numbers in the PR comment.
+
+Findings 6 and 12 went along with the above — the pre-sheet race is now
+documented as the same residue `ratings` files as issue #30 rather than left as
+an unqualified lock claim, and `_require_the_sheet_is_open()` no longer returns
+a sheet neither caller uses. Findings 7, 8, 9, 10 and 11 are filed: the lock
+claim still has no concurrency test, the closed-sheet branch is now a third
+copy, `placement_of()` costs a lazy dereference per write, and this module both
+builds an unused second tenant and imports its fixtures from a sibling app's
+test file — that last one being the other half of #36.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

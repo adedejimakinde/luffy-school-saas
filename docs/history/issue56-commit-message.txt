@@ -1,0 +1,78 @@
+A released card owes a file, and a row says so from the moment it is released
+
+Task 7 built a renderer, a job and a table to keep the file in, and nothing
+called any of them. This is the way in and the way out — and, in between, the
+part #56 said it would not close without.
+
+A render that *failed* was always visible: `on_failure` writes the reason into
+the school's own table. A render nobody ever asked for was not. A Redis that was
+down, a worker that never came back, a message lost between the two, and
+`ReleasedCardPdf` had no row at all — which is also the ordinary state of a card
+before it is released. The absence could not be interrogated, and the first
+person to find out was a parent who could not open their child's report card
+weeks later.
+
+`results.renders.mark_and_enqueue()` writes a PENDING row for every card inside
+the transaction that freezes it, and asks for the renders after that transaction
+commits. `services.release()` marks the class; `revision.revise()` marks the one
+card it writes, which matters because that is the only path by which a child
+placed into a term after it was released (#31) gets a card at all.
+
+`PdfState` is three states and deliberately not four. A QUEUED written by the
+enqueuer and cleared by the worker would say whether a job is in flight, and a
+worker that died between the two would strand that card in it for ever — the
+recovery path for a lost job is exactly "a download of a PENDING card asks
+again", and a fourth state switches that path off for the cards that need it
+most. What it costs is that PENDING cannot tell "queued a second ago" from
+"queued never"; `last_enqueued_at` and the debounce it drives are what stop that
+costing anything.
+
+`transaction.on_commit` and not a bare `.delay()`: a worker is another process
+on another connection, so a message published before the release commits can be
+picked up while READ COMMITTED still shows that worker no card. It would write a
+FAILED row saying the card does not exist, permanently, for a card that is fine
+three milliseconds later. And because `on_commit` runs after the commit, an
+exception there is a 500 for a principal whose cards have gone home — so every
+publish is caught per card and logged, with `retry=False` so a dead broker does
+not hold the request open through three retries per card, forty-five times over.
+Swallowing it is only defensible because the PENDING row survives: the work is
+recorded as owed, and the next download asks again.
+
+`GET /api/results/cards/{membership}/{term}/pdf/` asks the identical authority
+question as the JSON route beside it — a PDF of a card you may read is not a
+second permission, and two answers to one question is one answer nobody tested.
+Built serves the bytes; pending and failed are 202 with the state, and only
+pending is queued again. The exception text is not in the body: it is written
+for whoever debugs the render, and a parent reading TemplateSyntaxError learns
+nothing they can act on.
+
+The debounce is a conditional UPDATE and not an `if`. Two requests arriving
+together would both read PENDING and both find the window open; Postgres
+re-evaluates a WHERE clause against the newer row version when it unblocks, so
+one of two concurrent updates matches and the other reports zero rows. Proved
+with two real threads on two real connections, because a TestCase is one
+transaction and two "connections" inside it are one.
+
+`0022` names the state of every row that already exists and backfills a PENDING
+row for every released card that has none, one INSERT ... SELECT per schema.
+Without that the invariant would hold only on databases written from today and
+the download route would carry a "no row" branch for ever. Reversing it deletes
+those markers, because the old constraint refuses a row with neither a file nor
+a reason — which is exactly what a marker is. The check constraint is now per
+state and refuses BUILT with no bytes, FAILED with no reason, and PENDING
+already carrying either.
+
+`test_a_row_that_is_neither_a_file_nor_a_reason_is_refused` inverts: the row it
+refused by name is now what a release writes for every card. It is replaced by
+the pinned inversion and by four tests for the lies the new constraint refuses.
+Those tests also write with `update()` where they used to `create()`, because
+the row exists before they start and a `create()` would be refused by the
+OneToOne before any check constraint was consulted.
+
+`cards.cards_on()`'s docstring said task 7's job walks a whole class. It renders
+one card per job, and this enqueuer does not call `cards_on()` either — it takes
+ids off `card_by_student`, already one per child. The function still has no
+caller, which it now says, and is kept for the DISTINCT ON rule any future batch
+reader needs.
+
+Closes #56.

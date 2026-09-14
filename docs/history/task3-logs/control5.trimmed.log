@@ -1,0 +1,97 @@
+Found 19 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+F=== Starting migration
+.=== Starting migration
+F=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+F=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+F=== Starting migration
+=== Starting migration
+F=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.
+======================================================================
+FAIL: test_the_card_records_the_person_who_released_it (results.tests.test_cards.TheCopyTests.test_the_card_records_the_person_who_released_it)
+A `User` id, and it can never be filled in afterwards.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_cards.py", line 510, in test_the_card_records_the_person_who_released_it
+    self.assertEqual(written, [self.principal.pk] * 2)
+AssertionError: Lists differ: [None, None] != [25, 25]
+
+First differing element 0:
+None
+25
+
+- [None, None]
++ [25, 25]
+
+======================================================================
+FAIL: test_the_school_own_name_for_the_child_is_the_one_frozen (results.tests.test_cards.TheCopyTests.test_the_school_own_name_for_the_child_is_the_one_frozen)
+`display_name` beats the login name, as `Membership.name` has it.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_cards.py", line 476, in test_the_school_own_name_for_the_child_is_the_one_frozen
+    self.assertEqual(card.student_name, "Tunde Ade")
+AssertionError: 'Babatunde Ade' != 'Tunde Ade'
+- Babatunde Ade
+? ^^^^^
++ Tunde Ade
+? ^
+
+
+======================================================================
+FAIL: test_the_database_refuses_a_term_that_is_neither_present_nor_explained (results.tests.test_sessions.TheFreezeTests.test_the_database_refuses_a_term_that_is_neither_present_nor_explained)
+A term that vanished with no account of itself is refused by the table.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_sessions.py", line 781, in test_the_database_refuses_a_term_that_is_neither_present_nor_explained
+    self.assertIn("the_first_term_is_present_or_explained", refusal)
+AssertionError: 'the_first_term_is_present_or_explained' not found in 'null value in column "card_id" of relation "results_releasedsessionresult" violates not-null constraint\nDETAIL:  Failing row contains (2, 10107, 2025/2026, null, 70.00, null, , , not_enrolled, null, 100.00, null, equal, 70.00, 2026-08-29 15:54:23.431526+00, 1, null).\n'
+
+======================================================================
+FAIL: test_the_database_still_refuses_an_average_the_arithmetic_dropped (results.tests.test_sessions.TheFreezeTests.test_the_database_still_refuses_an_average_the_arithmetic_dropped)
+`0014` relaxed one direction of that constraint and not the other.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_sessions.py", line 702, in test_the_database_still_refuses_an_average_the_arithmetic_dropped
+    self.assertIn("a_session_average_has_a_term_behind_it", refusal)
+AssertionError: 'a_session_average_has_a_term_behind_it' not found in 'null value in column "card_id" of relation "results_releasedsessionresult" violates not-null constraint\nDETAIL:  Failing row contains (2, 10125, 2025/2026, 60.00, null, null, , not_enrolled, not_enrolled, 60.00, null, null, weighted, null, 2026-08-29 15:54:34.258253+00, 1, null).\n'
+
+======================================================================
+FAIL: test_the_database_still_refuses_an_average_with_nothing_behind_it (results.tests.test_sessions.TheFreezeTests.test_the_database_still_refuses_an_average_with_nothing_behind_it)
+The other direction, and the one the null-safety in `0014` protects.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_sessions.py", line 731, in test_the_database_still_refuses_an_average_with_nothing_behind_it
+    self.assertIn("a_session_average_has_a_term_behind_it", refusal)
+AssertionError: 'a_session_average_has_a_term_behind_it' not found in 'null value in column "card_id" of relation "results_releasedsessionresult" violates not-null constraint\nDETAIL:  Failing row contains (2, 10133, 2025/2026, null, null, null, not_enrolled, not_enrolled, not_enrolled, null, null, null, equal, 70.00, 2026-08-29 15:54:39.492044+00, 1, null).\n'
+
+----------------------------------------------------------------------
+Ran 19 tests in 86.782s
+
+FAILED (failures=5)
+Destroying test database for alias 'default'...

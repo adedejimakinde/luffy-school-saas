@@ -1,0 +1,40 @@
+  Applying results.0014_a_term_weighted_nothing_is_still_a_term...
+ OK
+  Applying results.0015_grade_bands...
+ OK
+  Applying results.0016_the_report_card_snapshot...
+ OK
+  Applying results.0017_every_frozen_row_hangs_off_a_card...
+ OK
+  Applying results.0018_a_frozen_card_is_append_only...
+ OK
+  Applying results.0019_a_card_can_be_reissued...
+ OK
+  Applying results.0020_no_index_is_built_twice...
+ OK
+  Applying results.0021_the_rendered_card...
+ OK
+  Applying results.0022_a_card_owes_a_file_from_the_moment_it_is_released...
+ OK
+  Applying results.0023_a_card_can_be_held_back...
+ OK
+  Applying sessions.0001_initial...
+ OK
+System check identified no issues (0 silenced).
+
+
+##### ISSUE 82 MEASUREMENT #####
+counts	{'n': 10, 'rows': 30, 'elapsed_s': 0.099, 'total_sql': 318, 'buckets': {'BEGIN': 1, 'SET': 158, 'SELECT': 68, 'SAVEPOINT': 30, 'INSERT': 30, 'RELEASE_SAVEPOINT': 30, 'COMMIT': 1}, 'summary': '30 charged, 0 skipped; 0 discounts, 0 skipped'}
+counts	{'n': 45, 'rows': 135, 'elapsed_s': 0.3633, 'total_sql': 1368, 'buckets': {'BEGIN': 1, 'SET': 683, 'SELECT': 278, 'SAVEPOINT': 135, 'INSERT': 135, 'RELEASE_SAVEPOINT': 135, 'COMMIT': 1}, 'summary': '135 charged, 0 skipped; 0 discounts, 0 skipped'}
+reader	{'case': 'svc10', 'n': 10, 'rows_written': 30, 'subtransactions': 30, 'scans': 20000, 'wall_s': 0.1461, 'per_scan_us': 7.31, 'xacts_committed_alongside': 8224, 'slru': {'zeroed': 4, 'hit': 3, 'read': 0, 'written': 0}}
+reader	{'case': 'bulk10', 'n': 10, 'rows_written': 30, 'subtransactions': 0, 'scans': 20000, 'wall_s': 0.1505, 'per_scan_us': 7.52, 'xacts_committed_alongside': 8247, 'slru': {'zeroed': 4, 'hit': 4, 'read': 0, 'written': 0}}
+reader	{'case': 'svc45', 'n': 45, 'rows_written': 135, 'subtransactions': 135, 'scans': 20000, 'wall_s': 0.7889, 'per_scan_us': 39.45, 'xacts_committed_alongside': 20905, 'slru': {'zeroed': 10, 'hit': 8100003, 'read': 0, 'written': 0}}
+reader	{'case': 'bulk45', 'n': 45, 'rows_written': 135, 'subtransactions': 0, 'scans': 20000, 'wall_s': 0.2458, 'per_scan_us': 12.29, 'xacts_committed_alongside': 11234, 'slru': {'zeroed': 6, 'hit': 1, 'read': 0, 'written': 0}}
+##### END #####
+
+.
+----------------------------------------------------------------------
+Ran 1 test in 51.538s
+
+OK
+Destroying test database for alias 'default'...

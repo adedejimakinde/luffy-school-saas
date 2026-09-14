@@ -1,0 +1,52 @@
+connected_to() restores the schema it found, so a test helper can nest
+
+`schools/tests/test_tenant_isolation.connected_to()` ended in
+`set_schema_to_public()` unconditionally. At the outermost level that is
+invisible — the schema it found *was* public, so forcing public and restoring
+public are the same thing — and one level in it is a trap: the inner block's
+exit drops the *outer* block onto public, and every read after it in the outer
+block looks for tenant tables in the shared schema.
+
+What makes it expensive is that the failure never mentions a schema. It arrives
+as `relation "results_releasedsubjectresult" does not exist` from whichever line
+touched the object next, frames away from either `with`, inside a payload
+builder or a serialiser — and the helper that produced the object works
+perfectly when called on its own. Task 7 lost a test run to it, and
+`results/tests/test_pdf.py` has carried a workaround for it since. Issue #58.
+
+`tenant_context` and not `schema_context`, though the two are otherwise the same
+save-and-restore. `tenant_context` hands `connection.tenant` the real `School`;
+`schema_context` sets a `FakeTenant`, which knows a schema name and no display
+name. `schools.logging.current_school()` reads that attribute, and
+`schools/tests/test_logging.py` — which imports this helper — asserts on
+`[St Mary's]`, not on `[st_marys]`. The other thirteen `connected_to`
+definitions in this repo do wrap `schema_context`, which is why that is worth
+stating rather than assuming; issue #67 covers the duplication itself.
+
+The old guarantee is kept, not traded away. Restoring what was current still
+lands the outermost block back on public, so no test can leave the connection
+inside a schema that is about to be dropped — which is the reason the original
+was written that way. Nothing in the repo nests today, textually or through a
+helper, so every one of the 800-odd existing call sites restores the public
+schema it was already given.
+
+`ConnectedToNestsTests` is seven tests over two schools: the inner exit returns
+to the outer school, three levels unwind one at a time, an exception on the way
+out still restores, a lazily-read object survives somebody else's block, the
+outermost block still lands on public, and `connection.tenant` is the `School`
+itself rather than a stand-in. Six of the seven fail against the old helper —
+two of them as `ProgrammingError: relation "academics_term" does not exist`
+raised from `refresh_from_db`, which is the diagnosis this whole issue is about.
+The seventh is the one that must pass either way.
+
+`test_pdf` drops its workaround. `TheRenderedPageTests` kept a context-free
+`_card()` so that `html()` could repeat the lookup rather than call it; now
+`card()` opens a block of its own and `html()` calls it from inside its own,
+which is the ordinary way to write it. Run against the old helper, that shape
+fails five tests with the missing-relation error verbatim.
+
+Verified:
+- `ConnectedToNestsTests` against the old helper: Ran 7, FAILED (failures=4, errors=2)
+- `ConnectedToNestsTests` against this one: Ran 7 in 4.206s, OK
+- `schools` + `results.tests.test_pdf`: Ran 238 in 220.234s, OK
+- `TheRenderedPageTests`'s new shape against the old helper: Ran 6, FAILED (errors=5)

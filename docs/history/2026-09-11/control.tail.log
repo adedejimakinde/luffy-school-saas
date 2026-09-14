@@ -1,0 +1,40 @@
+SAVEPOINT "s135172818111360_x43"
+SAVEPOINT "s135172818111360_x44"
+SAVEPOINT "s135172818111360_x45"
+SAVEPOINT "s135172818111360_x46"
+
+======================================================================
+FAIL: test_billing_a_class_opens_one_savepoint_not_one_per_charge (fees.tests.test_schedules.SubtransactionCountTests.test_billing_a_class_opens_one_savepoint_not_one_per_charge)
+Two children, two lines: four charges, and one savepoint for the run.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/vscode/worktrees/charge-subtransactions/fees/tests/test_schedules.py", line 1771, in test_billing_a_class_opens_one_savepoint_not_one_per_charge
+    self.assertEqual(
+AssertionError: 5 != 1 : one savepoint for apply_to_class()'s own atomic block and no more; a savepoint per charge is issue #82:
+SAVEPOINT "s135172818111360_x59"
+SAVEPOINT "s135172818111360_x60"
+SAVEPOINT "s135172818111360_x61"
+SAVEPOINT "s135172818111360_x62"
+SAVEPOINT "s135172818111360_x63"
+
+======================================================================
+FAIL: test_the_count_does_not_grow_with_the_class (fees.tests.test_schedules.SubtransactionCountTests.test_the_count_does_not_grow_with_the_class)
+The property, not the number. Half again the children, same savepoints.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/vscode/worktrees/charge-subtransactions/fees/tests/test_schedules.py", line 1787, in test_the_count_does_not_grow_with_the_class
+    self.assertEqual(
+AssertionError: 7 != 1 : the savepoint count must be flat in the size of the class; that is the whole of #82, since 64 is the limit and a class is not:
+SAVEPOINT "s135172818111360_x96"
+SAVEPOINT "s135172818111360_x97"
+SAVEPOINT "s135172818111360_x98"
+SAVEPOINT "s135172818111360_x99"
+SAVEPOINT "s135172818111360_x100"
+SAVEPOINT "s135172818111360_x101"
+SAVEPOINT "s135172818111360_x102"
+
+----------------------------------------------------------------------
+Ran 4 tests in 8.386s
+
+FAILED (failures=3)
+Destroying test database for alias 'default'...

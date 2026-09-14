@@ -1,0 +1,120 @@
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.IntegrityError: results_releasedtraitrating is append-only; UPDATE is not allowed. A released card has to keep saying what it said — correct it with a revision, which makes a new version.
+CONTEXT:  PL/pgSQL function results_frozen_ratings_are_append_only() line 3 at RAISE
+
+
+======================================================================
+ERROR: test_the_backfill_links_them_all_and_the_guards_refuse_nothing (results.tests.test_cards.TheBackfillMeetsTheAppendOnlyGuardsTests.test_the_backfill_links_them_all_and_the_guards_refuse_nothing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.RestrictViolation: results_releasedtraitrating is append-only; UPDATE is not allowed. A released card has to keep saying what it said — correct it with a revision, which makes a new version.
+CONTEXT:  PL/pgSQL function results_frozen_ratings_are_append_only() line 3 at RAISE
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_cards.py", line 801, in test_the_backfill_links_them_all_and_the_guards_refuse_nothing
+    backfill_migration.backfill(apps, connection.schema_editor())
+  File "/workspace/results/migrations/0017_every_frozen_row_hangs_off_a_card.py", line 221, in backfill
+    table.objects.bulk_update(rows, ["card_id"], batch_size=500)
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/query.py", line 924, in bulk_update
+    rows_updated += queryset.filter(pk__in=pks).update(**update_kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/query.py", line 1263, in update
+    rows = query.get_compiler(self.db).execute_sql(ROW_COUNT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 2060, in execute_sql
+    row_count = super().execute_sql(result_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.IntegrityError: results_releasedtraitrating is append-only; UPDATE is not allowed. A released card has to keep saying what it said — correct it with a revision, which makes a new version.
+CONTEXT:  PL/pgSQL function results_frozen_ratings_are_append_only() line 3 at RAISE
+
+
+======================================================================
+ERROR: test_the_guards_are_back_on_afterwards (results.tests.test_cards.TheBackfillMeetsTheAppendOnlyGuardsTests.test_the_guards_are_back_on_afterwards)
+A migration that left them off would leave released rows rewritable.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+psycopg2.errors.RestrictViolation: results_releasedtraitrating is append-only; UPDATE is not allowed. A released card has to keep saying what it said — correct it with a revision, which makes a new version.
+CONTEXT:  PL/pgSQL function results_frozen_ratings_are_append_only() line 3 at RAISE
+
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_cards.py", line 810, in test_the_guards_are_back_on_afterwards
+    backfill_migration.backfill(apps, connection.schema_editor())
+  File "/workspace/results/migrations/0017_every_frozen_row_hangs_off_a_card.py", line 221, in backfill
+    table.objects.bulk_update(rows, ["card_id"], batch_size=500)
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/manager.py", line 87, in manager_method
+    return getattr(self.get_queryset(), name)(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/query.py", line 924, in bulk_update
+    rows_updated += queryset.filter(pk__in=pks).update(**update_kwargs)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/query.py", line 1263, in update
+    rows = query.get_compiler(self.db).execute_sql(ROW_COUNT)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 2060, in execute_sql
+    row_count = super().execute_sql(result_type)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/models/sql/compiler.py", line 1623, in execute_sql
+    cursor.execute(sql, params)
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 79, in execute
+    return self._execute_with_wrappers(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 92, in _execute_with_wrappers
+    return executor(sql, params, many, context)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 100, in _execute
+    with self.db.wrap_database_errors:
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/utils.py", line 91, in __exit__
+    raise dj_exc_value.with_traceback(traceback) from exc_value
+  File "/usr/local/python/3.11.16/lib/python3.11/site-packages/django/db/backends/utils.py", line 105, in _execute
+    return self.cursor.execute(sql, params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+django.db.utils.IntegrityError: results_releasedtraitrating is append-only; UPDATE is not allowed. A released card has to keep saying what it said — correct it with a revision, which makes a new version.
+CONTEXT:  PL/pgSQL function results_frozen_ratings_are_append_only() line 3 at RAISE
+
+
+----------------------------------------------------------------------
+Ran 4 tests in 11.913s
+
+FAILED (errors=3)
+Destroying test database for alias 'default'...

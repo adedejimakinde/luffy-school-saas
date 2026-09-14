@@ -1,0 +1,76 @@
+A test database the last run has not let go of is not the next run's problem
+
+Issue #61, and the only part of it still open. PR #63 did the rest: the loud
+failure and the pipefail work are already in `main`, and the issue's own comment
+retitled it once Django was read properly. `_create_test_db` calls `sys.exit(2)`
+on this, loudly, naming the cause — the original "exits 0 and silent" report was
+a hand-rolled waiter throwing the status away, not Django.
+
+So what is left is a convenience, and it is worth saying that plainly rather
+than dressing it as a correctness fix. A run started shortly after one finished
+finds `test_luffy_db` still there and still occupied: the previous process has
+returned, its Postgres backend has not, and `DROP DATABASE` requires zero other
+sessions. It costs a startup and a diagnosis, twice so far, because the message
+sits four lines from the end of a long log and reads like configuration.
+
+`TenantTemplateRunner.setup_databases()` now clears those backends first, on a
+connection to the real database — the connection doing the terminating must not
+be among the ones terminated.
+
+## What it will not touch
+
+The names are computed, never loosely matched: the test database Django is
+about to ask for, and its `_1 … _N` worker clones. `luffy_db` cannot match
+either, because every candidate carries Django's `test_` prefix.
+
+`_` and `%` are `LIKE` wildcards and this schema's names are full of the
+former, so the name is escaped before the clone pattern is built from it.
+
+`--keepdb` skips the whole thing: it drops nothing, so it has nothing to lose.
+
+## It says what it did
+
+A terminated backend is reported at verbosity 1 and up. Killing connections
+quietly would be the same class of fault this harness exists to refuse.
+
+## The tests, and the control that caught the test being wrong
+
+Five cases against three scratch databases, never the suite's own: the drop
+really does fail while a connection is held (the control — if that stops
+failing, the race is gone and this guards nothing); terminating first lets it
+through; a worker clone is cleared too; nothing to clear is not an error; and
+the decoys are left alone.
+
+**The decoys are two, and the second exists because a control failed.** With
+only `luffy_probe_61x`, removing the escaping from the name left all five tests
+passing — the escaped suffix was keeping that name out on its own, so the test
+was proving less than it claimed. `luffyXprobeX61_1` puts letters exactly where
+the name has underscores, and is matched only when those underscores have
+become wildcards.
+
+| Run | Result |
+| --- | --- |
+| Five tests, escaping in place | `Ran 5 tests in 8.666s`, `OK`, `EXIT=0` |
+| Control, name escaping removed | `FAILED (failures=1)`, `EXIT=1`, `decoy='luffyXprobeX61_1'` |
+
+## And the whole path, against a real leftover
+
+A connection held open on a `test_luffy_db` that already exists, then a run —
+which is #61 as reported, rather than as unit-tested.
+
+| Run | Result |
+| --- | --- |
+| Clearing disabled | `Got an error recreating the test database: database "test_luffy_db" is being accessed by other users`, `EXIT=2`, `RESULT=<none — the runner printed no OK or FAILED line>` |
+| Clearing enabled | `Terminated a leftover backend still attached to 'test_luffy_db' (issue #61).`, `Ran 6 tests in 1.275s`, `OK`, `EXIT=0` |
+
+The control's `RESULT=<none>` is #63's guard doing its job on the way past: a
+run that never started, refused rather than reported as green.
+
+Its first draft used a `SimpleTestCase` module as the payload and proved
+nothing — Django sets up no database for tests that declare they need none, so
+there was no drop to lose. The payload is a `TestCase` module for that reason.
+
+`scripts/run-tests.sh`'s header said this script deliberately does not terminate
+for you, and pointed at #61 for the decision. The decision is made, one level
+down in the runner, so the header now says where it happens and why the
+diagnosis it prints is kept anyway.

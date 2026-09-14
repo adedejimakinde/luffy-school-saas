@@ -1,0 +1,55 @@
+Found 44 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.
+----------------------------------------------------------------------
+Ran 44 tests in 130.757s
+
+OK
+Destroying test database for alias 'default'...

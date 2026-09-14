@@ -1,0 +1,59 @@
+A released term's broadsheet is the cards that went home
+
+Issue #55. `broadsheet()` promised this in its own docstring — "there is no
+frozen snapshot yet — that is task 3 — and once there is, a *released* term must
+be served from it rather than from here" — and task 3 shipped in #44 without the
+switch being made. `docs/positions.md` and `docs/sessions.md` carried the same
+"once task 3 lands", so three places recorded a condition that had been true for
+weeks.
+
+## The cause is the roster, not a revision
+
+The issue was first framed as a revision re-ranking only its own card. That is a
+consequence. Marks lock at release — `gradebook`'s `0002` trigger refuses an
+INSERT, UPDATE or DELETE of a `Score` for a released term — and **nothing
+refuses a placement**. So a child placed into a released term (#31) or
+transferred out of one moved the live roster under a frozen ranking, and this
+page ranked whoever was on the roster now against marks frozen then. Two
+rankings for one class, with nothing in the data saying which was current.
+
+`test_a_placement_made_after_release_is_not_on_the_page` asserts both halves:
+the trigger's refusal, and the roster moving anyway.
+
+## Every number on the released page comes from the rows on that page
+
+A released sheet is served from `cards.cards_on(sheet)` — one card per child,
+highest version, the `DISTINCT ON` that function was kept for and had no caller
+for. `current_rank` is `dense_positions()` over the cards' frozen `own_average`
+values; `class_average` is `mean_percentage()` over the same values, still never
+stored. Columns come from the cards' own subject lines in their frozen print
+order, so a subject retired since release still appears on a page released with
+it. Nothing here writes, and an unreleased term still reads live marks — a
+teacher who could not see their own marking would be reading a stale sheet.
+
+`positions._mean()` becomes public as `mean_percentage()` for that class
+average: computing the mean anywhere else would be the second rounding policy
+the function was extracted to end.
+
+## The ranks are derived, not read off the cards
+
+`ReleasedCard.position` records where a child came **at that card's own freeze**,
+and a revision re-freezes one card against the class as it reads at that later
+moment. Reading those numbers off the cards can therefore put two children at
+rank 1 on one page — `TheRevisedChildTests.test_the_page_never_repeats_a_rank`
+asserts the frozen pair is literally `[1, 1]` where the derived one is `[1, 2]`.
+
+## The fields are renamed, which is a breaking API change
+
+`position` becomes `current_rank` and the per-subject `position` becomes
+`current_subject_rank`; `from_snapshot` is new and says which of the two
+questions the page answered. `results/card_api.py:34` already names the trap
+this closes: `position` meant *rank in the class*, *rank in a subject* and
+*where the line prints* in one codebase, and a broadsheet field called
+`position` holding a rank was one paste away from being read as print order.
+Nothing in the repository consumed the old names.
+
+Row order still differs between the two pages — the live one is in roster order,
+the released one comes back ordered by `student_membership_id` because
+`cards_on()`'s `DISTINCT ON` requires that leading sort. Both are arbitrary to a
+school, which is issue #24, and choosing an order here would pre-empt it.

@@ -1,0 +1,27 @@
+########## CONTROL 1_no_artefact_guard_service
+Ran 29 tests in 93.354s
+FAILED (errors=3)
+ERROR: test_a_moved_child_is_refused_by_the_card_that_went_home
+ERROR: test_a_moved_child_with_no_mark_yet_is_refused_a_new_one
+ERROR: test_a_moved_childs_save_answers_423_too
+
+########## CONTROL 2_no_artefact_branch_trigger
+Ran 29 tests in 94.254s
+FAILED (failures=1)
+FAIL: test_a_moved_child_is_refused_by_the_database_too
+
+########## CONTROL 3_guard_before_idempotent_exit
+Ran 29 tests in 94.153s
+FAILED (failures=1, errors=1)
+ERROR: test_clearing_a_mark_that_is_already_gone_stays_a_no_op
+FAIL: test_a_retried_clear_of_a_gone_mark_still_answers_200
+
+########## CONTROL 4_no_api_handler
+Ran 29 tests in 98.430s
+FAILED (errors=4)
+ERROR: test_a_moved_childs_save_answers_423_too
+ERROR: test_clearing_a_mark_on_a_released_term_answers_423
+ERROR: test_saving_into_a_released_term_answers_423
+ERROR: test_saving_into_a_term_under_review_answers_423_as_well
+
+########## controls complete; tree restored

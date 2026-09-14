@@ -1,0 +1,121 @@
+Task 9: a child's whole year, and the school's decision about it
+
+Everything else in `results` is reckoned per term. This is the two lines at the
+bottom of the card that are not — the average of the session, and the promotion
+— and the second of them is the first thing in this app that a machine must not
+decide.
+
+**A missing term renormalises, and is never a zero.** The whole module turns on
+this. A child who transferred in at second term did not score nothing in first
+term; they were not there. Scored as a zero the absence does not merely lower an
+average, it propagates into a recommendation: at 20/20/60 a child who sat two
+terms and averaged 77.50 reads 62.00, which is under a seventy pass mark, and
+the school is advised to make them repeat the year on the strength of a term
+they were not enrolled to sit. So the weights of the terms actually sat are
+renormalised to sum to a hundred — 20/60 becomes 25/75 — and
+`TheTwoTermCaseTests` holds it under both conventions with the numbers written
+out, which is what the settled decision asked for.
+
+**Three reasons a term is absent, kept apart.** They renormalise identically and
+they are not the same fact: `NOT_ENROLLED` is a transfer, `UNMARKED` is a school
+that has not entered its marks, and `NO_TERM` is a session still being taught.
+Collapsed into a bare `None` — which was the obvious shape — a marking backlog
+looks exactly like a transfer on the one screen a head of year uses to find
+both. `TermAbsence` is on the frozen row as well as the live read, and it is
+staff-only: a parent reading "no marks were entered" is being shown the school's
+filing rather than their child's year.
+
+**The averaging is configurable because the number decides promotions.** Equal
+and 20/20/60 are both real, so neither is hardcoded; `EQUAL` is the default,
+being what a school that has never thought about it means. A weighting must sum
+to a hundred, refused in the service with a sentence naming the total the school
+actually typed and again by a check constraint for the import that never reaches
+the service. In `EQUAL` mode the weights are **null**, not 33.33/33.33/33.34 —
+that is not a straight mean, it is a weighting that favours third term by a
+hundredth — and not left at their old values either, because a stale 20/20/60
+under a mode that says EQUAL is a field that lies to the next reader.
+
+**The exact mean, and weights that add up.** These pull in opposite directions
+and both matter, so the row does both: the stored weights are rounded to two
+places and the drift handed to the largest remainders so they total a hundred,
+while the average is computed from the exact ratios and rounded once. They
+disagree in the last penny by design — 0, 0, 100 stores a third-term weight of
+33.34 and an average of 33.33 — and the docstring says so rather than claiming
+an auditability the row does not have. When the spare hundredth has nowhere
+obvious to go, later terms win it: under an equal weighting every remainder is
+identical, so a stable sort would hand it to whichever term was inserted first,
+which is a number on a school's screen decided by dictionary order.
+
+**Frozen at third-term release, and third term only.** Alongside the conduct
+section and the remarks, inside the same transaction. `sessions.freeze_for_release()`
+decides for itself that earlier terms write nothing rather than being called
+conditionally from `release()` — a caller that has to remember which freezes
+apply to which term will eventually forget. The reason to copy at all is that a
+session average reaches backwards through two years of rows a school may
+legitimately change: switching from 20/20/60 to a straight mean, revising a
+first-term result, correcting a placement in a term long closed. None of those
+are misuse and every one rewrites a number a parent is holding.
+
+**Promotion is a suggestion and a decision, and they are different columns.**
+The suggestion can only ever be PROMOTED or REPEATED — a pass mark cannot reach
+"promoted on trial", which is a judgement about a child who fell short and is
+worth carrying anyway. Undecided is the **absence of a row**: there is no
+UNDECIDED member and no current-status column, because a status column with a
+default is a school-wide promotion performed by a default value, and the audit
+would show four hundred children as decided by a principal who reviewed nothing.
+
+**The suggestion is frozen at the moment of the decision, not recomputed.** This
+was the question worth arguing about. The gap between suggested and recorded is
+the record that a person went against the arithmetic — and the arithmetic is a
+function of a weighting the school may change. Recomputed, the same row reads as
+agreement or override depending on when it is asked: a school moving from
+20/20/60 to a straight mean turns a child who read 47.00 into one who reads
+51.67, and a principal who granted a trial pass against a REPEATED suggestion is
+retroactively recorded as having demoted a child the system wanted promoted.
+There is a test that performs exactly that move and asserts the row does not
+budge. The counter-case — a mark that was wrong and got fixed — is task 8's: a
+revision makes a new version, so it makes a new decision row.
+
+**Deciding is the principal's, configuring is the office's.** The one place
+these two sets deliberately disagree is the administrator, who may set the
+school's weighting and may not tell a family their child repeats the year.
+`RELEASING_ROLES` already draws that line and task 8 rests on it.
+
+**Found in self-review: a child can collect two frozen session lines.** The
+tempting claim is that at most one exists — `ClassPlacement` allows one group
+per child per term, so a child is on exactly one third-term roster. True at any
+instant, false over time: release JSS 1A, move the child to JSS 3B, release JSS
+3B, and both releases freeze them. Both rows are real records of releases that
+happened and the table is append-only, so the question is which one is the card.
+It is the first, on the rule `0010`, `0011` and issue #27 all turn on — a
+released card keeps saying what it said, and a later release cannot reach
+backwards into one already in a parent's hand.
+
+**And the test for it was worthless twice before it worked.** The two
+behavioural tests pass with the ordering removed, because Postgres with no ORDER
+BY hands back a freshly-inserted pair in insertion order — so they were getting
+the right row by luck. Verified by running the control rather than assumed. The
+captured-SQL test that replaced them was wrong in its own way and passed against
+an unordered query for two separate reasons: `QuerySet.first()` adds an ORDER BY
+on the primary key when a queryset has none, so asserting an ORDER BY exists
+proves nothing; and `created_at` is in every SELECT list, so asserting it
+appears matched the projection. It asserts on the ORDER BY clause alone now, and
+the control fails as it should. `LockScopeTests` keeps a behavioural pair and a
+SQL assertion for the same reason and says so at length; this is that shape.
+
+**`positions._round()` is now `round_percentage()`**, public and unchanged. The
+session average has to round the way every other percentage in this app rounds,
+and a second `quantize()` in a second module is the divergence `_mean()` was
+extracted to end.
+
+Forty-nine tests. Two schools throughout, and the second is used rather than
+built and ignored: a weighting is per-school, a pass mark is per-school, and
+both are asserted not to cross.
+
+Not in this PR, and named rather than left to be noticed: **the read API**.
+`results/api.py` exposes one broadsheet route, and the session view and
+promotion sheet are not on it. That PR is where the staff-only rules above have
+to be enforced at the serializer — the absence reasons and the suggestion, the
+same way position already is.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>

@@ -1,0 +1,23 @@
+Two PRs in flight removed and re-added the same workaround
+
+#66 and #58 were both cut from ff36dda and neither could see the other. #58
+makes `connected_to()` nest and removes the workarounds that existed because it
+did not; #66 added `results/tests/test_renders.py`, which carries one of those
+same workarounds. `git merge-tree` called the merge clean both ways round,
+because the two edits never touch the same lines — but after the merge
+`TheDebounceTests.ask()` says in its docstring that `connected_to()` "does not
+nest — it always lands back on `public`", which the merged code makes false, and
+it repeats `marker()`'s query by hand to dodge a bug that is no longer there.
+
+A stale comment of that kind is worse than none: it is the file's own
+explanation of why the duplication has to stay, and the next reader has no
+reason to doubt it.
+
+So `ask()` now calls `self.marker()`, which nests a block inside its own, and
+the docstring says what the code does. The outer block stays — nesting fixes an
+inner block inside an outer one, it does not conjure the outer one, and
+`enqueue_if_pending` reads the row's lazy relations.
+
+`results/tests/test_revision.py:972` also cites #58 and is left alone: it says
+to assert inside the context because the outermost block still lands on public,
+which is still true.

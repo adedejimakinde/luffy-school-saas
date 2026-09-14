@@ -1,0 +1,48 @@
+Found 5 test(s).
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+=== Starting migration
+F=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.=== Starting migration
+.
+======================================================================
+FAIL: test_an_invented_card_carries_the_school_and_the_class_by_name (results.tests.test_cards.TheBackfillInventsTheMissingCardsTests.test_an_invented_card_carries_the_school_and_the_class_by_name)
+The header of the page, and both halves of it were wrong.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/workspace/results/tests/test_cards.py", line 1001, in test_an_invented_card_carries_the_school_and_the_class_by_name
+    self.assertEqual(
+AssertionError: Lists differ: [{'school_name': '', 'class_group_name': 'ClassGroup objec[172 chars]26'}] != [{'school_name': "St Mary's", 'class_group_name': 'JSS 1A'[160 chars]26'}]
+
+First differing element 0:
+{'school_name': '', 'class_group_name': 'ClassGroup objec[53 chars]026'}
+{'school_name': "St Mary's", 'class_group_name': 'JSS 1A'[47 chars]026'}
+
+- [{'class_group_name': 'ClassGroup object (1)',
++ [{'class_group_name': 'JSS 1A',
+-   'school_name': '',
+?                   ^
+
++   'school_name': "St Mary's",
+?                  ++++++++ ^^
+
+    'session': '2025/2026',
+    'student_name': 'Ada Obi'},
+-  {'class_group_name': 'ClassGroup object (1)',
++  {'class_group_name': 'JSS 1A',
+-   'school_name': '',
+?                   ^
+
++   'school_name': "St Mary's",
+?                  ++++++++ ^^
+
+    'session': '2025/2026',
+    'student_name': 'Bola Eze'}]
+
+----------------------------------------------------------------------
+Ran 5 tests in 14.705s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...

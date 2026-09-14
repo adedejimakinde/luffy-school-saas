@@ -1,0 +1,120 @@
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+......=== Starting migration
+.....=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.=== Starting migration
+=== Starting migration
+.ERROR 2026-08-29 17:45:08,447 [portal] schools.delivery Invitation 99 to St Mary's could not be delivered by email
+Traceback (most recent call last):
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+ConnectionRefusedError: [Errno 111] Connection refused
+ERROR 2026-08-29 17:45:08,448 [portal] django.request Bad Gateway: /api/schools/st-marys/invitations/
+.ERROR 2026-08-29 17:45:08,994 [portal] django.request Service Unavailable: /api/schools/st-marys/invitations/
+.ERROR 2026-08-29 17:45:09,521 [portal] schools.delivery Invitation 102 to St Mary's could not be delivered by email
+Traceback (most recent call last):
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+ConnectionRefusedError: [Errno 111] Connection refused
+ERROR 2026-08-29 17:45:09,521 [portal] django.request Bad Gateway: /api/schools/st-marys/invitations/
+ERROR 2026-08-29 17:45:09,541 [portal] schools.delivery Invitation 103 to St Mary's could not be delivered by email
+Traceback (most recent call last):
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+ConnectionRefusedError: [Errno 111] Connection refused
+ERROR 2026-08-29 17:45:09,542 [portal] django.request Bad Gateway: /api/schools/st-marys/invitations/
+ERROR 2026-08-29 17:45:09,556 [portal] schools.delivery Invitation 104 to St Mary's could not be delivered by email
+Traceback (most recent call last):
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+  File "/workspace/schools/delivery.py", line 168, in send
+    send_mail(
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1124, in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1128, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/python/3.11.16/lib/python3.11/unittest/mock.py", line 1183, in _execute_mock_call
+    raise effect
+ConnectionRefusedError: [Errno 111] Connection refused
+ERROR 2026-08-29 17:45:09,557 [portal] django.request Bad Gateway: /api/schools/st-marys/invitations/
+.......
+----------------------------------------------------------------------
+Ran 993 tests in 2969.605s
+
+OK
+Destroying test database for alias 'default'...

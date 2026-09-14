@@ -1,0 +1,58 @@
+One connected_to, and it is the one that restores the schema it found
+
+Closes #67. `connected_to` was defined fourteen times across fourteen test
+modules and called about 850 times. Thirteen were character-for-character
+identical, wrapping `schema_context(school.schema_name)`; the fourteenth, in
+`schools/tests/test_tenant_isolation.py`, wrapped `tenant_context(school)`.
+Nothing in the name said which one a module had imported.
+
+There is now one, in `schools/tests/tenants.py` — already the shared home for
+`make_school` — and it wraps `tenant_context`.
+
+## Standardising on the thirteen would have kept the bug
+
+`tenant_context` restores the schema it found on the way out. `schema_context`
+does not, and that is issue #58: an inner block's exit drops the *outer* block
+onto public, and the next lazy read in the outer block goes looking for tenant
+tables in the shared schema. It arrives as
+`relation "academics_term" does not exist` from a line frames away from either
+`with`, and it has cost this project a lost run and a diagnosis twice.
+
+Taking the thirteen as the standard would have centralised that, which is worse
+than leaving it spread out — one helper that nobody suspects.
+
+## The visible behaviour change: log lines
+
+**This is not a refactor artefact and is worth stating plainly.**
+`tenant_context(school)` puts the real `School` on `connection.tenant`;
+`schema_context(name)` sets a `FakeTenant` that knows a schema name and no
+display name. `schools.logging.current_school()` reads that. So under the
+thirteen every log line inside a block read `[st_marys]`, and now every one
+reads `[St Mary's]`.
+
+Thirteen modules change what their log output says. Exactly one test asserts on
+it — `schools/tests/test_logging.py`, which imported the fourteenth and already
+expected `[St Mary's]`. That is precisely why this needed a full-suite run
+rather than an argument: almost nothing would have failed if it were wrong.
+
+## make_school() no longer drops its caller onto public
+
+The other half of #67, and the same bug as #58 three lines from the helper that
+fixes it. `build_template()` and `clone_template()` both ended in
+`set_schema_to_public()`, and `make_school()` calls `clone_template()`. So a
+`make_school()` inside a `connected_to` block left the block on public, and the
+block's next read failed the way #58 failed.
+
+Both genuinely need public for the DDL they run — installing a function, issuing
+`CREATE SCHEMA`. What they did not need was to leave it there. `_on_public()`
+keeps the reason and drops the footgun: it goes to public and puts the
+connection back where it was.
+
+`MakeSchoolInsideABlockTests` pins it — four tests: the schema name after
+`make_school()` returns, a real query after it (the symptom rather than the
+mechanism), the outermost block still landing on public, and the ordinary
+call-from-public case that every `setUp` in this repo depends on.
+
+**Nothing else pinned this.** Every existing caller builds its schools in
+`setUp`, before opening any block, which is how it survived a fix to
+`connected_to` that was otherwise about exactly this.
