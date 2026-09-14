@@ -760,14 +760,30 @@ def release(sheet, actor):
 
         **What used to be here and is deliberately gone.** A
         `_say_if_the_roster_moved()` logged a warning naming any child the
-        roster gained while the release ran. It worked by reading the roster a
-        second time, after everything was written, and comparing. Under one read
-        per block it would compare the snapshot against itself and could only
-        ever report "nothing moved" — a guard that guards nothing, with a log
-        line that reads as evidence somebody checked. It is deleted rather than
-        kept with a docstring admitting it. The platform's only detector of a
-        mid-release move goes with it, unreliable as it was; issue #47, which
-        was about putting its output in front of a person, is noted.
+        roster gained while the release ran. It worked by reading the roster
+        a second time, after everything was written, and comparing that
+        answer against the frozen one.
+
+        **One read per block did not, on its own, retire it.** Its roster came
+        from `positions.roster_ids()`, which still exists and still issues its
+        own `ClassPlacement` query. Kept verbatim it would go on doing exactly
+        that — a second read, inside the block, still capable of naming a child
+        the freeze never saw. Adopting the rule would have left it working, and
+        left the rule broken in the one place claiming to audit it.
+
+        Taking its roster from `results.student_ids` instead is what makes it
+        compare the snapshot against itself: `cards.freeze_for_release()`
+        writes one card per id in that list, so the difference is empty for
+        every state of the database and "nothing moved" is its only possible
+        output. The deletion therefore required **rewriting its roster
+        source**, not merely adopting one read per block — and it is the
+        rewritten version that is worthless, a guard that guards nothing with
+        a log line that reads as evidence somebody checked. Deleted rather
+        than kept with a docstring admitting it.
+
+        The platform's only detector of a mid-release move goes with it,
+        unreliable as it was; issue #47, which was about putting its output in
+        front of a person, is noted.
         """
         results = positions.class_results(locked.class_group, locked.term)
         card_by_student = cards.freeze_for_release(locked, results, by=actor)
