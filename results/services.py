@@ -758,16 +758,11 @@ def release(sheet, actor):
         registers is outside, because a broker must never be able to fail a
         release that has already happened. `results.renders` argues both.
 
-        **What used to be here and is deliberately gone.** A
-        `_say_if_the_roster_moved()` logged a warning naming any child the
-        roster gained while the release ran. It worked by reading the roster a
-        second time, after everything was written, and comparing. Under one read
-        per block it would compare the snapshot against itself and could only
-        ever report "nothing moved" — a guard that guards nothing, with a log
-        line that reads as evidence somebody checked. It is deleted rather than
-        kept with a docstring admitting it. The platform's only detector of a
-        mid-release move goes with it, unreliable as it was; issue #47, which
-        was about putting its output in front of a person, is noted.
+        **What used to be here.** A `_say_if_the_roster_moved()` logged the
+        children a release finished without. #60 required it to read the
+        snapshot rather than the roster, which makes it vacuous, so it was
+        deleted rather than rewritten. Nothing detects a mid-release placement
+        now — `docs/cards.md`, "The detector that went with it", and issue #47.
         """
         results = positions.class_results(locked.class_group, locked.term)
         card_by_student = cards.freeze_for_release(locked, results, by=actor)

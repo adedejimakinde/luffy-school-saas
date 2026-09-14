@@ -75,12 +75,10 @@ serialise the office against every release, and it would make the two reads
 
 **What is deliberately no longer asserted here.** Two tests used to check that a
 release logged a warning naming the child the roster gained. The warning came
-from `services._say_if_the_roster_moved()`, which read the roster a second time
-at the end and compared. Under one read per block it compares the snapshot with
-itself and can only report "nothing moved", so it was deleted rather than kept
-as a guard that guards nothing. The platform has no detector of a mid-release
-move now; issue #47, which was about putting its output in front of a person,
-records what went with it.
+from `services._say_if_the_roster_moved()`, which is deleted — `docs/cards.md`,
+"The detector that went with it", says why, and this file keeps a pointer rather
+than a third copy. The platform has no detector of a mid-release move now;
+issue #47 is what building one would take.
 
 Two schools, and Grace is used rather than built and ignored: the placing thread
 resolves its own school from `connection.schema_name`, so a thread whose

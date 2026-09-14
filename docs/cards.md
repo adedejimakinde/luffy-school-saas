@@ -103,14 +103,36 @@ against every release during the one week of the year when both happen
 constantly, and it makes two reads *agree* rather than removing the second one —
 leaving the next reader two reads and no reason to trust either.
 
-Gone with it: `services._say_if_the_roster_moved()`, which logged the children a
-release finished without by reading the roster once more at the end and
-comparing. Against a single snapshot it can only ever report "nothing moved", so
-it was a guard that guarded nothing whose log line read as evidence somebody had
-checked. Deleting it takes away the platform's only detector of a mid-release
-move, unreliable as that was — it could not tell "the office moved a child"
-from "my own second read raced the first" — and it is what issue #47 was
-reporting on.
+#### The detector that went with it
+
+`services._say_if_the_roster_moved()` logged the children a release finished
+without, by reading the roster a second time at the end and comparing. #60
+prescribed rewriting it to compare against the snapshot the freeze used — "what
+this release saw", in #60's words — and that version can only ever report
+"nothing moved", because `cards.freeze_for_release()` writes one card per id in
+that snapshot. So it was deleted rather than rewritten. #47's comments of 1 and
+3 September are where that was decided.
+
+**What went is not what the argument above describes.** The version that existed
+read `positions.roster_ids()` afresh, so its difference was non-empty exactly
+when a placement committed while the release ran — a true mid-release arrival,
+every time, with no false positives. It was a working detector, removed because
+the shape #60 required of it was not.
+
+**That sits against rule 8** in `docs/operating-rules.md`: a decision that
+produces an absence needs a record, and the freeze leaves a child placed
+mid-release with nothing. There is now no detector of one. The contradiction is
+open, and it is #47.
+
+**#47 does not want this function back.** Its own comments give the shape — the
+release's snapshot against the roster at a later, deliberate moment, outside any
+lock. The frozen side is already on the cards (`cards.cards_on(sheet)`), and
+`comments.missing()` and `ratings.unrated()` already do the same subtraction for
+remarks and traits. Not a second read inside the locked block: `roster_ids()`'s
+own docstring says why.
+
+`results/services.py` and `results/tests/test_release_roster_race.py` point at
+this section rather than keeping their own copies of it.
 
 `cards.the_card_for()` and `TheRosterMovedDuringRelease` are the belt to that
 braces: nothing on the release path can now reach for a child the cards never
