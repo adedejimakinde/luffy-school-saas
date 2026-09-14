@@ -394,6 +394,73 @@ PR #1 already models the relationship: this adult stands for this child. What is
 missing is the credential, not the relationship. Add authentication alongside, keep
 the existing membership and role plumbing intact.
 
+## What is configurable, and what is not
+
+**Configurable where schools differ, not foreclosed where they might.** Those are two
+different claims and the distinction is the whole section. A setting is a promise to
+maintain both branches forever; leaving something unforeclosed costs nothing, because
+the schema already permits it and no school has to opt in. The mistake in both
+directions is the same one — treating "a school might want this" as automatically
+meaning "this needs a switch".
+
+The three categories below are exhaustive over what has come up so far. Anything not
+in them has not been thought about, which is a different state from "not configurable".
+
+### 1. School settings — schools genuinely differ, and we expect to toggle these
+
+| setting | decision it lives under | why it is a setting |
+|---|---|---|
+| whether the child sees fee state | A6 | A6 says the child sees everything, fees included — withholding as a lever, so the child presses their parents. One school has confirmed that. It is also the assumption whose failure the break table says costs the most: a wrong A6 breaks D2's claim that exam surfaces are the *only* divergence between a guardian session and a student one. A setting is exactly the hedge, and cheap, because the alternative is discovering per school that a policy is a structural claim |
+| contact channel type | D9 | already a field with a type, a value and a verified flag — so this is finer-grained than a school setting: it varies **per guardian record**, not per school. A school whose parents are all on phone never sees the choice. This is the mechanism that makes A3 and A4 cheap to be wrong about |
+| the two PTA levy switches | D7 | two independent settings, **both default off**. A school with no distinct levy leaves them off and sees nothing, which is why A10 being wrong is cheap. Whether the levy exists and how it is administered are separate questions; only the first is settled here — see OPEN-8 |
+
+What these have in common: each is a **policy** a school holds and can state in a
+sentence, and each is already isolated behind one value. None of them changes what a
+guardian *is* or how one is reached.
+
+### 2. Not configurable, deliberately
+
+**D1** (a guardian is a separate identity, not a shared child login), **D2** (there is
+no parent portal — a guardian signs into the same surfaces with a guardian session),
+and **D6** (guardianship keys to the student, never to class, arm or stream).
+
+**The reason is one sentence: making these switchable means maintaining two
+architectures, and the second one is always the broken one.** It is not that the
+alternatives are unimaginable — each has a school somewhere that would prefer it. It
+is that the alternative branch gets a fraction of the traffic, a fraction of the tests,
+and none of the attention, and then fails on the case nobody ran. A shared child login
+that only some schools use is a credential model nobody is reasoning about when they
+write the next authorisation check. A parent portal behind a flag is a second set of
+templates that silently stops matching the first. A guardianship keyed to class for one
+school is a guard that reads current placement, which `docs/operating-rules.md` rule 1
+is the record of this project already getting wrong once.
+
+**If a school demands the opposite, that is a conversation, not a flag.** Possibly a
+conversation that changes the decision for everybody — these are not sacred, they are
+*single-valued*. What is ruled out is holding both answers at once and calling the
+disagreement a setting.
+
+### 3. Not foreclosed — the schema already allows it, so no decision is needed
+
+**A1** (both parents deal with the school) and **A4** (each guardian has their own
+number). Both are now confirmed by one school, and neither needs to be.
+
+`Guardianship` is a row per (guardian, child) pair. That already permits several
+guardians per child and several children per guardian, in any combination, across
+schools — D5 and D6 both rest on it. So:
+
+- A school that deals with **one contact per child** is a **subset** of what exists. It
+  writes one row instead of two. Nothing is configured, nothing is disabled, and no
+  code branches.
+- A school where **two guardians share one number** is the A4 failure, and what it
+  needs is a disambiguation step at sign-in — an addition to D3's flow, not a change to
+  the record. The break table says so already.
+
+**This is the cheap category and the one most often mistaken for the first.** The
+temptation on hearing "some schools only have one parent contact" is to add a
+single-guardian mode. There is nothing to add: the general case already contains the
+specific one. Reserve settings for where the branches genuinely diverge.
+
 ## Open questions
 
 Each of these needs a school-side answer before implementation.
