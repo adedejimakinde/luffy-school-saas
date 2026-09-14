@@ -1,17 +1,26 @@
 # Parent access
 
-Status: draft. Structural decisions settled (D1–D11). Domain input **not yet obtained
-from any school** — see the provenance warning below. Supersedes nothing. Extends
+Status: draft. Structural decisions settled (D1–D11). Domain input **obtained from one
+school, September 2026**, which confirmed A1–A7 as written — see the provenance note
+below for what one school does and does not settle. Supersedes nothing. Extends
 `docs/membership.md`.
 
 **Blocker check: done and clear.** The cross-schema FK concern that gated this phase
 has been verified as not applying — see D5. No tenant app holds a relation into a
 shared app; `Guardianship` is shared-to-shared. Nothing blocks implementation.
 
-**Should land first, though not blocking:** the `Guardianship.clean()` enforcement gap.
-Both of the model's stated rules are unreachable on the `save()` path and are held only
-by a duplicate copy in `link_guardian()`. Parent onboarding will add construction sites
-that inherit no protection.
+**No longer outstanding:** this used to say the `Guardianship.clean()` enforcement gap
+should land first — both of the model's stated rules unreachable on the `save()` path
+and held only by a duplicate copy in `link_guardian()`. Issue #91 closed that: `save()`
+calls `full_clean()`, and the duplicate is gone. #96's first slice then put both rules
+behind `accounts_guardianship_rules`, a trigger, so `bulk_create()` and
+`QuerySet.update()` are refused too. What remains open under #96 is the path that
+writes no guardianship row at all — a role change on the membership underneath a live
+link.
+
+The point the old sentence was making still applies to D10, and applies twice now:
+parent onboarding adds construction sites, and as of this revision there are two of
+them. Both go through the same action for exactly that reason.
 
 ## What this is
 
@@ -23,34 +32,63 @@ later. Cross-school guardian identity is **not** deferred — see D5; it already
 
 ## Domain assumptions
 
-**Provenance warning.** No school has been consulted. Everything in this section is
-either the author's model of Nigerian school practice or drawn from public sources.
-None of it is a school telling us what they do. This is recorded deliberately, because
-an assumption that gets remembered as a fact is the failure mode this project has
-already been bitten by elsewhere — an explanation can be confidently wrong, and only a
-real test revealed the truth.
+**Provenance.** One school has been consulted — **September 2026** — and confirmed
+A1–A7 **as written**. Before that, nothing in this section was a school telling us what
+they do; it was the author's model of Nigerian school practice or drawn from public
+sources. That is no longer the state of it, and the warning that used to stand here has
+been replaced rather than softened.
 
-Treat A1–A7 as **assumptions to be checked** the first time a school is available.
-A8–A10 are **researched** and carry more weight, but are still not this school's
-practice.
+**One school is not thirty, and the difference is the whole caveat.** What a single
+consultation buys is that these are no longer *invented*: each of A1–A7 is now at least
+one real school's practice, described by people who run it. What it does not buy is
+that they are *general*. A confirmation from one school cannot distinguish "this is how
+Nigerian schools work" from "this is how this school works", and those two readings
+diverge exactly where it would be most expensive — a state school versus a private one,
+day versus boarding, a school with a functioning bursary versus one without. The second
+school consulted is the one that will start telling them apart.
 
-### Assumed (unverified)
+Two consequences that are not rhetorical:
+
+- **The "which decisions survive a wrong assumption" table below stays.** It is not
+  leftover scaffolding from the unverified period. n=1 is the regime where that table
+  earns the most, because a single school is precisely how a local practice gets
+  mistaken for a universal one.
+- **Do not re-describe A1–A7 as facts.** They are confirmed observations with a named
+  source and a date, which is a different and weaker claim, and the failure mode this
+  project has already been bitten by elsewhere is an assumption that gets remembered as
+  a fact. Record the next school's answers next to these rather than in place of them.
+
+A8–A10 are **researched, and were not part of this confirmation.** They still carry
+their own weight and are still not any specific school's practice.
+
+### Assumed, then confirmed by one school (September 2026)
+
+Every item below was written as an assumption and is now **confirmed as written** by
+the one school consulted. ✓ marks that confirmation and nothing more — read it as *one
+school does this*, not as *schools do this*. The conditional clauses are kept rather
+than deleted: they are what the next school's answer will be checked against.
 
 - **A1. Both parents deal with the school.** Access is not a single "the parent"
-  account.
+  account. ✓ confirmed.
 - **A2. A child living with an aunt or grandparent means that adult becomes a
   guardian.** Guardianship follows the household, not the birth certificate.
+  ✓ confirmed.
 - **A3. The school holds a current phone number** for the parent who pays fees.
-  *Load-bearing and unverified.* D3 originally rested on this being verified and live;
-  it is now only assumed to exist.
-- **A4. Each guardian has their own number.** A number identifies one person. *If this
-  is false, sign-in needs a disambiguation step.*
+  ✓ confirmed — and see D10: this school collects it on the admission form, which is
+  *where* the number comes from and was not known when A3 was written. Still the
+  load-bearing one: D3 originally rested on the number being verified and live, and a
+  confirmation that the school holds one is not a guarantee that it still reaches
+  anybody. D9 is what makes that cheap to be wrong about.
+- **A4. Each guardian has their own number.** A number identifies one person.
+  ✓ confirmed. *If this turns out to be false at another school, sign-in needs a
+  disambiguation step.*
 - **A5. The paper report card still goes home.** Classnode adds speed, history and
-  durability, not first access. *If false, parent access becomes critical rather than
-  convenient, and the failure modes get much more expensive.*
+  durability, not first access. ✓ confirmed. *If false elsewhere, parent access becomes
+  critical rather than convenient, and the failure modes get much more expensive.*
 - **A6. The child sees everything, fees included.** Withholding is a lever: the child
-  is meant to know so they press their parents to pay.
+  is meant to know so they press their parents to pay. ✓ confirmed.
 - **A7. Students have real credentials** and will sit online exams on them.
+  ✓ confirmed.
 
 ### Researched (public sources, not school-specific)
 
@@ -80,9 +118,15 @@ practice.
 | A9 SSS streaming | all. D6's conclusion rests on A8 and on the released-artefact precedent independently | D6's streaming argument and its "different subject set" bullet. The JSS3 → SSS1 boundary survives either way: promotion is not streaming |
 | A10 PTA levy is distinct | D1–D6, D8–D11 | D7 entirely — with no distinct parent-facing levy there is nothing for two settings to configure. Cheap to be wrong about, because both settings default off: a school without a levy leaves them off and sees nothing |
 
-The last three rows are the researched assumptions. They carry more weight than A1–A7
-and are listed anyway, because D6 and D7 rest on them and a table that omits the
-load-bearing ones is the table telling you they are facts.
+The last three rows are the researched assumptions. They are listed anyway, because D6
+and D7 rest on them and a table that omits the load-bearing ones is the table telling
+you they are facts.
+
+**This table survived the confirmation deliberately.** The obvious move on hearing a
+school say "yes, all seven" is to delete it; that would be the same mistake as reading
+one school as thirty. Every row is still the answer to "what breaks if the *next*
+school says no", and it is now more useful than before rather than less — n=1 is where
+a local practice most easily passes for a universal one.
 
 The point of D9 (channel-agnostic verification) is to make A3 and A4 cheap to be wrong
 about.
@@ -154,8 +198,9 @@ comments. There is no password in the way, because D3 removed it.
 
 **A reassignable resource cannot be the durable identity key.** Email is not churned
 and reassigned, which makes it the better anchor where it exists. But whether schools
-hold usable guardian emails is unverified (A3), so the design must not depend on the
-answer.
+hold usable guardian *emails* is still unverified — A3's September 2026 confirmation
+was about phone numbers, and the admission form in D10 is where those come from. So the
+design must not depend on the answer.
 
 ### D9. The contact channel is verified in-band, and its type is a field
 
@@ -188,21 +233,51 @@ value, not the row pk. This is not cross-school identity (D5 still stands). It c
 nothing now and is the difference between "merge two guardian records across schemas"
 being hard and being impossible when portable records arrive.
 
-### D10. A school admin creates the guardian record, as a standalone action
+### D10. A school admin creates the guardian record — standalone, and from the admission form
 
-Create guardian, attach to child, enter contact channel. **Not a step inside admission.**
+Create guardian, attach to child, enter contact channel.
 
-No admission flow has been observed, so anything built inside one is a guess about a
-process we do not know. A standalone action is smaller, works regardless of how a given
-school admits students, and handles the cases an admission flow would not: a child
-already enrolled whose aunt becomes guardian mid-session, a second parent added later, a
-guardian replaced after a separation. If schools later want it folded into admission,
-that is a convenience wrapper over an action that already exists, not a rewrite.
+**Two entry points, one record.** The standalone admin action is the primitive. The
+admission form is the second way in, and it creates **the same guardian record, through
+the same code path, with the same verification step** — not a parallel one.
+
+**What changed.** This decision used to rule admission out, on the grounds that no
+admission flow had been observed and anything built inside one would be a guess about a
+process we did not know. That reasoning was sound and its premise has expired: the
+school consulted in September 2026 **collects guardian details on the admission form**.
+It is where the phone number in A3 actually comes from. Building only the standalone
+action would now mean a school typing the same guardian twice — once on paper at
+admission, once again into Classnode — which is how a system starts being worked around.
+
+**The standalone action stays the primitive, and is not merely the first half of
+admission.** Admission happens once, at the start; guardianship changes during the
+session, and those are exactly the cases a form fired at intake cannot reach:
+
+- a child already enrolled whose aunt becomes guardian mid-session
+- a second parent added later
+- a guardian replaced after a separation
+- a guardian attached to a *second* child, who was admitted in a different year
+
+So the ordering is: build the standalone action, then have admission call it. Admission
+is an entry point to it, not a copy of it, and not its owner.
+
+**Both routes converge on one guardian record with one verification step.** Stated
+plainly because it is the thing most likely to drift once there are two doors. The
+guardian is one row with one opaque identifier (D9), reached by one action. The
+contact channel is verified in-band exactly once per channel, by the same mechanism,
+whichever door it came through — a guardian entered at admission is **not** trusted
+more than one entered mid-session, and admission does not get a shortcut past
+verification because the details arrived on a form the school printed. Two entry points
+with two verification stories would be two guardian records wearing one name, and the
+divergence would surface as a parent who cannot sign in with details the school is
+certain it holds.
 
 One guardian, one child, one action. Attaching a second child is the same action again.
 No bulk import, no CSV, not yet.
 
-Guardians never self-register.
+Guardians never self-register. An admission form filled in by a parent is not
+self-registration: it is a school admin entering what the form says, under the school's
+authority, through the action above.
 
 ### D11. Contact changes are clerical; relationship changes are authority
 
@@ -323,10 +398,14 @@ the existing membership and role plumbing intact.
 
 Each of these needs a school-side answer before implementation.
 
-- ~~**OPEN-1. Who creates the guardian record?**~~ Closed by D10. Decided without
-  school input; revisit once a school is available.
-- ~~**OPEN-2. What happens when contact details change?**~~ Closed by D11. Decided
-  without school input; revisit once a school is available.
+- ~~**OPEN-1. Who creates the guardian record?**~~ Closed by D10, and **revisited
+  September 2026** as that note asked: the school consulted collects guardian details
+  on the admission form, so D10 now carries admission as a second entry point onto the
+  same record. The standalone action stays the primitive.
+- ~~**OPEN-2. What happens when contact details change?**~~ Closed by D11, decided
+  without school input. **Still not revisited.** A school is now available and this is
+  the question that was not put to them, so the note that used to say "revisit once a
+  school is available" has been answered for D10 and not for this. Ask it next.
 - **OPEN-9. Data protection.** Classnode will hold guardian contact details and
   children's academic records across many schools. Under the NDPA the schools are
   controllers and Classnode is a processor, implying lawful basis, retention limits,
