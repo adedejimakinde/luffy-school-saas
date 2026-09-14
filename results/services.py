@@ -758,32 +758,15 @@ def release(sheet, actor):
         registers is outside, because a broker must never be able to fail a
         release that has already happened. `results.renders` argues both.
 
-        **What used to be here and is deliberately gone.** A
-        `_say_if_the_roster_moved()` logged a warning naming any child the
-        roster gained while the release ran. It worked by reading the roster
-        a second time, after everything was written, and comparing that
-        answer against the frozen one.
-
-        **One read per block did not, on its own, retire it.** Its roster came
-        from `positions.roster_ids()`, which still exists and still issues its
-        own `ClassPlacement` query. Kept verbatim it would go on doing exactly
-        that — a second read, inside the block, still capable of naming a child
-        the freeze never saw. Adopting the rule would have left it working, and
-        left the rule broken in the one place claiming to audit it.
-
-        Taking its roster from `results.student_ids` instead is what makes it
-        compare the snapshot against itself: `cards.freeze_for_release()`
-        writes one card per id in that list, so the difference is empty for
-        every state of the database and "nothing moved" is its only possible
-        output. The deletion therefore required **rewriting its roster
-        source**, not merely adopting one read per block — and it is the
-        rewritten version that is worthless, a guard that guards nothing with
-        a log line that reads as evidence somebody checked. Deleted rather
-        than kept with a docstring admitting it.
-
-        The platform's only detector of a mid-release move goes with it,
-        unreliable as it was; issue #47, which was about putting its output in
-        front of a person, is noted.
+        **What used to be here.** A `_say_if_the_roster_moved()` logged the
+        children a release finished without, by reading the roster once more
+        at the end. It is deleted, because it could not tell an office move
+        from its own read racing the first — so its warning was never evidence
+        that anybody had checked. `docs/cards.md` holds that argument, and the
+        correction to the reason usually given for the deletion; this note
+        deliberately keeps no second copy. Nothing detects a mid-release
+        placement now, which is issue #47 — no longer a log line to put in
+        front of a person but a detector to build first.
         """
         results = positions.class_results(locked.class_group, locked.term)
         card_by_student = cards.freeze_for_release(locked, results, by=actor)

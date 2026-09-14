@@ -103,14 +103,52 @@ against every release during the one week of the year when both happen
 constantly, and it makes two reads *agree* rather than removing the second one —
 leaving the next reader two reads and no reason to trust either.
 
-Gone with it: `services._say_if_the_roster_moved()`, which logged the children a
-release finished without by reading the roster once more at the end and
-comparing. Against a single snapshot it can only ever report "nothing moved", so
-it was a guard that guarded nothing whose log line read as evidence somebody had
-checked. Deleting it takes away the platform's only detector of a mid-release
-move, unreliable as that was — it could not tell "the office moved a child"
-from "my own second read raced the first" — and it is what issue #47 was
-reporting on.
+**Gone with it: `services._say_if_the_roster_moved()`**, which logged the
+children a release finished without by reading the roster once more at the end
+and comparing. This is the one place that account lives. `results/services.py`
+and `results/tests/test_release_roster_race.py` point here instead of keeping
+their own copies, because three copies of it drifted apart once already.
+
+**The reason usually given for the deletion is wrong, and it is worth saying so
+plainly.** That reason runs: under one read per locked block the comparison is
+against the snapshot the freeze used, so the only possible output is "nothing
+moved". That is true of a version whose roster comes from `results.student_ids`
+— `cards.freeze_for_release()` writes one card per id in that list, so the
+difference is empty for every state of the database — **and that version was
+never written.** The function that was actually deleted took its roster from
+`positions.roster_ids()`, which is still live and still issues its own
+`ClassPlacement` query. Kept verbatim it would have gone on reading twice and
+could still have named a child the freeze never saw. Adopting one read per block
+therefore did not retire it; retiring it on that argument would have required
+rewriting its roster source first.
+
+**What justifies the deletion on its own is that the detector could not tell an
+office move from its own read racing the first.** Both produce the same
+difference — a child in the second read who is not in the cards. One is the
+office placing her while the release ran, which is the thing worth reporting;
+the other is this function's own read landing after a placement the freeze's
+read had every right not to see. It is also blind to a move that lands after it
+runs. A warning that cannot say which of the two happened, and is silent for a
+case it simply missed, is not evidence of anything — and its log line read as
+though somebody had checked.
+
+**The mechanism is not forbidden, and whoever picks up #47 may still use it.**
+The deleted docstring's own defence holds: a read placed after every write, with
+no row hanging off its result, cannot reintroduce #43, because nothing is
+decided by what it returns. One read per locked block is a rule about reads that
+*decide*. A second read for reporting stays available — it has to be argued for
+deliberately rather than assumed, and its roster source named — but the rule
+does not rule it out.
+
+**What the deletion costs.** There is now no detector of a mid-release placement
+at all: not at release, not afterwards, not on any schedule. The released
+broadsheet is built from the cards, so a child with no card is not a blank row,
+she is not a row; the card routes answer a flat 404 that is deliberately
+indistinguishable from "no such child"; there are no management commands and no
+periodic tasks. A child placed mid-release gets no card, her parents get no
+explanation, and the school has no way to find out. Issue #47 was reporting on
+the log line while it existed; it is now the work of **rebuilding the detection
+and surfacing it**, and that is what it is worth.
 
 `cards.the_card_for()` and `TheRosterMovedDuringRelease` are the belt to that
 braces: nothing on the release path can now reach for a child the cards never
