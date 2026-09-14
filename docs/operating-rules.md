@@ -186,12 +186,12 @@ A control run assumes there is a guard to remove. **A known-limit test has no
 guard**, so the method inverts, and reading one as an ordinary test gets it
 backwards in both directions.
 
-`GuardianshipRulesAreStillBypassableTests` asserts that `bulk_create()`,
-`QuerySet.update()` and a role change underneath a live link each write a
-`Guardianship` row that `clean()` would have refused. There is nothing to break:
-deleting `Guardianship.save()`'s `full_clean()` leaves all five of them green,
-because none of them reaches `save()`. Measured — 1 failure out of 6, and the one
-is the companion.
+The live example is `WhatARevisionCannotFixTests` in
+`results/tests/test_revision.py`, which asserts that all three inputs refuse a
+write after release, that none of the six messages promises a revision will fix
+it, and that a revision reproduces every mark, rating and remark exactly. There
+is no guard in it to break. **Those tests go red the day issue #54 is closed,
+which is the point of them.** Rule 6 makes the same argument from the prose end.
 
 - **Read a red one the opposite way round.** If one fails, somebody closed the
   gap. Update the issue it names, delete the test, and move its case into the
@@ -201,11 +201,32 @@ is the companion.
   the same failure wearing the issue's clothes.
 - **Each one carries a companion that does control.** A known-limit test alone
   proves nothing; paired with a test of the path that *is* closed, it proves the
-  limit is a boundary and not an absence. That companion is the control, and it is
-  the reason `test_the_ordinary_save_path_is_still_closed` is in the class.
+  limit is a boundary and not an absence.
 
-Same shape as `WhatARevisionCannotFixTests` in rule 6: written to go red the day
-its issue is closed.
+#### The mechanism, run to completion — and what it cost to not have it
+
+`GuardianshipRulesAreStillBypassableTests` was this section's example until
+issue #96 closed. It is worth keeping the history, because it is the only place
+in this repository where the whole cycle is on the record rather than predicted:
+
+| | what happened |
+| --- | --- |
+| written | five tests asserting that `bulk_create()`, `QuerySet.update()` and a role change underneath a live link each write a `Guardianship` row `clean()` would have refused, plus `test_the_ordinary_save_path_is_still_closed` as the companion |
+| controlled | deleting `Guardianship.save()`'s `full_clean()` left all five green and reddened only the companion — 1 failure out of 6, which is the inversion this section is about |
+| #96 slice 1 | `0008` put both rules behind a trigger on `accounts_guardianship`; four tests went red, were deleted, and their cases moved to `GuardianshipRulesHoldWhereSaveNeverRunsTests` |
+| #96 slice 2 | `0009` put them behind a trigger on `accounts_membership`; the last one went red, and its case moved to `GuardianshipRulesHoldOnTheMembershipUnderneathTests` |
+| now | the class is gone, because the gap it described is |
+
+The companion outlived it and sits in the last of those classes. Its job changed
+rather than ended: with no known limit left to bound, what it still answers is
+*which layer refused* — the same breach written from the other side is refused
+in Python by `clean()`, not by either trigger. Issue #89.
+
+**What the pattern was worth**, stated plainly because the cost of it is six
+tests nobody could control: the ordinary method would have left `bulk_create()`
+silently gaining a guard with nothing anywhere noticing, and a stale docstring
+saying it had none. Instead the suite announced both closures, on the day of
+each, in the form of a failure somebody had to act on.
 
 ---
 

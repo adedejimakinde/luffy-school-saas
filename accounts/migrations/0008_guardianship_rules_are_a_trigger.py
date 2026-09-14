@@ -61,8 +61,15 @@ of a membership a guardianship already points at — invalidates a link without
 writing to this table at all, so no trigger here can see it. Closing it needs a
 guard on `accounts_membership` protecting an invariant owned by
 `accounts_guardianship`, which is a shape this repository has nowhere. That is a
-different table, a different precedent, and its own review. It stays open in
-#96.
+different table, a different precedent, and its own review.
+
+> **Since landed**, as `0009_a_guardianship_pins_the_membership_under_it`, which
+> closed #96. Read its docstring before changing either file: there are now two
+> triggers carrying one pair of rules, and the reason they raise *different*
+> identifiers is so a test can say which of them refused. Its INSERT branch also
+> closes the gap the `NOT FOUND` note below leaves open — a guardianship
+> inserted ahead of its membership under a deferred FK reaches COMMIT with
+> neither rule ever applied to it.
 
 **A missing membership row is not this trigger's refusal.** If the `SELECT`
 finds nothing the trigger returns and lets the foreign key answer, which is the

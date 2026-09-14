@@ -73,6 +73,27 @@ A parent's reach is derived, never stored twice:
 - `User.children()` returns every child across every school in one query;
   `services.parent_dashboard()` groups them by school for the portal view.
 
+### A link pins two columns of the membership under it
+
+Both of `Guardianship.clean()`'s rules — the student must be a `STUDENT`
+membership, and a student is not their own guardian — read *through*
+`Guardianship.student` into `accounts_membership`. So `Membership.role` and
+`Membership.user` are held in place by a table `Membership` never mentions, and
+the database now says so: `accounts_membership_guardianship_rules`
+(`accounts/migrations/0009_a_guardianship_pins_the_membership_under_it`) refuses
+a change to either column while a guardianship points at the row. **Call
+`services.unlink_guardian()` first**, exactly as for a delete; the refusal
+message names the link and says the same thing.
+
+Everything else about a linked membership is untouched, and has to be:
+`release_student()` ends an enrolment while keeping every guardianship row
+pointing at it, which is how the receiving school knows who to re-link.
+
+This is the one guard in the project that sits on one table to protect another
+table's invariant. Issue #96 has the argument; `Membership`'s own docstring
+carries the short version, because the migration is not where a reader of the
+model looks.
+
 ## Two predicates, not one
 
 `Membership.status` answers two different questions, and conflating them causes bugs in
