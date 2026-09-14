@@ -759,14 +759,10 @@ def release(sheet, actor):
         release that has already happened. `results.renders` argues both.
 
         **What used to be here.** A `_say_if_the_roster_moved()` logged the
-        children a release finished without, by reading the roster once more
-        at the end. It is deleted, because it could not tell an office move
-        from its own read racing the first — so its warning was never evidence
-        that anybody had checked. `docs/cards.md` holds that argument, and the
-        correction to the reason usually given for the deletion; this note
-        deliberately keeps no second copy. Nothing detects a mid-release
-        placement now, which is issue #47 — no longer a log line to put in
-        front of a person but a detector to build first.
+        children a release finished without. #60 required it to read the
+        snapshot rather than the roster, which makes it vacuous, so it was
+        deleted rather than rewritten. Nothing detects a mid-release placement
+        now — `docs/cards.md`, "The detector that went with it", and issue #47.
         """
         results = positions.class_results(locked.class_group, locked.term)
         card_by_student = cards.freeze_for_release(locked, results, by=actor)

@@ -103,52 +103,36 @@ against every release during the one week of the year when both happen
 constantly, and it makes two reads *agree* rather than removing the second one —
 leaving the next reader two reads and no reason to trust either.
 
-**Gone with it: `services._say_if_the_roster_moved()`**, which logged the
-children a release finished without by reading the roster once more at the end
-and comparing. This is the one place that account lives. `results/services.py`
-and `results/tests/test_release_roster_race.py` point here instead of keeping
-their own copies, because three copies of it drifted apart once already.
+#### The detector that went with it
 
-**The reason usually given for the deletion is wrong, and it is worth saying so
-plainly.** That reason runs: under one read per locked block the comparison is
-against the snapshot the freeze used, so the only possible output is "nothing
-moved". That is true of a version whose roster comes from `results.student_ids`
-— `cards.freeze_for_release()` writes one card per id in that list, so the
-difference is empty for every state of the database — **and that version was
-never written.** The function that was actually deleted took its roster from
-`positions.roster_ids()`, which is still live and still issues its own
-`ClassPlacement` query. Kept verbatim it would have gone on reading twice and
-could still have named a child the freeze never saw. Adopting one read per block
-therefore did not retire it; retiring it on that argument would have required
-rewriting its roster source first.
+`services._say_if_the_roster_moved()` logged the children a release finished
+without, by reading the roster a second time at the end and comparing. #60
+prescribed rewriting it to compare against the snapshot the freeze used — "what
+this release saw", in #60's words — and that version can only ever report
+"nothing moved", because `cards.freeze_for_release()` writes one card per id in
+that snapshot. So it was deleted rather than rewritten. #47's comments of 1 and
+3 September are where that was decided.
 
-**What justifies the deletion on its own is that the detector could not tell an
-office move from its own read racing the first.** Both produce the same
-difference — a child in the second read who is not in the cards. One is the
-office placing her while the release ran, which is the thing worth reporting;
-the other is this function's own read landing after a placement the freeze's
-read had every right not to see. It is also blind to a move that lands after it
-runs. A warning that cannot say which of the two happened, and is silent for a
-case it simply missed, is not evidence of anything — and its log line read as
-though somebody had checked.
+**What went is not what the argument above describes.** The version that existed
+read `positions.roster_ids()` afresh, so its difference was non-empty exactly
+when a placement committed while the release ran — a true mid-release arrival,
+every time, with no false positives. It was a working detector, removed because
+the shape #60 required of it was not.
 
-**The mechanism is not forbidden, and whoever picks up #47 may still use it.**
-The deleted docstring's own defence holds: a read placed after every write, with
-no row hanging off its result, cannot reintroduce #43, because nothing is
-decided by what it returns. One read per locked block is a rule about reads that
-*decide*. A second read for reporting stays available — it has to be argued for
-deliberately rather than assumed, and its roster source named — but the rule
-does not rule it out.
+**That sits against rule 8** in `docs/operating-rules.md`: a decision that
+produces an absence needs a record, and the freeze leaves a child placed
+mid-release with nothing. There is now no detector of one. The contradiction is
+open, and it is #47.
 
-**What the deletion costs.** There is now no detector of a mid-release placement
-at all: not at release, not afterwards, not on any schedule. The released
-broadsheet is built from the cards, so a child with no card is not a blank row,
-she is not a row; the card routes answer a flat 404 that is deliberately
-indistinguishable from "no such child"; there are no management commands and no
-periodic tasks. A child placed mid-release gets no card, her parents get no
-explanation, and the school has no way to find out. Issue #47 was reporting on
-the log line while it existed; it is now the work of **rebuilding the detection
-and surfacing it**, and that is what it is worth.
+**#47 does not want this function back.** Its own comments give the shape — the
+release's snapshot against the roster at a later, deliberate moment, outside any
+lock. The frozen side is already on the cards (`cards.cards_on(sheet)`), and
+`comments.missing()` and `ratings.unrated()` already do the same subtraction for
+remarks and traits. Not a second read inside the locked block: `roster_ids()`'s
+own docstring says why.
+
+`results/services.py` and `results/tests/test_release_roster_race.py` point at
+this section rather than keeping their own copies of it.
 
 `cards.the_card_for()` and `TheRosterMovedDuringRelease` are the belt to that
 braces: nothing on the release path can now reach for a child the cards never
