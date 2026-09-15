@@ -9,15 +9,21 @@ The shape to keep in mind:
     Guardianship    (parent user, a child's STUDENT membership)
     TransferRequest one school's proposal to move a child to another, and the
                     other school's answer — two signatures, one transfer
+    GuardianAccount one guardian, once, and the opaque handle for them
+    GuardianContact the channel they are reached and verified on, append-only
 
 A person is not "a teacher"; a person *is a teacher at a school*, and may
 simultaneously be a parent at that school and at two others. So role is an
 attribute of the relationship, never of the user.
 """
 
+import uuid
+from datetime import timedelta
+
 from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
 from django.db import models, transaction
 from django.db.models import F, Q
 from django.utils import timezone
@@ -1097,3 +1103,333 @@ class SignInAttempts(models.Model):
 
     def __str__(self):
         return f"{self.scope}:{self.key} ({self.failures})"
+
+
+class ContactChannel(models.TextChoices):
+    """How a guardian is reached, and therefore how they prove who they are.
+
+    A field rather than a hardcoded assumption, and that is the whole point of
+    it (`docs/parent-access.md`, D9). Whether Nigerian schools hold usable
+    guardian *emails* is unverified — the September 2026 confirmation was about
+    phone numbers — so the design must not depend on the answer. If schools turn
+    out to hold good emails, email is the identity; if they only hold numbers,
+    phone works. No rewrite either way.
+    """
+
+    EMAIL = "email", "Email"
+    PHONE = "phone", "Phone"
+
+
+#: How long a verification code stays good for. Short, because the code is six
+#: digits and the window is part of what bounds guessing (see
+#: `accounts.guardian_contacts`), and because a guardian reads it off a handset
+#: they are holding — this is not an emailed link that has to survive a weekend
+#: the way `schools.models.DEFAULT_INVITATION_TTL` does.
+DEFAULT_VERIFICATION_TTL = timedelta(minutes=15)
+
+#: Digits in a verification code. Six is what a person will retype off an SMS
+#: without giving up. It is also only a million possibilities, which is why the
+#: attempt cap below — not the hash — is what stands between a code and a
+#: guess. See `guardian_contacts.hash_code()`.
+VERIFICATION_CODE_DIGITS = 6
+
+#: Wrong guesses one code absorbs before it is dead. Five against 10**6, inside
+#: a fifteen-minute window, leaves an attacker a 1-in-200,000 shot per code.
+#:
+#: This bounds guessing *per code*, which is only half the answer: without a
+#: bound on how many codes may be minted, an attacker resends and gets another
+#: five. The other half is the send limit in settings
+#: (`MAX_VERIFICATION_SENDS_PER_CHANNEL`), applied in
+#: `guardian_contacts.request_verification()`.
+MAX_VERIFICATION_ATTEMPTS = 5
+
+
+class GuardianAccount(models.Model):
+    """One guardian, once, and the opaque handle that names them.
+
+    This is *the guardian record* of D9 and D10: one row, reached by one
+    action, whichever door it came through. A parent with three children at two
+    schools still has exactly one of these — alongside the three `Guardianship`
+    rows and two PARENT memberships that D5 already gives them.
+
+    **Why this is not `Guardianship`.** A guardianship is per child, so putting
+    the channel there would mean a parent of three verifying the same phone
+    three times, and holding three opaque identifiers for one person. D10 says
+    "one row with one opaque identifier", and the contact channel is verified
+    "exactly once per channel" — neither is expressible per child.
+
+    **Why this is not `User`.** It nearly is, and `User` is already one row per
+    person across every school. But the credential here is guardian-shaped and
+    guardian-only — no password (D3), a channel instead — and a student or a
+    teacher has no use for any of it. Keeping it off `User` also means the
+    creation path is one table with one creator, which is what makes "never
+    auto-create a guardian from an inbound contact" a thing you can point at
+    rather than a rule spread across the account model.
+
+    `public_id` is D9's stable opaque identifier: **not the channel value**,
+    which changes and is reassignable, and **not the row pk**, which is a
+    sequence number that leaks how many guardians exist and cannot survive a
+    records merge. Read it as a handle, not as an identity system — D5 still
+    owns cross-school identity, and this does not replace it.
+    """
+
+    user = models.OneToOneField(
+        User,
+        related_name="guardian_account",
+        on_delete=models.PROTECT,
+        help_text="The person. One guardian account per login, forever.",
+    )
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Guardian account for {self.user}"
+
+    # -- the gate D9 describes, as a question anything can ask ---------------
+
+    def live_contact(self):
+        """The channel currently standing for this guardian, or None.
+
+        At most one, held by `one_live_contact_per_guardian`. Verified or not:
+        a channel entered and not yet confirmed is still the live one, it just
+        does not open anything yet.
+        """
+        return self.contacts.filter(revoked_at__isnull=True).first()
+
+    def has_verified_channel(self) -> bool:
+        """Whether this guardian's link is live, per D9.
+
+        **This is the predicate; it is not yet the gate.** Nothing reads it to
+        refuse access today, because sign-in does not exist yet — that is the
+        next slice, and it is where "the guardian link does not go live until
+        Classnode verifies the channel in-band" stops being a sentence in a
+        design doc. Linking a guardian still grants an ACTIVE PARENT membership
+        (`services.link_guardian()`), deliberately unchanged here.
+        """
+        return self.contacts.filter(
+            revoked_at__isnull=True, verified_at__isnull=False
+        ).exists()
+
+
+class GuardianContact(models.Model):
+    """A channel a guardian is reached on: a type, a value, and whether it is proven.
+
+    Append-only, and enforced as such by `accounts_guardian_contact_append_only`
+    rather than by this docstring (operating rule 3). Two one-way stamps are the
+    only writes an existing row ever takes:
+
+    * `verified_at` — set once, when a code sent to this channel comes back.
+    * `revoked_at` — set once, when a later channel replaces this one. **Nothing
+      writes it yet.** The contact-change flow of D11 is the next slice; the
+      trigger permits the stamp now so that landing D11 is a service, not a
+      second migration rewriting a trigger this one already got right.
+
+    **`value` carries no unique constraint, and that is deliberate.** One
+    handset per household is the ordinary case for the parents this is built
+    for, so two guardians sharing a number must both be able to hold it. This is
+    the same trap `schools.models.Invitation` already records — "a phone number
+    shared between two people (a household with one handset — the case that
+    arrives with parents) must not collide" — and it is the reason the channel
+    could not simply be `User.phone`, which is `unique=True` and would have
+    refused the second parent outright.
+
+    The consequence lands at sign-in, not here: a value can resolve to more than
+    one guardian, and whatever reads it must be built for that rather than
+    assuming `.get()`.
+    """
+
+    guardian = models.ForeignKey(
+        GuardianAccount, related_name="contacts", on_delete=models.PROTECT
+    )
+    channel_type = models.CharField(max_length=8, choices=ContactChannel)
+    value = models.CharField(
+        max_length=254,
+        help_text=(
+            "Normalized before it is stored: E.164 for a phone, lowercased "
+            "domain for an email. Never what was typed."
+        ),
+    )
+    # Which admin typed it. D11 makes contact changes clerical — any school
+    # admin may make one — which is workable precisely because every row says
+    # who wrote it, so "who changed this and when" has an answer without having
+    # had to predict who would be allowed to.
+    created_by = models.ForeignKey(
+        User, related_name="guardian_contacts_recorded", on_delete=models.PROTECT
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    verified_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            # Sign-in resolves a typed value to whoever holds it. Not unique:
+            # see the class docstring on shared handsets.
+            models.Index(fields=["value"]),
+        ]
+        constraints = [
+            # D9 gives a guardian *a* channel, singular, and D11's change flow
+            # is a replacement — "new channel entered → old binding revoked
+            # immediately" — not an addition. Until that flow exists, this
+            # refuses a second channel outright rather than letting a guardian
+            # quietly acquire two live ones that disagree about who they are.
+            models.UniqueConstraint(
+                fields=["guardian"],
+                condition=Q(revoked_at__isnull=True),
+                name="one_live_contact_per_guardian",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.get_channel_type_display()} {self.value} ({self.state})"
+
+    @property
+    def is_verified(self) -> bool:
+        return self.verified_at is not None
+
+    @property
+    def is_live(self) -> bool:
+        """Verified and not replaced. What D9 means by the link being live."""
+        return self.verified_at is not None and self.revoked_at is None
+
+    @property
+    def state(self) -> str:
+        if self.revoked_at is not None:
+            return "revoked"
+        return "verified" if self.verified_at is not None else "unverified"
+
+    def save(self, *args, **kwargs):
+        """Normalize on the way past, so no write can store what was typed.
+
+        `Model.save()` does not call `full_clean()`, so without this
+        `GuardianContact.objects.create(value="0803 123 4567")` stores the
+        spacing verbatim, and that channel never matches the number again —
+        neither at sign-in nor against the `User` row holding the same person's
+        phone. Exactly the shape of issue #91, which `Guardianship.save()`
+        records in full: a rule reachable only from `clean()` is a rule the
+        tests hold and production does not.
+
+        **Unconditional, and it was briefly guarded by `self._state.adding`.**
+        That guard was removed because no control run could turn it red, which
+        made it an unreachable branch rather than a protection: a stamp write is
+        `save(update_fields=["verified_at"])`, so only that column reaches the
+        UPDATE and the append-only trigger never sees `value` at all — and
+        normalization is idempotent, so a full save of an unchanged row
+        normalizes to what is already there. Two code paths where one suffices,
+        and the shorter one is the one whose behaviour can be demonstrated.
+        """
+        self.normalize_value()
+        super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        self.normalize_value()
+
+    def normalize_value(self):
+        """Put `value` in the one form this system stores, by its declared type.
+
+        Reuses PR #2's normalizers rather than restating them, which is what
+        keeps a channel and a `User` identifier agreeing about what "the same
+        phone number" means. `matching_identifier()` resolves `User` columns and
+        cannot see this table, so the two resolvers are separate code — the
+        normalization underneath them must not be.
+        """
+        if self.channel_type == ContactChannel.PHONE:
+            self.value = normalize_phone(self.value)
+        elif self.channel_type == ContactChannel.EMAIL:
+            # `normalize_email()` lowercases and nothing more — it is not a
+            # validator, and `value` is a CharField because it also holds E.164.
+            # Without this, "not-an-address" would be stored as an email channel
+            # and every later send to it would fail silently at the gateway.
+            validate_email(self.value or "")
+            self.value = normalize_email(self.value)
+        else:
+            raise ValidationError(
+                {"channel_type": f"{self.channel_type!r} is not a contact channel."}
+            )
+        if not self.value:
+            raise ValidationError({"value": "A contact channel needs a value."})
+
+
+class VerificationCodeStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    CONFIRMED = "confirmed", "Confirmed"
+    #: Dead for any reason other than having worked: guesses exhausted, or
+    #: superseded by a resend. Expiry is *not* a status — it is read off
+    #: `expires_at` when the code is presented, the same lazy sweep
+    #: `Invitation.validate_token()` argues for, so a row cannot sit live past
+    #: its date because a cron job is broken.
+    SPENT = "spent", "Spent"
+
+
+class GuardianContactCode(models.Model):
+    """The in-band proof: a one-time code sent to a channel, stored as a digest.
+
+    Follows the storage pattern of `schools.models.Invitation` — only ever the
+    SHA-256, never the code, so whoever can read this table still cannot mint a
+    working one from it — and **departs from it in one load-bearing place.**
+
+    `Invitation.validate_token()` looks a token up *globally* by `token_hash`.
+    That is safe for 32 bytes of entropy, where a collision will not happen and
+    a guess will not land. It would be a hole here: a six-digit code has a
+    million values, so a global lookup would let a code minted for one guardian
+    confirm a different guardian's channel — the holder of `123456` would verify
+    whoever else was issued `123456`. Every lookup in `guardian_contacts` is
+    therefore **scoped to the contact row**, and `code_hash` is deliberately
+    *not* unique.
+
+    The corollary is that the digest is not the security boundary here, the way
+    it is for an invitation token. `attempts` against `MAX_VERIFICATION_ATTEMPTS`
+    is, and the fifteen-minute `expires_at` behind it.
+    """
+
+    contact = models.ForeignKey(
+        GuardianContact, related_name="codes", on_delete=models.PROTECT
+    )
+    # Which school caused this send, for the per-school half of the rate limit.
+    # Nullable because not every send has a school behind it: platform staff act
+    # across schools (`_require_authority_over_guardian()` returns no school for
+    # them), and a guardian-initiated resend in the sign-in slice will have none
+    # either. A send with no school named is still counted against its channel —
+    # the limit that protects the handset — and only escapes the aggregate one.
+    requested_by_school = models.ForeignKey(
+        "schools.School",
+        related_name="guardian_verification_codes",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+    #: SHA-256 of the code. Not unique: see the class docstring.
+    code_hash = models.CharField(max_length=64, db_index=True)
+    status = models.CharField(
+        max_length=16, choices=VerificationCodeStatus, default=VerificationCodeStatus.PENDING
+    )
+    attempts = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["contact", "status"]),
+            # Both halves of the send limit are a COUNT over a time window, so
+            # each gets the (what, when) index that makes it an index scan
+            # rather than a walk of every code ever minted.
+            models.Index(fields=["contact", "created_at"]),
+            models.Index(fields=["requested_by_school", "created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.get_status_display()} code for {self.contact_id}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def attempts_exhausted(self) -> bool:
+        return self.attempts >= MAX_VERIFICATION_ATTEMPTS

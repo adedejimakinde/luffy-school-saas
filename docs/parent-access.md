@@ -483,6 +483,27 @@ Each of these needs a school-side answer before implementation.
   is on the standing list — so it gets a real test with 2+ tenants, not a description.
 - **OPEN-3. Code lifecycle.** Length, expiry window, retry limit, lockout behaviour,
   rate limiting per number and per school. Related to #17 (throttle sweep).
+  **Partly settled by PR B, by choosing defaults rather than by asking a school** —
+  recorded here so the next reader knows which numbers have a school behind them
+  (none of them) and which have reasoning (all of them). Six digits, fifteen minutes,
+  five wrong guesses per code, no lockout, five sends per channel per hour and two
+  hundred per school per hour. Each is a setting with its argument written at the
+  constant: `VERIFICATION_CODE_DIGITS` and `MAX_VERIFICATION_ATTEMPTS` in
+  `accounts/models.py`, the send limits in `settings.py`.
+
+  The two halves are not independent and were nearly shipped as though they were:
+  bounding guesses *per code* does nothing on its own, because an attacker out of
+  attempts asks for another code. The send limit is what closes that, and it is why
+  "rate limiting per number" is a correctness item and not only a cost one.
+
+  **Lockout behaviour is decided, not open:** counted, never locked, on the reasoning
+  `accounts/throttling.py` already sets out — a lockout on a resource anyone can name,
+  and a parent's number is on the enrolment form, is a weapon rather than a wall.
+
+  **What still needs a school:** whether five sends an hour survives contact with a
+  guardian on a bad network, and whether two hundred survives a real intake day. Both
+  are environment variables, so the answer costs a deploy and not a migration. The
+  delivery-channel question underneath them is OPEN-5.
 - **OPEN-4. Session duration.** Long sessions reduce SMS cost materially, since every
   code is a metered send under the current pricing model. How long is acceptable on a
   device that may be shared or lost?
