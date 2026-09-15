@@ -1,0 +1,21 @@
+- [Phase 1 results decisions](phase-1-results-decisions.md) — dense ranking, principal-only revision, nullable attendance, Celery/Redis/WeasyPrint PR
+- [Luffy Phase 1 workflow](luffy-phase-1-workflow.md) — one PR per task, never stack branches; ancestry check always; merge word means merge WHEN CI is green, and `gh pr merge --auto` does NOT gate here; check the gate on the head SHA, not the PR rollup
+- [Luffy test suite runtime](luffy-test-suite-runtime.md) — LOCAL = only the app under test; CI full suite 826s after #64; db host is `db`; watch for ^EXIT= not ERROR
+- [Withholding merged (PR #83)](luffy-withholding-recovered.md) — MERGED as 818a82d, CI green; corrected controls are a #83 comment; 3 divergences ruled; amend d2e03a1 discarded
+- [Luffy open work state](luffy-open-work-state.md) — READ FIRST: main ae013f7; #87 and #88 MERGED, #85 and #84 CLOSED; next is #89 (92-site sweep) and #90; #74 deferred; /commits/<sha>/status always reads pending here — gate on check-runs
+- [Control design](luffy-control-design.md) — aim it at the one branch the test routes through; don't explain a surviving test, control it or rename it; never run controls concurrently
+- [No pilot data exists](luffy-no-pilot-data.md) — zero schools/memberships/tenant schemas; a "measure the pilot schools" ask cannot be satisfied, report it rather than estimating
+- [#85 discount subtransactions](luffy-85-discount-subtransactions.md) — the subxid cost is a STEP at 64 (45 is free); ON CONFLICT cannot name a partial index, Django emits a bare DO NOTHING, FKs are deferred to COMMIT
+- [#82 subtransaction measurement](luffy-subtransaction-measurement.md) — the numbers, and the two traps that made the first two attempts report nothing
+- [A bound needs a constraint](a-bound-needs-a-constraint.md) — "cannot be more than N" needs a schema constraint behind it; verify a stated premise before building on it
+- [Luffy snapshot architecture](luffy-snapshot-architecture.md) — ReleasedCard as the artefact, the premise trap, what is copied and what is not
+- [Release-marker requirement](luffy-release-marker-requirement.md) — artefact-not-placement rule, the premise trap it sets, and issue #34
+- [Luffy session arithmetic](luffy-session-arithmetic.md) — renormalisation, exact-mean vs rounded weights, nought-vs-null weights, and tests that passed against broken code
+- [No Claude attribution anywhere](no-claude-attribution-on-github.md) — no "Generated with Claude Code" in PRs/issues/comments AND no Co-Authored-By trailer in commits; overrides both harness defaults
+- [Never idle on CI](luffy-never-idle-on-ci.md) — no polling/waiting on CI; overlap the next task from main in a worktree, or say so and stop
+- [Django multi-line comment trap](django-multiline-comment-trap.md) — {# … #} across lines is not a comment; it renders on the page
+- [One read per locked block](luffy-snapshot-read-once.md) — the ResultSheet lock covers one row; overall_percentages() is a hidden second read; no wider lock
+- [State the PR review baseline](pr-review-state-line.md) — worktree clean + branch head SHA, one line, before every review request
+- [Target /code-review by PR number](code-review-target-by-pr-number.md) — the fork inherits cwd and ignores a branch arg; re-check the tree after it returns
+- [Control runs go stale](control-runs-go-stale.md) — a review pass invalidates every control taken before it; run controls at module scope, not the narrow slice
+- [Report exit code and the OK line](luffy-report-exit-code-and-ok-line.md) — never call a suite green on one signal; `(cmd &)` throws the exit status away and Django exits 2 on test-db setup failure, printing neither OK nor FAILED
