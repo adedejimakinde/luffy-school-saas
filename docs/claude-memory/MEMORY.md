@@ -18,3 +18,4 @@
 - [State the PR review baseline](pr-review-state-line.md) — worktree clean + branch head SHA, one line, before every review request
 - [Target /code-review by PR number](code-review-target-by-pr-number.md) — the fork inherits cwd and ignores a branch arg; re-check the tree after it returns
 - [Control runs go stale](control-runs-go-stale.md) — a review pass invalidates every control taken before it; run controls at module scope, not the narrow slice
+- [Report exit code and the OK line](luffy-report-exit-code-and-ok-line.md) — never call a suite green on one signal; `(cmd &)` throws the exit status away and Django exits 2 on test-db setup failure, printing neither OK nor FAILED
