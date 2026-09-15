@@ -1,0 +1,892 @@
+"""The guardian's contact channel: recorded by a school, proved by the guardian.
+
+`docs/parent-access.md` D9 and D10. Every guard here has a control recorded
+against it in the docstring of the test that covers it — the method operating
+rule 5 sets out: break the thing deliberately, re-run, read the failure.
+
+Two schools throughout. A guardian record spans schools by construction (D5),
+so a single-tenant test of one is blind to the entire class of bug where a
+school reaches a guardian it has no child in common with.
+"""
+
+from datetime import timedelta
+
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
+from django.utils import timezone
+
+from accounts import guardian_contacts, services
+from accounts.models import (
+    MAX_VERIFICATION_ATTEMPTS,
+    ContactChannel,
+    GuardianAccount,
+    GuardianContact,
+    GuardianContactCode,
+    Role,
+    User,
+    VerificationCodeStatus,
+)
+from accounts.services import NotPermitted
+from schools.models import School
+from tests.refusals import RefusalAssertions
+
+PASSWORD = "correct-horse-battery"
+
+
+def make_school(name, slug, schema_name):
+    school = School(name=name, slug=slug, schema_name=schema_name)
+    school.auto_create_schema = False
+    school.save()
+    return school
+
+
+def make_user(username, full_name, **extra):
+    return User.objects.create_user(username, PASSWORD, full_name=full_name, **extra)
+
+
+class TwoSchools(TestCase):
+    """One parent with a child at each of two schools, and an admin at each."""
+
+    def setUp(self):
+        self.st_marys = make_school("St Mary's", "st-marys", "st_marys")
+        self.grace = make_school("Grace Academy", "grace", "grace")
+
+        self.marys_admin = make_user("marys-admin", "Bisi Adeyemi")
+        services.grant_membership(self.marys_admin, self.st_marys, Role.ADMIN)
+        self.grace_admin = make_user("grace-admin", "Tunde Bello")
+        services.grant_membership(self.grace_admin, self.grace, Role.ADMIN)
+
+        self.parent = make_user("ada-parent", "Ada Okonkwo")
+        self.child_at_marys = services.enroll_student(
+            make_user("STM/2026/0042", "Chidi Okonkwo"), self.st_marys
+        )
+        services.link_guardian(self.parent, self.child_at_marys)
+
+        # A second, unrelated guardian whose only child is at Grace.
+        self.other_parent = make_user("emeka-parent", "Emeka Nwosu")
+        self.child_at_grace = services.enroll_student(
+            make_user("GA/2026/0007", "Ngozi Nwosu"), self.grace
+        )
+        services.link_guardian(self.other_parent, self.child_at_grace)
+
+    def record(self, admin, parent, channel_type, value):
+        return guardian_contacts.record_contact_as(admin, parent, channel_type, value)
+
+
+class TheGuardianRecordTests(TwoSchools):
+    def test_one_guardian_account_survives_a_second_school(self):
+        """One person, one record — the shape D10 calls "one row, one action"."""
+        services.link_guardian(self.parent, self.child_at_grace)
+        first = guardian_contacts.guardian_account_for(self.parent)
+        again = guardian_contacts.guardian_account_for(self.parent)
+
+        self.assertEqual(first.pk, again.pk)
+        self.assertEqual(GuardianAccount.objects.filter(user=self.parent).count(), 1)
+        # Two children at two schools, still one guardian record.
+        self.assertEqual(self.parent.guardianships.count(), 2)
+
+    def test_the_opaque_identifier_is_neither_the_pk_nor_the_channel(self):
+        """D9's stable opaque identifier, and what it is not.
+
+        CONTROL: replacing `public_id`'s default with `lambda: uuid.UUID(int=0)`
+        leaves every account sharing one id; the uniqueness assertion goes red.
+        """
+        account = guardian_contacts.guardian_account_for(self.parent)
+        other = guardian_contacts.guardian_account_for(self.other_parent)
+
+        self.assertNotEqual(account.public_id, other.public_id)
+        self.assertNotEqual(str(account.public_id), str(account.pk))
+        stamped = account.public_id
+        account.refresh_from_db()
+        self.assertEqual(account.public_id, stamped)
+
+    def test_the_identifier_does_not_move_when_a_channel_is_recorded(self):
+        account = guardian_contacts.guardian_account_for(self.parent)
+        before = account.public_id
+        self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
+        account.refresh_from_db()
+        self.assertEqual(account.public_id, before)
+
+
+class NormalizationIsReusedTests(TwoSchools):
+    def test_a_phone_is_stored_in_e164_however_it_was_typed(self):
+        """PR #2's normalizer, not a second copy of it.
+
+        CONTROL: dropping the `normalize_phone()` call from
+        `GuardianContact.normalize_value()` stores "0803 123 4567" verbatim and
+        both assertions go red.
+        """
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "0803 123 4567"
+        )
+        self.assertEqual(contact.value, "+2348031234567")
+        contact.refresh_from_db()
+        self.assertEqual(contact.value, "+2348031234567")
+
+    def test_the_channel_and_a_user_identifier_agree_about_one_number(self):
+        """The two resolvers are separate code; the normalization under them is not.
+
+        `matching_identifier()` reads `User` columns and cannot see the contact
+        table, so this pins the thing that must not drift: one number typed two
+        ways lands on one guardian here exactly as it lands on one account there.
+        """
+        self.parent.phone = "+2348031234567"
+        self.parent.save()
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        guardian_contacts.confirm_verification(
+            contact, guardian_contacts.request_verification(contact)[1]
+        )
+
+        for typed in ("08031234567", "+234 803 123 4567", "+2348031234567"):
+            with self.subTest(typed=typed):
+                self.assertEqual(
+                    list(User.objects.matching_identifier(typed)), [self.parent]
+                )
+                self.assertEqual(
+                    [a.user for a in guardian_contacts.resolve_guardians(typed)],
+                    [self.parent],
+                )
+
+    def test_a_direct_create_normalizes_too(self):
+        """`Model.save()` does not call `full_clean()`, so `clean()` is not enough.
+
+        The service goes through `full_clean()` and would have looked correct
+        forever; `GuardianContact.objects.create()` does not, and is what a
+        management command, a data migration or the next service will reach for.
+        This is issue #91's shape — the one `Guardianship.save()` already
+        carries an override for — and it is a gap the other tests in this class
+        cannot see, because they all enter through `record_contact_as()`.
+
+        CONTROL: removing the `GuardianContact.save()` override stores
+        "0803 123 4567" verbatim and this goes red, while every other test in
+        this class stays green.
+        """
+        account = guardian_contacts.guardian_account_for(self.parent)
+        contact = GuardianContact.objects.create(
+            guardian=account,
+            channel_type=ContactChannel.PHONE,
+            value="0803 123 4567",
+            created_by=self.marys_admin,
+        )
+        contact.refresh_from_db()
+        self.assertEqual(contact.value, "+2348031234567")
+
+    def test_an_email_channel_is_lowercased_and_validated(self):
+        """CONTROL: removing `validate_email()` from `normalize_value()` stores
+        "not-an-address" as an email channel and the refusal assertion goes red.
+        """
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.EMAIL, "Ada@StMarys.NG"
+        )
+        self.assertEqual(contact.value, "ada@stmarys.ng")
+
+        with self.assertRaises(ValidationError):
+            guardian_contacts.record_contact(
+                guardian_contacts.guardian_account_for(self.other_parent),
+                ContactChannel.EMAIL,
+                "not-an-address",
+                created_by=self.grace_admin,
+            )
+
+    def test_the_type_is_a_field_and_both_kinds_round_trip(self):
+        """D9's "type is a field, not a hardcoded assumption", as data."""
+        phone = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        email = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.EMAIL, "emeka@grace.ng"
+        )
+        self.assertEqual(phone.channel_type, ContactChannel.PHONE)
+        self.assertEqual(email.channel_type, ContactChannel.EMAIL)
+
+
+class OneHandsetTwoGuardiansTests(TwoSchools):
+    def test_two_guardians_may_hold_the_same_number(self):
+        """The household case, and why `value` carries no unique index.
+
+        CONTROL: adding `unique=True` to `GuardianContact.value` and migrating
+        makes the second `record_contact_as()` raise IntegrityError — which is
+        exactly the parent a school could not enter.
+        """
+        first = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        second = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertEqual(first.value, second.value)
+        self.assertNotEqual(first.guardian_id, second.guardian_id)
+
+    def test_a_shared_number_resolves_to_both_guardians(self):
+        """Callers must be built for more than one. Pinned so PR C cannot assume `.get()`."""
+        for admin, parent in (
+            (self.marys_admin, self.parent),
+            (self.grace_admin, self.other_parent),
+        ):
+            contact = self.record(admin, parent, ContactChannel.PHONE, "08031234567")
+            _, raw = guardian_contacts.request_verification(contact)
+            guardian_contacts.confirm_verification(contact, raw)
+
+        found = guardian_contacts.resolve_guardians("08031234567")
+        self.assertCountEqual(
+            [a.user for a in found], [self.parent, self.other_parent]
+        )
+
+
+class OneLiveChannelTests(TwoSchools, RefusalAssertions):
+    def test_the_service_refuses_a_second_live_channel(self):
+        """CONTROL: deleting the `live_contact() is not None` check in
+        `record_contact()` lets the call through to the database, where
+        `one_live_contact_per_guardian` refuses it as an IntegrityError instead
+        — so the test goes red on the exception type, not on nothing happening.
+        """
+        self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
+        with self.assertRaises(guardian_contacts.ChannelAlreadyRecorded):
+            self.record(
+                self.marys_admin, self.parent, ContactChannel.EMAIL, "ada@stmarys.ng"
+            )
+
+    def test_the_database_refuses_it_too_when_the_service_is_bypassed(self):
+        """The service check and the constraint agree, per operating rule 3.
+
+        CONTROL: dropping `one_live_contact_per_guardian` from the migration
+        lets the second row insert and `assertRefusedBy` goes red.
+        """
+        account = guardian_contacts.guardian_account_for(self.parent)
+        GuardianContact.objects.create(
+            guardian=account,
+            channel_type=ContactChannel.PHONE,
+            value="+2348031234567",
+            created_by=self.marys_admin,
+        )
+        with self.assertRefusedBy("one_live_contact_per_guardian"):
+            GuardianContact.objects.create(
+                guardian=account,
+                channel_type=ContactChannel.EMAIL,
+                value="ada@stmarys.ng",
+                created_by=self.marys_admin,
+            )
+
+    def test_a_second_guardian_is_unaffected_by_the_first_ones_channel(self):
+        self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
+        second = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08039998888"
+        )
+        self.assertIsNotNone(second.pk)
+
+
+class TheChannelIsAppendOnlyTests(TwoSchools, RefusalAssertions):
+    """The four refusals in `accounts_guardian_contact_append_only`.
+
+    CONTROL for all of them: reversing
+    `0011_a_contact_channel_is_append_only` (or dropping the trigger) makes
+    every `assertRefusedBy` here go red, each reporting that no exception was
+    raised. Run one at a time — a control run invalidates anything measured
+    before it.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+
+    def test_the_value_cannot_be_rewritten(self):
+        with self.assertRefusedBy("guardian_contact_is_append_only"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                value="+2348039998888"
+            )
+
+    def test_the_channel_type_cannot_be_rewritten(self):
+        with self.assertRefusedBy("guardian_contact_is_append_only"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                channel_type=ContactChannel.EMAIL
+            )
+
+    def test_the_guardian_it_belongs_to_cannot_be_rewritten(self):
+        other = guardian_contacts.guardian_account_for(self.other_parent)
+        with self.assertRefusedBy("guardian_contact_is_append_only"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                guardian=other
+            )
+
+    def test_the_row_cannot_be_deleted(self):
+        with self.assertRefusedBy("guardian_contact_is_append_only"):
+            GuardianContact.objects.filter(pk=self.contact.pk).delete()
+
+    def test_a_verified_channel_does_not_verify_twice(self):
+        GuardianContact.objects.filter(pk=self.contact.pk).update(
+            verified_at=timezone.now()
+        )
+        with self.assertRefusedBy("guardian_contact_verifies_once"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                verified_at=timezone.now() + timedelta(days=1)
+            )
+
+    def test_a_verified_channel_cannot_be_unverified(self):
+        GuardianContact.objects.filter(pk=self.contact.pk).update(
+            verified_at=timezone.now()
+        )
+        with self.assertRefusedBy("guardian_contact_verifies_once"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(verified_at=None)
+
+    def test_a_revoked_channel_cannot_be_verified(self):
+        """The refusal the other three do not cover.
+
+        A channel revoked while still unverified has `verified_at IS NULL`, so
+        the one-way check passes and the stamp would land — quietly bringing a
+        replaced channel back to life.
+
+        CONTROL: deleting only the `a_revoked_channel_stays_revoked` branch from
+        the trigger lets the UPDATE through, and this test alone goes red while
+        the other five in this class stay green.
+        """
+        GuardianContact.objects.filter(pk=self.contact.pk).update(
+            revoked_at=timezone.now()
+        )
+        with self.assertRefusedBy("a_revoked_channel_stays_revoked"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                verified_at=timezone.now()
+            )
+
+    def test_a_revoked_channel_does_not_revoke_twice(self):
+        GuardianContact.objects.filter(pk=self.contact.pk).update(
+            revoked_at=timezone.now()
+        )
+        with self.assertRefusedBy("guardian_contact_revokes_once"):
+            GuardianContact.objects.filter(pk=self.contact.pk).update(
+                revoked_at=timezone.now() + timedelta(days=1)
+            )
+
+    def test_the_two_stamps_that_are_permitted_actually_land(self):
+        """The trigger permits what it is supposed to permit.
+
+        Without this, every test above would still pass with a trigger that
+        refused *all* updates — which is rule 5's "passes for a reason
+        unrelated to its subject", one layer up.
+        """
+        stamped = timezone.now()
+        GuardianContact.objects.filter(pk=self.contact.pk).update(verified_at=stamped)
+        GuardianContact.objects.filter(pk=self.contact.pk).update(revoked_at=stamped)
+        self.contact.refresh_from_db()
+        self.assertEqual(self.contact.verified_at, stamped)
+        self.assertEqual(self.contact.revoked_at, stamped)
+
+
+class VerificationTests(TwoSchools):
+    def setUp(self):
+        super().setUp()
+        self.contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+
+    def test_a_recorded_channel_is_not_live_until_the_code_comes_back(self):
+        """D9's gate, as the predicate PR C will read.
+
+        CONTROL: making `confirm_verification()` stamp `verified_at` before
+        comparing the digest turns the first assertion green too early and this
+        goes red.
+        """
+        account = guardian_contacts.guardian_account_for(self.parent)
+        self.assertFalse(account.has_verified_channel())
+        self.assertFalse(self.contact.is_verified)
+
+        code, raw = guardian_contacts.request_verification(self.contact)
+        self.assertFalse(account.has_verified_channel())
+
+        self.assertTrue(guardian_contacts.confirm_verification(self.contact, raw))
+        self.assertTrue(account.has_verified_channel())
+        self.contact.refresh_from_db()
+        self.assertTrue(self.contact.is_live)
+
+    def test_the_code_is_never_stored(self):
+        """CONTROL: adding a plaintext `code` column and writing `raw` to it
+        makes the sweep below find it and this test go red.
+        """
+        code, raw = guardian_contacts.request_verification(self.contact)
+        code.refresh_from_db()
+        self.assertNotIn(raw, str(code.__dict__))
+        self.assertEqual(code.code_hash, guardian_contacts.hash_code(raw))
+        self.assertEqual(len(code.code_hash), 64)
+
+    def test_a_wrong_code_is_refused_and_counted(self):
+        code, raw = guardian_contacts.request_verification(self.contact)
+        wrong = "000000" if raw != "000000" else "111111"
+
+        self.assertFalse(guardian_contacts.confirm_verification(self.contact, wrong))
+        code.refresh_from_db()
+        self.assertEqual(code.attempts, 1)
+        self.assertEqual(code.status, VerificationCodeStatus.PENDING)
+        self.contact.refresh_from_db()
+        self.assertFalse(self.contact.is_verified)
+
+    def test_a_code_dies_after_the_attempt_cap(self):
+        """The cap, not the digest, is what stands between a six-digit code and a guess.
+
+        CONTROL: removing `or code.attempts_exhausted` from
+        `confirm_verification()` lets the right code still work after the cap,
+        and the assertion below goes red. That control only bites because the
+        cap is now read in exactly one place — while the wrong-guess branch
+        *also* spent the code at the cap, this branch was unreachable and no
+        control could turn it red.
+        """
+        code, raw = guardian_contacts.request_verification(self.contact)
+        wrong = "000000" if raw != "000000" else "111111"
+
+        for _ in range(MAX_VERIFICATION_ATTEMPTS):
+            self.assertFalse(
+                guardian_contacts.confirm_verification(self.contact, wrong)
+            )
+
+        code.refresh_from_db()
+        self.assertEqual(code.attempts, MAX_VERIFICATION_ATTEMPTS)
+
+        # The one that matters: the *correct* code no longer works. The code is
+        # dead, not the guess. Read on this presentation rather than stamped
+        # during the loop, so the cap is one branch with one reader.
+        self.assertFalse(guardian_contacts.confirm_verification(self.contact, raw))
+        code.refresh_from_db()
+        self.assertEqual(code.status, VerificationCodeStatus.SPENT)
+        self.contact.refresh_from_db()
+        self.assertFalse(self.contact.is_verified)
+
+    def test_an_expired_code_is_refused(self):
+        _, raw = guardian_contacts.request_verification(
+            self.contact, ttl=timedelta(seconds=-1)
+        )
+        self.assertFalse(guardian_contacts.confirm_verification(self.contact, raw))
+        self.contact.refresh_from_db()
+        self.assertFalse(self.contact.is_verified)
+
+    def test_a_resend_kills_the_code_it_replaces(self):
+        """Exactly one live code per channel, so resending does not widen the target.
+
+        CONTROL: removing the `.update(status=SPENT)` sweep from
+        `request_verification()` leaves the first code PENDING and the first
+        assertion goes red.
+        """
+        first_row, first = guardian_contacts.request_verification(self.contact)
+        second_row, second = guardian_contacts.request_verification(self.contact)
+
+        self.assertFalse(guardian_contacts.confirm_verification(self.contact, first))
+        first_row.refresh_from_db()
+        self.assertEqual(first_row.status, VerificationCodeStatus.SPENT)
+        self.assertTrue(guardian_contacts.confirm_verification(self.contact, second))
+
+    def test_a_code_is_spent_once(self):
+        _, raw = guardian_contacts.request_verification(self.contact)
+        self.assertTrue(guardian_contacts.confirm_verification(self.contact, raw))
+        self.assertFalse(guardian_contacts.confirm_verification(self.contact, raw))
+
+    def test_an_already_verified_channel_takes_no_new_code(self):
+        _, raw = guardian_contacts.request_verification(self.contact)
+        guardian_contacts.confirm_verification(self.contact, raw)
+        self.contact.refresh_from_db()
+        with self.assertRaises(guardian_contacts.ChannelNotVerifiable):
+            guardian_contacts.request_verification(self.contact)
+
+    def test_an_empty_code_verifies_nothing(self):
+        guardian_contacts.request_verification(self.contact)
+        for empty in ("", None):
+            with self.subTest(empty=empty):
+                self.assertFalse(
+                    guardian_contacts.confirm_verification(self.contact, empty)
+                )
+
+
+class ACodeBelongsToOneChannelTests(TwoSchools):
+    """The one place this deliberately departs from `Invitation.validate_token()`.
+
+    That method looks a token up *globally* by `token_hash`, which is safe for
+    32 bytes of entropy. A six-digit code has a million values, so a global
+    lookup would let a code minted for one guardian act on another's channel.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.marys_contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.grace_contact = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08039998888"
+        )
+
+    def test_one_guardians_code_cannot_touch_anothers_channel(self):
+        """CONTROL: dropping `contact=locked` from the `GuardianContactCode`
+        filter in `confirm_verification()` makes the lookup global. Grace's
+        channel is then verified by St Mary's code, and both final assertions
+        go red.
+
+        **The mint order is the whole test, and the first version of it had the
+        order backwards.** The lookup is `.order_by("-created_at", "-id")`, so a
+        global filter returns the *newest* pending code. With St Mary's minted
+        first, a global lookup would have found Grace's own code, failed the
+        digest comparison, and returned False — the test passed with the guard
+        removed and proved nothing. St Mary's code has to be the newest one for
+        the broken lookup to reach it, which is what makes this aim at the
+        branch the call actually routes through rather than the branch its name
+        implies.
+        """
+        guardian_contacts.request_verification(self.grace_contact)
+        _, marys_raw = guardian_contacts.request_verification(self.marys_contact)
+
+        self.assertFalse(
+            guardian_contacts.confirm_verification(self.grace_contact, marys_raw)
+        )
+
+        self.marys_contact.refresh_from_db()
+        self.grace_contact.refresh_from_db()
+        # Grace's channel is the one the broken lookup would verify, using a
+        # code sent to a different guardian at a different school.
+        self.assertFalse(self.grace_contact.is_verified)
+        self.assertFalse(self.marys_contact.is_verified)
+
+    def test_the_code_hash_column_is_not_unique(self):
+        """Two channels may legitimately be issued the same six digits.
+
+        CONTROL: adding `unique=True` to `code_hash` and migrating makes the
+        second insert raise IntegrityError, which is a collision a real system
+        would hit roughly once in a million sends.
+        """
+        shared = guardian_contacts.hash_code("123456")
+        for contact in (self.marys_contact, self.grace_contact):
+            GuardianContactCode.objects.create(
+                contact=contact,
+                code_hash=shared,
+                expires_at=timezone.now() + timedelta(minutes=15),
+            )
+        self.assertEqual(
+            GuardianContactCode.objects.filter(code_hash=shared).count(), 2
+        )
+
+
+class NeverAutoCreateFromAnInboundContactTests(TwoSchools):
+    def test_an_unknown_value_creates_nothing_and_resolves_to_nobody(self):
+        """D9's "no account, no enumeration, no 'we sent you a code'".
+
+        CONTROL: there is no code path to break here, and that is the point —
+        the guard is structural. `resolve_guardians()` is the only function that
+        takes a raw value and it is a read. Giving it a `get_or_create` would
+        make the count assertions go red.
+        """
+        before = GuardianAccount.objects.count()
+        for unknown in ("08130000000", "nobody@nowhere.ng", "", None, "not a thing"):
+            with self.subTest(unknown=unknown):
+                self.assertEqual(
+                    list(guardian_contacts.resolve_guardians(unknown)), []
+                )
+        self.assertEqual(GuardianAccount.objects.count(), before)
+        self.assertEqual(GuardianContact.objects.count(), 0)
+        self.assertEqual(GuardianContactCode.objects.count(), 0)
+
+    def test_an_unverified_channel_resolves_to_nobody(self):
+        """A channel a school typed proves nothing until the code comes back.
+
+        CONTROL: dropping `contacts__verified_at__isnull=False` from
+        `resolve_guardians()` returns the guardian before verification and this
+        goes red.
+        """
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertEqual(list(guardian_contacts.resolve_guardians("08031234567")), [])
+
+        _, raw = guardian_contacts.request_verification(contact)
+        guardian_contacts.confirm_verification(contact, raw)
+        self.assertEqual(
+            [a.user for a in guardian_contacts.resolve_guardians("08031234567")],
+            [self.parent],
+        )
+
+    def test_a_revoked_channel_resolves_to_nobody(self):
+        """CONTROL: dropping `contacts__revoked_at__isnull=True` from
+        `resolve_guardians()` keeps returning the guardian after the channel is
+        replaced, and this goes red.
+        """
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        _, raw = guardian_contacts.request_verification(contact)
+        guardian_contacts.confirm_verification(contact, raw)
+
+        GuardianContact.objects.filter(pk=contact.pk).update(revoked_at=timezone.now())
+        self.assertEqual(list(guardian_contacts.resolve_guardians("08031234567")), [])
+
+
+@override_settings(
+    VERIFICATION_SEND_WINDOW=3600,
+    MAX_VERIFICATION_SENDS_PER_CHANNEL=3,
+    MAX_VERIFICATION_SENDS_PER_SCHOOL=4,
+)
+class SendsAreRateLimitedTests(TwoSchools):
+    """OPEN-3's "rate limiting per number and per school".
+
+    A code is a metered SMS to a real handset, so an unbounded send path is a
+    bill, a way to make a stranger's phone ring all afternoon, and the hole
+    through `MAX_VERIFICATION_ATTEMPTS` — an attacker out of guesses just asks
+    for another code.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+
+    def test_a_channel_stops_accepting_sends_at_the_limit(self):
+        """CONTROL: removing the `_assert_within_send_limits()` call from
+        `request_verification()` lets the fourth send through and this goes red.
+        """
+        for _ in range(3):
+            guardian_contacts.request_verification(self.contact)
+
+        with self.assertRaises(guardian_contacts.VerificationRateLimited) as caught:
+            guardian_contacts.request_verification(self.contact)
+        self.assertGreater(caught.exception.retry_after, 0)
+        self.assertLessEqual(caught.exception.retry_after, 3600)
+
+    def test_a_refused_send_mints_nothing_and_spares_the_live_code(self):
+        """The limit is checked before anything is written or spent.
+
+        A guardian still holding a good code must not lose it because somebody
+        else pushed the channel over its limit — which is what would happen if
+        the check ran after the supersede sweep.
+
+        CONTROL: moving `_assert_within_send_limits()` below the
+        `.update(status=SPENT)` sweep is **not** enough on its own — the sweep
+        does run, but `request_verification()` is `@transaction.atomic` and the
+        refusal rolls it back, so the live code survives and this stays green.
+        Removing the decorator as well is what turns it red. As with
+        `test_a_refused_call_leaves_no_guardian_record_behind`, two mechanisms
+        hold this and the atomic block is the load-bearing one; the ordering is
+        the statement of intent.
+        """
+        for _ in range(2):
+            guardian_contacts.request_verification(self.contact)
+        _, good = guardian_contacts.request_verification(self.contact)
+        before = GuardianContactCode.objects.count()
+
+        with self.assertRaises(guardian_contacts.VerificationRateLimited):
+            guardian_contacts.request_verification(self.contact)
+
+        self.assertEqual(GuardianContactCode.objects.count(), before)
+        # The code the guardian is holding still works.
+        self.assertTrue(guardian_contacts.confirm_verification(self.contact, good))
+
+    def test_the_limit_follows_the_handset_not_the_row(self):
+        """Two guardians sharing one number share one budget.
+
+        Counting per contact row would hand an attacker two windows for one
+        phone, which is `throttling.key_for()`'s reasoning applied to the same
+        fact. The cost — one household's sends can make the other wait — is the
+        trade `client_address()` already names.
+
+        CONTROL: keying the count on `contact=contact` instead of on
+        `contact__value` lets Grace's guardian send a full three to the same
+        handset, and this goes red.
+        """
+        shared = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertNotEqual(self.contact.pk, shared.pk)
+        self.assertEqual(self.contact.value, shared.value)
+
+        for _ in range(3):
+            guardian_contacts.request_verification(self.contact)
+
+        with self.assertRaises(guardian_contacts.VerificationRateLimited):
+            guardian_contacts.request_verification(shared)
+
+    def test_a_different_number_is_unaffected(self):
+        """The limit is per channel, not a global tap. Aimed at the other branch
+        of the same filter: without `contact__value` in it at all, every send on
+        the platform would share one budget and this would go red.
+        """
+        for _ in range(3):
+            guardian_contacts.request_verification(self.contact)
+
+        elsewhere = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08039998888"
+        )
+        code, _ = guardian_contacts.request_verification(elsewhere)
+        self.assertIsNotNone(code.pk)
+
+    def test_a_school_stops_sending_at_its_own_limit(self):
+        """The per-school half, and it is reachable rather than dead code.
+
+        Two tenants is the whole test: St Mary's exhausting its budget must not
+        touch Grace's, and the count has to be keyed on the school the authority
+        was found at.
+
+        CONTROL: removing the `school_id is None` block's body — the second half
+        of `_assert_within_send_limits()` — lets St Mary's send a fifth and this
+        goes red.
+        """
+        # Four sends from St Mary's, spread across channels so the per-channel
+        # limit is not what refuses: two guardians at this school, two each.
+        second_child = services.enroll_student(
+            make_user("STM/2026/0043", "Amaka Eze"), self.st_marys
+        )
+        second_parent = make_user("amaka-parent", "Uche Eze")
+        services.link_guardian(second_parent, second_child)
+        other_contact = guardian_contacts.record_contact_as(
+            self.marys_admin, second_parent, ContactChannel.PHONE, "08035550001"
+        )
+
+        for contact in (self.contact, other_contact):
+            for _ in range(2):
+                guardian_contacts.request_verification_as(self.marys_admin, contact)
+
+        third_child = services.enroll_student(
+            make_user("STM/2026/0044", "Ifeanyi Obi"), self.st_marys
+        )
+        third_parent = make_user("ifeanyi-parent", "Chioma Obi")
+        services.link_guardian(third_parent, third_child)
+        third_contact = guardian_contacts.record_contact_as(
+            self.marys_admin, third_parent, ContactChannel.PHONE, "08035550002"
+        )
+        with self.assertRaises(guardian_contacts.VerificationRateLimited):
+            guardian_contacts.request_verification_as(self.marys_admin, third_contact)
+
+        # Grace is untouched by St Mary's spending.
+        grace_contact = guardian_contacts.record_contact_as(
+            self.grace_admin, self.other_parent, ContactChannel.PHONE, "08039998888"
+        )
+        code, _ = guardian_contacts.request_verification_as(
+            self.grace_admin, grace_contact
+        )
+        self.assertEqual(code.requested_by_school_id, self.grace.pk)
+
+    def test_the_send_is_counted_against_the_school_that_was_entitled_to_it(self):
+        """A caller never names the school, so it cannot name someone else's.
+
+        CONTROL: making `request_verification_as()` take a `school_id` argument
+        from its caller instead of from the authority check would make this
+        assertion meaningless — it is here to pin that the two answers come from
+        one pass.
+        """
+        code, _ = guardian_contacts.request_verification_as(
+            self.marys_admin, self.contact
+        )
+        self.assertEqual(code.requested_by_school_id, self.st_marys.pk)
+
+    def test_platform_staff_are_behind_no_school(self):
+        operator = make_user("operator2", "Platform Operator", is_platform_staff=True)
+        code, _ = guardian_contacts.request_verification_as(operator, self.contact)
+        self.assertIsNone(code.requested_by_school_id)
+
+    def test_an_unauthorised_actor_cannot_send_at_all(self):
+        """CONTROL: dropping `_require_authority_over_guardian()` from
+        `request_verification_as()` lets Grace's admin send to St Mary's parent
+        — and bill it to a school it has no relationship with — and this goes
+        red.
+        """
+        with self.assertRaises(NotPermitted):
+            guardian_contacts.request_verification_as(self.grace_admin, self.contact)
+
+    def test_the_window_is_read_per_call(self):
+        """A limit that ignored its own setting would be a limit nobody can tune."""
+        for _ in range(3):
+            guardian_contacts.request_verification(self.contact)
+        with override_settings(MAX_VERIFICATION_SENDS_PER_CHANNEL=4):
+            code, _ = guardian_contacts.request_verification(self.contact)
+            self.assertIsNotNone(code.pk)
+
+
+class AuthorityIsPerSchoolTests(TwoSchools):
+    def test_an_admin_cannot_record_a_channel_for_another_schools_guardian(self):
+        """The two-tenant case the whole module is set up for.
+
+        CONTROL: deleting the `_require_authority_over_guardian()` call from
+        `record_contact_as()` lets Grace's admin write St Mary's parent's
+        channel, and this goes red.
+        """
+        with self.assertRaises(NotPermitted):
+            self.record(
+                self.grace_admin, self.parent, ContactChannel.PHONE, "08031234567"
+            )
+
+    def test_a_refused_call_leaves_no_guardian_record_behind(self):
+        """A refused call creates no guardian record, and **two** things hold that.
+
+        Authority is checked ahead of `guardian_account_for()`, on the ordering
+        `services.link_guardian()` argues for — refuse before writing rather
+        than write and lean on the rollback. `record_contact_as()` is also
+        `@transaction.atomic`, so the rollback would take it back anyway.
+
+        CONTROL: **either one alone leaves this green**, which is worth stating
+        because the obvious control does not work. Moving `guardian_account_for()`
+        above the check still rolls back; removing the decorator still never
+        creates anything. Removing *both* — reorder and drop `@transaction.atomic`
+        — is what turns this red, and that is the honest statement of what is
+        being relied on here.
+        """
+        before = GuardianAccount.objects.count()
+        with self.assertRaises(NotPermitted):
+            self.record(
+                self.grace_admin, self.parent, ContactChannel.PHONE, "08031234567"
+            )
+        self.assertEqual(GuardianAccount.objects.count(), before)
+        self.assertFalse(GuardianAccount.objects.filter(user=self.parent).exists())
+
+    def test_the_admin_at_the_childs_school_may(self):
+        contact = self.record(
+            self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertEqual(contact.created_by, self.marys_admin)
+
+    def test_a_shared_guardian_is_reachable_by_either_school(self):
+        """One parent, a child at each school: both admins have authority."""
+        services.link_guardian(self.parent, self.child_at_grace)
+        contact = self.record(
+            self.grace_admin, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertEqual(contact.created_by, self.grace_admin)
+
+    def test_a_teacher_has_no_authority(self):
+        """CONTROL: adding TEACHER to `MEMBERSHIP_GRANTING_ROLES` makes this go red.
+
+        Aimed at the role branch of `can_grant_memberships()`, which is a
+        different branch from the school branch two tests above.
+        """
+        teacher = make_user("marys-teacher", "Ngozi Eze")
+        services.grant_membership(teacher, self.st_marys, Role.TEACHER)
+        with self.assertRaises(NotPermitted):
+            self.record(teacher, self.parent, ContactChannel.PHONE, "08031234567")
+
+    def test_platform_staff_act_across_schools(self):
+        operator = make_user("operator", "Platform Operator", is_platform_staff=True)
+        contact = self.record(
+            operator, self.parent, ContactChannel.PHONE, "08031234567"
+        )
+        self.assertEqual(contact.created_by, operator)
+
+    def test_platform_staff_reach_a_guardian_with_no_live_child(self):
+        """The branch the docstring claimed and the code did not have.
+
+        `can_grant_memberships()` says yes to platform staff at any school, but
+        the loop only asks it about schools the guardian has a live child at —
+        so for a guardian with none the loop never ran, and platform staff were
+        refused by a function documented as being able to act across schools.
+        A school admin is still refused: no live child is no relationship.
+
+        CONTROL: removing the `is_platform_staff` short-circuit ahead of the
+        loop in `_require_authority_over_guardian()` makes this go red, while
+        `test_platform_staff_act_across_schools` above stays green — which is
+        why both are here.
+        """
+        orphaned = make_user("no-children", "Former Guardian")
+        self.assertFalse(orphaned.guardianships.exists())
+
+        operator = make_user("operator3", "Platform Operator", is_platform_staff=True)
+        contact = self.record(
+            operator, orphaned, ContactChannel.PHONE, "08037770001"
+        )
+        self.assertEqual(contact.created_by, operator)
+
+        with self.assertRaises(NotPermitted):
+            self.record(
+                self.marys_admin, orphaned, ContactChannel.PHONE, "08037770002"
+            )

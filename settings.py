@@ -266,6 +266,33 @@ SIGN_IN_MAX_FAILURES_PER_ADDRESS = int(
     os.environ.get("SIGN_IN_MAX_FAILURES_PER_ADDRESS", 50)
 )
 
+# ---------------------------------------------------------------------------
+# How many guardian verification codes may be SENT, and this counts successes
+# rather than failures — which is the opposite of the sign-in throttle above
+# and is why it is a separate set of numbers.
+#
+# A code is a metered SMS to a real handset (docs/parent-access.md, OPEN-4 and
+# OPEN-5), so an unbounded send path is two problems at once: a bill, and a way
+# to make a stranger's phone buzz all afternoon from a school's account. It also
+# multiplies guesses — every resend is another MAX_VERIFICATION_ATTEMPTS.
+#
+# Five per channel per hour. A guardian who did not receive the first one asks
+# again, maybe twice if the network is slow; five is past anything honest and
+# holds total guessing to 25 tries an hour against a million codes.
+#
+# Two hundred per school per hour. D10 admits guardians one at a time, typed by
+# a human, so a school cannot approach this by working normally even on a heavy
+# intake day — but a runaway loop or a stolen admin session reaches it in
+# seconds, which is the whole point of having it.
+# ---------------------------------------------------------------------------
+VERIFICATION_SEND_WINDOW = int(os.environ.get("VERIFICATION_SEND_WINDOW", 60 * 60))
+MAX_VERIFICATION_SENDS_PER_CHANNEL = int(
+    os.environ.get("MAX_VERIFICATION_SENDS_PER_CHANNEL", 5)
+)
+MAX_VERIFICATION_SENDS_PER_SCHOOL = int(
+    os.environ.get("MAX_VERIFICATION_SENDS_PER_SCHOOL", 200)
+)
+
 # How many entries at the right-hand end of `X-Forwarded-For` this deployment's
 # own proxies wrote. Zero — believe nothing, use REMOTE_ADDR — is the only safe
 # default: every hop trusted beyond the ones we actually run is one the caller
