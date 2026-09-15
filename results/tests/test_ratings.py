@@ -72,6 +72,16 @@ class RatingsSetUp(RefusalAssertions, TestCase):
             "ify", "Ify Nwosu", self.stmarys, Role.VICE_PRINCIPAL_ACADEMIC
         )
         self.their_teacher = self._staff("chika", "Chika Obi", self.grace, Role.TEACHER)
+        # Grace needs a principal and a VP of its own or its sheet cannot be
+        # walked to released — `CHECKING_ROLES` is the VP alone, approving and
+        # releasing are the principal — and without a released sheet there are
+        # no frozen rows at Grace to assert anything about.
+        self.their_principal = self._staff(
+            "amaka", "Amaka Eze", self.grace, Role.PRINCIPAL
+        )
+        self.their_vp = self._staff(
+            "uche", "Uche Ndu", self.grace, Role.VICE_PRINCIPAL_ACADEMIC
+        )
 
         self.ada = self._student("ada", "Ada Obi", self.stmarys)
         self.bisi = self._student("bisi", "Bisi Lawal", self.stmarys)
@@ -166,6 +176,33 @@ class RatingsSetUp(RefusalAssertions, TestCase):
         return ratings.card_sections(
             self.membership_of(student or self.ada).pk, self.jss1a(), self.term()
         )
+
+    def their_term(self):
+        return Term.objects.get(pk=self.their_term_id)
+
+    def their_jss1a(self):
+        return ClassGroup.objects.get(pk=self.their_jss1a_id)
+
+    def rate_at_grace(self, name, score, group=TraitGroup.AFFECTIVE):
+        return ratings.rate_as(
+            self.their_teacher,
+            self.their_term(),
+            self.trait(name, group),
+            self.membership_of(self.their_child, self.grace),
+            score,
+        )
+
+    def walk_to_released_at_grace(self):
+        """The same four steps at the other school. Caller holds the connection."""
+        sheet = services.open_sheet(
+            self.their_jss1a(), self.their_term(), self.their_principal
+        )
+        services.submit(sheet, self.their_teacher)
+        services.check(sheet, self.their_vp)
+        services.approve(sheet, self.their_principal)
+        services.release(sheet, self.their_principal)
+        sheet.refresh_from_db()
+        return sheet
 
     def walk_to_released(self):
         """Take JSS 1A's sheet the whole way, with four different people.
@@ -1197,6 +1234,7 @@ class TheFreezeTests(RatingsSetUp):
     def setUp(self):
         super().setUp()
         self.enable(self.stmarys, TraitGroup.AFFECTIVE, TraitGroup.PSYCHOMOTOR)
+        self.enable(self.grace, TraitGroup.AFFECTIVE, TraitGroup.PSYCHOMOTOR)
 
     def rate_the_class(self):
         with connected_to(self.stmarys):
@@ -1362,21 +1400,42 @@ class TheFreezeTests(RatingsSetUp):
             self.assertEqual(self.sections(), [])
 
     def test_the_frozen_rows_are_append_only_in_the_database(self):
-        """`.update()` never calls `save()`, which is why the trigger exists."""
+        """`.update()` never calls `save()`, which is why the trigger exists.
+
+        Both halves name the trigger, and neither did before — issue #89.
+        `assertIn("append-only", ...)` is satisfied by any of the ten messages
+        in this repository carrying that substring, and the delete half asserted
+        nothing beyond `IntegrityError`, which a NOT NULL or a foreign key met
+        on the way past would have satisfied just as well.
+        """
         self.rate_the_class()
 
         with connected_to(self.stmarys):
             sheet = self.walk_to_released()
 
-            with self.assertRaises(IntegrityError) as refused:
+            with self.assertRefusedBy("results_releasedtraitrating is append-only"):
                 with transaction.atomic():
                     ReleasedTraitRating.objects.filter(sheet=sheet).update(score=1)
 
-            self.assertIn("append-only", str(refused.exception))
-
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("results_releasedtraitrating is append-only"):
                 with transaction.atomic():
                     ReleasedTraitRating.objects.filter(sheet=sheet).delete()
+
+    def test_the_trigger_is_in_the_other_school_s_schema_too(self):
+        """The guard is created per schema, so one school proves one schema.
+
+        Grace Academy releases its own term and meets the same refusal, named.
+        A trigger that landed in St Mary's schema and nowhere else passes the
+        test above and fails this one — which is the whole reason this is a
+        second school and not a second class at the first.
+        """
+        with connected_to(self.grace):
+            self.rate_at_grace("Punctuality", 4)
+            sheet = self.walk_to_released_at_grace()
+
+            with self.assertRefusedBy("results_releasedtraitrating is append-only"):
+                with transaction.atomic():
+                    ReleasedTraitRating.objects.filter(sheet=sheet).update(score=1)
 
     def test_the_model_refuses_before_the_database_has_to(self):
         """The name claims a layer, so the assertion has to name it too.
