@@ -293,6 +293,42 @@ MAX_VERIFICATION_SENDS_PER_SCHOOL = int(
     os.environ.get("MAX_VERIFICATION_SENDS_PER_SCHOOL", 200)
 )
 
+# ---------------------------------------------------------------------------
+# How long a phone channel may go unused before the guardian link is suspended,
+# and how long a session opened by a one-time code lasts. The two are read
+# together on purpose — see `accounts.checks`, which refuses a deployment where
+# the session outlives the window.
+#
+# 180 days, phone only (docs/parent-access.md, D9). Nigerian operators churn a
+# number after a total of 360 days of inactivity and reassign it, so finishing
+# at 180 puts a school-mediated step in front of a reassignment while the number
+# is still not even eligible for it. It never touches an active guardian: three
+# terms a year means a natural sign-in roughly every four months, and the
+# longest natural gap — the long vacation — is about two. Email is not churned
+# and is not subject to it.
+#
+# Thirty days for the session, sliding (SESSION_SAVE_EVERY_REQUEST). OPEN-4 asks
+# how long is acceptable "on a device that may be shared or lost" and no school
+# has answered; this is reasoning, not a school, and OPEN-4 records which. A
+# guardian opens this a handful of times a term, so thirty days means checking
+# in monthly never costs a second metered send, while a lost handset is exposed
+# for at most a month.
+#
+# **The other half of that trade is not enforced yet, and this comment is not
+# going to claim it is.** Thirty days is only tolerable because what a
+# code-opened session reaches is a parent-scoped read of that guardian's own
+# children — and nothing here holds it to that today. A guardian who is also a
+# bursar is an ordinary person rather than a corner case
+# (`results.tests.test_withholding.TheClaimIsNotABool` is about exactly her), and
+# she would reach the gradebook from a session opened with six digits. The
+# escalation refusal in `SchoolAccessMiddleware` is what will make the sentence
+# true; until it lands this number is set against a narrower blast radius than
+# the code actually has, which is the argument for landing it before any route
+# mints one of these sessions.
+# ---------------------------------------------------------------------------
+GUARDIAN_DORMANCY_DAYS = int(os.environ.get("GUARDIAN_DORMANCY_DAYS", 180))
+GUARDIAN_SESSION_AGE = int(os.environ.get("GUARDIAN_SESSION_AGE", 30 * 24 * 60 * 60))
+
 # How many entries at the right-hand end of `X-Forwarded-For` this deployment's
 # own proxies wrote. Zero — believe nothing, use REMOTE_ADDR — is the only safe
 # default: every hop trusted beyond the ones we actually run is one the caller

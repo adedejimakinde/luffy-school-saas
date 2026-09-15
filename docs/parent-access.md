@@ -507,6 +507,34 @@ Each of these needs a school-side answer before implementation.
 - **OPEN-4. Session duration.** Long sessions reduce SMS cost materially, since every
   code is a metered send under the current pricing model. How long is acceptable on a
   device that may be shared or lost?
+
+  **Settled by PR C the way OPEN-3 was settled by PR B — by choosing a default rather
+  than by asking a school**, and recorded here so the next reader knows which. Thirty
+  days, sliding, as `GUARDIAN_SESSION_AGE` in `settings.py` with its argument written
+  at the constant. A guardian opens this a handful of times a term, so thirty days
+  means checking in monthly never costs a second metered send, while a lost handset is
+  exposed for at most a month.
+
+  **The parent-scoped half of that is not enforced yet**, and the constant says so at
+  its own definition rather than leaving the claim standing. Thirty days is only
+  tolerable because a code-opened session reaches a parent-scoped read of that
+  guardian's own children's cards and arrears; a guardian who is also staff would
+  today reach everything her staff role reaches. `SchoolAccessMiddleware`'s escalation
+  refusal is what makes the sentence true, and it belongs before any route mints one
+  of these sessions rather than after.
+
+  **It is not independent of the dormancy rule, and was nearly shipped as though it
+  were.** Dormancy is read when a code is requested, so it binds new codes and cannot
+  reach a session already open: a session longer than the dormancy window would let a
+  guardian keep access straight through the suspension that window is supposed to be.
+  Thirty against a hundred and eighty is a wide margin, but it is a margin between two
+  environment variables rather than a guard, so `accounts.E002` refuses a deployment
+  where the session is the longer of the two.
+
+  **What still needs a school:** whether thirty days is the right trade on a handset
+  that is shared with children or lent out, which is the half of the original question
+  that reasoning cannot answer. It is an environment variable, so the answer costs a
+  deploy and not a migration.
 - **OPEN-5. Delivery channel.** SMS, WhatsApp, or both with fallback. Cost and
   reliability differ; this is partly a pricing decision.
 - **OPEN-6. Revocation.** Who can revoke a guardian's access, and does revocation

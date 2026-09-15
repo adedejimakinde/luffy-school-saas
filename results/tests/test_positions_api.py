@@ -28,6 +28,7 @@ from django.db import IntegrityError, connection, transaction
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Role, User
 from accounts.services import grant_membership, link_guardian
+from tests.guardians import give_verified_channel
 from gradebook.models import Subject
 from results.tests.test_positions import PASSWORD, PositionSetUp, connected_to
 from schools.models import Domain, School
@@ -68,6 +69,9 @@ class BroadsheetApiSetUp(PositionSetUp):
             "mama", PASSWORD, full_name="Mama Ada"
         )
         link_guardian(self.parent_user, self.child)
+        # D9's gate — see `tests.guardians`. Without a verified channel this
+        # parent is INVITED, and the middleware refuses before the endpoint runs.
+        give_verified_channel(self.parent_user)
 
         self.student_user = self.child.user
 
