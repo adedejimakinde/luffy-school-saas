@@ -515,13 +515,16 @@ Each of these needs a school-side answer before implementation.
   means checking in monthly never costs a second metered send, while a lost handset is
   exposed for at most a month.
 
-  **The parent-scoped half of that is not enforced yet**, and the constant says so at
-  its own definition rather than leaving the claim standing. Thirty days is only
-  tolerable because a code-opened session reaches a parent-scoped read of that
-  guardian's own children's cards and arrears; a guardian who is also staff would
-  today reach everything her staff role reaches. `SchoolAccessMiddleware`'s escalation
-  refusal is what makes the sentence true, and it belongs before any route mints one
-  of these sessions rather than after.
+  **The parent-scoped half of that is enforced as of PR D**, and it landed before any
+  route mints one of these sessions rather than after, which was the whole argument for
+  its ordering. A code-opened session reaches a parent-scoped read of that guardian's
+  own children's cards and arrears and nothing else: `SchoolAccessMiddleware` marks the
+  session and `User.roles_at()` — the one call every guard on the platform makes —
+  narrows to PARENT. A guardian who is also staff reads her own child's card on that
+  session and gets her staff powers back by signing in with her password.
+
+  PR C shipped this constant with the claim written down as a thing not yet true, which
+  is the form a comment has to take when it is ahead of its code. It is behind it now.
 
   **It is not independent of the dormancy rule, and was nearly shipped as though it
   were.** Dormancy is read when a code is requested, so it binds new codes and cannot

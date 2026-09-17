@@ -266,6 +266,23 @@ SIGN_IN_MAX_FAILURES_PER_ADDRESS = int(
     os.environ.get("SIGN_IN_MAX_FAILURES_PER_ADDRESS", 50)
 )
 
+# Ten wrong codes per handset per quarter-hour. The same number as the
+# identifier limit above and not for the same reason, which is worth saying so
+# that changing one does not read as a reason to change the other.
+#
+# What bounds guessing *one* code is `MAX_VERIFICATION_ATTEMPTS` — five against
+# a million, inside a fifteen-minute expiry. This bounds the *sequence*: a
+# caller who burns a code, asks for another and keeps going. Ten leaves a
+# guardian who mistypes twice, asks for a fresh code and mistypes again well
+# inside it, and leaves an attacker two dead codes rather than an afternoon.
+#
+# It is a separate scope from the identifier on purpose — see
+# `accounts.models.SignInScope.CHANNEL`. Sharing the bucket would let a number
+# read off an enrolment form close a teacher's password door.
+SIGN_IN_MAX_FAILURES_PER_CHANNEL = int(
+    os.environ.get("SIGN_IN_MAX_FAILURES_PER_CHANNEL", 10)
+)
+
 # ---------------------------------------------------------------------------
 # How many guardian verification codes may be SENT, and this counts successes
 # rather than failures — which is the opposite of the sign-in throttle above
@@ -314,17 +331,22 @@ MAX_VERIFICATION_SENDS_PER_SCHOOL = int(
 # in monthly never costs a second metered send, while a lost handset is exposed
 # for at most a month.
 #
-# **The other half of that trade is not enforced yet, and this comment is not
-# going to claim it is.** Thirty days is only tolerable because what a
-# code-opened session reaches is a parent-scoped read of that guardian's own
-# children — and nothing here holds it to that today. A guardian who is also a
-# bursar is an ordinary person rather than a corner case
-# (`results.tests.test_withholding.TheClaimIsNotABool` is about exactly her), and
-# she would reach the gradebook from a session opened with six digits. The
-# escalation refusal in `SchoolAccessMiddleware` is what will make the sentence
-# true; until it lands this number is set against a narrower blast radius than
-# the code actually has, which is the argument for landing it before any route
-# mints one of these sessions.
+# **The other half of that trade is what makes thirty days the number it is, and
+# it is enforced rather than asserted.** What a code-opened session reaches is a
+# parent-scoped read of that guardian's own children and nothing else:
+# `SchoolAccessMiddleware` sets `parent_scoped_credential` on a session carrying
+# `guardian_signin.OPENED_BY_CODE`, and `User.roles_at()` — the one call every
+# guard on the platform makes — narrows to PARENT when it is set. A guardian who
+# is also a bursar is an ordinary person rather than a corner case
+# (`results.tests.test_withholding.TheClaimIsNotABool` is about exactly her); on
+# this session she reads her own child's card as a parent rather than as staff
+# the fee gate spares, and cannot hold a card back. She gets her staff powers
+# again by signing in with her password.
+#
+# So raising this number lengthens a parent-scoped exposure. It does not lengthen
+# a staff one, and that is the only reason thirty days is tolerable at all — the
+# comment here said so for one commit before the code did, and said that it was
+# saying it.
 # ---------------------------------------------------------------------------
 GUARDIAN_DORMANCY_DAYS = int(os.environ.get("GUARDIAN_DORMANCY_DAYS", 180))
 GUARDIAN_SESSION_AGE = int(os.environ.get("GUARDIAN_SESSION_AGE", 30 * 24 * 60 * 60))

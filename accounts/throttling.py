@@ -63,8 +63,17 @@ def _window() -> timedelta:
 
 
 def _limit(scope) -> int:
+    """This scope's cap, read per call so `override_settings` is honoured.
+
+    Named rather than defaulted, because a scope added later and forgotten here
+    would silently inherit the identifier's cap — a limit that is wrong without
+    ever looking wrong, which is the failure `_window()` above is written the
+    same way to avoid.
+    """
     if scope == SignInScope.ADDRESS:
         return settings.SIGN_IN_MAX_FAILURES_PER_ADDRESS
+    if scope == SignInScope.CHANNEL:
+        return settings.SIGN_IN_MAX_FAILURES_PER_CHANNEL
     return settings.SIGN_IN_MAX_FAILURES_PER_IDENTIFIER
 
 
