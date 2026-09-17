@@ -469,10 +469,45 @@ Each of these needs a school-side answer before implementation.
   September 2026** as that note asked: the school consulted collects guardian details
   on the admission form, so D10 now carries admission as a second entry point onto the
   same record. The standalone action stays the primitive.
-- ~~**OPEN-2. What happens when contact details change?**~~ Closed by D11, decided
-  without school input. **Still not revisited.** A school is now available and this is
-  the question that was not put to them, so the note that used to say "revisit once a
-  school is available" has been answered for D10 and not for this. Ask it next.
+
+  **Now closed on the half that was left — *who* creates it.** The same school reports
+  that **a school admin creates the guardian record at admission**, and that a secretary
+  is not a separate role there. So no actor is added: D10's standalone admin action is
+  correct as written, and admission calls it rather than needing an authority of its own.
+  Teacher-reported, one school, September 2026 — *one school does this*, not *schools do
+  this*. A school large enough to separate clerical intake from administration may answer
+  differently, and what would reopen is whether the action needs a narrower authority than
+  "school admin", not whether admission needs a second code path. It does not.
+- **OPEN-2. What happens when contact details change?** Closed by D11, decided without
+  school input — and **partly reopened by asking, September 2026.** This was the
+  question a school had not been put; it has been now, and the answer arrives in two
+  halves that the single decision does not cover equally.
+
+  **The deliberate change is closed, and D11 is right about it.** The school learns of a
+  new number or address and updates it: clerical, any admin, and the new channel proves
+  itself through the same verification the old one did.
+
+  **The change that surfaces by failing has no mechanism.** The same school reports that
+  a contact change is often discovered only when a message does not reach the parent —
+  the number is dead, or now belongs to someone else, and nobody finds out until
+  something sent to it goes unanswered. Nothing in the system detects that, and nothing
+  tells the school it has happened. There is no delivery channel in the repo at all yet
+  (OPEN-5), so today there is not even a place a failure signal could arrive; when there
+  is one, *receiving* the failure is a second thing to build rather than a by-product of
+  sending. The 180-day dormancy rule of D9 is not that mechanism either: it is a clock,
+  not a detector — it fires on silence, long after the fact, and only for phones.
+
+  **A live email behind a dead phone reduces the consequence without closing the gap.**
+  The same school holds both channels for a guardian, both live — which the schema
+  currently forbids, and which is #111 against `one_live_contact_per_guardian`. Where
+  both are held, a dead phone is not a lost parent: the other channel still reaches them.
+  The school still does not learn the phone is dead, and a guardian who holds one channel
+  gets nothing from this at all. So it is mitigation, not an answer.
+
+  Teacher-reported, one school, September 2026 — one school, not thirty. What a second
+  school would settle: whether "we find out when a message bounces" is this school's
+  process or everyone's, and how much of the gap is worth closing in software rather than
+  by the school's own habit of ringing a parent who has gone quiet.
 - **OPEN-9. Data protection.** Classnode will hold guardian contact details and
   children's academic records across many schools. Under the NDPA the schools are
   controllers and Classnode is a processor, implying lawful basis, retention limits,
