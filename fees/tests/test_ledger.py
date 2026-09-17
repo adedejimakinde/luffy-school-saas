@@ -20,7 +20,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 from django.db.utils import ProgrammingError
 from django.test import TestCase
 
@@ -35,6 +35,7 @@ from fees.models import (
     LedgerIsAppendOnly,
 )
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -42,8 +43,20 @@ PASSWORD = "correct-horse-battery"
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
 
+#: What `fees_ledger_append_only` says, table first and operation second.
+#:
+#: Both halves are load-bearing. **The table**, because ten trigger messages in
+#: this repository contain the substring `append-only` and a bare one is
+#: satisfied by a refusal from any of them — a wrong-table write being exactly
+#: what an append-only guarantee exists to catch. **The operation**, because the
+#: trigger interpolates `TG_OP`: without it the update test is satisfied by a
+#: DELETE refusal and the delete test by an UPDATE one, which is the pair of
+#: writes these tests exist to tell apart.
+APPEND_ONLY_UPDATE = "fees_feeledgerentry is append-only; UPDATE is not allowed"
+APPEND_ONLY_DELETE = "fees_feeledgerentry is append-only; DELETE is not allowed"
 
-class LedgerSetUp(TestCase):
+
+class LedgerSetUp(RefusalAssertions, TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
         self.student = User.objects.create_user(
@@ -201,20 +214,20 @@ class AppendOnlyTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             self.post_a_charge()
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(APPEND_ONLY_UPDATE), transaction.atomic():
                 FeeLedgerEntry.objects.update(amount_kobo=1)
 
     def test_the_database_refuses_a_delete_that_bypasses_the_model(self):
         with connected_to(self.stmarys):
             self.post_a_charge()
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(APPEND_ONLY_DELETE), transaction.atomic():
                 FeeLedgerEntry.objects.all().delete()
 
     def test_raw_sql_cannot_rewrite_the_books_either(self):
         """No ORM in the loop at all — the trigger is the whole defence."""
         with connected_to(self.stmarys):
             self.post_a_charge()
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(APPEND_ONLY_UPDATE), transaction.atomic():
                 with connection.cursor() as cursor:
                     cursor.execute("update fees_feeledgerentry set amount_kobo = 1")
 
@@ -305,7 +318,9 @@ class CorrectionTests(LedgerSetUp):
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
             first = services.reverse_entry(wrong)
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("an_entry_is_reversed_at_most_once"), (
+                transaction.atomic()
+            ):
                 FeeLedgerEntry.objects.create(
                     term=first.term,
                     kind=FeeEntryKind.REVERSAL,
@@ -326,7 +341,9 @@ class CorrectionTests(LedgerSetUp):
 
     def test_a_reversal_must_name_what_it_undoes(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("only_a_reversal_names_what_it_undoes"), (
+                transaction.atomic()
+            ):
                 FeeLedgerEntry.objects.create(
                     term=self.reload_term(),
                     kind=FeeEntryKind.REVERSAL,
@@ -340,7 +357,9 @@ class CorrectionTests(LedgerSetUp):
     def test_an_ordinary_entry_may_not_name_another(self):
         with connected_to(self.stmarys):
             existing = self.post_a_charge()
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("only_a_reversal_names_what_it_undoes"), (
+                transaction.atomic()
+            ):
                 FeeLedgerEntry.objects.create(
                     term=existing.term,
                     kind=FeeEntryKind.CHARGE,
@@ -393,23 +412,44 @@ class ConstraintTests(LedgerSetUp):
         return FeeLedgerEntry.objects.create(**fields)
 
     def test_a_zero_entry_is_refused(self):
+        """A zero *reversal*, because a zero charge never reaches this rule.
+
+        The obvious spelling — `self.entry(amount_kobo=0)`, which is a CHARGE —
+        is refused by `a_charge_or_refund_increases_what_is_owed` instead: a
+        charge must be strictly positive, and zero is not. So the row was
+        refused before `a_ledger_entry_moves_money` was ever consulted, and this
+        test passed with that rule removed from the model *and* the schema.
+        `REVERSAL` is the one kind carrying no sign rule, so a zero reversal is
+        the write only the zero rule refuses.
+        """
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
-                self.entry(amount_kobo=0)
+            undone = self.entry()
+            with self.assertRefusedBy("a_ledger_entry_moves_money"), (
+                transaction.atomic()
+            ):
+                self.entry(
+                    kind=FeeEntryKind.REVERSAL, amount_kobo=0, reverses=undone
+                )
 
     def test_a_negative_charge_is_refused(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(
+                "a_charge_or_refund_increases_what_is_owed"
+            ), transaction.atomic():
                 self.entry(kind=FeeEntryKind.CHARGE, amount_kobo=-TUITION)
 
     def test_a_positive_payment_is_refused(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(
+                "a_payment_or_discount_reduces_what_is_owed"
+            ), transaction.atomic():
                 self.entry(kind=FeeEntryKind.PAYMENT, amount_kobo=TUITION)
 
     def test_a_positive_discount_is_refused(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(
+                "a_payment_or_discount_reduces_what_is_owed"
+            ), transaction.atomic():
                 self.entry(kind=FeeEntryKind.DISCOUNT, amount_kobo=TUITION)
 
     def test_two_children_can_share_one_teller_reference(self):
