@@ -95,6 +95,7 @@ from .models import (
     CommentAuthor,
     PdfState,
     PromotionDecision,
+    ReleasedCard,
     ReleasedComment,
     ReleasedSessionResult,
     ReleasedTraitRating,
@@ -319,6 +320,18 @@ class ReportCardOut(Schema):
     academic_session: str
     term_name: str
     term_label: str
+
+    #: **Identity, where the two fields above are labels.** `term_name` is the
+    #: choice value and `term_label` is what it is called on the page; neither
+    #: one identifies a row, and a session has three terms carrying the same
+    #: pair year after year. A client holding this card and wanting the term
+    #: beside it had to guess an integer, which is the gap `card_index()` and
+    #: this field close together.
+    #:
+    #: Not a staff-only disclosure. The reader already holds this card, and the
+    #: id is the argument they used in the URL to fetch it — there is nothing
+    #: here they did not send.
+    term_id: int
     version: int
 
     #: Task 8. **The word "Revised" on the page, and the only source of it.**
@@ -377,6 +390,76 @@ class WithheldOut(Schema):
     school_name: str
     contact: str
     detail: str
+
+
+class ListedCardOut(Schema):
+    """One card in the index: enough to choose it, and nothing off the card.
+
+    **No marks, no averages, no comments, no conduct, no attendance.** This
+    object names a card; it does not serve one. That distinction is the whole
+    reason a withheld card can appear here at all — see `card_index()` — and it
+    is held by this schema having no slot for any of it rather than by a view
+    remembering not to fill one, which is the same technique `ReportCardOut`
+    uses against `position`.
+
+    `is_withheld` is the lever made visible. A family whose card is being held
+    is told so at the moment they look for it, and told by the same predicate
+    that will refuse them if they open it — `_is_withheld_from()`, not a second
+    reading of the withholding tables. What it deliberately does *not* carry is
+    the contact line: that belongs to the refusal, which is a sentence addressed
+    to somebody who has just been stopped, and repeating it against every row of
+    a list is not the same act.
+
+    `version` and `is_revised` are here for the reason `ReportCardOut` carries
+    them: a parent holding two cards for one term has to be able to tell which
+    supersedes the other, and a list that showed neither would be the place that
+    confusion starts.
+    """
+
+    term_id: int
+    term_name: str
+    term_label: str
+    academic_session: str
+    version: int
+    is_revised: bool
+    is_withheld: bool
+
+
+class ListedChildOut(Schema):
+    """One child this caller stands for, and the cards that went home for them.
+
+    `student_name` is the **live** membership name, and that is a deliberate
+    departure from the frozen-copy rule every field on `ReportCardOut` follows.
+    The rule is about a card: what a card said when it went home must not be
+    relabelled by an edit made afterwards. This is navigation — a parent picking
+    which of their children to look at — and a child whose name the office has
+    since corrected should be findable under the corrected one. The card they
+    then open still says what it said.
+
+    `cards` is empty for a child with no released card at this school. The child
+    is still listed: "your daughter is enrolled here and no card has gone home
+    yet" is an answer, and an index that dropped her would look identical to one
+    that had lost her.
+    """
+
+    student_membership_id: int
+    student_name: str
+    cards: List[ListedCardOut]
+
+
+class CardIndexOut(Schema):
+    """Every card this caller can reach at this school, as a family member.
+
+    Empty `children` is an ordinary 200 rather than a 404. A signed-in member of
+    staff with no children here, and a guardian whose children are all at the
+    school next door, both get it — and it discloses nothing either way, which
+    is the property that lets this route answer honestly where the card routes
+    answer 404. There is no school name and no term calendar here: this is a
+    directory of artefacts, and everything descriptive belongs to the card the
+    reader is about to open.
+    """
+
+    children: List[ListedChildOut]
 
 
 # -- who may read one --------------------------------------------------------
@@ -470,6 +553,93 @@ def _require_may_read(actor, school, child: Membership) -> CardClaim:
     return claim
 
 
+def _children_of(actor, school) -> List[Membership]:
+    """The children this caller stands for at this school. Never staff's roster.
+
+    Two of `_may_read()`'s three readers, and the omission of the third is the
+    design. `STAFF` is a claim on *every* card at the school, and an index built
+    from it would be eight hundred children — a staff directory, which is a
+    different surface answering a different question, and one this router has no
+    business growing by accident. A member of staff calling this gets the
+    children they are a parent or guardian of, which for most of them is none.
+
+    That also keeps this route's cost a function of a family rather than of a
+    roll, which is what makes it safe to serve without pagination.
+
+    **Ended memberships are included**, and deliberately: `_the_child()` scopes
+    on `school` and `role` and says nothing about status, so a card route serves
+    a graduated or transferred child's card to their guardian. An index that
+    filtered to live memberships would hide exactly the cards whose only copy is
+    now this platform's — the year a family most needs to reach back into.
+
+    Ordered explicitly rather than on `Meta.ordering`, following
+    `cards.card_for()`'s rule: a queryset without a total order resolves ties
+    however the plan happens to come back, and a list of children that reshuffles
+    between two loads is a list a parent stops trusting.
+    """
+    mine = Membership.objects.filter(
+        school=school, role=Role.STUDENT, user=actor
+    )
+    theirs = Membership.objects.filter(
+        school=school, role=Role.STUDENT, guardianships__guardian=actor
+    )
+    return list(
+        (mine | theirs).distinct().order_by("user__full_name", "pk")
+    )
+
+
+def _cards_of(actor, school, child: Membership) -> List[ListedCardOut]:
+    """Every term this child has a card for, newest first.
+
+    **The card named here is the card `report_card()` would serve**, because it
+    is fetched with the same call. `cards.card_for()` resolves "which row is the
+    card" — the earliest release, then its highest version — and that rule is
+    subtle enough that a second, bulk implementation of it would be a second
+    answer waiting to disagree. Two queries a term is the price of there being
+    one rule, and a family's index is a few terms, not a school's.
+
+    A term is listed **iff** the card route would answer for it. `card_for()`
+    returning `None` is skipped rather than listed-and-broken: an index entry a
+    parent taps and gets a 404 from is worse than no entry, because the first
+    one blames them for the tap.
+    """
+    claim = _may_read(actor, school, child)
+    if claim is None:
+        # Unreachable by construction — `_children_of()` returns only children
+        # this caller has a claim on. Skipping rather than listing is the safe
+        # direction anyway: the alternative is `_is_withheld_from()` answering
+        # `False` for a reader who has no claim, which would print "available"
+        # against a card nobody is going to be served.
+        return []
+
+    released = (
+        ReleasedCard.objects.filter(student_membership_id=child.pk)
+        .values_list("term_id", flat=True)
+        .distinct()
+    )
+    terms = Term.objects.filter(pk__in=list(released)).order_by(
+        "-session", "-starts_on", "-pk"
+    )
+
+    listed = []
+    for term in terms:
+        card = cards.card_for(child, term)
+        if card is None:
+            continue
+        listed.append(
+            ListedCardOut(
+                term_id=term.pk,
+                term_name=card.term_name,
+                term_label=TermName(card.term_name).label,
+                academic_session=card.session,
+                version=card.version,
+                is_revised=card.is_revised,
+                is_withheld=_is_withheld_from(claim, card),
+            )
+        )
+    return listed
+
+
 def _require_servable(claim: CardClaim, card):
     """403 for a family reader whose school is holding this card over fees.
 
@@ -509,16 +679,43 @@ def _require_servable(claim: CardClaim, card):
     helper to a route is that the route calls it, and no test can enumerate
     code in a module it does not know to look at.
     """
-    if claim not in FAMILY_CLAIMS:
-        return
-
-    if not withholding.is_withheld(card.student_membership_id, card.term_id):
+    if not _is_withheld_from(claim, card):
         return
 
     raise CardWithheld(
         school_name=card.school_name,
         contact=withholding.settings().withholding_contact,
     )
+
+
+def _is_withheld_from(claim: Optional[CardClaim], card) -> bool:
+    """Would `_require_servable()` refuse this card to this claim?
+
+    Extracted so that the index can mark a card withheld **by asking the
+    question the serving path asks**, rather than by asking a similar one. The
+    two answers have to agree on every card: an index that marks a card withheld
+    and a route that then serves it is a school telling a family two things, and
+    the family believes the one that suits them. Equally, an index that says
+    nothing about a card the route refuses sends a parent into a dead end it
+    could have named.
+
+    The staff-sparing half is the part that would have drifted. A guardian who
+    is also staff at this school holds `STAFF` — `_may_read()` checks the role
+    before the guardianship — so the gate spares them and the route serves their
+    own child's withheld card. An index that had reached for
+    `withholding.is_withheld()` directly would have marked that same card
+    withheld, correctly by the books and wrongly about what happens next.
+
+    `claim` is `Optional` only because `_may_read()` returns `None` for a caller
+    with no claim at all. Such a caller reaches neither surface — the index does
+    not enumerate them a child and `_require_may_read()` 404s them — and the
+    answer here is `False` for the reader who has no card rather than a refusal
+    about somebody else's.
+    """
+    if claim not in FAMILY_CLAIMS:
+        return False
+
+    return withholding.is_withheld(card.student_membership_id, card.term_id)
 
 
 # -- reading the snapshot ----------------------------------------------------
@@ -662,7 +859,75 @@ def _promotion(card) -> Optional[PromotionOut]:
     )
 
 
-# -- the endpoint ------------------------------------------------------------
+# -- the endpoints -----------------------------------------------------------
+
+
+@router.get("/cards/", response=CardIndexOut, tags=["results"])
+def card_index(request):
+    """Which cards this family can reach, and which of them are being held.
+
+    **Without this route a parent could not reach a card at all.** Both card
+    routes are keyed on `(student_membership_id, term_id)` and nothing in this
+    API ever handed a family either number: sign-in answers with a list of
+    *schools*, and `ReportCardOut` carried labels rather than a term id. The
+    page existed and the only way to open it was to type integers into a URL.
+
+    ## A withheld card is listed, and marked
+
+    It would have been one line to leave it out, and that line would have broken
+    two things.
+
+    It would defeat the point of withholding. A school holds a card back to
+    prompt a conversation about fees — `docs/withholding.md`, "403, and why the
+    convention is broken here", is the argument that the refusal has to name
+    somebody to ring. A card that simply never appears prompts nothing: the
+    family does not know there is anything to ring about, and the lever moves
+    nobody.
+
+    And it would put an oracle where there is nothing to protect. The flat-404
+    convention on the card routes exists because a *stranger* enumerating
+    membership ids must not learn which children are enrolled and which terms
+    were released. This route enumerates nothing — it answers only about
+    children the caller already stands for, and a parent knows their own child
+    exists and knows the term happened. Hiding it from them is not disclosure
+    control, it is a school being evasive with a family.
+
+    So the honest answer is the one a school would give at the counter: the card
+    exists, we are holding it, here is who to speak to. The last clause is the
+    refusal's and stays there — `ListedCardOut` says why.
+
+    ## It is not a third serving surface
+
+    `_require_servable()`'s docstring promises it is the only door through which
+    card *content* reaches a family, and this route does not open a second one.
+    It serves no mark, no average, no remark, no rating, no attendance: the
+    schema has no slot for any of them. What it serves is the existence of a
+    card and whether it is being held, which is the gate's own answer rather
+    than a way around it.
+
+    `test_withholding.AThirdServingSurfaceCannotBeAddedUngated` enumerates this
+    router and demands a 403 from every operation, so this route necessarily
+    failed it. The test was widened rather than relaxed — it now sorts routes
+    into those that must refuse and those that may only *name* a card, and holds
+    this one to the harder half of that bargain: no card content, and the
+    withheld mark actually set. That amendment is part of this change and is the
+    place to look first if this route ever starts serving more than it does now.
+
+    No pagination. The list is a family's children and their terms — single
+    digits — and a page parameter here would be a knob nobody turns standing in
+    for a limit nobody needs.
+    """
+    school = _school_of(request)
+    return CardIndexOut(
+        children=[
+            ListedChildOut(
+                student_membership_id=child.pk,
+                student_name=child.name,
+                cards=_cards_of(request.user, school, child),
+            )
+            for child in _children_of(request.user, school)
+        ]
+    )
 
 
 @router.get(
@@ -730,6 +995,7 @@ def card_payload(card) -> ReportCardOut:
         academic_session=card.session,
         term_name=card.term_name,
         term_label=TermName(card.term_name).label,
+        term_id=card.term_id,
         version=card.version,
         is_revised=card.is_revised,
         total_scored=card.total_scored,
@@ -880,6 +1146,7 @@ def report_card_pdf(request, student_membership_id: int, term_id: int):
 
 __all__ = [
     "router",
+    "card_index",
     "CARD_VIEWING_ROLES",
     "CardClaim",
     "FAMILY_CLAIMS",
