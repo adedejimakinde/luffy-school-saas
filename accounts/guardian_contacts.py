@@ -10,11 +10,30 @@ Three rules from that decision live here rather than in a docstring somewhere:
 rather than a check.** There is no function in this module that takes an
 arbitrary value from outside and creates anything. Creation takes an actor with
 authority over a school the guardian already has a child at (`record_contact_as`);
-verification takes a `GuardianContact` *row* that already exists
-(`request_verification`, `confirm_verification`). An unknown value therefore has
-nothing to reach: no account, no enumeration, and no "we have sent you a code".
-`resolve_guardians()` is the only entry point that accepts a raw value, it is a
-read, and it returns an empty queryset rather than creating a guardian to match.
+every door that sends a code takes a `GuardianContact` *row* that already
+exists. An unknown value therefore has nothing to reach: no account, no
+enumeration, and no "we have sent you a code". `resolve_guardians()` is the only
+entry point that accepts a raw value, it is a read, and it returns an empty
+queryset rather than creating a guardian to match.
+
+## Three doors, and the channel's own state is which one you are at
+
+There is exactly one reason a code is ever minted, and three situations it is
+minted in. They share `_mint_code()` — the rate limit, the supersede sweep, the
+digest — and differ only in what state they require the channel to be in:
+
+| door | channel must be | who may ask | counted against |
+|---|---|---|---|
+| `request_verification` | unverified | a school admin | their school |
+| `request_sign_in_code`  | verified, not dormant | the guardian, unauthenticated | no school |
+| `request_reactivation`  | verified, **dormant** | a school admin | their school |
+
+**A code carries no purpose column, deliberately.** The channel is verified or
+it is not, so at any moment at most one of these doors can have a pending code,
+and the state is a better answer than a column that could disagree with it.
+`_confirm_code()`'s `expect_verified` is what turns "at most one" from likely
+into true: without it a verification code could be spent at the sign-in door and
+open a session on a channel whose `verified_at` was still NULL.
 
 **Codes are stored as digests, never as codes** — the pattern
 `schools.models.Invitation` established, with one deliberate departure recorded
@@ -25,6 +44,15 @@ six-digit code is not.
 **Normalization is PR #2's, not a second copy.** A phone reaches E.164 through
 `normalize_phone()`, the same function `User` goes through, so a channel and a
 `User` identifier cannot come to disagree about what "the same number" means.
+
+**A phone channel goes dormant, and dormancy is a fold rather than a sweep.**
+D9 suspends a phone link after 180 days without a successful authentication. No
+cron job stamps anything: `last_authenticated_at()` is the maximum `confirmed_at`
+over the channel's own codes, read at the moment a code is asked for — the lazy
+shape `Invitation.validate_token()` argues for, so a channel cannot sit live past
+its date because a scheduled job is broken. Reactivation writes no row either;
+it is a school admin causing one code to go out, and the guardian answering it
+*is* the reactivation.
 
 **A code costs money and reaches a real handset, so sends are bounded** — per
 channel and per school, in `_assert_within_send_limits()`. This is the half of
@@ -51,7 +79,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from .identifiers import normalize_email, try_normalize_phone
@@ -67,7 +95,11 @@ from .models import (
     Guardianship,
     VerificationCodeStatus,
 )
-from .services import NotPermitted, can_grant_memberships
+from .services import (
+    NotPermitted,
+    activate_guardian_links,
+    can_grant_memberships,
+)
 
 
 class GuardianContactError(Exception):
@@ -103,6 +135,49 @@ class VerificationRateLimited(GuardianContactError):
     def __init__(self, message, *, retry_after):
         super().__init__(message)
         self.retry_after = retry_after
+
+
+class ChannelNotLive(GuardianContactError):
+    """The channel is not verified, or has been revoked. It opens nothing.
+
+    The counterpart of `ChannelNotVerifiable`, and the two are opposites on
+    purpose: that one refuses a channel that has *already* proved itself, this
+    one refuses a channel that has *not yet*. Every door in this module wants
+    one state or the other, and none of them wants both.
+    """
+
+
+class ChannelDormant(GuardianContactError):
+    """A phone channel with no successful authentication inside the window.
+
+    D9: a Nigerian number is reassigned after a total of 360 days of
+    inactivity, and the new holder inherits everything sent to it. Finishing at
+    180 puts a human at the school in front of that — somebody who can notice
+    the person on the line is not the person on the record — while the number
+    is still not even eligible for churning.
+
+    **Not a refusal a guardian is ever shown.** `accounts.guardian_signin`
+    swallows it into the same neutral answer an unknown value gets, because
+    telling a caller "that number is known to us but dormant" is the
+    enumeration D9 forbids. It is raised for the school-facing caller, and
+    carries `last_authenticated_at` so that caller can say when.
+    """
+
+    def __init__(self, message, *, last_authenticated_at):
+        super().__init__(message)
+        #: When this channel last answered a code, or None if it never has.
+        self.last_authenticated_at = last_authenticated_at
+
+
+class ChannelNotDormant(GuardianContactError):
+    """Reactivation was asked for a channel that is working.
+
+    This is a guard rather than tidiness. Without it, `reactivate_as()` would
+    be a way for any school admin to put a code on any guardian's live handset
+    whenever they liked — the one send path in this module that is not already
+    bounded by the channel's state, since `request_verification_as()` refuses a
+    verified channel and the sign-in door is not theirs to knock on.
+    """
 
 
 def hash_code(raw_code: str) -> str:
@@ -288,22 +363,85 @@ def _assert_within_send_limits(contact, school_id):
         )
 
 
-# -- verification -----------------------------------------------------------
+# -- how long a channel may sit unused --------------------------------------
 
 
-@transaction.atomic
-def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TTL):
-    """Mint a code for an existing channel. Returns `(code_row, raw_code)`.
+def _dormancy_window() -> timedelta:
+    """Read per call, so `override_settings` is honoured — as in `throttling`."""
+    return timedelta(days=settings.GUARDIAN_DORMANCY_DAYS)
+
+
+def last_authenticated_at(contact):
+    """When this channel last answered a code, or None if it never has.
+
+    **A fold over the code rows, not a column somebody stamps.** Every
+    successful answer already writes `confirmed_at`, so the rows *are* the
+    authentication log and the maximum of them is exact — operating rule 4's
+    "a balance is a fold over rows", and the same argument
+    `_assert_within_send_limits()` makes for counting sends. A
+    `last_authenticated_at` column would be a second copy of this with its own
+    way of going wrong, and it could not be added to `GuardianContact` anyway:
+    that table is append-only by trigger.
+
+    `confirmed_at`, deliberately, and **not** `created_at`. D9 says the window
+    runs from a successful *authentication*, so asking for codes and never
+    answering them must not hold a dormant channel open — which is exactly what
+    somebody holding a reassigned number would be doing.
+
+    The first verification is itself a confirmed code, so the clock starts at
+    `verified_at` with no special case for a channel that has only ever been
+    verified.
+    """
+    return contact.codes.filter(status=VerificationCodeStatus.CONFIRMED).aggregate(
+        last=Max("confirmed_at")
+    )["last"]
+
+
+def is_dormant(contact) -> bool:
+    """Has this channel gone quiet for longer than D9 allows?
+
+    **Phone only.** Email addresses are not churned and reassigned, so the
+    failure this rule exists to catch cannot happen to one; applying it anyway
+    would suspend email guardians for no reason and cost a school-side step to
+    undo.
+
+    **Per contact row, not per value** — and this is the one place that
+    deliberately parts company with `_assert_within_send_limits()`, which counts
+    per value. The two protect different things. The send limit protects a
+    *handset* from traffic, and two guardians on one handset are one handset.
+    Dormancy protects a *record* from going stale, and on a shared handset where
+    one guardian signs in every month and the other has not in a year, the
+    second record is exactly the stale one — a parent who has left the household
+    while the number stayed. Folding per value would keep that record alive on
+    the other parent's activity, which is the case the school-mediated step is
+    for.
+
+    A channel that has never authenticated at all is not dormant; it is
+    unverified, which is a different door with its own refusal.
+    """
+    if contact.channel_type != ContactChannel.PHONE:
+        return False
+    last = last_authenticated_at(contact)
+    if last is None:
+        return False
+    return timezone.now() - last >= _dormancy_window()
+
+
+# -- minting a code ----------------------------------------------------------
+
+
+def _mint_code(contact, *, school_id, ttl):
+    """Put one code on this channel. Returns `(code_row, raw_code)`.
+
+    The body every door shares, with none of the preconditions. There are three
+    doors and they differ *only* in what state they require the channel to be
+    in, so the rate limit, the supersede sweep and the digest live here once
+    rather than three times drifting apart.
 
     The raw code is returned and never stored; it exists in memory for as long
     as it takes a delivery channel to put it in an SMS or an email, and after
     that only in what the guardian received. A lost code is reissued, never
     recovered.
-
-    **Takes a row, not a value.** That is the shape of "never auto-create a
-    guardian from an inbound contact": there is no argument here that could
-    carry an unknown number, so there is no path from an inbound value to a
-    code being sent anywhere.
 
     Outstanding codes for the same channel are spent first, so exactly one code
     is live at a time. Without that, every resend would add a live code and the
@@ -311,20 +449,15 @@ def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TT
     with each one.
 
     `school_id` is the school whose budget this send counts against, and comes
-    from the authority check in `request_verification_as()` rather than from a
-    caller choosing one. None means no school is behind it — platform staff, or
-    a guardian asking for their own resend once sign-in exists — and such a send
-    is still counted against its channel.
+    from an authority check in the `_as` wrappers rather than from a caller
+    choosing one. None means no school is behind it — platform staff, or a
+    guardian asking for their own sign-in code — and such a send is still
+    counted against its channel.
 
     Raises `VerificationRateLimited` before minting anything, so a refused send
     neither writes a row nor spends the code already outstanding: a guardian
     still holding a good code does not lose it because somebody hit the limit.
     """
-    if contact.revoked_at is not None:
-        raise ChannelNotVerifiable("A revoked channel cannot be verified.")
-    if contact.verified_at is not None:
-        raise ChannelNotVerifiable("This channel is already verified.")
-
     _assert_within_send_limits(contact, school_id)
 
     GuardianContactCode.objects.filter(
@@ -342,6 +475,22 @@ def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TT
 
 
 @transaction.atomic
+def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TTL):
+    """Door one: prove a channel a school has just typed. Channel must be unverified.
+
+    **Takes a row, not a value.** That is the shape of "never auto-create a
+    guardian from an inbound contact": there is no argument here that could
+    carry an unknown number, so there is no path from an inbound value to a
+    code being sent anywhere. The same is true of the other two doors.
+    """
+    if contact.revoked_at is not None:
+        raise ChannelNotVerifiable("A revoked channel cannot be verified.")
+    if contact.verified_at is not None:
+        raise ChannelNotVerifiable("This channel is already verified.")
+    return _mint_code(contact, school_id=school_id, ttl=ttl)
+
+
+@transaction.atomic
 def request_verification_as(actor, contact, *, ttl=DEFAULT_VERIFICATION_TTL):
     """D10's send, by a school admin: the authorised way a code goes out.
 
@@ -355,15 +504,90 @@ def request_verification_as(actor, contact, *, ttl=DEFAULT_VERIFICATION_TTL):
 
 
 @transaction.atomic
-def confirm_verification(contact, raw_code) -> bool:
-    """Prove control of `contact` with `raw_code`. True if the channel is now verified.
+def request_sign_in_code(contact, *, ttl=DEFAULT_VERIFICATION_TTL):
+    """Door two: a guardian signing in. Channel must be live and not dormant.
 
-    Returns a flat `False` for a code that is wrong, expired, already used,
-    superseded by a resend, or out of attempts — and for a channel that is
-    revoked. The caller cannot tell which, and should not: distinguishing "wrong
-    code" from "that code expired" tells whoever is guessing whether they are
-    guessing in the right place at all. Same reasoning
-    `Invitation.validate_token()` gives for its flat `None`.
+    The only door a caller who is nobody yet can reach, and the only one with no
+    school behind it — `school_id` is not a parameter, because there is nothing
+    a guardian could be asked that would name one honestly. The send is still
+    counted against the channel, which is the limit that protects the handset.
+
+    Both refusals are swallowed by `accounts.guardian_signin` into the neutral
+    answer an unknown value gets. They are raised rather than returned as a flag
+    so that a school-facing caller — which is what `reactivate_as()` is — can
+    tell the two apart and say something useful.
+    """
+    if not contact.is_live:
+        raise ChannelNotLive("This channel is not verified, so it opens nothing.")
+    if is_dormant(contact):
+        raise ChannelDormant(
+            "This channel has not been used inside the dormancy window.",
+            last_authenticated_at=last_authenticated_at(contact),
+        )
+    return _mint_code(contact, school_id=None, ttl=ttl)
+
+
+@transaction.atomic
+def request_reactivation(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TTL):
+    """Door three: waking a dormant channel. Channel must be live and dormant.
+
+    **Reactivation is not a stamp, and there is no row that records one.** D9
+    asks for "school-side reactivation before any further code is sent", and
+    that is what this is: a school admin who has checked out of band that the
+    person on the number is the person on the record causes one code to go out.
+    The guardian answering it writes a fresh `confirmed_at`, and *that* is the
+    reactivation — the fold in `last_authenticated_at()` sees it and the channel
+    is no longer dormant.
+
+    Which means a reactivation nobody answers does not reactivate anything. That
+    is the correct behaviour and it falls out of the shape rather than needing a
+    rule: the clock is a record of the guardian answering, so only the guardian
+    answering can move it.
+    """
+    if not contact.is_live:
+        raise ChannelNotLive("This channel is not verified, so it opens nothing.")
+    if not is_dormant(contact):
+        raise ChannelNotDormant("This channel is not dormant; nothing to reactivate.")
+    return _mint_code(contact, school_id=school_id, ttl=ttl)
+
+
+@transaction.atomic
+def request_reactivation_as(actor, contact, *, ttl=DEFAULT_VERIFICATION_TTL):
+    """D9's school-side reactivation, by an admin with authority over the guardian.
+
+    Same authority check and same budget as `request_verification_as()`, for the
+    same reason: the school that was entitled to act is the school the send is
+    counted against.
+    """
+    school_id = _require_authority_over_guardian(actor, contact.guardian.user)
+    return request_reactivation(contact, school_id=school_id, ttl=ttl)
+
+
+# -- answering a code --------------------------------------------------------
+
+
+def _confirm_code(contact, raw_code, *, expect_verified: bool):
+    """Spend `raw_code` against `contact`. Returns `(locked_contact, code)` or None.
+
+    The body both confirm doors share. Every refusal is the same `None`: a code
+    that is wrong, expired, already used, superseded by a resend, or out of
+    attempts, and a channel that is revoked or in the wrong state for this door.
+    The caller cannot tell which, and should not — distinguishing "wrong code"
+    from "that code expired" tells whoever is guessing whether they are guessing
+    in the right place at all. Same reasoning `Invitation.validate_token()`
+    gives for its flat `None`.
+
+    **`expect_verified` is which door this is, and it is load-bearing.** A code
+    carries no purpose column, because the channel's own state is a better
+    answer: `request_verification()` mints only for an unverified channel and
+    `request_sign_in_code()` only for a verified one, so at any moment only one
+    door can have a pending code. This parameter is what makes that "only one"
+    true rather than merely likely — without it, a verification code minted for
+    a channel that has never proved itself could be spent at the sign-in door,
+    and a session would open on a channel whose `verified_at` was still NULL.
+
+    It is checked **under the lock**, not before it, for the same reason the
+    lock is taken at all.
 
     The wrong-code branch **counts against the code, not the channel.** A code
     out of attempts is spent the next time it is presented, right or wrong, so
@@ -374,17 +598,17 @@ def confirm_verification(contact, raw_code) -> bool:
     form — is a weapon anyone can pick up.
     """
     if not raw_code:
-        return False
+        return None
 
     # Lock the channel, not just the code. Two codes confirming at once would
     # otherwise both find `verified_at` NULL and both try to stamp it, and the
     # second would meet the append-only trigger as an IntegrityError rather than
     # as the ordinary "already verified" it is.
-    locked = (
-        GuardianContact.objects.select_for_update().filter(pk=contact.pk).first()
-    )
+    locked = GuardianContact.objects.select_for_update().filter(pk=contact.pk).first()
     if locked is None or locked.revoked_at is not None:
-        return False
+        return None
+    if (locked.verified_at is not None) != expect_verified:
+        return None
 
     code = (
         GuardianContactCode.objects.select_for_update()
@@ -393,12 +617,12 @@ def confirm_verification(contact, raw_code) -> bool:
         .first()
     )
     if code is None:
-        return False
+        return None
 
     if code.is_expired or code.attempts_exhausted:
         code.status = VerificationCodeStatus.SPENT
         code.save(update_fields=["status"])
-        return False
+        return None
 
     # `compare_digest` on the hexdigests. Both are already public-length values
     # of a secret, but a timing signal on the comparison is free to remove and
@@ -412,18 +636,68 @@ def confirm_verification(contact, raw_code) -> bool:
         # it.
         code.attempts += 1
         code.save(update_fields=["attempts"])
+        return None
+
+    code.status = VerificationCodeStatus.CONFIRMED
+    code.confirmed_at = timezone.now()
+    code.save(update_fields=["status", "confirmed_at"])
+    return locked, code
+
+
+@transaction.atomic
+def confirm_verification(contact, raw_code) -> bool:
+    """Prove control of `contact` with `raw_code`. True if the channel is now verified.
+
+    The `verified_at` stamp is the whole of what this adds to `_confirm_code()`,
+    and it is unconditional: `expect_verified=False` has already refused a
+    channel that carries one, so the `if locked.verified_at is None` this used to
+    guard the write with was a branch no control run could turn red. Operating
+    rule 5 — the shorter path is the one whose behaviour can be demonstrated.
+
+    **This is where D9's link goes live.** `services.link_guardian()` grants a
+    PARENT membership INVITED while the guardian has no verified channel, and
+    this is the moment that changes — so the stamp and the access it unlocks are
+    written in one transaction and cannot come apart. Every school the guardian
+    is waiting at is promoted at once, because one person has one channel.
+
+    **There is no matching demotion here, and the gap is deliberate rather than
+    forgotten.** D11 revokes a channel when a new one is entered and says the
+    link is suspended until the new one verifies; nothing stamps `revoked_at`
+    yet, so there is no event to hang a demotion on. Building the demotion
+    before the revocation that triggers it would be a guard with no path to it —
+    which is the shape operating rule 5 spends its time removing. When D11's
+    change flow lands, the revocation is where the demotion goes.
+    """
+    result = _confirm_code(contact, raw_code, expect_verified=False)
+    if result is None:
         return False
 
-    now = timezone.now()
-    code.status = VerificationCodeStatus.CONFIRMED
-    code.confirmed_at = now
-    code.save(update_fields=["status", "confirmed_at"])
-
-    if locked.verified_at is None:
-        locked.verified_at = now
-        locked.save(update_fields=["verified_at"])
+    locked, code = result
+    locked.verified_at = code.confirmed_at
+    locked.save(update_fields=["verified_at"])
     contact.verified_at = locked.verified_at
+    activate_guardian_links(locked.guardian.user)
     return True
+
+
+@transaction.atomic
+def confirm_sign_in_code(contact, raw_code):
+    """Prove control of a live channel again. Returns the confirmed code, or None.
+
+    The code row rather than a bare `True`, because it is the handset proof: it
+    carries `confirmed_at`, which is the fold `last_authenticated_at()` reads,
+    and it is what the sign-in audit points at to say *which* answered code
+    opened a session.
+
+    Writes no stamp. The channel was already verified — that is this door's
+    precondition — and `verified_at` does not move twice; the append-only
+    trigger would refuse it if this tried.
+    """
+    result = _confirm_code(contact, raw_code, expect_verified=True)
+    if result is None:
+        return None
+    _, code = result
+    return code
 
 
 # -- reading a typed value back ---------------------------------------------

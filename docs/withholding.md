@@ -586,6 +586,32 @@ so that PR #76's review comments still point at the same tests.
    decision, and switching it back on withholds it again without a new decision.
 7. A revision of a withheld child's card is still withheld — the `(child, term)`
    keying, tested directly.
+
+**A third control run, and it belongs to the whole list rather than to one
+test.** Every test above asserts a refusal, and `assertEqual(status_code, 403)`
+cannot say which layer produced one. `SchoolAccessMiddleware` answers 403 too —
+a guardian whose contact channel is unverified holds an INVITED PARENT
+membership and is refused before any view runs — so a test written that way
+passes whether this gate refused or the family never reached it. Seven tests did
+exactly that when the guardian gate landed, staying green under names like "is
+still withheld" while nothing was withheld and nobody had access. Two more
+asserted only that `reason` and the balance were *absent*, which a middleware
+403 satisfies more easily than this gate's own body does: a response that never
+reached the serializer cannot leak what the serializer excludes.
+
+So the refusal is asserted by **identity**, not by status. This gate's 403 is the
+only one in the API carrying the school's contact — that is what `WithheldOut`
+is for — and `WithholdingSetUp` reads it in `assertWithheld`, `assertFlat404`
+and `assertServed`, each of which names the answering layer when it fails.
+
+The control: make `SchoolAccessMiddleware` refuse every authenticated caller at a
+school host; run the module; show every one of those assertions RED with each
+failure naming the layer; revert; show it GREEN. Its output goes in the PR body
+with the other two. It is the same defect class as #84 one layer up, and unlike
+the two controls above it is not proving a rule no constraint can express — it
+is proving that the tests for all seven rules are asking the question they are
+named after.
+
 Billing's three — applying twice charges nobody twice, a reversed schedule
 charge is not re-posted, and concurrent applications do not double-charge — were
 written and run with the billing half. They live in `fees/tests/test_schedules.py`

@@ -39,3 +39,45 @@ def session_cookie_spans_every_host(app_configs, **kwargs):
             id="accounts.E001",
         )
     ]
+
+
+@register(Tags.security)
+def a_guardian_session_cannot_outlive_the_dormancy_window(app_configs, **kwargs):
+    """`GUARDIAN_SESSION_AGE` must be shorter than `GUARDIAN_DORMANCY_DAYS`.
+
+    Dormancy is read lazily, at the moment a code is asked for — the same shape
+    `Invitation.validate_token()` argues for, and the reason this rule needs no
+    cron job. The consequence is that it binds *new codes* and not sessions
+    already open, so a dormant guardian keeps whatever session they are holding
+    until it lapses on its own.
+
+    With the defaults that is harmless: a thirty-day sliding session cannot
+    survive a hundred and eighty idle days, so by the time a channel is dormant
+    there is no session left to suspend. But that is a coincidence of two
+    numbers rather than a guard, and each of them is an environment variable
+    somebody can raise on a Friday. Written down here, it becomes a guard.
+
+    Not `deploy=True`, unlike `accounts.E001`. That one is a fact about
+    production hostnames and has nothing to say in development; this is a
+    relationship between two settings, and it is wrong in every environment
+    where it is wrong.
+    """
+    dormancy = settings.GUARDIAN_DORMANCY_DAYS * 24 * 60 * 60
+    if settings.GUARDIAN_SESSION_AGE < dormancy:
+        return []
+    return [
+        Error(
+            f"GUARDIAN_SESSION_AGE ({settings.GUARDIAN_SESSION_AGE}s) is not "
+            f"shorter than GUARDIAN_DORMANCY_DAYS "
+            f"({settings.GUARDIAN_DORMANCY_DAYS} days = {dormancy}s), so a "
+            "session opened before a channel went dormant outlives the "
+            "suspension that dormancy is supposed to be.",
+            hint=(
+                "Lower GUARDIAN_SESSION_AGE, or raise GUARDIAN_DORMANCY_DAYS. "
+                "Dormancy is read when a code is requested, so it cannot reach "
+                "a session that is already open — the session has to expire "
+                "first, and that only happens if it is the shorter of the two."
+            ),
+            id="accounts.E002",
+        )
+    ]

@@ -266,6 +266,23 @@ SIGN_IN_MAX_FAILURES_PER_ADDRESS = int(
     os.environ.get("SIGN_IN_MAX_FAILURES_PER_ADDRESS", 50)
 )
 
+# Ten wrong codes per handset per quarter-hour. The same number as the
+# identifier limit above and not for the same reason, which is worth saying so
+# that changing one does not read as a reason to change the other.
+#
+# What bounds guessing *one* code is `MAX_VERIFICATION_ATTEMPTS` — five against
+# a million, inside a fifteen-minute expiry. This bounds the *sequence*: a
+# caller who burns a code, asks for another and keeps going. Ten leaves a
+# guardian who mistypes twice, asks for a fresh code and mistypes again well
+# inside it, and leaves an attacker two dead codes rather than an afternoon.
+#
+# It is a separate scope from the identifier on purpose — see
+# `accounts.models.SignInScope.CHANNEL`. Sharing the bucket would let a number
+# read off an enrolment form close a teacher's password door.
+SIGN_IN_MAX_FAILURES_PER_CHANNEL = int(
+    os.environ.get("SIGN_IN_MAX_FAILURES_PER_CHANNEL", 10)
+)
+
 # ---------------------------------------------------------------------------
 # How many guardian verification codes may be SENT, and this counts successes
 # rather than failures — which is the opposite of the sign-in throttle above
@@ -292,6 +309,47 @@ MAX_VERIFICATION_SENDS_PER_CHANNEL = int(
 MAX_VERIFICATION_SENDS_PER_SCHOOL = int(
     os.environ.get("MAX_VERIFICATION_SENDS_PER_SCHOOL", 200)
 )
+
+# ---------------------------------------------------------------------------
+# How long a phone channel may go unused before the guardian link is suspended,
+# and how long a session opened by a one-time code lasts. The two are read
+# together on purpose — see `accounts.checks`, which refuses a deployment where
+# the session outlives the window.
+#
+# 180 days, phone only (docs/parent-access.md, D9). Nigerian operators churn a
+# number after a total of 360 days of inactivity and reassign it, so finishing
+# at 180 puts a school-mediated step in front of a reassignment while the number
+# is still not even eligible for it. It never touches an active guardian: three
+# terms a year means a natural sign-in roughly every four months, and the
+# longest natural gap — the long vacation — is about two. Email is not churned
+# and is not subject to it.
+#
+# Thirty days for the session, sliding (SESSION_SAVE_EVERY_REQUEST). OPEN-4 asks
+# how long is acceptable "on a device that may be shared or lost" and no school
+# has answered; this is reasoning, not a school, and OPEN-4 records which. A
+# guardian opens this a handful of times a term, so thirty days means checking
+# in monthly never costs a second metered send, while a lost handset is exposed
+# for at most a month.
+#
+# **The other half of that trade is what makes thirty days the number it is, and
+# it is enforced rather than asserted.** What a code-opened session reaches is a
+# parent-scoped read of that guardian's own children and nothing else:
+# `SchoolAccessMiddleware` sets `parent_scoped_credential` on a session carrying
+# `guardian_signin.OPENED_BY_CODE`, and `User.roles_at()` — the one call every
+# guard on the platform makes — narrows to PARENT when it is set. A guardian who
+# is also a bursar is an ordinary person rather than a corner case
+# (`results.tests.test_withholding.TheClaimIsNotABool` is about exactly her); on
+# this session she reads her own child's card as a parent rather than as staff
+# the fee gate spares, and cannot hold a card back. She gets her staff powers
+# again by signing in with her password.
+#
+# So raising this number lengthens a parent-scoped exposure. It does not lengthen
+# a staff one, and that is the only reason thirty days is tolerable at all — the
+# comment here said so for one commit before the code did, and said that it was
+# saying it.
+# ---------------------------------------------------------------------------
+GUARDIAN_DORMANCY_DAYS = int(os.environ.get("GUARDIAN_DORMANCY_DAYS", 180))
+GUARDIAN_SESSION_AGE = int(os.environ.get("GUARDIAN_SESSION_AGE", 30 * 24 * 60 * 60))
 
 # How many entries at the right-hand end of `X-Forwarded-For` this deployment's
 # own proxies wrote. Zero — believe nothing, use REMOTE_ADDR — is the only safe

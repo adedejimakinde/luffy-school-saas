@@ -43,7 +43,7 @@ from ninja import NinjaAPI, Schema
 from ninja.errors import AuthenticationError, HttpError
 from ninja.utils import check_csrf
 
-from accounts import signin
+from accounts import guardian_signin, signin
 from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from gradebook.api import MessageOut, router as gradebook_router
@@ -354,6 +354,175 @@ def sign_in(request, payload: SignInIn):
     except signin.BadCredentials as exc:
         return 401, RefusedOut(
             detail=str(exc), code=signin.BAD_CREDENTIALS, retryable=False
+        )
+
+    return 200, SignedInOut(
+        full_name=user.full_name,
+        schools=_schools_of(user),
+        csrf_token=get_token(request),
+    )
+
+
+class GuardianCodeIn(Schema):
+    value: str
+
+
+class GuardianOptionOut(Schema):
+    """One guardian behind a shared handset, named by D9's opaque identifier.
+
+    `guardian` is `GuardianAccount.public_id` — never the row pk, which leaks
+    how many guardians exist, and never the channel value, which the caller
+    typed and which says nothing about who else is on it.
+    """
+
+    guardian: str
+    full_name: str
+
+
+class GuardianChoiceOut(Schema):
+    """The handset is proved and more than one person is behind it."""
+
+    detail: str
+    choose: list[GuardianOptionOut]
+
+
+class GuardianSessionIn(Schema):
+    """Both halves of the code door, because it is one step with two shapes.
+
+    `code` on the first call; `guardian` on the second, and only where the value
+    resolved to more than one person. A caller that never meets a shared handset
+    sends `code` alone and never learns the second half exists.
+    """
+
+    value: str
+    code: str = ""
+    guardian: Optional[str] = None
+
+
+def _guardian_csrf_failure(request):
+    """The 403 both guardian routes answer an unverified request with.
+
+    Written once because the two routes must not drift: the second is reachable
+    only through the first, so a difference between them would show up as a flow
+    that works until the handset turns out to be shared.
+    """
+    if check_csrf(request) is None:
+        return None
+    return 403, RefusedOut(
+        detail=(
+            "This request could not be verified as intended. Fetch a token "
+            "from /api/csrf/ and send it as X-CSRFToken."
+        ),
+        code=CSRF_FAILED,
+        retryable=True,
+    )
+
+
+def _throttled(request, exc):
+    """A 429 carrying both the field and the header, as `/api/login/` does."""
+    response = api.create_response(
+        request,
+        {
+            "detail": str(exc),
+            "code": signin.TOO_MANY_ATTEMPTS,
+            "retryable": True,
+            "retry_after": exc.retry_after,
+        },
+        status=429,
+    )
+    response["Retry-After"] = str(exc.retry_after)
+    return response
+
+
+@api.post(
+    "/guardian/code/",
+    response={200: MessageOut, 403: RefusedOut, 429: RefusedOut},
+    auth=None,
+    tags=["session"],
+)
+def guardian_code(request, payload: GuardianCodeIn):
+    """Ask for a sign-in code on a guardian's verified channel.
+
+    **The answer is the same for every value**, which is the whole route. D9
+    forbids account creation, enumeration, and "we have sent you a code" for an
+    unknown value; `guardian_signin.CODE_REQUESTED` says what follows *if* the
+    number is on a guardian record, so the sentence is true whoever types it and
+    a stranger learns nothing by typing somebody else's number into it.
+
+    The one thing that can come back different is the 429, and
+    `accounts.guardian_signin` explains why that is not an oracle: the window is
+    counted against the value as typed, whether or not it resolves to anybody.
+
+    Portal-only and CSRF-checked by hand, for `/api/login/`'s reasons — this is
+    the other route a caller uses *before* it has a cookie.
+    """
+    _portal_only(request)
+    refusal = _guardian_csrf_failure(request)
+    if refusal is not None:
+        return refusal
+
+    try:
+        guardian_signin.request_code(request, payload.value)
+    except guardian_signin.TooManyAttempts as exc:
+        return _throttled(request, exc)
+
+    return 200, MessageOut(detail=guardian_signin.CODE_REQUESTED)
+
+
+@api.post(
+    "/guardian/session/",
+    response={
+        200: SignedInOut,
+        202: GuardianChoiceOut,
+        401: RefusedOut,
+        403: RefusedOut,
+        429: RefusedOut,
+    },
+    auth=None,
+    tags=["session"],
+)
+def guardian_session(request, payload: GuardianSessionIn):
+    """Answer a code and get a session — or, on a shared handset, the chooser.
+
+    **202 and not 200 for the chooser**, following `report_card_pdf()`: a body
+    with a different shape gets a different status, so a client that treats any
+    2xx as "signed in" is wrong loudly rather than quietly. Nothing is signed in
+    at 202; the handset is proved and the session carries the spent code until
+    the pick comes back to this same route.
+
+    Every failure is 401 with one sentence — unknown value, unverified channel,
+    dormant channel, wrong code, expired code, replayed pick. The dormant case is
+    the one worth naming: a school-facing caller needs to tell it apart, which
+    is why the service raises it, and a guardian-facing one must not, which is
+    why `guardian_signin` swallows it.
+    """
+    _portal_only(request)
+    refusal = _guardian_csrf_failure(request)
+    if refusal is not None:
+        return refusal
+
+    try:
+        user = guardian_signin.sign_in_with_code(
+            request,
+            payload.value,
+            payload.code,
+            guardian_public_id=payload.guardian,
+        )
+    except guardian_signin.TooManyAttempts as exc:
+        return _throttled(request, exc)
+    except guardian_signin.MustChooseGuardian as exc:
+        return 202, GuardianChoiceOut(
+            detail=str(exc),
+            choose=[
+                GuardianOptionOut(
+                    guardian=str(account.public_id), full_name=account.user.full_name
+                )
+                for account in exc.offered
+            ],
+        )
+    except guardian_signin.BadCode as exc:
+        return 401, RefusedOut(
+            detail=str(exc), code=guardian_signin.BAD_CODE, retryable=False
         )
 
     return 200, SignedInOut(

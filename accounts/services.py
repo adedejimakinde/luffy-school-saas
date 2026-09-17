@@ -16,6 +16,7 @@ from django.utils import timezone
 from .models import (
     LIVE_STATUSES,
     MEMBERSHIP_GRANTING_ROLES,
+    GuardianAccount,
     Guardianship,
     Membership,
     MembershipStatus,
@@ -200,6 +201,31 @@ def link_guardian(
     `Guardianship.clean()`. Asked here, ahead of `grant_membership()` below, so
     that a refused link never grants the PARENT membership in the first place
     rather than granting one and relying on the rollback to take it back.
+
+    **The membership is granted INVITED unless the guardian holds a verified
+    contact channel**, which is D9's "the guardian link does not go live until
+    it comes back" as a thing the code does rather than a sentence in a design
+    doc. `GuardianAccount.has_verified_channel()` has existed since PR B with
+    nothing reading it; this is the reader.
+
+    INVITED rather than refusing outright, because D10's order is "create
+    guardian, attach to child, enter contact channel" — the link comes *before*
+    the channel, and a refusal here would make the documented flow impossible.
+    INVITED is exactly the state the model already has for this: `LIVE_STATUSES`
+    holds the relationship, so the child still appears on the parent's
+    dashboard and still occupies whatever the relationship occupies, while
+    `ACCESS_STATUSES` withholds the access. Those two predicates were kept apart
+    for this class of case and this is the case.
+
+    `grant_membership()` does not downgrade a live membership, so a guardian
+    already ACTIVE at a school stays ACTIVE when a second child is linked
+    there — the gate gives access, it does not take it away.
+
+    **What this deliberately does not do is take access back.** A channel
+    revoked under D11 leaves an ACTIVE membership standing, because D11's change
+    flow is not built yet and half a mechanism is worse than a named gap. The
+    demotion belongs with the revocation that causes it; see the note on
+    `guardian_contacts.activate_guardian_links()`.
     """
     try:
         Guardianship(
@@ -213,7 +239,17 @@ def link_guardian(
     except ValidationError as exc:
         _raise_as_membership_error(exc)
 
-    grant_membership(guardian, student.school, Role.PARENT)
+    account = GuardianAccount.objects.filter(user=guardian).first()
+    grant_membership(
+        guardian,
+        student.school,
+        Role.PARENT,
+        status=(
+            MembershipStatus.ACTIVE
+            if account is not None and account.has_verified_channel()
+            else MembershipStatus.INVITED
+        ),
+    )
 
     if is_primary_contact:
         Guardianship.objects.filter(student=student, is_primary_contact=True).update(
@@ -234,6 +270,35 @@ def link_guardian(
         link.is_primary_contact = True
         link.save(update_fields=["is_primary_contact"])
     return link
+
+
+def activate_guardian_links(guardian):
+    """Turn every waiting PARENT membership of `guardian` live. Returns how many.
+
+    The other half of `link_guardian()`'s gate: that one withholds access until
+    a channel is verified, and this is what verifying does about it. Called from
+    `guardian_contacts.confirm_verification()`, which is the one place a channel
+    ever becomes verified.
+
+    **Every school at once, because a guardian has one channel and many
+    schools.** D5 gives a parent of three children at two schools one login and
+    one guardian record; scoping this to a school would mean the channel proved
+    at St Mary's left the same person waiting at Grace with nothing further to
+    prove.
+
+    **INVITED only, never SUSPENDED.** A suspension is somebody's decision about
+    this person, and a verified channel is not an answer to it — promoting a
+    suspended parent would let anyone reverse a school's decision by asking for
+    a code. INVITED is the absence of a decision, which is the only thing this
+    is entitled to fill in.
+
+    **Role-scoped, because a guardian can be other things.** A teacher whose
+    membership is still INVITED is waiting on an invitation, not on a phone
+    number, and verifying a contact channel has nothing to say about it.
+    """
+    return Membership.objects.filter(
+        user=guardian, role=Role.PARENT, status=MembershipStatus.INVITED
+    ).update(status=MembershipStatus.ACTIVE)
 
 
 def _drop_parent_access_without_children(guardian, school):

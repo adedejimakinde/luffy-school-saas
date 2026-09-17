@@ -19,6 +19,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts import services, transfers
+from tests.guardians import give_verified_channel
 from accounts.models import (
     Guardianship,
     Membership,
@@ -68,6 +69,9 @@ class HandshakeSetUp(TestCase):
             self.parent, self.child, relationship=Relationship.MOTHER,
             is_primary_contact=True,
         )
+        # D9's gate — see `tests.guardians`. The transfer tests assert the
+        # parent's *access* moves with the child, which needs access to exist.
+        give_verified_channel(self.parent)
 
 
 class EitherSideMayAskTests(HandshakeSetUp):

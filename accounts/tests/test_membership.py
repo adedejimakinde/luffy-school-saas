@@ -11,6 +11,7 @@ from django.test import RequestFactory, TestCase
 from accounts import services
 from accounts.deletion import _sanctioned_delete
 from accounts.middleware import SchoolAccessMiddleware
+from tests.guardians import give_verified_channel
 from accounts.models import (
     FAMILY_ROLES,
     STAFF_ROLES,
@@ -235,6 +236,10 @@ class ParentAcrossSchoolsTests(TestCase):
 
         for child in (self.ada, self.tunde, self.zainab):
             services.link_guardian(self.parent, child, relationship=Relationship.MOTHER)
+        # D9's gate — see `tests.guardians`. Without a verified channel the
+        # PARENT membership stays INVITED: the relationship exists, the access
+        # does not, and every `has_access_to` below would read False.
+        give_verified_channel(self.parent)
 
     def test_one_login_sees_every_child_at_every_school(self):
         self.assertEqual(
@@ -300,6 +305,10 @@ class TransferCarriesTheFamilyTests(TestCase):
         services.link_guardian(
             self.parent, self.child, relationship=Relationship.MOTHER, is_primary_contact=True
         )
+        # D9's gate — see `tests.guardians`. Without a verified channel the
+        # PARENT membership stays INVITED: the relationship exists, the access
+        # does not, and every `has_access_to` below would read False.
+        give_verified_channel(self.parent)
 
     def test_transfer_moves_child_and_guardian_and_drops_the_old_school(self):
         moved = services.transfer_student(self.child, self.grace, reference="GA/77")
@@ -346,6 +355,9 @@ class OnePersonManyRolesTests(TestCase):
         services.grant_membership(self.teacher, self.school, Role.TEACHER)
         child = services.enroll_student(make_user("STM/1", "Chidi Obi"), self.school)
         services.link_guardian(self.teacher, child, relationship=Relationship.MOTHER)
+        # `roles_at()` is access-scoped, so the PARENT role only appears once
+        # D9's gate opens — see `tests.guardians`.
+        give_verified_channel(self.teacher)
 
         self.assertEqual(
             self.teacher.roles_at(self.school), {Role.TEACHER.value, Role.PARENT.value}
@@ -1192,6 +1204,10 @@ class AccessRequiresActiveStatusTests(TestCase):
         child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.school)
         parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
         services.link_guardian(parent, child)
+        # The subject here is the *invited* membership at Grace below, so the
+        # one at St Mary's has to be genuinely active — D9's gate, see
+        # `tests.guardians`.
+        give_verified_channel(parent)
 
         Membership.objects.create(
             user=parent,
@@ -1361,6 +1377,10 @@ class SchoolAccessMiddlewareTests(TestCase):
         self.parent = make_user("08031234567", "Bisi Ade", phone="08031234567")
         child = services.enroll_student(make_user("STM/1", "Ada Ade"), self.stmarys)
         services.link_guardian(self.parent, child)
+        # D9's gate — see `tests.guardians`. Without a verified channel the
+        # PARENT membership stays INVITED: the relationship exists, the access
+        # does not, and every `has_access_to` below would read False.
+        give_verified_channel(self.parent)
 
     def request_as(self, user):
         request = self.factory.get("/")
@@ -1428,6 +1448,10 @@ class TransferAsTwoOneSidedActsTests(TestCase):
             self.parent, self.child, relationship=Relationship.MOTHER,
             is_primary_contact=True,
         )
+        # D9's gate — see `tests.guardians`. Without a verified channel the
+        # PARENT membership stays INVITED: the relationship exists, the access
+        # does not, and every `has_access_to` below would read False.
+        give_verified_channel(self.parent)
 
     def test_each_school_acts_under_its_own_authority(self):
         """The whole point: neither admin holds authority at the other school."""

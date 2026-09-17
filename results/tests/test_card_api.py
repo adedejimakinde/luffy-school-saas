@@ -55,6 +55,7 @@ from academics.models import ClassGroup, Term, TermName
 from academics.services import assign_class_teacher, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership, link_guardian
+from tests.guardians import give_verified_channel
 from gradebook.models import Assessment, Score, Subject
 from results import cards, revision, sessions
 from results import services as results_services
@@ -141,6 +142,12 @@ class ReportCardApiSetUp(TestCase):
             "papa", PASSWORD, full_name="Papa Bola"
         )
         link_guardian(self.bolas_father, self.bola)
+        # D9's gate: a PARENT membership is INVITED until the guardian's contact
+        # channel is verified, and an invited member is refused at the school's
+        # host. Every guardian who fetches anything below needs a live channel,
+        # or the 403 that arrives is the middleware's and not this app's.
+        give_verified_channel(self.mama, "08030000001")
+        give_verified_channel(self.bolas_father, "08030000002")
 
     # -- fixtures ------------------------------------------------------------
 

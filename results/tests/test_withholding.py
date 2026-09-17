@@ -36,6 +36,26 @@ proven, and both of these have a failure mode where they pass vacuously: the
 first if the fixture releases nothing, the second if the PDF request never
 reaches the gate.
 
+## Which 403 this is
+
+`SchoolAccessMiddleware` answers 403 as well, and the guardian gate gave it a
+new reason to: a guardian whose contact channel is unverified holds an INVITED
+PARENT membership and is refused before any view runs. So the status alone
+identifies nothing. Every assertion here that read one was a test that could
+pass while the family never reached the gate — seven did exactly that through
+that very change, staying green under names like "is still withheld" while
+nothing was withheld and nobody had access. Two more asserted only the
+*absence* of `reason` and the balance, which a refusal from the wrong layer
+satisfies more easily than the right one does: a response that never reached
+the serializer cannot leak what the serializer excludes.
+
+`assertWithheld`, `assertFlat404` and `assertServed` on `WithholdingSetUp` read
+the refusal's identity off the body instead — the contact is the field only this
+403 carries — and each names the answering layer when it fails, so a test that
+goes red over an access failure does not send the next reader into the fees app.
+The third control run in the PR body is theirs: the middleware refuses every
+authenticated caller at a school host, and all nine go red.
+
 ## What the fixture has to carry
 
 `ReportCardApiSetUp` from `test_card_api.py`, which already builds two schools,
@@ -73,6 +93,7 @@ from results.models import (
     WithholdingStatus,
 )
 from schools.tests.tenants import connected_to
+from tests.guardians import give_verified_channel
 from tests.refusals import RefusalAssertions
 
 from .test_card_api import HOST, PASSWORD, THEIR_HOST, ReportCardApiSetUp
@@ -172,6 +193,101 @@ class WithholdingSetUp(RefusalAssertions, ReportCardApiSetUp):
         """The two ways to ask for one card, for tests that must run on each."""
         return (("json", self.fetch), ("pdf", self.fetch_pdf))
 
+    def assertNotTheWithheldBody(self, response, who):
+        """The assertion that matters, on the bytes rather than on parsed JSON.
+
+        A leak that renamed a field or nested it deeper would still be a leak.
+        """
+        self.assertNotIn(CONTACT.encode(), response.content, f"{who} was given the contact")
+        self.assertNotIn(b"holding", response.content.lower(), f"{who} learned of the withholding")
+        self.assertNotIn(b"St Mary", response.content, f"{who} was given the school name")
+
+    #: What the two surfaces answer when a card is served. The PDF route may
+    #: still be building it, which is a 202 and not a refusal.
+    SERVED = (200, 202)
+
+    def is_the_withheld_body(self, response) -> bool:
+        """Did *the fee gate* write this, or did some other layer refuse first?
+
+        A 403 carries no code in this API — `WithheldOut` is `school_name`,
+        `contact` and `detail`, and the contact is the field only this refusal
+        has. So identity is read off the body, on the bytes, exactly as
+        `assertNotTheWithheldBody()` above reads it.
+        """
+        return CONTACT.encode() in response.content
+
+    def assertWithheld(self, response, who="the family"):
+        """403 **from the fee gate**, which the status alone cannot establish.
+
+        `SchoolAccessMiddleware` answers 403 too, and PR C gave it a new reason
+        to: a guardian whose contact channel is unverified holds an INVITED
+        PARENT membership and is refused before any view runs. Every test here
+        that asserted a bare `403` therefore had a way to pass while the family
+        never reached the withholding gate at all — and during PR C's gate
+        change, seven of them did exactly that, staying green under names like
+        "is still withheld" while nothing was withheld and nobody had access.
+
+        That is operating rule 5's third way a green test lies, and #84's defect
+        class. The fix is to fix the assertion rather than to remember the trap.
+        """
+        self.assertEqual(
+            response.status_code, 403, f"{who} was not refused at all"
+        )
+        self.assertTrue(
+            self.is_the_withheld_body(response),
+            f"{who} got a 403 that is not the fee gate's — the body carries "
+            "neither the school's contact nor its sentence, so another layer "
+            "refused this request and the withholding gate was never reached",
+        )
+
+    def assertFlat404(self, response, who="the family"):
+        """404, and not a 403 wearing a message about withholding.
+
+        These tests assert the *absence* of a card, so a 403 arriving instead is
+        a different finding entirely — and the message they carried said "there
+        is nothing to withhold", which is a claim about the fee gate that the
+        response never went near.
+        """
+        if response.status_code == 403:
+            self.fail(
+                f"{who} got 403 where a flat 404 was due, from "
+                + (
+                    "the withholding gate"
+                    if self.is_the_withheld_body(response)
+                    else "a layer before it — an access failure, which is not "
+                    "what this test is about"
+                )
+            )
+        self.assertEqual(
+            response.status_code, 404, f"{who} was not given a flat 404"
+        )
+        self.assertNotTheWithheldBody(response, who)
+
+    def assertServed(self, response, who="the family"):
+        """Served — and when it is not, name *which* refusal this was.
+
+        The old shape was `assertNotEqual(status_code, 403)` with a message
+        blaming the fee gate. It went red for the right reason during PR C and
+        said the wrong thing: nothing had been withheld, the family simply had
+        no access. A failure that accuses the wrong subsystem sends the next
+        reader into the wrong app.
+        """
+        if response.status_code == 403:
+            self.fail(
+                f"{who} was refused 403 by "
+                + (
+                    "the withholding gate"
+                    if self.is_the_withheld_body(response)
+                    else "a layer before it — the body is not the fee gate's, "
+                    "so this is an access failure and not a withholding one"
+                )
+            )
+        self.assertIn(
+            response.status_code,
+            self.SERVED,
+            f"{who} was not served: HTTP {response.status_code}",
+        )
+
 
 class TheFeeDoorDoesNotTouchTheFreeze(WithholdingSetUp):
     """Design test 1, and the most important one here.
@@ -244,15 +360,17 @@ class AWithheldCardIsServedToStaffAndRefusedToAFamily(WithholdingSetUp):
     def test_a_guardian_is_refused_on_both_surfaces(self):
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                response = fetch(self.mama, self.stmarys, self.ada)
-                self.assertEqual(response.status_code, 403)
+                self.assertWithheld(
+                    fetch(self.mama, self.stmarys, self.ada), "Ada's mother"
+                )
 
     def test_the_child_themselves_is_refused_on_both_surfaces(self):
         """`SELF` is a family claim too — the design puts both in `FAMILY_CLAIMS`."""
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                response = fetch(self.ada.user, self.stmarys, self.ada)
-                self.assertEqual(response.status_code, 403)
+                self.assertWithheld(
+                    fetch(self.ada.user, self.stmarys, self.ada), "Ada herself"
+                )
 
     def test_staff_are_served_the_withheld_card_on_both_surfaces(self):
         """A bursar who cannot see what they are withholding cannot do the job."""
@@ -262,10 +380,8 @@ class AWithheldCardIsServedToStaffAndRefusedToAFamily(WithholdingSetUp):
             ("teacher", self.teacher),
         ):
             with self.subTest(role=role_name):
-                self.assertEqual(
-                    self.fetch(user, self.stmarys, self.ada).status_code,
-                    200,
-                    "staff always see a withheld card",
+                self.assertServed(
+                    self.fetch(user, self.stmarys, self.ada), f"the {role_name}"
                 )
 
     def test_a_bursar_may_read_a_card_at_all(self):
@@ -286,18 +402,16 @@ class AWithheldCardIsServedToStaffAndRefusedToAFamily(WithholdingSetUp):
         """
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                response = fetch(self.bolas_father, self.stmarys, self.bola)
-                self.assertNotEqual(
-                    response.status_code,
-                    403,
-                    "Bola has arrears and no decision; nothing should be withheld",
+                self.assertServed(
+                    fetch(self.bolas_father, self.stmarys, self.bola),
+                    "Bola's father",
                 )
 
     def test_lifting_serves_the_card_again(self):
         """A second row, and the first still stands."""
         self.lift(self.ada)
 
-        self.assertEqual(self.fetch(self.mama, self.stmarys, self.ada).status_code, 200)
+        self.assertServed(self.fetch(self.mama, self.stmarys, self.ada))
         with connected_to(self.stmarys):
             self.assertEqual(
                 WithholdingDecision.objects.filter(
@@ -340,15 +454,6 @@ class NobodyWithoutAClaimLearnsTheCardIsWithheld(WithholdingSetUp):
         self.withheld_and_released()
         self.nobody = User.objects.create_user("nobody", PASSWORD, full_name="No Body")
 
-    def assertNotTheWithheldBody(self, response, who):
-        """The assertion that matters, on the bytes rather than on parsed JSON.
-
-        A leak that renamed a field or nested it deeper would still be a leak.
-        """
-        self.assertNotIn(CONTACT.encode(), response.content, f"{who} was given the contact")
-        self.assertNotIn(b"holding", response.content.lower(), f"{who} learned of the withholding")
-        self.assertNotIn(b"St Mary", response.content, f"{who} was given the school name")
-
     def test_a_member_with_no_claim_gets_the_endpoints_flat_404(self):
         for label, user in (
             ("a classmate", self.bola.user),
@@ -356,13 +461,9 @@ class NobodyWithoutAClaimLearnsTheCardIsWithheld(WithholdingSetUp):
         ):
             for name, fetch in self.both_surfaces():
                 with self.subTest(reader=label, surface=name):
-                    response = fetch(user, self.stmarys, self.ada)
-                    self.assertEqual(
-                        response.status_code,
-                        404,
-                        "a member with no claim must not learn this card exists",
+                    self.assertFlat404(
+                        fetch(user, self.stmarys, self.ada), label
                     )
-                    self.assertNotTheWithheldBody(response, label)
 
     def test_a_non_member_gets_the_middlewares_403_and_learns_nothing(self):
         """403, but the middleware's — never the fee gate's.
@@ -417,11 +518,8 @@ class NoCardMeans404NotA403(WithholdingSetUp):
 
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                response = fetch(self.mama, self.stmarys, self.ada)
-                self.assertEqual(
-                    response.status_code,
-                    404,
-                    "no card was released; there is nothing to withhold",
+                self.assertFlat404(
+                    fetch(self.mama, self.stmarys, self.ada), "Ada's mother"
                 )
 
     def test_a_released_term_that_is_not_this_one_gets_404(self):
@@ -429,10 +527,10 @@ class NoCardMeans404NotA403(WithholdingSetUp):
 
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                response = fetch(
-                    self.mama, self.stmarys, self.ada, TermName.SECOND.value
+                self.assertFlat404(
+                    fetch(self.mama, self.stmarys, self.ada, TermName.SECOND.value),
+                    "Ada's mother",
                 )
-                self.assertEqual(response.status_code, 404)
 
 
 class TheFourCharacterBypass(WithholdingSetUp):
@@ -455,16 +553,13 @@ class TheFourCharacterBypass(WithholdingSetUp):
         self.withheld_and_released()
 
     def test_the_pdf_route_refuses_a_guardian(self):
-        self.assertEqual(
-            self.fetch_pdf(self.mama, self.stmarys, self.ada).status_code, 403
+        self.assertWithheld(
+            self.fetch_pdf(self.mama, self.stmarys, self.ada), "Ada's mother"
         )
 
     def test_the_pdf_route_serves_staff(self):
-        response = self.fetch_pdf(self.principal, self.stmarys, self.ada)
-        self.assertIn(
-            response.status_code,
-            (200, 202),
-            "staff see the withheld card's file, or that it is still building",
+        self.assertServed(
+            self.fetch_pdf(self.principal, self.stmarys, self.ada), "the principal"
         )
 
     def test_the_pdf_route_gives_a_claimless_member_the_flat_404(self):
@@ -473,9 +568,9 @@ class TheFourCharacterBypass(WithholdingSetUp):
         Not a non-member, who is refused a layer earlier by
         `SchoolAccessMiddleware` — see `NobodyWithoutAClaimLearnsTheCardIsWithheld`.
         """
-        response = self.fetch_pdf(self.bola.user, self.stmarys, self.ada)
-        self.assertEqual(response.status_code, 404)
-        self.assertNotIn(CONTACT.encode(), response.content)
+        self.assertFlat404(
+            self.fetch_pdf(self.bola.user, self.stmarys, self.ada), "a classmate"
+        )
 
     def test_the_two_surfaces_agree_for_every_reader(self):
         """The property, stated once: no reader gets a different answer class.
@@ -518,7 +613,7 @@ class TheWithheldFamilyLearnsNothingAboutTheRender(WithholdingSetUp):
 
         response = self.fetch_pdf(self.mama, self.stmarys, self.ada)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertWithheld(response, "Ada's mother")
         self.assertNotIn(b"state", response.content)
         self.assertNotIn(b"prepar", response.content.lower())
 
@@ -532,7 +627,7 @@ class TheWithheldFamilyLearnsNothingAboutTheRender(WithholdingSetUp):
 
         response = self.fetch_pdf(self.mama, self.stmarys, self.ada)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertWithheld(response, "Ada's mother")
         self.assertNotIn(b"It failed", response.content)
 
 
@@ -660,11 +755,9 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
                         f"gated deliberately, not skipped here.",
                     )
 
-                    response = self.client.get(url, HTTP_HOST=HOST)
-                    self.assertEqual(
-                        response.status_code,
-                        403,
-                        f"{path} served a withheld card to a guardian",
+                    self.assertWithheld(
+                        self.client.get(url, HTTP_HOST=HOST),
+                        f"a guardian at {path}",
                     )
                     drove += 1
 
@@ -746,6 +839,7 @@ class TheRefusalCarriesTheContactAndNothingElse(WithholdingSetUp):
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
                 response = fetch(self.mama, self.stmarys, self.ada)
+                self.assertWithheld(response, "Ada's mother")
                 self.assertNotIn(b"outstanding since November", response.content)
                 self.assertNotIn(b"avoiding calls", response.content)
                 self.assertNotIn(b"reason", response.content.lower())
@@ -754,6 +848,7 @@ class TheRefusalCarriesTheContactAndNothingElse(WithholdingSetUp):
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
                 response = fetch(self.mama, self.stmarys, self.ada)
+                self.assertWithheld(response, "Ada's mother")
                 self.assertNotIn(b"balance", response.content.lower())
                 self.assertNotIn(b"25000000", response.content)
                 self.assertNotIn(b"250000", response.content)
@@ -797,9 +892,7 @@ class TheSwitchGatesWhetherDecisionsAreConsulted(WithholdingSetUp):
 
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                self.assertNotEqual(
-                    fetch(self.mama, self.stmarys, self.ada).status_code, 403
-                )
+                self.assertServed(fetch(self.mama, self.stmarys, self.ada))
 
     def test_switching_it_back_on_withholds_again_with_no_new_decision(self):
         self.disable_withholding()
@@ -808,7 +901,7 @@ class TheSwitchGatesWhetherDecisionsAreConsulted(WithholdingSetUp):
 
         self.enable_withholding()
 
-        self.assertEqual(self.fetch(self.mama, self.stmarys, self.ada).status_code, 403)
+        self.assertWithheld(self.fetch(self.mama, self.stmarys, self.ada))
         with connected_to(self.stmarys):
             self.assertEqual(
                 WithholdingDecision.objects.count(),
@@ -853,11 +946,7 @@ class ARevisionOfAWithheldCardIsStillWithheld(WithholdingSetUp):
         )
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                self.assertEqual(
-                    fetch(self.mama, self.stmarys, self.ada).status_code,
-                    403,
-                    "a revision served the card the school had withheld",
-                )
+                self.assertWithheld(fetch(self.mama, self.stmarys, self.ada))
 
     def test_the_decision_is_not_keyed_on_the_card(self):
         """Stated structurally as well, so the reason survives a refactor."""
@@ -962,7 +1051,7 @@ class TheDecisionRowIsAppendOnly(WithholdingSetUp):
                 WithholdingStatus.WITHHELD,
             )
 
-        self.assertEqual(self.fetch(self.mama, self.stmarys, self.ada).status_code, 403)
+        self.assertWithheld(self.fetch(self.mama, self.stmarys, self.ada))
 
 
 class ThePolicyRefusesADeadEnd(WithholdingSetUp):
@@ -1114,11 +1203,7 @@ class TheBalanceNeverGates(WithholdingSetUp):
 
         for name, fetch in self.both_surfaces():
             with self.subTest(surface=name):
-                self.assertNotEqual(
-                    fetch(self.mama, self.stmarys, self.ada).status_code,
-                    403,
-                    "a balance withheld a card that nobody decided to withhold",
-                )
+                self.assertServed(fetch(self.mama, self.stmarys, self.ada))
 
     def test_a_paid_up_child_is_still_withheld_once_decided(self):
         """The other direction: paying does not lift a standing decision."""
@@ -1130,11 +1215,7 @@ class TheBalanceNeverGates(WithholdingSetUp):
                 250_000_00,
             )
 
-        self.assertEqual(
-            self.fetch(self.mama, self.stmarys, self.ada).status_code,
-            403,
-            "the balance does not decide; a person lifting the decision does",
-        )
+        self.assertWithheld(self.fetch(self.mama, self.stmarys, self.ada))
 
     def test_the_serving_path_never_reads_the_ledger(self):
         """`results.withholding` imports nothing from `fees` at module scope.
@@ -1390,11 +1471,11 @@ class TheClaimIsNotABool(WithholdingSetUp):
         )
         grant_membership(staff_parent, self.stmarys, Role.BURSAR)
         link_guardian(staff_parent, self.ada)
+        give_verified_channel(staff_parent, "08030000003")
 
-        self.assertEqual(
-            self.fetch(staff_parent, self.stmarys, self.ada).status_code,
-            200,
-            "the claim order decides this, and it is ruled",
+        self.assertServed(
+            self.fetch(staff_parent, self.stmarys, self.ada),
+            "a guardian who is also a bursar",
         )
 
     def test_family_claims_are_the_two_family_ones(self):

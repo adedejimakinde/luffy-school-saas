@@ -24,7 +24,7 @@ from django.contrib.auth.base_user import AbstractBaseUser, BaseUserManager
 from django.contrib.auth.models import PermissionsMixin
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
-from django.db import models, transaction
+from django.db import IntegrityError, models, transaction
 from django.db.models import F, Q
 from django.utils import timezone
 
@@ -267,17 +267,50 @@ class User(AbstractBaseUser, PermissionsMixin):
             memberships__user=self, memberships__status__in=ACCESS_STATUSES
         ).distinct()
 
+    #: Set on `request.user` by `SchoolAccessMiddleware` for a session opened
+    #: with a guardian sign-in code, and read by `roles_at()` below. An instance
+    #: attribute rather than a column, because it is a fact about *this request*
+    #: and not about the person — the same login signing in with a password the
+    #: next minute is entitled to everything again.
+    #:
+    #: A class-level default so nothing has to remember to set it. Every user
+    #: object that was not narrowed reads False here, including one loaded in a
+    #: management command where there is no request at all.
+    parent_scoped_credential = False
+
     def roles_at(self, school) -> set:
         """Roles this login may currently exercise at `school`.
 
         Access-scoped, so an invited or suspended person has no roles here even
         though the membership exists. Authorisation reads this.
+
+        **And it is the only thing authorisation reads**, which is why the
+        guardian-code narrowing is here rather than beside the membership query
+        in the middleware. `SchoolAccessMiddleware` sets `request.school_roles`,
+        but nothing else in the platform consults it: `card_api._may_read()`,
+        `gradebook.services.can_enter_marks()`, `results.services
+        ._require_authority()` and every other guard call `actor.roles_at()`
+        with `request.user`. Narrowing the middleware's own copy would have been
+        a restriction that looked enforced and was not — the defect class this
+        phase keeps finding.
+
+        `parent_scoped_credential` is what a six-digit code buys.
+        `settings.GUARDIAN_SESSION_AGE` is thirty days on the argument that a
+        lost handset reaches "a parent-scoped read of their own children", and
+        this filter is the sentence being true. A guardian who is also a bursar
+        reads her own child's card on that session as a parent — served or
+        withheld by the same fee gate as any other family — rather than as staff
+        who is spared it, and cannot withhold anybody's card. Her staff roles are
+        a password away, which is the point.
         """
-        return set(
+        roles = set(
             self.memberships.with_access()
             .filter(school=school)
             .values_list("role", flat=True)
         )
+        if self.parent_scoped_credential:
+            return roles & {Role.PARENT.value}
+        return roles
 
     def membership_id_at(self, school, role) -> int | None:
         """This login's membership pk in one role at one school, or `None`.
@@ -1051,16 +1084,26 @@ class TransferRequest(models.Model):
 
 
 class SignInScope(models.TextChoices):
-    """The two things a run of failed sign-ins is counted against.
+    """The three things a run of failed sign-ins is counted against.
 
-    Two, not one, because they answer different questions. IDENTIFIER bounds
-    how many guesses one account can absorb; ADDRESS bounds how many guesses
-    one machine can make across all accounts, which is the credential-stuffing
-    shape the first one cannot see.
+    They answer different questions. IDENTIFIER bounds how many guesses one
+    account can absorb; ADDRESS bounds how many guesses one machine can make
+    across all accounts, which is the credential-stuffing shape the first one
+    cannot see.
+
+    CHANNEL is the guardian door's, and it is **not** IDENTIFIER under another
+    name. `throttling.key_for()` normalises through `canonical_username()`, so a
+    phone number typed at the code door and the same number typed at the
+    password door would land in one bucket — and a parent's number is on the
+    enrolment form, which is exactly the semi-public identifier
+    `accounts.throttling` refuses to let anyone weaponise. Shared, it would let
+    whoever can read that form close a teacher's password door by guessing codes
+    at it. Two doors, two buckets. See `accounts.guardian_signin`.
     """
 
     IDENTIFIER = "identifier", "Identifier"
     ADDRESS = "address", "Network address"
+    CHANNEL = "channel", "Guardian contact channel"
 
 
 class SignInAttempts(models.Model):
@@ -1433,3 +1476,93 @@ class GuardianContactCode(models.Model):
     @property
     def attempts_exhausted(self) -> bool:
         return self.attempts >= MAX_VERIFICATION_ATTEMPTS
+
+
+class GuardianSignIn(models.Model):
+    """One opened guardian session: who was offered, who was picked, what proved it.
+
+    `GuardianContact.value` carries no unique constraint on purpose — one
+    household, one handset, two parents — so `resolve_guardians()` may hand back
+    several people for one number and the person holding the phone says which of
+    them they are. Nothing at sign-in can check that claim: D3 makes the handset
+    the credential and it belongs to both parents equally. A self-asserted choice
+    is the honest shape of the thing, and a self-asserted choice nobody wrote
+    down is the shape nobody can audit afterwards.
+
+    So this row exists to answer one question a term later, when a guardian says
+    they never saw a card their co-parent acted on: **what were the
+    alternatives, which was taken, and what proved the handset.**
+
+    **`offered` is every guardian the value resolved to, including `picked`.**
+    Storing only the ones not chosen would make the row unreadable on its own —
+    "offered two, picked one" needs both halves in one place — and storing only
+    the count would answer "was there a choice" without answering "between
+    whom", which is the question that actually gets asked.
+
+    **`proof` is the answered code row, not a timestamp of its own.**
+    `confirm_sign_in_code()` returns the row rather than `True` for exactly this:
+    it carries `confirmed_at`, the fold `last_authenticated_at()` reads for
+    dormancy, and it names the channel the code went to. A duplicated timestamp
+    here would be a second copy of that with its own way of being wrong.
+
+    **One code, one session, held by the constraint and not by the flow.** The
+    shared-handset path parks a spent code on the session and spends it on a
+    second call, so "this code already opened a session" is a state two
+    concurrent picks can both read as false. `one_session_per_answered_code` is
+    what makes it true rather than likely; `record()` reads the refusal and hands
+    the caller the module's one refusal, so a replay is indistinguishable from a
+    wrong code.
+
+    **Public schema, like `SignInAttempts`.** Sign-in happens on the portal,
+    before any school is chosen, and a guardian with children at two schools has
+    one of these rows rather than one per school.
+    """
+
+    picked = models.ForeignKey(
+        GuardianAccount,
+        related_name="sign_ins",
+        on_delete=models.PROTECT,
+        help_text="The guardian this session was opened as.",
+    )
+    offered = models.ManyToManyField(
+        GuardianAccount,
+        related_name="sign_ins_offered",
+        help_text=(
+            "Every guardian the typed value resolved to, including the one "
+            "picked. One entry is the ordinary case; two is a shared handset."
+        ),
+    )
+    proof = models.ForeignKey(
+        GuardianContactCode,
+        related_name="sign_ins",
+        on_delete=models.PROTECT,
+        help_text="The answered code that proved control of the handset.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["proof"], name="one_session_per_answered_code"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.picked} signed in at {self.created_at:%Y-%m-%d %H:%M}"
+
+    @classmethod
+    def record(cls, *, offered, picked, proof):
+        """Write the row, or None if this code has already opened a session.
+
+        Its own `atomic()` block, because an `IntegrityError` leaves the
+        enclosing transaction unusable and the caller still has a refusal to
+        raise — `throttling._locked_counter()`'s reasoning, for the same reason.
+        """
+        try:
+            with transaction.atomic():
+                row = cls.objects.create(picked=picked, proof=proof)
+        except IntegrityError:
+            return None
+        row.offered.set(offered)
+        return row
