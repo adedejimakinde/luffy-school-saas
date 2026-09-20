@@ -6,7 +6,7 @@ the modules and stylesheets in `static/card/`, `static/index/` and
 `static/web/`, the import map in `pages.py`, the static settings in
 `settings.py`, `whitenoise` in `requirements.txt`, and tests in
 `results/tests/test_card_page.py`, `results/tests/test_card_index_page.py`,
-`tests/test_pages.py` and `tests/js/`. Signing in is
+`tests/test_pages.py` and `tests/js/`. Signing in and out is
 [sign-in-page.md](sign-in-page.md). The payload it renders is
 [parent-access.md](parent-access.md) and [cards.md](cards.md); the same card as
 a file is [report-card-pdf.md](report-card-pdf.md).
@@ -233,6 +233,33 @@ the one authority there is, the `Domain` row for the public schema, and renders
 it into the frame. Where no such row exists the state says its sentence without
 a link, because a dead link is worse than being told to go back the way you
 came.
+
+## Signing out, and the dead link it uncovered
+
+Both pages carry a sign-out button, on the rule
+[sign-in-page.md](sign-in-page.md) sets: it is on every page where somebody is
+signed in. The card page needs it most, because a parent who followed a link
+straight to a card has no other way off it, and the handset this platform is
+built for is one somebody else picks up next. `print.css` removes it, for the
+reason the link rule beside it already gives — a control on paper is ink spent
+on something the reader cannot do.
+
+It is drawn only on the answers that prove there is a session to end: a served
+card, a withheld one, and a flat 404. The 404 is the one worth arguing — an
+unauthenticated caller of the card route gets 401, never 404, so a 404 here is a
+caller the API recognised and refused a claim to. A 500 or a dead transport
+proves nothing either way, and a button that posts a logout from a page that
+cannot reach the server is a control that does nothing while looking like it did.
+
+**What it uncovered is that both 401 states linked to a route that is not
+there.** `signedOut()` and `expired()` emitted `<a href="/">`, and `urls.py`
+serves `api/`, `cards/` and `cards/<child>/<term>/` and no root — so a parent
+whose session lapsed on a card was handed a 404 by the one screen whose entire
+job is telling her how to get back in. The index had the fix from the start and
+this page never got it. It has it now, by the same route: the view reads the
+portal's hostname from the `Domain` row for the public schema and renders it into
+`data-portal`, and where no such row exists the state says its sentence without a
+link.
 
 ## What is not here
 

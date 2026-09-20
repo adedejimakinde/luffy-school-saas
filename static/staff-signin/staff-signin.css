@@ -1,0 +1,88 @@
+/*
+ * The staff sign-in page. One column, one form, nothing decorative.
+ *
+ * The reader here is not the reader `signin.css` is drawn for. A parent is on a
+ * handset reading a code off the same screen they are typing into; a member of
+ * staff is signing in with a password from a manager, a note, or memory, on
+ * whatever they have to hand. So the code field's outsized type is absent and
+ * the password field is an ordinary one.
+ *
+ * Per-page and not shared with `signin.css`, following `card.css`, `index.css`
+ * and `signin.css`, which each carry their own copy of the base rules. One
+ * stylesheet for every page is a refactor that would touch four pages to save
+ * thirty lines, and it is not this change.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #999;
+  --wrong: #900;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 26rem; margin: 0 auto; }
+
+h1 { font-size: 1.3rem; margin: 0 0 8px; }
+
+label { display: block; margin: 16px 0 4px; color: var(--quiet); }
+
+input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  font: inherit;
+}
+
+button {
+  margin-top: 16px;
+  width: 100%;
+  padding: 13px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--ink);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+}
+
+/*
+ * The two secondary controls are quiet, and sign-out most of all. It is on a
+ * page whose whole content is "you are signed in", so a filled button competing
+ * with that sentence would be the loudest thing on a page that has nothing to
+ * shout about.
+ */
+button.again, button.signout {
+  margin-top: 8px;
+  background: none;
+  color: var(--quiet);
+  font-weight: 400;
+  text-decoration: underline;
+}
+
+/* Above the field it is about, and announced: `role="alert"` is what makes a
+   screen reader say it, and somebody who cannot see the red text is exactly
+   the reader who needs telling. */
+.problem {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--wrong);
+  background: #fff5f5;
+  color: var(--wrong);
+}
+
+/* Names, not links — `states.js` `landed()` has the reason. There is nothing
+   to give a tap target to, so the list is set as prose rather than as rows. */
+.schools { list-style: none; margin: 16px 0; padding: 0; }
+.schools li { padding: 8px 0; border-bottom: 1px solid #ddd; font-size: 1.05rem; }
+.quiet { color: var(--quiet); }

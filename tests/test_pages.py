@@ -1,8 +1,8 @@
 """Every page's import map, checked against the imports its modules actually make.
 
-Project-level because `pages.import_map()` is, and because the claim spans three
-pages in two apps: the sign-in page (`accounts`), and the card and index pages
-(`results`). A per-app copy of this would be three copies of one rule.
+Project-level because `pages.import_map()` is, and because the claim spans four
+pages in two apps: the two sign-in pages (`accounts`), and the card and index
+pages (`results`). A per-app copy of this would be four copies of one rule.
 
 ## What is being refused
 
@@ -30,6 +30,7 @@ from django.test import SimpleTestCase
 
 import pages
 from accounts.views import MODULES as SIGN_IN_MODULES
+from accounts.views import STAFF_MODULES
 from results.views import CARD_MODULES, INDEX_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -40,6 +41,7 @@ STATIC = Path(settings.BASE_DIR) / "static"
 #: Each page, by the name a failure should say out loud.
 PAGES = {
     "sign-in": SIGN_IN_MODULES,
+    "staff-sign-in": STAFF_MODULES,
     "card": CARD_MODULES,
     "index": INDEX_MODULES,
 }

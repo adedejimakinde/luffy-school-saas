@@ -75,3 +75,13 @@ button.again {
 .guardians li, .schools li { margin-bottom: 8px; }
 .schools a { font-size: 1.1rem; }
 .blank { color: var(--quiet); }
+
+/* Sign-out, on the two states that stop with a live session on the page. Quiet
+   for `staff-signin.css`'s reason: it is not what the reader came to do. */
+button.signout {
+  margin-top: 8px;
+  background: none;
+  color: var(--quiet);
+  font-weight: 400;
+  text-decoration: underline;
+}

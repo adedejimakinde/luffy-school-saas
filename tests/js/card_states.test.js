@@ -89,3 +89,56 @@ test("an unknown refusal renders the broken page rather than nothing", () => {
   const html = htmlFor({ ok: false, refusal: "something-new", body: {} });
   assert.match(html, /could not load/i);
 });
+
+test("the way back to sign-in is a link to the portal, not to a route that is not there", () => {
+  // **Both these states used to emit `<a href="/">`**, and `urls.py` routes no
+  // root: `api/`, `cards/` and `cards/<child>/<term>/` and nothing else. So a
+  // parent whose session lapsed on a card was handed a 404 by the one screen
+  // whose entire job is telling her how to get back in.
+  //
+  // CONTROL: putting `href="/"` back reddens both halves of this test and
+  // nothing else in the suite, which is what says nothing else was covering it.
+  for (const state of [states.expired({}, { portal: "portal.example.test" }),
+                       states.signedOut({}, { portal: "portal.example.test" })]) {
+    assert.match(state, /href="\/\/portal\.example\.test\/sign-in\/"/);
+    assert.doesNotMatch(state, /href="\/"/, "a link to a route this host does not serve");
+    // Protocol-relative, so a development deployment on plain HTTP is not sent
+    // to an https URL it cannot serve.
+    assert.doesNotMatch(state, /href="https?:/);
+  }
+});
+
+test("a deployment with no portal domain gets a sentence and no dead link", () => {
+  // The same rule the index page is already on, and the same rule the staff
+  // landing is on: no link is better than a link that goes nowhere.
+  for (const state of [states.expired({}), states.signedOut({})]) {
+    assert.doesNotMatch(state, /<a /);
+    assert.match(state, /go back to the sign-in page you came from/i);
+  }
+});
+
+test("a portal hostname cannot smuggle markup into the page", () => {
+  // It comes from a `Domain` row, which an admin typed.
+  const html = states.signedOut({}, { portal: '"><img src=x onerror="alert(1)">' });
+
+  assert.doesNotMatch(html, /<img src=x/);
+  assert.match(html, /&quot;&gt;&lt;img/);
+});
+
+test("the sign-out button is drawn only on answers that prove a session", () => {
+  // A control that posts a logout for a browser holding no cookie is a control
+  // that does nothing while looking like it did.
+  const shown = (answer) => htmlFor(answer, { portal: "p.test" }).includes('data-action="sign-out"');
+
+  assert.equal(shown({ ok: true, card: {} }), true);
+  // 403 is the fee gate, reached only after `_require_may_read()` answered.
+  assert.equal(shown({ ok: false, refusal: REFUSAL.WITHHELD, body: WITHHELD_BODY }), true);
+  // 404 is the flat refusal to an authenticated caller with no claim on this
+  // card — an anonymous one gets 401, never 404.
+  assert.equal(shown({ ok: false, refusal: REFUSAL.MISSING, body: {} }), true);
+
+  assert.equal(shown({ ok: false, refusal: REFUSAL.SIGNED_OUT, body: {} }), false);
+  assert.equal(shown({ ok: false, refusal: REFUSAL.EXPIRED, body: {} }), false);
+  // A 500 or a dead transport proves nothing in either direction.
+  assert.equal(shown({ ok: false, refusal: REFUSAL.BROKEN, body: {} }), false);
+});

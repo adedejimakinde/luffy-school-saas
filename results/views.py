@@ -59,18 +59,21 @@ from schools.models import Domain
 #: page loads at runtime and a stray file would join it silently.
 CARD_MODULES = (
     "web/html.js",
+    "web/http.js",
+    "web/signout.js",
     "card/api.js",
     "card/render.js",
     "card/states.js",
     "card/app.js",
 )
 
-#: The index page's own. It shares `web/` with the card page and the sign-in
-#: page — one escape rule for every page, which is what `settings.STATICFILES_DIRS`
-#: argues for.
+#: The index page's own. It shares `web/` with the card page and the two
+#: sign-in pages — one escape rule, one CSRF story and one sign-out for every
+#: page, which is what `settings.STATICFILES_DIRS` argues for.
 INDEX_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/signout.js",
     "index/states.js",
     "index/app.js",
 )
@@ -79,9 +82,21 @@ INDEX_MODULES = (
 def _portal_host() -> str:
     """Where a parent signs in, read from the one place that knows.
 
-    The index page needs it for a single sentence: its 401 state has to offer a
-    way back, and sign-in is on the portal while this page is on a school's
+    Both pages need it for a single sentence: their 401 states have to offer a
+    way back, and sign-in is on the portal while these pages are on a school's
     host, so the link cannot be relative.
+
+    **The card page did not always have it, and that was a dead link rather
+    than a missing nicety.** Its signed-out and expired states emitted
+    `<a href="/">`, and `urls.py` routes no root — `api/`, `cards/` and
+    `cards/<child>/<term>/` and nothing else — so a parent whose session lapsed
+    on a card was handed a 404 by the one screen whose job is telling her how to
+    get back in. Sign-out is what made that screen a place a reader arrives on
+    purpose.
+
+    One indexed row per page load, on a page that is already doing a card
+    fetch. Caching it would be a second place for a redeployed domain to go
+    stale.
 
     **The API deliberately will not answer this** — `api._portal_only()` says a
     client knows its own portal and that having the server name it would put the
@@ -107,6 +122,11 @@ def card_page(request, student_membership_id: int, term_id: int):
 
     `render()` rather than a `TemplateView`, because there is no dispatch to
     customise and a class would be three lines of ceremony around one call.
+
+    It reads one row it did not use to — the portal's hostname, for the two
+    states that have to send a reader back to sign-in. See `_portal_host()`.
+    Still no card data of any kind: who may read this card is
+    `GET /api/results/cards/<child>/<term>/`'s question.
     """
     return render(
         request,
@@ -115,6 +135,7 @@ def card_page(request, student_membership_id: int, term_id: int):
             "student_membership_id": student_membership_id,
             "term_id": term_id,
             "import_map": pages.import_map(*CARD_MODULES),
+            "portal_host": _portal_host(),
         },
     )
 

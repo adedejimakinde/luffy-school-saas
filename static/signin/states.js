@@ -16,7 +16,8 @@
  * half-way in, holding a spent code.
  */
 
-import { esc } from "../web/html.js";
+import { esc, waitInWords } from "../web/html.js";
+import { button as signOutButton } from "../web/signout.js";
 
 /** Step 1. The number, and no claim about whether we know it. */
 export function ask({ error = "", value = "" } = {}) {
@@ -100,6 +101,12 @@ export function whose({ detail = "", choose = [] } = {}) {
  * That is a deployment with no primary domain for that school, and a parent
  * being told the name of a school they cannot reach is worse than useless only
  * if it is silent about why.
+ *
+ * **Signed in, so it carries the sign-out button.** This state and `nowhere()`
+ * are the two places the guardian flow stops with a live session on the page,
+ * and the handset this flow exists for is one somebody else picks up next. The
+ * rule across the platform is the same everywhere: the button is on every page
+ * where somebody is signed in.
  */
 export function schools({ full_name = "", schools: list = [] } = {}) {
   return [
@@ -116,6 +123,7 @@ export function schools({ full_name = "", schools: list = [] } = {}) {
       )
       .join(""),
     "</ul>",
+    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -126,6 +134,10 @@ export function schools({ full_name = "", schools: list = [] } = {}) {
  * A guardian whose only membership was removed, or whose child left. It is not
  * an error — the credentials were good — so it does not read like one, and it
  * does not offer a link it cannot honour.
+ *
+ * It does offer the way out, which is the whole of what it can offer: a live
+ * session with nowhere to go, on a handset somebody else picks up next, is the
+ * one state where a sign-out button is the only useful control on the page.
  */
 export function nowhere({ full_name = "" } = {}) {
   return [
@@ -134,6 +146,7 @@ export function nowhere({ full_name = "" } = {}) {
     "<p>There are no schools on this account yet. If your child has started ",
     "at a school using this platform, ask the school office to add you as ",
     "their guardian.</p>",
+    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -144,20 +157,21 @@ export function nowhere({ full_name = "" } = {}) {
  * `retry_after` is seconds and comes from the API, which counts the window
  * against the value **as typed** — whether or not it resolves to anybody — so
  * that the throttle is not the enumeration oracle the rest of the flow refuses
- * to be. Printed in whole minutes when it is long enough that seconds would
- * read as precision nobody needs.
+ * to be.
+ *
+ * The rounding is `waitInWords()` in `web/html.js` rather than arithmetic
+ * written here, because the staff door answers 429 with the same field from the
+ * same throttle — `guardian_signin.TooManyAttempts` carries `signin.THROTTLED`
+ * — and a threshold kept in two places is a threshold that gets changed in one.
  */
 export function throttled({ detail = "", retry_after = null } = {}) {
-  const wait =
-    retry_after === null || retry_after === undefined
-      ? ""
-      : retry_after >= 120
-        ? ` Try again in about ${Math.ceil(retry_after / 60)} minutes.`
-        : ` Try again in about ${retry_after} seconds.`;
+  const wait = waitInWords(retry_after);
   return [
     '<section class="step step-throttled" data-step="throttled">',
     "<h1>Too many tries</h1>",
-    `<p>${esc(detail) || "That is too many attempts for now."}${wait}</p>`,
+    `<p>${esc(detail) || "That is too many attempts for now."}`,
+    wait ? ` Try again in ${wait}.` : "",
+    "</p>",
     '<button type="button" class="again" data-action="restart">Start again</button>',
     "</section>",
   ].join("");

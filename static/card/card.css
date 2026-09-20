@@ -95,3 +95,30 @@ table { border-collapse: collapse; width: 100%; }
 .state-withheld .contact { font-size: 1.05rem; }
 .state-withheld h1 { color: var(--held); }
 .state-loading { color: var(--quiet); }
+
+/*
+ * Sign-out, below the card.
+ *
+ * Quiet and last, because this page is a document and the control is not part
+ * of it. It is here at all because a parent who followed a link straight to a
+ * card has no other way off this page, and the handset this platform is built
+ * for is one somebody else picks up next. `print.css` removes it.
+ */
+button.signout {
+  display: block;
+  margin: 24px auto 0;
+  padding: 10px 16px;
+  border: 0;
+  background: none;
+  color: #555;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.problem {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid #900;
+  background: #fff5f5;
+  color: #900;
+}

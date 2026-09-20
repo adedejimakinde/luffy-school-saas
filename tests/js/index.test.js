@@ -9,8 +9,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { htmlFor } from "../../static/index/app.js";
+import { htmlFor, mount } from "../../static/index/app.js";
 import * as states from "../../static/index/states.js";
+import { forgetToken } from "../../static/web/http.js";
+import { fakeRoot } from "./fake_dom.js";
 
 const FAMILY = {
   status: 200,
@@ -143,4 +145,82 @@ test("a child's name cannot execute in a parent's browser", () => {
   });
   assert.doesNotMatch(html, /<script>alert/);
   assert.match(html, /&lt;script&gt;/);
+});
+
+test("the sign-out button is on the answer that proves a session, and no other", () => {
+  // A 200 is the API having answered this caller about their own children,
+  // which it does for nobody who is not signed in. A 401 already says the
+  // opposite; a 500 or a dead transport says nothing either way, and a button
+  // that posts a logout from a page that cannot reach the server is a control
+  // that does nothing while looking like it did.
+  const shown = (answer) => htmlFor(answer, { portal: "p.test" }).includes('data-action="sign-out"');
+
+  assert.equal(shown(FAMILY), true);
+  // Both silences are still a signed-in reader.
+  assert.equal(shown({ status: 200, body: { children: [] } }), true);
+  assert.equal(
+    shown({ status: 200, body: { children: [{ student_name: "Ada", cards: [] }] } }),
+    true,
+  );
+
+  assert.equal(shown({ status: 401, body: {} }), false);
+  assert.equal(shown({ status: 500, body: {} }), false);
+  assert.equal(shown({ status: 0, body: null }), false);
+});
+
+test("a sign-out that did not work leaves the cards on the page and says why", () => {
+  // The list is still there and still readable; what changed is only that the
+  // session is still open. Replacing the page would punish a parent for a
+  // failure on our side.
+  const html = htmlFor(FAMILY, { portal: "p.test", signOutFailed: true });
+
+  assert.match(html, /Ada Obi/);
+  assert.match(html, /could not sign you out/i);
+  assert.match(html, /close this browser/i);
+});
+
+test("mount signs out and the children's names go with the session", async () => {
+  forgetToken();
+  const root = fakeRoot({ portal: "portal.example.test" });
+  const calls = [];
+  await mount(root, {
+    fetchImpl: async (url) => {
+      calls.push(url);
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/logout/") return { status: 200, json: async () => ({ detail: "Signed out." }) };
+      return { status: 200, json: async () => FAMILY.body };
+    },
+  });
+  assert.match(root.innerHTML, /Ada Obi/);
+
+  await root.click({ "data-action": "sign-out" });
+
+  assert.ok(calls.includes("/api/logout/"), "the button never posted");
+  assert.doesNotMatch(root.innerHTML, /Ada Obi/, "a child's name outlived the session");
+  // **Not the expired state.** Signing out on purpose deletes the cookie as
+  // well as the session, so nothing lapsed and there is nothing to recover by
+  // trying again — `docs/membership.md` draws exactly that line.
+  assert.doesNotMatch(root.innerHTML, /session has ended/i);
+  assert.match(root.innerHTML, /please sign in/i);
+  assert.match(root.innerHTML, /\/\/portal\.example\.test\/sign-in\//);
+});
+
+test("a sign-out the server would not confirm does not empty the page", async () => {
+  forgetToken();
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: async (url) => {
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/logout/") return { status: 502, json: async () => ({}) };
+      return { status: 200, json: async () => FAMILY.body };
+    },
+  });
+
+  await root.click({ "data-action": "sign-out" });
+
+  // The dangerous direction. A page that cleared itself here would tell a
+  // parent on a shared handset that they were signed out while the cookie was
+  // still live and the cards still one refresh away.
+  assert.match(root.innerHTML, /Ada Obi/);
+  assert.match(root.innerHTML, /could not sign you out/i);
 });
