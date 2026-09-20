@@ -94,6 +94,13 @@ TENANT_APPS = [
     # bursar's ledger have different readers and different release schedules,
     # and neither should have to migrate because the other changed.
     "gradebook",
+    # Who was in the room. Separate from `academics` — which owns the roster a
+    # register is taken against — for the reason the three below are separate
+    # from each other: a register is written every morning by a form teacher and
+    # is stale by lunchtime, while a calendar of terms changes three times a
+    # year. Two tables with different relationships to time do not belong in one
+    # app, and `docs/attendance.md` D9 is the long form.
+    "attendance",
     # What a school *publishes*: the approval chain a term's results go
     # through, and the snapshot frozen when they are released. Separate from
     # `gradebook` for the reason `gradebook` is separate from `fees` — a

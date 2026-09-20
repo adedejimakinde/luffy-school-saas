@@ -1,8 +1,8 @@
 # Attendance
 
-Status: draft, **no domain input yet**. Structural decisions settled (D1–D11) against
+Status: draft, **no domain input yet**. Structural decisions settled (D1–D12) against
 the repository; three assumptions (A1–A3) are written as assumptions and have **not**
-been put to a school. A4 is settled from this repository and needs nobody. Extends
+been put to a school — the questions are drafted and waiting to be sent. A4 is settled from this repository and needs nobody. Extends
 `docs/results.md` and `docs/tenancy.md`. Supersedes nothing.
 
 Phase 2, weeks 10–13. Note that "Phase 2" is overloaded in older working notes, where
@@ -240,6 +240,32 @@ about the card's arithmetic and discovering it was wrong after cards have gone h
 The third state is structural rather than a status: a child with no mark in a register
 is unmarked, and a day with no register is unmarked, and D5 keeps the count of them.
 
+### D12. `school_days` gets a service function and a route, and no screen
+
+`Term.school_days` has a column, three constraints and a paragraph of
+documentation, and **no writer**: no admin, no form, no route, no service
+function. Today it is reachable only from the ORM, which means slice 2 could
+compute present and absent perfectly and still print nothing, because
+`days_open` would be null on every card.
+
+The door is `academics.services.set_school_days(term, count, by=actor)` plus an
+API route, admin-only, with the authority shape the other `academics` services
+already use — a `can_*` predicate, a `_require_*` raiser, and a `*_as(actor, …)`
+wrapper, so that authority is asked at the school and the write is pinned to the
+schema. `PLACEMENT_ROLES` is the nearest precedent and the right shape:
+declaring how many days a term taught is an office act, not a teacher's.
+
+**The route deliberately has no page, and nobody should assume one.** There are
+no staff screens anywhere in this project yet, and inventing one here would drag
+slice 2 into the staff-UI problem slice 3 already has to solve — which is the
+same problem, once, rather than twice in two shapes. The screen comes when staff
+pages exist. Until then this value is set by a route, and a school that has not
+had it set sees the blank card it already sees.
+
+It lands in **slice 2**, with the rest of the work that makes `days_open` mean
+something. It is named here rather than in the slice list because it is a
+decision about a door, not a step.
+
 ## What is configurable, and what is not
 
 **Not configurable, deliberately:** that the school declares `school_days` rather than
@@ -258,7 +284,8 @@ handles report cards, and one boolean does not earn a third settings table.
 
 1. **The register data path.** The two models, their constraints, the migration, the
    service layer, the roster read and the bulk-write endpoint. No page, no card.
-2. **The summary and the freeze.** `Term.school_days` gets a writer; the summary
+2. **The summary and the freeze.** `Term.school_days` gets a writer — D12, a service
+   function and a route with no page; the summary
    function; `cards.freeze_for_release()` gains its argument; D7's carry-forward and
    its control. Both rendering defects are fixed here, where they first become
    visible: `static/card/render.js` branches on `days_present` while
@@ -299,12 +326,8 @@ handles report cards, and one boolean does not earn a third settings table.
 
 ## Open questions
 
-- **OPEN-1. Who gives `Term.school_days` a value?** The column, its constraints and its
-  documentation all exist; there is no admin, no form, no API route and no service
-  function that writes it, so today it is reachable only from the ORM. Slice 2 needs it
-  populated or `days_open` is null and the card still prints nothing. Whether that door
-  is an admin screen, a term-settings route or part of a term-creation flow is not
-  settled here.
+- **OPEN-1 is closed.** See D12: a service function and an admin-only route on
+  `academics`, no screen, landing in slice 2.
 - **OPEN-2. What does the principal's view count as "too often"?** Deferred to slice 4.
 - **OPEN-3. Does a register need an audit of amendments?** D8 makes marks mutable. A
   register corrected the same morning is ordinary; a register corrected in March for a

@@ -46,6 +46,7 @@ from ninja.utils import check_csrf
 from accounts import guardian_signin, signin
 from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
+from attendance.api import router as attendance_router
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from results.card_api import router as report_card_router
@@ -65,6 +66,12 @@ from schools.models import (
 api = NinjaAPI(title="Luffy School API", version="1.0.0")
 
 api.add_router("/gradebook/", gradebook_router, tags=["gradebook"])
+
+# Tenant-host only in practice — `_school_of()` in that module answers 404 on the
+# portal, where `attendance_register` does not exist at all rather than existing
+# and being empty. Mounted here beside the others rather than on a second api
+# object, because the 404 is the routing decision and it is made in one place.
+api.add_router("/attendance/", attendance_router, tags=["attendance"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.
 api.add_router("/results/", results_router, tags=["results"])
