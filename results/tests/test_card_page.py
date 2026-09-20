@@ -22,15 +22,8 @@ page in — is tested where it lives, in `results/tests/js/` under `node --test`
 because those renderers are pure functions of a payload and need no browser.
 """
 
-import json
-import re
-from pathlib import Path
-
-from django.conf import settings
 from django.templatetags.static import static
 from django.test import TestCase
-
-from results import views as results_views
 
 from academics.models import TermName
 from results import cards
@@ -158,9 +151,9 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
         page = self.get_page(self.mama).content.decode()
 
         for asset in (
-            "results/card/app.js",
-            "results/card/card.css",
-            "results/card/print.css",
+            "card/app.js",
+            "card/card.css",
+            "card/print.css",
         ):
             with self.subTest(asset=asset):
                 self.assertIn(static(asset), page)
@@ -182,7 +175,7 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
 
         The page would keep working in development, where key and value are the
         same URL, and lose its remapping in production — the same asymmetry
-        `TheImportMapCoversEveryModuleTests` is about.
+        `tests.test_pages` is about.
         """
         page = self.get_page(self.mama).content.decode()
 
@@ -235,66 +228,3 @@ class ThePortalServesAFrameThatCannotWorkTests(ReportCardApiSetUp):
         self.assertEqual(
             answer.status_code, 404, "the portal has no card to answer with"
         )
-
-
-class TheImportMapCoversEveryModuleTests(TestCase):
-    """The map that keeps a hashed entry point from importing stale siblings.
-
-    `collectstatic` rewrites `{% static %}` and stylesheet `url()`, and does not
-    rewrite `import` statements. Without the map, `app.<hash>.js` asks for
-    `./api.js`, gets the unhashed copy, and the four modules behind the entry
-    point stop being cache-busted — a deploy can then pair a new entry point
-    with an old module out of the browser's own cache, and the symptom is a
-    page that is wrong for one person and fine for everyone else.
-
-    These assertions are about the *shape* of the map rather than about hashes,
-    so they hold under both storages: identity under the plain one, hashed under
-    the manifest. What they refuse is a module that nobody mapped.
-    """
-
-    MODULE_DIR = Path(results_views.__file__).parent / "static" / "results" / "card"
-
-    def test_every_javascript_file_on_disk_is_in_the_map(self):
-        """A new module added without joining `_MODULES` fails here.
-
-        That is the failure mode worth a test: the page keeps working in
-        development, where nothing is hashed, and loses cache-busting only once
-        deployed.
-        """
-        on_disk = {path.name for path in self.MODULE_DIR.glob("*.js")}
-
-        self.assertEqual(on_disk, set(results_views._MODULES))
-
-    def test_the_map_is_json_and_names_every_module(self):
-        imports = json.loads(results_views._import_map())["imports"]
-
-        self.assertEqual(len(imports), len(results_views._MODULES))
-        for name in results_views._MODULES:
-            with self.subTest(module=name):
-                self.assertIn(f"{settings.STATIC_URL}results/card/{name}", imports)
-
-    def test_each_key_is_the_url_a_relative_import_resolves_to(self):
-        """The keys are not decoration: a key the browser never asks for maps
-        nothing. A relative `./api.js` inside a module served from
-        `/static/results/card/` resolves against that directory, which is what
-        each key has to be."""
-        imports = json.loads(results_views._import_map())["imports"]
-
-        for key, value in imports.items():
-            with self.subTest(key=key):
-                self.assertTrue(key.startswith(f"{settings.STATIC_URL}results/card/"))
-                self.assertEqual(value, static(key.removeprefix(settings.STATIC_URL)))
-
-    def test_no_module_imports_a_sibling_the_map_does_not_cover(self):
-        """Read the imports out of the source rather than trusting the list.
-
-        This is the assertion that makes `_MODULES` true rather than merely
-        maintained: every relative import in every module has to name a file
-        the map remaps.
-        """
-        mapped = set(results_views._MODULES)
-
-        for path in sorted(self.MODULE_DIR.glob("*.js")):
-            for imported in re.findall(r'from\s+"\./([^"]+)"', path.read_text()):
-                with self.subTest(module=path.name, imports=imported):
-                    self.assertIn(imported, mapped)

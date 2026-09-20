@@ -10,8 +10,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { card } from "../../static/results/card/render.js";
-import { htmlFor, mount } from "../../static/results/card/app.js";
+import { card } from "../../static/card/render.js";
+import { htmlFor, mount } from "../../static/card/app.js";
 
 /** A card whose column order is neither alphabetical nor creation order. */
 function payload(overrides = {}) {

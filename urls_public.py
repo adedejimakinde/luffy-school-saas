@@ -14,9 +14,16 @@ cannot go missing here.
 from django.contrib import admin
 from django.urls import path
 
+from accounts.views import sign_in_page
 from urls import urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Sign-in is **here and only here**, which is why it is not in `urls.py`
+    # among the routes both hosts share. The API routes behind it begin with
+    # `api._portal_only()`, so a sign-in page on a school's host would be a
+    # form that submits into a 404 — and a school's host refuses anyone without
+    # an active membership there, which is the opposite of what a door needs.
+    path("sign-in/", sign_in_page, name="sign-in"),
     *tenant_urlpatterns,
 ]

@@ -29,7 +29,7 @@
  * and the page have to agree about it.
  */
 
-import { esc, numberOrBlank } from "./html.js";
+import { esc, numberOrBlank } from "../web/html.js";
 
 /** The whole page body for one card payload. */
 export function card(payload) {

@@ -1,11 +1,13 @@
 # The report card page
 
-The page a family opens. Code: `results/views.py`, the `cards/` route in
-`urls.py`, `results/templates/results/card_page.html`, the modules and
-stylesheets in `results/static/results/card/`, the static settings in
+The pages a family opens. Code: `results/views.py`, the two `cards/` routes in
+`urls.py`, `results/templates/results/card_page.html` and `card_index.html`,
+the modules and stylesheets in `static/card/`, `static/index/` and
+`static/web/`, the import map in `pages.py`, the static settings in
 `settings.py`, `whitenoise` in `requirements.txt`, and tests in
-`results/tests/test_card_page.py` (the shell) and `results/tests/js/` (the
-renderers and the four states). The payload it renders is
+`results/tests/test_card_page.py`, `results/tests/test_card_index_page.py`,
+`tests/test_pages.py` and `tests/js/`. Signing in is
+[sign-in-page.md](sign-in-page.md). The payload it renders is
 [parent-access.md](parent-access.md) and [cards.md](cards.md); the same card as
 a file is [report-card-pdf.md](report-card-pdf.md).
 
@@ -137,6 +139,27 @@ was the alternative. It was not taken because it makes every renderer need a DOM
 to run, and there is no DOM in `node --test` without adding a dependency and a
 build step to a page whose premise is having neither.
 
+## One static tree, because two pages share an escape rule
+
+The assets started per-app, under `results/static/results/card/`, on the
+argument that an asset belongs to the app whose page loads it the way its
+template does. The sign-in page broke that argument twice over and
+`settings.STATICFILES_DIRS` now names a project-level `static/` tree:
+
+1. **Two pages share `esc()`.** Two copies of an HTML escaper is two places to
+   fix an XSS, and one of them gets missed.
+2. **Per-app static makes the URL space and the disk layout diverge.** The
+   finders merge every app's `static/` into one `/static/`, so a relative
+   `import` that is correct in a browser resolves to nothing on disk — and
+   `node --test` has no finders. The premise of these pages is ES modules with
+   no build step, and that premise only holds while one relative path means the
+   same thing in both places.
+
+So the tree mirrors what is served: `static/web/` for what every page shares,
+and `static/card/`, `static/index/`, `static/signin/` for each page's own.
+`tests/test_pages.py` walks the `import` graph from each entry point and refuses
+a page whose map has a hole in it, or a module on disk that no page lists.
+
 ## WhiteNoise, and the two traps in serving assets from Django
 
 **The middleware sits above the tenant middleware.** A stylesheet is not a
@@ -176,13 +199,42 @@ of the source and refuses a module the map does not cover, so adding a fifth
 module without listing it fails a test rather than losing its cache-busting on
 the next deploy.
 
-## What is not here
+## The index, which is what makes a card reachable
 
-**There is no index page.** A family reaches a card by its URL, and
-`GET /api/results/cards/` — the index #116 added, which exists precisely so a
-parent does not have to type two integers — has no page in front of it yet. The
-card page is therefore reachable only from a link somebody sends. That is a
-deliberate scope line for this change and the obvious next one.
+`/cards/` on the school's host, listing every child this caller stands for and
+each of their cards. It exists because both card routes are keyed on
+`(student_membership_id, term_id)` and nothing this API said to a family ever
+carried either number — so the card page shipped openable only by typing two
+integers into a URL. An earlier version of this file called that "a deliberate
+scope line and the obvious next one", and this is that next one.
+
+Same shape as the card page: a shell with no list in it, a renderer that walks
+what the API sends, and its own states. Two of those states are worth naming.
+
+**A withheld card is listed and marked, never hidden.** `is_withheld` comes back
+true for a card the school is holding over fees, and the row is rendered with a
+mark and a link that still goes to the card page — where the 403 explains itself
+and names who to contact. Hiding it would defeat what withholding is *for*: a
+school holds a card back to start a conversation, and a card that never appears
+starts none. What makes listing it safe is that the index carries no card
+content at all: `ListedCardOut` has no slot for a mark, an average, a remark or
+a rating.
+
+**Two silences, told apart because they send a parent to different people.** No
+children on the account is the school office's business — a guardianship nobody
+recorded. Children with no released cards is nobody's fault and needs no action,
+so it does not read like a problem.
+
+Its 401 state has to link back to sign-in, which lives on the portal, so the
+link cannot be relative. `api._portal_only()` settles that the *API* will not
+say where the portal is — a client knows where it signed in, and having the
+server answer would put the same fact in two places. So the view reads it from
+the one authority there is, the `Domain` row for the public schema, and renders
+it into the frame. Where no such row exists the state says its sentence without
+a link, because a dead link is worse than being told to go back the way you
+came.
+
+## What is not here
 
 **There is no print button and no PDF link.** The browser's own print command
 uses `print.css`; the stored file has its own route and its own authority check.

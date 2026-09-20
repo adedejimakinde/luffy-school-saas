@@ -559,10 +559,25 @@ STATIC_URL = "static/"
 # stale collected copy can never be mistaken for a source file.
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-# The assets a page needs are per-app — `results/static/results/...` — found by
-# `AppDirectoriesFinder`, which `django.contrib.staticfiles` enables by default.
-# There is no project-wide `static/` directory and no `STATICFILES_DIRS`: an
-# asset belongs to the app whose page loads it, the same way its template does.
+# **One project-level tree, and this reverses what this comment said a change
+# ago.** The report card page's assets started per-app, under
+# `results/static/results/card/`, on the argument that an asset belongs to the
+# app whose page loads it the way its template does. Two pages broke that:
+#
+# 1. The sign-in page and the card page share `esc()`. Two copies of an HTML
+#    escaper is two places to fix an XSS and one of them will be missed, which
+#    is the drift this codebase spends its review effort removing.
+# 2. Per-app static makes the URL space and the disk layout diverge — the
+#    finders merge `results/static/` and `accounts/static/` into one `/static/`
+#    — so a relative `import` that is correct in a browser resolves to nothing
+#    on disk. That breaks `node --test`, which has no finders and reads files.
+#    The page's premise is ES modules with no build step, and that premise only
+#    holds while one relative path means the same thing in both places.
+#
+# So `static/` mirrors what is served: `static/web/` for what every page shares,
+# `static/card/`, `static/signin/`, `static/index/` for each page's own.
+# `STATICFILES_DIRS` is what makes that tree visible to the finders.
+STATICFILES_DIRS = [BASE_DIR / "static"]
 #
 # ## The hashed manifest, and why it is off in development
 #
