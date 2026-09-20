@@ -1,0 +1,90 @@
+/*
+ * The card on a screen. One file, no preprocessor, no framework.
+ *
+ * Layout is deliberately plain: this document is read once or twice a term, on
+ * whatever phone a parent has, often on a slow connection. There is nothing
+ * here a stylesheet of this size cannot do, and every dependency would be
+ * bytes on that connection plus a build step on a page whose premise is not
+ * having one.
+ *
+ * The palette is light-only on purpose. A report card is a document, not an
+ * app: it has a paper form, `print.css` is that form, and a dark-mode variant
+ * would be a second appearance to keep in agreement with it for no gain to
+ * the person reading it.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #999;
+  --wash: #f0f0f2;
+  --held: #900;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 900px; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: 1rem; margin: 0 0 4px; }
+
+.masthead { text-align: center; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+.masthead .term { margin: 2px 0 0; color: var(--quiet); }
+
+.revised {
+  display: inline-block;
+  margin: 6px 0 0;
+  padding: 1px 8px;
+  border: 1px solid var(--held);
+  border-radius: 9px;
+  color: var(--held);
+  font-size: .75rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+table { border-collapse: collapse; width: 100%; }
+
+.who { margin: 10px 0 14px; }
+.who th, .who td { padding: 3px 0; text-align: left; vertical-align: top; font-weight: 400; }
+.who th { color: var(--quiet); width: 22%; }
+
+/*
+ * The marks table is the one thing on this page that can be wider than a
+ * phone: a term with six papers across five subjects has eleven columns, and
+ * there is no honest way to make eleven columns fit 360px. It scrolls
+ * sideways in its own box rather than shrinking the type to unreadable or
+ * letting the whole page scroll, which would take the headings off screen.
+ */
+.grid-scroll { overflow-x: auto; }
+
+.grid { margin-bottom: 14px; font-size: .9rem; }
+.grid th, .grid td { border: .6px solid var(--rule); padding: 4px 6px; text-align: left; }
+.grid thead th { background: var(--wash); font-size: .8rem; }
+.grid .n { text-align: center; }
+.grid .max { color: var(--quiet); font-size: .72rem; }
+
+.blank { color: #888; }
+
+.conduct, .remark, .session, .promotion { margin-bottom: 12px; }
+.remark p { margin: 2px 0 0; }
+
+/*
+ * The states. A refusal is the page, not a banner on top of one, so it gets
+ * the same width and the same type as a card would — a parent who has been
+ * told the school is holding their child's card should not be reading it in
+ * small print at the top of an empty document.
+ */
+.state { padding: 24px 0; }
+.state h1 { margin-bottom: 8px; }
+.state-withheld .contact { font-size: 1.05rem; }
+.state-withheld h1 { color: var(--held); }
+.state-loading { color: var(--quiet); }

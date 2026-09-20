@@ -1,0 +1,54 @@
+/*
+ * The card on paper, and this is not decoration: a report card gets printed.
+ *
+ * Loaded with `media="print"` so the screen never parses it. What it has to
+ * get right is not prettiness but the three ways a printed card misleads:
+ *
+ * 1. **A table that breaks across pages loses its header.** Page two then
+ *    shows marks under no headings at all, which is worse than a second page
+ *    — `thead { display: table-header-group }` reprints it. Rows are kept
+ *    whole for the same reason: half a subject at a page break reads as a
+ *    subject with missing marks.
+ * 2. **A screen's sideways scroll does not exist on paper.** The scroll box
+ *    that keeps eleven columns usable on a phone would clip them in print, so
+ *    it is unset here and the table is allowed its full width.
+ * 3. **Ink the reader did not ask for.** Backgrounds and the state links are
+ *    dropped: a "Sign in again" link is meaningless on paper, and a grey
+ *    header wash costs a family toner for nothing.
+ *
+ * `@page` margins match `results/templates/results/report_card.html`, the
+ * WeasyPrint template, so a page printed from the browser and the PDF the
+ * school archives are the same document rather than two that resemble each
+ * other.
+ */
+
+@page {
+  size: A4;
+  margin: 14mm 13mm 16mm 13mm;
+}
+
+body {
+  padding: 0;
+  font-size: 10pt;
+  color: #000;
+}
+
+main { max-width: none; }
+
+.grid-scroll { overflow: visible; }
+
+.grid { font-size: 9pt; }
+.grid thead { display: table-header-group; }
+.grid tr { page-break-inside: avoid; }
+.grid thead th { background: none; border-bottom: 1px solid #000; }
+
+.conduct, .remark, .session, .promotion { page-break-inside: avoid; }
+
+/* A link is a thing to tap. On paper it is a sentence that cannot be obeyed. */
+.state a { display: none; }
+
+/*
+ * A withheld card printing as a full page of red would be a family's toner
+ * spent on a refusal. The words stay; the colour does not.
+ */
+.state-withheld h1 { color: #000; }

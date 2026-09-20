@@ -123,6 +123,14 @@ MIDDLEWARE = [
     # rest of the stack has done any work. What it buys here is the header set
     # — nosniff, referrer policy, and HSTS once a deployment turns it on.
     "django.middleware.security.SecurityMiddleware",
+    # Second, and **above the tenant middleware on purpose**. A stylesheet is
+    # not a school's: it is the same bytes on thirty hostnames, and resolving a
+    # tenant to serve one would mean a database query and a `search_path` set
+    # per asset, on requests that touch no school's data at all. Placed here,
+    # `/static/...` is answered and returned before `TenantMainMiddleware` is
+    # ever asked which school this is — which also means a request for an asset
+    # on a hostname that is not a school's cannot 404 as "no such tenant".
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django_tenants.middleware.main.TenantMainMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -537,6 +545,51 @@ TIME_ZONE = os.environ.get("TIME_ZONE", "Africa/Lagos")
 USE_I18N = True
 USE_TZ = True
 STATIC_URL = "static/"
+
+# ---------------------------------------------------------------------------
+# Static files
+#
+# One server process serves the assets, through WhiteNoise, because this
+# platform has no CDN and no separate web server in front of Django. The
+# alternative is `runserver`'s static handler, which exists for development and
+# says so.
+#
+# `STATIC_ROOT` is where `collectstatic` gathers them and the only directory
+# WhiteNoise reads in production. It is deliberately outside the app tree, so a
+# stale collected copy can never be mistaken for a source file.
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+# The assets a page needs are per-app — `results/static/results/...` — found by
+# `AppDirectoriesFinder`, which `django.contrib.staticfiles` enables by default.
+# There is no project-wide `static/` directory and no `STATICFILES_DIRS`: an
+# asset belongs to the app whose page loads it, the same way its template does.
+#
+# ## The hashed manifest, and why it is off in development
+#
+# `CompressedManifestStaticFilesStorage` renames every file to include a hash of
+# its contents — `card.7f3c1e.js` — and rewrites `{% static %}` to match. That
+# is what makes a far-future cache header safe: a changed file is a changed
+# name, so no browser can hold yesterday's script against today's payload. It
+# also pre-compresses, so the bytes on the wire are gzip/brotli without asking
+# the CPU per request.
+#
+# It refuses to serve any file that is not in the manifest, and the manifest is
+# written by `collectstatic` — which a test run and a `runserver` have not run.
+# Under that storage `{% static %}` raises `ValueError: Missing staticfiles
+# manifest entry` in development and in the test suite, and the failure looks
+# like a broken template rather than an uncollected asset. So the manifest is
+# conditioned on `DEBUG`: hashed and compressed where it is deployed, plain
+# where nothing has collected anything.
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        )
+    },
+}
 
 # ---------------------------------------------------------------------------
 # Background work

@@ -1,0 +1,52 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Report card</title>
+
+{% comment %}
+The title says "Report card" and not the child's name, deliberately. This
+document is served before anybody has been authenticated, so anything in it is
+readable by whoever opened the URL — and a browser tab, a bookmark and a
+browser's history all keep the title. The name arrives with the payload and is
+written into the page by the client, behind the API's authority check.
+
+Every comment in this file is `{% comment %}` and not a `{#` block spanning
+lines. A `{#` comment is single-line only: across lines it is not a comment at
+all, and every word of it renders on the page. This project has shipped that
+bug before.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'results/card/card.css' %}">
+<link rel="stylesheet" href="{% static 'results/card/print.css' %}" media="print">
+
+{% comment %}
+The import map, and it is not optional. `collectstatic` hashes filenames and
+rewrites `{% templatetag openblock %} static {% templatetag closeblock %}` in
+templates — it does not rewrite `import` statements inside JavaScript, so the
+hashed entry point still asks for `./api.js` and would be served the unhashed
+copy. That copy is not cache-busted, so a browser could pair today's entry
+point with yesterday's modules. `results/views.py` has the long version.
+
+It must come before the module that uses it: a map declared after the import
+that needs it is ignored.
+{% endcomment %}
+<script type="importmap">{{ import_map|safe }}</script>
+
+{% comment %}
+`defer` rather than `async`: the module has to find `#card` in the document and
+`async` would let it run before the element exists. `type="module"` is what
+makes `import` work with no bundler, which is the whole reason this page has no
+build step.
+{% endcomment %}
+<script type="module" defer src="{% static 'results/card/app.js' %}"></script>
+
+<main id="card"
+      data-student-membership-id="{{ student_membership_id }}"
+      data-term-id="{{ term_id }}">
+  {% comment %}
+  What a reader sees before the module runs, and the only state written in HTML
+  rather than by the client: if the script never loads, this is the page, and it
+  says something true.
+  {% endcomment %}
+  <p class="state-loading">Fetching this report card&hellip;</p>
+</main>

@@ -4,6 +4,14 @@ django-tenants>=3.6
 phonenumbers>=8.13
 django-ninja>=1.6
 
+# The report card page's own assets — its ES modules and stylesheets — are
+# served by the application process, because this platform has no CDN and no
+# web server in front of Django. WhiteNoise is what makes that defensible
+# rather than a development shortcut: hashed filenames, pre-compressed bytes and
+# a far-future cache header, from one process, with no extra moving part to
+# deploy. settings.py says why the hashing is off under DEBUG.
+whitenoise>=6.6
+
 # Background work. A report card PDF is minutes of rendering for a class of
 # forty-five, which is not a thing to do inside a request: Celery moves it off
 # the web process, Redis is the broker it hands the job to (settings.py says why

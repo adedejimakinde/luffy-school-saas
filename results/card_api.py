@@ -93,6 +93,7 @@ half of why freezing it would be wrong: the card would permanently say
 
 import enum
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import List, Optional
 
 from django.http import Http404, HttpResponse
@@ -195,6 +196,24 @@ class AssessmentCellOut(Schema):
     score: Optional[int]
 
 
+class ColumnOut(Schema):
+    """One column of the marks table: a paper's name and what it is out of.
+
+    The header, in print order, sent so that **the client decides nothing about
+    the order**. `card_columns()` produces it — the same call the PDF renderer
+    makes — so the page and the file cannot disagree about which paper prints
+    first. A browser deriving this list itself would be the second assembly of
+    it, in the one layer of this platform with no test runner.
+
+    Keyed as a pair for the reason `card_columns()` argues at length:
+    `max_score` is per `(term, subject, name)`, so two subjects' "Exam" can be
+    out of two different totals and are two different columns.
+    """
+
+    name: str
+    max_score: int
+
+
 class SubjectLineOut(Schema):
     """One subject's row on the card.
 
@@ -215,7 +234,33 @@ class SubjectLineOut(Schema):
     percentage: Optional[str]
     grade_letter: str
     grade_remark: str
+
+    #: This subject's own cells, in its own print order. **Unchanged**: the PDF
+    #: renderer reads this field through `card_rows()` and nothing about it
+    #: moves. A subject that has three papers has three entries here whatever
+    #: the rest of the card has.
     assessments: List[AssessmentCellOut]
+
+    #: The same cells, aligned to `ReportCardOut.columns`, `None` where this
+    #: subject has no such paper. Always exactly as long as `columns`.
+    #:
+    #: It is a second view of the cells above and that is the deliberate
+    #: trade. The alternative was a client walking `columns` and looking each
+    #: one up in `assessments` by `(name, max_score)` — the alignment rule
+    #: implemented a second time, in the layer with no tests, where a subject
+    #: with no such paper and a subject whose mark is missing would be one bug
+    #: away from printing identically.
+    #:
+    #: **Two absences, and they must not look the same.** A `None` entry is a
+    #: paper this subject does not have at all, and prints as a gap; an entry
+    #: whose `score` is null is a paper this child was not marked in, and
+    #: prints as a dash. `docs/report-card-pdf.md` has the table.
+    #:
+    #: Filled only by `card_payload()`, from `card_rows()`. Nothing else may
+    #: construct a `SubjectLineOut`, which is what keeps the two views from
+    #: drifting apart, and `TheAlignedCellsAgreeWithTheAssessmentsTests` is
+    #: what says so out loud.
+    cells: List[Optional[AssessmentCellOut]]
 
 
 class TraitOut(Schema):
@@ -373,6 +418,11 @@ class ReportCardOut(Schema):
     days_open: Optional[int]
 
     subjects: List[SubjectLineOut]
+
+    #: The marks table's header, in print order. See `ColumnOut`, and
+    #: `SubjectLineOut.cells`, which is aligned to this list.
+    columns: List[ColumnOut]
+
     sections: List[SectionOut]
     comments: List[CommentOut]
     session: Optional[SessionLineOut] = None
@@ -746,24 +796,34 @@ def _as_text(value) -> Optional[str]:
     return None if value is None else str(value)
 
 
-def _subject_lines(card) -> List[SubjectLineOut]:
-    """The subject table, in the order it was frozen to print in.
+def _subject_lines(card) -> tuple[List[SubjectLineOut], List[ColumnOut]]:
+    """The subject table and the header above it, in frozen print order.
 
     `cards.card_lines()` returns `(line, cells)` pairs already grouped, in two
     queries whatever the card's size. `ReleasedSubjectResult.Meta.ordering`
     carries the frozen print order — `position`, which on this table means where
     the line prints and *not* a rank.
+
+    **Two passes, because a line cannot know its own `cells` alone.** The
+    columns are the union *across* subjects, so no single line has enough in
+    hand to align itself: the first pass reads the frozen rows into
+    `AssessmentCellOut`s, and the second constructs each `SubjectLineOut` once,
+    with both its own cells and the aligned ones. Constructing them first and
+    filling `cells` afterwards would leave a window in which a line says it has
+    no cells, and something would eventually serialise one from inside it.
+
+    `card_columns()` and `card_rows()` are called with a stand-in rather than
+    with a payload, and the reason is not thrift: the payload cannot exist yet,
+    because `columns` is a field *of* the payload and these are what produce
+    it. Both functions read `.subjects` and each line's `.assessments` and
+    nothing else — that is the whole contract, and the stand-in honours it
+    exactly. Their signatures are untouched, so the PDF path calls the same two
+    functions with a real payload and is unaffected.
     """
-    return [
-        SubjectLineOut(
-            subject_name=line.subject_name,
-            subject_code=line.subject_code,
-            total_scored=line.total_scored,
-            total_available=line.total_available,
-            percentage=_as_text(line.percentage),
-            grade_letter=line.grade_letter,
-            grade_remark=line.grade_remark,
-            assessments=[
+    read = [
+        (
+            line,
+            [
                 AssessmentCellOut(
                     assessment_name=cell.assessment_name,
                     max_score=cell.max_score,
@@ -773,6 +833,32 @@ def _subject_lines(card) -> List[SubjectLineOut]:
             ],
         )
         for line, cells in cards.card_lines(card)
+    ]
+
+    grid = SimpleNamespace(
+        subjects=[SimpleNamespace(assessments=cells) for _, cells in read]
+    )
+    columns = card_columns(grid)
+    # `card_rows()` returns one row per `.subjects` entry, in that order, which
+    # is what makes this zip an alignment rather than a hope.
+    rows = card_rows(grid, columns)
+
+    return [
+        SubjectLineOut(
+            subject_name=line.subject_name,
+            subject_code=line.subject_code,
+            total_scored=line.total_scored,
+            total_available=line.total_available,
+            percentage=_as_text(line.percentage),
+            grade_letter=line.grade_letter,
+            grade_remark=line.grade_remark,
+            assessments=cells,
+            cells=row["cells"],
+        )
+        for (line, cells), row in zip(read, rows)
+    ], [
+        ColumnOut(name=column["name"], max_score=column["max_score"])
+        for column in columns
     ]
 
 
@@ -1002,7 +1088,11 @@ def card_payload(card) -> ReportCardOut:
     serving — a Celery worker rendering a PDF has no request to ask it of, and a
     payload builder that pretended otherwise would be answering with whatever
     the last caller happened to leave behind.
+
+    `subjects` and `columns` come out of one call, because the header is the
+    union across the subject lines and neither is knowable without the other.
     """
+    subjects, columns = _subject_lines(card)
     return ReportCardOut(
         school_name=card.school_name,
         student_name=card.student_name,
@@ -1019,7 +1109,8 @@ def card_payload(card) -> ReportCardOut:
         days_present=card.days_present,
         days_absent=card.days_absent,
         days_open=card.days_open,
-        subjects=_subject_lines(card),
+        subjects=subjects,
+        columns=columns,
         sections=_sections(card),
         comments=_comments(card),
         session=_session_line(card),
