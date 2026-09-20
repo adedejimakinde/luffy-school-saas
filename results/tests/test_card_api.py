@@ -727,3 +727,206 @@ class TheRevisedMarkerIsOnThePayload(ReportCardApiSetUp):
 
         self.assertFalse(theirs["is_revised"])
         self.assertEqual(theirs["version"], 1)
+
+
+class TheIndexIsHowAFamilyReachesACardAtAll(ReportCardApiSetUp):
+    """Without this route there is no path from signing in to a card.
+
+    The gap this closes is not a missing convenience. Both card routes are keyed
+    on `(student_membership_id, term_id)`; sign-in answers with a list of
+    *schools*; and until this change `ReportCardOut` carried `term_name` and
+    `term_label` but no `term_id`. So nothing the API ever said to a family
+    contained either number, and the only way to open a card was to type
+    integers into a URL bar and hope.
+
+    `test_a_guardian_can_go_from_the_index_to_a_card_with_no_other_knowledge`
+    is the one that holds that claim, and it is written to use **nothing** but
+    what the two responses contain — no `self.ada.pk`, no `self.terms`.
+
+    ## The control runs first
+
+    Every scoping test here asserts that somebody sees *less* than everything,
+    and an index that returned an empty list for every caller would pass all of
+    them. `test_the_index_really_lists_a_card` pins that shut before any of the
+    exclusions are asserted, against the same fixture.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.release()
+
+    def index(self, user, school=None, host=None):
+        school = school or self.stmarys
+        if user is not None:
+            self.client.force_login(user)
+        else:
+            self.client.logout()
+        return self.client.get(
+            "/api/results/cards/",
+            HTTP_HOST=host or (HOST if school == self.stmarys else THEIR_HOST),
+        )
+
+    def children_in(self, response):
+        return {child["student_name"]: child for child in response.json()["children"]}
+
+    # -- the control ---------------------------------------------------------
+
+    def test_the_index_really_lists_a_card(self):
+        """First, so that no exclusion below can pass against an empty index."""
+        body = self.children_in(self.index(self.mama))
+
+        self.assertEqual(
+            list(body),
+            ["Ada Obi"],
+            "the guardian's own child is not in the index, so every assertion "
+            "about who is *not* in it would be checking an empty list",
+        )
+        self.assertEqual(len(body["Ada Obi"]["cards"]), 1)
+        card = body["Ada Obi"]["cards"][0]
+        self.assertEqual(card["term_label"], "First term")
+        self.assertEqual(card["academic_session"], SESSION)
+        self.assertFalse(card["is_withheld"])
+
+    # -- the gap it closes ---------------------------------------------------
+
+    def test_a_guardian_can_go_from_the_index_to_a_card_with_no_other_knowledge(self):
+        """The whole point, driven using only what the responses themselves say.
+
+        Deliberately does not touch `self.ada` or `self.terms`. A test that
+        reached for the fixture's ids would prove the card route works, which
+        was never in doubt; what was in doubt is whether a family holding only a
+        session cookie can *find* the two numbers, and reaching past the payload
+        to get them is exactly the step a parent cannot take.
+        """
+        listed = self.index(self.mama).json()["children"][0]
+        membership_id = listed["student_membership_id"]
+        term_id = listed["cards"][0]["term_id"]
+
+        card = self.client.get(
+            f"/api/results/cards/{membership_id}/{term_id}/", HTTP_HOST=HOST
+        )
+
+        self.assertEqual(card.status_code, 200, "the index named a card that 404s")
+        self.assertEqual(card.json()["student_name"], "Ada Obi")
+
+    def test_the_card_payload_carries_the_term_id_it_was_fetched_with(self):
+        """`term_name` and `term_label` are labels; this is the identity.
+
+        Round-tripped rather than compared to the fixture, because the claim is
+        that a client holding a card can ask for another one — which needs the
+        id the card carries to be usable as the id the route takes.
+        """
+        first = self.fetch(self.mama, self.stmarys, self.ada).json()
+
+        again = self.client.get(
+            f"/api/results/cards/{self.ada.pk}/{first['term_id']}/", HTTP_HOST=HOST
+        )
+
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json()["term_id"], first["term_id"])
+        self.assertEqual(
+            first["term_id"],
+            self.terms_of(self.stmarys)[str(TermName.FIRST.value)],
+        )
+
+    # -- who is in it --------------------------------------------------------
+
+    def test_a_guardian_sees_their_own_child_and_not_another_families(self):
+        """Bola is at the same school, in the same class, released in the same run."""
+        body = self.children_in(self.index(self.mama))
+
+        self.assertIn("Ada Obi", body)
+        self.assertNotIn(
+            "Bola Eze",
+            body,
+            "a guardianship links a login to one child; holding PARENT at a "
+            "school says nothing about whose",
+        )
+
+    def test_a_child_sees_their_own_card(self):
+        """The `SELF` claim, which is a different branch of `_may_read()`."""
+        body = self.children_in(self.index(self.ada.user))
+
+        self.assertEqual(list(body), ["Ada Obi"])
+        self.assertEqual(len(body["Ada Obi"]["cards"]), 1)
+
+    def test_staff_get_an_index_of_their_own_children_and_not_the_roll(self):
+        """A principal is not a parent here, so her index is empty — not the school.
+
+        The refusal to build a staff index off `CardClaim.STAFF` is a design
+        decision rather than an omission: that claim reaches every card at the
+        school, and an index built from it would be a staff directory grown onto
+        a family router by accident. `_children_of()` carries the argument.
+        """
+        body = self.index(self.principal).json()
+
+        self.assertEqual(body["children"], [])
+
+    def test_a_guardian_at_another_school_never_reaches_this_route(self):
+        """403 from the middleware, and **not** an empty index from this view.
+
+        Written to assert what actually happens rather than what this route
+        would have done, because the difference is the tenancy guarantee.
+        `SchoolAccessMiddleware` refuses any authenticated caller with no active
+        membership at the host's school before a view runs, so Ada's mother is
+        turned away at Grace Academy's door and `_children_of()` is never asked.
+
+        `WhoMayReadACard.test_the_other_schools_principal_may_not_reach_across`
+        records the same refusal for the card route, including why that 403 is
+        not the disclosure hole a 403 usually is: the middleware's answer
+        depends only on the caller's own membership and never on what they
+        asked for.
+
+        The first draft of this test asserted an empty `children` list and
+        errored on a `text/html` body — the middleware's page. Keeping the
+        weaker assertion would have meant this file claimed `_children_of()`
+        scopes by school on the evidence of a request that never reached it.
+        """
+        self.release(self.grace)
+
+        response = self.index(self.mama, self.grace, host=THEIR_HOST)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(
+            b"children",
+            response.content,
+            "the refusal carried this route's payload shape, so the view ran",
+        )
+
+    def test_the_index_is_scoped_to_the_host_school_for_a_caller_who_is_a_member(self):
+        """The scoping claim the test above cannot make, driven by somebody inside.
+
+        A guardian with children at **both** schools is the case that separates
+        "the middleware refused you" from "this view scoped its query". She is a
+        member at each, so she reaches the route on both hosts and must be
+        handed a different child on each.
+        """
+        self.release(self.grace)
+        # No second channel: `link_guardian()` grants the PARENT membership
+        # ACTIVE outright when the guardian already holds a verified one, and
+        # `one_live_contact_per_guardian` refuses a second. One channel reaches
+        # every school a guardian has a child at, which is D5's whole point.
+        link_guardian(self.mama, self.ngozi)
+
+        here = self.children_in(self.index(self.mama, self.stmarys, host=HOST))
+        there = self.children_in(self.index(self.mama, self.grace, host=THEIR_HOST))
+
+        self.assertEqual(list(here), ["Ada Obi"])
+        self.assertEqual(list(there), ["Ngozi Ade"])
+
+    def test_an_unreleased_term_is_not_listed(self):
+        """The index lists artefacts, never a calendar.
+
+        Second and third term exist as `Term` rows for this child — `_child()`
+        places her in all three — and neither has been released. An index built
+        from placements rather than from `ReleasedCard` would list them, and a
+        parent would tap a card that does not exist.
+        """
+        cards_listed = self.index(self.mama).json()["children"][0]["cards"]
+
+        self.assertEqual([card["term_name"] for card in cards_listed], ["first"])
+
+    def test_an_unauthenticated_caller_is_refused(self):
+        response = self.index(None)
+
+        self.assertEqual(response.status_code, 401)

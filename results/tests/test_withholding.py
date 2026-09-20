@@ -75,10 +75,12 @@ import json
 import re
 
 from django.db import connection, transaction
+from django.test.utils import CaptureQueriesContext
 from django.test import TestCase
 
 from academics.models import TermName
 from accounts.models import Membership, Role, User
+from accounts.services import link_guardian
 from fees import services as fees_services
 from results import cards, revision, withholding
 from results.card_api import CardClaim, router as card_router
@@ -104,6 +106,24 @@ CONTACT = "Call the bursar's office on 0803 555 0100."
 #: from `router.path_operations`, and a hardcoded prefix there would be a second
 #: place to change; it is written once, here.
 PREFIX = "/api/results"
+
+#: What one more listed card costs the index, in queries. Pinned by
+#: `TheIndexAndTheGateGiveTheSameAnswer.test_the_index_costs_a_fixed_amount_per
+#: _listed_card`, which measures the **difference** between a one-card index and
+#: a three-card one rather than the absolute total.
+#:
+#: Measuring the delta is deliberate. An absolute count folds in the session
+#: lookup, the tenant middleware's membership checks and the session write, none
+#: of which this route controls — so a pin on the total would go red whenever
+#: somebody touched authentication, and the reader of that failure would come
+#: looking here. The per-card rate is the thing that would actually blow up, and
+#: it is the thing this route decides.
+#:
+#: Four statements, each doubled by the `SET search_path` django-tenants issues
+#: ahead of it: `cards.card_for()` is two — the earliest version-1 row, then the
+#: highest version of that sheet — and `withholding.is_withheld()` is two, the
+#: settings row and the decision row.
+QUERIES_PER_LISTED_CARD = 8
 
 
 class WithholdingSetUp(RefusalAssertions, ReportCardApiSetUp):
@@ -710,10 +730,34 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
     surface will read it, which is the function they would have to not call.
     """
 
-    KNOWN = {
+    #: Routes that serve card **content**, and must therefore refuse a withheld
+    #: family outright. This is the set the original test was written around.
+    MUST_REFUSE = {
         "/cards/{int:student_membership_id}/{int:term_id}/",
         "/cards/{int:student_membership_id}/{int:term_id}/pdf/",
     }
+
+    #: Routes that may answer a withheld family 200, because they only **name** a
+    #: card. The exemption is not a weakening and is not free: a route listed
+    #: here is held to `test_a_naming_route_carries_no_card_content_and_marks_it`
+    #: below, which is a harder bargain than refusing would have been — it must
+    #: carry no mark, average, remark or rating, *and* it must actually set the
+    #: withheld mark rather than stay silent about it.
+    #:
+    #: `card_index()` is here because leaving a withheld card out of the index
+    #: defeats the thing withholding is for: a school holds a card back to start
+    #: a conversation about fees, and a card that never appears starts none. Its
+    #: docstring carries the argument in full.
+    #:
+    #: **Adding a path here is a design decision, not a way to get this test
+    #: green.** The question to answer first is whether the new route serves
+    #: content or names a card; if it serves content it belongs in the set
+    #: above, and no amount of listing it here makes that safe.
+    NAMES_ONLY = {
+        "/cards/",
+    }
+
+    KNOWN = MUST_REFUSE | NAMES_ONLY
 
     def setUp(self):
         super().setUp()
@@ -731,7 +775,14 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
             "assertion driven from it would be checking nothing",
         )
 
-    def test_every_operation_on_the_router_refuses_a_withheld_family(self):
+    def test_every_operation_on_the_router_is_sorted_and_held_to_its_half(self):
+        """Every route either refuses a withheld family, or only names the card.
+
+        A path in neither set fails here rather than being skipped. That is the
+        property the whole class exists for: the finding is "a surface was added
+        and nobody decided which half it is in", and a loop that quietly passed
+        over the unrecognised one would report the opposite.
+        """
         term_id = self.terms_of(self.stmarys)[str(TermName.FIRST.value)]
         self.client.force_login(self.mama)
 
@@ -755,10 +806,26 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
                         f"gated deliberately, not skipped here.",
                     )
 
-                    self.assertWithheld(
-                        self.client.get(url, HTTP_HOST=HOST),
-                        f"a guardian at {path}",
+                    self.assertIn(
+                        path,
+                        self.KNOWN,
+                        f"{path} is on this router and is in neither "
+                        f"MUST_REFUSE nor NAMES_ONLY. Somebody added a serving "
+                        f"surface without deciding whether it serves card "
+                        f"content or merely names a card, and this test will "
+                        f"not guess on their behalf.",
                     )
+
+                    response = self.client.get(url, HTTP_HOST=HOST)
+                    if path in self.MUST_REFUSE:
+                        self.assertWithheld(response, f"a guardian at {path}")
+                    else:
+                        self.assertEqual(
+                            response.status_code,
+                            200,
+                            f"{path} is listed as naming a card rather than "
+                            f"serving one, so a withheld family must reach it",
+                        )
                     drove += 1
 
         self.assertEqual(
@@ -767,6 +834,94 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
             "the number of operations driven does not match the number known; "
             "a surface was added or removed and this test has not been read",
         )
+
+    #: What "card content" means, as bytes. Crude on purpose, like every other
+    #: exclusion assertion in this suite: a leak that renamed a field, nested it
+    #: a level deeper or moved it into an error body would still be a leak, and
+    #: a structural assertion on parsed JSON walks past all three.
+    #:
+    #: The fixture is what makes these real — Ada is marked in both subjects and
+    #: has a position over Bola — so every one of these strings *is* on her card
+    #: and absence here is an exclusion rather than an empty snapshot. The
+    #: control for that claim is `test_the_card_itself_carries_what_the_index_
+    #: must_not` below.
+    CARD_CONTENT = (
+        b"Mathematics",
+        b"English",
+        b"subjects",
+        b"sections",
+        b"comments",
+        b"own_average",
+        b"total_scored",
+        b"grade_letter",
+        b"position",
+    )
+
+    def test_a_naming_route_carries_no_card_content_and_marks_it(self):
+        """The harder half of the NAMES_ONLY bargain, and the price of being on it.
+
+        Two assertions, and the second is the one that makes the exemption
+        honest. A route could carry no card content by returning `{}` and would
+        pass the first on its own — and would also have hidden the withholding
+        from the family, which is the failure this design set out to avoid.
+        """
+        self.client.force_login(self.mama)
+
+        for path in self.NAMES_ONLY:
+            with self.subTest(path=path):
+                response = self.client.get(f"{PREFIX}{path}", HTTP_HOST=HOST)
+                self.assertEqual(response.status_code, 200)
+
+                for marker in self.CARD_CONTENT:
+                    self.assertNotIn(
+                        marker,
+                        response.content,
+                        f"{path} is listed as naming a card rather than serving "
+                        f"one, and {marker!r} is card content",
+                    )
+
+                body = json.loads(response.content)
+                listed = [
+                    card
+                    for child in body["children"]
+                    for card in child["cards"]
+                ]
+                self.assertTrue(
+                    listed,
+                    "the index named no card at all, so the mark below would be "
+                    "asserted over an empty list",
+                )
+                self.assertTrue(
+                    all(card["is_withheld"] for card in listed),
+                    "a withheld family reached the index and it did not say the "
+                    "card is being held — the lever is invisible and moves nobody",
+                )
+
+    def test_the_card_itself_carries_what_the_index_must_not(self):
+        """The control. Without it the exclusions above pass on an empty card.
+
+        Driven as the **principal**, because the guardian is exactly the caller
+        the gate refuses — fetching as her would answer 403 and prove that the
+        markers are absent from a refusal body, which is not the claim.
+        """
+        self.client.force_login(self.principal)
+        response = self.client.get(
+            self.card_url(self.stmarys, self.ada), HTTP_HOST=HOST
+        )
+        self.assertEqual(response.status_code, 200)
+
+        for marker in self.CARD_CONTENT:
+            if marker == b"position":
+                # Staff-only *everywhere*, including here. `test_card_api` owns
+                # that claim; it is skipped rather than asserted so that this
+                # control cannot be read as licensing it.
+                continue
+            self.assertIn(
+                marker,
+                response.content,
+                f"{marker!r} is not on the card either, so asserting its absence "
+                f"from the index proves nothing",
+            )
 
     def _url_for(self, path, student_membership_id, term_id):
         """Build a drivable URL, and say whether every parameter was filled."""
@@ -1486,3 +1641,146 @@ class TheClaimIsNotABool(WithholdingSetUp):
     def tearDown(self):
         connection.set_schema_to_public()
         super().tearDown()
+
+
+class TheIndexAndTheGateGiveTheSameAnswer(WithholdingSetUp):
+    """Design consequence of listing a withheld card rather than hiding it.
+
+    Once the index names a card it is being held, two surfaces are making a
+    claim about the same card and they have to agree. They agree here because
+    they ask the same function — `card_api._is_withheld_from()` — rather than
+    two readings of the withholding tables that happen to line up today.
+
+    The case that would have drifted has its own test below, and it is not
+    hypothetical: a guardian who is also staff is *spared* by the gate, so the
+    naive index would have marked their child's card withheld and the route
+    would then have served it.
+    """
+
+    def index(self, user, host=HOST):
+        self.client.force_login(user)
+        return self.client.get(f"{PREFIX}/cards/", HTTP_HOST=host)
+
+    def only_card(self, response):
+        children = response.json()["children"]
+        self.assertEqual(len(children), 1, "expected exactly one child listed")
+        self.assertEqual(len(children[0]["cards"]), 1)
+        return children[0]["cards"][0]
+
+    def test_a_marked_card_is_a_card_the_route_then_refuses(self):
+        """Marked *and* refused. Either alone is a school saying two things."""
+        self.withheld_and_released()
+
+        listed = self.only_card(self.index(self.mama))
+
+        self.assertTrue(listed["is_withheld"])
+        self.assertWithheld(
+            self.client.get(
+                f"{PREFIX}/cards/{self.ada.pk}/{listed['term_id']}/", HTTP_HOST=HOST
+            ),
+            "a guardian following her own index entry",
+        )
+
+    def test_an_unmarked_card_is_a_card_the_route_then_serves(self):
+        """The other half, and the reason this is not one assertion.
+
+        A predicate hard-wired to `True` would pass the test above. This fixture
+        releases without withholding anybody, so the index must say so and the
+        route must agree.
+        """
+        self.release()
+
+        listed = self.only_card(self.index(self.mama))
+
+        self.assertFalse(listed["is_withheld"])
+        self.assertEqual(
+            self.client.get(
+                f"{PREFIX}/cards/{self.ada.pk}/{listed['term_id']}/", HTTP_HOST=HOST
+            ).status_code,
+            200,
+        )
+
+    def test_a_guardian_who_is_also_staff_is_told_what_will_actually_happen(self):
+        """The drift case, and the whole reason the predicate was extracted.
+
+        `_may_read()` checks the staff role **before** the guardianship, so a
+        bursar who is also a parent here holds `STAFF` on their own child's card
+        and the fee gate spares them — `docs/withholding.md`, "A guardian who is
+        also staff is spared, and that is a decision".
+
+        An index that had called `withholding.is_withheld()` directly would have
+        marked this card withheld. It is withheld, by the books; it is also
+        about to be served. Telling this parent their card is being held and
+        then handing it over is the disagreement this test exists to prevent.
+        """
+        link_guardian(self.bursar, self.bola)
+        give_verified_channel(self.bursar, "08030000009")
+        self.enable_withholding()
+        self.withhold(self.bola)
+        self.release()
+
+        listed = self.only_card(self.index(self.bursar))
+
+        self.assertFalse(
+            listed["is_withheld"],
+            "the index marked a card that the gate is about to spare this "
+            "caller from — two surfaces, two answers, one card",
+        )
+        self.assertEqual(
+            self.client.get(
+                f"{PREFIX}/cards/{self.bola.pk}/{listed['term_id']}/", HTTP_HOST=HOST
+            ).status_code,
+            200,
+            "the gate served it, so the index was right to leave it unmarked",
+        )
+
+    def test_the_index_costs_a_fixed_amount_per_listed_card(self):
+        """The measurement, and it is a rate rather than a total.
+
+        `_cards_of()` asks `cards.card_for()` once per term instead of resolving
+        every card in one query, because "which row is *the* card" — the
+        earliest release, then its highest version — is subtle enough that a
+        second, bulk implementation of it would be a second answer waiting to
+        disagree with the route's. `withholding.is_withheld()` is called per
+        card for the same reason. Both are deliberate, both cost something, and
+        the cost is written down here rather than left to surface as a slow
+        request nobody can account for.
+
+        What bounds it is `_children_of()`, which refuses to build a staff
+        index: this route is asked for a family — single-digit children, single
+        -digit terms — and never for a school's roll. A rate that would be
+        indefensible over eight hundred children is the right trade over three.
+
+        **A bulk read is the fix if this ever stops being true**, and it belongs
+        in `results/withholding.py` next to `is_withheld()` rather than
+        assembled in `card_api`, so that the composition — switch first, then
+        decisions — stays in one place. It was not written here because nothing
+        yet needs it, and an unused second path through the gate is a liability.
+        """
+        self.enable_withholding()
+        self.withhold(self.ada)
+        self.release(term_name=TermName.FIRST.value)
+        self.client.force_login(self.mama)
+
+        with CaptureQueriesContext(connection) as one_card:
+            self.assertEqual(len(self.index_cards()), 1)
+
+        self.release(term_name=TermName.SECOND.value)
+        self.release(term_name=TermName.THIRD.value)
+
+        with CaptureQueriesContext(connection) as three_cards:
+            self.assertEqual(len(self.index_cards()), 3)
+
+        self.assertEqual(
+            len(three_cards) - len(one_card),
+            2 * QUERIES_PER_LISTED_CARD,
+            f"two more cards cost {len(three_cards) - len(one_card)} queries, "
+            f"not {2 * QUERIES_PER_LISTED_CARD}. Either the per-card work "
+            f"changed or something in this route stopped being linear in cards "
+            f"— and the second one is the finding.",
+        )
+
+    def index_cards(self):
+        response = self.client.get(f"{PREFIX}/cards/", HTTP_HOST=HOST)
+        self.assertEqual(response.status_code, 200)
+        return response.json()["children"][0]["cards"]

@@ -421,6 +421,61 @@ staff-only: **excluded at the serializer, not merely absent from the template**,
 because a field left out of the page but sitting in the JSON has not been left
 out.
 
+### The index names a withheld card, and marks it
+
+**Ruled, and it is the opposite of the instinct.** `card_api.card_index()` lists
+every card a family can reach at this school, and a card the school is holding
+appears in that list with `is_withheld` set rather than being quietly left out.
+
+Leaving it out was the first draft's instinct and it breaks two things.
+
+**It defeats what withholding is for.** A school holds a card back to start a
+conversation about fees. That is the whole reason the 403 is broken out of the
+flat-404 convention two sections up, and the whole reason
+`withholding_contact` is constrained non-empty: *a refusal that sends a parent
+nowhere is the dead end this design is about*. A card that never appears sends
+them nowhere even more completely — there is no refusal to read, no contact to
+ring, and no reason for the family to suspect anything is being held at all. A
+lever nobody can see moves nobody.
+
+**And there is nothing here for the disclosure convention to protect.** The
+flat 404 exists because a *stranger* enumerating membership ids must not learn
+which children are enrolled and which terms were released. The index enumerates
+nothing: it answers only about children the caller already stands for, by
+`Guardianship` or by being the child. A parent knows their own child exists and
+knows the term happened. Withholding that from them is not disclosure control,
+it is a school being evasive with a family.
+
+So the index gives the answer a school would give at the counter — the card
+exists, we are holding it, speak to the office — and the last clause stays on
+the refusal, where it is addressed to somebody who has just been stopped rather
+than repeated against every row of a list.
+
+**What makes this safe is that the index serves no card content.** No mark, no
+average, no remark, no rating, no attendance: `ListedCardOut` has no slot for any
+of them, which is the same technique `ReportCardOut` uses against `position`.
+`_require_servable()` is still the only door through which card *content*
+reaches a family, and this route does not open a second one.
+
+**One predicate, two surfaces.** `is_withheld` on a listed card is computed by
+`card_api._is_withheld_from()`, which is also what `_require_servable()` now
+asks before it raises. They cannot disagree, because they are the same function.
+Two readings would have drifted immediately and in a specific place: a guardian
+who is *also staff* here holds `STAFF` and the gate spares them, so a naive
+index calling `withholding.is_withheld()` directly would mark their own child's
+card withheld and the route would then hand it over. That case is
+`TheIndexAndTheGateGiveTheSameAnswer.test_a_guardian_who_is_also_staff_is_told_
+what_will_actually_happen`, and the control that reddens it is in the PR body.
+
+**Design test 4e was widened, not relaxed.**
+`AThirdServingSurfaceCannotBeAddedUngated` enumerates this router and demanded a
+403 from every operation, so this route necessarily failed it. It now sorts
+routes into `MUST_REFUSE` — those that serve card content — and `NAMES_ONLY`,
+those that may only name a card, and holds the second set to a *harder* bargain
+than refusing would have been: no card content in the body, **and** the withheld
+mark actually set. A route added to `NAMES_ONLY` to get the suite green has to
+pass that, and a route in neither set fails the enumeration outright.
+
 ### `CARD_VIEWING_ROLES` gains `BURSAR`
 
 `card_api.py:111` wrote the prophecy: *"a bursar could reasonably be added here
@@ -506,6 +561,7 @@ now facts about shipped code rather than promises. What is left is this design's
 | **the gate spares staff claims** | — | `report_card()`, pinned by tests |
 | **404 before 403** | — | the shared call order, pinned by tests |
 | **both routes gate identically** | — | one `_require_servable()`, called from `report_card()` and `report_card_pdf()`, pinned by tests |
+| **the index and the gate agree** | — | one `_is_withheld_from()`, asked by `card_index()` and `_require_servable()`, pinned by tests |
 
 The bottom four rows are the ones to be nervous about, and the pattern is the one
 `ReleasedCard`'s docstring already names: no constraint can express "a row exists
