@@ -28,8 +28,12 @@ attribute to print them from.
 
 An `Assessment` belongs to a subject, so two subjects in one term need not have
 the same ones. A header row taken from the first subject would label
-Mathematics' columns and print English's marks underneath them. `_columns()`
-takes the ordered union; `_rows()` aligns every line against it.
+Mathematics' columns and print English's marks underneath them.
+`card_api.card_columns()` takes the ordered union; `card_rows()` aligns every
+line against it. Both live in `card_api` rather than in `pdf`, beside the
+payload they read: which papers are columns, and in what order they print, is
+part of what a card says, and a renderer assembling half of that is the drift
+`card_payload()` was extracted to stop.
 
 A subject with no such assessment gets `None`, which prints as a gap — a
 different thing from a cell whose `score` is null, which is an assessment the

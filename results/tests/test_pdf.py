@@ -23,6 +23,7 @@ another worker, so a job that is unsafe to run twice is a bug, and a failure tha
 writes nothing is a card that is simply missing with no way to find out why.
 """
 
+import re
 import time
 from unittest.mock import patch
 
@@ -186,6 +187,12 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
     A header row taken from the first subject would label Mathematics' columns
     and print English's marks under them. This is the case that catches it: the
     two subjects are marked in assessments with *different names*.
+
+    `card_columns()` and `card_rows()` live in `card_api` beside the payload
+    they read, not in `pdf`. These tests stay here because the failure they
+    describe is a printed one — a row shifted left under the wrong header on a
+    page a parent reads — and `test_the_page_prints_the_total_a_mark_is_out_of`
+    below asserts the same alignment through the rendered HTML.
     """
 
     def setUp(self):
@@ -197,9 +204,9 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
     def test_every_assessment_name_gets_a_column(self):
         with connected_to(self.stmarys):
             card = cards.card_for(self.ada, self.term_of(self.stmarys, TermName.FIRST.value))
-            from results.card_api import card_payload
+            from results.card_api import card_columns, card_payload
 
-            columns = pdf._columns(card_payload(card))
+            columns = card_columns(card_payload(card))
 
         names = [column["name"] for column in columns]
         self.assertIn("Exam", names)
@@ -216,11 +223,11 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
         """
         with connected_to(self.stmarys):
             card = cards.card_for(self.ada, self.term_of(self.stmarys, TermName.FIRST.value))
-            from results.card_api import card_payload
+            from results.card_api import card_columns, card_payload, card_rows
 
             payload = card_payload(card)
-            columns = pdf._columns(payload)
-            rows = pdf._rows(payload, columns)
+            columns = card_columns(payload)
+            rows = card_rows(payload, columns)
 
         self.assertGreater(len(rows), 1)
         for row in rows:
@@ -230,6 +237,76 @@ class TheColumnsAreTheUnionTests(ReportCardApiSetUp):
         english = next(r for r in rows if r["line"].subject_name == "English")
         names = [column["name"] for column in columns]
         self.assertIsNone(english["cells"][names.index("Mid-term")])
+
+
+class TheHeaderPrintsInThePositionOrderTests(ReportCardApiSetUp):
+    """The printed order of the columns, pinned to `Assessment.position`.
+
+    This is issue #42's surface — the place a wrong order becomes visible to a
+    parent and can no longer be corrected — and until this class nothing in the
+    file asserted it. Measured, not assumed: `card_columns()` was reduced to
+    `sorted(seen)`, which is the alphabetical order #42 was opened about, and
+    all 37 tests here passed. Every ordering test above asserts a *set* of
+    columns, their keys, or the alignment of the cells under them, and a
+    reordering satisfies all three.
+
+    `gradebook.tests.test_print_order` is not the same pin and does not close
+    this. It asserts the order the *freeze* writes — `Assessment.position` into
+    `ReleasedAssessmentScore.position` — by reading rows, and never renders a
+    page. It is upstream of `card_columns()`, which is where a correctly frozen
+    order can still be printed in the wrong sequence.
+
+    Both subjects are given the same three papers, so the header is not also
+    being decided by which subject was read first — that rule is
+    `TheColumnsAreTheUnionTests`' — and the positions are set so that the
+    printed order agrees with neither the alphabet ("Exam, First CA, Mid-term")
+    nor the creation order the freeze used before `position` existed.
+    """
+
+    PAPERS = (("First CA", 20, 1), ("Mid-term", 30, 2), ("Exam", 90, 3))
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            term = self.term_of(self.stmarys, TermName.FIRST.value)
+            for key in ("maths", "english"):
+                subject_id = self.subjects_of(self.stmarys)[key]
+                for name, out_of, position in self.PAPERS:
+                    # setUp marked an "Exam" out of 100 in both subjects, at the
+                    # default position. It is re-totalled and pushed last here,
+                    # so the paper created *first* prints *last*.
+                    Assessment.objects.update_or_create(
+                        term=term,
+                        subject_id=subject_id,
+                        name=name,
+                        defaults={"max_score": out_of, "position": position},
+                    )
+        self.release()
+
+    def test_the_header_row_is_the_order_the_school_set(self):
+        """Asserted as a sequence, which is the only shape that pins an order.
+
+        An `assertIn` per column passes on any permutation of them, which is
+        how a reordering stays green — the bug *is* the sequence. The header
+        cells carrying a maximum are exactly the assessment columns; `Total`,
+        `%` and `Grade` have no `/max` span, so the list this reads out is the
+        marks header and nothing else, and an extra column would fail the
+        comparison rather than hide off the end of a substring match.
+        """
+        with connected_to(self.stmarys):
+            card = cards.card_for(
+                self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
+            )
+            html = " ".join(pdf.html_for(card).split())
+
+        printed = re.findall(
+            r'<th class="n">(.*?)<span class="max">/(\d+)</span></th>', html
+        )
+        self.assertEqual(
+            printed,
+            [(name, str(out_of)) for name, out_of, _ in self.PAPERS],
+            "The papers did not print smallest `position` first.",
+        )
 
 
 class ItReallyProducesAPdfTests(ReportCardApiSetUp):
@@ -765,14 +842,14 @@ class TwoSubjectsCanShareANameAndNotATotalTests(ReportCardApiSetUp):
         self.release()
 
     def payload_and_columns(self):
-        from results.card_api import card_payload
+        from results.card_api import card_columns, card_payload
 
         with connected_to(self.stmarys):
             card = cards.card_for(
                 self.ada, self.term_of(self.stmarys, TermName.FIRST.value)
             )
             payload = card_payload(card)
-            return card, payload, pdf._columns(payload)
+            return card, payload, card_columns(payload)
 
     def test_the_same_name_out_of_two_totals_is_two_columns(self):
         _, _, columns = self.payload_and_columns()
@@ -785,8 +862,10 @@ class TwoSubjectsCanShareANameAndNotATotalTests(ReportCardApiSetUp):
     def test_each_subject_aligns_under_its_own_total(self):
         """The alignment half. A second column is no use if the marks still land
         in the first one."""
+        from results.card_api import card_rows
+
         _, payload, columns = self.payload_and_columns()
-        rows = pdf._rows(payload, columns)
+        rows = card_rows(payload, columns)
         keys = [(c["name"], c["max_score"]) for c in columns]
 
         maths = next(r for r in rows if r["line"].subject_name == "Mathematics")
