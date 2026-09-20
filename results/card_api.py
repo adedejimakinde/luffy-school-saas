@@ -52,6 +52,21 @@ said was nothing.
 
 `positions` is not imported at all. Nothing on this page is recomputed.
 
+## The marks grid is assembled here too, and for `card_payload()`'s reason
+
+`card_columns()` and `card_rows()` turn one payload's subject lines into the
+header and the aligned rows a marks table prints. They were `_columns()` and
+`_rows()` in `results.pdf`, which left half of "what a card says" — which
+papers are columns, and in what order they print — assembled inside the
+renderer. That is the drift `card_payload()` was extracted to stop, and the
+grid had escaped it: a second surface growing a marks table derives its own
+columns, and the day the two disagree about which paper prints first they
+disagree on a document a parent already has in their hand.
+
+Neither function reaches past `ReportCardOut`, so the exclusions above hold for
+the grid as well — there is no `subject_position` in scope to be aligned into a
+column by accident.
+
 ## The same card as a file, and why the file route is here rather than anywhere else
 
 `report_card_pdf()` serves the PDF of the card `report_card()` serves as JSON.
@@ -746,6 +761,81 @@ def card_payload(card) -> ReportCardOut:
     )
 
 
+# -- the marks grid ----------------------------------------------------------
+
+
+def card_columns(payload) -> list[dict]:
+    """Every assessment on this card, once, in the order first seen.
+
+    **The union, not the first subject's row.** `AssessmentCellOut`s hang off
+    each `SubjectLineOut`, and an assessment belongs to a subject — so two
+    subjects in one term need not have the same ones. A header row taken from
+    the first subject would label Mathematics' columns and then print English's
+    marks underneath them. This takes the ordered union, and `card_rows()`
+    aligns every line against it.
+
+    Keyed on `(name, max_score)` and **not on the name alone**. An assessment
+    belongs to a subject — `uniq_assessment_term_subject_name` is per
+    `(term, subject, name)` — so Mathematics' "Exam" and English's "Exam" are
+    two different assessments and may be out of two different totals. One column
+    headed "Exam" would print 45-out-of-60 and 45-out-of-100 as the same mark,
+    on the document a parent is most likely to query with a teacher. The header
+    carries the maximum for the same reason.
+
+    `dict` rather than a `set`: the order is the frozen print order and a set
+    would replace it with whatever the hash happened to be, which is the kind of
+    ordering bug that agrees with itself until the day it does not.
+
+    The order is the one the cells were frozen to print in, and it is not
+    decided here. `ReleasedAssessmentScore.Meta.ordering` leads with the cell's
+    own `position`, copied at release from `Assessment.position` — the school's
+    own answer to where a paper prints, which is what closed **issue #42**.
+    Before `position` existed the freeze ordered by `(subject name, assessment
+    id)` — creation order — and `cards._assessments_for()` carries that history.
+    Nothing is re-sorted here on purpose: re-sorting would be a second place
+    deciding a print order, and a card in a parent's hand prints the order it
+    went out with.
+
+    *Across* subjects the header is first-seen order, so where two subjects
+    disagree about the order of names they share, the first subject read wins
+    and the second one's row is printed in the header's order rather than its
+    own. One row of columns cannot honour two orders at once, and `position` is
+    what settles it: two subjects that disagree are two subjects whose papers
+    were given different positions.
+    """
+    seen = {}
+    for line in payload.subjects:
+        for cell in line.assessments:
+            seen.setdefault((cell.assessment_name, cell.max_score), None)
+    return [{"name": name, "max_score": max_score} for name, max_score in seen]
+
+
+def card_rows(payload, columns) -> list[dict]:
+    """Each subject line with its cells aligned to `columns`; `None` for a gap.
+
+    A `None` is a subject that had no such assessment at all, which prints as a
+    gap and is a different thing from a cell whose `score` is null — that is an
+    assessment this child was not marked in, and it prints as a dash. Two
+    absences that mean different things must not look the same on a card
+    somebody is going to ask a teacher about.
+    """
+    rows = []
+    for line in payload.subjects:
+        by_key = {
+            (cell.assessment_name, cell.max_score): cell for cell in line.assessments
+        }
+        rows.append(
+            {
+                "line": line,
+                "cells": [
+                    by_key.get((column["name"], column["max_score"]))
+                    for column in columns
+                ],
+            }
+        )
+    return rows
+
+
 # -- the same card as a file -------------------------------------------------
 
 
@@ -885,4 +975,6 @@ __all__ = [
     "FAMILY_CLAIMS",
     "WithheldOut",
     "card_payload",
+    "card_columns",
+    "card_rows",
 ]
