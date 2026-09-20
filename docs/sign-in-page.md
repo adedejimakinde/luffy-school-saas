@@ -219,6 +219,25 @@ It would work today and it is the wrong shape: it depends on
 a Friday, and it puts knowledge of the cookie's name in the browser. The API has
 a route whose whole purpose is answering this.
 
+## The controls
+
+Operating rule 5: each claim was broken deliberately and the failures read. The
+row worth reading is the third, where the first aim of a control changed nothing
+— which is a result about the claim rather than a formality.
+
+| what was broken | what failed | what that says |
+| --- | --- | --- |
+| the staff landing links each school to `//host/cards/` | `the landing links nowhere at all`, alone | the no-link rule is asserted, not merely the shape of markup that happens to have no `<a>` in it |
+| `card/states.js` links back to `/` again | 4 tests, including the card page's sign-out round trip | the dead link is held by the states *and* by the flow that now reaches them on purpose |
+| `if (!button.dataset.guardian) return undefined;` removed from the guardian click handler | **nothing** | the branches above it return first, so the guard is the second line and not the first — the comment claiming otherwise was wrong and is corrected. Re-aimed: dropping the sign-out branch's `return` leaves the suite green *because of* the guard, dropping both reddens `a sign-out tap is not posted as a guardian pick`, and deleting the branch reddens it and the failure test beside it |
+| `sessionEnded()` returns true for every answer | 6 tests across all four pages | the asymmetry is what every page's "did not claim it did" assertion rests on, and it is asserted once per page rather than once |
+| `provesASession()` returns true for every answer | `the sign-out button is drawn only on answers that prove a session` | the five-way split is a rule with a test on it |
+| the 120-second threshold in `waitInWords()` moved | `too many tries says how long to wait, in a unit a person reads` — **twice, in two files** | the wait arithmetic really is one rule read by both doors. A copy per page would have reddened one |
+| `esc()` dropped from the staff landing | 2 tests | a school name typed into the admin cannot execute in a teacher's browser |
+| `card_page()` stops rendering `portal_host` | `test_the_frame_names_the_portal_so_the_401_state_can_offer_a_way_back`, 1 of the 2 | the pair is doing its job: the empty-domain test passes for a view that never sets the variable, and the test above it is what refuses that. Same pair the index page already has |
+| the staff page mounted in `urls.py` as well | `test_a_schools_own_host_does_not` | portal-only is routing, and the routing is asserted |
+| the PARENT narrowing dropped from `User.roles_at()` | `test_a_code_session_is_refused_there` and the known-limit test beside it | the escalation class really is about the credential and not about a missing membership |
+
 ## What is not here
 
 **No staff home page.** The staff landing is a receipt, not a hub: it says who
@@ -244,7 +263,7 @@ Django's default handler renders `ERROR_PAGE_TEMPLATE` with empty `details` and
 she sees "403 Forbidden". Closing that is a platform-wide surface — the same
 handler answers "You do not have access to this school", a different refusal
 with a different remedy — and it wants a distinguishable exception rather than a
-template branching on a message string. Issue, and
+template branching on a message string. **Issue #122**, and
 `TheEscalationRefusalHasSomewhereToPointTests` holds the limit as a test that
 goes red the day it closes.
 

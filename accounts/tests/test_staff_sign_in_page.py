@@ -234,7 +234,8 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         the sentence reaches nobody. She sees "403 Forbidden" and is told
         neither what happened nor that a password would fix it.
 
-        Closing it is a platform-wide surface rather than a template: the same
+        **Issue #122.** Closing it is a platform-wide surface rather than a
+        template: the same
         handler answers "You do not have access to this school", which is a
         different refusal with a different remedy, and telling them apart wants
         a distinguishable exception rather than a template branching on a
@@ -242,8 +243,8 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         bodies do not currently carry — the reason this class establishes which
         refusal fired by controlling the credential instead of reading the body.
 
-        **This test goes red the day that issue is closed**, which is the point
-        of it. When it does: delete it, and move its case into a test asserting
+        **This test goes red the day #122 is closed**, which is the point of
+        it. When it does: delete it, and move its case into a test asserting
         that the refusal names this page.
         """
         self.sign_in_with_a_code()

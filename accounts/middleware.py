@@ -68,6 +68,14 @@ class SchoolAccessMiddleware:
     This is a second reason this middleware answers 403, and it is why every
     assertion about a *feature's* 403 has to read the body rather than the
     status — see `results/tests/test_withholding.py`.
+
+    **The sentence below reaches nobody, and that is issue #122.** There is no
+    `403.html` in this repository, so Django's default handler renders
+    `ERROR_PAGE_TEMPLATE` with empty `details` and discards the message. The
+    page it should be pointing at exists — `/staff-sign-in/`, on the portal —
+    and the refusal still does not name it. Giving it one wants a refusal
+    something can tell apart rather than a template branching on this string,
+    because the same handler answers the other refusal below.
     """
 
     def __init__(self, get_response):
