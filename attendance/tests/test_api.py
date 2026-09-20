@@ -49,11 +49,10 @@ class RegisterApiSetUp(RegisterSetUp):
             Role.PARENT,
         )
 
-    def url(self, *, group=None, term=None, on=A_SCHOOL_DAY, period=None):
+    def url(self, *, group=None, term=None, on=A_SCHOOL_DAY):
         group = self.jss1a_id if group is None else group
         term = self.term_id if term is None else term
-        query = f"?period={period}" if period is not None else ""
-        return f"/api/attendance/classes/{group}/terms/{term}/{on}/{query}"
+        return f"/api/attendance/classes/{group}/terms/{term}/{on}/"
 
     def get(self, **kwargs):
         return self.client.get(self.url(**kwargs), HTTP_HOST=HOST)
@@ -159,9 +158,9 @@ class TakingARegisterOverHttpTests(RegisterApiSetUp):
         with connected_to(self.stmarys):
             self.assertEqual(AttendanceMark.objects.count(), 3)
 
-    def test_a_second_period_is_a_second_register(self):
+    def test_a_second_day_is_a_second_register(self):
         self.put(absent_ids=[])
-        answer = self.put(absent_ids=self.ids("ada"), period=5)
+        answer = self.put(absent_ids=self.ids("ada"), on="2025-09-18")
 
         self.assertEqual(answer.status_code, 200)
         with connected_to(self.stmarys):
@@ -196,9 +195,8 @@ class DiscardingOverHttpTests(RegisterApiSetUp):
         super().setUp()
         self.client.force_login(self.head.user)
 
-    def url_for_discard(self, on=A_SCHOOL_DAY, period=None):
-        query = f"?period={period}" if period is not None else ""
-        return f"/api/attendance/classes/{self.jss1a_id}/{on}/{query}"
+    def url_for_discard(self, on=A_SCHOOL_DAY):
+        return f"/api/attendance/classes/{self.jss1a_id}/{on}/"
 
     def test_a_register_and_its_marks_go_together(self):
         self.client.put(

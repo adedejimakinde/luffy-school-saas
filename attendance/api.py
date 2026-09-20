@@ -82,7 +82,6 @@ class RegisterOut(Schema):
     term_id: int
     term: str
     taken_on: date
-    period: int
     taken: bool
     rows: List[RegisterRowOut]
 
@@ -110,7 +109,6 @@ class RegisterTakenOut(Schema):
 
     class_group_id: int
     taken_on: date
-    period: int
     present: List[int]
     absent: List[int]
     #: On the roster now, not on the screen then, and therefore not marked.
@@ -212,8 +210,8 @@ def _rows_for(school, roster, marks) -> List[RegisterRowOut]:
     "/classes/{int:class_group_id}/terms/{int:term_id}/{on}/",
     response={200: RegisterOut, 403: MessageOut},
 )
-def register(request, class_group_id: int, term_id: int, on: date, period: int = 1):
-    """The register for one group, one day, one period — taken or not.
+def register(request, class_group_id: int, term_id: int, on: date):
+    """The register for one group on one day — taken or not.
 
     A GET that answers for a register that does not exist yet is the point
     rather than a convenience: the screen the teacher opens is the roster with
@@ -229,7 +227,7 @@ def register(request, class_group_id: int, term_id: int, on: date, period: int =
     group = get_object_or_404(ClassGroup, pk=class_group_id)
     term = get_object_or_404(Term, pk=term_id)
     roster = services.roster_ids(group, term)
-    existing = services.register_for(group, on, period)
+    existing = services.register_for(group, on)
     marks = services.marks_in(existing) if existing else {}
 
     return RegisterOut(
@@ -238,7 +236,6 @@ def register(request, class_group_id: int, term_id: int, on: date, period: int =
         term_id=term.pk,
         term=str(term),
         taken_on=on,
-        period=period,
         taken=existing is not None,
         rows=_rows_for(school, roster, marks),
     )
@@ -254,15 +251,14 @@ def take(
     term_id: int,
     on: date,
     payload: TakeRegisterIn,
-    period: int = 1,
 ):
-    """Take or amend the register for one group, one day, one period.
+    """Take or amend the register for one group on one day.
 
     PUT rather than POST because it is this slot being set to a state, and a
     teacher who submits twice — because the first answer was slow, or because
     they corrected one tap — has not taken two registers. There is exactly one
-    register per group per period per day, by constraint, and this route is how
-    it gets its contents.
+    register per group per day, by constraint, and this route is how it gets its
+    contents.
 
     **409 for a group with nobody in it**, not 404 and not 422: the group and
     the term both exist and the request is well-formed, but the state of the
@@ -288,7 +284,6 @@ def take(
             group,
             term,
             on=on,
-            period=period,
             absent_ids=payload.absent_ids,
             shown_ids=payload.shown_ids,
             by=request.user,
@@ -301,7 +296,6 @@ def take(
     return RegisterTakenOut(
         class_group_id=group.pk,
         taken_on=on,
-        period=period,
         present=taken.present,
         absent=taken.absent,
         appeared=taken.appeared,
@@ -313,12 +307,12 @@ def take(
     "/classes/{int:class_group_id}/{on}/",
     response={204: None, 403: MessageOut, 404: MessageOut},
 )
-def discard(request, class_group_id: int, on: date, period: int = 1):
-    """Take back a register filed against the wrong day or the wrong period.
+def discard(request, class_group_id: int, on: date):
+    """Take back a register filed against the wrong day.
 
     Not how a wrong *mark* is fixed — that is a second PUT, which amends. This
-    is for a register about a lesson that did not happen, where every mark in it
-    is wrong for the same reason.
+    is for a register about a day that did not happen, where every mark in it is
+    wrong for the same reason.
     """
     school = _school_of(request)
     refusal = _refuse_non_markers(request, school)
@@ -326,6 +320,6 @@ def discard(request, class_group_id: int, on: date, period: int = 1):
         return refusal
 
     group = get_object_or_404(ClassGroup, pk=class_group_id)
-    if not services.discard_register(group, on, period):
+    if not services.discard_register(group, on):
         return 404, MessageOut(detail="No register was taken for that slot.")
     return 204, None

@@ -156,16 +156,10 @@ def roster_ids(class_group, term) -> list[int]:
     return ClassPlacement.objects.student_ids(class_group, term)
 
 
-def register_for(class_group, on, period) -> Register | None:
-    """The register for one group, one day, one period, or None."""
-    return Register.objects.filter(
-        class_group=class_group, taken_on=on, period=period
-    ).first()
+def register_for(class_group, on) -> Register | None:
+    """This group's register for this day, or None. At most one, by constraint."""
+    return Register.objects.filter(class_group=class_group, taken_on=on).first()
 
-
-def day_registers(class_group, on):
-    """Every period taken for this group on this date, earliest first."""
-    return Register.objects.on_day(class_group, on)
 
 
 def group_that_marked(mark) -> int:
@@ -199,12 +193,11 @@ def take_register(
     term,
     *,
     on: date_type,
-    period: int = 1,
     absent_ids=(),
     shown_ids=None,
     by=None,
 ) -> RegisterTaken:
-    """Mark a whole group for one period of one day. Returns what was written.
+    """Mark a whole group for one day. Returns what was written.
 
     `absent_ids` is what the teacher tapped. Everyone else on the roster they
     were shown is present — the default this whole screen is built around.
@@ -215,7 +208,7 @@ def take_register(
     which knows exactly which forty-five names it drew and should say so.
 
     **Taking a register that already exists amends it.** That is not a second
-    register: `one_register_per_group_per_period` forbids one, and a teacher who
+    register: `one_register_per_group_per_day` forbids one, and a teacher who
     submits twice because the first answer was slow has not taken two registers.
     The row is locked for the duration so that two submissions racing serialise
     rather than interleaving into a half-amended register.
@@ -239,7 +232,7 @@ def take_register(
     appeared = sorted(roster_set - shown)
     not_on_the_roster = sorted(absent_set - roster_set)
 
-    register = _locked_register(class_group, term, on, period, by)
+    register = _locked_register(class_group, term, on, by)
     _write_marks(register, present, absent, by)
 
     return RegisterTaken(
@@ -251,7 +244,7 @@ def take_register(
     )
 
 
-def _locked_register(class_group, term, on, period, by) -> Register:
+def _locked_register(class_group, term, on, by) -> Register:
     """The register row for this slot, created if new, locked either way.
 
     `select_for_update()` on the existing row and the unique constraint on the
@@ -263,7 +256,7 @@ def _locked_register(class_group, term, on, period, by) -> Register:
     """
     existing = (
         Register.objects.select_for_update()
-        .filter(class_group=class_group, taken_on=on, period=period)
+        .filter(class_group=class_group, taken_on=on)
         .first()
     )
     if existing is not None:
@@ -275,7 +268,6 @@ def _locked_register(class_group, term, on, period, by) -> Register:
                 class_group=class_group,
                 term=term,
                 taken_on=on,
-                period=period,
                 taken_by_id=_stamp(by),
             )
     except IntegrityError as exc:
@@ -283,7 +275,7 @@ def _locked_register(class_group, term, on, period, by) -> Register:
             raise
         return (
             Register.objects.select_for_update()
-            .filter(class_group=class_group, taken_on=on, period=period)
+            .filter(class_group=class_group, taken_on=on)
             .get()
         )
 
@@ -296,7 +288,7 @@ def _is_a_duplicate_register(exc) -> bool:
     on it would swallow a foreign key violation and a not-null exactly the way
     it swallows the collision this is meant to recover from.
     """
-    return "one_register_per_group_per_period" in str(exc)
+    return "one_register_per_group_per_day" in str(exc)
 
 
 def _write_marks(register, present, absent, by):
@@ -368,8 +360,8 @@ def _write_marks(register, present, absent, by):
 
 
 @transaction.atomic
-def discard_register(class_group, on, period) -> bool:
-    """Take back a register taken for the wrong slot. True if a row went.
+def discard_register(class_group, on) -> bool:
+    """Take back a register taken for the wrong day. True if a row went.
 
     Both tables, in the order `PROTECT` requires. Returns False rather than
     raising when there was nothing there, on the same reasoning as
@@ -377,12 +369,12 @@ def discard_register(class_group, on, period) -> bool:
     the end state asked for is the end state that holds.
 
     This is not how a wrong *mark* is fixed — that is `take_register()` again,
-    which amends. This is for a register filed against the wrong day or the
-    wrong period, where every mark in it is about a lesson that did not happen.
+    which amends. This is for a register filed against the wrong day, where
+    every mark in it is about a day that did not happen.
     """
     register = (
         Register.objects.select_for_update()
-        .filter(class_group=class_group, taken_on=on, period=period)
+        .filter(class_group=class_group, taken_on=on)
         .first()
     )
     if register is None:
@@ -431,10 +423,10 @@ def take_register_as(actor, class_group, term, *, school, by=None, **kwargs):
     )
 
 
-def discard_register_as(actor, class_group, *, school, on, period) -> bool:
+def discard_register_as(actor, class_group, *, school, on) -> bool:
     """`discard_register()` for a caller with a request behind it."""
     _require_marking_authority(actor, school)
-    return discard_register(class_group, on, period)
+    return discard_register(class_group, on)
 
 
 __all__ = [
@@ -445,7 +437,6 @@ __all__ = [
     "NotAllowedToMarkAttendance",
     "RegisterTaken",
     "can_mark_attendance",
-    "day_registers",
     "group_that_marked",
     "discard_register",
     "discard_register_as",

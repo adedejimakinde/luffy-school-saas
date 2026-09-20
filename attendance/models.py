@@ -1,7 +1,7 @@
 """The register: the fact one was taken, and one child's entry in it.
 
 **Two tables, and that is the decision this module turns on.** A single table
-keyed on `(student, date, period)` cannot tell "nobody took a register" from "a
+keyed on `(student, date)` cannot tell "nobody took a register" from "a
 register was taken and this child was somehow skipped" — a missing row means
 both, and the ambiguity is unresolvable afterwards. `results.TermAbsence`
 already made this decision for session averages and made it in these words:
@@ -55,12 +55,12 @@ class RegisterQuerySet(models.QuerySet):
         return self.filter(term=term)
 
     def on_day(self, class_group, on):
-        """Every period taken for this group on this date, earliest first."""
-        return self.filter(class_group=class_group, taken_on=on).order_by("period")
+        """This group's register for this date. At most one, by constraint."""
+        return self.filter(class_group=class_group, taken_on=on)
 
 
 class Register(models.Model):
-    """One group, one date, one period: the fact that somebody marked.
+    """One group, one date: the fact that somebody marked.
 
     ## It carries the class group rather than looking one up
 
@@ -87,14 +87,28 @@ class Register(models.Model):
     that is also not guaranteed to give one answer, and the summary that feeds a
     report card groups on precisely this column.
 
-    ## The period is an ordinal, not a relation
+    ## One register a day, and the day's verdict is that register
+
+    This table carried a `period` ordinal when it was built, for a design that
+    stored per period and showed per day. A1 settled the grain **after** the
+    code existed — attendance is marked once a day — and the column went with
+    it.
+
+    **The forward-compatibility argument for keeping it did not survive being
+    looked at.** It was that grain cannot be retrofitted onto history. True, and
+    beside the point: under a once-a-day practice nothing writes a second
+    period, so every row would carry the same `1` and the column would hold no
+    history to lose. Re-adding it is therefore lossless — the value every
+    existing row needs is exactly the default — which is what makes dropping it
+    the cheap direction rather than the brave one, and what makes it safe to do
+    on an assumption the school has not confirmed.
 
     Nothing in this repository models a school day, a period, a timetable or a
-    lesson, and this phase does not build one. Storage is per period because
-    grain cannot be retrofitted onto history — a school that later wants
-    per-subject truancy cannot recover period detail from day rows, while
-    rolling periods up to days is arithmetic. What the *card* reads is one named
-    rule over these rows, not this column directly. See `docs/attendance.md` D4.
+    lesson, and now nothing gestures at one either. What replaces the rollup
+    rule is the constraint below: a day has at most one register, so the day's
+    verdict *is* that register — held by Postgres rather than by a function
+    somebody has to remember to call. See `docs/attendance.md` D4, which was
+    rewritten rather than deleted.
     """
 
     class_group = models.ForeignKey(
@@ -113,10 +127,6 @@ class Register(models.Model):
     #: Wednesday register, and `created_at` is where "when was this typed" lives.
     taken_on = models.DateField()
 
-    #: Numbered from one, in the school's own order. Not a foreign key, and a
-    #: school that takes exactly one register a day uses period 1 for every row
-    #: — which is the ordinary case and costs it nothing.
-    period = models.PositiveSmallIntegerField(default=1)
 
     #: A bare id pointing at the marker's membership in the shared `accounts`
     #: app — the policy `docs/tenancy.md` settles and `fees.FeeLedgerEntry`,
@@ -135,7 +145,7 @@ class Register(models.Model):
     objects = RegisterQuerySet.as_manager()
 
     class Meta:
-        ordering = ["taken_on", "period", "id"]
+        ordering = ["taken_on", "id"]
         # No `indexes` entry. The unique constraint below already builds a btree
         # led by `(class_group, taken_on)`, which is every read this table has —
         # one group's day, one group's term, and the existence check a second
@@ -153,28 +163,22 @@ class Register(models.Model):
         # is a `db_index=False` decision about delete-time lookups that belongs
         # to the whole repository rather than to this table. That is issue #32.
         constraints = [
-            # One register per group per period per day. Also the backstop for
-            # the race: two teachers opening the same register and submitting at
-            # the same instant both find no row and both insert, and this is
-            # what stops the second one succeeding. `services.take_register()`
-            # turns the resulting IntegrityError into the amendment it actually
-            # was.
+            # One register per group per day, and it does more work than it
+            # looks like. It is the backstop for the race — two teachers opening
+            # the same register and submitting at the same instant both find no
+            # row and both insert, and this is what stops the second succeeding;
+            # `services.take_register()` turns the resulting IntegrityError into
+            # the amendment it actually was. It is *also* what makes the day's
+            # attendance unambiguous, which used to be a named rollup rule and
+            # is now a thing the database will not let be otherwise.
             models.UniqueConstraint(
-                fields=["class_group", "taken_on", "period"],
-                name="one_register_per_group_per_period",
-            ),
-            # Periods are numbered from one. A zeroth period is not a school's
-            # numbering, it is an off-by-one arriving from a client, and it
-            # would sort ahead of the real morning register — which is the row
-            # the card's day rule reads.
-            models.CheckConstraint(
-                condition=Q(period__gte=1),
-                name="a_period_is_numbered_from_one",
+                fields=["class_group", "taken_on"],
+                name="one_register_per_group_per_day",
             ),
         ]
 
     def __str__(self):
-        return f"{self.class_group} on {self.taken_on}, period {self.period}"
+        return f"{self.class_group} on {self.taken_on}"
 
 
 class AttendanceMarkQuerySet(models.QuerySet):

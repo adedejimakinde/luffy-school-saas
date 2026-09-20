@@ -6,7 +6,7 @@ reason `docs/tenancy.md` gives about the one-current-term index and
 a data import, a shell session or a future service function walks straight
 around.
 
-The fourth rule — a register's date falls inside its term — is deliberately
+The third rule — a register's date falls inside its term — is deliberately
 **not** here, because it cannot be. A `CheckConstraint` sees one row of one
 table and this one spans two, so it lives in `services.DayOutsideTheTerm` and is
 tested in `test_taking_a_register`. Recorded here so the absence reads as a
@@ -25,13 +25,12 @@ from .fixtures import A_SCHOOL_DAY, RegisterSetUp
 
 
 class RegisterRecordTests(RegisterSetUp):
-    def test_a_register_records_the_group_the_term_the_day_and_the_period(self):
+    def test_a_register_records_the_group_the_term_and_the_day(self):
         with connected_to(self.stmarys):
             register = Register.objects.create(
                 class_group=self.jss1a,
                 term=self.term,
                 taken_on=A_SCHOOL_DAY,
-                period=1,
                 taken_by_id=self.teacher.pk,
             )
 
@@ -39,15 +38,8 @@ class RegisterRecordTests(RegisterSetUp):
             self.assertEqual(register.class_group_id, self.jss1a_id)
             self.assertEqual(register.term_id, self.term_id)
             self.assertEqual(register.taken_on, A_SCHOOL_DAY)
-            self.assertEqual(register.period, 1)
             self.assertEqual(register.taken_by_id, self.teacher.pk)
 
-    def test_a_period_defaults_to_one_because_most_schools_take_one_register(self):
-        with connected_to(self.stmarys):
-            register = Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY
-            )
-            self.assertEqual(register.period, 1)
 
     def test_taken_on_is_the_school_day_not_the_day_it_was_entered(self):
         """A form teacher catching up on Friday is entering Wednesday's register.
@@ -63,11 +55,20 @@ class RegisterRecordTests(RegisterSetUp):
             self.assertNotEqual(register.created_at.date(), register.taken_on)
 
 
-class OneRegisterPerSlotTests(RegisterSetUp):
-    def test_a_group_cannot_have_two_registers_for_one_period_of_one_day(self):
+class OneRegisterPerDayTests(RegisterSetUp):
+    """The constraint that also settles what a day's attendance says.
+
+    With one register a day, "the day's verdict" and "this register" are the
+    same row, and this is what stops them diverging. The design carried a named
+    rollup rule over several registers until A1 settled the grain; that rule
+    collapsed into this constraint rather than surviving as a function that
+    could only ever return its argument.
+    """
+
+    def test_a_group_cannot_have_two_registers_for_one_day(self):
         with connected_to(self.stmarys):
             Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY, period=1
+                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY
             )
             with transaction.atomic():
                 with self.assertRaises(IntegrityError) as caught:
@@ -75,48 +76,29 @@ class OneRegisterPerSlotTests(RegisterSetUp):
                         class_group=self.jss1a,
                         term=self.term,
                         taken_on=A_SCHOOL_DAY,
-                        period=1,
                     )
-            self.assertIn("one_register_per_group_per_period", str(caught.exception))
+            self.assertIn("one_register_per_group_per_day", str(caught.exception))
 
-    def test_two_periods_of_the_same_day_are_two_registers(self):
+    def test_two_days_are_two_registers(self):
         with connected_to(self.stmarys):
             Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY, period=1
+                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY
             )
             Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY, period=5
+                class_group=self.jss1a, term=self.term, taken_on=date(2025, 9, 18)
             )
             self.assertEqual(Register.objects.count(), 2)
 
-    def test_two_groups_may_both_be_marked_in_the_same_period(self):
+    def test_two_groups_may_both_be_marked_on_the_same_day(self):
         with connected_to(self.stmarys):
             Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY, period=1
+                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY
             )
             Register.objects.create(
-                class_group=self.jss1b, term=self.term, taken_on=A_SCHOOL_DAY, period=1
+                class_group=self.jss1b, term=self.term, taken_on=A_SCHOOL_DAY
             )
             self.assertEqual(Register.objects.count(), 2)
 
-
-class APeriodIsNumberedFromOneTests(RegisterSetUp):
-    def test_a_zeroth_period_is_refused(self):
-        """Not tidiness: period 0 sorts ahead of the morning register.
-
-        The card's day rule reads the earliest period taken that day, so a row
-        numbered zero would quietly become the day's verdict.
-        """
-        with connected_to(self.stmarys):
-            with transaction.atomic():
-                with self.assertRaises(IntegrityError) as caught:
-                    Register.objects.create(
-                        class_group=self.jss1a,
-                        term=self.term,
-                        taken_on=A_SCHOOL_DAY,
-                        period=0,
-                    )
-            self.assertIn("a_period_is_numbered_from_one", str(caught.exception))
 
 
 class OneMarkPerStudentPerRegisterTests(RegisterSetUp):
@@ -147,7 +129,7 @@ class OneMarkPerStudentPerRegisterTests(RegisterSetUp):
         with connected_to(self.stmarys):
             morning = self.a_register()
             afternoon = Register.objects.create(
-                class_group=self.jss1a, term=self.term, taken_on=A_SCHOOL_DAY, period=5
+                class_group=self.jss1a, term=self.term, taken_on=date(2025, 9, 18)
             )
             ada = self.children["ada"].pk
             AttendanceMark.objects.create(

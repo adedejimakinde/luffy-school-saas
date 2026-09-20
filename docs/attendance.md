@@ -1,8 +1,9 @@
 # Attendance
 
-Status: draft, **no domain input yet**. Structural decisions settled (D1–D12) against
-the repository; three assumptions (A1–A3) are written as assumptions and have **not**
-been put to a school — the questions are drafted and waiting to be sent. A4 is settled from this repository and needs nobody. Extends
+Status: draft. Structural decisions settled (D1–D12) against the repository. **A1 is
+stated from domain knowledge and not school-confirmed**; A2 and A3 have not been put to
+a school and the questions are drafted and waiting to be sent; A4 is settled from this
+repository and needs nobody. A4 is settled from this repository and needs nobody. Extends
 `docs/results.md` and `docs/tenancy.md`. Supersedes nothing.
 
 Phase 2, weeks 10–13. Note that "Phase 2" is overloaded in older working notes, where
@@ -27,16 +28,24 @@ school confirms it, ✓ marks *one school said yes* and nothing more, and the co
 clauses stay after confirmation because they are what the next school is checked
 against.
 
+### Stated from domain knowledge, not school-confirmed
+
+- **A1. Attendance is marked per day, not per period.** A Nigerian secondary school
+  takes one register for a class each day; subject teachers do not each keep one that
+  the report card counts. **Stated by the project lead from their own knowledge of
+  Nigerian schools, September 2026. Not confirmed by the school**, and the distinction
+  matters — this is the same standing as A8–A10 in `docs/parent-access.md`, which are
+  researched rather than confirmed, and weaker than the ✓ items there. *If this is
+  wrong and subject teachers each mark their own period, attendance needs to know who
+  teaches what — and no subject-teacher table exists; `academics.ClassTeacher` is one
+  teacher per group per term and is the only teaching assignment in the system. That is
+  a prerequisite change, not a detail.*
+
+  A1 arrived **after** slice 1 was built, and D4 and the schema were amended to match
+  rather than left carrying structure for a practice nobody has.
+
 ### To be put to the school
 
-- **A1. The form teacher takes one register a day, at assembly, and that register is
-  what the report card counts.** Subject teachers may or may not keep their own; the
-  card's number comes from the morning one. *Not confirmed.* This is the load-bearing
-  one. If subject teachers each take a register and the card is meant to reflect all of
-  them, then attendance needs to know who teaches what — and **no subject-teacher table
-  exists**; `academics.ClassTeacher` is one teacher per group per term and is the only
-  teaching assignment in the system. That is a prerequisite change, not a detail, which
-  is why this question goes first.
 - **A2. A school keeps more statuses than present and absent — at least late, and
   probably excused — and only some of them count as present on the card.** *Not
   confirmed.* The status list is cheap to extend; **which statuses count toward
@@ -64,7 +73,7 @@ against.
 
 | If this is wrong | These hold | These break |
 |---|---|---|
-| A1 form teacher, once a day | D1–D3, D5–D10 — the register, its keys, the freeze, the revision rule and the app are all indifferent to who marks | **D4's rollup rule**, and D11's actor. Per-period *storage* is already built for exactly this, so what changes is which registers the day's verdict reads, plus a subject-teacher table this repository does not have |
+| A1 marked per day | D1–D3, D5–D12 — the register, its keys, the freeze, the revision rule and the app are all indifferent to who marks and how often | **D4**, and D11's actor. The `period` column comes back and the rollup rule is written *with* it, as one change — re-adding is lossless, because under a once-a-day practice every existing row carries the value the column would default to. A subject-teacher table this repository does not have is the expensive half, not the column |
 | A2 more statuses | D1–D10 entirely | **D11** only, which is why D11 is the minimum rather than a guess. Adding a status is a `TextChoices` entry and a migration; changing what counts as present is a change to one function, `day_status()` |
 | A3 practice varies | all | nothing is built, so nothing breaks. This is the assumption it is cheapest to be wrong about, and only in that direction: shipping the knob first and finding nobody turns it is the expensive mistake |
 | A4 unmarked vs absent | — | nothing. A4 is not a claim about schools. If a school genuinely does not care to tell the two apart it can ignore the third number; the system still must not invent one |
@@ -272,9 +281,10 @@ decision about a door, not a step.
 the system computing it (already settled by `Term`); that unmarked is distinct from
 absent (A4); that a revision carries attendance forward (D7).
 
-**Not configurable yet, pending A3:** the rollup rule in D4, and which statuses count
-as present. Both live in one function each so that the cost of being wrong is a
-function body, not a schema.
+**Not configurable yet, pending A3:** which statuses count as present. It lives in one
+function so that the cost of being wrong is a function body, not a schema. The rollup
+rule used to sit beside it here; under A1 it is a constraint instead, and a constraint
+is deliberately not configurable.
 
 **No settings row is added in this phase.** `ReportCardSettings` is where a flag would
 go if A3 comes back yes — it is already the per-school singleton for how a school
@@ -284,6 +294,8 @@ handles report cards, and one boolean does not earn a third settings table.
 
 1. **The register data path.** The two models, their constraints, the migration, the
    service layer, the roster read and the bulk-write endpoint. No page, no card.
+   **Built, then amended**: A1 landed after it and took the `period` column and D4's
+   rollup rule with it.
 2. **The summary and the freeze.** `Term.school_days` gets a writer — D12, a service
    function and a route with no page; the summary
    function; `cards.freeze_for_release()` gains its argument; D7's carry-forward and

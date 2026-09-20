@@ -79,7 +79,7 @@ class ASecondSubmitAmendsTests(RegisterSetUp):
     def test_submitting_twice_does_not_make_two_registers(self):
         """A slow first answer is not a second register.
 
-        `one_register_per_group_per_period` forbids one; this asserts the
+        `one_register_per_group_per_day` forbids one; this asserts the
         service produces the amendment rather than the IntegrityError.
         """
         with connected_to(self.stmarys):
@@ -345,22 +345,18 @@ class AGroupWithNobodyInItTests(RegisterSetUp):
 
 
 class DiscardingARegisterTests(RegisterSetUp):
-    def test_a_register_filed_against_the_wrong_slot_goes_with_its_marks(self):
+    def test_a_register_filed_against_the_wrong_day_goes_with_its_marks(self):
         with connected_to(self.stmarys):
             services.take_register(
                 self.jss1a, self.term, on=A_SCHOOL_DAY, by=self.teacher
             )
-            self.assertTrue(
-                services.discard_register(self.jss1a, A_SCHOOL_DAY, 1)
-            )
+            self.assertTrue(services.discard_register(self.jss1a, A_SCHOOL_DAY))
             self.assertEqual(Register.objects.count(), 0)
             self.assertEqual(AttendanceMark.objects.count(), 0)
 
     def test_discarding_nothing_is_false_rather_than_an_error(self):
         with connected_to(self.stmarys):
-            self.assertFalse(
-                services.discard_register(self.jss1a, A_SCHOOL_DAY, 1)
-            )
+            self.assertFalse(services.discard_register(self.jss1a, A_SCHOOL_DAY))
 
 
 class WhoMayTakeARegisterTests(RegisterSetUp):
