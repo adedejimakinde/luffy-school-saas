@@ -7,7 +7,10 @@ Task 7, and then issue #56, which gave it a way in and a way out. Code:
 in `results/models.py`, migrations `0021_the_rendered_card` and
 `0022_a_card_owes_a_file_from_the_moment_it_is_released`, tests in
 `results/tests/test_pdf.py` and `results/tests/test_renders.py`. The queue
-underneath it is [background.md](background.md).
+underneath it is [background.md](background.md), and the same card as a page a
+family opens in a browser is [report-card-page.md](report-card-page.md) — which
+renders from the same `card_payload()`, including the `columns` and aligned
+`cells` this file's grid section argues for.
 
 ## Built from the family payload, never from the row
 

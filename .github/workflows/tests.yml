@@ -125,6 +125,39 @@ jobs:
           SESSION_COOKIE_DOMAIN: .example.test
         run: python manage.py check --deploy
 
+      # The report card page's assets, collected the way a deployment collects
+      # them — and **before the suite runs, because the suite needs them.**
+      #
+      # This job deliberately does not set DJANGO_DEBUG, so `settings.STORAGES`
+      # selects WhiteNoise's hashed, pre-compressed storage here. That storage
+      # serves nothing that is not in a manifest, and the manifest is written by
+      # this command: without this step every `{% static %}` in the page's
+      # template raises `Missing staticfiles manifest entry` during the tests,
+      # and the failure reads like a broken template rather than an uncollected
+      # asset.
+      #
+      # So it is two checks in one. It proves `collectstatic` succeeds — the
+      # step a deployment cannot skip — and it lets the suite exercise the
+      # production storage rather than the plain one a developer's DEBUG=1 gets.
+      - name: Collect static files
+        run: python manage.py collectstatic --noinput
+
+      # The page is vanilla ES modules with no build step, so its renderers are
+      # pure functions of a payload and its four refusal states are pure
+      # functions of an API body. `node --test` asserts them with no browser,
+      # no DOM and nothing installed: `package.json` has no dependencies, there
+      # is no `node_modules`, and `npm test` is one `node --test` invocation.
+      #
+      # A refusal is the path nobody demos — a withheld card, a lapsed session,
+      # a wrong link — which is exactly why they are tested here rather than
+      # eyeballed once.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Page module tests
+        run: npm test
+
       # `--parallel` splits the suite across worker processes, each with its own
       # clone of the test database. Both halves of the suite's cost are now
       # addressed here, and they interact, so it is worth stating the order.

@@ -930,3 +930,209 @@ class TheIndexIsHowAFamilyReachesACardAtAll(ReportCardApiSetUp):
         response = self.index(None)
 
         self.assertEqual(response.status_code, 401)
+
+
+class TheAlignedCellsAgreeWithTheAssessmentsTests(ReportCardApiSetUp):
+    """`columns` and `cells`, and the guard on sending the cells twice.
+
+    The page is a renderer: it walks `columns` for the header and each line's
+    `cells` for the row, and decides nothing about either. The cost is that
+    `cells` is a second view of `assessments`, so these tests exist to say the
+    two views cannot disagree — a card where they did would print a mark under
+    the wrong paper's heading, which is the failure the alignment was written
+    to prevent in the first place.
+
+    The card is arranged so the alignment is not trivially right:
+
+    * five columns from two subjects, whose `position`s disagree with both the
+      alphabet and creation order;
+    * "First CA" out of 20 in both subjects, which must collapse to **one**
+      column;
+    * "Exam" out of 100 in English and out of 90 in Mathematics, which must
+      stay **two**;
+    * "Second CA" in English only, so Mathematics' row carries a gap;
+    * and nobody marked in English's "Second CA", so that row carries an
+      unmarked cell. **A gap and an unmarked cell are in the same card on
+      purpose** — they print differently, and a payload that cannot tell them
+      apart is a page that prints "not taught" and "not marked" identically.
+    """
+
+    #: `(subject, name, out_of, position)`, and the printed order that follows.
+    PAPERS = (
+        ("english", "First CA", 20, 1),
+        ("english", "Exam", 100, 2),
+        ("english", "Second CA", 25, 4),
+        ("maths", "First CA", 20, 1),
+        ("maths", "Mid-term", 30, 2),
+        ("maths", "Exam", 90, 3),
+    )
+    EXPECTED_COLUMNS = [
+        ("First CA", 20),
+        ("Exam", 100),
+        ("Second CA", 25),
+        ("Mid-term", 30),
+        ("Exam", 90),
+    ]
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            term = self.term_of(self.stmarys, TermName.FIRST.value)
+            for key, name, out_of, position in self.PAPERS:
+                assessment, _ = Assessment.objects.update_or_create(
+                    term=term,
+                    subject_id=self.subjects_of(self.stmarys)[key],
+                    name=name,
+                    defaults={"max_score": out_of, "position": position},
+                )
+                # Everything is marked except English's Second CA, which is the
+                # unmarked cell this class needs. setUp already scored both
+                # subjects' Exam, so those are left alone.
+                if name in ("First CA", "Mid-term"):
+                    for child, value in ((self.ada, 17), (self.bola, 11)):
+                        Score.objects.create(
+                            assessment=assessment,
+                            student_membership_id=child.pk,
+                            value=value,
+                        )
+        self.release()
+
+    def payload_of(self, school, membership):
+        from results.card_api import card_payload
+
+        with connected_to(school):
+            return card_payload(
+                cards.card_for(membership, self.term_of(school, TermName.FIRST.value))
+            )
+
+    def test_the_columns_are_the_union_in_the_frozen_print_order(self):
+        payload = self.payload_of(self.stmarys, self.ada)
+
+        self.assertEqual(
+            [(column.name, column.max_score) for column in payload.columns],
+            self.EXPECTED_COLUMNS,
+            "the header is not the union in position order",
+        )
+
+    def test_every_line_is_exactly_as_long_as_the_header(self):
+        """The row-shift bug, stated as a length. A row shorter than the header
+        prints its last marks under the wrong papers."""
+        payload = self.payload_of(self.stmarys, self.ada)
+        self.assertTrue(payload.subjects, "nothing was released")
+
+        for line in payload.subjects:
+            with self.subTest(subject=line.subject_name):
+                self.assertEqual(len(line.cells), len(payload.columns))
+
+    def test_each_cell_sits_under_its_own_column(self):
+        """The claim the client is relying on, asserted cell by cell.
+
+        For every position in every row: either the entry is `None` and the
+        subject genuinely has no such paper, or it is the very cell from
+        `assessments` whose `(name, max_score)` is that column's. There is no
+        third case, and a swap of two same-named columns would fail here.
+        """
+        payload = self.payload_of(self.stmarys, self.ada)
+        keys = [(column.name, column.max_score) for column in payload.columns]
+
+        for line in payload.subjects:
+            own = {
+                (cell.assessment_name, cell.max_score): cell
+                for cell in line.assessments
+            }
+            for key, cell in zip(keys, line.cells):
+                with self.subTest(subject=line.subject_name, column=key):
+                    if cell is None:
+                        self.assertNotIn(
+                            key, own, "a gap where the subject has the paper"
+                        )
+                    else:
+                        self.assertEqual((cell.assessment_name, cell.max_score), key)
+                        self.assertEqual(
+                            cell, own[key], "not the cell from assessments"
+                        )
+
+    def test_no_cell_is_dropped_on_the_way_into_the_aligned_row(self):
+        """The other direction, which the test above cannot see.
+
+        Walking `cells` proves nothing was mis-placed; it does not prove
+        nothing was *left out*. Every one of a subject's own assessments has to
+        appear in its aligned row, or a mark the card carries is a mark the page
+        never shows.
+        """
+        payload = self.payload_of(self.stmarys, self.ada)
+
+        for line in payload.subjects:
+            with self.subTest(subject=line.subject_name):
+                self.assertEqual(
+                    sorted(
+                        (cell.assessment_name, cell.max_score)
+                        for cell in line.assessments
+                    ),
+                    sorted(
+                        (cell.assessment_name, cell.max_score)
+                        for cell in line.cells
+                        if cell is not None
+                    ),
+                )
+
+    def test_a_gap_and_an_unmarked_cell_are_different_things(self):
+        """Both in one card, which is what makes the distinction assertable.
+
+        Mathematics has no Second CA at all — `None`. English has one that
+        nobody was marked in — a cell whose `score` is null. The page prints
+        the first as a gap and the second as a dash; a payload that rendered
+        them the same would tell a parent their child was not marked in a paper
+        the school never set.
+        """
+        payload = self.payload_of(self.stmarys, self.ada)
+        at = [(c.name, c.max_score) for c in payload.columns].index(("Second CA", 25))
+
+        maths = next(l for l in payload.subjects if l.subject_name == "Mathematics")
+        english = next(l for l in payload.subjects if l.subject_name == "English")
+
+        self.assertIsNone(
+            maths.cells[at], "Mathematics has no Second CA; expected a gap"
+        )
+        self.assertIsNotNone(english.cells[at], "English's Second CA was frozen")
+        self.assertIsNone(english.cells[at].score, "nobody was marked in it")
+
+    def test_the_other_school_gets_its_own_columns_and_not_these(self):
+        """Two schools, because per-schema sequences make a count of one pass.
+
+        Grace never set any of the papers above. Her card's header must be
+        hers, and nothing here may reach it.
+        """
+        self.release(self.grace)
+        theirs = self.payload_of(self.grace, self.ngozi)
+
+        self.assertEqual(
+            [(column.name, column.max_score) for column in theirs.columns],
+            [("Exam", 100)],
+            "St Mary's papers reached Grace's card",
+        )
+        for line in theirs.subjects:
+            with self.subTest(subject=line.subject_name):
+                self.assertEqual(len(line.cells), 1)
+
+    def test_the_family_receives_both_over_http(self):
+        """The shape the page actually fetches, not the object behind it.
+
+        A field present on the schema and absent from the JSON is a field the
+        page does not have, and `cells` carrying `null` entries has to survive
+        serialisation as `null` rather than as an omission.
+        """
+        response = self.fetch(self.mama, self.stmarys, self.ada)
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+
+        self.assertEqual(
+            [(c["name"], c["max_score"]) for c in body["columns"]],
+            self.EXPECTED_COLUMNS,
+        )
+        maths = next(l for l in body["subjects"] if l["subject_name"] == "Mathematics")
+        self.assertEqual(len(maths["cells"]), len(body["columns"]))
+        self.assertIn(None, maths["cells"], "the gap did not survive as null")
+        english = next(l for l in body["subjects"] if l["subject_name"] == "English")
+        unmarked = [c for c in english["cells"] if c is not None and c["score"] is None]
+        self.assertEqual(len(unmarked), 1, "the unmarked cell did not survive")
