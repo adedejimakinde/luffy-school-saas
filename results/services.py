@@ -697,6 +697,13 @@ def release(sheet, actor):
     """
     from . import cards, comments, ratings, renders, sessions
 
+    # `attendance` does not import this module, so this one could sit at the top
+    # of the file. It is here beside the other four so that "what a release
+    # reads" is one list in one place, and so that a later import cycle through
+    # `attendance` — which will grow a summary view of its own — does not have
+    # to move it back.
+    from attendance import summary as attendance_summary
+
     def freeze_the_card(locked):
         """Everything the card is made of, copied at the moment of release.
 
@@ -765,7 +772,18 @@ def release(sheet, actor):
         now — `docs/cards.md`, "The detector that went with it", and issue #47.
         """
         results = positions.class_results(locked.class_group, locked.term)
-        card_by_student = cards.freeze_for_release(locked, results, by=actor)
+        # One read of the term's registers for the whole class, inside the same
+        # locked block and at the same instant as `class_results()` above. The
+        # three columns it fills live on `ReleasedCard`, which is append-only at
+        # two layers, so they can only be written on the INSERT — which is why
+        # this is an argument to the freeze below and not a fifth
+        # `freeze_for_release()` beside `ratings`, `comments` and `sessions`.
+        # `docs/attendance.md` D6, and issue #60 for why it is read here rather
+        # than inside.
+        attendance = attendance_summary.for_term(locked.term, results.student_ids)
+        card_by_student = cards.freeze_for_release(
+            locked, results, attendance=attendance, by=actor
+        )
         ratings.freeze_for_release(locked, card_by_student)
         comments.freeze_for_release(locked, card_by_student)
         sessions.freeze_for_release(locked, card_by_student, results)

@@ -74,6 +74,13 @@ table { border-collapse: collapse; width: 100%; }
 
 .blank { color: #888; }
 
+/* The parenthetical on a partial attendance line: "register kept on 40 of 62
+   days". Smaller and greyer than the counts beside it, because it is the
+   school's own gap rather than a fact about this child -- but present, not
+   hidden, since a line that omitted it would let a reader subtract 40 from 62
+   and call the difference absence. */
+.note { color: #666; font-size: 0.85em; }
+
 .conduct, .remark, .session, .promotion { margin-bottom: 12px; }
 .remark p { margin: 2px 0 0; }
 

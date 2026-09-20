@@ -46,6 +46,7 @@ from ninja.utils import check_csrf
 from accounts import guardian_signin, signin
 from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
+from academics.api import router as academics_router
 from attendance.api import router as attendance_router
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
@@ -72,6 +73,10 @@ api.add_router("/gradebook/", gradebook_router, tags=["gradebook"])
 # and being empty. Mounted here beside the others rather than on a second api
 # object, because the 404 is the routing decision and it is made in one place.
 api.add_router("/attendance/", attendance_router, tags=["attendance"])
+
+# The school's calendar. Tenant-host only, like the register above — and with no
+# page in front of it, deliberately: see `academics.api` and D12.
+api.add_router("/academics/", academics_router, tags=["academics"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.
 api.add_router("/results/", results_router, tags=["results"])

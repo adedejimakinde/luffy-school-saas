@@ -156,12 +156,53 @@ function percentage(value) {
   return `${esc(value)}%`;
 }
 
+/**
+ * The attendance line. **This function formats and does not decide.**
+ *
+ * Which of four things a card's attendance is gets settled once on the server,
+ * in `results.card_api.attendance_of()`, and arrives as `payload.attendance.state`.
+ * This matters because the PDF renders from the very same payload — `pdf.html_for()`
+ * calls `card_payload()` — so one answer reaches both renderers by construction.
+ * They diverged once before, when this function keyed on `days_present` and the
+ * template keyed on `days_open`, and it was invisible only because the columns
+ * were always null.
+ *
+ * The rule the states encode: **the denominator is only ever the days actually
+ * marked.** The school's declared term length is context and never a divisor,
+ * because dividing by it invites subtracting from it and reading the remainder
+ * as absence — which is a false accusation against a class whose school simply
+ * did not keep the register.
+ */
 function attendance(payload) {
-  if (payload.days_present === null || payload.days_present === undefined)
-    return '<span class="blank">&mdash;</span>';
-  return `${numberOrBlank(payload.days_present)} of ${numberOrBlank(
-    payload.days_open,
-  )} days`;
+  const a = payload.attendance || {};
+  switch (a.state) {
+    case "absent":
+      return '<span class="blank">&mdash;</span>';
+    case "not_recorded":
+      return '<span class="blank">Not recorded this term</span>';
+    case "partial": {
+      const counts = `${numberOrBlank(a.present)} present, ${numberOrBlank(
+        a.absent,
+      )} absent`;
+      // No parenthetical when the school never declared a term length: there is
+      // nothing to have kept the register *of*, and "40 of — days" would be a
+      // sentence with a hole in it. What was observed is still printed, because
+      // gating the whole line on the denominator throws the recorded half away
+      // and tells a parent nobody kept a register.
+      if (a.school_days === null || a.school_days === undefined) return counts;
+      return `${counts} <span class="note">(register kept on ${numberOrBlank(
+        a.marked,
+      )} of ${numberOrBlank(a.school_days)} days)</span>`;
+    }
+    case "complete":
+      return `Present ${numberOrBlank(a.present)} of ${numberOrBlank(
+        a.school_days,
+      )} days`;
+    default:
+      // An unknown state is a server this client does not understand, and a
+      // guess here would be a number nobody computed. Blank, like `absent`.
+      return '<span class="blank">&mdash;</span>';
+  }
 }
 
 function sections(payload) {

@@ -31,6 +31,17 @@ function payload(overrides = {}) {
     days_present: null,
     days_absent: null,
     days_open: null,
+    // The decision the server took, which is the only thing `attendance()`
+    // reads. The three raw columns above are still on the payload and are
+    // deliberately *not* what the renderer branches on.
+    attendance: {
+      state: "absent",
+      present: null,
+      absent: null,
+      school_days: null,
+      marked: null,
+      not_marked: null,
+    },
     columns: [
       { name: "First CA", max_score: 20 },
       { name: "Exam", max_score: 100 },
@@ -185,12 +196,74 @@ test("a percentage is printed exactly as it arrived", () => {
   assert.doesNotMatch(html, /83\.1%|83%/);
 });
 
+const attending = (state, extra = {}) =>
+  payload({
+    attendance: {
+      state,
+      present: null,
+      absent: null,
+      school_days: null,
+      marked: null,
+      not_marked: null,
+      ...extra,
+    },
+  });
+
+test("a fully marked term prints present of declared, which is the target case", () => {
+  const html = card(
+    attending("complete", { present: 58, absent: 4, school_days: 62, marked: 62, not_marked: 0 }),
+  );
+  assert.match(html, /Present 58 of 62 days/);
+});
+
 test("nought days present is not the same as no register kept", () => {
-  const kept = card(payload({ days_present: 0, days_absent: 60, days_open: 60 }));
-  assert.match(kept, /0 of 60 days/, "present on none of the days the school opened");
+  // Absent every day of a fully marked term. `0` is a real measurement and the
+  // one case where "Present 0 of 60" is true.
+  const kept = card(
+    attending("complete", { present: 0, absent: 60, school_days: 60, marked: 60, not_marked: 0 }),
+  );
+  assert.match(kept, /Present 0 of 60 days/, "present on none of the days the school opened");
 
   const none = card(payload());
-  assert.doesNotMatch(none, /of\s+days|0 of/, "no register: blank, not a zero");
+  assert.doesNotMatch(none, /of\s+days|0 of/, "no attendance on this card: blank, not a zero");
+});
+
+test("a term nobody marked never prints a number", () => {
+  // The case this whole design exists for. `0, 0, 62` is a school that kept no
+  // register, and "Present 0 out of 62 days" would accuse every child in the
+  // class of never turning up.
+  const html = card(
+    attending("not_recorded", { present: 0, absent: 0, school_days: 62, marked: 0, not_marked: 62 }),
+  );
+  assert.match(html, /Not recorded this term/);
+  assert.doesNotMatch(html, /0 of 62|of 62 days/, "no denominator, because nothing was measured");
+});
+
+test("a partly marked term never divides by the declared days", () => {
+  const html = card(
+    attending("partial", { present: 38, absent: 2, school_days: 62, marked: 40, not_marked: 22 }),
+  );
+  assert.match(html, /38 present, 2 absent/);
+  assert.match(html, /register kept on 40 of 62 days/);
+  assert.doesNotMatch(
+    html,
+    /38 of 62/,
+    "62 is never a denominator: subtracting from it reads unmarked days as absence",
+  );
+});
+
+/** The attendance cell alone. Asserting against the whole card would match any
+ *  digit in the marks table, which is how the first draft of the test below
+ *  passed for the wrong reason. */
+const attendanceCell = (html) =>
+  (html.match(/Attendance<\/th><td>([\s\S]*?)<\/td>/) || [])[1] || "";
+
+test("an unknown state is blank rather than a guess", () => {
+  const cell = attendanceCell(
+    card(attending("something_new", { present: 5, school_days: 62, marked: 5 })),
+  );
+  assert.match(cell, /&mdash;/, "blank, like a card with no attendance at all");
+  assert.doesNotMatch(cell, /5|62/, "a client that does not understand the state invents nothing");
 });
 
 test("the revised marker appears only when the payload says so", () => {
