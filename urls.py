@@ -18,10 +18,11 @@ routing rather than by a check inside a view somebody could forget to add.
 from django.urls import path
 
 from api import api
-from results.views import card_page
+from results.views import card_index_page, card_page
 
 urlpatterns = [
     path("api/", api.urls),
+    path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",
         card_page,

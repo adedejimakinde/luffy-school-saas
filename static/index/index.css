@@ -1,0 +1,59 @@
+/*
+ * The index. A list of children, each with a list of cards.
+ *
+ * Deliberately a list and not a table: the rows are links a parent taps, and a
+ * table of one column per card attribute is a layout that stops working on the
+ * device most of them are holding.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #ddd;
+  --held: #900;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 34rem; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0 0 16px; }
+h2 { font-size: 1.05rem; margin: 20px 0 6px; }
+
+.cards { list-style: none; margin: 0; padding: 0; }
+
+.cards li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cards a { font-size: 1.05rem; }
+
+/*
+ * A held card is marked, not dimmed and not hidden. Dimming it would say "this
+ * one does not matter", and it is the one the parent most needs to open: the
+ * card page's 403 is what names the school's contact.
+ */
+.tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--quiet);
+  border-radius: 9px;
+  color: var(--quiet);
+  font-size: .75rem;
+}
+
+.tag.held { border-color: var(--held); color: var(--held); }
+.tag.revised { border-color: var(--ink); color: var(--ink); }
+
+.blank { color: var(--quiet); }
+.state { padding: 24px 0; }

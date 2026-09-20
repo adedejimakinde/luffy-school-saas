@@ -1,0 +1,38 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in</title>
+
+{% comment %}
+Every comment in this file is a `{% comment %}` block rather than a `{#` one.
+A `{#` comment is single-line only: spanning lines it is not a comment at all
+and every word renders on the page. This project has shipped that bug before.
+
+The title is "Sign in" and says nothing about who is signing in, because this
+document is served to anybody who opens the URL.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'signin/signin.css' %}">
+
+{% comment %}
+The import map, declared before the module that needs it — a map that comes
+after the import it governs is ignored, silently. `pages.import_map()` has the
+long version: `collectstatic` hashes filenames but does not rewrite `import`
+statements, so without this the entry point is cache-busted and everything it
+imports is not.
+{% endcomment %}
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'signin/app.js' %}"></script>
+
+<main id="signin">
+  {% comment %}
+  What a reader sees if the module never loads. It has to be true on its own,
+  and it must not be a form: a form without the module behind it would submit
+  to this page and lose whatever was typed.
+  {% endcomment %}
+  <noscript>
+    <h1>See your child's report card</h1>
+    <p>This page needs JavaScript to sign you in. Please turn it on, or ask the
+    school office for help reaching your child's report card.</p>
+  </noscript>
+</main>

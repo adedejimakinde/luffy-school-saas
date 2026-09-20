@@ -2,8 +2,8 @@
   "name": "luffy-school-saas",
   "private": true,
   "type": "module",
-  "description": "No dependencies and no build step. This file exists so that node reads the page's ES modules as modules (`type: module`) and so `npm test` names the one command that runs their tests. There is no node_modules, nothing to install, and nothing here is served to a browser.",
+  "description": "No dependencies and no build step. This file exists so that node reads the page modules in static/ as modules (`type: module`) and so `npm test` names the one command that runs their tests. There is no node_modules, nothing to install, and nothing here is served to a browser.",
   "scripts": {
-    "test": "node --test results/tests/js/*.test.js"
+    "test": "node --test tests/js/*.test.js"
   }
 }

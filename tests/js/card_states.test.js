@@ -10,9 +10,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import * as states from "../../static/results/card/states.js";
-import { htmlFor } from "../../static/results/card/app.js";
-import { refusalFor, REFUSAL } from "../../static/results/card/api.js";
+import * as states from "../../static/card/states.js";
+import { htmlFor } from "../../static/card/app.js";
+import { refusalFor, REFUSAL } from "../../static/card/api.js";
 
 const WITHHELD_BODY = {
   school_name: "St Mary's",

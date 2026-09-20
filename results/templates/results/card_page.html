@@ -16,8 +16,8 @@ all, and every word of it renders on the page. This project has shipped that
 bug before.
 {% endcomment %}
 
-<link rel="stylesheet" href="{% static 'results/card/card.css' %}">
-<link rel="stylesheet" href="{% static 'results/card/print.css' %}" media="print">
+<link rel="stylesheet" href="{% static 'card/card.css' %}">
+<link rel="stylesheet" href="{% static 'card/print.css' %}" media="print">
 
 {% comment %}
 The import map, and it is not optional. `collectstatic` hashes filenames and
@@ -38,7 +38,7 @@ that needs it is ignored.
 makes `import` work with no bundler, which is the whole reason this page has no
 build step.
 {% endcomment %}
-<script type="module" defer src="{% static 'results/card/app.js' %}"></script>
+<script type="module" defer src="{% static 'card/app.js' %}"></script>
 
 <main id="card"
       data-student-membership-id="{{ student_membership_id }}"

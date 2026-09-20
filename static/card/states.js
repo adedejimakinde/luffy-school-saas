@@ -8,7 +8,7 @@
  * by definition the path nobody demos.
  */
 
-import { esc } from "./html.js";
+import { esc } from "../web/html.js";
 
 /** Before the answer arrives. Replaced by whatever comes back. */
 export function loading() {

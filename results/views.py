@@ -1,10 +1,17 @@
-"""The report card page: one HTML shell, and no card in it.
+"""The two pages a family sees, and neither has a card in it.
 
-The page a family opens. What it serves is a document with no marks, no name
-and no average anywhere in it — an empty frame, a stylesheet and three ES
-modules. Everything a parent reads arrives afterwards, from
-`GET /api/results/cards/<child>/<term>/`, which is the route that asks who is
+`card_index_page()` lists which children this caller stands for and which of
+their cards exist; `card_page()` is one of those cards. Both serve a document
+with no marks, no name and no average anywhere in it — an empty frame, a
+stylesheet and a few ES modules. Everything a parent reads arrives afterwards
+from `GET /api/results/cards/` and
+`GET /api/results/cards/<child>/<term>/`, which are the routes that ask who is
 allowed to read what.
+
+The index is the page that makes a card reachable at all: both card routes are
+keyed on `(student_membership_id, term_id)` and nothing this API said to a
+family carried either number until the index route existed, so the card page
+shipped openable only by typing two integers into a URL.
 
 ## The shell asks no authority question, and that is the design
 
@@ -41,52 +48,57 @@ different school is refused before this view — by the same middleware that
 refuses them the API, rather than by a check written again here.
 """
 
-import json
-
-from django.conf import settings
 from django.shortcuts import render
-from django.templatetags.static import static
 
-#: Every module the page loads, entry point last.
+import pages
+from schools.models import Domain
+
+#: Every module the card page loads, entry point last.
 #:
 #: Listed rather than globbed, because a directory listing would decide what a
 #: page loads at runtime and a stray file would join it silently.
-_MODULES = ("html.js", "api.js", "render.js", "states.js", "app.js")
+CARD_MODULES = (
+    "web/html.js",
+    "card/api.js",
+    "card/render.js",
+    "card/states.js",
+    "card/app.js",
+)
+
+#: The index page's own. It shares `web/` with the card page and the sign-in
+#: page — one escape rule for every page, which is what `settings.STATICFILES_DIRS`
+#: argues for.
+INDEX_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "index/states.js",
+    "index/app.js",
+)
 
 
-def _import_map() -> str:
-    """The hashed URL for every module, keyed by the URL its siblings ask for.
+def _portal_host() -> str:
+    """Where a parent signs in, read from the one place that knows.
 
-    **This exists because `collectstatic` does not rewrite `import` statements.**
-    It rewrites `{% static %}` in templates and `url()` in stylesheets, and that
-    is all: the hashed `app.4f21c0.js` still contains `from "./api.js"`, which
-    the browser resolves against the *document's* static path to
-    `/static/results/card/api.js` — the unhashed copy. It is served, so nothing
-    looks broken, and that is the problem: the entry point is cache-busted and
-    the four modules it imports are not. A deploy would hand a browser today's
-    `app.js` against yesterday's `render.js` out of its own cache, and the
-    symptom would be a page that is subtly wrong for one person and fine for
-    everybody else.
+    The index page needs it for a single sentence: its 401 state has to offer a
+    way back, and sign-in is on the portal while this page is on a school's
+    host, so the link cannot be relative.
 
-    An import map is the fix that needs no bundler. The keys are the URLs the
-    relative imports resolve to; the values are what `{% static %}` resolves
-    to, hashed where the storage hashes. Under plain storage — development, and
-    the test suite — key and value are identical and the map is a no-op, which
-    is exactly what it should be where nothing is hashed.
+    **The API deliberately will not answer this** — `api._portal_only()` says a
+    client knows its own portal and that having the server name it would put the
+    same fact in two places. This does not reopen that. It reads the fact from
+    the single authority there is, the `Domain` row for the public schema, and
+    renders it into a page this same deployment serves; it does not add an API
+    that tells arbitrary callers where the front door is.
 
-    `STATIC_URL` is read rather than assumed, so a deployment that serves
-    assets from a different prefix gets a map that still matches its own
-    imports.
+    Empty where no such row exists. The state then renders its sentence without
+    a link, because a dead link is worse than being told to go back the way you
+    came.
     """
-    prefix = settings.STATIC_URL or "/"
-    return json.dumps(
-        {
-            "imports": {
-                f"{prefix}results/card/{name}": static(f"results/card/{name}")
-                for name in _MODULES
-            }
-        },
-        indent=2,
+    return (
+        Domain.objects.filter(tenant__schema_name="public", is_primary=True)
+        .values_list("domain", flat=True)
+        .first()
+        or ""
     )
 
 
@@ -102,9 +114,32 @@ def card_page(request, student_membership_id: int, term_id: int):
         {
             "student_membership_id": student_membership_id,
             "term_id": term_id,
-            "import_map": _import_map(),
+            "import_map": pages.import_map(*CARD_MODULES),
         },
     )
 
 
-__all__ = ["card_page"]
+def card_index_page(request):
+    """The frame for the index: which children, and which of their cards.
+
+    Reads one row — the portal's hostname, for the sentence the 401 state needs
+    — and no card data of any kind. Who this caller stands for is
+    `GET /api/results/cards/`'s question, asked with the session cookie, and
+    that route answers only about children the caller already has a claim on.
+
+    Unauthenticated callers get the frame, exactly as the card page serves one:
+    the fetch inside it is what meets the authority question, and a
+    `login_required` here would turn the URL into an oracle in a deployment
+    where a school's host is guessable.
+    """
+    return render(
+        request,
+        "results/card_index.html",
+        {
+            "import_map": pages.import_map(*INDEX_MODULES),
+            "portal_host": _portal_host(),
+        },
+    )
+
+
+__all__ = ["card_page", "card_index_page", "CARD_MODULES", "INDEX_MODULES"]
