@@ -195,12 +195,19 @@ export function mount(root, { fetchImpl = fetch, navigate = null } = {}) {
         : { ...state, signOutFailed: true };
       return draw();
     }
-    // The pick carries the code that is already spent on proving the handset.
-    // Guarded on the attribute rather than reached by falling through every
-    // other button: the sign-out control is a `[data-action]` on two of these
-    // same states, and a fallthrough would post it as a pick with an undefined
-    // guardian — a spent code answered with a 401 and a family back at the
-    // code step for no reason they could see.
+    // The pick carries the code that is already spent on proving the handset,
+    // and it is guarded on the attribute rather than reached by falling through
+    // every other button.
+    //
+    // **The branches above return first, so this guard is the second line and
+    // not the first** — stated precisely because the first version of this
+    // comment claimed otherwise and a control proved it wrong. What the guard
+    // is worth was measured: dropping the `return` from the sign-out branch
+    // above leaves the suite green *because of this line*, and dropping both
+    // turns `a sign-out tap is not posted as a guardian pick` red. What it
+    // stops is a `[data-action]` reaching here at all — a sign-out posted as a
+    // pick with an undefined guardian is a spent code answered with a 401 and
+    // a family back at the code step for no reason they could see.
     if (!button.dataset.guardian) return undefined;
     return send(SESSION_URL, {
       value: state.value,

@@ -208,8 +208,14 @@ test("a sign-out tap is not posted as a guardian pick", async () => {
   // code answered with a 401, and a family dropped back to the code step for no
   // reason they could see.
   //
-  // CONTROL: removing `if (!button.dataset.guardian) return undefined;` reddens
-  // this, and the two assertions name which half broke.
+  // CONTROL, and the first aim of it was wrong in a way worth recording.
+  // Removing `if (!button.dataset.guardian) return undefined;` alone leaves
+  // this green, because the sign-out branch returns before ever reaching the
+  // fallthrough — the guard is the second line, not the first. The control that
+  // reddens this is dropping that branch's `return` *and* the guard, and
+  // dropping the branch outright reddens this and the failure test below it.
+  // Recorded rather than fixed silently: a control that changes nothing has
+  // told you the claim you were about to ship is not the claim the test holds.
   forgetToken();
   const root = fakeRoot();
   const posted = [];
