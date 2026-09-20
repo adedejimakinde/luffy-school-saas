@@ -34,7 +34,7 @@ from accounts.models import LIVE_STATUSES, Membership, Role
 from accounts.staff import why_not_a_teacher_here
 from accounts.students import why_not_a_student_here
 
-from .models import ClassPlacement, ClassTeacher
+from .models import ClassPlacement, ClassTeacher, Term
 
 
 class AcademicsError(Exception):
@@ -91,6 +91,16 @@ _UNIQUE_VIOLATION = "23505"
 
 #: The constraint whose firing means "somebody placed this child first".
 _COLLISION = "one_class_placement_per_student_per_term"
+
+
+class NotAllowedToSetTermLength(AcademicsError):
+    """The actor holds no role at this school that may declare a term's length.
+
+    Its own class rather than `NotAllowedToPlace`, even though the role set is
+    identical today: the two answer different questions, and a caller catching
+    "you may not place children" to explain a refusal about the calendar would
+    print the wrong sentence the moment either set moves.
+    """
 
 
 class NotThisSchoolsTeacher(AcademicsError):
@@ -390,6 +400,78 @@ def carry_forward_placements(from_term, to_term, *, by=None) -> int:
 PLACEMENT_ROLES = frozenset({Role.PRINCIPAL.value, Role.ADMIN.value})
 
 
+def set_school_days(term, count, *, by=None):
+    """Declare how many teaching days a term held. Returns the `Term`.
+
+    **The school declares this; nothing computes it.** `Term.school_days`
+    already carries the argument at length — weekends come out, but so do
+    mid-term break, public holidays that move year to year, sports day and any
+    day the school shut for weather. A computed count that disagreed with the
+    school's own register would make every attendance figure wrong in a way
+    nobody could explain. This function is the door onto that column, which
+    until now had constraints, documentation and no writer at all: it was
+    reachable only from the ORM, so `days_open` was null on every card that
+    could ever have been released.
+
+    `None` clears it, and clearing is a real act rather than an oversight — a
+    term whose length was entered wrongly and is not yet known again is better
+    described by a blank than by a number somebody has stopped believing. The
+    constraints refuse the rest: at least one day, and no more than the term's
+    own calendar span.
+
+    Locked, because this is read-modify-write on one row and two administrators
+    setting it at the same instant would otherwise both read the old value and
+    both write their own, losing one with nothing to show a change was lost —
+    the same reasoning `move_student()` records.
+
+    **There is no screen for this**, and that is D12 in `docs/attendance.md`
+    rather than an omission: there are no staff pages anywhere in this project
+    yet, and inventing one here would drag this slice into the staff-UI problem
+    the register screen already has to solve. The route exists; the screen comes
+    when staff pages do.
+    """
+    with transaction.atomic():
+        locked = Term.objects.select_for_update().get(pk=term.pk)
+        locked.school_days = count
+        locked.full_clean(exclude=["session", "name"])
+        # Only the column that changed. `Term` carries no `updated_at` — see
+        # the model — so there is no `auto_now` field to list, and listing one
+        # that does not exist is a `FieldError` at save time rather than at
+        # import.
+        locked.save(update_fields=["school_days"])
+        return locked
+
+
+#: Roles that may declare a term's length at their own school.
+#:
+#: The same set as `PLACEMENT_ROLES` and for the same reason: this is an office
+#: act, not a teacher's. It is also the denominator of a number printed on every
+#: card the school sends home, so the set that may change it is the set that
+#: answers for the calendar.
+TERM_LENGTH_ROLES = PLACEMENT_ROLES
+
+
+def can_set_school_days(actor, school) -> bool:
+    """May `actor` declare a term's length at `school`?"""
+    if not getattr(actor, "is_authenticated", False):
+        return False
+    return bool(set(actor.roles_at(school)) & TERM_LENGTH_ROLES)
+
+
+def _require_term_length_authority(actor, school):
+    if not can_set_school_days(actor, school):
+        raise NotAllowedToSetTermLength(
+            f"{actor} may not set a term's length at {school}. How many days a "
+            f"term taught is declared by a principal or an administrator."
+        )
+
+
+def set_school_days_as(actor, term, count, *, school, by=None):
+    """`set_school_days()` for a caller with a request behind it."""
+    _require_term_length_authority(actor, school)
+    return set_school_days(term, count, by=actor if by is None else by)
+
+
 def can_place_students(actor, school) -> bool:
     """May `actor` place children into groups at `school`?
 
@@ -570,19 +652,22 @@ def unassign_class_teacher_as(actor, school, class_group, term) -> bool:
 
 
 __all__ = [
-    "CLASS_TEACHER_ROLES",
-    "PLACEMENT_ROLES",
     "AcademicsError",
     "AlreadyPlaced",
+    "CLASS_TEACHER_ROLES",
     "NotAllowedToAssignClassTeachers",
     "NotAllowedToPlace",
+    "NotAllowedToSetTermLength",
     "NotPlaced",
     "NotThisSchoolsStudent",
     "NotThisSchoolsTeacher",
+    "PLACEMENT_ROLES",
+    "TERM_LENGTH_ROLES",
     "assign_class_teacher",
     "assign_class_teacher_as",
     "can_assign_class_teachers",
     "can_place_students",
+    "can_set_school_days",
     "carry_forward_placements",
     "class_teacher_of",
     "is_class_teacher",
@@ -593,6 +678,8 @@ __all__ = [
     "placement_of",
     "remove_placement",
     "remove_placement_as",
+    "set_school_days",
+    "set_school_days_as",
     "unassign_class_teacher",
     "unassign_class_teacher_as",
 ]

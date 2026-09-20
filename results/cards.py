@@ -60,6 +60,8 @@ live from the append-only `PromotionDecision`. `ReleasedCard`'s docstring has
 both arguments in full.
 """
 
+from dataclasses import dataclass
+
 from django.db.models import Prefetch
 
 from . import grades
@@ -191,7 +193,9 @@ def _scores_for(assessments, student_ids) -> dict[tuple[int, int], int]:
     }
 
 
-def freeze_for_release(sheet, results, *, by=None) -> dict[int, ReleasedCard]:
+def freeze_for_release(
+    sheet, results, *, attendance=None, by=None
+) -> dict[int, ReleasedCard]:
     """Copy this class's cards as they read now. Returns `student_id -> card`.
 
     **The return value is the roster**, and that is the point of it rather than a
@@ -219,6 +223,17 @@ def freeze_for_release(sheet, results, *, by=None) -> dict[int, ReleasedCard]:
     by the same column; a card written by this function always has one, and it
     can never be filled in afterwards because the table is append-only.
 
+    `attendance` is `attendance.summary.for_term()`'s answer for this roster, and
+    it is an **argument for the same reason `results` is**: the three columns it
+    fills are on `ReleasedCard`, which is append-only at two layers — the
+    `save()` guard and `0018`'s `BEFORE UPDATE OR DELETE` trigger — so they can
+    only be written on the INSERT. There is no `attendance.freeze_for_release()`
+    beside `ratings` and `comments`, because a module writing after the cards
+    exist would need an UPDATE that both layers refuse. Read once at the top of
+    `services.release()`'s locked block and handed down, exactly as #60 made
+    `results` be. `None` means the caller has nothing to say about attendance
+    and every card is written with the three columns null.
+
     `results` is a `positions.ClassResults` — one roster read and one aggregate
     read — so that every number on every card in the class comes from the same
     instant. Reading them per child would let a mark landing mid-freeze put one
@@ -236,10 +251,19 @@ def freeze_for_release(sheet, results, *, by=None) -> dict[int, ReleasedCard]:
     """
     if not results.student_ids:
         return {}
-    return _freeze(sheet, results, results.student_ids, versions={}, by=by)
+    return _freeze(
+        sheet,
+        results,
+        results.student_ids,
+        versions={},
+        attendance=_attendance_from(attendance, results.student_ids, sheet.term),
+        by=by,
+    )
 
 
-def freeze_a_revision(sheet, results, student_id, *, version, by) -> dict[int, ReleasedCard]:
+def freeze_a_revision(
+    sheet, results, student_id, *, version, supersedes=None, by
+) -> dict[int, ReleasedCard]:
     """Task 8. One child's card again, at a new version, from live data.
 
     Returns the same `student_id -> card` mapping `freeze_for_release()` does,
@@ -269,10 +293,99 @@ def freeze_a_revision(sheet, results, student_id, *, version, by) -> dict[int, R
     no totals, no position, no average — over a card that had all four. Every
     value individually legal, so nothing objected. Issue #59.
     """
-    return _freeze(sheet, results, [student_id], versions={student_id: version}, by=by)
+    return _freeze(
+        sheet,
+        results,
+        [student_id],
+        versions={student_id: version},
+        attendance=_carried_forward(supersedes, student_id),
+        by=by,
+    )
 
 
-def _freeze(sheet, results, whose, *, versions, by) -> dict[int, ReleasedCard]:
+@dataclass(frozen=True)
+class _CardAttendance:
+    """The three numbers one card carries, together only here.
+
+    `attendance.summary.TermAttendance` deliberately holds present and absent
+    and **not** `days_open`, because the term's length is the school's
+    declaration about a calendar rather than an observation about a child, and
+    an object pairing them would invite a caller to treat the pair as one
+    measurement. The card is exactly where they do belong side by side: the
+    difference between what was observed and what the school declared is the
+    unmarked remainder, which is the quantity A4 exists to keep visible.
+
+    They are paired here, for the length of one INSERT, and nowhere else.
+    """
+
+    present: int | None
+    absent: int | None
+    open: int | None
+
+
+def _attendance_from(summary, student_ids, term) -> dict:
+    """Pair each child's observed marks with the term the school declared.
+
+    `summary` is `attendance.summary.for_term()`'s answer, or `None` when the
+    caller has nothing to say — a release of a term nobody kept a register for,
+    or any caller predating this slice. `None` writes all three columns null,
+    which is "this card carries no attendance", and is a different row from a
+    child whose register was simply never taken: she gets `0, 0, 62`, and the
+    renderer must never turn that into "present on none of 62 days".
+
+    `term.school_days` is read here rather than passed, because it is one column
+    on a row this function already holds and re-reading it per child would be
+    the `#60` mistake in miniature. It is nullable — a school that has not
+    declared its term length yet — and a null denominator with real counts is a
+    legal row that prints what was observed and nothing about the calendar.
+    """
+    if summary is None:
+        return {}
+    school_days = term.school_days
+    return {
+        sid: _CardAttendance(
+            present=marks.present, absent=marks.absent, open=school_days
+        )
+        for sid, marks in summary.items()
+        if sid in set(student_ids)
+    }
+
+
+def _carried_forward(supersedes, student_id) -> dict:
+    """D7. A revision keeps the attendance the card it supersedes was sent with.
+
+    **Not recomputed.** Sharing `_card_for()` with the release path would
+    otherwise mean a March revision fixing a comment typo silently restating the
+    attendance numbers a parent read in December — every value individually
+    legal, nothing objecting, and the correction to one field quietly rewriting
+    another. That is the failure this codebase keeps finding in exactly this
+    shape; issue #59 is the same bug about marks.
+
+    The difference lives **here, at the call site**, rather than as a flag inside
+    `_card_for()`. A boolean threaded down would make one function behave two
+    ways and would put the decision in the place least able to explain it: the
+    release path and the revision path disagree about where these three numbers
+    come from, and that disagreement is the decision, not a mode.
+
+    Correcting attendance itself is therefore an explicit input — a caller that
+    means to change it passes the new numbers rather than relying on a re-read
+    to pick them up. `None` for a revision with no predecessor, which is the
+    task 8 case of a child placed into a term after it was released: she has no
+    earlier card to carry anything forward from, and inventing numbers for her
+    would be the same lie from the other direction.
+    """
+    if supersedes is None:
+        return {}
+    return {
+        student_id: _CardAttendance(
+            present=supersedes.days_present,
+            absent=supersedes.days_absent,
+            open=supersedes.days_open,
+        )
+    }
+
+
+def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int, ReleasedCard]:
     """The card rows and their two content tables, for `whose`.
 
     Split out of `freeze_for_release()` when task 8 needed the same freeze for
@@ -301,6 +414,7 @@ def _freeze(sheet, results, whose, *, versions, by) -> dict[int, ReleasedCard]:
             student_id,
             released_by_id,
             versions.get(student_id, 1),
+            (attendance or {}).get(student_id),
         )
         for student_id in whose
     ]
@@ -350,9 +464,25 @@ def _subjects_in_print_order(subject_ids):
 
 
 def _card_for(
-    sheet, term, school_name, names, results, student_id, released_by_id, version=1
+    sheet,
+    term,
+    school_name,
+    names,
+    results,
+    student_id,
+    released_by_id,
+    version=1,
+    attendance=None,
 ) -> ReleasedCard:
-    """One child's card row. **Never conditional** — see the module docstring."""
+    """One child's card row. **Never conditional** — see the module docstring.
+
+    `attendance` is a `TermAttendance` or `None`, and `None` writes all three
+    columns null. Null is not zero here and the difference is the whole of A4:
+    null means this card carries no attendance at all, while `present=0` with a
+    term length means a register could have been kept and was not — a school's
+    admin gap, which must never print as a child being away. The renderer tells
+    them apart and `docs/attendance.md` D13 is the table.
+    """
     scored = available = 0
     for subject_id in results.subject_ids:
         subject_scored, subject_available = results.scored_and_available(
@@ -377,6 +507,9 @@ def _card_for(
         own_average=results.averages.get(student_id),
         position=results.positions.get(student_id),
         roster_size=len(results.student_ids),
+        days_present=attendance.present if attendance else None,
+        days_absent=attendance.absent if attendance else None,
+        days_open=attendance.open if attendance else None,
         released_by_id=released_by_id,
     )
 

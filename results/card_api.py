@@ -94,6 +94,7 @@ half of why freezing it would be wrong: the card would permanently say
 import enum
 from decimal import Decimal
 from types import SimpleNamespace
+from enum import Enum
 from typing import List, Optional
 
 from django.http import Http404, HttpResponse
@@ -354,6 +355,121 @@ class CardPdfNotReadyOut(Schema):
     detail: str
 
 
+class AttendanceState(str, Enum):
+    """Which of four sentences a card's attendance line is.
+
+    **The state is decided once, on the server, and neither renderer works it
+    out.** The page and the PDF both render from `card_payload()` — `pdf.html_for()`
+    calls it — so one answer reaches both by construction rather than by two
+    branches held together with a test. They diverged once already, when the
+    page keyed on `days_present` and the template keyed on `days_open`, and that
+    divergence was invisible only because the columns were always null.
+
+    `NOT_RECORDED` is the state this design exists for. Once the columns are
+    populated, a term nobody kept a register for is `0, 0, 62` — and "Present 0
+    out of 62 days" is a false accusation against every child in the class. It
+    is the exact failure A4 prevents in the schema, arriving through the
+    renderer instead. The old defence was `days_present === null`, which stops
+    working the moment attendance is real.
+    """
+
+    #: All three columns null: this card carries no attendance at all. A card
+    #: frozen before attendance existed, or a release that had nothing to say.
+    #: Prints nothing — not a dash, not a zero.
+    ABSENT = "absent"
+
+    #: Nothing was marked. `present + absent == 0` with days still to account
+    #: for. The school kept no register, which is the school's gap and **not**
+    #: the children's absence, so no number is printed at all.
+    NOT_RECORDED = "not_recorded"
+
+    #: Some days marked, some not. The denominator is the days **marked**, never
+    #: the days declared, and the shortfall is named as the school's own.
+    PARTIAL = "partial"
+
+    #: Every declared day was marked, so "present of declared" and "present of
+    #: marked" are the same fraction. This is the only state in which
+    #: "Present 58 of 62 days" is a true sentence, and it is the one the
+    #: roadmap's target case lands in.
+    COMPLETE = "complete"
+
+
+class AttendanceOut(Schema):
+    """The attendance line, decided rather than described.
+
+    `marked` and `not_marked` are served rather than left to the client to
+    subtract. A renderer doing the arithmetic is a renderer that can get it
+    wrong in one place and not the other, which is the divergence this object
+    ends.
+    """
+
+    state: AttendanceState
+    present: Optional[int]
+    absent: Optional[int]
+    #: The school's declared `Term.school_days`. **Context, never a divisor** —
+    #: dividing by it is what invites reading the remainder as absence.
+    school_days: Optional[int]
+    #: `present + absent`: the days actually observed, and the only denominator
+    #: this card ever prints.
+    marked: Optional[int]
+    #: `school_days - marked`: days the school opened and took no register. Null
+    #: when no term length was declared, because then it is unknowable rather
+    #: than nought.
+    #:
+    #: **Named `not_marked` and never `unmarked`**, which is not a style choice.
+    #: `results.TermAbsence.UNMARKED` is the literal string `"unmarked"`, it is
+    #: staff-only, and `test_the_payload_never_says_why_a_term_averaged_nothing`
+    #: greps the raw response bytes for it. A field called `unmarked` here would
+    #: not leak anything itself — it would make that guard unable to tell a real
+    #: leak from this field, which is worse than a leak, because it is a guard
+    #: that keeps passing. It caught this rename.
+    not_marked: Optional[int]
+
+
+def attendance_of(card) -> AttendanceOut:
+    """The one decision, taken once. See `AttendanceState`.
+
+    Reads the three frozen columns and nothing else — no live registers, no
+    `Term` lookup. A released card says what it said, and `days_open` was copied
+    onto it at release precisely so that a school editing its term length
+    afterwards cannot restate a card already in a parent's hand.
+    """
+    present, absent, school_days = card.days_present, card.days_absent, card.days_open
+    if present is None and absent is None and school_days is None:
+        return AttendanceOut(
+            state=AttendanceState.ABSENT,
+            present=None,
+            absent=None,
+            school_days=None,
+            marked=None,
+            not_marked=None,
+        )
+
+    marked = (present or 0) + (absent or 0)
+    not_marked = None if school_days is None else max(school_days - marked, 0)
+
+    if marked == 0:
+        state = AttendanceState.NOT_RECORDED
+    elif school_days is not None and marked >= school_days:
+        # `>=` rather than `==`: a school that declared fewer days than it went
+        # on to mark has an inconsistency between its calendar and its register,
+        # and the honest reading is that every declared day is accounted for.
+        # Printing a negative remainder, or calling it partial, would both be
+        # worse than saying "complete" about a term that was over-marked.
+        state = AttendanceState.COMPLETE
+    else:
+        state = AttendanceState.PARTIAL
+
+    return AttendanceOut(
+        state=state,
+        present=present,
+        absent=absent,
+        school_days=school_days,
+        marked=marked,
+        not_marked=not_marked,
+    )
+
+
 class ReportCardOut(Schema):
     """One child's card for one term, exactly as it was released.
 
@@ -367,7 +483,11 @@ class ReportCardOut(Schema):
     marked in. It is null where they were marked in nothing, which prints blank
     rather than as a zero that would claim they sat exams and scored none.
 
-    Attendance is nullable until Phase 2 and prints blank meanwhile.
+    Attendance is three frozen columns plus `attendance`, which is the decision
+    taken over them — see `AttendanceState`. The columns are nullable and
+    legitimately nought, and those are different answers: a term nobody kept a
+    register for prints no number at all, while a child absent every day of a
+    fully marked term prints `0`.
 
     `session` and `promotion` are third-term only and absent otherwise. A
     first-term card carrying a session average would be showing the first term's
@@ -413,9 +533,16 @@ class ReportCardOut(Schema):
     total_available: int
     own_average: Optional[str]
 
+    #: **Kept, and no longer what a renderer reads.** The three raw columns
+    #: stay on the payload because they are what the card was frozen with and a
+    #: client may legitimately want them; `attendance` below is what decides
+    #: what a reader is shown. Neither renderer branches on these.
     days_present: Optional[int]
     days_absent: Optional[int]
     days_open: Optional[int]
+
+    #: The decision, made once. See `AttendanceState`.
+    attendance: AttendanceOut
 
     subjects: List[SubjectLineOut]
 
@@ -1109,6 +1236,7 @@ def card_payload(card) -> ReportCardOut:
         days_present=card.days_present,
         days_absent=card.days_absent,
         days_open=card.days_open,
+        attendance=attendance_of(card),
         subjects=subjects,
         columns=columns,
         sections=_sections(card),

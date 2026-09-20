@@ -742,27 +742,97 @@ class AttendanceOfNoughtTests(ReportCardApiSetUp):
             with patch("results.pdf.card_payload", return_value=payload):
                 return " ".join(pdf.html_for(card).split())
 
-    def test_a_child_present_on_none_of_the_days_open_is_told_so(self):
-        self.assertIn("0 of 60 days", self.html_with(days_present=0, days_open=60))
+    def attendance_line(self, state, **fields):
+        """The PDF's attendance cell for one decided state.
+
+        `attendance` is what the template reads — the raw columns are still on
+        the payload and are deliberately not what either renderer branches on,
+        so patching them would prove nothing about the page.
+        """
+        line = {
+            "state": state,
+            "present": None,
+            "absent": None,
+            "school_days": None,
+            "marked": None,
+            "not_marked": None,
+        }
+        line.update(fields)
+        return self.html_with(attendance=line)
+
+    def test_a_child_present_on_none_of_a_fully_marked_term_is_told_so(self):
+        """`0` present with sixty absences is the one case "0 of 60" is true.
+
+        It reads `complete`, not `not_recorded`, and the difference is `marked`
+        rather than `present`: nought present with sixty absences is a child who
+        was never there, and nought present with nothing marked is a school that
+        never looked.
+        """
+        html = self.attendance_line(
+            "complete", present=0, absent=60, school_days=60, marked=60, not_marked=0
+        )
+        self.assertIn("Present 0 of 60 days", html)
+
+    def test_a_term_nobody_marked_is_never_given_a_denominator(self):
+        """The case this design exists for, on the PDF.
+
+        `0, 0, 62` is a school that kept no register. "Present 0 out of 62 days"
+        would be a false accusation against every child in the class, and it is
+        the failure A4 prevents in the schema arriving through the renderer.
+        """
+        html = self.attendance_line(
+            "not_recorded", present=0, absent=0, school_days=62, marked=0, not_marked=62
+        )
+        self.assertIn("Not recorded this term", html)
+        self.assertNotIn("of 62 days", html)
+        self.assertNotIn("Present 0", html)
+
+    def test_a_partly_marked_term_never_divides_by_the_declared_days(self):
+        html = self.attendance_line(
+            "partial", present=38, absent=2, school_days=62, marked=40, not_marked=22
+        )
+        self.assertIn("38 present, 2 absent", html)
+        self.assertIn("register kept on 40 of 62 days", html)
+        self.assertNotIn("38 of 62", html)
+
+    def attendance_cell(self, html):
+        """The attendance cell alone, not the whole page.
+
+        Asserting against the whole document matches the stylesheet — the
+        `.note` rule carries a comment with the word "present" in it — and the
+        first draft of the control below failed on exactly that. A control that
+        can be satisfied or broken by a CSS comment is measuring the wrong
+        thing.
+        """
+        import re
+
+        found = re.search(r"Attendance</td>\s*<td>(.*?)</td>", html, re.S)
+        return found.group(1) if found else ""
 
     def test_an_attendance_nobody_recorded_is_still_a_dash(self):
-        """The control. Without it the test above passes against a page that
+        """The control. Without it the tests above pass against a page that
         prints the raw value for everything, dash included."""
-        self.assertIn("— of 60 days", self.html_with(days_present=None, days_open=60))
+        cell = self.attendance_cell(self.attendance_line("absent"))
+        self.assertIn("&mdash;", cell)
+        self.assertNotIn("present", cell.lower())
+        self.assertNotIn("recorded", cell.lower())
 
     def test_a_register_kept_without_a_term_length_still_prints_what_is_known(self):
         """The three columns are independently nullable and no constraint ties
-        them together, so `days_present` set with `days_open` null is a row the
-        database permits. Gating the whole line on `days_open` throws the
+        them together, so marks with no declared term length is a row the
+        database permits. Gating the whole line on the denominator throws the
         recorded half away and tells a parent nobody kept a register."""
-        html = self.html_with(days_present=52, days_open=None, days_absent=None)
-        self.assertIn("52 days present", html)
+        html = self.attendance_line(
+            "partial", present=52, absent=0, school_days=None, marked=52
+        )
+        self.assertIn("52 present, 0 absent", html)
+        self.assertNotIn("register kept on", html)
 
     def test_the_control_nothing_recorded_at_all_is_a_dash(self):
         """Without this the test above passes against a page that prints
-        "None days present" when there is genuinely nothing to say."""
-        html = self.html_with(days_present=None, days_open=None, days_absent=None)
-        self.assertNotIn("days present", html)
+        "None present" when there is genuinely nothing to say."""
+        html = self.attendance_line("absent")
+        self.assertNotIn("present,", self.attendance_cell(html))
         self.assertIn("Attendance", html)
 
 

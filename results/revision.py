@@ -165,8 +165,24 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
         results = positions.class_results(locked.class_group, locked.term)
         _require_still_on_this_roster(locked, results, student_id)
 
+        # D7. `previous` is the card this revision supersedes, and its three
+        # attendance numbers are copied onto the new version rather than
+        # recomputed. A March revision fixing a comment typo must not silently
+        # restate the attendance a parent read in December — every value
+        # individually legal, nothing objecting, and a correction to one field
+        # quietly rewriting another. That is issue #59's shape, about a
+        # different column.
+        #
+        # `None` for a first version, which is the task 8 case of a child placed
+        # into a term after it was released: she has no earlier card to carry
+        # anything forward from.
         frozen = cards.freeze_a_revision(
-            locked, results, student_id, version=version, by=actor
+            locked,
+            results,
+            student_id,
+            version=version,
+            supersedes=previous,
+            by=actor,
         )
         ratings.freeze_for_release(locked, frozen)
         comments.freeze_for_release(locked, frozen)

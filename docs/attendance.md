@@ -1,6 +1,6 @@
 # Attendance
 
-Status: draft. Structural decisions settled (D1–D12) against the repository. **A1 is
+Status: draft. Structural decisions settled (D1–D13) against the repository. **A1 is
 stated from domain knowledge and not school-confirmed**; A2 and A3 have not been put to
 a school and the questions are drafted and waiting to be sent; A4 is settled from this
 repository and needs nobody. A4 is settled from this repository and needs nobody. Extends
@@ -274,6 +274,48 @@ had it set sees the blank card it already sees.
 It lands in **slice 2**, with the rest of the work that makes `days_open` mean
 something. It is named here rather than in the slice list because it is a
 decision about a door, not a step.
+
+### D13. What the card shows, decided once, on the server
+
+The case that settled this is a term where the school declared `school_days` and
+nobody ever took a register: present 0, absent 0, every day unmarked. **"Present
+0 out of 62 days" is a false accusation against every child in the class.** It is
+exactly the failure A4 prevents in the schema, arriving through the renderer
+instead — and it would have shipped, because the renderers' whole defence
+against "no register was kept" was `days_present === null`, and this slice makes
+that column a real count that is never null. The defence stops working precisely
+when the data starts existing.
+
+**The rule: the denominator is only ever the days actually marked.** The school's
+declared term length is context and never a divisor, because dividing by it
+invites subtracting from it and reading the remainder as absence.
+
+| state | when | what both renderers print |
+| --- | --- | --- |
+| `ABSENT` | all three columns null | nothing — no number, no dash-with-denominator |
+| `NOT_RECORDED` | `present + absent == 0` | "Not recorded this term" |
+| `PARTIAL` | some marked, some not | "38 present, 2 absent (register kept on 40 of 62 days)" |
+| `COMPLETE` | `marked >= school_days` | "Present 58 of 62 days" |
+
+`COMPLETE` is the roadmap's target line, and it is printed **only** when every
+declared day was marked — which is what makes the sentence true when it appears.
+A child absent on all 62 days of a fully marked term reads "Present 0 of 62
+days": `0` is a real measurement and this is the one state in which that string
+is honest. The nought-versus-null care the renderers already had does not go
+away; it moves from `null` to `marked == 0`, which is the signal that survives
+the columns being populated.
+
+A `PARTIAL` term whose school never declared a length prints the counts and no
+parenthetical — there is nothing to have kept the register *of*, and gating the
+whole line on the denominator would throw the observed half away.
+
+**Neither renderer decides which state it is in.** `card_api.attendance_of()`
+answers once and both format. This is true by construction rather than by a test
+holding two branches together: `pdf.html_for()` renders from `card_payload()`,
+which is the same function that builds `ReportCardOut` for the page. They
+diverged once already — the page keyed on `days_present` while the template
+keyed on `days_open` — and it was invisible only because the columns were always
+null.
 
 ## What is configurable, and what is not
 
