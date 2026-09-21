@@ -45,6 +45,7 @@ from ninja.errors import AuthenticationError, HttpError
 from ninja.utils import check_csrf
 
 from accounts import guardian_signin, signin
+from accounts.enrolment_api import router as enrolment_router
 from accounts.models import Membership, Role
 from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
@@ -82,6 +83,7 @@ api.add_router("/attendance/", attendance_router, tags=["attendance"])
 # The school's calendar. Tenant-host only, like the register above — and with no
 # page in front of it, deliberately: see `academics.api` and D12.
 api.add_router("/academics/", academics_router, tags=["academics"])
+api.add_router("/enrolment/", enrolment_router, tags=["enrolment"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.
 api.add_router("/results/", results_router, tags=["results"])

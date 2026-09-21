@@ -1,0 +1,31 @@
+/*
+ * The roll: who is enrolled, and which class each child is in.
+ *
+ * A list, not a table — the rows carry a select and wrap, and an office works
+ * down them one child at a time.
+ */
+:root{--ink:#111;--quiet:#555;--rule:#ddd;--stop:#900;--stop-bg:#fdeeee;--warn:#7a4a00;--warn-bg:#fff6e5}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px;background:#fff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:44rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 8px}
+h2{font-size:1.1rem;margin:28px 0 8px}
+.term{color:var(--quiet);margin:0 0 16px}
+.quiet{color:var(--quiet)}
+.children{list-style:none;margin:0;padding:0}
+.child{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule)}
+.child .name{font-weight:600;flex:1 1 12rem}
+.handle,.reference{color:var(--quiet);font-size:.95rem}
+.child.unplaced{border-left:4px solid var(--warn);background:var(--warn-bg);padding-left:8px}
+.child .standing{color:var(--quiet)}
+select,input{font:inherit;padding:10px;border:1px solid var(--rule);border-radius:6px}
+.child select{min-height:44px}
+form{display:grid;gap:6px;max-width:26rem;margin:8px 0 0}
+label{font-weight:600;margin-top:6px}
+form input,form select{width:100%}
+button{font:inherit;min-height:44px;padding:10px 16px;background:#fff;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+form button{justify-self:start;margin-top:8px}
+.blank{color:var(--quiet)}
+.note{font-size:.95rem;color:var(--stop)}
+form.handle-taken,form.rejected,form.not-allowed{background:var(--stop-bg);border-left:4px solid var(--stop);padding-left:8px}
+a{color:#14507d}

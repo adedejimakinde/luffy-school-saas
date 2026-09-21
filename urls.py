@@ -19,6 +19,7 @@ from django.urls import path
 
 from api import api
 from academics.views import setup_page
+from accounts.views import roll_page
 from attendance.views import register_page
 from gradebook.views import marking_page
 from results.views import card_index_page, card_page, chain_page, comments_page
@@ -38,6 +39,7 @@ urlpatterns = [
     # in the public schema. The page has a state for that answer.
     # The office's own surface: the calendar and the class groups.
     path("setup/", setup_page, name="school-setup"),
+    path("roll/", roll_page, name="roll"),
     path("register/", register_page, name="register"),
     # The second staff surface, on the same terms as the register above.
     path("marking/", marking_page, name="marking"),

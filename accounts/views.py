@@ -93,6 +93,35 @@ def staff_sign_in_page(request):
     )
 
 
+#: The roll page's own modules.
+ROLL_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "roll/api.js",
+    "roll/states.js",
+    "roll/app.js",
+)
+
+
+def roll_page(request):
+    """The frame for the roll. Reads one row, holds no child.
+
+    The sixth staff surface. A shell: who may admit and who may place are two
+    different questions, asked by `accounts.services` and `academics.services`
+    respectively, and a view that rendered the roll would be a third place
+    asking them.
+    """
+    return render(
+        request,
+        "accounts/roll_page.html",
+        {
+            "import_map": pages.import_map(*ROLL_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 def refused(request, exception=None):
     """The 403 page, which says what happened and whether anything fixes it.
 
@@ -145,7 +174,9 @@ def refused(request, exception=None):
 __all__ = [
     "sign_in_page",
     "staff_sign_in_page",
+    "roll_page",
     "refused",
+    "ROLL_MODULES",
     "MODULES",
     "STAFF_MODULES",
 ]

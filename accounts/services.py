@@ -454,6 +454,40 @@ def grant_membership_as(actor, user, school, role, **kwargs):
 
 
 @transaction.atomic
+def admit_student_as(actor, school, full_name, username, *, reference="", **fields):
+    """Create a child's login and enrol them, in one transaction.
+
+    **The two halves are one act.** Creating the `User` and granting the
+    STUDENT `Membership` are separate writes to separate tables, and a failure
+    between them leaves an account belonging to no school — a row nothing in
+    this system can reach, and one the next admission with the same handle then
+    collides with. The atomic block is what makes "admit a child" mean either
+    both or neither.
+
+    **The handle is the school's, and this does not invent one.** `User.username`
+    says so: "students get a school-issued handle such as STM/2026/0042". A
+    generated one would be a scheme the school did not choose and would have to
+    live with on every register and every card. `canonical_username()` leaves it
+    alone unless it is entirely phone-shaped, which is what stops `STM-0803...`
+    being rewritten into a phone number.
+
+    **No usable password**, by `create_user(username, None)`. A young child may
+    have neither an email nor a phone, so there is no channel to send a
+    credential to and nothing to verify — and a password nobody chose is one
+    nobody can be accountable for. `IdentifierBackend` refuses an unusable
+    password at the door, so the account exists and cannot yet be signed into,
+    which is the honest state for a child the school has just admitted.
+
+    Placement is **not** here. A child enrolled and not yet in a class is a real
+    state a school has — admissions in August, classes settled in September —
+    and folding it in would make the two impossible to tell apart.
+    """
+    _require_grant_authority(actor, school)
+    user = User.objects.create_user(username, None, full_name=full_name)
+    return user, enroll_student(user, school, reference=reference, **fields)
+
+
+@transaction.atomic
 def enroll_student_as(actor, user, school, **kwargs):
     _require_grant_authority(actor, school)
     return enroll_student(user, school, **kwargs)
