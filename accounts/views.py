@@ -109,10 +109,14 @@ def refused(request, exception=None):
 
     Three things are deliberately narrow here.
 
-    `detail` is printed only for a `SchoolAccessRefused`. Any other
-    `PermissionDenied` — from the admin, from a future view — renders the page
-    with no sentence, because an arbitrary exception's `str()` is written for
-    whoever debugs it and an error page is not where to start trusting that.
+    `detail` **and** the remedy are both gated on `SchoolAccessRefused`, and on
+    the same `isinstance` rather than on two tests that could disagree. Any
+    other `PermissionDenied` — from the admin, from a future view — renders the
+    page with no sentence and no remedy: an arbitrary exception's `str()` is
+    written for whoever debugs it, and an error page is not where to start
+    trusting that. Reading the attribute off whatever arrived with `getattr()`
+    was the first shape of this, and it would have offered the staff door to a
+    class that merely happened to carry the name.
 
     `portal_host()` is called **only** when a password is the remedy. It is a
     database query, and a page answering a refusal should not make one it has
@@ -125,7 +129,7 @@ def refused(request, exception=None):
     came.
     """
     ours = isinstance(exception, SchoolAccessRefused)
-    a_password_fixes_it = getattr(exception, "a_password_fixes_it", False)
+    a_password_fixes_it = ours and exception.a_password_fixes_it
     return render(
         request,
         "403.html",

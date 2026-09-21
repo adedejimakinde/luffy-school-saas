@@ -382,3 +382,35 @@ class ThePageServedForAnyOtherRefusalTests(GuardianSignInSetUp):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("quota exceeded", body)
         self.assertNotIn(URL, body, "a remedy was offered for an unknown refusal")
+
+    def test_a_foreign_exception_carrying_the_flag_gets_no_remedy(self):
+        """The attribute is not a duck type, and this is what says so.
+
+        The first shape of `refused()` read the flag off whatever arrived, with
+        `getattr(exception, "a_password_fixes_it", False)`. That gates the
+        remedy on a *name* rather than on a type, so any future
+        `PermissionDenied` that happened to carry it — from another app, for
+        another reason — would have been offered the staff door while its
+        sentence was withheld as untrusted. Offering a remedy the page has no
+        grounds for is the failure `accounts/refusals.py` exists to prevent, so
+        both halves are gated on the same `isinstance`.
+        """
+        from django.core.exceptions import PermissionDenied
+
+        from accounts.views import refused
+
+        class Impostor(PermissionDenied):
+            a_password_fixes_it = True
+
+        request = RequestFactory().get("/", HTTP_HOST=PORTAL)
+
+        response = refused(request, Impostor("not ours"))
+        body = response.content.decode()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn(
+            URL,
+            body,
+            "the staff door was offered to an exception that merely carries the name",
+        )
+        self.assertNotIn("not ours", body)
