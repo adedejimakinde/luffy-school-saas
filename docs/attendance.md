@@ -271,6 +271,10 @@ same problem, once, rather than twice in two shapes. The screen comes when staff
 pages exist. Until then this value is set by a route, and a school that has not
 had it set sees the blank card it already sees.
 
+*Since written: the staff sign-in page has landed and this is still true. That
+page is a door and a receipt, not a hub — it holds no school's data and has no
+screen to hang `school_days` on. The first staff screen is slice 3's register.*
+
 It lands in **slice 2**, with the rest of the work that makes `days_open` mean
 something. It is named here rather than in the slice list because it is a
 decision about a door, not a step.
@@ -346,12 +350,16 @@ handles report cards, and one boolean does not earn a third settings table.
    `results/templates/results/report_card.html` branches on `days_open`, so the page
    and the PDF disagree for a card with a term length and no register; and
    `days_absent` is stored, served on `ReportCardOut`, and rendered by neither.
-3. **The register screen.** **This slice has a dependency that is probably its own PR
-   first: there is no staff sign-in page.** The only pages that exist are the parent
-   card, the parent index and guardian sign-in; `POST /api/login/` is the staff
-   identifier-and-password door and has no page in front of it. A teacher cannot reach
-   a register without one, so either slice 3 grows a staff sign-in page or — better —
-   that page lands on its own beforehand and slice 3 stays about the register.
+3. **The register screen.** Its dependency landed on its own beforehand, which was
+   the better of the two options this list named: **the staff sign-in page exists**,
+   at `/staff-sign-in/` on the portal, in front of `POST /api/login/`. Sign-out came
+   with it. See [sign-in-page.md](sign-in-page.md), and note the one thing that slice
+   deliberately did not decide: the staff landing names the schools a login may act
+   at and **links to none of them**, because `/cards/` is a family surface even for
+   staff and there is no staff destination yet. This slice builds the first one, and
+   it is the slice that gets to decide how a member of staff reaches it — which is
+   also when the guardian flow's link rule gets a second caller and is worth lifting
+   into `static/web/`.
 4. **The principal's view**: which students are absent too often. Needs a threshold,
    and a threshold is a number somebody chooses; that question is deferred to this
    slice rather than answered here.

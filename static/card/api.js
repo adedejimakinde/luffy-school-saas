@@ -66,6 +66,31 @@ export async function fetchCard({ studentMembershipId, termId, fetchImpl = fetch
   return { ok: false, refusal: refusalFor(response.status, body), body: body || {} };
 }
 
+/**
+ * Whether this answer proves there is a session to end.
+ *
+ * The sign-out button is drawn on the answers that could only have come back to
+ * somebody signed in, and on no others — a control that posts a logout for a
+ * browser holding no cookie is a control that does nothing while looking like
+ * it did.
+ *
+ * Three of the five qualify, and the 404 is the one worth arguing. An
+ * unauthenticated caller of this route gets 401, never 404:
+ * `_require_may_read()` 404s a caller who *is* known and has no claim on this
+ * child, which is the flat-404 convention doing its job. So a 404 here is an
+ * authenticated stranger to this card, and she has a session.
+ *
+ * The 403 is the fee gate, which is reached only after `_require_may_read()`
+ * has already answered — `SchoolAccessMiddleware`'s own 403 never gets this
+ * far, because it refuses the *frame* on the way in and this module is never
+ * loaded. And `broken` is excluded because it proves nothing in either
+ * direction: a 500 or a dead transport says nothing about the cookie.
+ */
+export function provesASession(answer) {
+  if (answer.ok) return true;
+  return answer.refusal === REFUSAL.WITHHELD || answer.refusal === REFUSAL.MISSING;
+}
+
 /** Which state an answer puts the page in. Exported so a test can name it. */
 export function refusalFor(status, body) {
   if (status === 403) return REFUSAL.WITHHELD;

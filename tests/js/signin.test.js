@@ -10,8 +10,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { advance, destination, htmlFor, initialState } from "../../static/signin/app.js";
+import { advance, destination, htmlFor, initialState, mount } from "../../static/signin/app.js";
 import * as steps from "../../static/signin/states.js";
+import { forgetToken } from "../../static/web/http.js";
+import { fakeRoot } from "./fake_dom.js";
 
 const CODE_SENT = { status: 200, body: { detail: "If that number is on a guardian record, a code is on its way." } };
 const ONE_SCHOOL = {
@@ -183,4 +185,113 @@ test("every step renders something a reader can act on", () => {
     assert.match(html, /<h1>/, `${step} has no heading`);
     assert.ok(html.length > 80, `${step} renders almost nothing`);
   }
+});
+
+test("the two states that hold a live session offer a way to end it", () => {
+  // The rule across the platform: the button is on every page where somebody is
+  // signed in. These two are where this flow stops with a session open — the
+  // `leaving` state does not need one because it is on its way elsewhere — and
+  // a shared handset is exactly a page somebody else picks up next.
+  assert.match(htmlFor(advance(atTheCodeStep(), TWO_SCHOOLS)), /data-action="sign-out"/);
+  assert.match(
+    htmlFor(
+      advance(atTheCodeStep(), { status: 200, body: { full_name: "Mama Ada", schools: [] } }),
+    ),
+    /data-action="sign-out"/,
+  );
+});
+
+test("a sign-out tap is not posted as a guardian pick", async () => {
+  // The trap this guards. The click handler used to treat every button that
+  // was not `restart` as a pick, so a `[data-action="sign-out"]` would have
+  // gone to `/api/guardian/session/` carrying `guardian: undefined` — a spent
+  // code answered with a 401, and a family dropped back to the code step for no
+  // reason they could see.
+  //
+  // CONTROL, and the first aim of it was wrong in a way worth recording.
+  // Removing `if (!button.dataset.guardian) return undefined;` alone leaves
+  // this green, because the sign-out branch returns before ever reaching the
+  // fallthrough — the guard is the second line, not the first. The control that
+  // reddens this is dropping that branch's `return` *and* the guard, and
+  // dropping the branch outright reddens this and the failure test below it.
+  // Recorded rather than fixed silently: a control that changes nothing has
+  // told you the claim you were about to ship is not the claim the test holds.
+  forgetToken();
+  const root = fakeRoot();
+  const posted = [];
+  const page = mount(root, {
+    fetchImpl: async (url) => {
+      posted.push(url);
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/guardian/code/") return { status: 200, json: async () => CODE_SENT.body };
+      if (url === "/api/logout/") return { status: 200, json: async () => ({ detail: "Signed out." }) };
+      return { status: 200, json: async () => TWO_SCHOOLS.body };
+    },
+  });
+
+  await root.submit({ value: "08031234567" });
+  await root.submit({ code: "123456" });
+  assert.equal(page.current().step, "schools");
+  posted.length = 0;
+
+  await root.click({ "data-action": "sign-out" });
+
+  assert.ok(posted.includes("/api/logout/"), "the tap did not sign anybody out");
+  assert.ok(
+    !posted.includes("/api/guardian/session/"),
+    "the tap was posted as a guardian pick as well",
+  );
+  assert.equal(page.current().step, "signed-out");
+  assert.doesNotMatch(root.innerHTML, /St Mary/, "the schools outlived the session");
+});
+
+test("picking a guardian still reaches the session route", async () => {
+  // The companion. Without it the test above passes just as well against a
+  // handler that stopped sending picks altogether.
+  forgetToken();
+  const root = fakeRoot();
+  const posted = [];
+  const page = mount(root, {
+    fetchImpl: async (url, options = {}) => {
+      posted.push({ url, body: options.body ? JSON.parse(options.body) : null });
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/guardian/code/") return { status: 200, json: async () => CODE_SENT.body };
+      // The first answer from the session route is the 202; the pick that
+      // follows it is what signs somebody in.
+      return posted.filter((p) => p.url === "/api/guardian/session/").length > 1
+        ? { status: 200, json: async () => ONE_SCHOOL.body }
+        : { status: 202, json: async () => SHARED_HANDSET.body };
+    },
+  });
+
+  await root.submit({ value: "08031234567" });
+  await root.submit({ code: "123456" });
+  assert.equal(page.current().step, "whose");
+
+  await root.click({ "data-guardian": "3f1c-aaa" });
+
+  const pick = posted.at(-1);
+  assert.equal(pick.url, "/api/guardian/session/");
+  assert.deepEqual(pick.body, { value: "08031234567", code: "123456", guardian: "3f1c-aaa" });
+});
+
+test("a guardian sign-out that was not confirmed does not claim it was", async () => {
+  forgetToken();
+  const root = fakeRoot();
+  const page = mount(root, {
+    fetchImpl: async (url) => {
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/guardian/code/") return { status: 200, json: async () => CODE_SENT.body };
+      if (url === "/api/logout/") return { status: 500, json: async () => ({}) };
+      return { status: 200, json: async () => TWO_SCHOOLS.body };
+    },
+  });
+
+  await root.submit({ value: "08031234567" });
+  await root.submit({ code: "123456" });
+  await root.click({ "data-action": "sign-out" });
+
+  assert.equal(page.current().step, "schools");
+  assert.match(root.innerHTML, /could not sign you out/i);
+  assert.match(root.innerHTML, /St Mary/, "the chooser was thrown away on a failed sign-out");
 });

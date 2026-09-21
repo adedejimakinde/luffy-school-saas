@@ -23,12 +23,27 @@
 
 import { getJson } from "../web/http.js";
 import { esc } from "../web/html.js";
+import { button as signOutButton, failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as states from "./states.js";
 
 const INDEX_URL = "/api/results/cards/";
 
-/** The markup for one answer. Pure, so every branch is testable. */
-export function htmlFor({ status, body }, { portal = "" } = {}) {
+/**
+ * The markup for one answer. Pure, so every branch is testable.
+ *
+ * **The sign-out button is shown on a 200 and on nothing else.** A 200 is the
+ * API having answered this caller about their own children, which it does for
+ * nobody who is not signed in — so it is the one status that proves there is a
+ * session to end. A 401 is the opposite and already says so. A 500 or a dead
+ * transport proves nothing either way, and a button that posts a logout from a
+ * page that cannot reach the server is a control that does nothing while
+ * looking like it did.
+ *
+ * `signOutFailed` is the answer to a tap that did not work, and it is rendered
+ * below the list rather than in place of it: the cards are still there and
+ * still readable, and what changed is only that the session is still open.
+ */
+export function htmlFor({ status, body }, { portal = "", signOutFailed = false } = {}) {
   if (status === 401) {
     return states.signedOut({ portal, expired: body && body.code === "session_expired" });
   }
@@ -36,13 +51,15 @@ export function htmlFor({ status, body }, { portal = "" } = {}) {
 
   const children = body.children || [];
   const cards = children.reduce((n, child) => n + (child.cards || []).length, 0);
-  if (!cards) return states.nothing({ hasChildren: children.length > 0 });
+  const after = (signOutFailed ? failureNote() : "") + signOutButton();
+  if (!cards) return states.nothing({ hasChildren: children.length > 0 }) + after;
 
   return [
     '<section class="index" data-state="cards">',
     "<h1>Report cards</h1>",
     children.map(child).join(""),
     "</section>",
+    after,
   ].join("");
 }
 
@@ -82,6 +99,7 @@ function card(record, entry) {
 }
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
+  const portal = root.dataset.portal || "";
   root.innerHTML = '<p class="state state-loading">Fetching your cards&hellip;</p>';
   let answer;
   try {
@@ -89,7 +107,31 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   } catch {
     answer = { status: 0, body: null };
   }
-  root.innerHTML = htmlFor(answer, { portal: root.dataset.portal || "" });
+  let signOutFailed = false;
+  const draw = () => {
+    root.innerHTML = htmlFor(answer, { portal, signOutFailed });
+  };
+  draw();
+
+  // Delegated from the root, because the button is redrawn on every state and
+  // a listener bound to the element itself would be bound to a node that is
+  // about to be replaced.
+  root.addEventListener("click", async (event) => {
+    if (!event.target.closest('[data-action="sign-out"]')) return;
+    const ended = sessionEnded(await signOut({ fetchImpl }));
+    if (ended) {
+      // Not `signedOut({expired: true})`. Signing out on purpose deletes the
+      // cookie as well as the session, so nothing lapsed and nothing is
+      // recoverable by trying again — `docs/membership.md` draws exactly that
+      // line, and telling somebody who chose to sign out that their session
+      // "ended" would invite them to expect their place back.
+      root.innerHTML = states.signedOut({ portal });
+      return;
+    }
+    signOutFailed = true;
+    draw();
+  });
+
   return answer;
 }
 

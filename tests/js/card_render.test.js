@@ -12,6 +12,8 @@ import assert from "node:assert/strict";
 
 import { card } from "../../static/card/render.js";
 import { htmlFor, mount } from "../../static/card/app.js";
+import { forgetToken } from "../../static/web/http.js";
+import { fakeRoot } from "./fake_dom.js";
 
 /** A card whose column order is neither alphabetical nor creation order. */
 function payload(overrides = {}) {
@@ -288,8 +290,8 @@ test("a staff-only field in the payload still does not reach the page", () => {
 test("mount puts the card in the element and names the state it settled in", async () => {
   // The whole pipeline — read the ids, fetch, render, record the state — with
   // a stub element and a stub fetch. No DOM: `mount` touches `innerHTML` and
-  // `dataset`, and an object with those two is enough to drive it.
-  const root = { dataset: { studentMembershipId: "5", termId: "9" }, innerHTML: "" };
+  // `dataset` and a click listener, and `fakeRoot()` is those three.
+  const root = fakeRoot({ studentMembershipId: "5", termId: "9" });
   const calls = [];
   const answer = await mount(root, {
     fetchImpl: async (url) => {
@@ -305,7 +307,7 @@ test("mount puts the card in the element and names the state it settled in", asy
 });
 
 test("mount settles in the withheld state and says so on the element", async () => {
-  const root = { dataset: { studentMembershipId: "5", termId: "9" }, innerHTML: "" };
+  const root = fakeRoot({ studentMembershipId: "5", termId: "9" });
   await mount(root, {
     fetchImpl: async () => ({
       status: 403,
@@ -318,7 +320,7 @@ test("mount settles in the withheld state and says so on the element", async () 
 });
 
 test("a fetch that never lands is the broken state, not a blank page", async () => {
-  const root = { dataset: { studentMembershipId: "5", termId: "9" }, innerHTML: "" };
+  const root = fakeRoot({ studentMembershipId: "5", termId: "9" });
   await mount(root, {
     fetchImpl: async () => {
       throw new TypeError("Failed to fetch");
@@ -332,4 +334,47 @@ test("a fetch that never lands is the broken state, not a blank page", async () 
 test("htmlFor renders a card for an ok answer and a state for every other", () => {
   assert.match(htmlFor({ ok: true, card: payload() }), /Ada Obi/);
   assert.match(htmlFor({ ok: false, refusal: "missing", body: {} }), /No report card here/);
+});
+
+test("mount signs out and the card goes with the session", async () => {
+  forgetToken();
+  const root = fakeRoot({ studentMembershipId: "5", termId: "9", portal: "portal.example.test" });
+  const calls = [];
+  await mount(root, {
+    fetchImpl: async (url) => {
+      calls.push(url);
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/logout/") return { status: 200, json: async () => ({ detail: "Signed out." }) };
+      return { status: 200, json: async () => payload() };
+    },
+  });
+  assert.match(root.innerHTML, /Ada Obi/);
+
+  await root.click({ "data-action": "sign-out" });
+
+  assert.ok(calls.includes("/api/logout/"));
+  // A card left on screen after its claim has been given up is a child's marks
+  // waiting for whoever picks the handset up next — which is the case the
+  // guardian flow exists for, so it is the case sign-out has to answer.
+  assert.doesNotMatch(root.innerHTML, /Ada Obi/, "the marks outlived the session");
+  assert.equal(root.dataset.state, "signed-out");
+  assert.match(root.innerHTML, /\/\/portal\.example\.test\/sign-in\//);
+});
+
+test("a sign-out the server would not confirm leaves the card alone", async () => {
+  forgetToken();
+  const root = fakeRoot({ studentMembershipId: "5", termId: "9", portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: async (url) => {
+      if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+      if (url === "/api/logout/") return { status: 0, json: async () => ({}) };
+      return { status: 200, json: async () => payload() };
+    },
+  });
+
+  await root.click({ "data-action": "sign-out" });
+
+  assert.match(root.innerHTML, /Ada Obi/, "a card cleared on an unproved sign-out");
+  assert.match(root.innerHTML, /could not sign you out/i);
+  assert.equal(root.dataset.state, "card");
 });

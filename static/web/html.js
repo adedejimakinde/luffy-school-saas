@@ -46,3 +46,23 @@ export function esc(value) {
 export function numberOrBlank(value, blank = "&mdash;") {
   return value === null || value === undefined ? blank : esc(value);
 }
+
+/**
+ * Seconds to wait, in the unit a person reading it would use.
+ *
+ * Shared because the threshold is a rule rather than a sentence: both sign-in
+ * doors answer 429 with the same `retry_after` — `guardian_signin` raises
+ * `TooManyAttempts` carrying `signin.THROTTLED`, the password door's own
+ * constant — so two pages print the same number and must round it the same way.
+ * A copy per page is two places to change the threshold and one of them gets
+ * missed.
+ *
+ * Whole minutes once seconds would read as precision nobody needs, and `""` for
+ * an answer that carried no `retry_after` at all: the caller then says "too many
+ * attempts" without inventing a wait it was not told.
+ */
+export function waitInWords(seconds) {
+  if (seconds === null || seconds === undefined) return "";
+  if (seconds >= 120) return `about ${Math.ceil(seconds / 60)} minutes`;
+  return `about ${seconds} seconds`;
+}

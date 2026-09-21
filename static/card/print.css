@@ -52,3 +52,10 @@ main { max-width: none; }
  * spent on a refusal. The words stay; the colour does not.
  */
 .state-withheld h1 { color: #000; }
+
+/*
+ * Sign-out is a control, and a control on paper is ink spent on something the
+ * reader cannot do. Same argument as the link rule above it, and it has to be
+ * stated separately because a button is not an `a`.
+ */
+button.signout { display: none; }

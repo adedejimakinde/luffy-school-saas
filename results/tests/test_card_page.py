@@ -28,6 +28,7 @@ from django.test import TestCase
 from academics.models import TermName
 from results import cards
 from results.tests.test_card_api import HOST, ReportCardApiSetUp
+from schools.models import Domain
 from schools.tests.tenants import connected_to
 
 
@@ -47,6 +48,34 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
         else:
             self.client.logout()
         return self.client.get(self.page_url(self.ada), HTTP_HOST=host)
+
+    def test_the_frame_names_the_portal_so_the_401_state_can_offer_a_way_back(self):
+        """**This used to be missing, and the omission was a dead link.**
+
+        The signed-out and expired states emitted `<a href="/">`, and `urls.py`
+        routes no root — `api/`, `cards/` and `cards/<child>/<term>/` and
+        nothing else — so a parent whose session lapsed on a card was handed a
+        404 by the one screen whose entire job is telling her how to get back
+        in. The index page had the fix from the start; this page never got it.
+
+        Sign-in is on the portal and this page is on a school's host, so the
+        link out cannot be relative. `api._portal_only()` settles that the API
+        will not say where the portal is; this is read from the one authority
+        there is, the `Domain` row for the public schema.
+        """
+        page = self.get_page(self.mama).content.decode()
+
+        self.assertIn('data-portal="testserver"', page)
+
+    def test_a_deployment_with_no_portal_domain_renders_an_empty_one(self):
+        """And the state then says its sentence without a link, rather than
+        linking to `//undefined/sign-in/`. Same rule as the index, and the same
+        rule the staff landing is on: no link is better than a dead one."""
+        Domain.objects.filter(tenant__schema_name="public").delete()
+
+        page = self.get_page(self.mama).content.decode()
+
+        self.assertIn('data-portal=""', page)
 
     def test_the_school_host_serves_the_page(self):
         response = self.get_page(self.mama)

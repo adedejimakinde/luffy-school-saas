@@ -76,28 +76,58 @@ export function missing() {
  * refresh away from working; the other says nothing was ever signed in. The API
  * distinguishes them for exactly this reason and it would be a waste to
  * collapse them here.
+ *
+ * `portal` is where sign-in lives, and it is a second argument rather than a
+ * field on `body` because it does not come from the API — see `wayBack()`.
  */
-export function expired(body) {
+export function expired(body, { portal = "" } = {}) {
   const detail =
     esc(body.detail) || "Your session has ended. Sign in again to see this card.";
   return [
     '<section class="state state-expired">',
     "<h1>Your session has ended</h1>",
     `<p>${detail}</p>`,
-    '<p><a href="/">Sign in again</a></p>',
+    wayBack(portal, "Sign in again"),
     "</section>",
   ].join("");
 }
 
 /** 401 with no session cookie at all: nobody is signed in on this browser. */
-export function signedOut() {
+export function signedOut(body, { portal = "" } = {}) {
   return [
     '<section class="state state-signed-out">',
     "<h1>Please sign in</h1>",
     "<p>Sign in to see this report card.</p>",
-    '<p><a href="/">Sign in</a></p>',
+    wayBack(portal, "Sign in"),
     "</section>",
   ].join("");
+}
+
+/**
+ * The link back to sign-in, which is on another host — or a sentence, if this
+ * deployment cannot say which host.
+ *
+ * **Both these states used to emit `<a href="/">`, and `/` is routed nowhere.**
+ * `urls.py` serves `api/`, `cards/` and `cards/<child>/<term>/` and no root, so
+ * a parent whose session lapsed on a card was handed a link to a 404 — on the
+ * one screen whose entire job is telling her how to get back in. Sign-out makes
+ * that screen somewhere a reader arrives on purpose rather than only by
+ * accident, which is what turned a latent dead link into one worth fixing here.
+ *
+ * The hostname comes from the frame, the way the index page already does it:
+ * `results.views._portal_host()` reads the `Domain` row for the public schema
+ * and renders it into a `data-` attribute. The API deliberately will not answer
+ * this — `api._portal_only()` says a client knows where it signed in and that
+ * having the server say so would put one fact in two places — and reading a
+ * `Domain` row into a page this deployment serves is not that.
+ *
+ * With no portal domain configured there is no link, only the sentence. A dead
+ * link is worse than being told to go back the way you came, which is the rule
+ * this page is now on both sides of.
+ */
+function wayBack(portal, label) {
+  if (!portal) return "<p>Go back to the sign-in page you came from.</p>";
+  return `<p><a href="//${esc(portal)}/sign-in/">${label}</a></p>`;
 }
 
 /**

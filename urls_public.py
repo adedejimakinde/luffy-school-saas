@@ -14,7 +14,7 @@ cannot go missing here.
 from django.contrib import admin
 from django.urls import path
 
-from accounts.views import sign_in_page
+from accounts.views import sign_in_page, staff_sign_in_page
 from urls import urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
@@ -25,5 +25,10 @@ urlpatterns = [
     # form that submits into a 404 — and a school's host refuses anyone without
     # an active membership there, which is the opposite of what a door needs.
     path("sign-in/", sign_in_page, name="sign-in"),
+    # The staff door, on the same host and for the same reason: `api.sign_in()`
+    # begins with `_portal_only()` too. Two routes and not one with a flag —
+    # the flows share no step, and a query parameter deciding which form a
+    # sign-in page shows is a page whose URL cannot be linked to.
+    path("staff-sign-in/", staff_sign_in_page, name="staff-sign-in"),
     *tenant_urlpatterns,
 ]

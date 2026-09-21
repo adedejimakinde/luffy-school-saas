@@ -13,6 +13,7 @@
  */
 
 import { postJson } from "../web/http.js";
+import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as steps from "./states.js";
 
 const CODE_URL = "/api/guardian/code/";
@@ -76,16 +77,46 @@ export function htmlFor(state) {
     case "whose":
       return steps.whose(state.body || {});
     case "schools":
-      return steps.schools(state.body || {});
+      return steps.schools(state.body || {}) + note(state);
     case "nowhere":
-      return steps.nowhere(state.body || {});
+      return steps.nowhere(state.body || {}) + note(state);
     case "throttled":
       return steps.throttled(state.body || {});
     case "leaving":
       return leaving(state.body || {});
+    case "signed-out":
+      return signedOut();
     default:
       return steps.broken();
   }
+}
+
+/**
+ * The sign-out failure sentence, appended to whichever state was on screen.
+ *
+ * Appended rather than passed in, so `schools()` and `nowhere()` stay pure
+ * functions of an API body and do not grow a parameter for a failure that has
+ * nothing to do with what they render.
+ */
+function note(state) {
+  return state.signOutFailed ? failureNote() : "";
+}
+
+/**
+ * Signed out from one of the two states that hold a live session.
+ *
+ * The way back is this same page, which is where this reader already is, so the
+ * link is relative — unlike the family pages on a school's host, whose way back
+ * crosses to the portal and needs the hostname rendered into the frame.
+ */
+function signedOut() {
+  return [
+    '<section class="step step-signed-out" data-step="signed-out">',
+    "<h1>Signed out</h1>",
+    "<p>Your session has ended on this browser and on your school's pages.</p>",
+    '<p><a href="/sign-in/">Sign in again</a></p>',
+    "</section>",
+  ].join("");
 }
 
 /** The one-school case: say where they are going, then go. */
@@ -150,14 +181,34 @@ export function mount(root, { fetchImpl = fetch, navigate = null } = {}) {
     return undefined;
   });
 
-  root.addEventListener("click", (event) => {
+  root.addEventListener("click", async (event) => {
     const button = event.target.closest("[data-guardian],[data-action]");
     if (!button) return;
     if (button.dataset.action === "restart") {
       state = initialState();
       return draw();
     }
-    // The pick carries the code that is already spent on proving the handset.
+    if (button.dataset.action === "sign-out") {
+      const answer = await signOut({ fetchImpl });
+      state = sessionEnded(answer)
+        ? { ...initialState(), step: "signed-out" }
+        : { ...state, signOutFailed: true };
+      return draw();
+    }
+    // The pick carries the code that is already spent on proving the handset,
+    // and it is guarded on the attribute rather than reached by falling through
+    // every other button.
+    //
+    // **The branches above return first, so this guard is the second line and
+    // not the first** — stated precisely because the first version of this
+    // comment claimed otherwise and a control proved it wrong. What the guard
+    // is worth was measured: dropping the `return` from the sign-out branch
+    // above leaves the suite green *because of this line*, and dropping both
+    // turns `a sign-out tap is not posted as a guardian pick` red. What it
+    // stops is a `[data-action]` reaching here at all — a sign-out posted as a
+    // pick with an undefined guardian is a spent code answered with a 401 and
+    // a family back at the code step for no reason they could see.
+    if (!button.dataset.guardian) return undefined;
     return send(SESSION_URL, {
       value: state.value,
       code: state.code,

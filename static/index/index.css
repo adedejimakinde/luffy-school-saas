@@ -57,3 +57,27 @@ h2 { font-size: 1.05rem; margin: 20px 0 6px; }
 
 .blank { color: var(--quiet); }
 .state { padding: 24px 0; }
+
+/*
+ * Sign-out, below the list. Quiet, because it is not what the reader came for
+ * — but present on every page that has a session, which is the rule the two
+ * sign-in pages and the card page are on as well.
+ */
+button.signout {
+  display: block;
+  margin: 24px 0 0;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--quiet);
+  font: inherit;
+  text-decoration: underline;
+}
+
+.problem {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--held);
+  background: #fff5f5;
+  color: var(--held);
+}
