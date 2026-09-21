@@ -63,11 +63,36 @@ function camel(name) {
  */
 export function fakeRoot(dataset = {}) {
   const listeners = {};
-  return {
+  //: Fields the page would find with `querySelector`, keyed by the attribute
+  //: selector that finds them. `type()` seeds this, because a handler reading
+  //: `root.querySelector('[data-author="x"]').value` is reading something the
+  //: user typed — and a stub with no way to type can only test the paths where
+  //: nobody did.
+  const fields = {};
+  const root = {
     dataset: { ...dataset },
     innerHTML: "",
     addEventListener(type, handler) {
       (listeners[type] = listeners[type] || []).push(handler);
+    },
+    /** Put a value in the box the page will look for. No event; just state. */
+    type(selector, value) {
+      fields[selector] = { value, dataset: {} };
+      return root;
+    },
+    querySelector(selector) {
+      return fields[selector] || null;
+    },
+    /**
+     * A field whose value was committed — a select being chosen, a checkbox
+     * toggled. Distinct from `blur()`: `change` bubbles, so the page listens
+     * for it without capture, and a stub that fired one as the other would
+     * exercise a listener the browser would not call.
+     */
+    async change(attributes = {}, value = "") {
+      const target = fakeTarget(attributes);
+      target.value = value;
+      for (const handler of listeners.change || []) await handler({ target });
     },
     async click(attributes = { "data-action": "sign-out" }) {
       const target = fakeTarget(attributes);
@@ -88,9 +113,9 @@ export function fakeRoot(dataset = {}) {
       target.value = value;
       for (const handler of listeners.blur || []) await handler({ target });
     },
-    async submit(fields = {}) {
+    async submit(formFields = {}) {
       const form = {};
-      for (const [name, value] of Object.entries(fields)) form[name] = { value };
+      for (const [name, value] of Object.entries(formFields)) form[name] = { value };
       let prevented = false;
       for (const handler of listeners.submit || []) {
         await handler({ target: form, preventDefault: () => (prevented = true) });
@@ -98,4 +123,5 @@ export function fakeRoot(dataset = {}) {
       return prevented;
     },
   };
+  return root;
 }

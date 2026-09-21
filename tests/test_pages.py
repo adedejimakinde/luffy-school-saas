@@ -33,7 +33,12 @@ from accounts.views import MODULES as SIGN_IN_MODULES
 from accounts.views import STAFF_MODULES
 from attendance.views import REGISTER_MODULES
 from gradebook.views import MARKING_MODULES
-from results.views import CARD_MODULES, CHAIN_MODULES, INDEX_MODULES
+from results.views import (
+    CARD_MODULES,
+    CHAIN_MODULES,
+    COMMENTS_MODULES,
+    INDEX_MODULES,
+)
 
 #: The tree that is served, which is also the tree on disk — see
 #: `settings.STATICFILES_DIRS` for why those two being the same is the whole
@@ -49,6 +54,7 @@ PAGES = {
     "register": REGISTER_MODULES,
     "marking": MARKING_MODULES,
     "results-chain": CHAIN_MODULES,
+    "comments": COMMENTS_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

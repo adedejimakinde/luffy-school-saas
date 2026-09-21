@@ -1,0 +1,36 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remarks</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page. Shipped once already here.
+
+The title names no child and no class. This document is served to whoever opens
+the URL — there is no `login_required`, for the oracle reason `results/views.py`
+gives — and a tab title outlives the page in history.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'comments/comments.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'comments/app.js' %}"></script>
+
+{% comment %}
+`data-portal` is the portal's hostname and the only thing the server writes
+into this frame. The signed-out state needs it to reach `/staff-sign-in/`,
+which is on the portal while this page is on a school's host.
+{% endcomment %}
+<main id="comments" data-portal="{{ portal_host }}">
+  {% comment %}
+  What a reader sees if the module never loads. It must not be a form: a form
+  without the module behind it would submit to this page, and here that loses a
+  paragraph somebody has just written.
+  {% endcomment %}
+  <noscript>
+    <h1>Remarks</h1>
+    <p>This page needs JavaScript to load your class. Please turn it on, or ask
+    your school office for help.</p>
+  </noscript>
+  <p class="state state-loading">Finding your class&hellip;</p>
+</main>
