@@ -15,11 +15,13 @@
  * both doors because it is the same throttle, `guardian_signin.TooManyAttempts`
  * carrying `signin.THROTTLED`.
  *
- * Not shared: the school list. The guardian flow's is a **chooser** — it links
- * each school to `/cards/` on that school's host, and the one-school case skips
- * it entirely. This one links nowhere, for the reason `landed()` gives, so the
- * two have only `esc()` in common and a module holding that would be a module
- * holding nothing.
+ * Not shared: the school list. The guardian flow's is a **chooser** — one
+ * destination per school, and the one-school case skips it entirely by
+ * redirecting. This one is a hub: a school may offer this login two links, one
+ * or none, and it never redirects. What the two do share is the `//host/path`
+ * rule, which is `hostHref()` in `web/html.js` now that it has a second
+ * caller; the prose around it stays per-page, because the reasons a school is
+ * named without a link are not the same on both.
  */
 
 import { esc, hostHref, waitInWords } from "../web/html.js";

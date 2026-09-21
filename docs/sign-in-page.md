@@ -65,7 +65,7 @@ Nothing is remembered anywhere but the page's own memory for the life of the
 page. Deliberately not `sessionStorage`: a code left in a browser's storage on
 a shared handset is a code the next person to pick up the phone can replay.
 
-## The staff door: one step, and a landing that links nowhere
+## The staff door: one step, and a landing that links where it can
 
 `POST /api/login/` takes an identifier and a password and answers one of four
 ways — a session, a session with no school on it, one refusal, or a throttle.
@@ -84,36 +84,56 @@ resolves any identifier `User.matching_identifier()` knows, so a student with a
 password can sign in here too. The page is framed for staff because staff are
 who needed a door and had none.
 
-### Where it sends them, which is nowhere
+### Where it sends them
 
 The guardian flow ends by going somewhere: one school and it redirects, more
-than one and it asks which. The staff flow ends by naming the schools this login
-may act at, **without a link on any of them**, and that is the decision this
-page turns on rather than an omission.
+than one and it asks which. The staff flow ends by naming the schools this
+login may act at **and linking each to what that school actually offers it.**
 
-`/cards/` is the only page a school's host serves, and it is a *family* surface
-even for staff: `card_api._children_of()` says "Never staff's roster" and answers
-with the children the caller is a parent or guardian of, "which for most of them
-is none". A teacher sent there reads "No children on this account… ask the school
+Until slice 3 it linked nowhere, and that was a decision rather than an
+omission. `/cards/` was the only page a school's host served, and it is a
+*family* surface even for staff: `card_api._children_of()` says "Never staff's
+roster". A teacher sent there read "No children on this account… ask the school
 office to add you as a guardian" — the school's answer to a question she did not
-ask. Redirecting her is wrong for that reason, and a link labelled "Report cards"
-is the same wrong answer with a tap in between.
+ask. And the payload could not tell the two apart, because `SchoolOut` carried
+slug, name and host and nothing about what was behind them.
 
-**And the payload cannot tell the two apart.** `SignedInOut.schools` is
-`SchoolOut` — slug, name, host — built from `user.schools()`, a distinct `School`
-query carrying no role and no guardianship. The field it looks like it wants is
-`roles`, and that is not the question either: `_children_of()` is `role=STUDENT`
-and (`user=actor` or `guardianships__guardian=actor`), so a PARENT membership with
-no `Guardianship` rows stands for nobody, and a link keyed on the role would be
-keyed on the near-enough thing — rule 1's defect class. The honest field is a
-per-school boolean off that same query, answerable from the public schema since
-`Membership` and `Guardianship` are both in `SHARED_APPS`, and it is an API change
-with its own tests rather than something to smuggle in behind a label.
+Both halves have changed. `/register/` is a staff destination, and `SchoolOut`
+carries two booleans:
 
-So: no link is better than a link to the wrong answer. Slice 3 of
-[attendance.md](attendance.md) gives this page its first destination that is a
-staff destination — the register — and that is when a link rule gets a second
-caller and is worth lifting into `static/web/`.
+| field | the question it asks | why not a role |
+| --- | --- | --- |
+| `may_take_a_register` | `attendance.services.can_mark_attendance()` — `roles_at(school) & MARKING_ROLES` | a bursar and a vice principal (academic) are staff and do not mark, so "is staff" sends them to a 403 |
+| `has_children_here` | `card_api._children_of()`'s predicate — `role=STUDENT` and (`user=actor` or `guardianships__guardian=actor`) | a PARENT membership with no `Guardianship` rows stands for nobody, and the page would answer "No children on this account" |
+
+Each is **the same question the surface behind the link asks**, which is the
+whole reason neither is a role. Four queries for the whole payload regardless
+of how many schools: both tables are in SHARED_APPS, so each boolean is one
+`school_id` set and a membership test.
+
+That `/cards/` really serves this to a member of staff on a password session is
+**proved rather than assumed** —
+`results.tests.test_card_api.AStaffParentOnAPasswordSessionIsServedHerOwnChild`,
+written before the field was added, with a staff-member-without-guardianship
+control beside it so the positive result is about guardianship and not about a
+roster.
+
+**There is no auto-redirect, ever.** The guardian flow redirects on one school
+because `/cards/` is the only thing a guardian does; a principal signing in has
+many reasons to be there, and the landing is a hub from the day it has two
+destinations.
+
+**One school is one row, whatever is held there.** Multiple `Membership` rows
+per (user, school) are expected and correct, so the capability is the union: a
+bursar who also teaches gets the register link, and a teacher who is also a
+parent gets both on the one school. The landing answers "where can I go", not
+"what am I called".
+
+Three ways a school ends up with no link, and they are three different
+sentences: no host at all (a deployment fault), a host and nothing this login
+may do there yet (a bursar, a vice principal), and the null-host case
+`hostHref()` now handles for both pages. A school named with nothing after it
+would read as a page that failed to load.
 
 ### Signed in with no school is a success, not a refusal
 
@@ -231,7 +251,7 @@ invisible from there.
 
 | what was broken | what failed | what that says |
 | --- | --- | --- |
-| the staff landing links each school to `//host/cards/` | `the landing links nowhere at all`, alone | the no-link rule is asserted, not merely the shape of markup that happens to have no `<a>` in it |
+| ~~the staff landing links each school to `//host/cards/`~~ | ~~`the landing links nowhere at all`~~ | **retired by slice 3.** The no-link rule was right while `/cards/` was the only destination; it is replaced by `each school is linked to what it offers this login, and to nothing else`, whose fixture is asymmetric so a renderer drawing both links everywhere reddens |
 | `card/states.js` links back to `/` again | 4 tests, including the card page's sign-out round trip | the dead link is held by the states *and* by the flow that now reaches them on purpose |
 | `if (!button.dataset.guardian) return undefined;` removed from the guardian click handler | **nothing** | the branches above it return first, so the guard is the second line and not the first — the comment claiming otherwise was wrong and is corrected. Re-aimed: dropping the sign-out branch's `return` leaves the suite green *because of* the guard, dropping both reddens `a sign-out tap is not posted as a guardian pick`, and deleting the branch reddens it and the failure test beside it |
 | `sessionEnded()` returns true for every answer | 6 tests across all four pages | the asymmetry is what every page's "did not claim it did" assertion rests on, and it is asserted once per page rather than once |
@@ -250,10 +270,10 @@ invisible from there.
 
 ## What is not here
 
-**No staff home page.** The staff landing is a receipt, not a hub: it says who
-signed in and at which schools, and stops. There are no staff screens on this
-platform yet and inventing one here would be the staff-UI problem
-[attendance.md](attendance.md) D12 already declined to solve twice.
+**Still no staff home page.** The landing is a hub of *links*, not a dashboard:
+it says who signed in, at which schools, and what each one offers this login —
+and stops. It holds no school's data, which is what keeps it a page the portal
+can serve at all.
 
 **No `next=` parameter.** Nothing links into either sign-in page yet, so a
 redirect target neither could have been given is a knob nobody turns. When slice

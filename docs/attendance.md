@@ -59,6 +59,32 @@ against.
   nobody turns should not exist. One school's practice is not evidence of variation —
   it is evidence of one practice.
 
+- **A5. A teacher may need to take the register of a class they are not answerable
+  for.** *Not confirmed, and the system currently assumes true by omission.*
+  `can_mark_attendance()` is school-wide: any TEACHER at the school may take any
+  class's register, with no reference to `ClassTeacher`. Results submission is
+  scoped precisely because of issue #25 — "a JSS 1A teacher could submit JSS 3B's
+  results and be recorded as the signatory of a class they do not teach" — and
+  attendance has the same shape and no equivalent scope.
+
+  It was invisible until there was a screen. Slice 3's register screen has to show a
+  teacher a list of classes, and with no scope that list is every class in the
+  school. The screen ships the honest list rather than narrowing it, because a
+  restriction enforced only by a screen is the defect class this phase keeps finding.
+
+  The case that decides it is ordinary: **a subject teacher covering an absent form
+  teacher.** Scope marking to `ClassTeacher` and the cover teacher cannot mark the
+  class standing in front of them, and the workaround is a borrowed login — strictly
+  worse, because `taken_by_id` then names the wrong person on every row it touches.
+  That is the same argument `MARKING_ROLES` already makes for admitting principals
+  and administrators.
+
+  Three options, not two: leave it school-wide and say so as a decision rather than
+  an omission; scope it with an explicit cover mechanism; or keep the write open and
+  make who-marked-what legible, which `Register.taken_by_id` already supports with no
+  new authority rule. **Issue #125**, and it wants a pilot-school answer rather than
+  a repository one.
+
 ### Settled from this repository, and needing no school
 
 - **A4. "No register was taken" is not "the child was absent", and the two must never
@@ -77,6 +103,7 @@ against.
 | A2 more statuses | D1–D10 entirely | **D11** only, which is why D11 is the minimum rather than a guess. Adding a status is a `TextChoices` entry and a migration; changing what counts as present is a change to one function, `day_status()` |
 | A3 practice varies | all | nothing is built, so nothing breaks. This is the assumption it is cheapest to be wrong about, and only in that direction: shipping the knob first and finding nobody turns it is the expensive mistake |
 | A4 unmarked vs absent | — | nothing. A4 is not a claim about schools. If a school genuinely does not care to tell the two apart it can ignore the third number; the system still must not invent one |
+| A5 any teacher may mark any class | D1–D12, and the screen — nothing built assumes the wide rule is *right*, only that it is what the route enforces | the class chooser's list, and one test that asserts it is wide and says so. Narrowing is a service-layer change with its own controls, plus a cover mechanism, because the borrowed-login workaround is worse than the gap |
 
 ## Decisions
 
@@ -350,16 +377,16 @@ handles report cards, and one boolean does not earn a third settings table.
    `results/templates/results/report_card.html` branches on `days_open`, so the page
    and the PDF disagree for a card with a term length and no register; and
    `days_absent` is stored, served on `ReportCardOut`, and rendered by neither.
-3. **The register screen.** Its dependency landed on its own beforehand, which was
-   the better of the two options this list named: **the staff sign-in page exists**,
-   at `/staff-sign-in/` on the portal, in front of `POST /api/login/`. Sign-out came
-   with it. See [sign-in-page.md](sign-in-page.md), and note the one thing that slice
-   deliberately did not decide: the staff landing names the schools a login may act
-   at and **links to none of them**, because `/cards/` is a family surface even for
-   staff and there is no staff destination yet. This slice builds the first one, and
-   it is the slice that gets to decide how a member of staff reaches it — which is
-   also when the guardian flow's link rule gets a second caller and is worth lifting
-   into `static/web/`.
+3. **The register screen. Built.** `/register/` on a school's host, in front of the
+   endpoints slice 1 built, with `GET /api/attendance/where/` added because the
+   register is keyed on `(class_group, term, date)` and the API named none of the
+   three. It also settled what the sign-in slice deliberately left open — where a
+   member of staff goes after signing in. `SignedInOut.schools` now carries
+   `may_take_a_register` and `has_children_here`, each being the **same question
+   the surface behind the link asks** rather than a role standing in for one, and
+   the landing draws a link per school from them. The guardian flow's link rule
+   got its second caller and is `hostHref()` in `static/web/html.js`. See
+   [sign-in-page.md](sign-in-page.md).
 4. **The principal's view**: which students are absent too often. Needs a threshold,
    and a threshold is a number somebody chooses; that question is deferred to this
    slice rather than answered here.
@@ -391,6 +418,10 @@ handles report cards, and one boolean does not earn a third settings table.
 - **OPEN-1 is closed.** See D12: a service function and an admin-only route on
   `academics`, no screen, landing in slice 2.
 - **OPEN-2. What does the principal's view count as "too often"?** Deferred to slice 4.
+- **A5 (raised by slice 3, and it is a *domain* question).** Who may take a class's
+  register, and who covers an absent form teacher? Stated in full under Domain
+  assumptions above. **Issue #125.**
+
 - **OPEN-3. Does a register need an audit of amendments?** D8 makes marks mutable. A
   register corrected the same morning is ordinary; a register corrected in March for a
   day in November is not, and nothing currently distinguishes them. The card is
