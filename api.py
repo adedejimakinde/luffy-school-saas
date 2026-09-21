@@ -290,7 +290,7 @@ def _portal_only(request):
         raise Http404("Sign in on the portal host.")
 
 
-def _schools_of(user):
+def _schools_of(user, *, parent_scoped=False):
     """Every school this login may act at, with where to go and what is there.
 
     **Four queries regardless of how many schools**, which matters for the
@@ -326,6 +326,25 @@ def _schools_of(user):
     **`user.schools()` is already ACCESS_STATUSES**, so a school reaching this
     list at all is one the person may act at; the booleans say what they may do
     *there*, which is a narrower question and sometimes "nothing yet".
+
+    ## `parent_scoped` is what a six-digit code buys, said at the door
+
+    `guardian_session()` calls this too, and a session opened with a code
+    reaches "a parent-scoped read of their own children and nothing else" —
+    `settings.GUARDIAN_SESSION_AGE` rests thirty days on that sentence and
+    `User.roles_at()` is what makes it true on a school's host.
+
+    It is **not** true here without being said. `roles_at()` narrows on
+    `user.parent_scoped_credential`, which `SchoolAccessMiddleware` sets only on
+    a school's host — and this route is portal-only, so the flag is False when
+    this runs whichever way the roles are read. A guardian who also teaches
+    would therefore have been told `may_take_a_register: true` on a credential
+    that `can_mark_attendance()` will refuse the moment she uses it, which is
+    precisely the link-to-a-page-that-refuses-you this field exists to prevent.
+
+    So the caller says which door it is rather than this function guessing from
+    a request it does not have. `has_children_here` is untouched by it: her own
+    children are exactly what the code is *for*.
     """
     schools = list(user.schools())
     hosts = dict(
@@ -350,7 +369,7 @@ def _schools_of(user):
             slug=school.slug,
             name=school.name,
             host=hosts.get(school.pk),
-            may_take_a_register=school.pk in markers,
+            may_take_a_register=not parent_scoped and school.pk in markers,
             has_children_here=school.pk in families,
         )
         for school in schools
@@ -615,7 +634,9 @@ def guardian_session(request, payload: GuardianSessionIn):
 
     return 200, SignedInOut(
         full_name=user.full_name,
-        schools=_schools_of(user),
+        # This is the code door, so the answer is parent-scoped whatever else
+        # this login is. See `_schools_of()`.
+        schools=_schools_of(user, parent_scoped=True),
         csrf_token=get_token(request),
     )
 

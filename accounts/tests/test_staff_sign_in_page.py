@@ -414,3 +414,79 @@ class ThePageServedForAnyOtherRefusalTests(GuardianSignInSetUp):
             "the staff door was offered to an exception that merely carries the name",
         )
         self.assertNotIn("not ours", body)
+
+
+class ACodeSessionIsNotToldItMayTakeARegisterTests(GuardianSignInSetUp):
+    """**The payload has to keep the promise `roles_at()` keeps on the host.**
+
+    `settings.GUARDIAN_SESSION_AGE` rests thirty days on a code session
+    reaching "a parent-scoped read of their own children and nothing else", and
+    `User.roles_at()` makes that true wherever authority is asked — but only on
+    a school's host, because `SchoolAccessMiddleware` is what sets
+    `parent_scoped_credential` and it does nothing on the portal.
+
+    `GET`/`POST /api/guardian/session/` answers on the portal, so a guardian
+    who also teaches would have been handed `may_take_a_register: true` on a
+    credential `can_mark_attendance()` refuses the moment she uses it. A field
+    that says "you may" about a page that answers 403 is the exact failure the
+    booleans were added to prevent, so the narrowing is stated at the door
+    rather than inferred from a request that has not happened yet.
+
+    The control is the class beside it: the same person through the password
+    door is told `true`, which is what makes this a fact about the credential
+    rather than about her roles.
+    """
+
+    OTHER_HOST = "grace.testserver"
+
+    def setUp(self):
+        super().setUp()
+        self.grace = make_school("Grace Academy", "grace", "grace")
+        Domain.objects.create(tenant=self.grace, domain=self.OTHER_HOST, is_primary=True)
+        services.grant_membership(self.mama, self.grace, Role.TEACHER)
+
+    def schools_after_a_code(self):
+        self.client.post(
+            "/api/guardian/code/",
+            data={"value": HANDSET},
+            content_type="application/json",
+            HTTP_HOST=PORTAL,
+        )
+        answered = self.answer(self.mint())
+        self.assertEqual(answered.status_code, 200, answered.content)
+        return {s["slug"]: s for s in answered.json()["schools"]}
+
+    def test_the_password_door_tells_her_she_may(self):
+        """The control, and it runs first: everything below would pass against
+        a payload that said `false` to everybody."""
+        response = self.client.post(
+            "/api/login/",
+            data={"identifier": "mama", "password": PASSWORD},
+            content_type="application/json",
+            HTTP_HOST=PORTAL,
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = {s["slug"]: s for s in response.json()["schools"]}
+        self.assertTrue(
+            rows["grace"]["may_take_a_register"],
+            "the password door denies a teacher her register, so the code "
+            "door saying no below would prove nothing",
+        )
+
+    def test_the_code_door_does_not(self):
+        rows = self.schools_after_a_code()
+
+        self.assertFalse(
+            rows["grace"]["may_take_a_register"],
+            "a session opened with six digits off an SMS was told it may take "
+            "a register",
+        )
+
+    def test_her_own_children_are_still_hers_on_that_credential(self):
+        """The narrowing is about staff powers, not about her family. Her own
+        children are exactly what the code is for, and a code session that
+        could not find them would have nothing left to be for."""
+        rows = self.schools_after_a_code()
+
+        self.assertTrue(rows["st-marys"]["has_children_here"])
