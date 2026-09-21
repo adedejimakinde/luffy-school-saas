@@ -66,3 +66,32 @@ export function waitInWords(seconds) {
   if (seconds >= 120) return `about ${Math.ceil(seconds / 60)} minutes`;
   return `about ${seconds} seconds`;
 }
+
+/**
+ * A page on a school's own host, as a link this page can actually draw.
+ *
+ * **Scheme-relative on purpose.** `//host/path` keeps whatever scheme the
+ * deployment is served over, where a hard-coded `https://` is wrong in
+ * development and a bare `/path` is wrong everywhere that matters here: every
+ * caller is on a *different* host from the one it is linking to, so a path
+ * would resolve against the page's own host and 404. That is the dead
+ * `<a href="/">` the card page shipped, and the reason
+ * `accounts/templates/403.html` names the portal by host too.
+ *
+ * **`""` for a school with no host, and every caller must branch on it.** A
+ * deployment with no primary `Domain` for that school has nothing to link to,
+ * and a school named without a link is honest where `//null/cards/` is a
+ * broken link that looks like a working one. Returning the empty string rather
+ * than throwing keeps the decision — what to say instead — with the page that
+ * knows what it is offering, because the two callers say different things: the
+ * guardian chooser explains the missing web address, and the staff landing has
+ * its own reasons a school may not be linked.
+ *
+ * The host is escaped here rather than by each caller. It is a value a school
+ * typed into the admin, it lands inside a quoted attribute, and an escape that
+ * every caller has to remember is an escape one of them will not.
+ */
+export function hostHref(host, path) {
+  if (!host) return "";
+  return `//${esc(host)}${path}`;
+}
