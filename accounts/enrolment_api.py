@@ -46,6 +46,7 @@ from ninja import Router, Schema
 
 from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term
+from accounts import bulk
 from accounts import services as accounts_services
 from accounts.models import Membership, Role
 from accounts.session import session_auth
@@ -109,6 +110,18 @@ class AdmitIn(Schema):
 
 class PlaceIn(Schema):
     class_group_id: int
+
+
+class BulkIn(Schema):
+    """The file's text, not a multipart upload.
+
+    The page reads the file with `FileReader` and posts its contents, which
+    keeps every request on this platform JSON and behind ninja's own CSRF
+    check. A multipart route would be the one exception to that, for no gain
+    on a file an office pastes or picks.
+    """
+
+    csv: str
 
 
 def _school_of(request):
@@ -341,4 +354,88 @@ def place(request, student_membership_id: int, payload: PlaceIn):
         reference=membership.reference,
         class_group_id=group.pk,
         class_group=group.name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Admitting a class from a spreadsheet.
+# ---------------------------------------------------------------------------
+
+
+class RowProblemOut(Schema):
+    """One thing wrong with one row, and where to find it.
+
+    `line` is the line in **their file** — the header is 1, so the first child
+    is 2. "Row 14" is something an office can find; "the third error" is not.
+    """
+
+    line: int
+    column: str
+    detail: str
+
+
+class BulkReportOut(Schema):
+    """What a file did, or what is wrong with it.
+
+    `admitted` is 0 whenever `problems` is non-empty, and that is the whole
+    contract: **a file half-applies or it does not apply.** An office cannot
+    tell which children landed without reading the roll against the
+    spreadsheet by hand.
+
+    `generated` is `line -> handle` for every child whose school left the
+    column blank. Reported because a child cannot be handed a login nobody
+    wrote down.
+
+    `guardians_pending` is how many guardian links were made and are **not yet
+    live**. D9: `link_guardian()` grants an INVITED membership until the
+    guardian's contact channel is verified, so an import that said nothing
+    would leave the office believing it had finished.
+    """
+
+    admitted: int
+    problems: List[RowProblemOut]
+    generated: dict
+    guardians_pending: int
+
+
+@router.post(
+    "/roll/import/",
+    response={200: BulkReportOut, 403: MessageOut, 422: MessageOut},
+)
+def bulk_admit(request, payload: BulkIn):
+    """Admit a whole class from a CSV, or none of it.
+
+    A 200 carrying `problems` is the ordinary refusal — the file was read, every
+    row was judged, and nothing was written. It is not a 422, because the
+    request was well formed and the *file* is what disagrees; the body is the
+    answer rather than the error.
+
+    A 422 is for a file that cannot be read as a file at all: no header, a
+    missing required column, or no current term to place anybody in.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_ADMIT)
+    if not academics.can_place_students(request.user, school):
+        # A bulk import places every child, so it needs both authorities —
+        # and an administrator holds both.
+        return 403, MessageOut(detail=_MAY_NOT_PLACE)
+
+    try:
+        report = bulk.admit(request.user, school, _current_term(), payload.csv)
+    except bulk.BulkError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except ValidationError as exc:
+        return 422, MessageOut(detail=_first(exc))
+
+    return 200, BulkReportOut(
+        admitted=len(report.planned) if report.ok else 0,
+        problems=[
+            RowProblemOut(line=p.line, column=p.column, detail=p.detail)
+            for p in report.problems
+        ],
+        generated={str(line): handle for line, handle in report.generated.items()},
+        guardians_pending=sum(
+            1 for p in report.planned if p.guardian_contact
+        ) if report.ok else 0,
     )
