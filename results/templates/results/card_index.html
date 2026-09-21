@@ -19,7 +19,7 @@ authenticated and a tab title outlives the page in history and bookmarks.
 {% comment %}
 `data-portal` is the portal's hostname, and it is the only thing the server
 writes into this frame. The 401 state needs it to offer a way back to sign-in,
-which lives on another host; `results.views._portal_host()` says why reading it
+which lives on another host; `schools.hosts.portal_host()` says why reading it
 from the `Domain` row is not the thing `api._portal_only()` refuses to do. It is
 empty where a deployment has no portal domain, and the state then renders its
 sentence without a link.

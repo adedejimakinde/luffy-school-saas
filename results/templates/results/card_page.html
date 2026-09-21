@@ -45,7 +45,7 @@ build step.
 that is not one of the two integers out of the URL. The signed-out and expired
 states have to offer a way back to sign-in, which lives on another host, so the
 link cannot be relative — and it cannot come from the API either, which
-`api._portal_only()` settles. `results.views._portal_host()` reads it from the
+`api._portal_only()` settles. `schools.hosts.portal_host()` reads it from the
 `Domain` row for the public schema. Empty where a deployment has no portal
 domain, and the states then render their sentence without a link.
 {% endcomment %}

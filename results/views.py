@@ -51,7 +51,7 @@ refuses them the API, rather than by a check written again here.
 from django.shortcuts import render
 
 import pages
-from schools.models import Domain
+from schools.hosts import portal_host
 
 #: Every module the card page loads, entry point last.
 #:
@@ -79,44 +79,6 @@ INDEX_MODULES = (
 )
 
 
-def _portal_host() -> str:
-    """Where a parent signs in, read from the one place that knows.
-
-    Both pages need it for a single sentence: their 401 states have to offer a
-    way back, and sign-in is on the portal while these pages are on a school's
-    host, so the link cannot be relative.
-
-    **The card page did not always have it, and that was a dead link rather
-    than a missing nicety.** Its signed-out and expired states emitted
-    `<a href="/">`, and `urls.py` routes no root — `api/`, `cards/` and
-    `cards/<child>/<term>/` and nothing else — so a parent whose session lapsed
-    on a card was handed a 404 by the one screen whose job is telling her how to
-    get back in. Sign-out is what made that screen a place a reader arrives on
-    purpose.
-
-    One indexed row per page load, on a page that is already doing a card
-    fetch. Caching it would be a second place for a redeployed domain to go
-    stale.
-
-    **The API deliberately will not answer this** — `api._portal_only()` says a
-    client knows its own portal and that having the server name it would put the
-    same fact in two places. This does not reopen that. It reads the fact from
-    the single authority there is, the `Domain` row for the public schema, and
-    renders it into a page this same deployment serves; it does not add an API
-    that tells arbitrary callers where the front door is.
-
-    Empty where no such row exists. The state then renders its sentence without
-    a link, because a dead link is worse than being told to go back the way you
-    came.
-    """
-    return (
-        Domain.objects.filter(tenant__schema_name="public", is_primary=True)
-        .values_list("domain", flat=True)
-        .first()
-        or ""
-    )
-
-
 def card_page(request, student_membership_id: int, term_id: int):
     """The frame for one card. Takes two integers and trusts neither.
 
@@ -124,7 +86,8 @@ def card_page(request, student_membership_id: int, term_id: int):
     customise and a class would be three lines of ceremony around one call.
 
     It reads one row it did not use to — the portal's hostname, for the two
-    states that have to send a reader back to sign-in. See `_portal_host()`.
+    states that have to send a reader back to sign-in. See
+    `schools.hosts.portal_host()`.
     Still no card data of any kind: who may read this card is
     `GET /api/results/cards/<child>/<term>/`'s question.
     """
@@ -135,7 +98,7 @@ def card_page(request, student_membership_id: int, term_id: int):
             "student_membership_id": student_membership_id,
             "term_id": term_id,
             "import_map": pages.import_map(*CARD_MODULES),
-            "portal_host": _portal_host(),
+            "portal_host": portal_host(),
         },
     )
 
@@ -158,7 +121,7 @@ def card_index_page(request):
         "results/card_index.html",
         {
             "import_map": pages.import_map(*INDEX_MODULES),
-            "portal_host": _portal_host(),
+            "portal_host": portal_host(),
         },
     )
 

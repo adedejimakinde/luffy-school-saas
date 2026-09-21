@@ -1,8 +1,8 @@
-from django.core.exceptions import PermissionDenied
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
 
 from .guardian_signin import OPENED_BY_CODE
+from .refusals import CodeSessionCannotEscalate, NoMembershipHere
 
 
 class SchoolAccessMiddleware:
@@ -69,13 +69,18 @@ class SchoolAccessMiddleware:
     assertion about a *feature's* 403 has to read the body rather than the
     status — see `results/tests/test_withholding.py`.
 
-    **The sentence below reaches nobody, and that is issue #122.** There is no
-    `403.html` in this repository, so Django's default handler renders
-    `ERROR_PAGE_TEMPLATE` with empty `details` and discards the message. The
-    page it should be pointing at exists — `/staff-sign-in/`, on the portal —
-    and the refusal still does not name it. Giving it one wants a refusal
-    something can tell apart rather than a template branching on this string,
-    because the same handler answers the other refusal below.
+    **Both sentences below now reach the person refused — issue #122, closed.**
+    They used to reach nobody: there was no `403.html`, so Django's default
+    handler rendered `ERROR_PAGE_TEMPLATE` with empty `details` and discarded
+    the message, and a reader saw "403 Forbidden" and nothing else.
+
+    What the fix turns on is that these two refusals have **different
+    remedies** — one is a password away from what she is asking for and the
+    other is not — so the identity has to travel with the exception rather than
+    be recovered from its prose. `accounts.refusals` is the two classes, and
+    `accounts.views.refused()` is the handler that reads them. A template
+    branching on these strings would have offered the wrong remedy the day
+    somebody reworded one.
     """
 
     def __init__(self, get_response):
@@ -116,12 +121,12 @@ class SchoolAccessMiddleware:
                     # platform is not locked out of a school they hold no
                     # membership at; six digits off an SMS is not how they prove
                     # they are that person.
-                    raise PermissionDenied(
+                    raise CodeSessionCannotEscalate(
                         "This session was opened with a sign-in code, which "
                         "reaches a guardian's own children and nothing else."
                     )
                 if not user.is_platform_staff:
-                    raise PermissionDenied(
+                    raise NoMembershipHere(
                         "You do not have access to this school."
                     )
 

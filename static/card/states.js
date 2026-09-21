@@ -115,7 +115,7 @@ export function signedOut(body, { portal = "" } = {}) {
  * accident, which is what turned a latent dead link into one worth fixing here.
  *
  * The hostname comes from the frame, the way the index page already does it:
- * `results.views._portal_host()` reads the `Domain` row for the public schema
+ * `schools.hosts.portal_host()` reads the `Domain` row for the public schema
  * and renders it into a `data-` attribute. The API deliberately will not answer
  * this — `api._portal_only()` says a client knows where it signed in and that
  * having the server say so would put one fact in two places — and reading a

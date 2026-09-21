@@ -15,7 +15,7 @@ from django.contrib import admin
 from django.urls import path
 
 from accounts.views import sign_in_page, staff_sign_in_page
-from urls import urlpatterns as tenant_urlpatterns
+from urls import handler403, urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -32,3 +32,11 @@ urlpatterns = [
     path("staff-sign-in/", staff_sign_in_page, name="staff-sign-in"),
     *tenant_urlpatterns,
 ]
+
+#: Re-exported, not re-declared. Django looks `handler403` up as an attribute of
+#: whichever urlconf is in force, and `django_tenants` gives the public schema
+#: this module instead of `urls.py` — so without this line the portal would fall
+#: back to the default handler while every school's host used ours. Importing
+#: the name keeps one definition; writing the dotted path again would be a
+#: second copy to drift.
+__all__ = ["urlpatterns", "handler403"]
