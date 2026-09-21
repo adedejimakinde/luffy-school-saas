@@ -20,7 +20,7 @@ from django.urls import path
 from api import api
 from attendance.views import register_page
 from gradebook.views import marking_page
-from results.views import card_index_page, card_page
+from results.views import card_index_page, card_page, chain_page
 
 urlpatterns = [
     path("api/", api.urls),
@@ -38,6 +38,8 @@ urlpatterns = [
     path("register/", register_page, name="register"),
     # The second staff surface, on the same terms as the register above.
     path("marking/", marking_page, name="marking"),
+    # The third staff surface, on the same terms as the two above.
+    path("results/", chain_page, name="results-chain"),
     path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",
