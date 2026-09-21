@@ -34,7 +34,7 @@ from accounts.models import LIVE_STATUSES, Membership, Role
 from accounts.staff import why_not_a_teacher_here
 from accounts.students import why_not_a_student_here
 
-from .models import ClassPlacement, ClassTeacher, Term
+from .models import ClassGroup, ClassPlacement, ClassTeacher, Term
 
 
 class AcademicsError(Exception):
@@ -110,6 +110,17 @@ class NotThisSchoolsTeacher(AcademicsError):
     actually works at — correct for a log and a test, and a cross-tenant leak if
     it were ever returned to an HTTP caller. `results.api` answers a flat 404 for
     that reason; this message is for the people who can already see both.
+    """
+
+
+class NotAllowedToSetUp(AcademicsError):
+    """The actor holds no role at this school that may shape its calendar.
+
+    Its own class rather than reusing `NotAllowedToSetTermLength`: declaring
+    how long a term was is a statement about a term that exists, and creating
+    one is a statement about what the school teaches. They happen to admit the
+    same roles today, and a caller catching one should not silently start
+    catching the other if that stops being true.
     """
 
 
@@ -442,6 +453,115 @@ def set_school_days(term, count, *, by=None):
         return locked
 
 
+#: Roles that may set up a school's calendar and its class groups.
+#:
+#: The same set as `PLACEMENT_ROLES`, and for the same reason it gives: this is
+#: office work rather than a teacher's. A term and a class group are the two
+#: things every other tenant table hangs off — a placement, a register, a
+#: result sheet, a card — so the set that may create them is the set that
+#: answers for the school's shape.
+SETUP_ROLES = PLACEMENT_ROLES
+
+
+def create_term(session, name, starts_on, ends_on, **fields):
+    """Open a term's record. Returns it, in `draft` as far as anything else is
+    concerned — a `ResultSheet` is created lazily and a register needs marks.
+
+    **Creating does not make it current.** Those are two decisions, and a
+    school opening next term's record in advance while this one is still being
+    taught is ordinary rather than a corner case. `set_current_term()` is the
+    other one, said out loud.
+
+    `full_clean()` before the write, so `term_ends_after_it_starts` and
+    `next_term_starts_after_this_one_ends` arrive as sentences a person can
+    act on rather than as an `IntegrityError` from Postgres. The constraints
+    are still what hold the rule — this is what turns them into a message,
+    which is the layering `_require_not_already_signed()` describes for the
+    chain.
+    """
+    term = Term(session=session, name=name, starts_on=starts_on, ends_on=ends_on, **fields)
+    term.full_clean()
+    term.save()
+    return term
+
+
+@transaction.atomic
+def set_current_term(term):
+    """Make this the term the school is teaching. Returns it.
+
+    **The old one is cleared in the same transaction**, and that is not
+    tidiness: `one_current_term` is a `UniqueConstraint` on `is_current` where
+    it is true, so setting a second without clearing the first is refused by
+    the database. Doing both here means a school never has to know that, and
+    never gets half of it.
+
+    Clearing first, then setting — the order matters for the same constraint.
+    The reverse raises before the clear can run.
+
+    Idempotent: making the current term current again is a no-op rather than an
+    error, because a screen doing it on a double click is not a mistake worth a
+    refusal.
+    """
+    Term.objects.filter(is_current=True).exclude(pk=term.pk).update(is_current=False)
+    locked = Term.objects.select_for_update().get(pk=term.pk)
+    if not locked.is_current:
+        locked.is_current = True
+        locked.save(update_fields=["is_current"])
+    return locked
+
+
+def create_class_group(name, level=0, **fields):
+    """Open a class group. Returns it.
+
+    `level` is the school's own ordering and is **not** derived from the name:
+    "JSS 1A" sorts before "JSS 10A" as text, and no string rule survives a
+    school running Nursery, Primary and Senior in one place. The model says so
+    at length; this is the writer that respects it.
+    """
+    group = ClassGroup(name=name, level=level, **fields)
+    group.full_clean()
+    group.save()
+    return group
+
+
+def can_set_up(actor, school) -> bool:
+    """May `actor` create terms and class groups at `school`?
+
+    Access-scoped like every other authority question here: an invited or
+    suspended administrator has a membership and no authority, because
+    `roles_at()` is scoped to ACCESS_STATUSES.
+    """
+    if not getattr(actor, "is_authenticated", False):
+        return False
+    return bool(set(actor.roles_at(school)) & SETUP_ROLES)
+
+
+def _require_setup_authority(actor, school):
+    if not can_set_up(actor, school):
+        raise NotAllowedToSetUp(
+            f"{actor} may not set up the calendar at {school}. That is done by "
+            f"a principal or an administrator of the school."
+        )
+
+
+def create_term_as(actor, session, name, starts_on, ends_on, *, school, **fields):
+    """`create_term()` for a caller with a request behind it."""
+    _require_setup_authority(actor, school)
+    return create_term(session, name, starts_on, ends_on, **fields)
+
+
+def set_current_term_as(actor, term, *, school):
+    """`set_current_term()` for a caller with a request behind it."""
+    _require_setup_authority(actor, school)
+    return set_current_term(term)
+
+
+def create_class_group_as(actor, name, *, school, level=0, **fields):
+    """`create_class_group()` for a caller with a request behind it."""
+    _require_setup_authority(actor, school)
+    return create_class_group(name, level=level, **fields)
+
+
 #: Roles that may declare a term's length at their own school.
 #:
 #: The same set as `PLACEMENT_ROLES` and for the same reason: this is an office
@@ -652,6 +772,15 @@ def unassign_class_teacher_as(actor, school, class_group, term) -> bool:
 
 
 __all__ = [
+    "SETUP_ROLES",
+    "NotAllowedToSetUp",
+    "can_set_up",
+    "create_class_group",
+    "create_class_group_as",
+    "create_term",
+    "create_term_as",
+    "set_current_term",
+    "set_current_term_as",
     "AcademicsError",
     "AlreadyPlaced",
     "CLASS_TEACHER_ROLES",

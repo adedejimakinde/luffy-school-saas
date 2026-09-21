@@ -18,6 +18,7 @@ routing rather than by a check inside a view somebody could forget to add.
 from django.urls import path
 
 from api import api
+from academics.views import setup_page
 from attendance.views import register_page
 from gradebook.views import marking_page
 from results.views import card_index_page, card_page, chain_page, comments_page
@@ -35,6 +36,8 @@ urlpatterns = [
     # every `attendance` route it fetches begins with `_school_of()`, which
     # raises `Http404` on the portal because the register tables do not exist
     # in the public schema. The page has a state for that answer.
+    # The office's own surface: the calendar and the class groups.
+    path("setup/", setup_page, name="school-setup"),
     path("register/", register_page, name="register"),
     # The second staff surface, on the same terms as the register above.
     path("marking/", marking_page, name="marking"),
