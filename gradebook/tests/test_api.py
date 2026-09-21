@@ -19,6 +19,8 @@ the conflict warning worthless by crying wolf at a teacher working alone.
 
 from django.db import connection
 
+from academics import services as academics
+from academics.models import ClassGroup, Term
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook.models import Score
@@ -39,6 +41,16 @@ class GradebookApiSetUp(GradebookSetUp):
 
         # The school's own host. Everything below is a request to it.
         Domain.objects.create(tenant=self.stmarys, domain=HOST, is_primary=True)
+
+        # A class group with the fixture's children in it. The sheet route is
+        # scoped to one group now, so a sheet without a roster in it would be
+        # an empty sheet — which every assertion about who appears on one
+        # would pass against.
+        with connected_to(self.stmarys):
+            group = ClassGroup.objects.create(name="JSS 1A", level=1)
+            self.jss1a_id = group.pk
+            for child in (self.ada, self.emeka):
+                academics.place_student(group, Term.objects.get(pk=self.term_id), child)
 
         # The portal, where a parent with children at several schools signs in.
         # No schema of its own; it is the public one.
@@ -78,9 +90,21 @@ class GradebookApiSetUp(GradebookSetUp):
 
     # -- request helpers, all of them on the school's host -------------------
 
-    def sheet(self, assessment_id=None):
+    def sheet(self, assessment_id=None, class_group_id=None, omit_group=False):
+        """The sheet for one group. `class_group_id` is required by the route.
+
+        It used to be every student in the school — an `Assessment` carries a
+        term and a subject and no class group, so "First CA / Mathematics"
+        listed the whole roll. `omit_group` is how the test below asserts that
+        the field is required rather than defaulting back to that.
+        """
+        query = (
+            ""
+            if omit_group
+            else f"?class_group_id={class_group_id or self.jss1a_id}"
+        )
         return self.client.get(
-            f"/api/gradebook/assessments/{assessment_id or self.first_ca_id}/sheet/",
+            f"/api/gradebook/assessments/{assessment_id or self.first_ca_id}/sheet/{query}",
             HTTP_HOST=HOST,
         )
 
@@ -169,13 +193,41 @@ class MarkingSheetTests(GradebookApiSetUp):
         self.assertEqual(self.sheet().status_code, 401)
 
     def test_there_is_no_gradebook_on_the_portal_host(self):
-        """404, not 403: on the portal these tables do not exist to be refused."""
+        """404, not 403: on the portal these tables do not exist to be refused.
+
+        Asked **without** `class_group_id`, deliberately. The field is required,
+        and if it were a required *query parameter* ninja would validate it
+        before this view ran — answering 422 and telling a caller on the portal
+        that the route is real and what it wants. The host has to answer first.
+        """
         self.client.force_login(self.teacher.user)
         response = self.client.get(
             f"/api/gradebook/assessments/{self.first_ca_id}/sheet/",
             HTTP_HOST="testserver",
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_the_class_group_is_required_and_says_so(self):
+        """A default of "every student in the school" is the behaviour being
+        removed, so omitting the field is an error rather than a wildcard."""
+        self.client.force_login(self.teacher.user)
+
+        response = self.sheet(omit_group=True)
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("class_group_id", response.json()["detail"])
+
+    def test_a_parent_omitting_the_group_is_refused_before_being_corrected(self):
+        """**The ordering, asserted.** 403 and not 422.
+
+        A parent who leaves the field out must not be told the route is real
+        and what shape it takes — that is the existence oracle
+        `_refuse_non_markers()` closes, and a required query parameter would
+        have reopened it one layer above the gate.
+        """
+        self.client.force_login(self.parent.user)
+
+        self.assertEqual(self.sheet(omit_group=True).status_code, 403)
 
 
 class SavingOneMarkTests(GradebookApiSetUp):

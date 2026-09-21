@@ -58,9 +58,10 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 
+from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
-from accounts.services import school_directory
 from accounts.session import session_auth
+from results import services as results_services
 
 from . import services
 from .models import Assessment, Score
@@ -112,12 +113,81 @@ class SheetRowOut(ScoreOut):
 
 
 class SheetOut(Schema):
+    """One class group's rows for one assessment, and whether they can be written.
+
+    **`locked` is a fact about the sheet, not about each row**, and that is a
+    consequence of the class group being required rather than a simplification.
+    `services._require_the_sheet_is_open()` resolves a child through
+    `placement_of(student, term)`; `ClassPlacement` is unique per
+    `(term, student_membership_id)` by constraint; and
+    `results_services.locked_sheet_for()` answers per `(class_group, term)`. So
+    every child in a scoped sheet resolves to the *same* `ResultSheet`, and a
+    per-row flag would be N copies of one answer costing N queries.
+
+    It exists at all because this screen saves on blur. Without it a teacher
+    types a mark into a cell that cannot accept it, tabs away, and learns from
+    the 423 — after typing. The number they just entered is the worst moment to
+    discover the sheet shut.
+
+    `locked` is `False` where no `ResultSheet` row exists yet, which is the
+    ordinary case for a term nobody has submitted: `is_open_for_writing(None)`
+    is what `locked_sheet_for()` returning `None` means, and a term with no
+    sheet is open rather than closed.
+    """
+
     assessment_id: int
     assessment: str
     subject: str
     term: str
+    class_group_id: int
+    class_group: str
     max_score: int
+    locked: bool
+    #: Why it is locked, for the sentence the screen shows. `None` when open.
+    locked_reason: Optional[str] = None
     rows: List[SheetRowOut]
+
+
+class MarkableAssessmentOut(Schema):
+    id: int
+    name: str
+    subject: str
+    max_score: int
+
+
+class MarkableGroupOut(Schema):
+    id: int
+    name: str
+    level: int
+
+
+class WhereToMarkOut(Schema):
+    """What the marking screen needs before it can ask for a sheet.
+
+    The sheet is keyed on `(assessment, class_group)` and the API named neither
+    — the same gap the card index closed for a family and
+    `attendance.api.where_to_mark()` closed for the register. A screen keyed on
+    ids nothing ever handed it is a screen openable only by typing integers
+    into a URL.
+
+    `term` is the school's own `Term.is_current`, never one inferred from
+    today's date: a computed term disagrees with the school the first time a
+    term runs late, and a mark filed against the wrong one carries nothing
+    saying it was a guess.
+
+    **Every subject and every class, not a subset.** `can_enter_marks()` is
+    school-wide and carries no reference to a subject or a class group, so a
+    narrower list would be a scope the platform does not enforce, drawn as
+    though it did. That gap is issue #128, alongside #125 and #25; the reason a
+    sheet cannot be scoped by subject even in principle is issue #127 —
+    nothing models which students take which subject, so SSS electives cannot
+    be expressed at all.
+    """
+
+    term_id: Optional[int]
+    term: Optional[str]
+    assessments: List[MarkableAssessmentOut]
+    classes: List[MarkableGroupOut]
 
 
 class SaveIn(Schema):
@@ -311,29 +381,91 @@ def _is_our_write_arriving_twice(current, payload, actor) -> bool:
 # -- reading the sheet -------------------------------------------------------
 
 
+@router.get("/where/", response={200: WhereToMarkOut, 403: MessageOut})
+def where_to_mark(request):
+    """The assessments and classes a sheet can be asked for, for the screen.
+
+    **Authority first, before either read.** `_refuse_non_markers()` gives the
+    reason at length: asking it second turns this into a directory of the
+    school's subjects and class groups for anybody signed in there, parents and
+    students included. They could not mark either way; they could read the
+    shape of the school off a 200.
+    """
+    school = _school_of(request)
+    refused = _refuse_non_markers(request, school)
+    if refused is not None:
+        return refused
+
+    term = Term.objects.filter(is_current=True).first()
+    assessments = (
+        []
+        if term is None
+        else [
+            MarkableAssessmentOut(
+                id=a.pk, name=a.name, subject=a.subject.name, max_score=a.max_score
+            )
+            for a in Assessment.objects.filter(term=term).select_related("subject")
+        ]
+    )
+    return WhereToMarkOut(
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        assessments=assessments,
+        classes=[
+            MarkableGroupOut(id=g.pk, name=g.name, level=g.level)
+            for g in ClassGroup.objects.filter(is_active=True)
+        ],
+    )
+
+
 @router.get(
     "/assessments/{int:assessment_id}/sheet/",
-    response={200: SheetOut, 403: MessageOut},
+    response={200: SheetOut, 403: MessageOut, 422: MessageOut},
 )
-def marking_sheet(request, assessment_id: int):
-    """Every student on the roll, marked or not, with the version to save against.
+def marking_sheet(
+    request, assessment_id: int, class_group_id: Optional[int] = None
+):
+    """One class group's rows for one assessment, marked or not.
 
     The unmarked students are the point. They have no `Score` row — that is the
     module's whole premise — so they cannot come from the score table, and a
-    sheet built from it would show only the children already marked. The roll
-    comes from `school_directory()`, and a mark is attached where there is one.
+    sheet built from it would show only the children already marked.
 
-    Relationship-scoped, so a suspended student still appears: a teacher marking
-    a register works from the roll the office keeps, and silently dropping a
-    child from a sheet is how a mark goes missing with nobody noticing.
+    **The roster is the class group's, and `class_group_id` is required.** It
+    used to be `school_directory(school, role=STUDENT)` — *every* student in
+    the school — which was invisible while there was no screen and is not a
+    sheet anybody can mark from: an `Assessment` carries a term and a subject
+    and **no class group**, so "First CA / Mathematics" listed Primary 1 beside
+    JSS 3B.
+
+    Required rather than optional, because a default of "everyone" is the
+    behaviour being removed. A caller who omits it gets a 422 naming the field,
+    which is a better answer than eight hundred rows.
+
+    **It is typed `Optional` and required by hand, and that is about ordering
+    rather than taste.** A required query parameter is validated by ninja
+    *before* the view runs, which puts the 422 in front of both checks below:
+    a caller on the portal would be told "this wants a `class_group_id`" where
+    the honest answer is "there is no gradebook on this host", and — worse — a
+    parent omitting the field would get a 422 instead of a 403, learning that
+    the route is real and what shape it takes. That is precisely the existence
+    oracle `_refuse_non_markers()` is written to close, arriving one layer
+    above it. So the host answers first, then authority, then the field.
+
+    This is a **view scope, not an authority narrowing**. `can_enter_marks()`
+    is unchanged and still school-wide; who may mark is issue #128. Narrowing
+    the list here while the write stays open would be a restriction that looked
+    enforced and was not.
+
+    Relationship-scoped through `ClassPlacement`, so a suspended student still
+    appears: a teacher marks from the roll the office keeps, and silently
+    dropping a child is how a mark goes missing with nobody noticing.
 
     Gated on `can_enter_marks()` — the same authority as writing, deliberately.
     `SchoolAccessMiddleware` has only established that the caller belongs to
     this school, and this school's parents and students belong to it too. A
     sheet is the whole class's marks side by side, which is the one thing a
-    parent must not be handed. What a parent may see is their own child's
-    marks; that is a different endpoint with a different shape, and it is not
-    this one wearing a filter.
+    parent must not be handed.
     """
     school = _school_of(request)
     if not services.can_enter_marks(request.user, school):
@@ -341,36 +473,65 @@ def marking_sheet(request, assessment_id: int):
             detail="A marking sheet is the whole class's marks. It is shown to "
             "the staff who enter them."
         )
+    if class_group_id is None:
+        return 422, MessageOut(
+            detail="A marking sheet is one class group's. Name the group with "
+            "`class_group_id`."
+        )
     assessment = get_object_or_404(
         Assessment.objects.select_related("subject", "term"), pk=assessment_id
     )
+    group = get_object_or_404(ClassGroup, pk=class_group_id)
+
+    roster = ClassPlacement.objects.student_ids(group, assessment.term)
+    students = {
+        m.pk: m
+        for m in Membership.objects.filter(pk__in=roster).select_related("user")
+    }
 
     scores = {
         score.student_membership_id: score
-        for score in Score.objects.filter(assessment=assessment)
+        for score in Score.objects.filter(
+            assessment=assessment, student_membership_id__in=roster
+        )
     }
     totals = _totals_for_everyone(assessment)
     empty = TotalOut(scored=0, available=0, marked=0)
 
     rows = [
         SheetRowOut(
-            student=student.user.full_name or student.user.username,
-            **_cell(
-                assessment,
-                student.pk,
-                scores.get(student.pk),
-                totals.get(student.pk, empty),
+            student=students[sid].user.full_name or students[sid].user.username,
+            **_cell(assessment, sid, scores.get(sid), totals.get(sid, empty)),
+        )
+        for sid in sorted(
+            students,
+            key=lambda sid: (
+                students[sid].user.full_name or students[sid].user.username
             ),
         )
-        for student in school_directory(school, role=Role.STUDENT)
     ]
+
+    # One read for the whole sheet — see `SheetOut.locked` for why this is a
+    # sheet-level fact once the class group is required.
+    sheet = results_services.locked_sheet_for(group, assessment.term)
+    open_for_writing = results_services.is_open_for_writing(sheet)
 
     return SheetOut(
         assessment_id=assessment.pk,
         assessment=assessment.name,
         subject=assessment.subject.name,
         term=str(assessment.term),
+        class_group_id=group.pk,
+        class_group=group.name,
         max_score=assessment.max_score,
+        locked=not open_for_writing,
+        locked_reason=None
+        if open_for_writing
+        else (
+            f"{group.name} — {assessment.term} is "
+            f"{sheet.get_state_display().lower()}, so its marks cannot be "
+            f"changed here."
+        ),
         rows=rows,
     )
 
