@@ -55,6 +55,7 @@ from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
+from results.comments_api import router as comments_router
 from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
@@ -92,6 +93,7 @@ api.add_router("/results/", results_router, tags=["results"])
 # nothing importable in `card_api` that carries a staff-only field.
 api.add_router("/results/", report_card_router, tags=["results"])
 api.add_router("/results/", chain_router, tags=["results"])
+api.add_router("/results/", comments_router, tags=["results"])
 
 
 @api.exception_handler(CardWithheld)
