@@ -1,0 +1,107 @@
+/*
+ * The marking sheet. One row per child: a name, a number, a running total.
+ *
+ * A list and not a table, for the reason the index gives: these are read and
+ * typed into on a phone as often as a laptop, and a table of four columns stops
+ * working at that width. The input is the row's point, so it is large and the
+ * label sits above it rather than beside it.
+ *
+ * The two notes a save can leave — a conflict and a rejected number — are
+ * colour *and* a rule *and* a sentence, never colour alone.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #ddd;
+  --conflict: #7a4a00;
+  --conflict-bg: #fff6e5;
+  --invalid: #900;
+  --invalid-bg: #fdeeee;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 34rem; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0 0 8px; }
+
+.term, .when { color: var(--quiet); margin: 0 0 16px; }
+
+.quiet { color: var(--quiet); font-weight: 400; }
+
+.locked {
+  background: #f4f4f4;
+  border-left: 4px solid var(--rule);
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.assessments, .classes, .roster { list-style: none; margin: 8px 0 0; padding: 0; }
+
+.assessments button, .classes button {
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  margin: 0 0 8px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.roster .row {
+  display: grid;
+  grid-template-columns: 1fr 5rem auto;
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.roster label { grid-column: 1; }
+
+.roster input {
+  grid-column: 2;
+  font: inherit;
+  /* 48px so a thumb can reach it; right-aligned so two-digit marks line up. */
+  min-height: 48px;
+  padding: 10px;
+  text-align: right;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+}
+
+.roster input:disabled { background: #f4f4f4; color: var(--quiet); }
+
+.total { grid-column: 3; color: var(--quiet); font-variant-numeric: tabular-nums; }
+
+.note { grid-column: 1 / -1; font-size: 0.95rem; }
+
+.row.conflict { background: var(--conflict-bg); border-left: 4px solid var(--conflict); padding-left: 8px; }
+.row.conflict .note { color: var(--conflict); }
+.row.invalid { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding-left: 8px; }
+.row.invalid .note { color: var(--invalid); }
+
+button.back, button.signout {
+  font: inherit;
+  min-height: 48px;
+  padding: 12px 18px;
+  margin: 12px 8px 0 0;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+a { color: #14507d; }
