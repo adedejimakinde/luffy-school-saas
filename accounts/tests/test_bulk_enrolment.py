@@ -139,12 +139,21 @@ class BulkImportTests(EnrolmentSetUp):
                 self.assertNotIn(leaked, detail)
 
     def test_a_handle_duplicated_inside_the_file_is_caught(self):
-        """Neither exists yet, so only the file itself can catch this."""
-        body = self.upload(
+        """Neither exists yet, so only the file itself can catch this.
+
+        **Status first**, and that is the assertion doing the work. Without the
+        in-file check the duplicate is still refused — by the database, at
+        write time, as a whole-file 422 — and the difference between that and a
+        200 carrying a line number *is* what this check buys. Reading the body
+        first turned that regression into `KeyError: 'problems'`.
+        """
+        response = self.upload(
             self.admin,
             csv_of("Chike Obi,JSS 1A,STM/1,,,", "Ngozi Abah,JSS 1B,STM/1,,,"),
-        ).json()
+        )
 
+        self.assertEqual(response.status_code, 200, "a per-row report became a whole-file refusal")
+        body = response.json()
         self.assertEqual([p["line"] for p in body["problems"]], [3])
         self.assertIn("twice in this file", body["problems"][0]["detail"])
 
@@ -195,6 +204,22 @@ class BulkImportTests(EnrolmentSetUp):
         response = self.upload(self.teacher, csv_of("Chike Obi,JSS 1A,,,,"))
 
         self.assertEqual(response.status_code, 403)
+
+    def test_a_principal_cannot_import(self):
+        """**Added because a control found it missing.**
+
+        A teacher fails both checks, so removing either one still refused her —
+        nothing in this file could tell the two apart. A principal is the
+        person who can: `PLACEMENT_ROLES` admits her and
+        `MEMBERSHIP_GRANTING_ROLES` does not, so a bulk import must refuse her
+        for the *admit* half while she may still move a child by hand.
+        """
+        before = self.counts()
+
+        response = self.upload(self.head, csv_of("Chike Obi,JSS 1A,,,,"))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.counts(), before)
 
     def test_an_administrator_at_one_school_cannot_import_at_the_other(self):
         response = self.upload(
