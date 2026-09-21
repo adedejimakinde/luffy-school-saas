@@ -34,12 +34,20 @@ from django.utils import timezone
 from api import CSRF_FAILED
 
 from accounts import throttling
-from accounts.models import Role, SignInAttempts, SignInScope, User
-from accounts.services import grant_membership
+from accounts.models import (
+    Membership,
+    MembershipStatus,
+    Role,
+    SignInAttempts,
+    SignInScope,
+    User,
+)
+from accounts.services import enroll_student, grant_membership, link_guardian
 from accounts.session import NOT_AUTHENTICATED
 from accounts.signin import BAD_CREDENTIALS, TOO_MANY_ATTEMPTS
 from schools.models import Domain, School
 from schools.tests.test_invitations import make_school
+from tests.guardians import give_verified_channel
 
 PASSWORD = "correct-horse-battery"
 PORTAL = "testserver"
@@ -128,7 +136,16 @@ class SigningInTests(SignInSetUp):
         self.assertEqual(body["full_name"], "Tayo Teacher")
         self.assertEqual(
             body["schools"],
-            [{"slug": "st-marys", "name": "St Mary's", "host": SCHOOL_HOST}],
+            [
+                {
+                    "slug": "st-marys",
+                    "name": "St Mary's",
+                    "host": SCHOOL_HOST,
+                    # A teacher marks, and has no child here.
+                    "may_take_a_register": True,
+                    "has_children_here": False,
+                }
+            ],
         )
         self.assertTrue(body["csrf_token"])
 
@@ -500,3 +517,134 @@ class SigningOutTests(SignInSetUp):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["code"], NOT_AUTHENTICATED)
         self.assertFalse(response.json()["retryable"])
+
+
+class WhatEachSchoolOffersThisLoginTests(SignInSetUp):
+    """The two booleans the staff landing draws its links from.
+
+    **Two schools in every test here, and that is the point rather than
+    thoroughness.** The thing most likely to be got wrong about a per-school
+    answer is that it is not per-school — a boolean computed once for the login
+    and repeated on every row would pass every single-tenant test written for
+    it. So the shape throughout is one person, two schools, two different
+    answers.
+
+    Each boolean is the **same question the surface behind the link asks**:
+    `may_take_a_register` is `attendance.services.can_mark_attendance()`, and
+    `has_children_here` is `card_api._children_of()`'s predicate. Neither is a
+    role, because in both cases the role is the near-enough thing —
+    `api._schools_of()` sets out which way each one is wrong.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.grace = make_school("Grace Academy", "grace", "grace")
+        Domain.objects.create(
+            tenant=self.grace, domain="grace.testserver", is_primary=True
+        )
+
+    def rows(self, identifier="tayo"):
+        return {s["slug"]: s for s in self.sign_in(identifier=identifier).json()["schools"]}
+
+    # -- may_take_a_register -------------------------------------------------
+
+    def test_one_login_gets_a_different_answer_at_each_school(self):
+        """A teacher at St Mary's and a bursar at Grace. **The test a
+        single-tenant fixture cannot fail**: a boolean computed for the person
+        rather than for the school passes everything else in this class."""
+        grant_membership(self.teacher, self.grace, Role.BURSAR)
+
+        rows = self.rows()
+
+        self.assertTrue(rows["st-marys"]["may_take_a_register"])
+        self.assertFalse(
+            rows["grace"]["may_take_a_register"],
+            "a bursar was offered a register — the answer is not per-school",
+        )
+
+    def test_a_bursar_who_also_teaches_is_one_row_and_may_mark(self):
+        """Multiple `Membership` rows per (user, school) are expected and
+        correct, and the landing answers 'where can I go', not 'what am I
+        called'. So the capability is the union and the school appears once."""
+        grant_membership(self.teacher, self.stmarys, Role.BURSAR)
+
+        listed = self.sign_in().json()["schools"]
+
+        self.assertEqual(
+            [s["slug"] for s in listed],
+            ["st-marys"],
+            "two memberships at one school became two rows on the landing",
+        )
+        self.assertTrue(listed[0]["may_take_a_register"])
+
+    def test_a_vice_principal_academic_does_not_mark(self):
+        """Staff, and not a marker. `MARKING_ROLES` is teacher, principal and
+        admin — a vp_academic checks results and a bursar keeps the books."""
+        vp = User.objects.create_user("vera", PASSWORD, full_name="Vera VP")
+        grant_membership(vp, self.grace, Role.VICE_PRINCIPAL_ACADEMIC)
+
+        rows = self.rows(identifier="vera")
+
+        self.assertFalse(rows["grace"]["may_take_a_register"])
+
+    def test_a_suspended_teacher_has_no_school_to_be_asked_about(self):
+        """`user.schools()` is ACCESS_STATUSES, so the row is absent rather
+        than present-and-false. The booleans are scoped the same way, which is
+        what keeps the two from disagreeing."""
+        membership = grant_membership(self.teacher, self.grace, Role.TEACHER)
+        Membership.objects.filter(pk=membership.pk).update(
+            status=MembershipStatus.SUSPENDED
+        )
+
+        rows = self.rows()
+
+        self.assertNotIn("grace", rows)
+        self.assertIn("st-marys", rows)
+
+    # -- has_children_here ---------------------------------------------------
+
+    def test_a_staff_parent_is_told_which_school_her_child_is_at(self):
+        """The case the whole field exists for, and it is two schools again:
+        she teaches at both and guards a child at one."""
+        grant_membership(self.teacher, self.grace, Role.TEACHER)
+        child = enroll_student(
+            User.objects.create_user("bola", PASSWORD, full_name="Bola Eze"),
+            self.grace,
+        )
+        link_guardian(self.teacher, child)
+        give_verified_channel(self.teacher, "08030000009")
+
+        rows = self.rows()
+
+        self.assertTrue(rows["grace"]["has_children_here"])
+        self.assertFalse(
+            rows["st-marys"]["has_children_here"],
+            "a guardianship at one school answered for the other",
+        )
+
+    def test_a_parent_role_with_no_guardianship_stands_for_nobody(self):
+        """**The near-enough control.** A PARENT membership is not the
+        question. `_children_of()` is `role=STUDENT` and (`user=actor` or
+        `guardianships__guardian=actor`), so this login would land on "No
+        children on this account" — and a link keyed on the role would have
+        sent her there."""
+        grant_membership(self.teacher, self.grace, Role.PARENT)
+
+        rows = self.rows()
+
+        self.assertFalse(
+            rows["grace"]["has_children_here"],
+            "a PARENT membership with no Guardianship behind it was read as a child",
+        )
+
+    def test_a_student_reaches_their_own_card(self):
+        """The other half of `_children_of()`: `user=actor`. A student signing
+        in at the password door is served their own card, so the boolean has to
+        answer for them too."""
+        child_user = User.objects.create_user("ada", PASSWORD, full_name="Ada Obi")
+        enroll_student(child_user, self.grace)
+
+        rows = self.rows(identifier="ada")
+
+        self.assertTrue(rows["grace"]["has_children_here"])
+        self.assertFalse(rows["grace"]["may_take_a_register"])

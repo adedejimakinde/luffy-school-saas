@@ -36,6 +36,7 @@ docstring has the argument in full.
 from typing import Optional
 
 from django.contrib.auth import logout as end_session
+from django.db.models import Q
 from django.http import Http404
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
@@ -44,10 +45,12 @@ from ninja.errors import AuthenticationError, HttpError
 from ninja.utils import check_csrf
 
 from accounts import guardian_signin, signin
+from accounts.models import Membership, Role
 from accounts.services import NotPermitted
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
 from attendance.api import router as attendance_router
+from attendance.services import MARKING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from results.card_api import router as report_card_router
@@ -206,6 +209,31 @@ class SchoolOut(Schema):
     name: str
     host: Optional[str] = None
 
+    #: May this login take a register at this school? The **same predicate the
+    #: route enforces** — `attendance.services.can_mark_attendance()`, which is
+    #: `roles_at(school) & MARKING_ROLES` — and not a role, because a role is
+    #: the near-enough thing. A bursar and a vice principal (academic) are
+    #: staff and do not mark, so a link keyed on "is staff" would send them to
+    #: a screen that refuses them.
+    #:
+    #: The union across roles, because a bursar who also teaches may mark: one
+    #: school is one row on the landing and one row is one answer.
+    may_take_a_register: bool = False
+
+    #: Has this login a child at this school — their own card, or one they are
+    #: a guardian of? `card_api._children_of()`'s question, which is
+    #: `role=STUDENT` and (`user=actor` or `guardianships__guardian=actor`).
+    #:
+    #: **Not a PARENT membership**, which is the near-enough thing here: a
+    #: PARENT row with no `Guardianship` behind it stands for nobody, and
+    #: `/cards/` would answer such a caller with "No children on this
+    #: account" — the school's answer to a question they did not ask.
+    #:
+    #: That `/cards/` really does serve this to a member of staff on a password
+    #: session is proved rather than assumed, by
+    #: `results.tests.test_card_api.AStaffParentOnAPasswordSessionIsServedHerOwnChild`.
+    has_children_here: bool = False
+
 
 class SignedInOut(Schema):
     """What a client gets back, which is what it needs to do anything next.
@@ -263,11 +291,41 @@ def _portal_only(request):
 
 
 def _schools_of(user):
-    """Every school this login may act at, with the host each one lives on.
+    """Every school this login may act at, with where to go and what is there.
 
-    Two queries regardless of how many schools, which matters for the parent
-    this shape exists for. `is_primary` because a school may answer on several
-    hostnames and only one of them is the one to send somebody to.
+    **Four queries regardless of how many schools**, which matters for the
+    parent this shape exists for and for the teacher at three schools it now
+    also serves. `is_primary` because a school may answer on several hostnames
+    and only one of them is the one to send somebody to.
+
+    ## Why the two booleans are computed here and not read off a role
+
+    The landing draws a link per school, and what it needs to know is whether
+    the surface behind that link will *serve this person* — not what they are
+    called. Those differ, and the difference is the whole argument
+    `docs/sign-in-page.md` made against shipping a link in the previous slice:
+
+    - a bursar and a vice principal (academic) are staff and do not mark, so a
+      register link keyed on "is staff" sends them to a 403; and
+    - a PARENT membership with no `Guardianship` rows stands for nobody, so a
+      `/cards/` link keyed on the role sends them to "No children on this
+      account… ask the school office to add you as a guardian".
+
+    So each boolean is the **same question the surface behind it asks**.
+    `may_take_a_register` is `roles_at(school) & MARKING_ROLES`, which is what
+    `attendance.services.can_mark_attendance()` is. `has_children_here` is
+    `card_api._children_of()`'s predicate. Both are answerable from the public
+    schema — `Membership` and `Guardianship` are in SHARED_APPS — which is why
+    this is two set lookups rather than a query per school per boolean.
+
+    Marking roles are read from `Membership` directly rather than by calling
+    `roles_at()` once per school, which would be one query each. The filter is
+    ACCESS_STATUSES for the same reason `roles_at()` is: an invited or
+    suspended teacher holds a membership and no authority.
+
+    **`user.schools()` is already ACCESS_STATUSES**, so a school reaching this
+    list at all is one the person may act at; the booleans say what they may do
+    *there*, which is a narrower question and sometimes "nothing yet".
     """
     schools = list(user.schools())
     hosts = dict(
@@ -275,8 +333,26 @@ def _schools_of(user):
             "tenant_id", "domain"
         )
     )
+    markers = set(
+        user.memberships.with_access()
+        .filter(school__in=schools, role__in=MARKING_ROLES)
+        .values_list("school_id", flat=True)
+    )
+    # The child's own login and the guardian's, in one query — the two halves
+    # of `_children_of()`, asked as "is there any such child" per school.
+    families = set(
+        Membership.objects.filter(school__in=schools, role=Role.STUDENT)
+        .filter(Q(user=user) | Q(guardianships__guardian=user))
+        .values_list("school_id", flat=True)
+    )
     return [
-        SchoolOut(slug=school.slug, name=school.name, host=hosts.get(school.pk))
+        SchoolOut(
+            slug=school.slug,
+            name=school.name,
+            host=hosts.get(school.pk),
+            may_take_a_register=school.pk in markers,
+            has_children_here=school.pk in families,
+        )
         for school in schools
     ]
 
