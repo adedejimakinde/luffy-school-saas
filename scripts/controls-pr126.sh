@@ -7,6 +7,15 @@
 # and the run reports EXIT=1 with no OK/FAILED line at all. A legitimate red
 # became an unreportable crash. Serial runs report the failure.
 set -uo pipefail
+
+# Restore on ANY exit, including a kill. A control leaves a deliberately broken
+# guard in the tree between the break and the restore, and a session that dies
+# in that window would hand the next one code that looks committed and is not.
+# `git checkout --` only touches tracked files, so it cannot eat a new test
+# file the way a mid-run restore can — but commit before running anyway, per
+# HANDOFF-PR126.md.
+restore () { git checkout -- api.py attendance/ static/ accounts/ results/ 2>/dev/null; }
+trap restore EXIT INT TERM
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DJANGO_DEBUG=1
 PY="accounts.tests.test_login accounts.tests.test_staff_sign_in_page attendance.tests.test_api attendance.tests.test_register_page"
