@@ -62,6 +62,24 @@ class TheSetUpScreenTests(ChainSetUp):
         self.assertEqual(sorted(c["name"] for c in body["classes"]), ["JSS 1A", "JSS 1B"])
         self.assertEqual(len(body["terms"]), 2)
 
+    def test_a_group_no_longer_taught_is_still_listed(self):
+        """**Added because a control found it missing.**
+
+        Aiming a control at "the class list silently drops inactive groups"
+        reddened nothing, because every group in the fixture is active — so
+        nothing asserted the rule the model states in as many words: a group no
+        longer taught is "kept, because old placements name it". A screen that
+        dropped it would make last year's JSS 1A vanish from the office's view
+        while every placement, register and card still named it.
+        """
+        with connected_to(self.stmarys):
+            ClassGroup.objects.create(name="JSS 4A", level=4, is_active=False)
+
+        classes = {c["name"]: c for c in self.setup_for(self.head).json()["classes"]}
+
+        self.assertIn("JSS 4A", classes, "a group no longer taught was dropped")
+        self.assertFalse(classes["JSS 4A"]["is_active"])
+
     def test_one_schools_shape_is_never_the_others(self):
         ours = self.setup_for(self.head).json()
         theirs = self.setup_for(self.their_head, host=THEIR_HOST).json()
