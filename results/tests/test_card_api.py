@@ -1136,3 +1136,74 @@ class TheAlignedCellsAgreeWithTheAssessmentsTests(ReportCardApiSetUp):
         english = next(l for l in body["subjects"] if l["subject_name"] == "English")
         unmarked = [c for c in english["cells"] if c is not None and c["score"] is None]
         self.assertEqual(len(unmarked), 1, "the unmarked cell did not survive")
+
+
+class AStaffParentOnAPasswordSessionIsServedHerOwnChild(ReportCardApiSetUp):
+    """**The prerequisite for the family boolean on `SignedInOut.schools`.**
+
+    The staff landing names the schools a login may act at and links to none of
+    them. Slice 3 gives it links, and the question this class settles is whether
+    `/cards/` is one of them for a member of staff who is *also* a guardian at
+    that school.
+
+    `docs/sign-in-page.md` argued the field the landing wants is "a per-school
+    boolean off that same query" rather than a role — because
+    `card_api._children_of()` is `role=STUDENT` and (`user=actor` or
+    `guardianships__guardian=actor`), so a PARENT membership with no
+    `Guardianship` rows stands for nobody. That argument assumed the page would
+    actually serve such a caller. **Nothing asserted it**, and a boolean that
+    offers a link into a surface that refuses the person is worse than no link.
+
+    So this is proved before the field is added, not after. The reading of the
+    code says it should work — `_children_of()` never excludes staff, and
+    `User.parent_scoped_credential` narrows a *code* session only — but that is
+    a reading, and the two controls below are what make it a result.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.release()
+        # A teacher at St Mary's who is also Bola's guardian. The staff-parent
+        # `settings.GUARDIAN_SESSION_AGE` is written about, on the credential
+        # that carries all her roles rather than the one that narrows them.
+        link_guardian(self.teacher, self.bola)
+        give_verified_channel(self.teacher, "08030000003")
+
+    def index_as(self, user):
+        self.client.force_login(user)
+        return self.client.get("/api/results/cards/", HTTP_HOST=HOST)
+
+    def test_a_teacher_with_no_guardianship_sees_nothing(self):
+        """The control, and it runs first. Everything below would pass against
+        an index that simply listed the school's roll to any member of staff,
+        and this is what says the positive result is about guardianship."""
+        body = self.index_as(self.principal).json()
+
+        self.assertEqual(
+            body["children"],
+            [],
+            "staff with no guardianship got a roster, so the test below proves "
+            "nothing about guardianship",
+        )
+
+    def test_her_password_session_is_served_the_child_she_guards(self):
+        """The prerequisite itself. If this is red the family boolean does not
+        ship, because it would be a link to a page that refuses her."""
+        response = self.index_as(self.teacher)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        names = [child["student_name"] for child in response.json()["children"]]
+        self.assertEqual(
+            names,
+            ["Bola Eze"],
+            "a staff-parent on a password session is not served her own child, "
+            "so `/cards/` is not a destination the landing may link her to",
+        )
+
+    def test_she_is_served_that_child_and_not_the_other(self):
+        """Being staff does not widen it. `_children_of()` says 'Never staff's
+        roster' and Ada is the child she does *not* guard — so this separates
+        'guardianship was consulted' from 'the roll was returned'."""
+        names = [c["student_name"] for c in self.index_as(self.teacher).json()["children"]]
+
+        self.assertNotIn("Ada Obi", names, "her TEACHER role widened the index")

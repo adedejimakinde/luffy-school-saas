@@ -1,0 +1,48 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Take a register</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page. Shipped once already here.
+
+The title names no class and no school. This document is served to whoever
+opens the URL — there is no `login_required`, for the oracle reason
+`attendance/views.py` gives — and a tab title outlives the page in history.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'register/register.css' %}">
+
+{% comment %}
+The import map, declared before the module that needs it — a map that comes
+after the import it governs is ignored, silently. `pages.import_map()` has the
+long version: `collectstatic` hashes filenames but does not rewrite `import`
+statements, so without this the entry point is cache-busted and everything it
+imports is not.
+{% endcomment %}
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'register/app.js' %}"></script>
+
+{% comment %}
+`data-portal` is the portal's hostname, and the only thing the server writes
+into this frame. The signed-out state needs it to offer a way back to
+`/staff-sign-in/`, which is on the portal while this page is on a school's
+host, so the link cannot be relative. Empty where a deployment has no portal
+domain, and the state then renders its sentence without a link — the rule
+`schools.hosts.portal_host()` states and `accounts/templates/403.html` keeps.
+{% endcomment %}
+<main id="register" data-portal="{{ portal_host }}">
+  {% comment %}
+  What a reader sees if the module never loads. It has to be true on its own,
+  and it must not be a form: a form without the module behind it would submit
+  to this page and lose a register somebody has just taken standing in front of
+  a class.
+  {% endcomment %}
+  <noscript>
+    <h1>Take a register</h1>
+    <p>This page needs JavaScript to load your classes. Please turn it on, or
+    ask your school office for help.</p>
+  </noscript>
+  <p class="state state-loading">Finding your classes&hellip;</p>
+</main>

@@ -117,6 +117,48 @@ class RegisterTakenOut(Schema):
     not_on_the_roster: List[int]
 
 
+class MarkableClassOut(Schema):
+    """One class group this school teaches, for the chooser to draw."""
+
+    id: int
+    name: str
+    level: int
+
+
+class WhereToMarkOut(Schema):
+    """What the register screen needs before it can ask for a register.
+
+    Both card routes taught this lesson once already: a screen keyed on ids
+    nothing ever handed it is a screen openable only by typing integers into a
+    URL. The register is keyed on `(class_group, term, date)` and until now the
+    API named none of the three.
+
+    `term` is **the school's own current term**, not one worked out from
+    today's date. `Term.is_current` is a column the school sets, unique by
+    constraint, and it is the same authority `school_days` comes from — a
+    screen that inferred the term from the calendar would disagree with the
+    school the first time a term ran late, and the register it wrote would be
+    filed against the wrong one.
+
+    `None` where no term is marked current. The screen then says so instead of
+    guessing, because a register filed against a guessed term is worse than a
+    register not taken: nothing about the row says it was a guess.
+
+    **Every class the school teaches, not a subset.** Any teacher may take any
+    class's register — `can_mark_attendance()` is school-wide and carries no
+    reference to `ClassTeacher` — so a narrower list here would be a scope this
+    platform does not enforce, shown as though it did. That gap is issue #125,
+    which is also where the domain question behind it lives (the subject
+    teacher covering an absent form teacher). Narrowing the screen while the
+    route stays open would be the restriction-that-looks-enforced this codebase
+    keeps finding.
+    """
+
+    term_id: Optional[int]
+    term: Optional[str]
+    classes: List[MarkableClassOut]
+
+
 class MessageOut(Schema):
     detail: str
 
@@ -204,6 +246,32 @@ def _rows_for(school, roster, marks) -> List[RegisterRowOut]:
 
 
 # -- the endpoints -----------------------------------------------------------
+
+
+@router.get("/where/", response={200: WhereToMarkOut, 403: MessageOut})
+def where_to_mark(request):
+    """The classes and the term a register can be taken for, for the screen.
+
+    **The authority check is first, before either read**, for the reason
+    `_refuse_non_markers()` gives: asking it second turns this into a directory
+    of the school's class groups for anybody signed in there, parents and
+    students included. They could not take a register either way; they could
+    read the roll's shape off a 200.
+    """
+    school = _school_of(request)
+    refusal = _refuse_non_markers(request, school)
+    if refusal:
+        return refusal
+
+    term = Term.objects.filter(is_current=True).first()
+    return WhereToMarkOut(
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        classes=[
+            MarkableClassOut(id=group.pk, name=group.name, level=group.level)
+            for group in ClassGroup.objects.filter(is_active=True)
+        ],
+    )
 
 
 @router.get(

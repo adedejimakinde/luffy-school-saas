@@ -16,7 +16,7 @@
  * half-way in, holding a spent code.
  */
 
-import { esc, waitInWords } from "../web/html.js";
+import { esc, hostHref, waitInWords } from "../web/html.js";
 import { button as signOutButton } from "../web/signout.js";
 
 /** Step 1. The number, and no claim about whether we know it. */
@@ -115,12 +115,16 @@ export function schools({ full_name = "", schools: list = [] } = {}) {
     "<p>Your children are at more than one school. Which one?</p>",
     '<ul class="schools">',
     list
-      .map((school) =>
-        school.host
-          ? `<li><a href="//${esc(school.host)}/cards/">${esc(school.name)}</a></li>`
+      .map((school) => {
+        // `hostHref()` is the one place the `//host/path` rule lives now; the
+        // sentence for a school it cannot link stays here, because the staff
+        // landing's reasons for not linking a school are not this one.
+        const href = hostHref(school.host, "/cards/");
+        return href
+          ? `<li><a href="${href}">${esc(school.name)}</a></li>`
           : `<li>${esc(school.name)} <span class="blank">` +
-            "(this school has no web address set up yet — ask the school office)</span></li>",
-      )
+            "(this school has no web address set up yet — ask the school office)</span></li>";
+      })
       .join(""),
     "</ul>",
     signOutButton(),

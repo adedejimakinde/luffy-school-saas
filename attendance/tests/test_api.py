@@ -18,6 +18,7 @@ import json
 from django.test import TestCase
 
 from academics import services as academics
+from academics.models import Term
 from accounts.models import Role, User
 from accounts.services import grant_membership
 from attendance.models import AttendanceMark, Register
@@ -261,3 +262,86 @@ class ThereIsNoRegisterOnThePortalTests(RegisterApiSetUp):
     def test_the_portal_host_has_no_such_route(self):
         answer = self.client.get(self.url(), HTTP_HOST="testserver")
         self.assertEqual(answer.status_code, 404)
+
+
+class WhereToMarkTests(RegisterApiSetUp):
+    """The chooser's data: which classes, and which term.
+
+    Without this route the register screen is keyed on three values nothing
+    ever handed it — the same gap the card index closed for a family, where the
+    page shipped openable only by typing two integers into a URL.
+    """
+
+    WHERE = "/api/attendance/where/"
+
+    def where(self, host=HOST):
+        return self.client.get(self.WHERE, HTTP_HOST=host)
+
+    def test_a_marker_is_told_the_classes_and_the_current_term(self):
+        with connected_to(self.stmarys):
+            Term.objects.filter(pk=self.term_id).update(is_current=True)
+        self.client.force_login(self.teacher.user)
+
+        body = self.where().json()
+
+        self.assertEqual(body["term_id"], self.term_id)
+        self.assertEqual(
+            sorted(group["name"] for group in body["classes"]),
+            ["JSS 1A", "JSS 1B"],
+        )
+
+    def test_every_class_is_listed_and_not_only_the_ones_she_is_answerable_for(self):
+        """**Asserted because it is a gap, not because it is a feature.**
+
+        `can_mark_attendance()` is school-wide and carries no reference to
+        `ClassTeacher`, so any teacher may take any class's register. A screen
+        showing a shorter list would be a scope the platform does not enforce,
+        drawn as though it did — which is the restriction-that-looks-enforced
+        this codebase keeps finding.
+
+        Issue #125 is where narrowing it is argued, together with the domain
+        question behind it: a subject teacher covering an absent form teacher.
+        **This test goes red the day #125 is closed**, and that is the point of
+        it; when it does, move its case into whatever the new rule is.
+        """
+        self.client.force_login(self.teacher.user)
+
+        names = [group["name"] for group in self.where().json()["classes"]]
+
+        self.assertIn(
+            "JSS 1B",
+            names,
+            "the list narrowed without the route narrowing with it",
+        )
+
+    def test_no_current_term_is_reported_rather_than_guessed(self):
+        """A term worked out from today's date would disagree with the school
+        the first time a term ran late, and the register would be filed against
+        the wrong one with nothing on the row to say so."""
+        self.client.force_login(self.teacher.user)
+
+        body = self.where().json()
+
+        self.assertIsNone(body["term_id"])
+        self.assertIsNone(body["term"])
+
+    def test_a_bursar_is_refused_before_anything_is_looked_up(self):
+        """The authority check runs first, so this cannot become a directory of
+        the school's class groups for anybody signed in there."""
+        self.client.force_login(self.bursar.user)
+
+        answer = self.where()
+
+        self.assertEqual(answer.status_code, 403)
+        self.assertNotIn("JSS 1A", answer.content.decode())
+
+    def test_a_parent_is_refused_too(self):
+        self.client.force_login(self.parent.user)
+
+        self.assertEqual(self.where().status_code, 403)
+
+    def test_the_portal_has_no_such_route(self):
+        """404 and not 403: there is no register on the portal to refuse."""
+        self.client.force_login(self.head.user)
+
+        self.assertEqual(self.where(host="testserver").status_code, 404)

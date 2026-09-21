@@ -18,10 +18,23 @@ routing rather than by a check inside a view somebody could forget to add.
 from django.urls import path
 
 from api import api
+from attendance.views import register_page
 from results.views import card_index_page, card_page
 
 urlpatterns = [
     path("api/", api.urls),
+    # The first staff surface on a school's host, and the mirror image of the
+    # two sign-in pages: they are portal-only because a door needs a host that
+    # lets somebody with no membership through, and this needs the one host
+    # that will not.
+    #
+    # `urls_public.py` splats these patterns in, so the **portal serves this
+    # frame too** — exactly as it already serves `/cards/`. That is harmless
+    # and deliberate rather than an oversight: the frame holds nothing, and
+    # every `attendance` route it fetches begins with `_school_of()`, which
+    # raises `Http404` on the portal because the register tables do not exist
+    # in the public schema. The page has a state for that answer.
+    path("register/", register_page, name="register"),
     path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",

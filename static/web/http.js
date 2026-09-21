@@ -64,10 +64,33 @@ export async function getJson(url, { fetchImpl = fetch } = {}) {
  * widened. A future POST that crossed hosts would need that, and would deserve
  * an argument rather than a setting.
  */
-export async function postJson(url, payload, { fetchImpl = fetch } = {}) {
+export async function postJson(url, payload, options = {}) {
+  return sendJson("POST", url, payload, options);
+}
+
+/**
+ * The same request with the same CSRF story, spelled PUT.
+ *
+ * `PUT /api/attendance/classes/{id}/terms/{id}/{date}/` is the register write,
+ * and it is a PUT rather than a POST for the reason `attendance/api.py` gives:
+ * there is exactly one register per group per day by constraint, and a teacher
+ * who submits twice — because the first answer was slow, or because they
+ * corrected one tap — has not taken two registers.
+ *
+ * It shares `sendJson()` rather than copying it, because what would be copied
+ * is the **retry rule**: a 403 carrying `csrf_failed` is retried once with a
+ * fresh token and not more. A second copy of that is a second place for "once"
+ * to become "until it works", which is a page that hammers a route refusing
+ * everything while telling the reader nothing.
+ */
+export async function putJson(url, payload, options = {}) {
+  return sendJson("PUT", url, payload, options);
+}
+
+async function sendJson(method, url, payload, { fetchImpl = fetch } = {}) {
   const send = async (csrf) =>
     fetchImpl(url, {
-      method: "POST",
+      method,
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
