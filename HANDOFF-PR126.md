@@ -15,7 +15,18 @@ once #126 is merged.
 1. **Re-run the controls from scratch**: `scripts/controls-pr126.sh`.
    They were interrupted after BASELINE (green both) and control 1a's JS half.
    Every earlier control run is stale, because the code changed after them.
-2. **Verify CI on the head SHA** (`9290072`), not the PR rollup.
+2. **Verify CI on the head SHA**, not the PR rollup.
+
+   **Useful narrowing:** the full suite came back **green on `71d9ffc`**, which
+   is the last commit that touches any code. Everything after it —  `9290072`
+   and `ec44eb5` — changes only `docs/`, this file, and
+   `scripts/controls-pr126.sh`: no Python, no JS, no templates, nothing the
+   suite executes. So the code in this PR is CI-proven; what still needs
+   confirming on the real head is only that those three additions did not
+   upset anything (e.g. a test that walks `scripts/`).
+
+   Confirm it on the head SHA anyway. "Nothing it changed is executed" is a
+   reading, and the gate is the gate.
 3. Merge gated on that SHA → ancestry both ways → fast-forward local `main` →
    delete the remote branch.
 4. Delete this file and `PR-A-CONTROLS.md`.
