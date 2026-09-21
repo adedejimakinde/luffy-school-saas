@@ -29,3 +29,15 @@ urlpatterns = [
         name="report-card-page",
     ),
 ]
+
+#: The 403 page, named here so **a school's host** has one — which is the host
+#: `SchoolAccessMiddleware` refuses people on, and therefore the only host where
+#: its two refusals are ever raised. Django resolves this off the urlconf in
+#: force, and `django_tenants` swaps that per schema, so the portal needs its
+#: own name for the same view; `urls_public.py` imports this one rather than
+#: writing a second string that could drift.
+#:
+#: Issue #122: before this, both refusals fell to Django's default handler,
+#: which rendered `ERROR_PAGE_TEMPLATE` with empty `details` and discarded the
+#: sentence each one carried.
+handler403 = "accounts.views.refused"

@@ -38,6 +38,9 @@ replay.
 from django.shortcuts import render
 
 import pages
+from schools.hosts import portal_host
+
+from .refusals import SchoolAccessRefused
 
 #: Every module the guardian page loads, entry point last. `pages.import_map()`
 #: says why each one has to be listed rather than only the entry point.
@@ -90,4 +93,55 @@ def staff_sign_in_page(request):
     )
 
 
-__all__ = ["sign_in_page", "staff_sign_in_page", "MODULES", "STAFF_MODULES"]
+def refused(request, exception=None):
+    """The 403 page, which says what happened and whether anything fixes it.
+
+    Issue #122. `SchoolAccessMiddleware` has always raised `PermissionDenied`
+    carrying a sentence written for the person it refuses, and with no
+    `403.html` in the repository Django's default handler rendered
+    `ERROR_PAGE_TEMPLATE` with empty `details` and threw the sentence away.
+
+    **The remedy is read off the exception's type, never off its text.**
+    `accounts.refusals` says why at length: the two refusals this middleware
+    raises are one password apart and infinitely far apart respectively, and a
+    template branching on prose would start offering the wrong one the day
+    somebody reworded a sentence.
+
+    Three things are deliberately narrow here.
+
+    `detail` is printed only for a `SchoolAccessRefused`. Any other
+    `PermissionDenied` — from the admin, from a future view — renders the page
+    with no sentence, because an arbitrary exception's `str()` is written for
+    whoever debugs it and an error page is not where to start trusting that.
+
+    `portal_host()` is called **only** when a password is the remedy. It is a
+    database query, and a page answering a refusal should not make one it has
+    no use for.
+
+    And there is no link when that query comes back empty. A deployment with no
+    primary `Domain` for the public schema gets the sentence without the link,
+    which is the rule `schools.hosts.portal_host()` states and the card page
+    already keeps: a dead link is worse than being told to go back the way you
+    came.
+    """
+    ours = isinstance(exception, SchoolAccessRefused)
+    a_password_fixes_it = getattr(exception, "a_password_fixes_it", False)
+    return render(
+        request,
+        "403.html",
+        {
+            "detail": str(exception) if ours else "",
+            "a_password_fixes_it": a_password_fixes_it,
+            "portal_host": portal_host() if a_password_fixes_it else "",
+        },
+        status=403,
+    )
+
+
+__all__ = [
+    "sign_in_page",
+    "staff_sign_in_page",
+    "refused",
+    "MODULES",
+    "STAFF_MODULES",
+]

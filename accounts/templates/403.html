@@ -1,0 +1,84 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Not allowed</title>
+
+{% comment %}
+Every comment in this file is a `{% comment %}` block rather than a `{#` one.
+A `{#` comment is single-line only: spanning lines it is not a comment at all
+and every word renders on the page. This project has shipped that bug before.
+
+## Why this file exists at all
+
+Issue #122. `SchoolAccessMiddleware` raises `PermissionDenied` carrying a
+sentence written for the person it refuses, and with no `403.html` here
+Django's default handler rendered `ERROR_PAGE_TEMPLATE` with empty `details`
+and discarded it. A reader saw "403 Forbidden" and learned neither what had
+happened nor whether anything would fix it.
+
+## No stylesheet, no modules, no `{% load static %}`
+
+Deliberately. This is the page that has to render when something is already
+wrong, and every asset it depended on would be another thing that can be
+missing at exactly the moment it is needed. The styling below is inline and
+small enough to read.
+
+## The link, and why it carries a hostname
+
+`/staff-sign-in/` is mounted in `urls_public.py` and **not** in `urls.py`, so
+it exists on the portal and nowhere else — while this page is being rendered on
+a school's host, which is where the refusal happened. A relative link would
+resolve against the school's host and hand the reader a 404 from the one screen
+whose job is telling them how to get back in. That is not hypothetical: it is
+the dead `<a href="/">` the card page shipped, which `schools.hosts
+.portal_host()` was lifted out of `results.views` to fix.
+
+Scheme-relative — `//host/path` — rather than a hard-coded `https://`, which is
+the form `static/card/states.js` `wayBack()` already uses: it keeps whatever
+scheme this deployment is being served over instead of pinning one that is
+wrong in development.
+
+`portal_host` is empty when no primary `Domain` exists for the public schema,
+and then there is no link at all, only the sentence. A dead link is worse than
+being told to go back the way you came.
+{% endcomment %}
+
+<style>
+  body { font: 16px/1.6 system-ui, sans-serif; margin: 0; padding: 2rem 1.25rem;
+         color: #1c1c1c; background: #fff; }
+  main { max-width: 34rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+  p { margin: 0 0 1rem; }
+  .quiet { color: #555; font-size: 0.95rem; }
+  a { color: #14507d; }
+</style>
+
+<main>
+  <h1>You cannot open this page</h1>
+
+  {% comment %}
+  The sentence the middleware wrote, which until now reached nobody. Printed
+  only for the refusals `accounts.refusals` defines — `accounts.views.refused()`
+  blanks it for any other `PermissionDenied`, because an arbitrary exception's
+  text is written for whoever debugs it.
+  {% endcomment %}
+  {% if detail %}<p>{{ detail }}</p>{% endif %}
+
+  {% comment %}
+  The remedy, and only where there is one. `a_password_fixes_it` is a property
+  of the exception's *type*, never of its wording — see `accounts/refusals.py`
+  for why offering this to the wrong person would be a false remedy rather than
+  an unhelpful one.
+  {% endcomment %}
+  {% if a_password_fixes_it %}
+    {% if portal_host %}
+      <p><a href="//{{ portal_host }}/staff-sign-in/">Sign in with your
+      password</a> to use the roles your school has given you.</p>
+    {% else %}
+      <p>Signing in with your password is what restores the roles your school
+      has given you. Go back to the sign-in page you came from.</p>
+    {% endif %}
+  {% else %}
+    <p class="quiet">If you think you should have access here, your school
+    office is who can arrange it.</p>
+  {% endif %}
+</main>

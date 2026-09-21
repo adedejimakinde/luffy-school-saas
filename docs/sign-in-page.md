@@ -252,20 +252,32 @@ it safe is already in the response: the host has to be one of the hosts
 `SignedInOut` just named for that user, which is an allow-list derived from the
 answer rather than from a settings list.
 
-**No 403 page, so the escalation refusal still reaches nobody.**
-`SchoolAccessMiddleware` refuses a code-opened session that reaches a school
-where the guardian holds no PARENT role, with a sentence written for the person
-it refuses, and `settings.GUARDIAN_SESSION_AGE` rests thirty days on that
+**The 403 page has landed — issue #122 is closed.** It was listed here as the
+gap: `SchoolAccessMiddleware` refuses a code-opened session that reaches a
+school where the guardian holds no PARENT role, with a sentence written for the
+person it refuses, `settings.GUARDIAN_SESSION_AGE` rests thirty days on that
 narrowing and ends "She gets her staff powers again by signing in with her
-password." **The page that sentence names now exists.** What does not is any way
-for her to read the sentence: there is no `403.html` in this repository, so
-Django's default handler renders `ERROR_PAGE_TEMPLATE` with empty `details` and
-she sees "403 Forbidden". Closing that is a platform-wide surface — the same
-handler answers "You do not have access to this school", a different refusal
-with a different remedy — and it wants a distinguishable exception rather than a
-template branching on a message string. **Issue #122**, and
-`TheEscalationRefusalHasSomewhereToPointTests` holds the limit as a test that
-goes red the day it closes.
+password" — and with no `403.html` in the repository Django's default handler
+rendered `ERROR_PAGE_TEMPLATE` with empty `details`, so she saw "403 Forbidden"
+and read none of it.
+
+What closing it turned on is that this handler answers **two** refusals with
+**different remedies**: this one is a password away from what she is asking for,
+and "You do not have access to this school" is not. So the remedy travels with
+the exception's *type* — `accounts/refusals.py`, two `PermissionDenied`
+subclasses and an `a_password_fixes_it` class attribute — rather than being
+recovered from prose a template matched on. `accounts.views.refused()` is the
+handler, named as `handler403` in `urls.py` and re-exported from
+`urls_public.py` because `django_tenants` swaps the urlconf per schema.
+
+**The link carries the portal's hostname, and that is the load-bearing half.**
+`/staff-sign-in/` exists on the portal and nowhere else, while this page renders
+on a school's host — so a path-only `href` would resolve against the school's
+host and hand her a 404 from the screen whose job is telling her how to get
+back in. It is the dead `<a href="/">` the card page shipped, which is why
+`schools.hosts.portal_host()` was lifted out of `results.views` to serve both.
+The test asserts the full `//host/path`, because an assertion on the path alone
+would have called the 404 a pass.
 
 **No "resend my code" timer.** The API throttles by value as typed and answers
 429 with `Retry-After`; the page prints the wait in minutes or seconds and
