@@ -19,6 +19,7 @@ from django.urls import path
 
 from api import api
 from attendance.views import register_page
+from gradebook.views import marking_page
 from results.views import card_index_page, card_page
 
 urlpatterns = [
@@ -35,6 +36,8 @@ urlpatterns = [
     # raises `Http404` on the portal because the register tables do not exist
     # in the public schema. The page has a state for that answer.
     path("register/", register_page, name="register"),
+    # The second staff surface, on the same terms as the register above.
+    path("marking/", marking_page, name="marking"),
     path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",

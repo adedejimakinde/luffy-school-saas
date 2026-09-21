@@ -73,6 +73,21 @@ export function fakeRoot(dataset = {}) {
       const target = fakeTarget(attributes);
       for (const handler of listeners.click || []) await handler({ target });
     },
+    /**
+     * A field losing focus, which on the marking page **is** the save.
+     *
+     * Capture-phase, because `blur` does not bubble: `app.js` listens on the
+     * root with `capture: true`, and a stub that dispatched it like a click
+     * would test a listener the browser would never call. The handler is
+     * awaited for the same reason `click()` awaits — the save is a request and
+     * a redraw, and a test that did not await would assert against the page as
+     * it was before the answer came back.
+     */
+    async blur(attributes = {}, value = "") {
+      const target = fakeTarget(attributes);
+      target.value = value;
+      for (const handler of listeners.blur || []) await handler({ target });
+    },
     async submit(fields = {}) {
       const form = {};
       for (const [name, value] of Object.entries(fields)) form[name] = { value };
