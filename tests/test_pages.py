@@ -31,6 +31,7 @@ from django.test import SimpleTestCase
 import pages
 from accounts.views import MODULES as SIGN_IN_MODULES
 from accounts.views import STAFF_MODULES
+from attendance.views import REGISTER_MODULES
 from results.views import CARD_MODULES, INDEX_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -44,6 +45,7 @@ PAGES = {
     "staff-sign-in": STAFF_MODULES,
     "card": CARD_MODULES,
     "index": INDEX_MODULES,
+    "register": REGISTER_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

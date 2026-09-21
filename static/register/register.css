@@ -1,0 +1,110 @@
+/*
+ * The register. A list of names, each a tap target, and one submit.
+ *
+ * Sized for the device this is actually used on: a phone held in one hand in
+ * front of a class. The roster rows are deliberately large — a mis-tap here
+ * marks the wrong child absent, and the person who would notice is not in the
+ * room. Same reason absence is what is tapped: the common case is a handful of
+ * taps, so the screen that fits in thirty seconds is the one where nothing is
+ * needed for the children who are present.
+ *
+ * Not a table. One column of names and one state per name is a list, and a
+ * table of it stops working at the width these are read on.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #ddd;
+  --absent: #900;
+  --absent-bg: #fdeeee;
+  --warn: #7a4a00;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 34rem; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0 0 8px; }
+
+.term, .when { color: var(--quiet); margin: 0 0 16px; }
+
+label { display: block; margin: 12px 0 4px; font-weight: 600; }
+
+input[type="date"] {
+  font: inherit;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  width: 100%;
+}
+
+.classes, .roster { list-style: none; margin: 8px 0 0; padding: 0; }
+
+.classes button, .roster button {
+  font: inherit;
+  text-align: left;
+  width: 100%;
+  /* 48px is the smallest target that survives a thumb in a corridor. */
+  min-height: 48px;
+  padding: 12px 14px;
+  margin: 0 0 8px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* The tapped state has to read as marked at a glance and from an angle, so it
+ * is colour *and* weight *and* a rule — never colour alone. */
+.roster li.absent button {
+  background: var(--absent-bg);
+  border-color: var(--absent);
+  border-left-width: 6px;
+  color: var(--absent);
+  font-weight: 700;
+}
+
+.roster li.absent button::after { content: " — absent"; font-weight: 400; }
+
+.tally { color: var(--quiet); margin: 12px 0; }
+
+.already {
+  background: #f4f4f4;
+  border-left: 4px solid var(--rule);
+  padding: 8px 12px;
+  margin: 0 0 12px;
+}
+
+.warn { color: var(--warn); }
+
+button.submit, button.again, button.back, button.signout {
+  font: inherit;
+  min-height: 48px;
+  padding: 12px 18px;
+  margin: 4px 8px 4px 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button.submit {
+  background: var(--ink);
+  color: #fff;
+  border: 1px solid var(--ink);
+  font-weight: 600;
+}
+
+button.again, button.back, button.signout {
+  background: #fff;
+  border: 1px solid var(--rule);
+}
+
+a { color: #14507d; }
