@@ -241,13 +241,20 @@ a route whose whole purpose is answering this.
 
 ## The controls
 
-Operating rule 5: each claim was broken deliberately and the failures read. Two
-rows are worth reading rather than counting. The third is where the first aim of
+Operating rule 5: each claim was broken deliberately and the failures read.
+**Serially — never `--parallel`.** A control reddens tests that fail inside a
+transaction by construction, and those failures cannot be pickled back to the
+parent: the pool dies and the run reports `EXIT=1` with *no* `OK`/`FAILED` line.
+That is a crash, not a red, and four of slice 3's controls were nearly written
+up as reds on the strength of it. `_refuse_non_markers() refuses nobody` is the
+one that crashed; run serially it names eight tests.
+
+Three rows are worth reading rather than counting. The third is where the first aim of
 a control changed nothing — a result about the claim rather than a formality.
-The `handler403`-dropped-from-`urls_public.py` row is the other: nothing in the
+The `handler403`-dropped-from-`urls_public.py` row is the second: nothing in the
 suite reddened until a test was written for it, because every other test here
 runs on a school's host and the portal's fallback to Django's default handler is
-invisible from there.
+invisible from there. The third is the landing pair — see it below.
 
 | what was broken | what failed | what that says |
 | --- | --- | --- |
@@ -267,6 +274,12 @@ invisible from there.
 | the remedy read off the exception **by name** — `getattr(exception, "a_password_fixes_it", False)` | `a foreign exception carrying the flag gets no remedy`, alone | an attribute name is not a type. This was the shipped shape until the control for it was written: nothing reachable carries that name today, so the looseness was invisible, and the impostor exception in the test is what makes it visible |
 | `handler403` dropped from `urls_public.py` | `both urlconfs resolve the same 403 handler`, alone | **the row worth reading.** Nothing else in the suite notices: the middleware never refuses anybody on the portal, so every other test here runs on a school's host and passes with the portal on Django's default handler. The test was written because the control found nothing without it |
 | `handler403` removed entirely | 5 failures across 4 tests — the resolver test once per `subTest`, plus the sentence, the full URL and the other refusal | the page is reached through the wiring and not by accident |
+| the payload claims every school is markable | 4, incl. `one login gets a different answer at each school` and `the code door does not` — **and no JS test at all** | see the row below: this half cannot reach the landing |
+| **`landed()` draws the register link regardless of the boolean** | `each school is linked to what it offers this login, and to nothing else` **and** `a school offering this login nothing is named and says so` | **the row worth reading.** The landing is a pure renderer fed a payload and never calls `can_mark_attendance()`, so breaking the server-side predicate can only redden API tests. One control could not have made this claim; it takes two, and the second is what says the link is keyed on the boolean rather than on `host` or on nothing |
+| the booleans answered for the login, not per school | `one login gets a different answer at each school` **and** `a staff parent is told which school her child is at` | the tenancy control, confirmed on **both** booleans — the failure a single-tenant fixture structurally cannot catch |
+| `user.schools()` scoped to `LIVE_STATUSES` | `a suspended teacher has no school to be asked about`, alone | the access/live distinction is what keeps a held-but-not-actable school off the landing |
+| `_refuse_non_markers()` refuses nobody | 8, including `a parent cannot tell a real class from an invented one` and `…a real term…` | the gate is the gate — and the two oracle tests say the authority-before-lookup *ordering* is load-bearing, not merely tidy |
+| the code door stops narrowing the payload | `the code door does not`, alone | a six-digit code cannot be told it may take a register. Found by a control rather than by review, and fixed in `71d9ffc` |
 
 ## What is not here
 
