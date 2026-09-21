@@ -1,6 +1,6 @@
 /**
- * The staff sign-in flow: one step, five answers, and a landing that links
- * nowhere.
+ * The staff sign-in flow: one step, five answers, and a landing that links to
+ * what each school actually offers this login.
  *
  * `advance()` is a pure (state, answer) -> state function and every state is a
  * pure function of an API body, so the whole flow is walked here without a
@@ -27,8 +27,20 @@ const TWO_SCHOOLS = {
   body: {
     full_name: "Adaeze Bello",
     schools: [
-      { slug: "st-marys", name: "St Mary's", host: "st-marys.example.test" },
-      { slug: "grace", name: "Grace Academy", host: "grace.example.test" },
+      {
+        slug: "st-marys",
+        name: "St Mary's",
+        host: "st-marys.example.test",
+        may_take_a_register: true,
+        has_children_here: false,
+      },
+      {
+        slug: "grace",
+        name: "Grace Academy",
+        host: "grace.example.test",
+        may_take_a_register: false,
+        has_children_here: true,
+      },
     ],
     csrf_token: "t",
   },
@@ -58,21 +70,115 @@ test("a password signs a member of staff in and names the account that answered"
   assert.match(html, /Grace Academy/);
 });
 
-test("the landing links nowhere at all", () => {
-  // The decision this page turns on. `/cards/` is the only page a school's host
-  // serves and `_children_of()` makes it a family surface even for staff, so a
-  // teacher sent there reads "No children on this account… ask the school
-  // office to add you as a guardian" — the school's answer to somebody else's
-  // question. Auto-redirecting is wrong for that reason; a link labelled
-  // "Report cards" is the same wrong answer with a tap in between.
+test("each school is linked to what it offers this login, and to nothing else", () => {
+  // This replaces `the landing links nowhere at all`, which was the rule while
+  // `/cards/` was the only page a school's host served — a *family* surface
+  // even for staff, so a teacher sent there read "No children on this account".
+  // Both halves that made it right have changed: the register is a staff
+  // destination, and `SchoolOut` now carries the two booleans, each being the
+  // same question the surface behind it asks rather than a role standing in.
   //
-  // CONTROL: putting `<a href="//${host}/cards/">` back into `landed()` reddens
-  // this and nothing else, which is what says this assertion is the rule rather
-  // than a description of markup that happens not to have a link in it.
+  // The fixture is deliberately asymmetric — a marker at one school and a
+  // family at the other — so a renderer that drew both links on every school,
+  // or keyed either on `host`, fails here.
   const html = htmlFor(advance(initialState(), TWO_SCHOOLS));
 
-  assert.doesNotMatch(html, /<a /, "the landing offers a link it cannot justify");
-  assert.doesNotMatch(html, /\/cards\//, "the family page is not a staff destination");
+  assert.match(html, /<a href="\/\/st-marys\.example\.test\/register\/">/);
+  assert.doesNotMatch(
+    html,
+    /<a href="\/\/st-marys\.example\.test\/cards\/">/,
+    "a school where she guards nobody was linked to the family page",
+  );
+  assert.match(html, /<a href="\/\/grace\.example\.test\/cards\/">/);
+  assert.doesNotMatch(
+    html,
+    /<a href="\/\/grace\.example\.test\/register\/">/,
+    "a school where she may not mark was linked to the register",
+  );
+});
+
+test("a school offering this login nothing is named and says so", () => {
+  // A bursar and a vice principal (academic) both land here. Named without a
+  // sentence would read as a page that failed to load, and neither has done
+  // anything wrong.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Bimpe Bursar",
+        schools: [
+          {
+            slug: "grace",
+            name: "Grace Academy",
+            host: "grace.example.test",
+            may_take_a_register: false,
+            has_children_here: false,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.match(html, /Grace Academy/);
+  assert.doesNotMatch(html, /<a /, "a link was drawn for a login with nothing to open");
+  assert.match(html, /nothing for you to open here yet/);
+});
+
+test("a school with no host is named but not linked, whatever it offers", () => {
+  // `hostHref()`'s rule, on its second caller. The booleans say she may do
+  // both things there; the deployment cannot say where. A `//null/register/`
+  // is a broken link that looks like a working one.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Tayo",
+        schools: [
+          {
+            slug: "grace",
+            name: "Grace Academy",
+            host: null,
+            may_take_a_register: true,
+            has_children_here: true,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.doesNotMatch(html, /href="\/\/null/, "a null host became a link");
+  assert.doesNotMatch(html, /<a /);
+  assert.match(html, /no web address set up yet/);
+});
+
+test("one school is one row however many roles are held there", () => {
+  // Multiple memberships per (user, school) are expected and correct. The
+  // landing answers "where can I go", not "what am I called", so a teacher who
+  // is also a parent at one school is one school with two links.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Tayo",
+        schools: [
+          {
+            slug: "st-marys",
+            name: "St Mary's",
+            host: "st-marys.example.test",
+            may_take_a_register: true,
+            has_children_here: true,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.equal(html.match(/St Mary&#39;s/g).length, 1, "the school was drawn twice");
+  assert.match(html, /\/register\//);
+  assert.match(html, /\/cards\//);
 });
 
 test("the flow never redirects, even for a member of staff at one school", () => {

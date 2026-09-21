@@ -22,7 +22,7 @@
  * holding nothing.
  */
 
-import { esc, waitInWords } from "../web/html.js";
+import { esc, hostHref, waitInWords } from "../web/html.js";
 import { button as signOutButton } from "../web/signout.js";
 
 /**
@@ -56,34 +56,32 @@ export function ask({ error = "", identifier = "" } = {}) {
 }
 
 /**
- * Signed in, and these are the schools. **Named, and not linked.**
+ * Signed in, and these are the schools — each with what it actually offers.
  *
- * The link this page has no business drawing is `/cards/`, which is the only
- * page a school's host serves today. It is a *family* surface even for staff:
- * `card_api._children_of()` says "Never staff's roster" and answers with the
- * children the caller is a parent or guardian of, "which for most of them is
- * none". So a teacher sent there lands on "No children on this account… ask the
- * school office to add you as a guardian", which reads as the school's answer to
- * her sign-in. Redirecting her there is wrong; labelling it "Report cards" and
- * making her tap is the same wrong answer with a tap in between.
+ * **This page linked nowhere until now, and that was a decision rather than an
+ * omission.** `/cards/` is the only page a school's host served, and it is a
+ * *family* surface even for staff: `card_api._children_of()` says "Never
+ * staff's roster". A teacher sent there read "No children on this account…
+ * ask the school office to add you as a guardian" — the school's answer to a
+ * question she did not ask. And the payload could not tell the two apart,
+ * because `SchoolOut` carried slug, name and host and nothing about what was
+ * behind them.
  *
- * **And the payload cannot tell the two apart.** `SignedInOut.schools` is
- * `SchoolOut` — slug, name, host — built by `api._schools_of()` from
- * `user.schools()`, a distinct `School` query carrying no role and no
- * guardianship. The field it looks like it wants is `roles`, and that is not the
- * question either: `_children_of()` is `role=STUDENT` and (`user=actor` or
- * `guardianships__guardian=actor`), so a PARENT membership with no
- * `Guardianship` rows stands for nobody and a link keyed on the role would be
- * keyed on the near-enough thing. The honest field is a per-school boolean off
- * that same query — answerable from the public schema, since `Membership` and
- * `Guardianship` are both in `SHARED_APPS` — and it is an API change with its own
- * tests rather than something to smuggle in behind a label.
+ * Both halves have now changed. The register is a staff destination, and
+ * `SchoolOut` carries `may_take_a_register` and `has_children_here` — each the
+ * same question the surface behind it asks, rather than a role standing in for
+ * one. So a link here is a link to a page that will serve this person.
  *
- * So: no link is better than a link to the wrong answer, which is the rule the
- * card page's signed-out state is getting in this same change. Slice 3 gives
- * this page its first destination that is a staff destination — the register —
- * and that is when a link rule gets a second caller and is worth lifting into
- * `web/`.
+ * **A school is one row whatever it offers**, because the landing answers
+ * "where can I go" and not "what am I called". A bursar who also teaches has
+ * two memberships and one row with a register on it; a teacher who is also a
+ * parent gets both links on the one school.
+ *
+ * Three ways a school ends up with no link, and they are not the same sentence:
+ * no host at all (a deployment fault), a host and nothing this person may do
+ * there yet, and — via `hostHref()` — the null-host case the guardian chooser
+ * also has. The first two are said out loud; a school named with nothing after
+ * it would read as a page that failed to load.
  *
  * The name is the receipt. A staff-parent may hold two accounts on this
  * platform, and "signed in as" is how she knows which one answered.
@@ -94,13 +92,51 @@ export function landed({ full_name = "", schools = [] } = {}) {
     `<h1>Signed in${full_name ? ` as ${esc(full_name)}` : ""}</h1>`,
     `<p>You can act at ${schools.length === 1 ? "this school" : "these schools"}:</p>`,
     '<ul class="schools">',
-    schools.map((school) => `<li>${esc(school.name)}</li>`).join(""),
+    schools.map(school).join(""),
     "</ul>",
-    '<p class="quiet">Your school\'s own pages open on the school\'s own web ',
-    "address. Follow the link you were sent, or the one in your browser's ",
-    "history.</p>",
     signOutButton(),
     "</section>",
+  ].join("");
+}
+
+/**
+ * One school, and the links this login has a reason to be offered there.
+ *
+ * Each link is drawn **iff** the boolean for it is true, and those booleans are
+ * the route's own predicates — see `api._schools_of()`. Drawing one off
+ * `school.host` alone would put back the guess this page refused to make.
+ */
+function school(entry) {
+  const { name = "", host = null } = entry;
+  const links = [];
+  if (entry.may_take_a_register) {
+    links.push([hostHref(host, "/register/"), "Take a register"]);
+  }
+  if (entry.has_children_here) {
+    links.push([hostHref(host, "/cards/"), "Report cards"]);
+  }
+
+  if (!host) {
+    return (
+      `<li>${esc(name)} <span class="blank">` +
+      "(this school has no web address set up yet — ask the school office)" +
+      "</span></li>"
+    );
+  }
+  if (!links.length) {
+    // Signed in, at a school, with nothing on this platform to do there yet.
+    // Said rather than left blank: a bursar and a vice principal (academic)
+    // both land here, and neither has done anything wrong.
+    return (
+      `<li>${esc(name)} <span class="blank">` +
+      "(nothing for you to open here yet)</span></li>"
+    );
+  }
+  return [
+    `<li>${esc(name)}`,
+    '<ul class="what">',
+    links.map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join(""),
+    "</ul></li>",
   ].join("");
 }
 
