@@ -147,8 +147,14 @@ class TheRollTests(EnrolmentSetUp):
     def test_a_principal_sees_the_roll_and_is_told_she_may_not_admit(self):
         """**The two authorities are different sets.** A principal may move a
         child between classes and may not admit one."""
-        body = self.get_roll(self.head).json()
+        response = self.get_roll(self.head)
 
+        # Status first. Without it, a change that costs a principal the roll
+        # entirely surfaces as `KeyError: 'may_admit'` — an error where a clean
+        # failure would have said what actually changed. A control collapsing
+        # the two role sets did exactly that.
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
         self.assertFalse(body["may_admit"])
         self.assertTrue(body["may_place"])
 
