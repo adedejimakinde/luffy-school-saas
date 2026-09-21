@@ -10,26 +10,25 @@ once #126 is merged.
   pushed. Working tree clean.
 - **Do not merge #126 yet.** See "What is left" below.
 
-## What is left, in order
+## What is left
 
-1. **Re-run the controls from scratch**: `scripts/controls-pr126.sh`.
-   They were interrupted after BASELINE (green both) and control 1a's JS half.
-   Every earlier control run is stale, because the code changed after them.
-2. **Verify CI on the head SHA**, not the PR rollup.
+**Only the merge.** Everything else is done:
 
-   **Useful narrowing:** the full suite came back **green on `71d9ffc`**, which
-   is the last commit that touches any code. Everything after it —  `9290072`
-   and `ec44eb5` — changes only `docs/`, this file, and
-   `scripts/controls-pr126.sh`: no Python, no JS, no templates, nothing the
-   suite executes. So the code in this PR is CI-proven; what still needs
-   confirming on the real head is only that those three additions did not
-   upset anything (e.g. a test that walks `scripts/`).
+- **Controls: all six run, all six reddened**, serially. Baseline green either
+  side; tree restored clean; a confirmation run afterwards came back
+  `EXIT=0 RESULT=OK` (98 tests) and `JS 104/0`. The table is in
+  `docs/sign-in-page.md`.
+- **CI: green on the head SHA `5b145c9`**, and on every earlier SHA that
+  touches code (`71d9ffc`, `073da51`, `3902faf`).
 
-   Confirm it on the head SHA anyway. "Nothing it changed is executed" is a
-   reading, and the gate is the gate.
-3. Merge gated on that SHA → ancestry both ways → fast-forward local `main` →
-   delete the remote branch.
-4. Delete this file and `PR-A-CONTROLS.md`.
+So the remaining sequence is: merge gated on the head SHA → ancestry both ways →
+fast-forward local `main` → delete the remote branch → delete this file and
+`scripts/controls-pr126.sh` (both exist only in case this PR was handed over
+mid-flight) and `PR-A-CONTROLS.md`.
+
+It was **not** merged in the session that built it, because the instruction for
+this PR was to report when it was pushed with CI and controls done. The merge
+is somebody's call, not an implied next step.
 
 ## Two rules the controls in this repo now depend on
 
