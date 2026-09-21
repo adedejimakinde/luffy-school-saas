@@ -121,6 +121,29 @@ class TheRollTests(EnrolmentSetUp):
             "the roll costs more when the school has more children",
         )
 
+    def test_the_roll_offers_the_classes_a_child_can_join(self):
+        """Served here rather than fetched from `/api/academics/setup/`: this
+        screen already reads `ClassGroup` for the names on each row, and a
+        second round trip would couple it to a route with narrower authority."""
+        body = self.get_roll(self.admin).json()
+
+        self.assertEqual(
+            sorted(c["name"] for c in body["classes"]), ["JSS 1A", "JSS 1B"]
+        )
+
+    def test_a_group_no_longer_taught_is_not_offered_for_a_new_child(self):
+        """Kept on the setup screen because old placements name it; not offered
+        here, because putting a new child in one records something the school
+        has said it no longer does."""
+        from academics.models import ClassGroup
+
+        with connected_to(self.stmarys):
+            ClassGroup.objects.create(name="JSS 4A", level=4, is_active=False)
+
+        names = [c["name"] for c in self.get_roll(self.admin).json()["classes"]]
+
+        self.assertNotIn("JSS 4A", names)
+
     def test_a_principal_sees_the_roll_and_is_told_she_may_not_admit(self):
         """**The two authorities are different sets.** A principal may move a
         child between classes and may not admit one."""

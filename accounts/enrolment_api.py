@@ -72,10 +72,28 @@ class EnrolledChildOut(Schema):
     class_group: Optional[str] = None
 
 
+class ClassChoiceOut(Schema):
+    class_group_id: int
+    name: str
+
+
 class RollOut(Schema):
+    """The roll, and the classes a child can be put in.
+
+    `classes` is here rather than fetched from `/api/academics/setup/` because
+    this screen already reads `ClassGroup` for the names on each row — serving
+    it costs nothing more, and a second round trip to another router would
+    couple this page to a route with its own, *narrower* authority.
+
+    Only groups still taught are offered. An inactive group is kept because old
+    placements name it, and putting a new child into one would be recording
+    something the school has said it no longer does.
+    """
+
     term_id: Optional[int]
     term: Optional[str]
     children: List[EnrolledChildOut]
+    classes: List[ClassChoiceOut]
     may_admit: bool
     may_place: bool
 
@@ -165,15 +183,15 @@ def roll(request):
         .live()
         .select_related("user")
     )
+    groups = list(ClassGroup.objects.all())
+    group_names = {g.pk: g.name for g in groups}
     placements = {}
-    group_names = {}
     if term is not None:
         placements = dict(
             ClassPlacement.objects.filter(term=term).values_list(
                 "student_membership_id", "class_group_id"
             )
         )
-        group_names = dict(ClassGroup.objects.values_list("pk", "name"))
 
     children = [
         EnrolledChildOut(
@@ -193,6 +211,11 @@ def roll(request):
         term_id=term.pk if term else None,
         term=str(term) if term else None,
         children=children,
+        classes=[
+            ClassChoiceOut(class_group_id=g.pk, name=g.name)
+            for g in groups
+            if g.is_active
+        ],
         may_admit=accounts_services.can_grant_memberships(request.user, school),
         may_place=academics.can_place_students(request.user, school),
     )
