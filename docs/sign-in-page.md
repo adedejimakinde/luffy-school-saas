@@ -98,8 +98,8 @@ office to add you as a guardian" — the school's answer to a question she did n
 ask. And the payload could not tell the two apart, because `SchoolOut` carried
 slug, name and host and nothing about what was behind them.
 
-Both halves have changed. `/register/` is a staff destination, and `SchoolOut`
-carries two booleans:
+Both halves have changed. `/register/` is a staff destination —
+[register-page.md](register-page.md) — and `SchoolOut` carries two booleans:
 
 | field | the question it asks | why not a role |
 | --- | --- | --- |

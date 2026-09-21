@@ -385,7 +385,8 @@ handles report cards, and one boolean does not earn a third settings table.
    `may_take_a_register` and `has_children_here`, each being the **same question
    the surface behind the link asks** rather than a role standing in for one, and
    the landing draws a link per school from them. The guardian flow's link rule
-   got its second caller and is `hostHref()` in `static/web/html.js`. See
+   got its second caller and is `hostHref()` in `static/web/html.js`. The screen
+   itself is [register-page.md](register-page.md); where staff come from is
    [sign-in-page.md](sign-in-page.md).
 4. **The principal's view**: which students are absent too often. Needs a threshold,
    and a threshold is a number somebody chooses; that question is deferred to this
