@@ -1,0 +1,109 @@
+/*
+ * The approval chain. One row per class: where it stands, and what you may do.
+ *
+ * A list and not a table, for the reason the index gives: the actions are the
+ * point and they wrap, which a four-column table does badly on the device a
+ * principal actually opens this on.
+ *
+ * The state is carried by a word, not by colour alone — "Submitted by teacher"
+ * is what a reader needs, and a coloured dot they have to decode is not.
+ */
+
+:root {
+  --ink: #111;
+  --quiet: #555;
+  --rule: #ddd;
+  --warn: #7a4a00;
+  --warn-bg: #fff6e5;
+  --stop: #900;
+  --stop-bg: #fdeeee;
+  --done: #14612f;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 20px 16px;
+  background: #fff;
+  color: var(--ink);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main { max-width: 42rem; margin: 0 auto; }
+
+h1 { font-size: 1.35rem; margin: 0 0 8px; }
+
+.term { color: var(--quiet); margin: 0 0 16px; }
+
+.classes { list-style: none; margin: 0; padding: 0; }
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.name { font-weight: 600; }
+.standing { color: var(--quiet); }
+.actions { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
+.actions.quiet { color: var(--quiet); display: block; }
+
+.row.state-released .standing { color: var(--done); font-weight: 600; }
+
+.actions button {
+  font: inherit;
+  min-height: 44px;
+  padding: 10px 16px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.actions button.send-back { border-color: var(--warn); color: var(--warn); }
+
+.send-back-form { grid-column: 1 / -1; display: grid; gap: 6px; }
+.send-back-form textarea {
+  font: inherit;
+  padding: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  width: 100%;
+}
+.send-back-form button {
+  font: inherit;
+  min-height: 44px;
+  padding: 10px 16px;
+  justify-self: start;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.note { grid-column: 1 / -1; font-size: 0.95rem; }
+
+/* Each note is colour *and* a rule *and* a sentence, never colour alone. */
+.row.already-signed { background: var(--warn-bg); border-left: 4px solid var(--warn); padding-left: 8px; }
+.row.already-signed .note { color: var(--warn); }
+.row.moved { background: var(--warn-bg); border-left: 4px solid var(--warn); padding-left: 8px; }
+.row.moved .note { color: var(--warn); }
+.row.needs-a-reason .note,
+.row.not-allowed .note { color: var(--stop); }
+.row.not-allowed { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 8px; }
+
+button.signout {
+  font: inherit;
+  min-height: 44px;
+  padding: 10px 16px;
+  margin-top: 16px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+a { color: #14507d; }

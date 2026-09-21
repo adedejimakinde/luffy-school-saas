@@ -78,6 +78,17 @@ INDEX_MODULES = (
     "index/app.js",
 )
 
+#: The approval chain page's own. Staff, not family — the first page in this
+#: app that is. It shares `web/` with every other page on the platform.
+CHAIN_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "results/api.js",
+    "results/states.js",
+    "results/app.js",
+)
+
 
 def card_page(request, student_membership_id: int, term_id: int):
     """The frame for one card. Takes two integers and trusts neither.
@@ -126,4 +137,33 @@ def card_index_page(request):
     )
 
 
-__all__ = ["card_page", "card_index_page", "CARD_MODULES", "INDEX_MODULES"]
+def chain_page(request):
+    """The frame for the approval chain. Reads one row, holds no result.
+
+    The third staff surface, after the register and the marking sheet, and the
+    first staff page in an app whose other two are family ones. Like them it is
+    a **shell**: who may take which step is `results.services`' question, asked
+    on the row read under the lock, and a view that rendered the chain
+    server-side would be a second place asking it.
+
+    **No `login_required`**, for the reason the card page gives: a redirect on
+    a guessable URL is an oracle. The fetch inside the page meets the question.
+    """
+    return render(
+        request,
+        "results/chain_page.html",
+        {
+            "import_map": pages.import_map(*CHAIN_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
+__all__ = [
+    "card_page",
+    "card_index_page",
+    "chain_page",
+    "CARD_MODULES",
+    "INDEX_MODULES",
+    "CHAIN_MODULES",
+]
