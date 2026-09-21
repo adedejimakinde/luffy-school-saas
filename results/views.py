@@ -137,6 +137,35 @@ def card_index_page(request):
     )
 
 
+#: The comments page's own modules.
+COMMENTS_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "comments/api.js",
+    "comments/states.js",
+    "comments/app.js",
+)
+
+
+def comments_page(request):
+    """The frame for writing the two remarks. Reads one row, holds no remark.
+
+    The fourth staff surface. A shell, like the three before it: who may sign
+    which remark is `comments.write_as()`'s question, asked against the
+    placement it writes with, and a view that rendered the card server-side
+    would be a second place asking it.
+    """
+    return render(
+        request,
+        "results/comments_page.html",
+        {
+            "import_map": pages.import_map(*COMMENTS_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 def chain_page(request):
     """The frame for the approval chain. Reads one row, holds no result.
 
@@ -163,7 +192,9 @@ __all__ = [
     "card_page",
     "card_index_page",
     "chain_page",
+    "comments_page",
     "CARD_MODULES",
     "INDEX_MODULES",
     "CHAIN_MODULES",
+    "COMMENTS_MODULES",
 ]
