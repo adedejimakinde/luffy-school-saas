@@ -221,9 +221,13 @@ a route whose whole purpose is answering this.
 
 ## The controls
 
-Operating rule 5: each claim was broken deliberately and the failures read. The
-row worth reading is the third, where the first aim of a control changed nothing
-— which is a result about the claim rather than a formality.
+Operating rule 5: each claim was broken deliberately and the failures read. Two
+rows are worth reading rather than counting. The third is where the first aim of
+a control changed nothing — a result about the claim rather than a formality.
+The `handler403`-dropped-from-`urls_public.py` row is the other: nothing in the
+suite reddened until a test was written for it, because every other test here
+runs on a school's host and the portal's fallback to Django's default handler is
+invisible from there.
 
 | what was broken | what failed | what that says |
 | --- | --- | --- |
@@ -237,6 +241,11 @@ row worth reading is the third, where the first aim of a control changed nothing
 | `card_page()` stops rendering `portal_host` | `test_the_frame_names_the_portal_so_the_401_state_can_offer_a_way_back`, 1 of the 2 | the pair is doing its job: the empty-domain test passes for a view that never sets the variable, and the test above it is what refuses that. Same pair the index page already has |
 | the staff page mounted in `urls.py` as well | `test_a_schools_own_host_does_not` | portal-only is routing, and the routing is asserted |
 | the PARENT narrowing dropped from `User.roles_at()` | `test_a_code_session_is_refused_there` and the known-limit test beside it | the escalation class really is about the credential and not about a missing membership |
+| `NoMembershipHere.a_password_fixes_it` set to True | `the other refusal offers no password door` **and** `the two refusals are told apart by type not by wording` | the remedy really is keyed on which refusal fired. Both halves redden together, which is the point: the page's behaviour and the class attribute it reads are one claim, not two |
+| the 403 links the door by path — `href="/staff-sign-in/"` | `the refusal names the password door by its full url`, alone | the hostname is load-bearing and not decoration. A path-only link resolves against the school's host she was refused on, which is a 404; the test's negative assertion is what refuses it |
+| `refused()` prints `str(exception)` for every `PermissionDenied` | `a plain permission denied prints no detail` | the narrowing to our own refusal types is a rule with a test on it, not a habit |
+| `handler403` dropped from `urls_public.py` | `both urlconfs resolve the same 403 handler`, alone | **the row worth reading.** Nothing else in the suite notices: the middleware never refuses anybody on the portal, so every other test here runs on a school's host and passes with the portal on Django's default handler. The test was written because the control found nothing without it |
+| `handler403` removed entirely | 5 failures across 4 tests — the resolver test once per `subTest`, plus the sentence, the full URL and the other refusal | the page is reached through the wiring and not by accident |
 
 ## What is not here
 
