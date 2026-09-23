@@ -52,25 +52,30 @@ not a duplicate to reject. Contacts are compared after normalisation, so
 `0803...`, `803...` and `+234803...` are the same person — which is the whole
 reason the normalising happens before the matching rather than after.
 
-Every link is reported by line with whether it is **live**. Usually it is not:
-D9 holds a link INVITED until the guardian verifies a channel. But a guardian
-already verified on the platform goes live at once, and a report saying
-"pending" for them would be false in the direction that matters.
+Every link is reported by line as **"pending verification"** unless the
+guardian is already live *at this school*. Since #135 a link goes live only
+when the guardian answers the school that made it, so a guardian verified at
+another school is pending here like anybody new — and the report cannot be
+used to learn which numbers belong to verified parents elsewhere.
+
+Guardians go through `guardian_contacts.link_by_contact_as()`, the one code
+path D10 asks for: the same find-or-create, the same link, and the same channel
+recorded as the roll's guardians panel, so an imported guardian has a channel
+to verify.
 """
 
 import csv
 import io
 from dataclasses import dataclass, field
 
-from django.core.exceptions import ValidationError
-from django.core.validators import validate_email
 from django.db import transaction
 
 from academics import services as academics
 from academics.models import ClassGroup
-from accounts.identifiers import canonical_username, normalize_email, try_normalize_phone
-from accounts.models import ACCESS_STATUSES, Membership, Role, User
-from accounts.services import admit_student_as, link_guardian
+from accounts import guardian_contacts
+from accounts.identifiers import canonical_username
+from accounts.models import Membership, Role, User
+from accounts.services import admit_student_as
 
 #: The header a file must carry. Two are required of every row; the rest may be
 #: absent from the file entirely.
@@ -107,7 +112,7 @@ class GuardianLink:
 
     line: int
     guardian_contact: str
-    live: bool
+    status: str
 
 
 @dataclass
@@ -167,33 +172,6 @@ def _read(text):
         }
         rows.append((offset, row))
     return rows
-
-
-def _contact(value):
-    """One contact, normalised, or `None` if it is neither a phone nor an email.
-
-    **Normalising happens before any matching**, which is the whole point:
-    `0803...`, `803...` and `+2348031234567` are one person, and a file that
-    compared them as typed would create three guardians for one parent and link
-    each child to a different one.
-
-    Phone first, because `try_normalize_phone()` answers `None` for anything
-    that is not phone-shaped, and an address containing digits is not a number.
-    """
-    phone = try_normalize_phone(value)
-    if phone:
-        return phone
-
-    # **`normalize_email()` does not validate**, and assuming it did was a real
-    # bug these tests caught: it lowercases and returns, so `'0803'` and
-    # `'not a contact at all'` both came back as perfectly good "addresses"
-    # and every malformed contact in a file was silently accepted as one.
-    # `validate_email` is what actually refuses.
-    try:
-        validate_email(value)
-    except ValidationError:
-        return None
-    return normalize_email(value)
 
 
 def _handle_key(username):
@@ -336,7 +314,7 @@ def check(school, text) -> Report:
                 report.problems.append(
                     RowProblem(line, "guardian_contact", "A guardian's name needs a contact.")
                 )
-            elif (guardian_contact := _contact(guardian_raw) or "") == "":
+            elif (read := guardian_contacts.read_contact(guardian_raw)) is None:
                 report.problems.append(
                     RowProblem(
                         line,
@@ -344,6 +322,8 @@ def check(school, text) -> Report:
                         f"{guardian_raw!r} is neither a phone number nor an email address.",
                     )
                 )
+            else:
+                guardian_contact = read[1]
 
         if len(report.problems) == problems_before:
             report.planned.append(
@@ -374,10 +354,10 @@ def admit(actor, school, term, text) -> Report:
     a handle claimed by another school between the two passes — takes the whole
     file back out rather than leaving a prefix of it behind.
 
-    **Siblings share a guardian.** Rows are grouped by normalised contact, one
-    `User` is found or made per contact, and each child is linked to it. Two
-    rows with one number are two children of one parent, which is the ordinary
-    case in a school and not a duplicate to refuse.
+    **Siblings share a guardian.** Each row goes through
+    `link_by_contact_as()`, which finds the `User` the first sibling's row made
+    by its normalised contact, so two rows with one number are two children of
+    one parent — the ordinary case in a school, and not a duplicate to refuse.
     """
     if term is None:
         raise BulkError(
@@ -391,7 +371,6 @@ def admit(actor, school, term, text) -> Report:
 
     with transaction.atomic():
         taken = _handles_in_use(school, report.planned)
-        guardians = {}
         for planned in report.planned:
             username = planned.username or _generated_username(
                 school, planned.reference, taken
@@ -414,59 +393,24 @@ def admit(actor, school, term, text) -> Report:
             )
 
             if planned.guardian_contact:
-                guardian = guardians.get(planned.guardian_contact)
-                if guardian is None:
-                    guardian = _guardian_for(
-                        planned.guardian_contact, planned.guardian_name
-                    )
-                    guardians[planned.guardian_contact] = guardian
-                # D9: this link is **not live** until the guardian's contact
-                # channel is verified. `link_guardian()` grants an INVITED
-                # membership for exactly that reason, and the report says so
-                # rather than leaving the office to think it finished.
-                link_guardian(guardian, membership)
-                # Read back rather than assumed: a guardian already verified
-                # on the platform is ACTIVE at once, and `grant_membership()`
-                # never downgrades one who is already live here.
+                link = guardian_contacts.link_by_contact_as(
+                    actor,
+                    membership,
+                    planned.guardian_name,
+                    planned.guardian_contact,
+                )
+                # Read back rather than assumed. New links are INVITED; one to
+                # a guardian this school has already confirmed is live, because
+                # `grant_membership()` never downgrades a live membership.
                 report.guardian_links.append(
                     GuardianLink(
                         line=planned.line,
                         guardian_contact=planned.guardian_contact,
-                        live=Membership.objects.filter(
-                            user=guardian,
-                            school=school,
-                            role=Role.PARENT,
-                            status__in=ACCESS_STATUSES,
-                        ).exists(),
+                        status=guardian_contacts.link_status_at(link.guardian, school),
                     )
                 )
 
     return report
-
-
-def _guardian_for(contact, full_name):
-    """The guardian this contact belongs to, made if they are new.
-
-    Matched on the **normalised** contact, which is what makes two spellings of
-    one number one parent. A guardian already on the platform — a parent with a
-    child at another school — is reused rather than duplicated: `User` is the
-    platform's, not a school's.
-
-    No usable password, like an admitted child: the guardian signs in with a
-    code on a channel the school verifies, and `guardian_signin` is that flow.
-    """
-    is_phone = contact.startswith("+")
-    existing = User.objects.filter(
-        **({"phone": contact} if is_phone else {"email__iexact": contact})
-    ).first()
-    if existing is not None:
-        return existing
-    return User.objects.create_user(
-        contact,
-        None,
-        full_name=full_name,
-        **({"phone": contact} if is_phone else {"email": contact}),
-    )
 
 
 __all__ = [

@@ -82,6 +82,9 @@ from django.db import transaction
 from django.db.models import Max, Q
 from django.utils import timezone
 
+from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+
 from .identifiers import normalize_email, try_normalize_phone
 from .models import (
     DEFAULT_VERIFICATION_TTL,
@@ -93,12 +96,18 @@ from .models import (
     GuardianContact,
     GuardianContactCode,
     Guardianship,
+    Membership,
+    MembershipStatus,
+    Relationship,
+    Role,
+    User,
     VerificationCodeStatus,
 )
 from .services import (
     NotPermitted,
     activate_guardian_links,
     can_grant_memberships,
+    link_guardian_as,
 )
 
 
@@ -282,6 +291,131 @@ def record_contact(guardian_account, channel_type, value, *, created_by):
     contact.full_clean(validate_constraints=False)
     contact.save()
     return contact
+
+
+#: What a link is, as a school's office reads it. Keyed on the guardian's
+#: PARENT membership **at that school** — the only thing that decides whether
+#: they can see the child there — and never on their channel, which may have
+#: been proved at another school (#135).
+LIVE = "live"
+SUSPENDED = "suspended"
+PENDING = "pending verification"
+
+
+def link_status_at(guardian, school) -> str:
+    """`LIVE`, `SUSPENDED` or `PENDING` for `guardian` at `school`."""
+    status = (
+        Membership.objects.filter(
+            user=guardian, school_id=getattr(school, "pk", school), role=Role.PARENT
+        )
+        .values_list("status", flat=True)
+        .first()
+    )
+    if status == MembershipStatus.ACTIVE:
+        return LIVE
+    if status == MembershipStatus.SUSPENDED:
+        return SUSPENDED
+    return PENDING
+
+
+class NotAContact(GuardianContactError):
+    """A value that is neither a phone number nor an email address."""
+
+
+class AmbiguousContact(GuardianContactError):
+    """A value more than one account answers to."""
+
+
+def read_contact(value):
+    """`(channel_type, normalised value)`, or None if it is neither kind.
+
+    **Normalised before anything is matched against it**, which is the point:
+    `0803...`, `803...` and `+2348031234567` are one person, and comparing them
+    as typed would make one parent three accounts. Phone first, because
+    `try_normalize_phone()` answers None for anything not phone-shaped.
+
+    `normalize_email()` does not validate — it lowercases and returns — so
+    `validate_email` is what refuses `'0803'` as an address.
+    """
+    value = (value or "").strip()
+    phone = try_normalize_phone(value)
+    if phone:
+        return ContactChannel.PHONE, phone
+    try:
+        validate_email(value)
+    except ValidationError:
+        return None
+    return ContactChannel.EMAIL, normalize_email(value)
+
+
+def _guardian_for(channel_type, value, full_name):
+    """The `User` this contact belongs to, made if there is none.
+
+    Matched on the **normalised** contact through `matching_identifier()`, the
+    lookup sign-in resolves through, so a parent with a child at another school
+    is one person rather than two — `User` is the platform's, not a school's
+    (D5) — and nothing is found here that a later sign-in would not find.
+    No usable password: a guardian signs in with a code on a verified channel.
+    """
+    matches = list(User.objects.matching_identifier(value)[:2])
+    if len(matches) > 1:
+        # Two people answer to this value (one's handle, another's number, say).
+        # Picking one is how a child is linked to a stranger.
+        raise AmbiguousContact(
+            f"{value!r} matches more than one account, so it cannot say who "
+            f"the guardian is."
+        )
+    if matches:
+        return matches[0]
+    column = "phone" if channel_type == ContactChannel.PHONE else "email"
+    return User.objects.create_user(value, None, full_name=full_name, **{column: value})
+
+
+@transaction.atomic
+def link_by_contact_as(
+    actor, student, full_name, contact, *, relationship=Relationship.GUARDIAN
+):
+    """D10's one code path: find or make the guardian, attach the child, enter
+    the channel. Returns the `Guardianship`.
+
+    **Every door that links a guardian by contact comes through here** — the
+    roll's guardians panel and the bulk import alike — because D10's promise is
+    one guardian record with one verification story, and two doors with two
+    find-or-create rules are two guardian records wearing one name. The import
+    used to skip the channel entirely, so an imported guardian had nothing to
+    verify.
+
+    **Authority before anything is created**, so a refused call leaves no
+    account behind.
+
+    **The channel is recorded only if the guardian has none.** One found by an
+    identifier with a channel of their own keeps it: changing a guardian's
+    channel is D11's clerical flow, with its own verification, and not a side
+    effect of a school typing a number.
+
+    The link starts INVITED and stays so until the guardian answers this
+    school — `services.link_guardian()`, and #135 for why. What the school
+    typed is kept on the link; see `Guardianship.entered_name`.
+    """
+    if not can_grant_memberships(actor, student.school):
+        raise NotPermitted(f"{actor} cannot link guardians at {student.school}.")
+    read = read_contact(contact)
+    if read is None:
+        raise NotAContact(f"{contact!r} is neither a phone number nor an email address.")
+    channel_type, value = read
+
+    guardian = _guardian_for(channel_type, value, full_name)
+    link = link_guardian_as(
+        actor,
+        guardian,
+        student,
+        relationship=relationship,
+        entered_name=full_name,
+        entered_contact=value,
+    )
+    if guardian_account_for(guardian).live_contact() is None:
+        record_contact_as(actor, guardian, channel_type, value)
+    return link
 
 
 @transaction.atomic
@@ -654,11 +788,14 @@ def confirm_verification(contact, raw_code) -> bool:
     guard the write with was a branch no control run could turn red. Operating
     rule 5 — the shorter path is the one whose behaviour can be demonstrated.
 
-    **This is where D9's link goes live.** `services.link_guardian()` grants a
-    PARENT membership INVITED while the guardian has no verified channel, and
-    this is the moment that changes — so the stamp and the access it unlocks are
-    written in one transaction and cannot come apart. Every school the guardian
-    is waiting at is promoted at once, because one person has one channel.
+    **This is where D9's link goes live — at the school that asked.**
+    `services.link_guardian()` grants a PARENT membership INVITED, and this is
+    the moment that changes, so the stamp and the access it unlocks are written
+    in one transaction and cannot come apart. Only the school whose code this
+    was is promoted (#135): proving the channel is the guardian answering *that*
+    school, not every school that has typed their number. A code no school
+    asked for — platform staff are behind none — proves the channel and opens
+    nothing.
 
     **There is no matching demotion here, and the gap is deliberate rather than
     forgotten.** D11 revokes a channel when a new one is entered and says the
@@ -676,7 +813,8 @@ def confirm_verification(contact, raw_code) -> bool:
     locked.verified_at = code.confirmed_at
     locked.save(update_fields=["verified_at"])
     contact.verified_at = locked.verified_at
-    activate_guardian_links(locked.guardian.user)
+    if code.requested_by_school_id is not None:
+        activate_guardian_links(locked.guardian.user, code.requested_by_school_id)
     return True
 
 

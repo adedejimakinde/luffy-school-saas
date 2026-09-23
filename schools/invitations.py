@@ -201,9 +201,23 @@ def invite_staff(
     membership = grant_membership(
         user, school, role, status=MembershipStatus.INVITED
     )
-    invitation, raw_token = _issue(membership, actor, ttl=ttl)
+    invitation, raw_token = _issue(
+        membership, actor, ttl=ttl, sent_to=_sent_to(email=email, phone=phone)
+    )
     _deliver(invitation, raw_token, accept_url_for)
     return invitation, raw_token
+
+
+def _sent_to(*, email=None, phone=None):
+    """What the admin typed, normalised the way `resolve_invitee()` read it.
+
+    Kept on the invitation because it is the one "who" the inviting school may
+    be shown: the account it resolved to can hold a name and a second
+    identifier from another school.
+    """
+    return " / ".join(
+        filter(None, (normalize_email(email), try_normalize_phone(phone) if phone else None))
+    )
 
 
 @transaction.atomic
@@ -242,7 +256,10 @@ def resend_invitation(actor, invitation, *, ttl=None, accept_url_for=None):
             f"The membership this invitation activates is "
             f"{invitation.membership.get_status_display().lower()}, not invited."
         )
-    fresh, raw_token = _issue(invitation.membership, actor, ttl=ttl)
+    # The same address again: a resend is the same offer to the same person.
+    fresh, raw_token = _issue(
+        invitation.membership, actor, ttl=ttl, sent_to=invitation.sent_to
+    )
     _deliver(fresh, raw_token, accept_url_for)
     return fresh, raw_token
 
@@ -254,7 +271,7 @@ def revoke_invitation(actor, invitation):
     return invitation.revoke()
 
 
-def _issue(membership, actor, *, ttl=None):
+def _issue(membership, actor, *, ttl=None, sent_to=""):
     """Mint a token for `membership`, killing every other live one it has.
 
     At most one invitation per membership is live at a time. That was already
@@ -304,7 +321,7 @@ def _issue(membership, actor, *, ttl=None):
         invitation.revoke()
 
     kwargs = {"ttl": ttl} if ttl is not None else {}
-    return Invitation.create_with_token(membership, actor, **kwargs)
+    return Invitation.create_with_token(membership, actor, sent_to=sent_to, **kwargs)
 
 
 def configured_accept_url(raw_token):

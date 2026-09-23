@@ -122,6 +122,37 @@ def roll_page(request):
     )
 
 
+#: The staff page's own modules.
+STAFF_PAGE_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "staff/api.js",
+    "staff/states.js",
+    "staff/app.js",
+)
+
+
+def staff_page(request):
+    """The frame for staff invitations. Holds no invitation and no name.
+
+    A shell like the roll: who may see the list is `invite_staff()`'s own
+    authority, asked by the API, and a view that rendered the list would be a
+    second place asking it. The school's slug is rendered in because the
+    invitation routes are addressed by it; it is already in the host.
+    """
+    school = getattr(request, "school", None)
+    return render(
+        request,
+        "accounts/staff_page.html",
+        {
+            "import_map": pages.import_map(*STAFF_PAGE_MODULES),
+            "portal_host": portal_host(),
+            "school_slug": school.slug if school is not None else "",
+        },
+    )
+
+
 def refused(request, exception=None):
     """The 403 page, which says what happened and whether anything fixes it.
 
@@ -175,8 +206,10 @@ __all__ = [
     "sign_in_page",
     "staff_sign_in_page",
     "roll_page",
+    "staff_page",
     "refused",
     "ROLL_MODULES",
+    "STAFF_PAGE_MODULES",
     "MODULES",
     "STAFF_MODULES",
 ]

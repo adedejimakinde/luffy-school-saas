@@ -232,6 +232,54 @@ class ClosingTheWindowTests(HandshakeSetUp):
         )
 
 
+class WhoArrivesLiveTests(HandshakeSetUp):
+    """A transfer carries the child's guardians, and carries **whether they were
+    live**. The mother was confirmed at St Mary's; the father was linked there
+    and never answered. Both come across; only she can see the child at Grace.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.father = make_user("08037654321", "Tunde Ade", phone="08037654321")
+        services.link_guardian(self.father, self.child, relationship=Relationship.FATHER)
+        self.assertEqual(self.status_of(self.father, self.stmarys), MembershipStatus.INVITED)
+
+    def status_of(self, user, school):
+        return Membership.objects.get(user=user, school=school, role=Role.PARENT).status
+
+    def transfer(self):
+        request = transfers.request_transfer_as(self.stmarys_admin, self.child, self.grace)
+        return transfers.accept_transfer_as(self.grace_admin, request)
+
+    def test_a_guardian_live_at_the_sending_school_arrives_live(self):
+        """Nobody typed anything, and both schools signed. Making her prove
+        herself again to see her own child is the cost #135 was never about.
+
+        CONTROL: dropping the carry in `transfer_student()` — every link
+        arriving through `link_guardian()` alone — makes this go red.
+        """
+        self.transfer()
+
+        self.assertEqual(self.status_of(self.parent, self.grace), MembershipStatus.ACTIVE)
+        self.assertTrue(self.parent.has_access_to(self.grace))
+
+    def test_a_guardian_not_yet_live_at_the_sending_school_arrives_not_yet_live(self):
+        """Moving is not answering. If a transfer promoted every link it
+        carried, a link St Mary's made to a mistyped number would go live at
+        Grace for being moved — a way round the gate.
+
+        CONTROL 8: carrying every link as live regardless makes this red.
+        """
+        moved = self.transfer()
+
+        self.assertEqual(self.status_of(self.father, self.grace), MembershipStatus.INVITED)
+        self.assertFalse(self.father.has_access_to(self.grace))
+        self.assertTrue(
+            Guardianship.objects.filter(guardian=self.father, student=moved).exists(),
+            "the pending guardian was left behind rather than carried",
+        )
+
+
 class OneOpenRequestTests(HandshakeSetUp):
     def test_a_second_destination_is_refused_while_one_is_open(self):
         transfers.request_transfer_as(self.stmarys_admin, self.child, self.grace)

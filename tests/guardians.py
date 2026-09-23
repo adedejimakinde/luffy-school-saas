@@ -1,11 +1,16 @@
 """One fixture, shared: a guardian whose link is actually live.
 
-`services.link_guardian()` grants a PARENT membership INVITED until the
-guardian holds a verified contact channel — D9's "the guardian link does not go
-live until it comes back", gated in code as of PR C. Every test that signs a
-parent in, or asserts they can reach a school, therefore needs a channel behind
-them; without one they get a relationship and no access, and the failure looks
-nothing like its cause.
+`services.link_guardian()` grants a PARENT membership INVITED, and a school's
+link goes live only when the guardian answers **that school** — D9's "the
+guardian link does not go live until it comes back", made per school by #135.
+Every test that signs a parent in, or asserts they can reach a school,
+therefore needs that answer behind them; without it they get a relationship and
+no access, and the failure looks nothing like its cause.
+
+**Link first, then call this.** It answers at every school the guardian is
+waiting at *when it is called*, so a child linked afterwards stays waiting —
+which is the behaviour under test in `test_guardian_contacts`, not a fixture
+quirk.
 
 **That failure is worth describing, because it is what this module exists to
 stop being rediscovered.** `SchoolAccessMiddleware` refuses the request, so the
@@ -25,8 +30,14 @@ the way production will — which also means every test using it exercises
 `activate_guardian_links()` in passing.
 """
 
-from accounts import guardian_contacts
-from accounts.models import ContactChannel, GuardianContact
+from accounts import guardian_contacts, services
+from accounts.models import (
+    ContactChannel,
+    GuardianContact,
+    Membership,
+    MembershipStatus,
+    Role,
+)
 
 #: An arbitrary Nigerian mobile, normalized to E.164 on the way into the column.
 #: Callers sharing one handset between two guardians pass the same value twice
@@ -42,12 +53,13 @@ def give_verified_channel(
     channel_type=ContactChannel.PHONE,
     recorded_by=None,
 ):
-    """Record a channel for `user` and answer the code, returning the contact.
+    """Record a channel for `user`, prove it, and answer every school waiting.
 
-    Any PARENT membership they are already waiting on goes ACTIVE, because that
-    is what `confirm_verification()` does. So this may be called before or after
-    `link_guardian()` and the guardian ends up live either way — which matters,
-    since D10's order puts the channel last and most fixtures put it first.
+    The channel is proved with a code no school asked for, which opens nothing
+    (`confirm_verification()`). Each school the guardian is waiting at is then
+    answered through `services.activate_guardian_links()` — the one function
+    that turns a school live, standing in for PR D's per-school door, which
+    will reach it by sending that school's own code to this channel.
 
     `recorded_by` is the admin who typed it. It defaults to the guardian
     themselves, which is not a state production produces — `record_contact_as()`
@@ -69,5 +81,23 @@ def give_verified_channel(
     assert guardian_contacts.confirm_verification(contact, raw_code), (
         "the fixture's own code did not verify the channel"
     )
+    waiting = Membership.objects.filter(
+        user=user, role=Role.PARENT, status=MembershipStatus.INVITED
+    ).values_list("school_id", flat=True)
+    for school_id in list(waiting):
+        services.activate_guardian_links(user, school_id)
     contact.refresh_from_db()
     return contact
+
+
+def answer_at(user, school):
+    """`user` answers `school`, so their waiting link there goes live.
+
+    For a guardian whose channel is already proved and who is linked at a
+    further school afterwards — a second child, a second school. Since #135
+    that link waits until the guardian answers *that* school; PR D is the door
+    that asks, by sending that school's code to the proved channel. This is
+    the function the door will call, and nothing it does is by fiat:
+    `activate_guardian_links()` still refuses to touch a suspension.
+    """
+    return services.activate_guardian_links(user, school)

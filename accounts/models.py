@@ -534,6 +534,17 @@ class Guardianship(models.Model):
     is_primary_contact = models.BooleanField(default=False)
     receives_invoices = models.BooleanField(default=True)
     can_collect = models.BooleanField(default=True, help_text="Authorised for pickup.")
+    # What the school typed when it made this link. Shown to that school in
+    # place of the `User`'s own name and channel until the guardian is live
+    # there: a contact can resolve to somebody else's parent, and their stored
+    # details are not this school's to read (#135, and `InvitationOut`'s rule).
+    # `db_default` as well as `default`: the rules on this table are tested by
+    # raw INSERTs that never reach `save()`, and a Python-only default leaves
+    # them violating NOT NULL instead of the rule they were written to reach.
+    entered_name = models.CharField(max_length=255, blank=True, default="", db_default="")
+    entered_contact = models.CharField(
+        max_length=254, blank=True, default="", db_default=""
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

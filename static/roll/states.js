@@ -6,6 +6,10 @@
  * admin, so a principal sees the roll, may move a child, and is offered no
  * admission form. Collapsing them into "is the office" would show her a form
  * that 403s on submit.
+ *
+ * **A child's guardians open in a panel**, loaded when asked for rather than
+ * with the roll, so the roll costs nothing per child. `may_link` is the
+ * panel's own boolean: ADMIN alone links and removes, and a principal reads.
  */
 
 import { esc } from "../web/html.js";
@@ -19,11 +23,13 @@ export function roll({
   may_admit = false,
   may_place = false,
   notes = {},
+  panel = null,
 } = {}) {
   return [
     '<section class="state state-roll" data-state="roll">',
     "<h1>The roll</h1>",
     `<p class="term">${esc(term) || "No term is open"}</p>`,
+    panel ? guardiansPanel(panel) : "",
     children.length
       ? `<ul class="children">${children
           .map((c) => childRow(c, { classes, may_place }))
@@ -55,6 +61,8 @@ function childRow(c, { classes, may_place }) {
       : `<span class="standing">${
           unplaced ? "Not in a class yet" : esc(c.class_group)
         }</span>`,
+    `<button type="button" data-action="guardians" data-child="${esc(c.student_membership_id)}">`,
+    "Guardians</button>",
     "</li>",
   ].join("");
 }
@@ -130,6 +138,126 @@ function notTheAdmissionsOffice() {
     '<p class="quiet">Children are admitted by an administrator of the ' +
     "school. You can still move them between classes.</p>"
   );
+}
+
+/**
+ * One child's guardians.
+ *
+ * **What a guardian is here comes from the server and is not decided here.**
+ * `status` is read from the guardian's membership at this school, and a link
+ * starts `pending verification` whoever the guardian is — a parent verified at
+ * another school included (#135). This renderer says what the server said; a
+ * page that assumed "not live" would pass every test that only looked at new
+ * guardians, and would go on saying it after a guardian had answered.
+ *
+ * `name` and `contact` are what this school typed, and nothing else until the
+ * guardian is live here — see `GuardianOut` for why.
+ */
+export function guardiansPanel({ body = {}, note = null, confirming = null } = {}) {
+  const { student = "", guardians = [], may_link = false, relationships = [] } = body;
+  return [
+    '<section class="guardians" data-panel="guardians">',
+    `<h2>Guardians of ${esc(student)}</h2>`,
+    guardians.length
+      ? `<ul class="guardian-list">${guardians
+          .map((g) => guardianRow(g, { may_link, confirming, student }))
+          .join("")}</ul>`
+      : '<p class="blank">No guardian is linked to this child yet.</p>',
+    may_link
+      ? linkForm(relationships, note)
+      : '<p class="quiet">Guardians are linked by an administrator of the school.</p>',
+    !may_link && note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    '<button type="button" data-action="close-guardians">Close</button>',
+    "</section>",
+  ].join("");
+}
+
+function guardianRow(g, { may_link, confirming, student }) {
+  return [
+    `<li class="guardian" data-status="${esc(g.status)}">`,
+    `<span class="name">${esc(g.name) || "—"}</span>`,
+    `<span class="contact">${esc(g.contact) || "—"}</span>`,
+    `<span class="relationship">${esc(g.relationship)}</span>`,
+    `<p class="standing">${standing(g, student)}</p>`,
+    may_link ? removeControl(g, confirming, student) : "",
+    "</li>",
+  ].join("");
+}
+
+/**
+ * The link, in a sentence. **"Not live yet" is said out loud**, because an
+ * administrator who links a parent and walks away believing they are done has
+ * done half a job — and nothing on this screen can send the code yet, so it
+ * says that too rather than offering a button that goes nowhere.
+ */
+function standing(g, student) {
+  if (g.status === "live") {
+    return g.channel === "dormant"
+      ? "Live, but their phone has been quiet for 180 days, so they cannot sign " +
+          "in until the school reactivates it."
+      : `Live: they can see ${esc(student)}.`;
+  }
+  if (g.status === "suspended") {
+    return `Suspended by the school: they cannot see ${esc(student)}.`;
+  }
+  return (
+    `Pending verification — not live yet. They cannot see ${esc(student)} ` +
+    "until they confirm with this school. Sending them a code is not " +
+    "connected yet."
+  );
+}
+
+/**
+ * Removing a guardian takes **two clicks**. D11 calls it an authority
+ * decision, and a slipped hand on a list of parents is not one.
+ */
+function removeControl(g, confirming, student) {
+  if (String(confirming) === String(g.link_id)) {
+    return [
+      '<p class="confirm" role="alert">',
+      `Remove ${esc(g.name) || "this guardian"} from ${esc(student)}? `,
+      `<button type="button" data-action="remove-guardian" data-link="${esc(g.link_id)}">`,
+      "Yes, remove</button> ",
+      '<button type="button" data-action="cancel-remove">Cancel</button>',
+      "</p>",
+    ].join("");
+  }
+  return (
+    `<button type="button" data-action="ask-remove" data-link="${esc(g.link_id)}">` +
+    "Remove</button>"
+  );
+}
+
+/**
+ * Linking a guardian. **A refused link keeps what was typed** — a mistyped
+ * number is one field to fix, not a name and a number to type again.
+ */
+function linkForm(relationships, note) {
+  const typed = (note && note.typed) || {};
+  const chosen = typed.relationship || "guardian";
+  return [
+    `<form class="link-guardian${note ? ` ${esc(note.kind)}` : ""}" data-form="guardian">`,
+    "<h3>Link a guardian</h3>",
+    '<label for="guardian_name">Name</label>',
+    `<input id="guardian_name" name="guardian_name" value="${esc(typed.full_name)}" required>`,
+    '<label for="guardian_contact">Phone number or email</label>',
+    '<input id="guardian_contact" name="guardian_contact" placeholder="0803 123 4567" ',
+    `value="${esc(typed.contact)}" required>`,
+    '<label for="relationship">Relationship</label>',
+    '<select id="relationship" name="relationship">',
+    relationships
+      .map(
+        (r) =>
+          `<option value="${esc(r)}"${r === chosen ? " selected" : ""}>${esc(
+            r.charAt(0).toUpperCase() + r.slice(1),
+          )}</option>`,
+      )
+      .join(""),
+    "</select>",
+    '<button type="submit">Link guardian</button>',
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
 }
 
 /** Signed in, and with no part in the roll. */

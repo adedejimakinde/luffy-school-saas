@@ -1,0 +1,26 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staff invitations</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page.
+
+The title names no person and no school. This document is served to whoever
+opens the URL — there is no `login_required`, for the oracle reason
+`accounts/views.py` gives. The slug is already in the host.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'staff/staff.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'staff/app.js' %}"></script>
+
+<main id="staff" data-portal="{{ portal_host }}" data-school="{{ school_slug }}">
+  <noscript>
+    <h1>Staff invitations</h1>
+    <p>This page needs JavaScript. Please turn it on, or ask whoever set up
+    this system for you.</p>
+  </noscript>
+  <p class="state state-loading">Loading invitations&hellip;</p>
+</main>
