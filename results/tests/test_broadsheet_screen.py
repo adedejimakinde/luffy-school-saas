@@ -186,36 +186,34 @@ class TheOverviewTests(BroadsheetScreenSetUp):
         self.assertNotIn("74.50", str(body))
 
     def test_the_overview_does_not_cost_more_as_a_class_grows(self):
-        """A fixed number of queries per class, none per child.
+        """A fixed number of queries per class, none per child. **Every**
+        query the request makes is counted.
 
-        Counts the route's **data** queries only. The first version counted
-        everything and failed 36 != 56 on plumbing alone — the session writes
-        `force_login()` makes, savepoints, and `SET search_path`, whose count
-        depends on which schema the fixture's own helpers left the connection
-        on. None of that is the overview's work, and a count that includes it
-        measures the fixture.
+        The login is setup, so it happens **before** the measured block. An
+        earlier version logged in inside it and failed 36 != 56: all twenty
+        extra queries were `force_login()`'s — seven on `django_session`, its
+        savepoints, and the `SET search_path` swings that came from logging in
+        on `public` and then serving on the school's schema. Measured with the
+        login outside, a small class, the same class again and the class three
+        children larger each cost 26, query for query.
         """
-        plumbing = ("SET search_path", "SAVEPOINT", "RELEASE SAVEPOINT", "django_session")
 
-        def data_queries():
+        def queries_for_the_overview():
             self.client.force_login(self.principal)
             with CaptureQueriesContext(connection) as captured:
                 response = self.client.get(
                     f"/api/results/overview/?term_id={self.term_id}", HTTP_HOST=HOST
                 )
-            return response, [
-                q["sql"] for q in captured.captured_queries
-                if not any(word in q["sql"] for word in plumbing)
-            ]
+            return response, len(captured.captured_queries)
 
-        _, small = data_queries()
+        _, small = queries_for_the_overview()
         for n in range(3):
             child = self.enrol(self.stmarys, f"extra{n}", f"Extra {n}", self.group_id, self.term_id)
             self.mark(self.stmarys, self.term_id, self.maths_id, child, 50 + n)
-        response, larger = data_queries()
+        response, larger = queries_for_the_overview()
 
         self.assertEqual(self.jss1a(response.json())["children_with_an_average"], 5)
-        self.assertEqual(len(larger), len(small), "the overview costs more per child")
+        self.assertEqual(larger, small, "the overview costs more per child")
 
 
 class TheFrameTests(BroadsheetScreenSetUp):
