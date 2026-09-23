@@ -188,7 +188,42 @@ def chain_page(request):
     )
 
 
+#: The broadsheet page's own modules.
+BROADSHEET_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "broadsheet/api.js",
+    "broadsheet/states.js",
+    "broadsheet/app.js",
+)
+
+
+def broadsheet_page(request):
+    """The frame for broadsheets and the overview. Holds no child and no number.
+
+    A shell like the chain's, and for the same reasons: who may read a
+    position is `results.api._require_position_authority()`'s question, and
+    no `login_required`, because a redirect on a guessable URL is an oracle.
+
+    **The one thing it says is whether this host is a school's.** The routes
+    behind it answer a flat 404 both to somebody who may not read and to the
+    portal, where there are no results at all — deliberately the same answer —
+    so the page cannot tell those apart from the fetch and is told here.
+    """
+    return render(
+        request,
+        "results/broadsheet_page.html",
+        {
+            "import_map": pages.import_map(*BROADSHEET_MODULES),
+            "portal_host": portal_host(),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
 __all__ = [
+    "broadsheet_page",
     "card_page",
     "card_index_page",
     "chain_page",
@@ -197,4 +232,5 @@ __all__ = [
     "INDEX_MODULES",
     "CHAIN_MODULES",
     "COMMENTS_MODULES",
+    "BROADSHEET_MODULES",
 ]

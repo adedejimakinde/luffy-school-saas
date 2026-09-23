@@ -79,6 +79,9 @@ function classRow(row, note, asking) {
     `<li class="row state-${esc(row.state)}${note ? ` ${esc(note.kind)}` : ""}">`,
     `<span class="name">${esc(row.class_group)}</span>`,
     `<span class="standing">${esc(row.state_label)}</span>`,
+    // The sheet itself, so whoever is about to approve or release reads the
+    // numbers first. The broadsheet route decides who may, as it always did.
+    `<a class="broadsheet" href="/broadsheet/?class=${encodeURIComponent(row.class_group_id)}">Broadsheet</a>`,
     actions.length
       ? `<span class="actions">${actions.join("")}</span>`
       : `<span class="actions quiet">${

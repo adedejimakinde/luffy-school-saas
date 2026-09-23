@@ -25,6 +25,21 @@ built from their own schemas rather than by filtering these. That is
 length: these are tenant tables, `TenantMainMiddleware` has already chosen the
 schema from the hostname, and a slug would be a second opinion free to disagree
 with the connection.
+
+## Three routes, one audience
+
+`/broadsheets/` lists the terms a reader can choose between, `/overview/` is the
+school's classes for one term — class average and how many children have one,
+**no names and no ranks** — and the broadsheet is one class. All three sit
+behind `_require_position_authority()` with its flat 404, because a list of
+terms and classes is a directory of the school, and the reason `/where/` is
+gated for markers holds here too.
+
+**The overview's numbers are the page's numbers.** Both come out of
+`_class_figures()` and `_mean_or_none()`, so a principal who reads 74.50 beside
+JSS 1A on the overview reads 74.50 at the foot of JSS 1A's page — including for
+a released class whose roster moved after release, which is issue #55's shape
+and the one place the live marks and the frozen cards give different answers.
 """
 
 from typing import List, Optional
@@ -33,7 +48,9 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 
-from academics.models import ClassGroup, Term
+from django.db.models import Q
+
+from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
 from accounts.session import session_auth
 from gradebook.models import Subject
@@ -41,6 +58,7 @@ from gradebook.models import Subject
 from . import cards as released_cards
 from . import positions
 from . import services
+from .models import ResultSheet
 
 router = Router(auth=session_auth)
 
@@ -202,6 +220,122 @@ def _as_text(value) -> Optional[str]:
     return None if value is None else str(value)
 
 
+def _frozen_averages(released) -> dict:
+    """`child -> own_average` over the released cards, skipping the unmarked."""
+    return {
+        card.student_membership_id: card.own_average
+        for card in released
+        if card.own_average is not None
+    }
+
+
+def _mean_or_none(averages):
+    """The class average of these averages, or None when there are none —
+    the dash rather than a zero that would claim the class sat and scored
+    nothing. One spelling, used by the page's snapshot path and by the
+    overview, so the two cannot round one mean two ways (`class_average()`
+    records that this has happened once already)."""
+    averages = list(averages)
+    return positions.mean_percentage(averages) if averages else None
+
+
+def _class_figures(class_group, term):
+    """`(class_average, children with an average, from_snapshot)` for one class.
+
+    The same question the broadsheet answers, asked the same way: a released
+    term from the frozen cards, an unreleased one from live marks. The
+    overview calls this per class, so its number is the page's number by
+    construction rather than by coincidence.
+    """
+    sheet = services.sheet_for(class_group, term)
+    if sheet is not None and sheet.is_released:  # the frozen cards
+        averages = _frozen_averages(released_cards.cards_on(sheet))
+        return _mean_or_none(averages.values()), len(averages), True
+    results = positions.class_results(class_group, term)
+    return results.class_average, len(results.averages), False
+
+
+class TermChoiceOut(Schema):
+    term_id: int
+    term: str
+    is_current: bool
+
+
+class BroadsheetTermsOut(Schema):
+    """The terms a broadsheet can be asked for, newest first."""
+
+    terms: List[TermChoiceOut]
+
+
+class ClassFiguresOut(Schema):
+    """One class on the overview. **No names and no ranks**: the overview
+    compares classes, and whoever wants children opens the class."""
+
+    class_group_id: int
+    class_group: str
+    #: Staff-only, like the page's; null when nobody in the class has a mark.
+    class_average: Optional[str]
+    children_with_an_average: int
+    from_snapshot: bool
+
+
+class OverviewOut(Schema):
+    term_id: int
+    term: str
+    classes: List[ClassFiguresOut]
+
+
+@router.get("/broadsheets/", response=BroadsheetTermsOut, tags=["results"])
+def broadsheet_terms(request):
+    """Which terms a broadsheet can be read for. Authority before the read,
+    with the broadsheet's own flat 404 — see the module docstring."""
+    school = _school_of(request)
+    _require_position_authority(request.user, school)
+    return BroadsheetTermsOut(
+        terms=[
+            TermChoiceOut(term_id=term.pk, term=str(term), is_current=term.is_current)
+            for term in Term.objects.order_by("-starts_on", "-pk")
+        ]
+    )
+
+
+@router.get("/overview/", response=OverviewOut, tags=["results"])
+def overview(request, term_id: int):
+    """Every class this term, with its class average: the principal's view.
+
+    **Which classes.** Every class still taught, and every class that had a
+    child or a result sheet this term — so a class retired since a released
+    term is still on that term's overview, with the figures that went home.
+
+    Per class, a fixed number of queries whatever its size: `sheet_for()`, then
+    either `cards_on()` or `class_results()`'s two reads. Nothing here is per
+    child.
+    """
+    school = _school_of(request)
+    _require_position_authority(request.user, school)
+    term = get_object_or_404(Term, pk=term_id)
+
+    groups = ClassGroup.objects.filter(
+        Q(is_active=True)
+        | Q(pk__in=ClassPlacement.objects.filter(term=term).values("class_group_id"))
+        | Q(pk__in=ResultSheet.objects.filter(term=term).values("class_group_id"))
+    ).order_by("level", "name")
+
+    classes = []
+    for group in groups:
+        average, counted, frozen = _class_figures(group, term)
+        classes.append(
+            ClassFiguresOut(
+                class_group_id=group.pk,
+                class_group=str(group),
+                class_average=_as_text(average),
+                children_with_an_average=counted,
+                from_snapshot=frozen,
+            )
+        )
+    return OverviewOut(term_id=term.pk, term=str(term), classes=classes)
+
+
 @router.get(
     "/classes/{class_group_id}/broadsheet/",
     response=BroadsheetOut,
@@ -315,11 +449,7 @@ def _from_the_snapshot(class_group, term, sheet):
     """
     released = released_cards.cards_on(sheet)
 
-    averages = {
-        card.student_membership_id: card.own_average
-        for card in released
-        if card.own_average is not None
-    }
+    averages = _frozen_averages(released)
     ranks = positions.dense_positions(averages)
 
     # Columns in the order the cards froze them — `ReleasedSubjectResult.position`
@@ -380,11 +510,7 @@ def _from_the_snapshot(class_group, term, sheet):
     return BroadsheetOut(
         class_group=str(class_group),
         term=str(term),
-        class_average=(
-            _as_text(positions.mean_percentage(averages.values()))
-            if averages
-            else None
-        ),
+        class_average=_as_text(_mean_or_none(averages.values())),
         rows=rows,
         from_snapshot=True,
     )
