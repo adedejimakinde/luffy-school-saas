@@ -33,7 +33,7 @@ two conventions in one file would invite a route that mixes them. That module's
 docstring has the argument in full.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 from django.contrib.auth import logout as end_session
 from django.db.models import Q
@@ -46,8 +46,8 @@ from ninja.utils import check_csrf
 
 from accounts import guardian_signin, signin
 from accounts.enrolment_api import router as enrolment_router
-from accounts.models import Membership, Role
-from accounts.services import NotPermitted
+from accounts.models import STAFF_ROLES, Membership, Role
+from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
 from attendance.api import router as attendance_router
@@ -64,6 +64,7 @@ from schools.models import (
     Domain,
     Invitation,
     InvitationError,
+    InvitationStatus,
     InviteeDeactivated,
     PasswordRequired,
     School,
@@ -743,6 +744,89 @@ class AcceptedOut(Schema):
 
 
 # -- administrative: issuing and cancelling ----------------------------------
+
+
+class InvitationRowOut(Schema):
+    """One invitation on the staff screen.
+
+    `sent_to` is **what the inviting admin typed**, and the only "who" this
+    carries — for `InvitationOut`'s reason: the account an address resolved to
+    may be somebody else's teacher, with their own name and a second
+    identifier, neither of which is this school's to read. None for an
+    invitation issued before the column existed; the screen shows "-".
+
+    `status` is the one the invitee would meet: a pending invitation past its
+    expiry reads `expired`, whatever the row still says.
+    """
+
+    id: int
+    sent_to: Optional[str]
+    role: str
+    role_display: str
+    status: str
+    expires_at: str
+
+
+class InvitationListOut(Schema):
+    invitations: List[InvitationRowOut]
+    #: The roles the form may offer: `invite_staff()` refuses anything else.
+    roles: List[str]
+
+
+_MAY_NOT_INVITE = "Staff are invited by an administrator of the school."
+
+
+@api.get(
+    "/schools/{slug}/invitations/",
+    response={200: InvitationListOut},
+    auth=session_auth,
+    tags=["invitations"],
+)
+def list_invitations(request, slug: str):
+    """This school's invitations that are still somebody's to act on.
+
+    **Authority before the read**, and it is `invite_staff()`'s own authority —
+    whoever may issue an invitation may see the list, and nobody else.
+
+    **One row per membership, the newest.** A resend is a second row that
+    revokes the first, so listing every row would show each resend as a
+    revoked invitation beside a live one. Accepted ones drop off: that person
+    is on the staff list now.
+
+    **`membership__school=` is the whole of the isolation.** `Invitation` lives
+    in the public schema beside `Membership`, so no tenant schema stands behind
+    this filter.
+    """
+    school = get_object_or_404(School, slug=slug)
+    if not can_grant_memberships(request.user, school):
+        raise HttpError(403, _MAY_NOT_INVITE)
+
+    newest = {}
+    for invitation in (
+        Invitation.objects.for_school(school)
+        .select_related("membership")
+        .order_by("-created_at", "-pk")
+    ):
+        newest.setdefault(invitation.membership_id, invitation)
+
+    rows = []
+    for invitation in newest.values():
+        if invitation.status == InvitationStatus.ACCEPTED:
+            continue
+        status = invitation.status
+        if status == InvitationStatus.PENDING and invitation.is_expired:
+            status = InvitationStatus.EXPIRED
+        rows.append(
+            InvitationRowOut(
+                id=invitation.pk,
+                sent_to=invitation.sent_to or None,
+                role=invitation.intended_role,
+                role_display=invitation.membership.get_role_display(),
+                status=status,
+                expires_at=invitation.expires_at.isoformat(),
+            )
+        )
+    return InvitationListOut(invitations=rows, roles=sorted(STAFF_ROLES))
 
 
 @api.post(

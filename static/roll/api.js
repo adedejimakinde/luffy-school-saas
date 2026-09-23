@@ -35,6 +35,14 @@ export function classUrl(studentMembershipId) {
   return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/class/`;
 }
 
+export function guardiansUrl(studentMembershipId) {
+  return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/guardians/`;
+}
+
+export function removeUrl(studentMembershipId, linkId) {
+  return `${guardiansUrl(studentMembershipId)}${encodeURIComponent(linkId)}/remove/`;
+}
+
 /**
  * Which page-level state an answer produces.
  *
@@ -117,4 +125,53 @@ export async function setClass({ studentMembershipId, classGroupId, fetchImpl = 
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
+}
+
+/**
+ * One child's guardians. **A 404 here is the child, not the host**: the roll
+ * itself loaded on this host, so a missing child is a panel note rather than
+ * the whole page turning into "wrong address".
+ */
+export async function fetchGuardians({ studentMembershipId, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(await getJson(guardiansUrl(studentMembershipId), { fetchImpl }), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** Link a guardian by name and contact. Answers with the whole panel. */
+export async function linkGuardian({ studentMembershipId, guardian, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(
+      await postJson(guardiansUrl(studentMembershipId), guardian, { fetchImpl }),
+      201,
+    );
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** Remove one guardian from one child. Answers with the whole panel. */
+export async function removeGuardian({ studentMembershipId, linkId, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(
+      await postJson(removeUrl(studentMembershipId, linkId), {}, { fetchImpl }),
+      200,
+    );
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+function panelAnswer(answer, expected) {
+  if (answer.status === expected && answer.body) return { ok: true, body: answer.body };
+  if (answer.status === 422) return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
+  if (answer.status === 403) return { ok: false, outcome: SAVE.NOT_ALLOWED, body: answer.body || {} };
+  if (answer.status === 404) return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
+  return {
+    ok: false,
+    refusal: refusalFor(answer.status, answer.body),
+    body: answer.body || {},
+  };
 }

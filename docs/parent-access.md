@@ -209,6 +209,16 @@ and a verified flag. The channel is entered by a school admin (D10) and is **not
 trusted because a school typed it.** Classnode sends a verification to the channel and
 the guardian link does not go live until it comes back.
 
+**Live per school, not per channel (#135, decided September 2026).** A link goes live
+at a school only when the guardian answers *that school*. A channel already proved at
+St Mary's does not make a Grace link live, and neither does answering a St Mary's code:
+with guardians found by contact, a mistyped number that belongs to a verified parent
+elsewhere would otherwise hand them a child with nobody asked. Until the guardian is
+live at a school, that school is shown what it typed about them — never the account's
+stored name or channel, and never "verified", either of which would tell an office that
+a number belongs to a parent somewhere else. The door that asks an already-verified
+guardian to answer a second school is PR D, with delivery (OPEN-5).
+
 This is the one decision that makes A3 and A4 cheap to be wrong about. If schools turn
 out to hold good emails, email is the identity. If they only hold numbers, phone works.
 No rewrite either way.
@@ -273,7 +283,12 @@ divergence would surface as a parent who cannot sign in with details the school 
 certain it holds.
 
 One guardian, one child, one action. Attaching a second child is the same action again.
-No bulk import, no CSV, not yet.
+
+~~No bulk import, no CSV, not yet.~~ **Superseded by B2 (#134):** a class can be
+admitted from a CSV with guardian columns. It is a third entry point onto the same
+action, not a copy of it — `guardian_contacts.link_by_contact_as()` is the one code path,
+used by the roll's guardians panel and by the import, and it records the channel either
+way, so an imported guardian has the same single verification story as any other.
 
 Guardians never self-register. An admission form filled in by a parent is not
 self-registration: it is a school admin entering what the form says, under the school's

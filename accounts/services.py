@@ -16,7 +16,6 @@ from django.utils import timezone
 from .models import (
     LIVE_STATUSES,
     MEMBERSHIP_GRANTING_ROLES,
-    GuardianAccount,
     Guardianship,
     Membership,
     MembershipStatus,
@@ -190,6 +189,8 @@ def link_guardian(
     is_primary_contact=False,
     receives_invoices=True,
     can_collect=True,
+    entered_name="",
+    entered_contact="",
 ):
     """Link a parent's login to one child.
 
@@ -202,11 +203,15 @@ def link_guardian(
     that a refused link never grants the PARENT membership in the first place
     rather than granting one and relying on the rollback to take it back.
 
-    **The membership is granted INVITED unless the guardian holds a verified
-    contact channel**, which is D9's "the guardian link does not go live until
-    it comes back" as a thing the code does rather than a sentence in a design
-    doc. `GuardianAccount.has_verified_channel()` has existed since PR B with
-    nothing reading it; this is the reader.
+    **The membership is granted INVITED, whatever the guardian's channel**,
+    which is D9's "the guardian link does not go live until it comes back" as a
+    thing the code does rather than a sentence in a design doc — and, since
+    #135, at *this school*. It used to go ACTIVE at once for a guardian holding
+    a verified channel anywhere, and with guardians found by contact that meant
+    one mistyped number handed a child to a verified parent at another school,
+    with nobody asked. A channel proved at St Mary's is not the guardian saying
+    yes to a child at Grace. `activate_guardian_links()` is what turns a school
+    live, and it is only ever asked about one school.
 
     INVITED rather than refusing outright, because D10's order is "create
     guardian, attach to child, enter contact channel" — the link comes *before*
@@ -219,7 +224,16 @@ def link_guardian(
 
     `grant_membership()` does not downgrade a live membership, so a guardian
     already ACTIVE at a school stays ACTIVE when a second child is linked
-    there — the gate gives access, it does not take it away.
+    there — the gate gives access, it does not take it away. **Liveness is per
+    school, not per child**: a parent this school has already confirmed sees a
+    second child here at once. Per-child would need a status on `Guardianship`.
+
+    `entered_name` and `entered_contact` are what the school typed when it made
+    this link. They are what this school is shown about the guardian until the
+    guardian is live here, because the `User` behind a contact may be somebody
+    else's parent, and their stored name is not this school's to read — the
+    reason `InvitationOut` says nothing about who an invitation resolved to.
+    Kept on a link that already existed rather than overwritten.
 
     **What this deliberately does not do is take access back.** A channel
     revoked under D11 leaves an ACTIVE membership standing, because D11's change
@@ -239,16 +253,8 @@ def link_guardian(
     except ValidationError as exc:
         _raise_as_membership_error(exc)
 
-    account = GuardianAccount.objects.filter(user=guardian).first()
     grant_membership(
-        guardian,
-        student.school,
-        Role.PARENT,
-        status=(
-            MembershipStatus.ACTIVE
-            if account is not None and account.has_verified_channel()
-            else MembershipStatus.INVITED
-        ),
+        guardian, student.school, Role.PARENT, status=MembershipStatus.INVITED
     )
 
     if is_primary_contact:
@@ -264,6 +270,8 @@ def link_guardian(
             "is_primary_contact": is_primary_contact,
             "receives_invoices": receives_invoices,
             "can_collect": can_collect,
+            "entered_name": entered_name,
+            "entered_contact": entered_contact,
         },
     )
     if not created and is_primary_contact and not link.is_primary_contact:
@@ -272,19 +280,20 @@ def link_guardian(
     return link
 
 
-def activate_guardian_links(guardian):
-    """Turn every waiting PARENT membership of `guardian` live. Returns how many.
+def activate_guardian_links(guardian, school):
+    """Turn `guardian`'s waiting PARENT membership at `school` live. Returns how many.
 
     The other half of `link_guardian()`'s gate: that one withholds access until
-    a channel is verified, and this is what verifying does about it. Called from
-    `guardian_contacts.confirm_verification()`, which is the one place a channel
-    ever becomes verified.
+    the guardian answers, and this is what answering does about it. Called from
+    `guardian_contacts.confirm_verification()`, with the school whose code was
+    answered.
 
-    **Every school at once, because a guardian has one channel and many
-    schools.** D5 gives a parent of three children at two schools one login and
-    one guardian record; scoping this to a school would mean the channel proved
-    at St Mary's left the same person waiting at Grace with nothing further to
-    prove.
+    **One school, never every school** (#135). A guardian has one channel and
+    may have children at several schools, and this used to promote all of them
+    at once — so a code St Mary's sent, answered for St Mary's, also opened
+    whatever child Grace had linked to that number, typo or not. The guardian
+    said yes to one school, and one school is what goes live. Grace asks for
+    its own answer; PR D is the door that asks.
 
     **INVITED only, never SUSPENDED.** A suspension is somebody's decision about
     this person, and a verified channel is not an answer to it — promoting a
@@ -297,7 +306,10 @@ def activate_guardian_links(guardian):
     number, and verifying a contact channel has nothing to say about it.
     """
     return Membership.objects.filter(
-        user=guardian, role=Role.PARENT, status=MembershipStatus.INVITED
+        user=guardian,
+        school_id=getattr(school, "pk", school),
+        role=Role.PARENT,
+        status=MembershipStatus.INVITED,
     ).update(status=MembershipStatus.ACTIVE)
 
 

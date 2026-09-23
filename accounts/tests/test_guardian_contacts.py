@@ -1359,8 +1359,10 @@ class TheLinkDoesNotGoLiveUntilTheChannelDoesTests(TwoSchools):
     """
 
     def verified_channel_for(self, admin, parent, value="08031234567"):
+        """Recorded and proved **by `admin`'s school**, which is the school the
+        answer opens (#135) — the way production asks, not the unscoped door."""
         contact = self.record(admin, parent, ContactChannel.PHONE, value)
-        _, raw = guardian_contacts.request_verification(contact)
+        _, raw = guardian_contacts.request_verification_as(admin, contact)
         self.assertTrue(guardian_contacts.confirm_verification(contact, raw))
         return contact
 
@@ -1404,42 +1406,67 @@ class TheLinkDoesNotGoLiveUntilTheChannelDoesTests(TwoSchools):
         )
         self.assertTrue(self.parent.has_access_to(self.st_marys))
 
-    def test_one_channel_turns_every_school_live_at_once(self):
-        """One person, one channel, many schools — D5's shape.
+    def test_one_answer_opens_only_the_school_that_asked(self):
+        """**Reversed by #135.** This used to assert that one channel turned
+        every school live at once. It no longer does, on purpose: Grace linked
+        this number too — rightly or by a typo, nothing here can tell — and a
+        code St Mary's sent, answered for St Mary's, is not the guardian saying
+        yes to Grace's child.
 
-        CONTROL: scoping the `activate_guardian_links()` query to a single
-        school (say, by passing one in and filtering on it) leaves Grace waiting
-        with nothing further to prove, and this goes red.
+        CONTROL: dropping the `school_id=` filter from
+        `activate_guardian_links()` promotes Grace too, and this goes red.
         """
         services.link_guardian(self.parent, self.child_at_grace)
-        for school in (self.st_marys, self.grace):
-            self.assertEqual(
-                self.parent_membership(self.parent, school).status,
-                MembershipStatus.INVITED,
-            )
 
         self.verified_channel_for(self.marys_admin, self.parent)
 
-        for school in (self.st_marys, self.grace):
-            with self.subTest(school=school.slug):
-                self.assertEqual(
-                    self.parent_membership(self.parent, school).status,
-                    MembershipStatus.ACTIVE,
-                )
+        self.assertEqual(
+            self.parent_membership(self.parent, self.st_marys).status,
+            MembershipStatus.ACTIVE,
+        )
+        self.assertEqual(
+            self.parent_membership(self.parent, self.grace).status,
+            MembershipStatus.INVITED,
+            "an answer to St Mary's opened Grace",
+        )
+        self.assertFalse(self.parent.has_access_to(self.grace))
 
-    def test_a_child_linked_after_verification_is_live_immediately(self):
-        """The gate reads the channel, not the order things happened in.
+    def test_a_guardian_verified_at_one_school_waits_at_the_next(self):
+        """**Reversed by #135.** This used to pin the opposite — "the gate
+        reads the channel, not the order" — and that was the hole: with
+        guardians found by contact, a mistyped number belonging to a verified
+        parent elsewhere handed them the child at once, with nobody asked.
 
-        CONTROL: dropping the `account is not None and ...` test in
-        `link_guardian()` and always passing INVITED leaves this second school
-        waiting behind a channel that is already proved, and this goes red.
+        CONTROL: `link_guardian()` granting ACTIVE to a guardian with a
+        verified channel — what it did before — makes this go red.
         """
         self.verified_channel_for(self.marys_admin, self.parent)
         services.link_guardian(self.parent, self.child_at_grace)
 
         self.assertEqual(
             self.parent_membership(self.parent, self.grace).status,
-            MembershipStatus.ACTIVE,
+            MembershipStatus.INVITED,
+            "a channel proved at St Mary's went live at Grace",
+        )
+        self.assertFalse(self.parent.has_access_to(self.grace))
+
+    def test_a_code_no_school_asked_for_proves_the_channel_and_opens_nothing(self):
+        """Platform staff are behind no school, and neither is the unscoped
+        door. The channel is proved; no school has been answered.
+
+        CONTROL: activating every waiting school when `requested_by_school_id`
+        is None makes this go red.
+        """
+        contact = self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
+        _, raw = guardian_contacts.request_verification(contact)
+
+        self.assertTrue(guardian_contacts.confirm_verification(contact, raw))
+
+        contact.refresh_from_db()
+        self.assertIsNotNone(contact.verified_at)
+        self.assertEqual(
+            self.parent_membership(self.parent, self.st_marys).status,
+            MembershipStatus.INVITED,
         )
 
     def test_a_suspended_parent_is_not_promoted_by_verifying(self):
@@ -1471,9 +1498,11 @@ class TheLinkDoesNotGoLiveUntilTheChannelDoesTests(TwoSchools):
         CONTROL: dropping `role=Role.PARENT` from `activate_guardian_links()`
         makes the invited teacher membership below go ACTIVE, and this red.
         """
+        # At St Mary's, the school that asks below, so that the school filter
+        # cannot hold this on the role filter's behalf.
         services.grant_membership(
             self.parent,
-            self.grace,
+            self.st_marys,
             Role.TEACHER,
             status=MembershipStatus.INVITED,
         )
@@ -1482,7 +1511,7 @@ class TheLinkDoesNotGoLiveUntilTheChannelDoesTests(TwoSchools):
 
         self.assertEqual(
             Membership.objects.get(
-                user=self.parent, school=self.grace, role=Role.TEACHER
+                user=self.parent, school=self.st_marys, role=Role.TEACHER
             ).status,
             MembershipStatus.INVITED,
         )
@@ -1493,14 +1522,19 @@ class TheLinkDoesNotGoLiveUntilTheChannelDoesTests(TwoSchools):
 
         CONTROL: dropping `user=guardian` from `activate_guardian_links()`
         promotes every waiting parent on the platform, and this goes red.
+
+        The other parent waits at **St Mary's**, the school that asks, so that
+        the school filter cannot hold this on the user filter's behalf.
         """
+        services.link_guardian(self.other_parent, self.child_at_marys)
+
         self.verified_channel_for(self.marys_admin, self.parent)
 
         self.assertEqual(
-            self.parent_membership(self.other_parent, self.grace).status,
+            self.parent_membership(self.other_parent, self.st_marys).status,
             MembershipStatus.INVITED,
         )
-        self.assertFalse(self.other_parent.has_access_to(self.grace))
+        self.assertFalse(self.other_parent.has_access_to(self.st_marys))
 
     def test_a_wrong_code_promotes_nothing(self):
         """The promotion hangs off the confirmed branch, not off being asked.

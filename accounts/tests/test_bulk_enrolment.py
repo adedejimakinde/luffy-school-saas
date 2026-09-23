@@ -11,7 +11,8 @@ report.
 """
 
 from academics.models import ClassPlacement, Term
-from accounts.models import Guardianship, Membership, Role, User
+from accounts.models import GuardianAccount, Guardianship, Membership, Role, User
+from accounts.services import link_guardian
 from accounts.tests.test_enrolment_api import EnrolmentSetUp
 from results.tests.fixtures import HOST, THEIR_HOST
 from schools.tests.tenants import connected_to
@@ -385,8 +386,8 @@ class BulkImportTests(EnrolmentSetUp):
         self.assertEqual(
             body["guardian_links"],
             [
-                {"line": 2, "guardian_contact": "+2348031234567", "live": False},
-                {"line": 3, "guardian_contact": "papa@example.com", "live": False},
+                {"line": 2, "guardian_contact": "+2348031234567", "status": "pending verification"},
+                {"line": 3, "guardian_contact": "papa@example.com", "status": "pending verification"},
             ],
         )
         self.assertEqual(body["guardians_pending"], 2)
@@ -396,15 +397,24 @@ class BulkImportTests(EnrolmentSetUp):
         )
         self.assertEqual(parent.status, "invited", "the link went live without a channel")
 
-    def test_a_guardian_already_verified_is_reported_live_not_pending(self):
-        """`link_guardian()` grants ACTIVE at once to a guardian who already
-        holds a verified channel, so "pending" would be false — and false in
-        the direction that matters: the office would believe a parent could not
-        yet see a child they already can."""
+    def test_a_guardian_verified_elsewhere_is_pending_here_like_anybody_new(self):
+        """**Reversed by #135.** This used to say "live": `link_guardian()`
+        granted ACTIVE at once to a guardian verified anywhere. Now a link goes
+        live only when the guardian answers *this* school, so a parent verified
+        at Grace is pending at St Mary's — and the report cannot tell St Mary's
+        which numbers belong to verified parents elsewhere.
+
+        CONTROL 4: `link_guardian()` granting ACTIVE makes this go red.
+        """
         parent = User.objects.create_user(
             "mama.obi", None, full_name="Mama Obi", phone="08031234567"
         )
+        with_a_child_at_grace = Membership.objects.filter(
+            school=self.grace, role=Role.STUDENT
+        ).first()
+        link_guardian(parent, with_a_child_at_grace)
         give_verified_channel(parent, "08031234567")
+        self.assertTrue(parent.has_access_to(self.grace), "the fixture is not live at Grace")
 
         response = self.upload(
             self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,0803 123 4567")
@@ -414,14 +424,57 @@ class BulkImportTests(EnrolmentSetUp):
         body = response.json()
         self.assertEqual(
             body["guardian_links"],
-            [{"line": 2, "guardian_contact": "+2348031234567", "live": True}],
+            [{"line": 2, "guardian_contact": "+2348031234567", "status": "pending verification"}],
         )
-        self.assertEqual(body["guardians_pending"], 0)
+        self.assertEqual(body["guardians_pending"], 1)
         self.assertEqual(
             Guardianship.objects.get(student__user__username="ST-MARYS/1").guardian,
             parent,
             "an existing parent was duplicated rather than linked",
         )
+        self.assertFalse(parent.has_access_to(self.stmarys))
+
+    def test_a_guardian_already_live_at_this_school_is_reported_live(self):
+        """The one case a new link is live: this school has already had its
+        answer from this guardian, for another child, and `grant_membership()`
+        never takes that back. Liveness is per school, not per child.
+
+        The control for the test above, and the reason it needs one: a report
+        that printed "pending verification" whatever happened would pass it.
+        """
+        parent = User.objects.create_user(
+            "mama.obi", None, full_name="Mama Obi", phone="08031234567"
+        )
+        link_guardian(
+            parent, Membership.objects.filter(school=self.stmarys, role=Role.STUDENT).first()
+        )
+        give_verified_channel(parent, "08031234567")
+
+        body = self.upload(
+            self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,08031234567")
+        ).json()
+
+        self.assertEqual(
+            body["guardian_links"],
+            [{"line": 2, "guardian_contact": "+2348031234567", "status": "live"}],
+        )
+        self.assertEqual(body["guardians_pending"], 0)
+
+    def test_an_imported_guardian_has_a_channel_to_verify(self):
+        """D10: one guardian record, one verification story, whichever door.
+        The import used to make the `User` and record no channel, so there was
+        nothing for anybody to verify.
+
+        CONTROL 7: the import creating its own guardian rather than going
+        through `link_by_contact_as()` makes this go red.
+        """
+        self.upload(self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,0803 123 4567"))
+
+        guardian = Guardianship.objects.get(student__user__username="ST-MARYS/1").guardian
+        contact = GuardianAccount.objects.get(user=guardian).live_contact()
+        self.assertIsNotNone(contact, "an imported guardian has no channel")
+        self.assertEqual(contact.value, "+2348031234567")
+        self.assertIsNone(contact.verified_at)
 
     # -- files that are not files ----------------------------------------------
 

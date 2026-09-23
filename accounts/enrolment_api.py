@@ -46,9 +46,16 @@ from ninja import Router, Schema
 
 from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term
-from accounts import bulk
+from accounts import bulk, guardian_contacts
 from accounts import services as accounts_services
-from accounts.models import Membership, Role
+from accounts.models import (
+    LIVE_STATUSES,
+    GuardianAccount,
+    Guardianship,
+    Membership,
+    Relationship,
+    Role,
+)
 from accounts.session import session_auth
 
 router = Router(auth=session_auth)
@@ -139,6 +146,9 @@ _MAY_NOT_ADMIT = (
 _MAY_NOT_PLACE = (
     "Children are put in classes by a principal or an administrator of the school."
 )
+_MAY_NOT_LINK = "Guardians are linked by an administrator of the school."
+_NO_SUCH_CHILD = "There is no such child on this school's roll."
+_NO_SUCH_LINK = "That guardian is not linked to this child."
 
 
 def _first(exc) -> str:
@@ -380,11 +390,16 @@ class GuardianLinkOut(Schema):
     `guardian_contact` is the contact **as it was read** — `+2348031234567`
     for a row that said `0803 123 4567` — so an office can see a misread
     number rather than discover it when the code never arrives.
+
+    `status` is `"pending verification"` for every new link, and `"live"` only
+    for a guardian this school has already confirmed (#135): a guardian
+    verified at another school waits here like anybody new, so the report
+    says nothing about who is verified elsewhere.
     """
 
     line: int
     guardian_contact: str
-    live: bool
+    status: str
 
 
 class BulkReportOut(Schema):
@@ -399,11 +414,9 @@ class BulkReportOut(Schema):
     column blank. Reported because a child cannot be handed a login nobody
     wrote down.
 
-    `guardian_links` is every link made, by line, and whether it is **live**.
-    D9: `link_guardian()` grants an INVITED membership until the guardian's
-    contact channel is verified, so an import that said nothing would leave the
-    office believing it had finished. A guardian already verified on the
-    platform goes live at once, and the report says so rather than "pending".
+    `guardian_links` is every link made, by line, with its status. D9:
+    a link is INVITED until the guardian answers this school, so an import that
+    said nothing would leave the office believing it had finished.
     `guardians_pending` counts the ones that are not live.
     """
 
@@ -443,6 +456,10 @@ def bulk_admit(request, payload: BulkIn):
         return 422, MessageOut(detail=str(exc))
     except ValidationError as exc:
         return 422, MessageOut(detail=_first(exc))
+    except guardian_contacts.GuardianContactError as exc:
+        # A contact two accounts answer to, found at write time. Nothing was
+        # written: `admit()` holds the whole file in one transaction.
+        return 422, MessageOut(detail=str(exc))
 
     return 200, BulkReportOut(
         admitted=len(report.planned) if report.ok else 0,
@@ -453,9 +470,228 @@ def bulk_admit(request, payload: BulkIn):
         generated={str(line): handle for line, handle in report.generated.items()},
         guardian_links=[
             GuardianLinkOut(
-                line=link.line, guardian_contact=link.guardian_contact, live=link.live
+                line=link.line, guardian_contact=link.guardian_contact, status=link.status
             )
             for link in report.guardian_links
         ],
-        guardians_pending=sum(1 for link in report.guardian_links if not link.live),
+        guardians_pending=sum(
+            1 for link in report.guardian_links if link.status == guardian_contacts.PENDING
+        ),
     )
+
+
+# ---------------------------------------------------------------------------
+# A child's guardians: who they are here, and whether they can see the child.
+# ---------------------------------------------------------------------------
+
+
+class GuardianOut(Schema):
+    """One guardian of one child, **as this school is entitled to see them**.
+
+    `name` and `contact` are what this school typed when it made the link
+    (`Guardianship.entered_name`). A contact can resolve to a guardian who is
+    somebody else's parent, and until they have answered *this* school their
+    stored name and channel are not this school's to read — the same rule
+    `InvitationOut` keeps. Once they are live here, a link with nothing typed
+    on it falls back to the name they hold.
+
+    `status` is the link as the office reads it: `pending verification` until
+    the guardian answers this school, then `live` — or `suspended`, which is a
+    school's decision that no code reverses.
+
+    `channel` is said only once they are live here: `verified`, or `dormant`
+    after D9's 180 quiet days. Before that it is `not verified here` whatever
+    their channel is elsewhere, because "verified" on a screen would tell an
+    office that a number belongs to a parent at another school.
+    """
+
+    link_id: int
+    name: str
+    contact: str
+    relationship: str
+    status: str
+    channel: str
+
+
+class GuardiansOut(Schema):
+    student_membership_id: int
+    student: str
+    guardians: List[GuardianOut]
+    #: ADMIN alone links and unlinks; a principal reads the panel.
+    may_link: bool
+    relationships: List[str]
+
+
+class LinkIn(Schema):
+    full_name: str
+    contact: str
+    relationship: str = Relationship.GUARDIAN
+
+
+def _child_here(school, student_membership_id):
+    """A child on this school's roll, or None.
+
+    **`school=` is the whole of the isolation here.** `Membership` is a shared
+    table, so no tenant schema stands behind this filter: without it, an
+    administrator at Grace could address a St Mary's child by id and read — or
+    link — their guardians.
+    """
+    return (
+        Membership.objects.select_related("user")
+        .filter(
+            pk=student_membership_id,
+            school=school,
+            role=Role.STUDENT,
+            status__in=LIVE_STATUSES,
+        )
+        .first()
+    )
+
+
+def _guardian_out(link, school) -> GuardianOut:
+    status = guardian_contacts.link_status_at(link.guardian, school)
+    live = status == guardian_contacts.LIVE
+    if not live:
+        name, contact = link.entered_name, link.entered_contact
+        channel = "not verified here" if contact else "no contact recorded here"
+    else:
+        name = link.entered_name or link.guardian.full_name
+        # A read, not `guardian_account_for()`: that one creates the account,
+        # and a GET that writes a row is a GET nobody can reason about.
+        account = GuardianAccount.objects.filter(user=link.guardian).first()
+        account_contact = account.live_contact() if account is not None else None
+        contact = link.entered_contact or (account_contact.value if account_contact else "")
+        if account_contact is None:
+            channel = "no contact recorded"
+        elif guardian_contacts.is_dormant(account_contact):
+            channel = "dormant"
+        elif account_contact.verified_at is not None:
+            channel = "verified"
+        else:
+            channel = "not verified"
+    return GuardianOut(
+        link_id=link.pk,
+        name=name,
+        contact=contact,
+        relationship=link.relationship,
+        status=status,
+        channel=channel,
+    )
+
+
+def _guardians_of(child, school, may_link) -> GuardiansOut:
+    links = Guardianship.objects.filter(student=child).select_related("guardian").order_by("pk")
+    return GuardiansOut(
+        student_membership_id=child.pk,
+        student=child.display_name or child.user.full_name or child.user.username,
+        guardians=[_guardian_out(link, school) for link in links],
+        may_link=may_link,
+        relationships=list(Relationship.values),
+    )
+
+
+@router.get(
+    "/roll/{int:student_membership_id}/guardians/",
+    response={200: GuardiansOut, 403: MessageOut, 404: MessageOut},
+)
+def guardians(request, student_membership_id: int):
+    """A child's guardians. Principal or administrator, asked **before** the
+    child is looked up, so "may you?" and "is there such a child?" cannot be
+    told apart by somebody with no part in the roll."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    child = _child_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    return 200, _guardians_of(
+        child, school, accounts_services.can_grant_memberships(request.user, school)
+    )
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/guardians/",
+    response={201: GuardiansOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def link(request, student_membership_id: int, payload: LinkIn):
+    """Link a guardian to a child by name and contact — D10's standalone action.
+
+    Through `guardian_contacts.link_by_contact_as()`, the same code path the
+    bulk import takes, so a guardian entered here and one entered in a file are
+    one record with one channel. The link starts **pending verification** and
+    stays so until the guardian answers this school (#135); sending them the
+    code that asks is PR D, once there is a way to deliver one.
+
+    Answers with the whole panel, because a link can change what the rest of
+    it says — a sibling's guardian becoming this child's too.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    child = _child_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+
+    name = payload.full_name.strip()
+    if not name:
+        return 422, MessageOut(detail="A guardian needs a name.")
+    if payload.relationship not in Relationship.values:
+        return 422, MessageOut(detail=f"{payload.relationship!r} is not a relationship.")
+
+    try:
+        with transaction.atomic():
+            guardian_contacts.link_by_contact_as(
+                request.user,
+                child,
+                name,
+                payload.contact,
+                relationship=payload.relationship,
+            )
+    except guardian_contacts.GuardianContactError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except accounts_services.MembershipError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except ValidationError as exc:
+        return 422, MessageOut(detail=_first(exc))
+
+    return 201, _guardians_of(child, school, True)
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/guardians/{int:link_id}/remove/",
+    response={200: GuardiansOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def unlink(request, student_membership_id: int, link_id: int):
+    """Remove one guardian from one child. ADMIN alone.
+
+    D11 calls this "an authority decision … whoever the school designates", and
+    `unlink_guardian_as()` designates the administrator. The page asks for a
+    second click before it sends this; the route does not, because a confirm
+    step is about a person's hand slipping, not about who they are.
+
+    If that was the guardian's last child here, their PARENT membership here
+    ends too (`unlink_guardian()`). A sibling's link is untouched.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    child = _child_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    link = (
+        Guardianship.objects.select_related("guardian")
+        .filter(pk=link_id, student=child)
+        .first()
+    )
+    if link is None:
+        return 404, MessageOut(detail=_NO_SUCH_LINK)
+
+    try:
+        with transaction.atomic():
+            accounts_services.unlink_guardian_as(request.user, link.guardian, child)
+    except accounts_services.MembershipError as exc:
+        # `unlink_guardian_as()` refuses on its own authority too. Unreachable
+        # past the check above, and mapped anyway so a refusal is never a 500.
+        return 422, MessageOut(detail=str(exc))
+    return 200, _guardians_of(child, school, True)

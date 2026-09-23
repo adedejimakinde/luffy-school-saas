@@ -11,7 +11,16 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, SAVE, admit, fetchRoll, setClass } from "./api.js";
+import {
+  REFUSAL,
+  SAVE,
+  admit,
+  fetchGuardians,
+  fetchRoll,
+  linkGuardian,
+  removeGuardian,
+  setClass,
+} from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -31,6 +40,27 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
     default:
       return states.broken();
   }
+}
+
+/**
+ * What a guardians-panel answer does to the screen.
+ *
+ * A success replaces the panel with the server's — **the whole panel**, since
+ * a link or a removal can change what the rest of it says. A refusal that is a
+ * page state (signed out, broken) takes the page; anything else is a note in
+ * the panel, and a link form keeps what was typed.
+ */
+export function applyPanel(state, childId, result, typed = null) {
+  if (result.ok) {
+    return { ...state, panel: { childId, body: result.body, note: null, confirming: null } };
+  }
+  if (result.refusal) return { step: result.refusal, ...result.body };
+  const kind = result.outcome === SAVE.NOT_ALLOWED ? "not-allowed" : "rejected";
+  const panel = state.panel || { childId, body: {} };
+  return {
+    ...state,
+    panel: { ...panel, note: { kind, detail: result.body.detail, typed } },
+  };
 }
 
 export function fromRoll(answer) {
@@ -73,8 +103,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
   };
   const load = async (notes = {}) => {
+    const panel = state.panel || null;
     state = fromRoll(await fetchRoll({ fetchImpl }));
-    if (state.step === "roll") state = { ...state, notes };
+    if (state.step === "roll") state = { ...state, notes, panel };
     draw();
   };
 
@@ -89,7 +120,48 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
   root.addEventListener("click", async (event) => {
     const hit = event.target.closest("[data-action]");
-    if (!hit || hit.dataset.action !== "sign-out") return;
+    if (!hit) return;
+    const action = hit.dataset.action;
+    const panel = state.panel;
+
+    if (action === "guardians") {
+      const childId = Number(hit.dataset.child);
+      state = applyPanel(state, childId, await fetchGuardians({ studentMembershipId: childId, fetchImpl }));
+      draw();
+      return;
+    }
+    if (action === "close-guardians") {
+      state = { ...state, panel: null };
+      draw();
+      return;
+    }
+    if (action === "ask-remove" && panel) {
+      state = { ...state, panel: { ...panel, confirming: Number(hit.dataset.link) } };
+      draw();
+      return;
+    }
+    if (action === "cancel-remove" && panel) {
+      state = { ...state, panel: { ...panel, confirming: null } };
+      draw();
+      return;
+    }
+    if (action === "remove-guardian" && panel) {
+      // Only the link the page asked about. A stray "remove" with no question
+      // in front of it is not the second click of anything.
+      if (String(panel.confirming) !== String(hit.dataset.link)) return;
+      state = applyPanel(
+        state,
+        panel.childId,
+        await removeGuardian({
+          studentMembershipId: panel.childId,
+          linkId: Number(hit.dataset.link),
+          fetchImpl,
+        }),
+      );
+      draw();
+      return;
+    }
+    if (action !== "sign-out") return;
     const ended = sessionEnded(await signOut({ fetchImpl }));
     if (ended) {
       root.innerHTML = states.signedOut({ portal });
@@ -101,6 +173,22 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
+    if (form && form.guardian_contact && state.panel) {
+      if (event.preventDefault) event.preventDefault();
+      const guardian = {
+        full_name: form.guardian_name.value,
+        contact: form.guardian_contact.value,
+        relationship: form.relationship ? form.relationship.value : "guardian",
+      };
+      state = applyPanel(
+        state,
+        state.panel.childId,
+        await linkGuardian({ studentMembershipId: state.panel.childId, guardian, fetchImpl }),
+        guardian,
+      );
+      draw();
+      return;
+    }
     if (!form || !form.username) return;
     if (event.preventDefault) event.preventDefault();
 

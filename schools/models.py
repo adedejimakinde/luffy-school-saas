@@ -163,6 +163,12 @@ class Invitation(models.Model):
     status = models.CharField(
         max_length=16, choices=InvitationStatus, default=InvitationStatus.PENDING
     )
+    # The address the issuing admin typed, normalised — and the only "who" a
+    # school is ever shown about an invitation. The `User` it resolved to may be
+    # somebody else's teacher with a real name and a second identifier, and
+    # neither is the inviting school's to read (`api.InvitationOut`). Blank on
+    # every invitation issued before this column existed.
+    sent_to = models.CharField(max_length=254, blank=True, default="", db_default="")
     created_at = models.DateTimeField(auto_now_add=True)
     expires_at = models.DateTimeField()
     accepted_at = models.DateTimeField(null=True, blank=True)
@@ -211,7 +217,9 @@ class Invitation(models.Model):
     # -- minting and redeeming -----------------------------------------------
 
     @classmethod
-    def create_with_token(cls, membership, invited_by, *, ttl=DEFAULT_INVITATION_TTL):
+    def create_with_token(
+        cls, membership, invited_by, *, ttl=DEFAULT_INVITATION_TTL, sent_to=""
+    ):
         """Create an invitation and return `(invitation, raw_token)`.
 
         The raw token is returned and never stored. It exists in memory for as
@@ -225,6 +233,7 @@ class Invitation(models.Model):
             invited_by=invited_by,
             token_hash=hash_token(raw_token),
             expires_at=timezone.now() + ttl,
+            sent_to=sent_to,
         )
         return invitation, raw_token
 
