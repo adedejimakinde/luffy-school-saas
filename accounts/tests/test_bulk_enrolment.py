@@ -15,6 +15,7 @@ from accounts.models import Guardianship, Membership, Role, User
 from accounts.tests.test_enrolment_api import EnrolmentSetUp
 from results.tests.fixtures import HOST, THEIR_HOST
 from schools.tests.tenants import connected_to
+from tests.guardians import give_verified_channel
 
 IMPORT = "/api/enrolment/roll/import/"
 
@@ -138,6 +139,54 @@ class BulkImportTests(EnrolmentSetUp):
             with self.subTest(leaked=leaked):
                 self.assertNotIn(leaked, detail)
 
+    def test_a_handle_in_use_in_another_case_is_reported_on_its_row(self):
+        """The platform compares handles case-insensitively (`User.save()` asks
+        `matching_identifier()`), so this file has to as well.
+
+        **Status first.** A check narrower than the platform's lets the row
+        through, and `User.save()` then refuses it at write time as a
+        whole-file 422 with no line number — nothing written, and nothing the
+        office can find either.
+        """
+        User.objects.create_user("GRC/2026/0001", None, full_name="Their Child")
+
+        response = self.upload(self.admin, csv_of("Chike Obi,JSS 1A,grc/2026/0001,,,"))
+
+        self.assertEqual(response.status_code, 200, "a per-row report became a whole-file refusal")
+        body = response.json()
+        self.assertEqual([p["line"] for p in body["problems"]], [2])
+        self.assertIn("already in use", body["problems"][0]["detail"])
+
+    def test_a_generated_handle_steps_around_one_given_later_in_the_file(self):
+        """Line 2's reference would make `ST-MARYS/0100`, and line 3 asks for
+        exactly that handle by name. Generating in file order without knowing
+        what the rest of the file claims hands line 2 the handle and refuses
+        the whole file at line 3 — for a file with nothing wrong in it."""
+        response = self.upload(
+            self.admin,
+            csv_of("Chike Obi,JSS 1A,,0100,,", "Ngozi Abah,JSS 1B,ST-MARYS/0100,,,"),
+        )
+
+        self.assertEqual(response.status_code, 200, "a good file was refused whole")
+        body = response.json()
+        self.assertEqual(body["admitted"], 2)
+        self.assertEqual(
+            Membership.objects.get(user__username="ST-MARYS/0100").user.full_name,
+            "Ngozi Abah",
+        )
+        self.assertNotEqual(body["generated"]["2"], "ST-MARYS/0100")
+
+    def test_a_generated_handle_steps_around_one_in_use_in_another_case(self):
+        """A school that once typed its handles in lower case must not be
+        dead-ended: a generated handle is one the office cannot correct, so a
+        collision on it has to be avoided here rather than refused at save."""
+        User.objects.create_user("st-marys/1", None, full_name="Typed By Hand")
+
+        response = self.upload(self.admin, csv_of("Chike Obi,JSS 1A,,,,"))
+
+        self.assertEqual(response.status_code, 200, "a generated handle collided at save")
+        self.assertEqual(response.json()["generated"], {"2": "ST-MARYS/2"})
+
     def test_a_handle_duplicated_inside_the_file_is_caught(self):
         """Neither exists yet, so only the file itself can catch this.
 
@@ -166,6 +215,22 @@ class BulkImportTests(EnrolmentSetUp):
 
         self.assertEqual(body["admitted"], 0)
         self.assertIn("admission number", body["problems"][0]["detail"])
+
+    def test_a_reference_in_use_at_the_other_school_is_no_obstacle_here(self):
+        """**`Membership` is shared**, so "unique within this school" is a
+        `school=` filter doing real work rather than the tenant schema doing it
+        for free. Without it Grace's admission numbers would refuse St Mary's
+        children — and tell St Mary's which numbers Grace has issued."""
+        Membership.objects.filter(school=self.grace, role=Role.STUDENT).update(
+            reference="0100"
+        )
+
+        response = self.upload(self.admin, csv_of("Chike Obi,JSS 1A,,0100,,"))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["problems"], [])
+        self.assertEqual(body["admitted"], 1)
 
     def test_a_reference_duplicated_inside_the_file_is_caught(self):
         body = self.upload(
@@ -205,20 +270,29 @@ class BulkImportTests(EnrolmentSetUp):
 
         self.assertEqual(response.status_code, 403)
 
-    def test_a_principal_cannot_import(self):
-        """**Added because a control found it missing.**
+    def test_a_principal_is_refused_before_the_file_is_read(self):
+        """**Added because controls found the first two versions blind.**
 
-        A teacher fails both checks, so removing either one still refused her —
-        nothing in this file could tell the two apart. A principal is the
-        person who can: `PLACEMENT_ROLES` admits her and
-        `MEMBERSHIP_GRANTING_ROLES` does not, so a bulk import must refuse her
-        for the *admit* half while she may still move a child by hand.
+        A teacher fails both authorities, so removing either check still
+        refused her. A principal is the one who can tell them apart —
+        `PLACEMENT_ROLES` admits her and `MEMBERSHIP_GRANTING_ROLES` does not.
+
+        But a *clean* file cannot tell either: without the route's check,
+        `admit_student_as()` refuses her at write time anyway. What only the
+        route's check provides is refusing **before `check()` reads anything**,
+        so the file here is one `check()` would fault — on a handle that exists
+        at the other school. Without the gate she gets a 200 and a report that
+        says which handles are taken on the platform.
         """
+        User.objects.create_user("GRC/2026/0001", None, full_name="Their Child")
         before = self.counts()
 
-        response = self.upload(self.head, csv_of("Chike Obi,JSS 1A,,,,"))
+        response = self.upload(self.head, csv_of("Chike Obi,JSS 1A,GRC/2026/0001,,,"))
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 403, "the file was judged for somebody who may not import")
+        body = response.json()
+        self.assertNotIn("problems", body)
+        self.assertIn("admitted by an administrator", body["detail"])
         self.assertEqual(self.counts(), before)
 
     def test_an_administrator_at_one_school_cannot_import_at_the_other(self):
@@ -233,15 +307,16 @@ class BulkImportTests(EnrolmentSetUp):
     def test_siblings_sharing_a_contact_are_one_guardian_linked_to_each(self):
         """**Two rows, one parent.** The ordinary case in a school, and not a
         duplicate to refuse."""
-        body = self.upload(
+        response = self.upload(
             self.admin,
             csv_of(
                 "Chike Obi,JSS 1A,,,Mama Obi,08031234567",
                 "Ada Obi Two,JSS 1B,,,Mama Obi,08031234567",
             ),
-        ).json()
+        )
 
-        self.assertEqual(body["admitted"], 2)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["admitted"], 2)
         guardians = User.objects.filter(phone="+2348031234567")
         self.assertEqual(guardians.count(), 1, "one parent became two accounts")
         self.assertEqual(Guardianship.objects.filter(guardian=guardians.first()).count(), 2)
@@ -250,16 +325,17 @@ class BulkImportTests(EnrolmentSetUp):
         """`0803...`, `803...` and `+234803...` are one number. Normalising
         happens **before** the matching, which is the whole reason it happens
         at all."""
-        body = self.upload(
+        response = self.upload(
             self.admin,
             csv_of(
                 "One Child,JSS 1A,,,Mama Obi,08031234567",
                 "Two Child,JSS 1B,,,Mama Obi,8031234567",
                 "Three Child,JSS 1A,,,Mama Obi,+2348031234567",
             ),
-        ).json()
+        )
 
-        self.assertEqual(body["admitted"], 3)
+        self.assertEqual(response.status_code, 200, "three spellings of one number were refused")
+        self.assertEqual(response.json()["admitted"], 3)
         self.assertEqual(User.objects.filter(phone="+2348031234567").count(), 1)
         self.assertEqual(
             Guardianship.objects.filter(guardian__phone="+2348031234567").count(), 3
@@ -287,20 +363,65 @@ class BulkImportTests(EnrolmentSetUp):
 
         self.assertEqual(body["problems"][0]["column"], "guardian_name")
 
-    def test_the_report_says_the_guardian_links_are_not_live_yet(self):
+    def test_the_report_says_each_guardian_link_is_not_live_yet(self):
         """D9: `link_guardian()` grants an INVITED membership until a contact
         channel is verified, so an import that said nothing would leave the
-        office believing it had finished."""
-        body = self.upload(
-            self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,08031234567")
-        ).json()
+        office believing it had finished. **Per line**, so they know which
+        parents to chase.
 
-        self.assertEqual(body["guardians_pending"], 1)
-        link = Guardianship.objects.get(guardian__phone="+2348031234567")
+        The link is found through the child rather than the guardian's phone,
+        so that a control breaking how contacts are stored cannot turn this
+        into a `DoesNotExist` about something else."""
+        response = self.upload(
+            self.admin,
+            csv_of(
+                "Chike Obi,JSS 1A,STM/1,,Mama Obi,08031234567",
+                "Ngozi Abah,JSS 1B,STM/2,,Papa Abah,papa@example.com",
+            ),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            body["guardian_links"],
+            [
+                {"line": 2, "guardian_contact": "+2348031234567", "live": False},
+                {"line": 3, "guardian_contact": "papa@example.com", "live": False},
+            ],
+        )
+        self.assertEqual(body["guardians_pending"], 2)
+        link = Guardianship.objects.get(student__user__username="STM/1")
         parent = Membership.objects.get(
             user=link.guardian, school=self.stmarys, role=Role.PARENT
         )
         self.assertEqual(parent.status, "invited", "the link went live without a channel")
+
+    def test_a_guardian_already_verified_is_reported_live_not_pending(self):
+        """`link_guardian()` grants ACTIVE at once to a guardian who already
+        holds a verified channel, so "pending" would be false — and false in
+        the direction that matters: the office would believe a parent could not
+        yet see a child they already can."""
+        parent = User.objects.create_user(
+            "mama.obi", None, full_name="Mama Obi", phone="08031234567"
+        )
+        give_verified_channel(parent, "08031234567")
+
+        response = self.upload(
+            self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,0803 123 4567")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            body["guardian_links"],
+            [{"line": 2, "guardian_contact": "+2348031234567", "live": True}],
+        )
+        self.assertEqual(body["guardians_pending"], 0)
+        self.assertEqual(
+            Guardianship.objects.get(student__user__username="ST-MARYS/1").guardian,
+            parent,
+            "an existing parent was duplicated rather than linked",
+        )
 
     # -- files that are not files ----------------------------------------------
 

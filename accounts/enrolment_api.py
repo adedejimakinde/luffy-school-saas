@@ -374,6 +374,19 @@ class RowProblemOut(Schema):
     detail: str
 
 
+class GuardianLinkOut(Schema):
+    """One child linked to one guardian, by the line that asked for it.
+
+    `guardian_contact` is the contact **as it was read** — `+2348031234567`
+    for a row that said `0803 123 4567` — so an office can see a misread
+    number rather than discover it when the code never arrives.
+    """
+
+    line: int
+    guardian_contact: str
+    live: bool
+
+
 class BulkReportOut(Schema):
     """What a file did, or what is wrong with it.
 
@@ -386,15 +399,18 @@ class BulkReportOut(Schema):
     column blank. Reported because a child cannot be handed a login nobody
     wrote down.
 
-    `guardians_pending` is how many guardian links were made and are **not yet
-    live**. D9: `link_guardian()` grants an INVITED membership until the
-    guardian's contact channel is verified, so an import that said nothing
-    would leave the office believing it had finished.
+    `guardian_links` is every link made, by line, and whether it is **live**.
+    D9: `link_guardian()` grants an INVITED membership until the guardian's
+    contact channel is verified, so an import that said nothing would leave the
+    office believing it had finished. A guardian already verified on the
+    platform goes live at once, and the report says so rather than "pending".
+    `guardians_pending` counts the ones that are not live.
     """
 
     admitted: int
     problems: List[RowProblemOut]
     generated: dict
+    guardian_links: List[GuardianLinkOut]
     guardians_pending: int
 
 
@@ -435,7 +451,11 @@ def bulk_admit(request, payload: BulkIn):
             for p in report.problems
         ],
         generated={str(line): handle for line, handle in report.generated.items()},
-        guardians_pending=sum(
-            1 for p in report.planned if p.guardian_contact
-        ) if report.ok else 0,
+        guardian_links=[
+            GuardianLinkOut(
+                line=link.line, guardian_contact=link.guardian_contact, live=link.live
+            )
+            for link in report.guardian_links
+        ],
+        guardians_pending=sum(1 for link in report.guardian_links if not link.live),
     )

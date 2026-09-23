@@ -36,6 +36,11 @@ typed. Blank, one is generated — `SLUG/reference` where a reference exists,
 else `SLUG/n` — and **every generated handle is reported back**, because a
 child cannot be handed a login nobody wrote down.
 
+Handles are compared the way the platform compares them — case-insensitively,
+through `User.objects.matching_identifier()` — and not as typed. A check
+narrower than `User.save()`'s lets a row through that the save then refuses,
+which arrives as a whole-file refusal with no line number on it.
+
 `reference` is the school's admission number. Optional; unique within the
 school and within the file when present, because two children sharing one is a
 records problem the office wants told about now rather than found in March.
@@ -46,6 +51,11 @@ Two rows carrying the same contact are **one guardian linked to two children**,
 not a duplicate to reject. Contacts are compared after normalisation, so
 `0803...`, `803...` and `+234803...` are the same person — which is the whole
 reason the normalising happens before the matching rather than after.
+
+Every link is reported by line with whether it is **live**. Usually it is not:
+D9 holds a link INVITED until the guardian verifies a channel. But a guardian
+already verified on the platform goes live at once, and a report saying
+"pending" for them would be false in the direction that matters.
 """
 
 import csv
@@ -58,8 +68,8 @@ from django.db import transaction
 
 from academics import services as academics
 from academics.models import ClassGroup
-from accounts.identifiers import normalize_email, try_normalize_phone
-from accounts.models import Membership, Role, User
+from accounts.identifiers import canonical_username, normalize_email, try_normalize_phone
+from accounts.models import ACCESS_STATUSES, Membership, Role, User
 from accounts.services import admit_student_as, link_guardian
 
 #: The header a file must carry. Two are required of every row; the rest may be
@@ -92,6 +102,15 @@ class PlannedChild:
 
 
 @dataclass
+class GuardianLink:
+    """One child linked to one guardian, and whether that parent can see them yet."""
+
+    line: int
+    guardian_contact: str
+    live: bool
+
+
+@dataclass
 class Report:
     """What a file would do, or did.
 
@@ -103,6 +122,8 @@ class Report:
     planned: list = field(default_factory=list)
     #: Filled by `admit()`: the handles this school now has to hand out.
     generated: dict = field(default_factory=dict)
+    #: Filled by `admit()`: every guardian link made, in file order.
+    guardian_links: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -175,6 +196,37 @@ def _contact(value):
     return normalize_email(value)
 
 
+def _handle_key(username):
+    """A handle as the platform compares it: canonical, and without case."""
+    return canonical_username(username).lower()
+
+
+def _prefix(school):
+    return school.slug.upper()
+
+
+def _handles_in_use(school, planned):
+    """Every handle a generated one could collide with, as `_handle_key()`s.
+
+    **The whole file's given handles**, not just the rows before this one:
+    generating in file order without them hands line 2 a handle that line 9
+    asks for by name, and the database refuses line 9 — a whole-file refusal
+    for a file with nothing wrong in it.
+
+    **And every handle already under this school's prefix, in any case**,
+    read once. A generated handle is one the office cannot correct, so a
+    collision on it has to be stepped around here rather than refused at save.
+    """
+    taken = {_handle_key(p.username) for p in planned if p.username}
+    taken.update(
+        username.lower()
+        for username in User.objects.filter(
+            username__istartswith=_prefix(school) + "/"
+        ).values_list("username", flat=True)
+    )
+    return taken
+
+
 def _generated_username(school, reference, taken):
     """A handle for a child whose school did not give one.
 
@@ -183,19 +235,18 @@ def _generated_username(school, reference, taken):
     anything taken. The slug is the school's own short name, so the handle says
     which school it belongs to without a second table to look it up in.
 
-    `taken` carries the handles this file has already claimed. Without it two
-    generated handles in one upload would collide with each other and the
-    database would refuse the second, after the first had been written.
+    `taken` is `_handles_in_use()`, grown by every handle this file claims as
+    it goes, so two generated handles in one upload cannot collide either.
     """
-    prefix = school.slug.upper()
+    prefix = _prefix(school)
     if reference:
         candidate = f"{prefix}/{reference}"
-        if candidate not in taken and not User.objects.filter(username=candidate).exists():
+        if _handle_key(candidate) not in taken:
             return candidate
     n = 1
     while True:
         candidate = f"{prefix}/{n}"
-        if candidate not in taken and not User.objects.filter(username=candidate).exists():
+        if _handle_key(candidate) not in taken:
             return candidate
         n += 1
 
@@ -216,7 +267,7 @@ def check(school, text) -> Report:
     taken_usernames = set()
     taken_references = set()
 
-    for line, row in _read(school and text or text):
+    for line, row in _read(text):
         problems_before = len(report.problems)
 
         full_name = row.get("full_name", "")
@@ -225,11 +276,11 @@ def check(school, text) -> Report:
 
         username = row.get("username", "")
         if username:
-            if username in taken_usernames:
+            if _handle_key(username) in taken_usernames:
                 report.problems.append(
                     RowProblem(line, "username", f"{username!r} appears twice in this file.")
                 )
-            elif User.objects.filter(username=username).exists():
+            elif User.objects.matching_identifier(username).exists():
                 # Deliberately not naming the holder: the handle is unique
                 # across the platform, so saying where it is in use would tell
                 # this office which children exist at another school.
@@ -237,7 +288,7 @@ def check(school, text) -> Report:
                     RowProblem(line, "username", f"{username!r} is already in use.")
                 )
             else:
-                taken_usernames.add(username)
+                taken_usernames.add(_handle_key(username))
 
         reference = row.get("reference", "")
         if reference:
@@ -339,13 +390,13 @@ def admit(actor, school, term, text) -> Report:
         return report
 
     with transaction.atomic():
-        taken = set()
+        taken = _handles_in_use(school, report.planned)
         guardians = {}
         for planned in report.planned:
             username = planned.username or _generated_username(
                 school, planned.reference, taken
             )
-            taken.add(username)
+            taken.add(_handle_key(username))
             if planned.username_was_generated:
                 # Reported back because a child cannot be handed a login
                 # nobody wrote down.
@@ -374,6 +425,21 @@ def admit(actor, school, term, text) -> Report:
                 # membership for exactly that reason, and the report says so
                 # rather than leaving the office to think it finished.
                 link_guardian(guardian, membership)
+                # Read back rather than assumed: a guardian already verified
+                # on the platform is ACTIVE at once, and `grant_membership()`
+                # never downgrades one who is already live here.
+                report.guardian_links.append(
+                    GuardianLink(
+                        line=planned.line,
+                        guardian_contact=planned.guardian_contact,
+                        live=Membership.objects.filter(
+                            user=guardian,
+                            school=school,
+                            role=Role.PARENT,
+                            status__in=ACCESS_STATUSES,
+                        ).exists(),
+                    )
+                )
 
     return report
 
@@ -405,6 +471,7 @@ def _guardian_for(contact, full_name):
 
 __all__ = [
     "BulkError",
+    "GuardianLink",
     "Report",
     "RowProblem",
     "PlannedChild",
