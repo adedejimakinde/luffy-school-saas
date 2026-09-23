@@ -22,7 +22,13 @@ from academics.views import setup_page
 from accounts.views import roll_page, staff_page
 from attendance.views import register_page
 from gradebook.views import marking_page
-from results.views import card_index_page, card_page, chain_page, comments_page
+from results.views import (
+    broadsheet_page,
+    card_index_page,
+    card_page,
+    chain_page,
+    comments_page,
+)
 
 urlpatterns = [
     path("api/", api.urls),
@@ -46,6 +52,7 @@ urlpatterns = [
     path("marking/", marking_page, name="marking"),
     # The third staff surface, on the same terms as the two above.
     path("results/", chain_page, name="results-chain"),
+    path("broadsheet/", broadsheet_page, name="broadsheet"),
     # The fourth staff surface, on the same terms as the three above.
     path("comments/", comments_page, name="comments"),
     path("cards/", card_index_page, name="report-card-index"),

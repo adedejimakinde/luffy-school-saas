@@ -279,3 +279,14 @@ test("a class name typed into the admin cannot execute in a principal's browser"
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
 });
+
+test("every row links to its class's broadsheet", () => {
+  // Whoever is about to approve or release reads the numbers first. The
+  // broadsheet route decides who may, as it always did.
+  const html = states.chain({
+    term: "2025/2026 First term",
+    rows: [{ class_group_id: 11, class_group: "JSS 1A", state: "approved", state_label: "Approved" }],
+  });
+
+  assert.match(html, /<a class="broadsheet" href="\/broadsheet\/\?class=11">Broadsheet<\/a>/);
+});

@@ -1,0 +1,31 @@
+/*
+ * Broadsheets. A wide table that scrolls sideways on a phone and prints on
+ * paper: staff take these into meetings.
+ */
+:root{--ink:#111;--quiet:#555;--rule:#ddd;--live:#7a4a00;--live-bg:#fff6e5;--done:#1d5a2c;--done-bg:#eef7f0}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px;background:#fff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:72rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 8px}
+h2{font-size:1.1rem;margin:20px 0 8px}
+.term,.blank{color:var(--quiet)}
+.chooser{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select{font:inherit;padding:8px;border:1px solid var(--rule);border-radius:6px}
+button{font:inherit;min-height:44px;padding:8px 14px;background:#fff;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+.scroll{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;min-width:100%}
+th,td{padding:6px 10px;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+td small{color:var(--quiet)}
+tfoot th,tfoot td{font-weight:600;border-top:2px solid var(--ink)}
+.banner{padding:8px 12px;border-left:4px solid}
+.banner.live{border-color:var(--live);background:var(--live-bg)}
+.banner.released{border-color:var(--done);background:var(--done-bg)}
+a{color:#14507d}
+@media print{
+  body{padding:0;font-size:11pt}
+  .chooser,.back,[data-action="sign-out"]{display:none}
+  .scroll{overflow:visible}
+  th,td{padding:3px 6px}
+  .banner{border-left-width:2px}
+}

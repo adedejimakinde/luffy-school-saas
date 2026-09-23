@@ -35,6 +35,7 @@ from academics.views import SETUP_MODULES
 from attendance.views import REGISTER_MODULES
 from gradebook.views import MARKING_MODULES
 from results.views import (
+    BROADSHEET_MODULES,
     CARD_MODULES,
     CHAIN_MODULES,
     COMMENTS_MODULES,
@@ -59,6 +60,7 @@ PAGES = {
     "setup": SETUP_MODULES,
     "roll": ROLL_MODULES,
     "staff": STAFF_PAGE_MODULES,
+    "broadsheet": BROADSHEET_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these
