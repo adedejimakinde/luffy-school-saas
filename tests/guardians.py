@@ -88,3 +88,16 @@ def give_verified_channel(
         services.activate_guardian_links(user, school_id)
     contact.refresh_from_db()
     return contact
+
+
+def answer_at(user, school):
+    """`user` answers `school`, so their waiting link there goes live.
+
+    For a guardian whose channel is already proved and who is linked at a
+    further school afterwards — a second child, a second school. Since #135
+    that link waits until the guardian answers *that* school; PR D is the door
+    that asks, by sending that school's code to the proved channel. This is
+    the function the door will call, and nothing it does is by fiat:
+    `activate_guardian_links()` still refuses to touch a suspension.
+    """
+    return services.activate_guardian_links(user, school)

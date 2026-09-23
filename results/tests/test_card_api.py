@@ -55,7 +55,7 @@ from academics.models import ClassGroup, Term, TermName
 from academics.services import assign_class_teacher, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership, link_guardian
-from tests.guardians import give_verified_channel
+from tests.guardians import answer_at, give_verified_channel
 from gradebook.models import Assessment, Score, Subject
 from results import cards, revision, sessions
 from results import services as results_services
@@ -902,11 +902,11 @@ class TheIndexIsHowAFamilyReachesACardAtAll(ReportCardApiSetUp):
         handed a different child on each.
         """
         self.release(self.grace)
-        # No second channel: `link_guardian()` grants the PARENT membership
-        # ACTIVE outright when the guardian already holds a verified one, and
-        # `one_live_contact_per_guardian` refuses a second. One channel reaches
-        # every school a guardian has a child at, which is D5's whole point.
+        # No second channel — `one_live_contact_per_guardian` refuses one. Her
+        # proved channel reaches Grace too (D5), but since #135 a link goes
+        # live only when she answers *that* school, so she answers Grace.
         link_guardian(self.mama, self.ngozi)
+        answer_at(self.mama, self.grace)
 
         here = self.children_in(self.index(self.mama, self.stmarys, host=HOST))
         there = self.children_in(self.index(self.mama, self.grace, host=THEIR_HOST))
