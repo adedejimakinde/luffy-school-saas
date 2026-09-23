@@ -1,0 +1,79 @@
+name: deploy
+
+# The deploy button (decided 2026-09-23: manual, after school hours, never on
+# merge). Deploys one commit by its full SHA, and only one that is on main and
+# passed CI on that exact SHA — the `test` job and the `image` job that built
+# the images `deploy/deploy.sh` will pull.
+#
+# Needs, before it can run for real: the server, and three repository secrets —
+# DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS. docs/deployment.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Full 40-character commit SHA on main whose CI passed
+        required: true
+
+# One deploy at a time, and a second never cancels a first mid-migration.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  checks: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    env:
+      SHA: ${{ inputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: A full SHA, on main
+        run: |
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Give the full 40-character SHA, not a branch or a short one."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$SHA" origin/main; then
+            echo "::error::$SHA is not on main."
+            exit 1
+          fi
+
+      # Asked of the SHA, not of a pull request's rollup, which can still be
+      # showing the previous commit's green. Both jobs must exist and have
+      # succeeded: an empty list is "never ran", not "passed".
+      - name: CI passed on exactly this SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          verdict=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" --jq '
+            [.check_runs[] | select(.name == "test" or .name == "image")] as $runs
+            | if ($runs | map(.name) | unique | length) == 2
+                 and ($runs | all(.status == "completed" and .conclusion == "success"))
+              then "passed" else "not passed" end')
+          if [ "$verdict" != "passed" ]; then
+            echo "::error::CI has not passed on $SHA (both 'test' and 'image' must succeed)."
+            exit 1
+          fi
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" "/opt/classnode/deploy.sh $SHA"

@@ -1,0 +1,102 @@
+# The production stack, on one Hetzner server.
+#
+#   CLASSNODE_TAG=<full commit sha> docker compose -f deploy/compose.yml up -d
+#
+# Never started by hand for a release: `deploy/deploy.sh <sha>` pulls the images
+# CI built for that commit, migrates, swaps web and worker, and checks health.
+# docs/deployment.md is the runbook.
+#
+# **No connection pooler, and no service may be added between web/worker and
+# db that pools connections** — issue #115, docs/tenancy.md. Each gunicorn and
+# Celery process connects to Postgres directly, a connection per request.
+
+name: classnode
+
+x-app: &app
+  image: ghcr.io/adedejimakinde/luffy-school-saas:${CLASSNODE_TAG:?set CLASSNODE_TAG to the full commit SHA to run}
+  env_file:
+    - production.env
+    - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  caddy:
+    image: ghcr.io/adedejimakinde/luffy-school-saas/caddy:${CLASSNODE_TAG:?set CLASSNODE_TAG}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file:
+      # PLATFORM_DOMAIN, from the one place it is named.
+      - production.env
+      # CLOUDFLARE_API_TOKEN and ACME_EMAIL, and nothing else: the proxy is the
+      # process facing the internet, so it holds no application secret.
+      - ${CLASSNODE_ETC:-/etc/classnode}/caddy.env
+    volumes:
+      # The certificate and ACME account. Kept, so a restart does not re-issue.
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+    depends_on:
+      - web
+
+  web:
+    <<: *app
+    # The image's CMD is gunicorn; nothing to override. The healthcheck asks
+    # over plain HTTP inside the network, which is why `/healthz/` answers
+    # ahead of the HTTPS redirect (schools/health.py).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz/', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  worker:
+    <<: *app
+    # Exec form, so celery is PID 1 and receives compose's SIGTERM itself —
+    # the development compose file explains what goes wrong otherwise.
+    command: ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
+    # Long enough for a warm shutdown to finish the card it is rendering.
+    stop_grace_period: 2m
+
+  db:
+    # Matched to CI and the devcontainer. A major version change is a dump and
+    # restore, not an image bump, and belongs in its own change.
+    image: postgres:15-alpine
+    env_file:
+      - production.env
+      - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+    volumes:
+      # On the Hetzner Volume, not the server's own disk, so the data outlives
+      # a rebuilt server. Backups are separate and off-server (H3).
+      - ${CLASSNODE_DATA:-/srv/classnode}/postgres:/var/lib/postgresql/data
+    shm_size: 256mb
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    # Append-only for the reason the development file gives: what Redis holds
+    # is accepted jobs, and a snapshot window is the set a restart would drop.
+    command: redis-server --appendonly yes
+    volumes:
+      - ${CLASSNODE_DATA:-/srv/classnode}/redis:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  caddy-data:
+  caddy-config:

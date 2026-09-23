@@ -1,0 +1,29 @@
+# TLS for the portal and every school, from one wildcard certificate.
+#
+# Decided 2026-09-23: a wildcard, validated through DNS rather than a
+# certificate per school, so adding a school is a `Domain` row and nothing here,
+# and the list of schools on the platform is not published in Certificate
+# Transparency logs the way a per-school certificate would publish each name.
+#
+# Validation needs a Cloudflare API token limited to editing DNS in this one
+# zone, read from the environment (secrets live only on the server). The domain
+# is PLATFORM_DOMAIN, the same variable settings.py derives the cookie domain
+# and allowed hosts from.
+{
+	email {$ACME_EMAIL}
+}
+
+{$PLATFORM_DOMAIN}, *.{$PLATFORM_DOMAIN} {
+	tls {
+		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+	}
+
+	encode zstd gzip
+
+	# Caddy *sets* X-Forwarded-For and X-Forwarded-Proto and ignores any the
+	# client sent, because no `trusted_proxies` are configured. settings.py's
+	# SECURE_PROXY_SSL_HEADER and TRUSTED_PROXY_COUNT=1 are only safe because
+	# of that: nothing may ever be put in front of this without the same
+	# property.
+	reverse_proxy web:8000
+}

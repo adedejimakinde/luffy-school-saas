@@ -149,7 +149,33 @@ Worth stating plainly so nobody cites this document for more than it earned:
 - **Scale.** Two schemas. Not fifty. Nothing here says anything about how long
   `migrate_schemas` takes at fifty, or about connection reuse under load.
 - **Connection pooling.** `search_path` is per-connection state. Nothing here
-  tests what a pooler that hands out connections mid-transaction would do to it.
+  tests what a pooler that hands out connections mid-transaction would do to it
+  — so the deployment does not have one. See the rule below.
+
+## The connection rule (issue #115)
+
+**Tenant isolation is `search_path`, and `search_path` belongs to a
+connection.** `TenantMainMiddleware` sets it per request, on the connection
+that request uses. The suite proves isolation only for the topology it runs in:
+a connection per request (`CONN_MAX_AGE = 0`), nothing between Django and
+Postgres. So that is the only topology the platform deploys:
+
+- **No connection pooler.** Decided 2026-09-23: at pilot scale a few gunicorn
+  workers and one Celery worker are far under Postgres's connection limit, and
+  a pooler buys nothing that is worth the risk below.
+- **A pooler in transaction mode is banned, permanently.** It returns a server
+  connection to the pool at the end of each transaction while `SET
+  search_path` outlives it, so the next request — very likely another
+  school's — runs its unqualified queries against the previous school's
+  schema. Nothing raises: the tables exist and are full, and the answer is an
+  ordinary 200 carrying another school's rows. Statement mode is worse.
+- **Session mode is the only pooling that would keep the rule**, and adopting
+  it is a decision to be taken with this section in front of whoever takes it,
+  not a configuration change.
+- `CONN_MAX_AGE`, a client-side `pool` option and
+  `DISABLE_SERVER_SIDE_CURSORS` are pinned by
+  `tests/test_deployment.py::ConnectionsAreNotPooledTests`. Changing any of
+  them means breaking a test that cites this section.
 
 ## Writing tests for tenant-scoped models
 
