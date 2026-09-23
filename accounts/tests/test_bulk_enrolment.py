@@ -11,7 +11,7 @@ report.
 """
 
 from academics.models import ClassPlacement, Term
-from accounts.models import GuardianAccount, Guardianship, Membership, Role, User
+from accounts.models import GuardianContact, Guardianship, Membership, Role, User
 from accounts.services import link_guardian
 from accounts.tests.test_enrolment_api import EnrolmentSetUp
 from results.tests.fixtures import HOST, THEIR_HOST
@@ -471,7 +471,13 @@ class BulkImportTests(EnrolmentSetUp):
         self.upload(self.admin, csv_of("Chike Obi,JSS 1A,,,Mama Obi,0803 123 4567"))
 
         guardian = Guardianship.objects.get(student__user__username="ST-MARYS/1").guardian
-        contact = GuardianAccount.objects.get(user=guardian).live_contact()
+        # Filtered, not `GuardianAccount.objects.get()`: an import that skipped
+        # the shared path makes no account at all, and a `.get()` turned that
+        # into `DoesNotExist` under control 7 — a crash about the lookup where
+        # the finding is "no channel".
+        contact = GuardianContact.objects.filter(
+            guardian__user=guardian, revoked_at__isnull=True
+        ).first()
         self.assertIsNotNone(contact, "an imported guardian has no channel")
         self.assertEqual(contact.value, "+2348031234567")
         self.assertIsNone(contact.verified_at)
