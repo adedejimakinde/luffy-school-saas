@@ -412,6 +412,20 @@ def transfer_student(student, to_school, *, reference=""):
     Ends the old membership (keeping it as history), opens a new one, and
     re-links every guardian — which in turn grants them a PARENT membership at
     the new school and drops the old one if no other child keeps them there.
+
+    **A guardian live at the sending school arrives live; anybody else arrives
+    as they were.** #135 makes a school's own link wait until the guardian
+    answers that school, because a school types a contact and can type it
+    wrong. A transfer types nothing: it carries the child's own guardians, and
+    both schools have signed it. So a guardian the sending school had already
+    confirmed is not made to prove themselves again to see their own child —
+    but a link still pending there is not promoted by moving, or a transfer
+    would be a way round the gate. Read **before** the enrolment ends, because
+    ending it is what drops the old membership this reads.
+
+    What the sending school typed about each guardian comes across too: it is
+    the child's record, and the receiving school shows it until the guardian
+    is live there.
     """
     if student.role != Role.STUDENT:
         raise NotAStudent("Only a STUDENT membership can be transferred.")
@@ -420,6 +434,14 @@ def transfer_student(student, to_school, *, reference=""):
 
     guardians = list(
         Guardianship.objects.filter(student=student).select_related("guardian")
+    )
+    live_at_the_sending_school = set(
+        Membership.objects.filter(
+            user_id__in=[link.guardian_id for link in guardians],
+            school_id=student.school_id,
+            role=Role.PARENT,
+            status=MembershipStatus.ACTIVE,
+        ).values_list("user_id", flat=True)
     )
 
     # End first: the partial unique index allows only one live STUDENT row.
@@ -441,7 +463,11 @@ def transfer_student(student, to_school, *, reference=""):
             is_primary_contact=link.is_primary_contact,
             receives_invoices=link.receives_invoices,
             can_collect=link.can_collect,
+            entered_name=link.entered_name,
+            entered_contact=link.entered_contact,
         )
+        if link.guardian_id in live_at_the_sending_school:
+            activate_guardian_links(link.guardian, to_school)
         # Drop access to the old school unless another child is still there.
         unlink_guardian(link.guardian, student)
 

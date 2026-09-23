@@ -1515,6 +1515,13 @@ class TransferAsTwoOneSidedActsTests(TestCase):
         self.assertTrue(link.is_primary_contact)
 
     def test_the_receiving_school_relinks_the_guardian_under_its_own_authority(self):
+        """**Changed by #135.** The two-halves path is not a transfer: by the
+        time Grace links anybody, St Mary's has already ended the enrolment and
+        the parent's membership with it, and Grace's links are Grace's own
+        acts. So they wait until the parent answers Grace, like any link a
+        school makes. The handshake (`transfers`) is the path that carries a
+        confirmed guardian across live.
+        """
         services.release_student_as(self.stmarys_admin, self.child)
         admitted = services.enroll_student_as(
             self.grace_admin, self.child.user, self.grace
@@ -1530,7 +1537,7 @@ class TransferAsTwoOneSidedActsTests(TestCase):
                 is_primary_contact=link.is_primary_contact,
             )
 
-        self.assertTrue(self.parent.has_access_to(self.grace))
+        self.assertFalse(self.parent.has_access_to(self.grace), "a school's own link went live unanswered")
         self.assertFalse(self.parent.has_access_to(self.stmarys))
         self.assertEqual([c.pk for c in self.parent.children()], [admitted.pk])
         self.assertTrue(
