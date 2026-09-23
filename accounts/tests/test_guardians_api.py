@@ -104,9 +104,17 @@ class LinkingTests(GuardiansSetUp):
 
     def test_a_guardian_who_has_answered_here_reads_live(self):
         """The control for the one above: without it, a panel printing
-        "pending" whatever the membership said would pass."""
+        "pending" whatever the membership said would pass.
+
+        Answered the way production will: St Mary's own administrator asks
+        for a code on the channel the link recorded, and the guardian answers
+        it. (`give_verified_channel()` would record a second channel, which
+        `one_live_contact_per_guardian` refuses — the link already made one.)
+        """
         self.link(self.admin, self.ada)
-        give_verified_channel(User.objects.get(phone="+2348031234567"), "08031234567")
+        contact = GuardianAccount.objects.get(user__phone="+2348031234567").live_contact()
+        _, raw = guardian_contacts.request_verification_as(self.admin.user, contact)
+        self.assertTrue(guardian_contacts.confirm_verification(contact, raw))
 
         guardian = self.read(self.admin, self.ada).json()["guardians"][0]
 
