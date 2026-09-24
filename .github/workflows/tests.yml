@@ -244,11 +244,16 @@ jobs:
 
       # Placeholders: `validate` parses the file and provisions its modules,
       # including the Cloudflare DNS one, without asking Cloudflare or Let's
-      # Encrypt for anything.
+      # Encrypt for anything. The module does check the token's *shape* when it
+      # provisions — `caddy-dns/cloudflare` v0.2.4 accepts `cf(ut|at)_…` or a
+      # legacy 35–50 characters of `[A-Za-z0-9_-]` — so the placeholder is an
+      # obviously fake one in that shape, not the word "placeholder", which it
+      # refused.
       - name: The Caddyfile is valid
         run: >-
           docker run --rm -e PLATFORM_DOMAIN=example.test
-          -e CLOUDFLARE_API_TOKEN=placeholder -e ACME_EMAIL=ci@example.test
+          -e CLOUDFLARE_API_TOKEN="ci-placeholder-$(openssl rand -hex 12)"
+          -e ACME_EMAIL=ci@example.test
           "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile
 
       - name: The compose file is valid
