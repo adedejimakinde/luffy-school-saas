@@ -26,3 +26,8 @@ whitenoise>=6.6
 celery>=5.4
 redis>=5.0
 weasyprint>=62
+
+# What serves the application in production (`deploy/compose.yml`). Sync
+# workers: every request is short except the bulk import, and a process per
+# worker keeps a connection per request — the only topology issue #115 allows.
+gunicorn>=22.0

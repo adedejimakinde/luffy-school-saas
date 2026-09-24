@@ -116,14 +116,19 @@ jobs:
       # Registered `deploy=True`, so nothing else in this file would ever run
       # it, and a check nothing runs is close to a check that does not exist.
       #
-      # This is not a substitute for running it against the real deployment's
-      # environment, which is where the settings actually differ. What it
-      # catches here is a check that has started failing for everybody, and a
-      # setting regressing to a default that fails open.
+      # Run under the committed production configuration, `deploy/production.env`
+      # — the file the server runs with — rather than a stand-in cookie domain,
+      # so this is the checklist for the settings that actually deploy. Every
+      # warning fails it; the one silenced (HSTS preload, `security.W021`) is
+      # silenced in settings.py with its reason. `tests/test_deployment.py` runs
+      # the same check inside the suite, and the `image` job below runs it once
+      # more inside the built image.
       - name: Deployment checks
-        env:
-          SESSION_COOKIE_DOMAIN: .example.test
-        run: python manage.py check --deploy
+        run: |
+          set -a
+          . deploy/production.env
+          set +a
+          python manage.py check --deploy --fail-level WARNING
 
       # The report card page's assets, collected the way a deployment collects
       # them — and **before the suite runs, because the suite needs them.**
@@ -188,3 +193,79 @@ jobs:
       # already refuses for an unreachable broker a few steps up.
       - name: Run tests
         run: scripts/run-tests.sh
+
+  # The production images, built only once the suite above has passed on this
+  # commit, and tagged with its full SHA — the only name `deploy/deploy.sh`
+  # accepts, so what runs on the server is always a commit that passed here.
+  #
+  # Built on every pull request as well, because a Dockerfile nobody builds
+  # until the day of a deploy is a deploy that fails for a reason unrelated to
+  # the change being shipped. Pushed to GHCR from `main` only.
+  #
+  # Each check below is something the devcontainer cannot run (there is no
+  # Docker in it), so this job is the only place the image, the Caddyfile and
+  # the compose file are tested at all.
+  image:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
+      CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the application image
+        run: docker build -t "$APP_IMAGE" .
+
+      # The slim base carries nothing it does not have to, so a WeasyPrint
+      # library the devcontainer happened to have could be missing here — and
+      # it would fail at a parent's first download, not at build time. This
+      # makes it fail here.
+      - name: The image renders a PDF
+        run: >-
+          docker run --rm "$APP_IMAGE" python -c
+          "import weasyprint; assert weasyprint.HTML(string='<p>x</p>').write_pdf()[:4] == b'%PDF'"
+
+      - name: The image passes the deployment checklist under production.env
+        run: >-
+          docker run --rm --env-file deploy/production.env
+          -e DJANGO_SECRET_KEY="ci-image-check-$(openssl rand -hex 32)"
+          -e POSTGRES_PASSWORD=unused
+          "$APP_IMAGE" python manage.py check --deploy --fail-level WARNING
+
+      - name: Build the Caddy image
+        run: docker build -t "$CADDY_IMAGE" deploy/caddy
+
+      # Placeholders: `validate` parses the file and provisions its modules,
+      # including the Cloudflare DNS one, without asking Cloudflare or Let's
+      # Encrypt for anything. The module does check the token's *shape* when it
+      # provisions — `caddy-dns/cloudflare` v0.2.4 accepts `cf(ut|at)_…` or a
+      # legacy 35–50 characters of `[A-Za-z0-9_-]` — so the placeholder is an
+      # obviously fake one in that shape, not the word "placeholder", which it
+      # refused.
+      - name: The Caddyfile is valid
+        run: >-
+          docker run --rm -e PLATFORM_DOMAIN=example.test
+          -e CLOUDFLARE_API_TOKEN="ci-placeholder-$(openssl rand -hex 12)"
+          -e ACME_EMAIL=ci@example.test
+          "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile
+
+      - name: The compose file is valid
+        run: |
+          mkdir -p "$RUNNER_TEMP/etc"
+          touch "$RUNNER_TEMP/etc/secrets.env" "$RUNNER_TEMP/etc/caddy.env"
+          CLASSNODE_ETC="$RUNNER_TEMP/etc" CLASSNODE_TAG="${{ github.sha }}" \
+            docker compose -f deploy/compose.yml config --quiet
+
+      - name: Push both images (main only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "$APP_IMAGE"
+          docker push "$CADDY_IMAGE"

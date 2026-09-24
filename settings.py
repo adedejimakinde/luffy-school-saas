@@ -39,6 +39,16 @@ if not SECRET_KEY:
         "set DJANGO_DEBUG=1 for local development."
     )
 
+#: **The parent domain every host on the platform lives under** — the portal
+#: and each school's `<slug>.<domain>` alike. One setting, and the three things
+#: that must agree with it are derived from it rather than typed again: the
+#: session cookie's domain, the allowed hosts, and the default From address.
+#: Caddy reads the same variable for its certificate (`deploy/Caddyfile`), so a
+#: deployment names its domain once, in `deploy/production.env`.
+#:
+#: Unset in development, where there is one host and none of the three needs it.
+PLATFORM_DOMAIN = os.environ.get("PLATFORM_DOMAIN", "").strip().lower().lstrip(".") or None
+
 # **The `Domain` table is the real allowlist**, which is why this could be `*`
 # for as long as it was. `TenantMainMiddleware` resolves every request's host
 # against `schools.Domain` and raises `Http404` for one it does not recognise,
@@ -49,9 +59,16 @@ if not SECRET_KEY:
 # through that middleware. `*` remains the default because narrowing it here
 # without narrowing `Domain` buys nothing and would silently break a school the
 # day it is added.
+#
+# Under a `PLATFORM_DOMAIN` the default narrows to it — a leading dot, which
+# Django reads as the domain and every subdomain — because then there is a
+# single parent every `Domain` row must sit under, and narrowing here costs no
+# school anything.
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "*").split(",")
+    for host in os.environ.get(
+        "DJANGO_ALLOWED_HOSTS", f".{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else "*"
+    ).split(",")
     if host.strip()
 ]
 
@@ -126,8 +143,14 @@ TENANT_DOMAIN_MODEL = "schools.Domain"
 TEST_RUNNER = "schools.tests.runner.TenantTemplateRunner"
 
 MIDDLEWARE = [
-    # First, as Django asks: it is the one that can end a request before the
-    # rest of the stack has done any work. What it buys here is the header set
+    # Ahead of everything, including the security middleware's HTTPS redirect:
+    # `/healthz/` is asked by the container's own healthcheck over plain HTTP
+    # inside the compose network, and by the deploy script, neither of which
+    # comes through the TLS proxy. It answers from one `SELECT 1` and returns
+    # before any tenant is resolved — see `schools/health.py`.
+    "schools.health.HealthCheckMiddleware",
+    # First of the real stack, as Django asks: it is the one that can end a
+    # request before the rest of the stack has done any work. What it buys here is the header set
     # — nosniff, referrer policy, and HSTS once a deployment turns it on.
     "django.middleware.security.SecurityMiddleware",
     # Second, and **above the tenant middleware on purpose**. A stylesheet is
@@ -172,6 +195,45 @@ MIDDLEWARE = [
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_REFERRER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
+
+# ---------------------------------------------------------------------------
+# Behind the TLS proxy
+#
+# The block above left the redirect and HSTS for "a decision somebody has to
+# make with the infrastructure in front of them". This is that decision, for
+# the one topology this platform deploys: Caddy terminates TLS for the portal
+# and every school's host (`deploy/Caddyfile`) and speaks plain HTTP to
+# gunicorn on the compose network. `deploy/production.env` turns it on.
+#
+# **`SECURE_PROXY_SSL_HEADER` is what makes the other two safe.** Without it
+# Django sees every request as plain HTTP — because on its own socket it is —
+# so the redirect below would send every HTTPS request back to HTTPS for ever,
+# and CSRF's origin check would compare an `https://` Origin against an
+# `http://` request and refuse every form and API write on the platform. It is
+# only safe because Caddy *sets* `X-Forwarded-Proto` rather than passing along
+# whatever the client sent; nothing else may ever be put in front of gunicorn
+# without the same property.
+#
+# **HSTS starts at a day and includes subdomains.** Every school is a
+# subdomain of one parent and is served by one wildcard certificate, so there is
+# no subdomain that should ever be plain HTTP. A day is short on purpose for the
+# first weeks: HSTS cannot be withdrawn faster than its own max-age, and a year
+# is the number to move to once the certificate renewal has been seen to work.
+# Not preloaded — see `SILENCED_SYSTEM_CHECKS`.
+# ---------------------------------------------------------------------------
+TLS_TERMINATED_BY_PROXY = os.environ.get("TLS_TERMINATED_BY_PROXY", "0") == "1"
+if TLS_TERMINATED_BY_PROXY:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", 60 * 60 * 24))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+#: `security.W021` is "HSTS preload is off". Preloading ships the domain inside
+#: every browser and needs a year's max-age first; it cannot be taken back on
+#: any timescale this project controls. Off deliberately, not by omission — and
+#: silenced so that `check --deploy --fail-level WARNING` can gate CI on every
+#: *other* warning.
+SILENCED_SYSTEM_CHECKS = ["security.W021"]
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -246,7 +308,9 @@ SESSION_COOKIE_AGE = 60 * 60 * 12
 # up on the second host, which is why `accounts/checks.py` refuses a production
 # deploy without it rather than letting it be discovered by a teacher. Unset is
 # still right for local single-host development, where it means "this host".
-SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN") or None
+SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN") or (
+    f".{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else None
+)
 
 # The CSRF cookie has to travel exactly as far as the session it protects.
 CSRF_COOKIE_DOMAIN = SESSION_COOKIE_DOMAIN
@@ -429,7 +493,10 @@ INVITATION_ACCEPT_URL = os.environ.get("INVITATION_ACCEPT_URL")
 DEFAULT_EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 
 EMAIL_BACKEND = os.environ.get("EMAIL_BACKEND", DEFAULT_EMAIL_BACKEND)
-DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", "no-reply@luffy.school")
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL",
+    f"no-reply@{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else "no-reply@localhost",
+)
 
 #: Where that SMTP backend connects. Django's own defaults are `localhost:25`
 #: with no credentials, which is not a mail server anywhere this runs — so the
@@ -461,6 +528,17 @@ DATABASES = {
         "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "changeme"),
         "HOST": os.environ.get("POSTGRES_HOST", "db"),
         "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        # **A connection per request, never pooled — issue #115.** Tenant
+        # isolation is Postgres `search_path`, which is per-connection state
+        # set per request by `TenantMainMiddleware`. With a connection per
+        # request, connection identity and tenant identity coincide by
+        # construction, and that is the only topology the test suite proves.
+        # No pooler in front of Postgres, and **never one in transaction
+        # mode**: it would hand one school's `search_path` to another school's
+        # queries, silently. `docs/tenancy.md` holds the rule and
+        # `tests/test_deployment.py` pins this value, so changing it means
+        # breaking a test that cites #115.
+        "CONN_MAX_AGE": 0,
     }
 }
 
