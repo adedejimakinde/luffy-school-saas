@@ -91,6 +91,59 @@ test("a released row offers nothing and says why", () => {
   assert.doesNotMatch(html, /<button[^>]*data-step=/);
 });
 
+// -- who a release left without a card (issue #47) ---------------------------
+
+const BOLA = {
+  student_membership_id: 41,
+  name: "Bola Eze",
+  reference: "STM/7",
+  noticed_at: "2026-07-20T10:15:00+01:00",
+};
+
+test("a released row names the children the release left without a card", () => {
+  const html = states.chain({
+    rows: [row({ state: "released", state_label: "Released to parents", without_a_card: [BOLA] })],
+  });
+
+  assert.match(html, /1 child has no card from this release/);
+  assert.match(html, /placed into JSS 1A while it was being released/);
+  assert.match(html, /Bola Eze/);
+  assert.match(html, /STM\/7/);
+});
+
+test("nothing is drawn for null, which is what everybody but the principal gets", () => {
+  // `null` is "not yours to see" and `[]` is "none": neither draws anything.
+  for (const without_a_card of [null, [], undefined]) {
+    const html = states.chain({
+      rows: [row({ state: "released", state_label: "Released to parents", without_a_card })],
+    });
+    assert.doesNotMatch(html, /left-out/);
+    assert.doesNotMatch(html, /no card from this release/);
+  }
+});
+
+test("the release step's own answer shows them at once", () => {
+  // The check runs when the release commits, which is before the step answers,
+  // so the row that comes back already carries them.
+  const { state: after } = applyStep(state(), 11, {
+    ok: true,
+    row: row({ state: "released", state_label: "Released to parents", without_a_card: [BOLA, { ...BOLA, student_membership_id: 42, name: "Chidi Obi", reference: "" }] }),
+  });
+
+  const html = htmlFor(after);
+  assert.match(html, /2 children have no card from this release/);
+  assert.match(html, /Bola Eze/);
+  assert.match(html, /Chidi Obi/);
+});
+
+test("a name is text, not markup", () => {
+  const html = states.chain({
+    rows: [row({ state: "released", without_a_card: [{ ...BOLA, name: "<img src=x onerror=alert(1)>" }] })],
+  });
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /&lt;img/);
+});
+
 // -- the four refusals are four sentences ------------------------------------
 
 test("already-signed names the step this person took", () => {

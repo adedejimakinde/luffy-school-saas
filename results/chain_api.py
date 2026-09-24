@@ -22,12 +22,29 @@ rather than closed.
 
 Three queries regardless of how many classes, and **not one of them touches a
 student**: the groups, the sheets for this term, and the groups this login is
-class teacher of. No roster, no marks, no counts.
+class teacher of. No roster, no marks, no counts. (A principal with a released
+class gets a fourth, over `ReleaseOmission`. That is the exception below, and it
+reads a record rather than a roster.)
 
 That is deliberate. A list that counted "38 of 45 marked" per class would be a
 per-child read per row on the one screen a principal refreshes while waiting,
 and the number it produced would be a second implementation of something the
 marking sheet already answers. Detail is loaded when a sheet is opened.
+
+## One exception: the children a release left out, and only for the principal
+
+A released row carries `without_a_card`, the `ReleaseOmission` rows for that
+sheet: the children placed into the class while its release ran, who got no
+card (issue #47). That is a fourth query, over the record table and never over
+a roster, so its cost is the number of omissions and not the size of a class.
+
+**Only a login that may release sees it**, and everybody else gets `null`
+rather than an empty list, so "none" and "not yours to see" stay two answers.
+The rest of this list names no child for the reason above. The principal is
+the exception because she pressed release and is the one who can act on it.
+The same rows come back on the release step itself, because the check that
+writes them runs when the release commits, which is before this module builds
+its answer.
 
 ## Actions are computed here, and enforced in `services`
 
@@ -55,7 +72,7 @@ from academics.models import ClassGroup, ClassTeacher, Term
 from accounts.models import Role
 from accounts.session import session_auth
 
-from . import services
+from . import omissions, services
 from .models import ResultSheet, SheetState
 
 router = Router(auth=session_auth)
@@ -92,6 +109,15 @@ class AlreadySignedOut(Schema):
     existing: Optional[SignatoryOut] = None
 
 
+class NoCardOut(Schema):
+    """A child the release left without a card, as `ReleaseOmission` froze her."""
+
+    student_membership_id: int
+    name: str
+    reference: str
+    noticed_at: str
+
+
 class SheetRowOut(Schema):
     """One class group's standing, and what this login may do about it.
 
@@ -99,6 +125,9 @@ class SheetRowOut(Schema):
     to act — the transition routes are keyed on the class group, and open the
     sheet themselves — but a null is the honest way to say "no row yet" rather
     than inventing one for a list.
+
+    `without_a_card` is null unless the class is released **and** this login may
+    release; see the module docstring.
     """
 
     class_group_id: int
@@ -111,6 +140,7 @@ class SheetRowOut(Schema):
     may_approve: bool = False
     may_release: bool = False
     may_send_back: bool = False
+    without_a_card: Optional[List[NoCardOut]] = None
 
 
 class ChainOut(Schema):
@@ -221,7 +251,9 @@ def chain(request):
     """Where every class stands this term, and what this login may do.
 
     Three queries, none of which touches a student — see the module docstring
-    for why a "38 of 45 marked" column is deliberately absent.
+    for why a "38 of 45 marked" column is deliberately absent, and for the one
+    exception: a principal's released rows name the children the release left
+    out.
 
     **Every class is listed, including the ones this login cannot act on.** A
     teacher seeing "JSS 3B — awaiting check" is reading her own school's
@@ -244,6 +276,7 @@ def chain(request):
     sheets = {
         s.class_group_id: s for s in ResultSheet.objects.filter(term=term)
     }
+    left_out = _left_out(roles, sheets.values())
 
     rows = []
     for group in ClassGroup.objects.filter(is_active=True):
@@ -258,10 +291,37 @@ def chain(request):
                 sheet_id=sheet.pk if sheet else None,
                 state=state,
                 state_label=SheetState(state).label,
+                without_a_card=_no_card(left_out, sheet, state),
                 **_actions(state, roles, group.pk, mine),
             )
         )
     return ChainOut(term_id=term.pk, term=str(term), rows=rows)
+
+
+def _left_out(roles, sheets):
+    """`sheet id -> its omissions` for released sheets, if this login may release.
+
+    `None` for anybody else, so the fourth query is not even asked on their
+    behalf.
+    """
+    if not roles & services.RELEASING_ROLES:
+        return None
+    released = [s.pk for s in sheets if s.state == SheetState.RELEASED]
+    return omissions.of_sheets(released) if released else {}
+
+
+def _no_card(left_out, sheet, state):
+    if left_out is None or sheet is None or state != SheetState.RELEASED:
+        return None
+    return [
+        NoCardOut(
+            student_membership_id=row.student_membership_id,
+            name=row.student_name,
+            reference=row.student_reference,
+            noticed_at=row.noticed_at.isoformat(),
+        )
+        for row in left_out.get(sheet.pk, [])
+    ]
 
 
 def _signatory(transition):
@@ -326,12 +386,14 @@ def _step(request, class_group_id, move, *, reason=None):
     # is, and reading it off the transition saves a re-read of the row the
     # service has only just written under its own lock.
     state = moved.to_state
+    released = [moved.sheet] if state == SheetState.RELEASED else []
     return 200, SheetRowOut(
         class_group_id=group.pk,
         class_group=group.name,
         sheet_id=moved.sheet_id,
         state=state,
         state_label=SheetState(state).label,
+        without_a_card=_no_card(_left_out(roles, released), moved.sheet, state),
         **_actions(state, roles, group.pk, _my_class_groups(request, school, term)),
     )
 

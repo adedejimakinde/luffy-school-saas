@@ -119,17 +119,20 @@ when a placement committed while the release ran — a true mid-release arrival,
 every time, with no false positives. It was a working detector, removed because
 the shape #60 required of it was not.
 
-**That sits against rule 8** in `docs/operating-rules.md`: a decision that
-produces an absence needs a record, and the freeze leaves a child placed
-mid-release with nothing. There is now no detector of one. The contradiction is
-open, and it is #47.
+**That sat against rule 8** in `docs/operating-rules.md`: a decision that
+produces an absence needs a record, and the freeze left a child placed
+mid-release with nothing. For a while there was no detector of one; that was #47.
 
-**#47 does not want this function back.** Its own comments give the shape — the
-release's snapshot against the roster at a later, deliberate moment, outside any
-lock. The frozen side is already on the cards (`cards.cards_on(sheet)`), and
-`comments.missing()` and `ratings.unrated()` already do the same subtraction for
-remarks and traits. Not a second read inside the locked block: `roster_ids()`'s
-own docstring says why.
+**#47 did not bring this function back.** It built the shape its own comments
+gave: the release's frozen side against the roster at a later, deliberate
+moment, outside any lock. `results.omissions` registers a check inside the
+release that runs once the release commits. It reads the class afresh, compares
+it with the version-1 cards on the sheet, and writes a `ReleaseOmission` for
+each child on the class with no card. The principal sees them by name on the
+chain page, and on the release step's own answer. What it cannot see is a
+placement landing after its own read, and it says so. Not a second read inside
+the locked block: `roster_ids()`'s own docstring says why, and the module
+argues why a read after the commit is not that.
 
 `results/services.py` and `results/tests/test_release_roster_race.py` point at
 this section rather than keeping their own copies of it.

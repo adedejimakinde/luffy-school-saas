@@ -695,7 +695,7 @@ def release(sheet, actor):
     `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
     module-level import here would close the circle.
     """
-    from . import cards, comments, ratings, renders, sessions
+    from . import cards, comments, omissions, ratings, renders, sessions
 
     # `attendance` does not import this module, so this one could sit at the top
     # of the file. It is here beside the other four so that "what a release
@@ -765,11 +765,14 @@ def release(sheet, actor):
         registers is outside, because a broker must never be able to fail a
         release that has already happened. `results.renders` argues both.
 
-        **What used to be here.** A `_say_if_the_roster_moved()` logged the
-        children a release finished without. #60 required it to read the
-        snapshot rather than the roster, which makes it vacuous, so it was
-        deleted rather than rewritten. Nothing detects a mid-release placement
-        now — `docs/cards.md`, "The detector that went with it", and issue #47.
+        **And one thing after the commit.** `omissions.notice_after_commit()`
+        registers a check that runs once the release is durable: it reads the
+        class's roster afresh, outside this block, and writes a
+        `ReleaseOmission` for each child on it who has no card here — a child
+        the office placed while this block ran. It is registered here because
+        it belongs to this release, and it runs after because a read in here is
+        the second read #60 removed. `results.omissions` argues it in full;
+        issue #47 and `docs/cards.md` have the history.
         """
         results = positions.class_results(locked.class_group, locked.term)
         # One read of the term's registers for the whole class, inside the same
@@ -788,6 +791,7 @@ def release(sheet, actor):
         comments.freeze_for_release(locked, card_by_student)
         sessions.freeze_for_release(locked, card_by_student, results)
         renders.mark_and_enqueue(card_by_student.values())
+        omissions.notice_after_commit(locked)
 
     return _move(
         sheet,

@@ -88,8 +88,39 @@ function classRow(row, note, asking) {
           row.state === "released" ? "Released — nothing further" : "Nothing for you here"
         }</span>`,
     asking === row.class_group_id ? sendBackForm(row) : "",
+    leftOut(row),
     note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
     "</li>",
+  ].join("");
+}
+
+/**
+ * The children this release left without a card, by name. Issue #47.
+ *
+ * Only ever present for a login that may release — the API sends `null` to
+ * everybody else, and this draws nothing for `null` or an empty list. A child
+ * placed into the class while its release ran is not on it and cannot be added
+ * to it. The sentence says what happened and offers no remedy: a revision can
+ * give her a card, but one with no frozen sections (issue #31), and no page
+ * offers it yet — pointing at a remedy that does not work is worse than none
+ * (`accounts/refusals.py`).
+ */
+function leftOut(row) {
+  const children = row.without_a_card || [];
+  if (!children.length) return "";
+  const who = children
+    .map((child) =>
+      `<li>${esc(child.name || "A child with no name on record")}` +
+      `${child.reference ? ` <span class="reference">${esc(child.reference)}</span>` : ""}</li>`,
+    )
+    .join("");
+  const count = children.length === 1 ? "1 child has" : `${children.length} children have`;
+  return [
+    '<div class="left-out" role="status">',
+    `<p>${count} no card from this release. They were placed into `,
+    `${esc(row.class_group)} while it was being released, so they were not on it.</p>`,
+    `<ul>${who}</ul>`,
+    "</div>",
   ].join("");
 }
 
