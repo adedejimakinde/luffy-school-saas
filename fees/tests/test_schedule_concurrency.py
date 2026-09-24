@@ -34,12 +34,13 @@ test can tell that from working correctly.
 
 import threading
 from datetime import date
+from unittest import mock
 
 from django.db import connection, connections
 from django.test import TransactionTestCase
 
 from academics import services as academics
-from academics.models import ClassGroup, Term, TermName
+from academics.models import ClassGroup, ClassPlacement, Term, TermName
 from accounts.models import User
 from accounts.services import enroll_student
 from fees import schedules
@@ -225,3 +226,87 @@ class ConcurrentApplicationTests(TwoSchoolsBillingSetUp):
                 FeeLedgerEntry.objects.values_list("student_membership_id", flat=True)
             )
             self.assertEqual(theirs, {self.ngozi.pk})
+
+
+class TwoBillsOneTermTests(TwoSchoolsBillingSetUp):
+    """B2's rule — a bill does not charge a child already charged for the term
+    — read across two *different* bills, which the schedule lock does not
+    serialise.
+
+    The window is the mid-term move: JSS 1A's run has read its roster and
+    posted Ada's charges, not yet committed; the office moves Ada to JSS 3A;
+    JSS 3A's run reads its roster, finds Ada, and asks whether another bill has
+    charged them. Unserialised, the answer is "no" — the charges are not
+    committed — and Ada is charged by both. The term lock makes JSS 3A's run
+    wait for JSS 1A's commit, and then it reads them.
+
+    Staged rather than raced: JSS 1A's run is held just before it returns, so
+    the interleaving is the one above every time, not by luck.
+
+    CONTROL B2-5: `apply_to_class()` without the term lock makes this red —
+    Ada ends with three charges.
+    """
+
+    def test_a_child_moved_while_their_old_bill_runs_is_charged_once(self):
+        with connected_to(self.stmarys):
+            term = Term.objects.get()
+            senior = ClassGroup.objects.create(name="JSS 3A", level=3)
+            senior_bill = FeeSchedule.objects.create(term=term, class_group=senior)
+            FeeScheduleLine.objects.create(
+                schedule=senior_bill, description="Tuition", amount_kobo=TUITION
+            )
+        paused, release = threading.Event(), threading.Event()
+        held = {}
+        real_summary = schedules.AppliedSummary
+
+        def summary_after_a_pause(**fields):
+            if threading.current_thread() is held.get("thread"):
+                paused.set()
+                release.wait(20)
+            return real_summary(**fields)
+
+        results, unexpected = {}, []
+
+        def run(name, schedule_id):
+            try:
+                with connected_to(self.stmarys):
+                    results[name] = schedules.apply_to_class(
+                        FeeSchedule.objects.get(pk=schedule_id), by=self.bursar
+                    )
+            except Exception as exc:  # noqa: BLE001 — reported, not swallowed
+                unexpected.append(exc)
+            finally:
+                connections.close_all()
+
+        with mock.patch.object(schedules, "AppliedSummary", summary_after_a_pause):
+            junior_run = threading.Thread(target=run, args=("junior", self.schedule_id))
+            held["thread"] = junior_run
+            junior_run.start()
+            self.assertTrue(paused.wait(20), "JSS 1A's run never reached its end")
+
+            # The office's move, as the one-row change it is. Not
+            # `move_student()`, whose own lock is not what is under test.
+            with connected_to(self.stmarys):
+                ClassPlacement.objects.filter(student_membership_id=self.ada.pk).update(
+                    class_group=senior
+                )
+
+            senior_run = threading.Thread(target=run, args=("senior", senior_bill.pk))
+            senior_run.start()
+            senior_run.join(3)  # blocked on the term, or finished without it
+            release.set()
+            junior_run.join(30)
+            senior_run.join(30)
+
+        self.assertEqual(unexpected, [], f"a thread failed: {unexpected}")
+        with connected_to(self.stmarys):
+            self.assertEqual(
+                sorted(
+                    FeeLedgerEntry.objects.filter(student_membership_id=self.ada.pk)
+                    .values_list("narration", flat=True)
+                ),
+                ["PTA levy", "Tuition"],
+                "Ada was charged by both bills",
+            )
+        self.assertEqual(results["senior"].billed_elsewhere, (self.ada.pk,))
+        self.assertEqual(results["junior"].charges_posted, 4)

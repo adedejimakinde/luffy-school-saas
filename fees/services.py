@@ -136,7 +136,9 @@ class NoReason(FeeLedgerError):
     "Reversal of: Payment received", which records that something was undone
     and never why. Asked by `discount_once()` and `undo()`, the two ways a
     person does either, and not by the primitives beneath them, which a
-    schedule and a concession call with narrations of their own.
+    schedule and a concession call with narrations of their own. Since B2,
+    `fees.billing` asks it too, of a concession's grant and its revocation
+    (issue #75).
     """
 
 

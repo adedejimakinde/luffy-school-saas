@@ -74,9 +74,14 @@ const account = (overrides = {}) => ({
 
 function serve(routes) {
   const posted = [];
+  //: PUT and DELETE, apart from `posted` so the POST tests read as before.
+  const others = [];
   const impl = async (url, options = {}) => {
     if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
     if (options.method === "POST") posted.push({ url, body: JSON.parse(options.body) });
+    if (options.method === "PUT" || options.method === "DELETE") {
+      others.push({ method: options.method, url, body: options.body === undefined ? undefined : JSON.parse(options.body) });
+    }
     for (const [match, answer] of routes) {
       if (url.includes(match)) {
         const value = typeof answer === "function" ? answer(options) : answer;
@@ -87,6 +92,7 @@ function serve(routes) {
     throw new Error(`no stub for ${url}`);
   };
   impl.posted = posted;
+  impl.others = others;
   return impl;
 }
 
@@ -317,4 +323,228 @@ test("an undo sends its reason", async () => {
 
   assert.deepEqual(fetchImpl.posted, [{ url: "/api/fees/entries/41/reversal/", body: { reason: "Keyed twice" } }]);
   assert.match(root.innerHTML, /Undone\./);
+});
+
+// -- B2: bills ------------------------------------------------------------------
+
+const bill = (overrides = {}) => ({
+  class_group_id: 5,
+  class_group: "JSS 1A",
+  term_id: 7,
+  term: "2025/2026 First term",
+  may_write: true,
+  schedule_id: 9,
+  lines: [
+    { line_id: 1, description: "Tuition", amount_kobo: 15_000_000, charged: 2 },
+    { line_id: 2, description: "Uniform", amount_kobo: 500_000, charged: 0 },
+  ],
+  total_kobo: 15_500_000,
+  children: 2,
+  ...overrides,
+});
+
+const BILLS = {
+  terms: TERMS,
+  term_id: 7,
+  term: "2025/2026 First term",
+  may_write: true,
+  classes: [
+    { class_group_id: 5, class_group: "JSS 1A", children: 2, schedule_id: 9, lines: 2, total_kobo: 15_500_000 },
+    { class_group_id: 6, class_group: "JSS 2A", children: 0, schedule_id: null, lines: 0, total_kobo: 0 },
+  ],
+};
+
+async function openBill(fetchImpl) {
+  forgetToken();
+  const root = fakeRoot({ onSchool: "yes" });
+  await mount(root, { fetchImpl, newKey: keys(), today: "2025-10-05" });
+  await root.click({ "data-action": "open-bills" });
+  await root.click({ "data-action": "open-bill", "data-class": "5" });
+  return root;
+}
+
+const billRoutes = (extra = []) => [
+  ...extra,
+  ["/api/fees/bills/", { status: 200, body: BILLS }],
+  ["/bill/?term_id=", { status: 200, body: bill() }],
+  ["/api/fees/classes/", { status: 200, body: { terms: TERMS, term_id: 7, term: "2025/2026 First term", may_write: true, classes: [] } }],
+];
+
+test("the bills list says which classes have a bill and which do not", () => {
+  const html = states.bills({ bills: BILLS });
+  assert.match(html, /JSS 1A<\/button> <span class="quiet">2 lines, ₦155,000\.00; 2 children/);
+  assert.match(html, /JSS 2A<\/button> <span class="quiet">no bill yet; 0 children/);
+});
+
+test("a line says how many it charged, and one that charged anybody cannot be removed", () => {
+  const html = states.bill({ bill: bill() });
+  assert.match(html, /charged 2/);
+  assert.match(html, /nobody charged yet/);
+  assert.match(html, /data-action="remove-line" data-line="2"/);
+  assert.doesNotMatch(html, /data-action="remove-line" data-line="1"/);
+  assert.match(html, /<th>Total<\/th><th class="num">₦155,000\.00/);
+});
+
+test("a reader sees the bill and no way to change it", () => {
+  const html = states.bill({ bill: bill({ may_write: false }) });
+  assert.match(html, /Tuition/);
+  assert.doesNotMatch(html, /data-line-add|data-action="change-line"|data-action="remove-line"|charge-class/);
+});
+
+test("a line is added for the term on screen, and the bill is drawn from the answer", async () => {
+  const after = bill({ lines: [...bill().lines, { line_id: 3, description: "PTA levy", amount_kobo: 1_500_000, charged: 0 }] });
+  const fetchImpl = serve(billRoutes([["/bill/lines/", { status: 201, body: after }]]));
+  const root = await openBill(fetchImpl);
+
+  await root.submit({ intent: "add-line", description: "PTA levy", amount: "15,000" });
+
+  assert.deepEqual(fetchImpl.posted, [
+    { url: "/api/fees/classes/5/bill/lines/", body: { term_id: 7, description: "PTA levy", amount: "15,000" } },
+  ]);
+  assert.match(root.innerHTML, /PTA levy/);
+  assert.match(root.innerHTML, /Added “PTA levy”\./);
+});
+
+test("a line refused for its name keeps what was typed and says why", async () => {
+  const fetchImpl = serve(
+    billRoutes([["/bill/lines/", { status: 409, body: { detail: "This bill already has a line called \"Tuition\", for a different amount." } }]]),
+  );
+  const root = await openBill(fetchImpl);
+
+  await root.submit({ intent: "add-line", description: "Tuition", amount: "140,000" });
+
+  assert.match(root.innerHTML, /already has a line called/);
+  assert.match(root.innerHTML, /value="140,000"/);
+});
+
+test("changing a line is a PUT, and says the children already charged keep their charge", async () => {
+  const fetchImpl = serve(billRoutes([["/bill-lines/1/", { status: 200, body: bill() }]]));
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "change-line", "data-line": "1" });
+  assert.match(root.innerHTML, /The 2 already charged keep what they were charged/);
+  await root.submit({ intent: "change-line", description: "Tuition", amount: "160,000" });
+
+  assert.deepEqual(fetchImpl.others, [
+    { method: "PUT", url: "/api/fees/bill-lines/1/", body: { description: "Tuition", amount: "160,000" } },
+  ]);
+  assert.match(root.innerHTML, /Children already charged keep what they were charged/);
+});
+
+test("removing an unused line is a DELETE", async () => {
+  const fetchImpl = serve(billRoutes([["/bill-lines/2/", { status: 200, body: bill({ lines: bill().lines.slice(0, 1) }) }]]));
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "remove-line", "data-line": "2" });
+
+  assert.deepEqual(fetchImpl.others, [{ method: "DELETE", url: "/api/fees/bill-lines/2/", body: undefined }]);
+  assert.doesNotMatch(root.innerHTML, /Uniform/);
+});
+
+test("charging the class names who another class's bill already charged", async () => {
+  const done = {
+    students: 1, students_skipped: 0, charges_posted: 2, charges_skipped: 0, charged_kobo: 15_500_000,
+    discounts_posted: 0, discounts_skipped: 0, discounted_kobo: 0,
+    billed_elsewhere: [{ student_membership_id: 3, student: "Ada Obi" }],
+    summary: "2 charged, 0 skipped; 0 discounts, 0 skipped; 1 already billed by another class's bill",
+  };
+  const fetchImpl = serve(billRoutes([["/bill/charges/", { status: 200, body: done }]]));
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "charge-class" });
+
+  assert.deepEqual(fetchImpl.posted, [{ url: "/api/fees/classes/5/bill/charges/", body: { term_id: 7 } }]);
+  assert.match(root.innerHTML, /2 charges posted/);
+  assert.match(root.innerHTML, /another class's bill already charged them this term: Ada Obi\./);
+});
+
+test("a lost answer to charging says pressing again charges nobody twice", async () => {
+  const fetchImpl = serve(billRoutes([["/bill/charges/", () => new Error("connection reset")]]));
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "charge-class" });
+
+  assert.match(root.innerHTML, /data-state="bill"/);
+  assert.match(root.innerHTML, /nobody is charged twice/);
+});
+
+// -- B2: concessions ------------------------------------------------------------
+
+const CONCESSIONS = {
+  student_membership_id: 3,
+  student: "Ada Obi",
+  may_write: true,
+  concessions: [
+    { concession_id: 12, amount_kobo: 5_000_000, reason: "Staff child", granted_at: "2025-09-20T09:00:00Z", revoked: null },
+    {
+      concession_id: 11,
+      amount_kobo: 2_000_000,
+      reason: "Sibling discount",
+      granted_at: "2025-01-10T09:00:00Z",
+      revoked: { reason: "Sibling left", revoked_by: "Bola Bursar", revoked_at: "2025-09-01T10:00:00Z" },
+    },
+  ],
+};
+
+test("a revoked concession stays on the account, with who, when and why", () => {
+  const html = states.account({ account: account(), concessions: CONCESSIONS });
+  assert.match(html, /Revoked 2025-09-01 by Bola Bursar: Sibling left/);
+  assert.match(html, /data-action="revoke-concession" data-concession="12"/);
+  assert.doesNotMatch(html, /data-concession="11"/, "a revoked concession offered a second revocation");
+});
+
+test("a reader sees concessions and cannot grant or revoke", () => {
+  const html = states.account({ account: account({ may_write: false }), concessions: CONCESSIONS });
+  assert.match(html, /Staff child/);
+  assert.doesNotMatch(html, /revoke-concession|grant-concession/);
+});
+
+const concessionRoutes = (extra = []) => [
+  ...extra,
+  ["/concessions/", { status: 200, body: CONCESSIONS }],
+  ["/students/3/", { status: 200, body: account() }],
+];
+
+test("a revocation sends its reason, and one refused for having none says why", async () => {
+  let refused = true;
+  const fetchImpl = serve(
+    concessionRoutes([
+      [
+        "/revocation/",
+        () =>
+          refused
+            ? ((refused = false), { status: 422, body: { detail: "Say why, in a few words. The books keep the reason." } })
+            : { status: 201, body: { ...CONCESSIONS.concessions[0], revoked: { reason: "Left", revoked_by: "Bola Bursar", revoked_at: "2025-10-05T10:00:00Z" } } },
+      ],
+    ]),
+  );
+  const root = await openAccount(fetchImpl);
+
+  await root.click({ "data-action": "revoke-concession", "data-concession": "12" });
+  await root.submit({ intent: "revocation", reason: "" });
+  assert.match(root.innerHTML, /Say why, in a few words/);
+  assert.match(root.innerHTML, /data-revocation/, "the form closed on a refusal");
+
+  await root.submit({ intent: "revocation", reason: "Left" });
+
+  assert.deepEqual(fetchImpl.posted.map((p) => p.body), [{ reason: "" }, { reason: "Left" }]);
+  assert.equal(fetchImpl.posted[1].url, "/api/fees/concessions/12/revocation/");
+  assert.match(root.innerHTML, /Revoked\. No bill will give it from now on/);
+});
+
+test("a concession is granted under a key of its own", async () => {
+  const fetchImpl = serve(
+    concessionRoutes([["/students/3/concessions/", (options) => (options.method === "POST"
+      ? { status: 201, body: { concession: CONCESSIONS.concessions[0], granted: true } }
+      : { status: 200, body: CONCESSIONS })]]),
+  );
+  const root = await openAccount(fetchImpl);
+
+  await root.click({ "data-action": "grant-concession" });
+  await root.submit({ intent: "concession", amount: "50,000", reason: "Staff child" });
+
+  assert.deepEqual(fetchImpl.posted, [
+    { url: "/api/fees/students/3/concessions/", body: { amount: "50,000", reason: "Staff child", form_key: "key-3" } },
+  ]);
+  assert.match(root.innerHTML, /Concession granted/);
 });
