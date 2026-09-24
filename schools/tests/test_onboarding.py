@@ -57,6 +57,21 @@ class OnboardingTests(TestCase):
         with self.captureOnCommitCallbacks(execute=True):
             return create_school(slug=slug, **kw)
 
+    def refused(self, message=None, **kw):
+        """Refused **by the onboarding rules** — not by Postgres rejecting a
+        schema name further down, which would be a refusal with the wrong
+        identity and, for a name Postgres accepts, no refusal at all. Anything
+        else that raises is a failure that names what refused instead."""
+        try:
+            self.make(**kw)
+        except OnboardingError as exc:
+            if message:
+                self.assertIn(message, str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 — the point is to name it
+            self.fail(f"refused by {type(exc).__name__}, not by the host rule: {exc}")
+        self.fail(f"created with {kw!r}, where the host rule should have refused it")
+
     def nothing_was_written(self):
         """No school, no host and no invitation — nothing to clean up by hand."""
         self.assertFalse(School.objects.exists())
@@ -109,8 +124,7 @@ class OnboardingTests(TestCase):
 
         CONTROL 7: `create_school` skipping `check_host()` makes this red.
         """
-        with self.assertRaisesMessage(OnboardingError, "more than one label"):
-            self.make(slug="st.marys")
+        self.refused("more than one label", slug="st.marys")
 
         self.nothing_was_written()
 
@@ -120,22 +134,19 @@ class OnboardingTests(TestCase):
         CONTROL 7 too: skipping the check makes a school on `stmarys.None`.
         """
         with override_settings(PLATFORM_DOMAIN=None):
-            with self.assertRaisesMessage(OnboardingError, "PLATFORM_DOMAIN is not set"):
-                self.make()
+            self.refused("PLATFORM_DOMAIN is not set")
 
         self.nothing_was_written()
 
     def test_a_label_that_is_not_a_dns_label_is_refused(self):
         for slug in ("St Marys", "-stmarys", "stmarys-", "st_marys"):
             with self.subTest(slug=slug):
-                with self.assertRaises(OnboardingError):
-                    self.make(slug=slug)
+                self.refused("not a usable subdomain", slug=slug)
 
     def test_the_portals_subdomain_and_the_reserved_ones_are_refused(self):
         for slug in ("app", "www", "admin"):
             with self.subTest(slug=slug):
-                with self.assertRaisesMessage(OnboardingError, "reserved"):
-                    self.make(slug=slug)
+                self.refused("reserved", slug=slug)
 
     # -- refusals that leave nothing behind ---------------------------------------
 
