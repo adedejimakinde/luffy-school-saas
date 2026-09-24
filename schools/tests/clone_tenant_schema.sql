@@ -141,15 +141,25 @@ BEGIN
     );
   END LOOP;
 
-  -- CHECK, then PRIMARY KEY and UNIQUE — by name. Ordered so that the unique
-  -- indexes a foreign key may need exist before the foreign keys are added.
+  -- CHECK, then PRIMARY KEY, UNIQUE and EXCLUDE — by name. Ordered so that
+  -- the unique indexes a foreign key may need exist before the foreign keys
+  -- are added.
+  --
+  -- EXCLUDE ('x') arrived with the timetable (T1): `periods_do_not_overlap`
+  -- and `a_teacher_teaches_one_subject_at_a_time`. Before it was listed here
+  -- a clone had neither — the index loop below skips any index that backs a
+  -- constraint, so an exclusion constraint missing from this list is missing
+  -- altogether — and every timetable test would have run against a table with
+  -- no clash rule. `AClonedSchemaIsTheSameSchemaTests` is what said so. Its
+  -- operator classes resolve from `public`, where the timetable's migration
+  -- installs `btree_gist`.
   FOR r IN
     SELECT c.relname AS tbl, con.conname AS name,
            pg_get_constraintdef(con.oid) AS def, con.contype
     FROM pg_constraint con
     JOIN pg_class c     ON c.oid = con.conrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE n.nspname = source_schema AND con.contype IN ('c', 'p', 'u')
+    WHERE n.nspname = source_schema AND con.contype IN ('c', 'p', 'u', 'x')
     ORDER BY CASE con.contype WHEN 'c' THEN 1 WHEN 'p' THEN 2 ELSE 3 END
   LOOP
     EXECUTE format('ALTER TABLE %I.%I ADD CONSTRAINT %I %s',
