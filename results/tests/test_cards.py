@@ -108,11 +108,12 @@ def historical_apps():
 
 from results.tests.test_positions import PASSWORD, make_school
 from schools.tests.tenants import connected_to
+from tests.refusals import RefusalAssertions
 
 SESSION = "2025/2026"
 
 
-class CardSetUp(TestCase):
+class CardSetUp(RefusalAssertions, TestCase):
     """One school, a full session, a class, two subjects and two children."""
 
     TERM_DATES = {
@@ -662,17 +663,26 @@ class AppendOnlyTests(CardSetUp):
             self.release_the_term()
             card = cards.card_for(self.ada, self.term(self.stmarys, "first"))
 
-            with self.assertRaises(IntegrityError):
+            # Each table's own trigger, and the operation: the ten append-only
+            # sentences share "is append-only", and a needle stopping there is
+            # satisfied by whichever of them answers (#89).
+            with self.assertRefusedBy(
+                "results_releasedcard is append-only; UPDATE is not allowed"
+            ):
                 with transaction.atomic():
                     ReleasedCard.objects.filter(pk=card.pk).update(
                         own_average=Decimal("99.00")
                     )
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                "results_releasedsubjectresult is append-only; UPDATE is not allowed"
+            ):
                 with transaction.atomic():
                     ReleasedSubjectResult.objects.filter(card=card).update(
                         grade_letter="A1"
                     )
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                "results_releasedassessmentscore is append-only; UPDATE is not allowed"
+            ):
                 with transaction.atomic():
                     ReleasedAssessmentScore.objects.filter(card=card).update(score=1)
 
@@ -686,7 +696,9 @@ class AppendOnlyTests(CardSetUp):
             self.release_the_term()
             card = cards.card_for(self.ada, self.term(self.stmarys, "first"))
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                "results_releasedassessmentscore is append-only; DELETE is not allowed"
+            ):
                 with transaction.atomic():
                     ReleasedAssessmentScore.objects.filter(card=card).delete()
 
