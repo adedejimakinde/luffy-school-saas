@@ -20,3 +20,9 @@ class SchoolsConfig(AppConfig):
         where the Django documentation would otherwise have it.
         """
         import celery_app  # noqa: F401
+
+        # The bare-id policy's check, registered here because tenancy is this
+        # app's subject. Imported for the side effect, as `accounts` does its
+        # own: a check that is only registered when something else happens to
+        # import the module is not a check.
+        from . import checks  # noqa: F401
