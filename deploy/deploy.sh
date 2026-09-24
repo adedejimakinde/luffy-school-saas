@@ -35,7 +35,7 @@ set +a
 PREVIOUS="$(cat deployed-sha 2>/dev/null || true)"
 export CLASSNODE_TAG="$SHA"
 
-docker compose pull web worker caddy
+docker compose pull web worker caddy db
 docker compose up -d db redis
 docker compose run --rm --no-deps web python manage.py migrate_schemas --noinput
 docker compose up -d web worker caddy

@@ -81,7 +81,11 @@ services:
         condition: service_healthy
 
   db:
-    image: postgres:15-alpine
+    # Debian, matched to CI and to the production database image — WAL-G
+    # ships glibc builds only, and text sorts by the C library's collation.
+    # A volume first created under the old Alpine image should be recreated
+    # (development data is disposable) or reindexed: `REINDEX DATABASE`.
+    image: postgres:15-bookworm
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
