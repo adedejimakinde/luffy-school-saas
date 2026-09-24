@@ -93,7 +93,11 @@ class MoneyTests(LedgerSetUp):
                 self.membership, term, TUITION, narration="First term tuition"
             )
             services.record_payment(
-                self.membership, term, 100_000 * KOBO_PER_NAIRA, reference="TLR-4471"
+                self.membership,
+                term,
+                100_000 * KOBO_PER_NAIRA,
+                method="bank_transfer",
+                reference="TLR-4471",
             )
 
             outstanding = FeeLedgerEntry.objects.for_student(self.membership.pk).balance()
@@ -114,7 +118,7 @@ class MoneyTests(LedgerSetUp):
             term = self.reload_term()
             services.charge(self.membership, term, TUITION, narration="Tuition")
             services.record_payment(
-                self.membership, term, 200_000 * KOBO_PER_NAIRA
+                self.membership, term, 200_000 * KOBO_PER_NAIRA, method="cash"
             )
             self.assertEqual(
                 FeeLedgerEntry.objects.for_student(self.membership.pk).balance(),
@@ -172,7 +176,7 @@ class MoneyTests(LedgerSetUp):
                 narration="Staff child concession",
             )
             services.record_payment(
-                self.membership, term, 120_000 * KOBO_PER_NAIRA
+                self.membership, term, 120_000 * KOBO_PER_NAIRA, method="cash"
             )
 
             received = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.PAYMENT).balance()
@@ -443,7 +447,8 @@ class ConstraintTests(LedgerSetUp):
             with self.assertRefusedBy(
                 "a_payment_or_discount_reduces_what_is_owed"
             ), transaction.atomic():
-                self.entry(kind=FeeEntryKind.PAYMENT, amount_kobo=TUITION)
+                # With a method, so the sign rule is the only one it breaks.
+                self.entry(kind=FeeEntryKind.PAYMENT, amount_kobo=TUITION, method="cash")
 
     def test_a_positive_discount_is_refused(self):
         with connected_to(self.stmarys):
@@ -483,7 +488,9 @@ class ConstraintTests(LedgerSetUp):
 
             for child in (self.membership, sibling):
                 services.charge(child, term, TUITION, narration="First term fees")
-                services.record_payment(child, term, TUITION, reference=teller)
+                services.record_payment(
+                    child, term, TUITION, method="bank_transfer", reference=teller
+                )
 
             self.assertEqual(
                 FeeLedgerEntry.objects.filter(

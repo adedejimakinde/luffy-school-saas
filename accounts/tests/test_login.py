@@ -141,8 +141,10 @@ class SigningInTests(SignInSetUp):
                     "slug": "st-marys",
                     "name": "St Mary's",
                     "host": SCHOOL_HOST,
-                    # A teacher marks, and has no child here.
+                    # A teacher marks, does not read the books, and has no
+                    # child here.
                     "may_take_a_register": True,
+                    "may_see_fees": False,
                     "has_children_here": False,
                 }
             ],
@@ -600,6 +602,22 @@ class WhatEachSchoolOffersThisLoginTests(SignInSetUp):
 
         self.assertNotIn("grace", rows)
         self.assertIn("st-marys", rows)
+
+    # -- may_see_fees --------------------------------------------------------
+
+    def test_the_books_are_offered_per_school_and_to_their_readers_only(self):
+        """A bursar at Grace and a teacher at St Mary's: one login, two
+        answers. The teacher's half is the one that matters — a link there
+        would open onto the books' flat 404."""
+        grant_membership(self.teacher, self.grace, Role.BURSAR)
+
+        rows = self.rows()
+
+        self.assertTrue(rows["grace"]["may_see_fees"])
+        self.assertFalse(
+            rows["st-marys"]["may_see_fees"],
+            "a teacher was offered the books — the answer is not per-school",
+        )
 
     # -- has_children_here ---------------------------------------------------
 

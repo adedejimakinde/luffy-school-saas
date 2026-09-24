@@ -52,6 +52,8 @@ from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
 from attendance.api import router as attendance_router
 from attendance.services import MARKING_ROLES
+from fees.api import router as fees_router
+from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from results.card_api import router as report_card_router
@@ -85,6 +87,9 @@ api.add_router("/attendance/", attendance_router, tags=["attendance"])
 # page in front of it, deliberately: see `academics.api` and D12.
 api.add_router("/academics/", academics_router, tags=["academics"])
 api.add_router("/enrolment/", enrolment_router, tags=["enrolment"])
+# The school's books. Tenant-host only like the two above, and refused with a
+# flat 404 to anybody who may not read them — see `fees.api`.
+api.add_router("/fees/", fees_router, tags=["fees"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.
 api.add_router("/results/", results_router, tags=["results"])
@@ -227,6 +232,12 @@ class SchoolOut(Schema):
     #: school is one row on the landing and one row is one answer.
     may_take_a_register: bool = False
 
+    #: May this login read the school's books? `fees.authority.may_read()`'s
+    #: question — bursar, administrator, principal, vice principal (academic)
+    #: — so a teacher is not sent to a page that answers with a 404, and a
+    #: bursar, who had nothing on the landing until now, has somewhere to go.
+    may_see_fees: bool = False
+
     #: Has this login a child at this school — their own card, or one they are
     #: a guardian of? `card_api._children_of()`'s question, which is
     #: `role=STUDENT` and (`user=actor` or `guardianships__guardian=actor`).
@@ -364,6 +375,11 @@ def _schools_of(user, *, parent_scoped=False):
         .filter(school__in=schools, role__in=MARKING_ROLES)
         .values_list("school_id", flat=True)
     )
+    book_readers = set(
+        user.memberships.with_access()
+        .filter(school__in=schools, role__in=FEES_READING_ROLES)
+        .values_list("school_id", flat=True)
+    )
     # The child's own login and the guardian's, in one query — the two halves
     # of `_children_of()`, asked as "is there any such child" per school.
     families = set(
@@ -377,6 +393,7 @@ def _schools_of(user, *, parent_scoped=False):
             name=school.name,
             host=hosts.get(school.pk),
             may_take_a_register=not parent_scoped and school.pk in markers,
+            may_see_fees=not parent_scoped and school.pk in book_readers,
             has_children_here=school.pk in families,
         )
         for school in schools

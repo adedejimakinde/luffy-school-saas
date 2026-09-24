@@ -14,12 +14,17 @@ call, and keeping the rules here rather than in a view is what makes them true
 for an import and a management command too.
 """
 
-from django.db import connection, transaction
+from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
 from accounts.students import why_not_a_student_here
 
-from .models import FeeEntryKind, FeeLedgerEntry, LedgerIsAppendOnly
+from .models import (
+    FeeEntryKind,
+    FeeLedgerEntry,
+    LedgerIsAppendOnly,
+    PaymentMethod,
+)
 
 
 class FeeLedgerError(Exception):
@@ -98,6 +103,41 @@ class NotThisSchoolsStudent(FeeLedgerError):
     school's students are in the same table. The school half of the question has
     to be asked in code whichever way the column is declared.
     """
+
+
+class NoMethod(FeeLedgerError):
+    """Money moved and the entry does not say how, or says it in a way the
+    school cannot reconcile: no method, a method not on the list, or a bank
+    transfer with no reference.
+
+    Asked here as well as by `a_method_on_money_that_moved_and_nowhere_else`
+    and `a_bank_transfer_names_its_reference`, so a caller gets a sentence and
+    a `FeeLedgerError` rather than an `IntegrityError` from Postgres. The
+    constraints are what hold; this is what reads.
+    """
+
+
+class FormAlreadyUsed(FeeLedgerError):
+    """A form key already posted an entry, and not this one.
+
+    The same key twice with the same details is a double click, and the answer
+    is the entry the first click posted. The same key with different details is
+    a page that reused a key it should have replaced — answering with the first
+    entry would tell the bursar a payment was recorded that was not.
+    """
+
+
+def _require_method(method, reference):
+    if method not in PaymentMethod.values:
+        raise NoMethod(
+            f"Say how the money moved: one of {', '.join(PaymentMethod.labels)}."
+        )
+    if method == PaymentMethod.BANK_TRANSFER and not (reference or "").strip():
+        raise NoMethod(
+            "A bank transfer needs its teller or transfer reference, so the "
+            "school can find it on its statement."
+        )
+    return method
 
 
 def _require_student_of_this_school(membership):
@@ -222,8 +262,8 @@ def _insert_or_skip(entry, *, conflict_target):
 
 
 def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
-          reference="", recorded_by=None, reverses=None, source_line=None,
-          source_concession=None, skip_on_conflict=None):
+          reference="", method="", form_key=None, recorded_by=None, reverses=None,
+          source_line=None, source_concession=None, skip_on_conflict=None):
     """Create one entry. Every public function below funnels through here.
 
     `skip_on_conflict` is an `ON CONFLICT` inference clause. Passed, the insert
@@ -241,6 +281,8 @@ def _post(*, membership, term, kind, amount_kobo, narration, effective_on,
         amount_kobo=amount_kobo,
         narration=narration,
         reference=reference,
+        method=method,
+        form_key=form_key,
         effective_on=effective_on or timezone.localdate(),
         recorded_by_id=getattr(recorded_by, "pk", recorded_by),
         reverses=reverses,
@@ -427,9 +469,15 @@ def charge(membership, term, amount_kobo, *, narration, effective_on=None,
 
 
 @transaction.atomic
-def record_payment(membership, term, amount_kobo, *, narration="Payment received",
-                   effective_on=None, reference="", recorded_by=None):
-    """Record money received. Reduces what the family owes."""
+def record_payment(membership, term, amount_kobo, *, method, narration="Payment received",
+                   effective_on=None, reference="", recorded_by=None, form_key=None):
+    """Record money received. Reduces what the family owes.
+
+    `method` is required, and a bank transfer needs its `reference` — see
+    `NoMethod`. A caller posting from a form passes its `form_key`, and wants
+    `record_payment_once()`, which turns the second click into the first
+    click's entry.
+    """
     return _post(
         membership=membership,
         term=term,
@@ -438,8 +486,73 @@ def record_payment(membership, term, amount_kobo, *, narration="Payment received
         narration=narration,
         effective_on=effective_on,
         reference=reference,
+        method=_require_method(method, reference),
+        form_key=form_key,
         recorded_by=recorded_by,
     )
+
+
+def _is_the_form_key_colliding(exc) -> bool:
+    """Did `a_form_posts_once` fire, or something else?
+
+    `academics.services._is_the_placement_colliding()` has the long version:
+    `IntegrityError` says a rule refused the row and not which, and only one
+    of them means "this form was already posted".
+    """
+    cause = getattr(exc, "__cause__", None)
+    diag = getattr(cause, "diag", None)
+    return getattr(diag, "constraint_name", None) == "a_form_posts_once"
+
+
+def record_payment_once(membership, term, amount_kobo, *, method, form_key,
+                        effective_on=None, reference="", recorded_by=None):
+    """`record_payment()` for a form: the same form twice is one payment.
+
+    Returns `(entry, posted)`. `posted` is False when this form had already
+    posted — a double click, or a retry of a request whose answer never
+    arrived — and the entry is the one the first submission posted.
+
+    **The unique index is the whole mechanism**, not a read-then-write: two
+    submissions racing each other both pass any read, and only the index sees
+    them both. `record_payment()`'s savepoint is what lets the refused insert
+    roll back without taking the caller's transaction with it — one savepoint
+    per payment, which is not issue #82's shape (that was one per child in a
+    loop).
+
+    Raises `FormAlreadyUsed` when the key posted a *different* payment.
+    """
+    try:
+        return (
+            record_payment(
+                membership,
+                term,
+                amount_kobo,
+                method=method,
+                effective_on=effective_on,
+                reference=reference,
+                recorded_by=recorded_by,
+                form_key=form_key,
+            ),
+            True,
+        )
+    except IntegrityError as exc:
+        if not _is_the_form_key_colliding(exc):
+            raise
+    earlier = FeeLedgerEntry.objects.get(form_key=form_key)
+    same = (
+        earlier.kind == FeeEntryKind.PAYMENT
+        and earlier.student_membership_id == membership.pk
+        and earlier.term_id == term.pk
+        and earlier.amount_kobo == -amount_kobo
+        and earlier.method == method
+        and earlier.reference == reference
+    )
+    if not same:
+        raise FormAlreadyUsed(
+            "This form was already used to record a different payment. Nothing "
+            "new was recorded; reload the page and enter it again."
+        )
+    return earlier, False
 
 
 def _discount(membership, term, amount_kobo, *, narration, effective_on=None,
@@ -571,8 +684,8 @@ def discount(membership, term, amount_kobo, *, narration, effective_on=None,
 
 
 @transaction.atomic
-def refund(membership, term, amount_kobo, *, narration="Refund", effective_on=None,
-           reference="", recorded_by=None):
+def refund(membership, term, amount_kobo, *, method, narration="Refund",
+           effective_on=None, reference="", recorded_by=None):
     """Hand money back. Increases what the family owes, back towards zero.
 
     The sign is the surprising half and it is right: a family sitting at −₦50,000
@@ -598,6 +711,7 @@ def refund(membership, term, amount_kobo, *, narration="Refund", effective_on=No
         narration=narration,
         effective_on=effective_on,
         reference=reference,
+        method=_require_method(method, reference),
         recorded_by=recorded_by,
     )
 
@@ -718,7 +832,9 @@ __all__ = [
     "AlreadyReversed",
     "CannotReverse",
     "FeeLedgerError",
+    "FormAlreadyUsed",
     "LedgerIsAppendOnly",
+    "NoMethod",
     "NotPositive",
     "NotThisSchoolsStudent",
     "NotThisStudentsConcession",
@@ -726,6 +842,7 @@ __all__ = [
     "charge",
     "discount",
     "record_payment",
+    "record_payment_once",
     "refund",
     "reverse_entry",
     "snapshot_student",
