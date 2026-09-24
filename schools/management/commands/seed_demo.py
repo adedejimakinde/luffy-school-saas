@@ -30,7 +30,12 @@ from django_tenants.utils import schema_context
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
 from accounts.models import Role, User
-from accounts.services import enroll_student, grant_membership, link_guardian
+from accounts.services import (
+    activate_guardian_links,
+    enroll_student,
+    grant_membership,
+    link_guardian,
+)
 from attendance import services as attendance
 from fees import services as fees
 from fees.models import KOBO_PER_NAIRA, PaymentMethod
@@ -129,6 +134,10 @@ class Command(BaseCommand):
             parent = login("parent", f"Parent {name.split()[0]}")
             for child in children[:2]:
                 link_guardian(parent, child)
+            # `link_guardian()` grants INVITED until the guardian answers the
+            # school's code, and this is what answering does. A demo parent has
+            # no phone to answer with, and an INVITED one can open nothing.
+            activate_guardian_links(parent, school)
 
         logins = [(name, u.user.username, label) for (key, _, label), u in zip(STAFF, staff.values())]
         logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[1].name})"))

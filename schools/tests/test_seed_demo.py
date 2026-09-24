@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 from django_tenants.utils import schema_context
 
 from academics.models import ClassPlacement, Term
-from accounts.models import Membership, Role
+from accounts.models import Membership, MembershipStatus, Role
 from attendance.models import Register
 from fees.models import FeeEntryKind, FeeLedgerEntry
 from gradebook.models import Score
@@ -55,6 +55,12 @@ class SeedDemoTests(TestCase):
                 for role in (Role.ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL_ACADEMIC,
                              Role.TEACHER, Role.BURSAR, Role.PARENT):
                     self.assertEqual(roles.count(role.value), 1, role)
+                # CONTROL 2: leaving the parent INVITED, as `link_guardian()`
+                # grants it, makes this red — and the demo parent sees nothing.
+                self.assertEqual(
+                    Membership.objects.get(school=school, role=Role.PARENT).status,
+                    MembershipStatus.ACTIVE,
+                )
 
                 with schema_context(school.schema_name):
                     term = Term.objects.get(is_current=True)
