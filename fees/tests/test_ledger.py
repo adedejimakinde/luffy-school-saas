@@ -33,6 +33,7 @@ from fees.models import (
     FeeLedgerEntry,
     KOBO_PER_NAIRA,
     LedgerIsAppendOnly,
+    PaymentMethod,
 )
 from schools.tests.tenants import connected_to, make_school
 from tests.refusals import RefusalAssertions
@@ -42,6 +43,14 @@ PASSWORD = "correct-horse-battery"
 #: ₦150,000 as the column stores it. Spelled out once so the tests below read as
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
+
+#: The three ways an amount enters the books from a caller, with what each
+#: needs besides it: a payment says how the money moved (fees 3(a)).
+EVERY_WAY_IN = (
+    (services.charge, {}),
+    (services.record_payment, {"method": PaymentMethod.CASH}),
+    (services.discount, {}),
+)
 
 #: What `fees_ledger_append_only` says, table first and operation second.
 #:
@@ -134,12 +143,12 @@ class MoneyTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             term = self.reload_term()
-            for function in (services.charge, services.record_payment, services.discount):
+            for function, how in EVERY_WAY_IN:
                 with self.subTest(function=function.__name__):
                     with self.assertRaises(services.NotPositive):
-                        function(self.membership, term, -5000, narration="wrong way")
+                        function(self.membership, term, -5000, narration="wrong way", **how)
                     with self.assertRaises(services.NotPositive):
-                        function(self.membership, term, 0, narration="nothing")
+                        function(self.membership, term, 0, narration="nothing", **how)
 
     def test_a_float_amount_is_refused(self):
         """The reason the column is kobo, restated where it can be enforced.
@@ -638,10 +647,10 @@ class WrongStudentTests(TestCase):
     def test_the_check_covers_every_way_in(self):
         with connected_to(self.stmarys):
             term = Term.objects.get()
-            for function in (services.charge, services.record_payment, services.discount):
+            for function, how in EVERY_WAY_IN:
                 with self.subTest(function=function.__name__):
                     with self.assertRaises(services.NotThisSchoolsStudent):
-                        function(self.theirs, term, TUITION, narration="nope")
+                        function(self.theirs, term, TUITION, narration="nope", **how)
             self.assertEqual(FeeLedgerEntry.objects.count(), 0)
 
     def test_our_own_student_is_fine(self):
