@@ -1,12 +1,41 @@
 # Offline mode for teachers
 
-Status: **proposal, for review. Nothing here is built.** No decision below is settled
-until it is reviewed; where one depends on a school telling us how they work, it says
-so and the question is under Open questions. Extends `docs/gradebook.md` and
-`docs/attendance.md`; changes neither's rules.
+Status: **reviewed 2026-09-24 — the plan.** S1–S4 are being built; S5–S7 wait until
+after the pilot. The decisions taken in review are recorded directly below, and they
+override anything later in the document that reads as still open. Extends
+`docs/gradebook.md` and `docs/attendance.md`; changes neither's rules.
 
 Everything this document says about the code as it stands was read on `main` at
 `ecc36f9` and cites the line it was read from.
+
+## Decision record (review, 2026-09-24)
+
+**Build now, in this order:**
+
+1. **S1**: the register's day in Lagos time (D9), plus the date input the page draws
+   and never listens to, plus the two stale-prose findings at the end of this
+   document.
+2. **S2**: a refused or failed mark is kept on its cell (D5's first paragraph).
+3. **S4**: idempotency keys (D3).
+4. **S3**: the marks outbox, with one entry per cell, and 423, 422 and 403 final
+   (D1, D2, D6, D7).
+
+**Deferred until after the pilot:** S5 (service worker and snapshots), S6 (the
+register's base and per-child merge), and S7 (shared handsets). The document stays
+the plan for them.
+
+**Correctness requirements 1, 2, 4, 5, 6, 7 and 8 apply to the slices built now.**
+Each is a two-school test with a control. Requirement 3 is S6's and waits with it.
+
+| open question | decided |
+| --- | --- |
+| OPEN-1, the per-child register merge | **Agreed with D4.** Added to the pilot-school questions, issue #155, because a school's answer can still overturn it. |
+| OPEN-2, where the idempotency key lives | **A `SyncReceipt` table with a unique key.** |
+| OPEN-3, how long unsent work may sit | **Seven days, then flagged, not deleted.** |
+| OPEN-4, a "pending on a device" signal | **None in v1.** |
+| OPEN-5, taken-at versus arrived-at | **Deferred with S6.** |
+| OPEN-6, devices | **Chrome on Android is in scope. Safari gets a clear warning.** |
+| OPEN-7, clearing a mark offline | **No.** |
 
 ## What this is
 
@@ -131,8 +160,9 @@ The same shape here, for both writes:
   landed would meet its own write as a change since the base. The key is what tells
   the two apart.
 
-Where the key lives is OPEN-2. The requirement is that it is enforced by a unique
-constraint, not by a read — the lesson `a_form_posts_once` records.
+Where the key lives was OPEN-2, decided in review: a `SyncReceipt` table with a unique
+key. The requirement is that it is enforced by a unique constraint, not by a read —
+the lesson `a_form_posts_once` records.
 
 ### D4. A register syncs child by child against what the teacher was shown
 
@@ -277,7 +307,9 @@ says so.
 
 ## The slices
 
-In order; each is useful on its own and each is its own PR.
+In order; each is useful on its own and each is its own PR. **S5, S6 and S7 are
+deferred until after the pilot** (decision record, above); S1–S4 are built in the order
+S1, S2, S4, S3.
 
 - **S1. The register's day in Lagos time (D9).** A bug fix, needed online today.
 - **S2. A refused mark is kept, not lost (D5's first paragraph).** Online behaviour:
@@ -313,6 +345,9 @@ Each is a test, with two schools, never one.
    value is still on the device and on screen until they dismiss it.
 
 ## Open questions
+
+**All seven were decided in review on 2026-09-24.** The decision record at the top is
+the answer to each. They are kept here as the reasoning behind those answers.
 
 - **OPEN-1. Is a per-child register merge what schools want (D4)?** The alternative is
   refusing the whole register when anything changed. D4 argues against it; a school
