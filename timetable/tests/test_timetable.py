@@ -13,6 +13,8 @@ Claims, each with the test that fails without it:
 4. Copying last term fills an empty term and never writes over one.
 5. Admin and the vice principal (academic) edit; the principal and every
    teacher read and are told they may not edit; everybody else gets a flat 404.
+   Only a membership that grants access counts: an invited or suspended one
+   reads nothing and edits nothing.
 6. Another school's teacher cannot be put on this school's timetable, and is
    not named in the refusal.
 7. A cloned test schema carries both exclusion constraints
@@ -26,7 +28,7 @@ from django.db import connection
 from django.test import TestCase
 
 from academics.models import ClassGroup, Term, TermName
-from accounts.models import Role, User
+from accounts.models import Membership, MembershipStatus, Role, User
 from accounts.services import grant_membership
 from gradebook.models import Subject
 from schools.models import Domain, School
@@ -37,6 +39,7 @@ from timetable.models import Period, TimetableSlot, Weekday
 
 PASSWORD = "correct-horse-battery"
 HOST = "st-marys.testserver"
+GRACE_HOST = "grace.testserver"
 API = "/api/timetable/"
 NOBODY = 10**9
 
@@ -374,6 +377,34 @@ class WhoMayReadTests(TimetableSetUp):
                     self.assertEqual(answer.status_code, 404)
                     self.assertEqual(answer.content, missing)
 
+    def test_a_teacher_membership_that_grants_no_access_reads_nothing(self):
+        """`may_read()` counts only memberships that grant access. The bursar
+        is active at St Mary's, so the middleware lets them through to the
+        route, and they also hold a teacher membership there — suspended, then
+        invited. Neither opens the timetable: the flat 404.
+
+        Two schools, because the refusal must come from this school's
+        membership and not from the login: at Grace the same login is an
+        active teacher, and reads Grace's timetable.
+
+        CONTROL 9: `may_read()` counting every membership at the school rather
+        than `roles_at()`'s access-scoped ones makes this red.
+        """
+        Domain.objects.create(tenant=self.grace, domain=GRACE_HOST, is_primary=True)
+        grant_membership(self.bursar.user, self.grace, Role.TEACHER)
+        dormant = grant_membership(self.bursar.user, self.stmarys, Role.TEACHER)
+        missing = self.missing()
+
+        for status in (MembershipStatus.SUSPENDED, MembershipStatus.INVITED):
+            with self.subTest(status=status):
+                Membership.objects.filter(pk=dormant.pk).update(status=status)
+
+                answer = self.get(self.bursar, "")
+
+                self.assertEqual(answer.status_code, 404)
+                self.assertEqual(answer.content, missing)
+        self.assertEqual(self.get(self.bursar, "", host=GRACE_HOST).status_code, 200)
+
     def test_there_is_no_timetable_on_the_portal(self):
         self.assertEqual(self.get(self.admin, "", host="testserver").status_code, 404)
 
@@ -420,6 +451,50 @@ class WhoMayEditTests(TimetableSetUp):
                 )
         self.assertEqual(self.slots(), [])
 
+    def test_a_vp_membership_that_grants_no_access_edits_nothing(self):
+        """A teacher who also holds a vice principal (academic) membership at
+        St Mary's — suspended, then invited — reads as a teacher and is told
+        they may not edit. At Grace the same login is an active vice
+        principal and sets a lesson, so the refusal is this school's
+        membership and not the login.
+
+        CONTROL 10: `may_edit()` counting every membership at the school rather
+        than `roles_at()`'s access-scoped ones makes this red.
+        """
+        Domain.objects.create(tenant=self.grace, domain=GRACE_HOST, is_primary=True)
+        dormant = grant_membership(self.kemi.user, self.stmarys, Role.VICE_PRINCIPAL_ACADEMIC)
+        grant_membership(self.kemi.user, self.grace, Role.VICE_PRINCIPAL_ACADEMIC)
+        with connected_to(self.grace):
+            their_term = Term.objects.create(
+                session="2025/2026", name=TermName.FIRST,
+                starts_on=date(2025, 9, 15), ends_on=date(2025, 12, 12), is_current=True,
+            )
+            their_maths = Subject.objects.create(name="Mathematics", code="MTH")
+            their_period = Period.objects.create(starts_at=time(8, 0), ends_at=time(8, 40))
+
+        for status in (MembershipStatus.SUSPENDED, MembershipStatus.INVITED):
+            with self.subTest(status=status):
+                Membership.objects.filter(pk=dormant.pk).update(status=status)
+
+                answer = self.put_lesson(self.kemi)
+
+                self.assertEqual(answer.status_code, 403)
+        self.assertEqual(self.slots(), [])
+
+        at_grace = self.put(
+            self.kemi,
+            f"classes/{self.their_class.pk}/lessons/",
+            {
+                "term_id": their_term.pk,
+                "weekday": Weekday.MONDAY,
+                "period_id": their_period.pk,
+                "subject_id": their_maths.pk,
+                "teacher_membership_id": self.their_teacher.pk,
+            },
+            host=GRACE_HOST,
+        )
+        self.assertEqual(at_grace.status_code, 201, at_grace.content)
+
     def test_a_bursar_editing_gets_the_flat_404(self):
         missing = self.missing()
 
@@ -440,7 +515,7 @@ class WhoMayEditTests(TimetableSetUp):
 
     def test_another_schools_teacher_is_not_found_and_not_named(self):
         """Claim 6. CONTROL 7: the teacher lookup losing `school=` makes this
-        red — the service would refuse her, but by naming her school."""
+        red — the service would refuse them, but by naming their school."""
         answer = self.put_lesson(self.admin, teacher_membership_id=self.their_teacher.pk)
 
         self.assertEqual(answer.status_code, 422)

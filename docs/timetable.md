@@ -91,7 +91,7 @@ teacher reads nothing. The landing page offers the link on the same predicate
 
 **The teacher is looked up with `school=` in the query.** The teacher is a bare
 membership id into the shared table, so a lookup without the school would find
-another school's teacher. She is not found and not named; the answer is
+another school's teacher. They are not found and not named; the answer is
 "Choose one of the school's teachers."
 
 ## The routes

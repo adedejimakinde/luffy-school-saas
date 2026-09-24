@@ -55,10 +55,8 @@ from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
-from timetable.services import READING_ROLES as TIMETABLE_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
-from timetable.api import router as timetable_router
 from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
@@ -75,6 +73,8 @@ from schools.models import (
     School,
     WeakPassword,
 )
+from timetable.api import router as timetable_router
+from timetable.services import READING_ROLES as TIMETABLE_READING_ROLES
 
 api = NinjaAPI(title="Luffy School API", version="1.0.0")
 

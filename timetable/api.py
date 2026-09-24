@@ -283,7 +283,7 @@ def put_lesson(request, class_group_id: int, payload: LessonIn):
     period = Period.objects.filter(pk=payload.period_id).first()
     subject = Subject.objects.filter(pk=payload.subject_id).first()
     # Scoped to this school in the query: another school's teacher is not
-    # "found and refused", she is not found — and not named.
+    # "found and refused", they are not found — and not named.
     teacher = (
         Membership.objects.select_related("user", "school")
         .filter(pk=payload.teacher_membership_id, school=school, role=Role.TEACHER.value)

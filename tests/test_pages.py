@@ -35,7 +35,6 @@ from academics.views import SETUP_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import FEES_MODULES
 from gradebook.views import MARKING_MODULES
-from timetable.views import TIMETABLE_MODULES
 from results.views import (
     BROADSHEET_MODULES,
     CARD_MODULES,
@@ -43,6 +42,7 @@ from results.views import (
     COMMENTS_MODULES,
     INDEX_MODULES,
 )
+from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
 #: `settings.STATICFILES_DIRS` for why those two being the same is the whole

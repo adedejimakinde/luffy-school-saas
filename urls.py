@@ -22,7 +22,6 @@ from academics.views import setup_page
 from accounts.views import roll_page, staff_page
 from attendance.views import absences_page, register_page
 from fees.views import fees_page
-from timetable.views import timetable_page
 from gradebook.views import marking_page
 from results.views import (
     broadsheet_page,
@@ -31,6 +30,7 @@ from results.views import (
     chain_page,
     comments_page,
 )
+from timetable.views import timetable_page
 
 urlpatterns = [
     path("api/", api.urls),
