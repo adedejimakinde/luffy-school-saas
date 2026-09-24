@@ -1,3 +1,4 @@
+- [Classnode state 2026-09-24](classnode-state-2026-09-24.md) — READ FIRST: supersedes luffy-open-work-state; #144 (B1) open awaiting CI+merge; B2 + T1 decisions; `timetable` WIP branch; fresh-Codespace setup
 - [Phase 1 results decisions](phase-1-results-decisions.md) — dense ranking, principal-only revision, nullable attendance, Celery/Redis/WeasyPrint PR
 - [Luffy Phase 1 workflow](luffy-phase-1-workflow.md) — one PR per task, never stack branches; ancestry check always; merge word means merge WHEN CI is green, and `gh pr merge --auto` does NOT gate here; check the gate on the head SHA, not the PR rollup
 - [Luffy test suite runtime](luffy-test-suite-runtime.md) — LOCAL = only the app under test; CI full suite 826s after #64; db host is `db`; watch for ^EXIT= not ERROR
