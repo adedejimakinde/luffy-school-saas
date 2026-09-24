@@ -21,7 +21,7 @@ both real schemas, created the production way.
 import threading
 from datetime import date
 
-from django.db import IntegrityError, connection, connections, transaction
+from django.db import connection, connections, transaction
 from django.test import TestCase, TransactionTestCase
 
 from academics import services
@@ -30,6 +30,7 @@ from accounts.models import MembershipStatus, Role, User
 from accounts.services import enroll_student, grant_membership
 from schools.models import School
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -44,7 +45,7 @@ def a_term(session="2025/2026", name=TermName.FIRST, starts=None, ends=None):
     )
 
 
-class TwoSchoolsSetUp(TestCase):
+class TwoSchoolsSetUp(RefusalAssertions, TestCase):
     """St Mary's and Grace Academy, each with a real schema of its own."""
 
     def setUp(self):
@@ -149,7 +150,7 @@ class TwoSchoolsKeepTheirOwnGroupsTests(TwoSchoolsSetUp):
 
     def test_one_school_cannot_name_two_groups_the_same(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("uniq_class_group_name"):
                 with transaction.atomic():
                     ClassGroup.objects.create(name="JSS 1A", level=1)
 
@@ -272,7 +273,7 @@ class OneGroupPerChildPerTermTests(TwoSchoolsSetUp):
         with connected_to(self.stmarys):
             services.place_student(self.jss1a(), self.term(), self.ada)
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("one_class_placement_per_student_per_term"):
                 with transaction.atomic():
                     ClassPlacement.objects.create(
                         class_group_id=self.jss1b_id,
@@ -302,7 +303,11 @@ class OneGroupPerChildPerTermTests(TwoSchoolsSetUp):
             # checked yet at this point.
             services.place_student(missing, self.term(), self.ada)
 
-            with self.assertRaises(IntegrityError):
+            # Named by what it points at: the constraint's own name is one
+            # Django generated, and the missing row is the class group.
+            with self.assertRefusedBy(
+                r'Key \(class_group_id\)=\(999999\) is not present in table "academics_classgroup"'
+            ):
                 connection.check_constraints()
 
     def test_a_real_non_collision_integrity_error_is_not_swallowed(self):
@@ -316,7 +321,7 @@ class OneGroupPerChildPerTermTests(TwoSchoolsSetUp):
         against by name.
         """
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError) as caught:
+            with self.assertRefusedBy("uniq_class_group_name") as caught:
                 with transaction.atomic():
                     ClassGroup.objects.create(name="JSS 1A", level=1)
 
