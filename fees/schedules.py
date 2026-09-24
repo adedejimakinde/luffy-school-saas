@@ -294,9 +294,10 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     )
 
     # **`order_by()` explicitly, because this one carries a concurrency
-    # guarantee.** Two runs of two *different* schedules in one term can both
+    # guarantee.** Two runs of two *different* schedules in one term could both
     # reach the same `(child, term, concession)` row — that is the collision the
-    # foot of this function skips. If they reach *several* such rows in
+    # foot of this function skips — and, since B2, can only by a writer that
+    # does not take the term lock above. If they reach *several* such rows in
     # different orders, Postgres does not hand back a unique violation; it hands
     # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError`.
     #

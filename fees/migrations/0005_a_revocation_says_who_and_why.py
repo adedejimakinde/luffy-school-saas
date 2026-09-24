@@ -1,9 +1,8 @@
 """A concession's revocation becomes a row: who, when and why. Issue #75.
 
-Two migrations and not one, because this one writes rows and the next one
-alters the table they point at. Postgres refuses an `ALTER TABLE` on a table
-with pending deferred-constraint events in the same transaction, and every
-backfilled revocation's foreign key is one.
+Two migrations and not one: this one writes rows, the next alters the table
+they point at, and keeping the data change and the schema change in separate
+transactions keeps each one's failure its own.
 
 **The backfill.** A concession already switched off (`is_active = false`)
 becomes a revocation dated by its `updated_at` — the only "when" the old column

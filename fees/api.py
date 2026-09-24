@@ -27,6 +27,7 @@ from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.utils import timezone
@@ -748,17 +749,20 @@ def _bill_out(request, school, group, term) -> BillOut:
 
 
 def _concession_out(concession) -> ConcessionOut:
+    """The times in the school's zone, not UTC, so the date the page prints
+    is the day it happened in Lagos — a revocation at 00:30 is not
+    yesterday's."""
     revocation = getattr(concession, "revocation", None)
     return ConcessionOut(
         concession_id=concession.pk,
         amount_kobo=concession.amount_kobo,
         reason=concession.reason,
-        granted_at=concession.granted_at,
+        granted_at=timezone.localtime(concession.granted_at),
         revoked=(
             RevocationOut(
                 reason=revocation.reason,
                 revoked_by=revocation.revoked_by_name,
-                revoked_at=revocation.revoked_at,
+                revoked_at=timezone.localtime(revocation.revoked_at),
             )
             if revocation
             else None
@@ -838,7 +842,10 @@ def add_bill_line(request, class_group_id: int, payload: BillLineIn):
     except NotAnAmount as exc:
         return 422, MessageOut(detail=str(exc))
     try:
-        _, added = billing.add_line(billing.open_bill(group, term), payload.description, amount_kobo)
+        # One transaction, so a refused line does not leave the empty bill it
+        # would have started behind it — there is no ATOMIC_REQUESTS here.
+        with transaction.atomic():
+            _, added = billing.add_line(billing.open_bill(group, term), payload.description, amount_kobo)
     except billing.NoDescription as exc:
         return 422, MessageOut(detail=str(exc))
     except billing.LineAlreadyOnBill as exc:

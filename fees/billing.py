@@ -23,6 +23,7 @@ refuses a blank reason from anywhere.
 """
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from django.db.models import Max, ProtectedError
 
 from . import schedules, services
@@ -154,20 +155,30 @@ def change_line(line, *, description, amount_kobo):
 
 
 def remove_line(line):
-    """Remove a line nobody has been charged by."""
+    """Remove a line nobody has been charged by.
+
+    **Under the bill's lock**, the one `apply_to_class()` takes. A charge run
+    that has read this line and not yet committed would otherwise lose the
+    line underneath it: its charges are invisible to the check below, the
+    foreign key they carry is deferred to COMMIT, and the run would fail there
+    — the whole class unbilled, and a 500 for whoever pressed "Charge". Waiting
+    for the run means the check sees its charges and refuses.
+    """
     refusal = LineHasCharged(
         f"\"{line.description}\" has already charged children on this bill, and "
         f"those charges name it. Undo them first if the line should not have "
         f"been billed, or leave it and change it for whoever is billed next."
     )
-    if line.entries.exists():
-        raise refusal
-    try:
-        line.delete()
-    except ProtectedError as exc:
-        # A charge committed between the check and the delete: Django's
-        # collector reads the protected relation again before it deletes.
-        raise refusal from exc
+    with transaction.atomic():
+        FeeSchedule.objects.select_for_update().get(pk=line.schedule_id)
+        if line.entries.exists():
+            raise refusal
+        try:
+            line.delete()
+        except ProtectedError as exc:
+            # Django's collector reads the protected relation again before it
+            # deletes; under the lock this should find what the check found.
+            raise refusal from exc
 
 
 def apply(schedule, *, by):
@@ -241,8 +252,8 @@ def revoke_concession(concession, *, reason, by):
             return None
         return AlreadyRevoked(
             f"This concession was already revoked on "
-            f"{earlier.revoked_at:%d %B %Y}: \"{earlier.reason}\". To give the "
-            f"child a discount again, grant a new one."
+            f"{timezone.localtime(earlier.revoked_at):%d %B %Y}: \"{earlier.reason}\". "
+            f"To give the child a discount again, grant a new one."
         )
 
     refusal = already()

@@ -548,3 +548,29 @@ test("a concession is granted under a key of its own", async () => {
   ]);
   assert.match(root.innerHTML, /Concession granted/);
 });
+
+test("a line another bursar removed redraws the bill and says so, not a refusal screen", async () => {
+  let removed = false;
+  const fetchImpl = serve([
+    ["/bill-lines/2/", () => ((removed = true), { status: 404, body: { detail: "No such account." } })],
+    ["/api/fees/bills/", { status: 200, body: BILLS }],
+    ["/bill/?term_id=", () => ({ status: 200, body: removed ? bill({ lines: bill().lines.slice(0, 1) }) : bill() })],
+    ["/api/fees/classes/", { status: 200, body: { terms: TERMS, term_id: 7, term: "2025/2026 First term", may_write: true, classes: [] } }],
+  ]);
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "remove-line", "data-line": "2" });
+
+  assert.match(root.innerHTML, /data-state="bill"/);
+  assert.match(root.innerHTML, /That line is no longer on this bill/);
+  assert.doesNotMatch(root.innerHTML, /Uniform/);
+});
+
+test("a lost answer to a removal says pressing again is safe", async () => {
+  const fetchImpl = serve(billRoutes([["/bill-lines/2/", () => new Error("connection reset")]]));
+  const root = await openBill(fetchImpl);
+
+  await root.click({ "data-action": "remove-line", "data-line": "2" });
+
+  assert.match(root.innerHTML, /could not tell whether that line was removed/);
+});

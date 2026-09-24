@@ -43,7 +43,7 @@ from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term, TermName
 from accounts.models import User
 from accounts.services import enroll_student
-from fees import schedules
+from fees import billing, schedules
 from fees.models import FeeLedgerEntry, FeeSchedule, FeeScheduleLine, KOBO_PER_NAIRA
 from schools.models import School
 from schools.tests.tenants import connected_to
@@ -310,3 +310,78 @@ class TwoBillsOneTermTests(TwoSchoolsBillingSetUp):
             )
         self.assertEqual(results["senior"].billed_elsewhere, (self.ada.pk,))
         self.assertEqual(results["junior"].charges_posted, 4)
+
+
+class RemovingALineWhileTheClassIsChargedTests(TwoSchoolsBillingSetUp):
+    """A bursar removes a line while another's run of the same bill is
+    between reading its lines and committing its charges.
+
+    Unlocked, the removal cannot see the run's charges — uncommitted — and
+    their foreign key onto the line is deferred to COMMIT, so the line goes
+    and the run then fails at COMMIT: the whole class unbilled, and a 500 for
+    whoever pressed "Charge". `billing.remove_line()` takes the bill's lock,
+    so it waits for the run, sees the charges, and refuses.
+
+    Staged, as `TwoBillsOneTermTests` is: the run is held just before it
+    returns.
+
+    CONTROL B2-11: `remove_line()` without the bill's lock makes this red.
+    """
+
+    def test_the_removal_waits_for_the_run_and_is_refused(self):
+        with connected_to(self.stmarys):
+            levy_id = FeeScheduleLine.objects.get(
+                schedule_id=self.schedule_id, description="PTA levy"
+            ).pk
+        paused, release = threading.Event(), threading.Event()
+        held = {}
+        real_summary = schedules.AppliedSummary
+
+        def summary_after_a_pause(**fields):
+            if threading.current_thread() is held.get("thread"):
+                paused.set()
+                release.wait(20)
+            return real_summary(**fields)
+
+        outcome, unexpected = {}, []
+
+        def charge():
+            try:
+                with connected_to(self.stmarys):
+                    outcome["run"] = schedules.apply_to_class(
+                        FeeSchedule.objects.get(pk=self.schedule_id), by=self.bursar
+                    )
+            except Exception as exc:  # noqa: BLE001 — reported, not swallowed
+                unexpected.append(exc)
+            finally:
+                connections.close_all()
+
+        def remove():
+            try:
+                with connected_to(self.stmarys):
+                    billing.remove_line(FeeScheduleLine.objects.get(pk=levy_id))
+                outcome["removal"] = "removed"
+            except billing.LineHasCharged:
+                outcome["removal"] = "refused"
+            except Exception as exc:  # noqa: BLE001
+                unexpected.append(exc)
+            finally:
+                connections.close_all()
+
+        with mock.patch.object(schedules, "AppliedSummary", summary_after_a_pause):
+            run = threading.Thread(target=charge)
+            held["thread"] = run
+            run.start()
+            self.assertTrue(paused.wait(20), "the run never reached its end")
+            remover = threading.Thread(target=remove)
+            remover.start()
+            remover.join(3)  # blocked on the bill, or finished without it
+            release.set()
+            run.join(30)
+            remover.join(30)
+
+        self.assertEqual(unexpected, [], f"a thread failed: {unexpected}")
+        self.assertEqual(outcome["removal"], "refused")
+        self.assertEqual(outcome["run"].charges_posted, 4)
+        with connected_to(self.stmarys):
+            self.assertTrue(FeeScheduleLine.objects.filter(pk=levy_id).exists())

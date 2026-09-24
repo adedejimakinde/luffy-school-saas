@@ -19,6 +19,7 @@ Claims, each with the test that fails without it:
 
 import json
 import uuid
+from datetime import datetime, timezone as dt_timezone
 
 from academics import services as academics
 from academics.models import ClassGroup, Term
@@ -199,6 +200,19 @@ class EditingTheBillTests(BillingApiSetUp):
         self.assertEqual(answer.status_code, 409)
         self.assertIn("already has a line called", answer.json()["detail"])
 
+    def test_a_refused_line_leaves_no_empty_bill_behind(self):
+        """The bill is started and the line added in one transaction, so a
+        blank description leaves the class unbilled rather than holding an
+        empty bill nobody asked for.
+
+        CONTROL B2-12: `add_bill_line` without its `transaction.atomic()`
+        makes this red."""
+        answer = self.add_line(description="   ")
+
+        self.assertEqual(answer.status_code, 422)
+        [jss1a] = self.get(self.bursar, f"bills/?term_id={self.term_id}").json()["classes"]
+        self.assertIsNone(jss1a["schedule_id"])
+
     def test_a_third_decimal_place_is_refused_here_too(self):
         answer = self.add_line(amount="150,000.005")
         self.assertEqual(answer.status_code, 422)
@@ -262,6 +276,23 @@ class ConcessionRouteTests(BillingApiSetUp):
         self.assertTrue(revoked["revoked_at"])
         listed = self.get(self.principal, f"students/{self.ada.pk}/concessions/").json()
         self.assertEqual(listed["concessions"][0]["revoked"]["reason"], "Parent left")
+
+    def test_a_revocation_is_dated_in_the_schools_day_not_utc(self):
+        """23:30 UTC on 1 October is 00:30 on the 2nd in Lagos, and the page
+        prints the date it is sent."""
+        concession_id = self.grant().json()["concession"]["concession_id"]
+        with connected_to(self.stmarys):
+            FeeConcessionRevocation.objects.create(
+                concession_id=concession_id,
+                reason="Left",
+                revoked_by_id=self.bursar.pk,
+                revoked_by_name="Bola Bursar",
+                revoked_at=datetime(2025, 10, 1, 23, 30, tzinfo=dt_timezone.utc),
+            )
+
+        [listed] = self.get(self.bursar, f"students/{self.ada.pk}/concessions/").json()["concessions"]
+
+        self.assertTrue(listed["revoked"]["revoked_at"].startswith("2025-10-02T00:30"), listed["revoked"])
 
     def test_revoking_without_a_reason_is_refused_and_writes_nothing(self):
         """The user's control, decided 2026-09-24: a revocation without a

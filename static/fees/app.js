@@ -83,8 +83,9 @@ export async function mount(
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
   let where = { termId: null, classId: null, studentId: null };
-  //: One key per form, because the two are two entries: a payment and a
-  //: discount sent under one key would be refused as a reused form.
+  //: One key per form, because each form is its own write: a payment, a
+  //: discount and a concession sent under one key would be refused as a
+  //: reused form.
   const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
   let signOutFailed = false;
   const draw = () => {
@@ -148,10 +149,15 @@ export async function mount(
   };
   /**
    * A bill write: the answer is the bill, drawn as it comes back. A lost
-   * answer keeps what was typed — sending a line again adds it once, because
-   * the bill names each line once and the same line twice is a double click.
+   * answer keeps what was typed and says, in `lost`, why sending again is
+   * safe for that write.
+   *
+   * **A 404 here is a line that is no longer there** — another bursar removed
+   * it, or this page's own removal landed and its answer did not. The bill is
+   * read again rather than the page turned into "not something you can
+   * open": if the refusal is real, that read gets it too.
    */
-  const billWrite = async (answer, { draftField, draft, done }) => {
+  const billWrite = async (answer, { draftField, draft, done, lost }) => {
     if (answer.ok) {
       state = { step: "bill", bill: answer.body, note: done, noteTone: "done" };
     } else if (answer.refusal === REFUSAL.BROKEN) {
@@ -159,8 +165,14 @@ export async function mount(
         ...state,
         ...(draftField ? { [draftField]: draft } : {}),
         noteTone: "stop",
-        note: "We could not tell whether that was saved. Send it again — it will not be added twice.",
+        note: lost,
       };
+    } else if (answer.refusal === REFUSAL.NOT_YOURS) {
+      await showBill(where.classId, {
+        note: "That line is no longer on this bill. This is the bill as it stands now.",
+        noteTone: "stop",
+      });
+      return;
     } else if (answer.refusal) {
       state = { step: answer.refusal };
     } else {
@@ -229,7 +241,12 @@ export async function mount(
           line: { term_id: where.termId, ...draft },
           fetchImpl,
         });
-        await billWrite(answer, { draftField: "newLineDraft", draft, done: `Added “${draft.description.trim()}”.` });
+        await billWrite(answer, {
+          draftField: "newLineDraft",
+          draft,
+          done: `Added “${draft.description.trim()}”.`,
+          lost: "We could not tell whether that line was added. Send it again — the same line is not added twice.",
+        });
         return;
       }
       if (intent === "change-line" && state.changing) {
@@ -239,6 +256,7 @@ export async function mount(
           draftField: "lineDraft",
           draft,
           done: "Changed. Children already charged keep what they were charged.",
+          lost: "We could not tell whether that change was saved. Send it again — saving it twice is the same as once.",
         });
       }
       return;
@@ -343,7 +361,10 @@ export async function mount(
       return;
     }
     if (action === "remove-line" && state.step === "bill") {
-      return billWrite(await removeBillLine({ lineId: Number(hit.dataset.line), fetchImpl }), { done: "Removed." });
+      return billWrite(await removeBillLine({ lineId: Number(hit.dataset.line), fetchImpl }), {
+        done: "Removed.",
+        lost: "We could not tell whether that line was removed. Press Remove again — if it is gone, the page will say so.",
+      });
     }
     if (action === "charge-class" && state.step === "bill") {
       const answer = await postCharges({ classId: where.classId, termId: where.termId, fetchImpl });
