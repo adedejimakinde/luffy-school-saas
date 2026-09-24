@@ -55,6 +55,7 @@ from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
+from timetable.api import router as timetable_router
 from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
@@ -98,6 +99,10 @@ api.add_router("/results/", results_router, tags=["results"])
 api.add_router("/results/", report_card_router, tags=["results"])
 api.add_router("/results/", chain_router, tags=["results"])
 api.add_router("/results/", comments_router, tags=["results"])
+# The bell schedule and who teaches what, per class per term. Tenant-host only
+# and refused with a flat 404 to anybody who may not read it — see
+# `timetable.api`.
+api.add_router("/timetable/", timetable_router, tags=["timetable"])
 
 
 @api.exception_handler(CardWithheld)
