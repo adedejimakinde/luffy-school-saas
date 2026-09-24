@@ -27,7 +27,7 @@ that skip the service, which is exactly the import and the `psql` session the
 issue names.
 """
 
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 
 from academics.models import ClassGroup, Term
 from academics.services import assign_class_teacher, move_student
@@ -43,9 +43,22 @@ from results.tests.test_positions import (
     connected_to,
 )
 from schools.models import Domain
+from tests.refusals import RefusalAssertions
+
+#: `gradebook_scores_stop_at_release`'s two sentences, each pinned to its branch
+#: and its operation. The mark is what tells them from the same two sentences in
+#: `results_comments_stop_at_release` and `results_ratings_stop_at_release`,
+#: which say "its remarks" and "a released rating" where these say "its marks"
+#: and "a released mark" — a needle stopping short of that word would be
+#: satisfied by any of the three (#89).
+TERM_RELEASED = "its marks are part of a card somebody is holding and {op} is not allowed"
+CARD_RELEASED = (
+    "a released card has to keep saying what it said and {op} is not allowed. "
+    "Correcting a released mark is a revision"
+)
 
 
-class ReleaseGuardSetUp(PositionSetUp):
+class ReleaseGuardSetUp(RefusalAssertions, PositionSetUp):
     """St Mary's, with a placed child, a class teacher, a VP and a First CA."""
 
     def setUp(self):
@@ -300,7 +313,7 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
             self.mark_ada()
             self.walk_to("released")
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(TERM_RELEASED.format(op="UPDATE")):
                 with transaction.atomic():
                     Score.objects.filter(
                         assessment_id=self.first_ca_id,
@@ -313,7 +326,7 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
             self.mark_ada()
             self.walk_to("released")
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(TERM_RELEASED.format(op="DELETE")):
                 with transaction.atomic():
                     Score.objects.filter(
                         assessment_id=self.first_ca_id,
@@ -330,7 +343,7 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
         with connected_to(self.stmarys):
             self.walk_to("released")
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(TERM_RELEASED.format(op="INSERT")):
                 with transaction.atomic():
                     Score.objects.create(
                         assessment_id=self.first_ca_id,
@@ -418,7 +431,9 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
             self.walk_to("released")
             self.move_ada_to_a_new_class()
 
-            with self.assertRaises(IntegrityError):
+            # The artefact branch, not the sheet's: Ada's placement is now a
+            # class whose term is open, so only her card can refuse this.
+            with self.assertRefusedBy(CARD_RELEASED.format(op="UPDATE")):
                 with transaction.atomic():
                     Score.objects.filter(
                         assessment_id=self.first_ca_id,
