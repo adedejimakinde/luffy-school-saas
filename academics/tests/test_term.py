@@ -17,11 +17,12 @@ service function walks straight around.
 
 from datetime import date
 
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 from django.test import TestCase
 
 from academics.models import Term, TermName
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 SESSION = "2025/2026"
 
@@ -34,7 +35,7 @@ def make_term(**extra):
     return Term.objects.create(**extra)
 
 
-class TermSetUp(TestCase):
+class TermSetUp(RefusalAssertions, TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
 
@@ -94,7 +95,7 @@ class TermConstraintTests(TermSetUp):
 
     def test_a_next_term_cannot_begin_before_this_one_ends(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("next_term_starts_after_this_one_ends"), transaction.atomic():
                 make_term(
                     ends_on=date(2025, 12, 12),
                     next_term_starts_on=date(2025, 11, 1),
@@ -103,7 +104,7 @@ class TermConstraintTests(TermSetUp):
     def test_a_next_term_cannot_begin_on_the_day_this_one_ends(self):
         """A day cannot belong to two terms, so the bound is strict."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("next_term_starts_after_this_one_ends"), transaction.atomic():
                 make_term(
                     ends_on=date(2025, 12, 12),
                     next_term_starts_on=date(2025, 12, 12),
@@ -121,7 +122,7 @@ class TermConstraintTests(TermSetUp):
     def test_a_term_cannot_hold_more_school_days_than_it_has_days(self):
         """The count is a claim about this term, so the term bounds it."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("school_days_fit_inside_the_term"), transaction.atomic():
                 make_term(
                     starts_on=date(2025, 9, 15),
                     ends_on=date(2025, 12, 12),  # 89 calendar days
@@ -140,7 +141,7 @@ class TermConstraintTests(TermSetUp):
 
     def test_a_term_cannot_have_zero_school_days(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("a_term_has_at_least_one_school_day"), transaction.atomic():
                 make_term(school_days=0)
 
     def test_the_bounds_are_checked_on_update_too(self):
@@ -153,7 +154,7 @@ class TermConstraintTests(TermSetUp):
         with connected_to(self.stmarys):
             term = make_term(school_days=61)
             term.school_days = 500
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("school_days_fit_inside_the_term"), transaction.atomic():
                 term.save(update_fields=["school_days"])
 
 
@@ -237,7 +238,7 @@ class TermConstraintSqlTests(TermSetUp):
                 self.assertIn(name, defs)
 
 
-class TermIsolationTests(TestCase):
+class TermIsolationTests(RefusalAssertions, TestCase):
     """The new columns are per-school, like everything else in this app.
 
     Not a formality: the whole reason `Term` is tenant-scoped is that two
@@ -282,7 +283,7 @@ class TermIsolationTests(TestCase):
         for school in (self.stmarys, self.grace):
             with self.subTest(school=school.slug):
                 with connected_to(school):
-                    with self.assertRaises(IntegrityError), transaction.atomic():
+                    with self.assertRefusedBy("school_days_fit_inside_the_term"), transaction.atomic():
                         make_term(
                             starts_on=date(2025, 9, 15),
                             ends_on=date(2025, 9, 19),
