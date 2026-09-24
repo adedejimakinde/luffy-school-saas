@@ -45,7 +45,8 @@ from academics.models import ClassGroup, Term
 from accounts.models import Membership, Role
 from accounts.session import session_auth
 
-from . import services
+from . import absences, services
+from .models import AbsenceSettings
 
 router = Router(auth=session_auth)
 
@@ -391,3 +392,156 @@ def discard(request, class_group_id: int, on: date):
     if not services.discard_register(group, on):
         return 404, MessageOut(detail="No register was taken for that slot.")
     return 204, None
+
+
+# -- the principal's list: who is absent too often ---------------------------
+#
+# Refused differently from everything above, and deliberately. A register is
+# refused with a 403 because the person refused is staff who knows registers
+# exist. This list is refused with a **flat 404**, the broadsheet's answer: it
+# names children and their absences, and "you may not read it" must read the
+# same as "there is no such term" — to a parent, a student, a bursar, and to a
+# teacher, whose own-class view waits on #125.
+
+
+class TermChoiceOut(Schema):
+    term_id: int
+    term: str
+    is_current: bool
+
+
+class AbsentChildOut(Schema):
+    student_membership_id: int
+    student: str
+    class_group: str
+    absent: int
+    marked: int
+    #: Percent absent of the days marked, to one place. A string, so "12.5"
+    #: reaches the screen as it was computed, not as a float prints it.
+    rate: str
+
+
+class AbsencesOut(Schema):
+    """One term's list, and what "too often" meant when it was drawn.
+
+    `term_id` is null only where the school has no terms at all, or no current
+    one and none was asked for — the screen says so rather than guessing one.
+
+    `registers_taken` is there so that an empty list can say which of two
+    things it means. "Nobody is absent too often" is a finding; "nobody has
+    taken a register this term" is the absence of one, and the screen must not
+    say the first when the truth is the second.
+    """
+
+    terms: List[TermChoiceOut]
+    term_id: Optional[int]
+    term: Optional[str]
+    threshold_percent: int
+    min_marked_days: int
+    may_change_threshold: bool
+    registers_taken: int
+    children: List[AbsentChildOut]
+
+
+class ThresholdIn(Schema):
+    threshold_percent: int
+    min_marked_days: int
+
+
+class ThresholdOut(Schema):
+    threshold_percent: int
+    min_marked_days: int
+
+
+def _require_absence_authority(actor, school):
+    """The flat 404, before any read — so the refusal cannot depend on whether
+    the term asked for exists. `results.api._require_position_authority()` has
+    the long version."""
+    if not absences.may_see(actor, school):
+        raise Http404("No such list.")
+
+
+@router.get("/absences/", response=AbsencesOut)
+def absence_list(request, term_id: Optional[int] = None):
+    """Every child at or over the school's threshold for one term, worst first.
+
+    The school's current term when none is asked for. A fixed number of
+    queries whatever the size of the school — `absences.flagged()` says which.
+    """
+    school = _school_of(request)
+    _require_absence_authority(request.user, school)
+
+    terms = list(Term.objects.order_by("-starts_on", "-pk"))
+    if term_id is not None:
+        term = next((t for t in terms if t.pk == term_id), None)
+        if term is None:
+            raise Http404("No such list.")
+    else:
+        term = next((t for t in terms if t.is_current), None)
+
+    settings = AbsenceSettings.load()
+    rows = absences.flagged(school, term, settings) if term else []
+    return AbsencesOut(
+        terms=[
+            TermChoiceOut(term_id=t.pk, term=str(t), is_current=t.is_current) for t in terms
+        ],
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        threshold_percent=settings.threshold_percent,
+        min_marked_days=settings.min_marked_days,
+        may_change_threshold=absences.may_change_threshold(request.user, school),
+        registers_taken=absences.registers_taken(term) if term else 0,
+        children=[
+            AbsentChildOut(
+                student_membership_id=row.student_membership_id,
+                student=row.student,
+                class_group=row.class_group,
+                absent=row.absent,
+                marked=row.marked,
+                rate=str(row.rate),
+            )
+            for row in rows
+        ],
+    )
+
+
+#: A vice principal (academic) reads the list and may not change what it
+#: means. They already know the list exists, so this refusal can say so.
+_MAY_NOT_CHANGE_THRESHOLD = (
+    "What counts as absent too often is set by the principal or an administrator."
+)
+
+
+@router.put(
+    "/absences/threshold/",
+    response={200: ThresholdOut, 403: MessageOut, 422: MessageOut},
+)
+def change_threshold(request, payload: ThresholdIn):
+    """Set what "too often" means at this school.
+
+    Anybody who may not read the list gets the list's own flat 404, so this
+    route is no more of an oracle than the list is.
+
+    The bounds are also check constraints on the row; they are checked here
+    first only so the answer is a sentence and not a 500.
+    """
+    school = _school_of(request)
+    _require_absence_authority(request.user, school)
+    if not absences.may_change_threshold(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_CHANGE_THRESHOLD)
+    if not 1 <= payload.threshold_percent <= 100:
+        return 422, MessageOut(detail="The threshold is a percentage from 1 to 100.")
+    if not 1 <= payload.min_marked_days <= 365:
+        return 422, MessageOut(detail="The days marked is a number from 1 to 365.")
+
+    settings, _ = AbsenceSettings.objects.update_or_create(
+        pk=1,
+        defaults={
+            "threshold_percent": payload.threshold_percent,
+            "min_marked_days": payload.min_marked_days,
+        },
+    )
+    return ThresholdOut(
+        threshold_percent=settings.threshold_percent,
+        min_marked_days=settings.min_marked_days,
+    )

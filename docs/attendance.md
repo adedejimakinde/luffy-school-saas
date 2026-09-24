@@ -388,9 +388,19 @@ handles report cards, and one boolean does not earn a third settings table.
    got its second caller and is `hostHref()` in `static/web/html.js`. The screen
    itself is [register-page.md](register-page.md); where staff come from is
    [sign-in-page.md](sign-in-page.md).
-4. **The principal's view**: which students are absent too often. Needs a threshold,
-   and a threshold is a number somebody chooses; that question is deferred to this
-   slice rather than answered here.
+4. **The principal's view. Built.** `/absences/` on a school's host, over
+   `GET /api/attendance/absences/?term_id=` (the school's current term when none is
+   given) and `PUT /api/attendance/absences/threshold/`. OPEN-2 is answered below.
+   The list is every child placed in the term whose absent share of **marked** days
+   is at or over the school's threshold, once the child has at least the school's
+   floor of marked days, worst first; `attendance/absences.py` holds the rule. It is
+   one aggregate over the term's marks (`summary.for_term()`), so a child who moved
+   class mid-term is counted across both classes' registers and listed under the
+   class she is in now — correctness requirement 2 is about which group *took* a
+   register, and this list does not say. The answer carries `registers_taken`, so an
+   empty list says either "nobody is absent that often" or "no register has been
+   taken this term", never the first when the truth is the second. The landing links
+   to it from `may_see_absences`, the same predicate the route asks.
 
 ## Correctness requirements
 
@@ -418,7 +428,18 @@ handles report cards, and one boolean does not earn a third settings table.
 
 - **OPEN-1 is closed.** See D12: a service function and an admin-only route on
   `academics`, no screen, landing in slice 2.
-- **OPEN-2. What does the principal's view count as "too often"?** Deferred to slice 4.
+- **OPEN-2 is closed** (decided 2026-09-24). "Too often" is **absent on at least a
+  share of the days marked, once a floor of days has been marked** — not a count of
+  days, which reads differently in week two and week twelve, and not a share of the
+  declared `school_days`, which would count every unmarked day as present (A4 says it
+  is neither). The threshold is **the school's own**: `AbsenceSettings`, one row per
+  school schema, 10% and 10 marked days until the principal or an administrator
+  changes it. The comparison is in integers (`absent × 100 ≥ threshold × marked`), so
+  a child exactly on the line is on the list whatever rounding would say. **Who reads
+  it:** the principal, the vice principal (academic) and the administrator, for the
+  whole school; everybody else gets a flat 404, as for the broadsheet. A class
+  teacher's own-class view needs a `ClassTeacher` scope attendance does not have yet
+  — issue #125.
 - **A5 (raised by slice 3, and it is a *domain* question).** Who may take a class's
   register, and who covers an absent form teacher? Stated in full under Domain
   assumptions above. **Issue #125.**

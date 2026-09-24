@@ -76,4 +76,35 @@ def register_page(request):
     )
 
 
-__all__ = ["register_page", "REGISTER_MODULES"]
+#: The absence list's own modules.
+ABSENCE_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/signout.js",
+    "absences/api.js",
+    "absences/states.js",
+    "absences/app.js",
+)
+
+
+def absences_page(request):
+    """The frame for the principal's absence list. Holds no child and no number.
+
+    A shell on the broadsheet's terms: who may read the list is
+    `attendance.api._require_absence_authority()`'s question, answered with a
+    flat 404 to a refused reader and on the portal alike. So the one thing
+    this frame says is whether the host is a school's, because the page cannot
+    tell those two apart from the fetch.
+    """
+    return render(
+        request,
+        "attendance/absences_page.html",
+        {
+            "import_map": pages.import_map(*ABSENCE_MODULES),
+            "portal_host": portal_host(),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
+__all__ = ["ABSENCE_MODULES", "absences_page", "register_page", "REGISTER_MODULES"]

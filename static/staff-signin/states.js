@@ -70,9 +70,9 @@ export function ask({ error = "", identifier = "" } = {}) {
  * behind them.
  *
  * Both halves have now changed. The register is a staff destination, and
- * `SchoolOut` carries `may_take_a_register` and `has_children_here` — each the
- * same question the surface behind it asks, rather than a role standing in for
- * one. So a link here is a link to a page that will serve this person.
+ * `SchoolOut` carries `may_take_a_register`, `may_see_absences` and
+ * `has_children_here` — each the same question the surface behind it asks,
+ * rather than a role standing in for one. So a link here is a link to a page that will serve this person.
  *
  * **A school is one row whatever it offers**, because the landing answers
  * "where can I go" and not "what am I called". A bursar who also teaches has
@@ -114,6 +114,9 @@ function school(entry) {
   if (entry.may_take_a_register) {
     links.push([hostHref(host, "/register/"), "Take a register"]);
   }
+  if (entry.may_see_absences) {
+    links.push([hostHref(host, "/absences/"), "Absent too often"]);
+  }
   if (entry.has_children_here) {
     links.push([hostHref(host, "/cards/"), "Report cards"]);
   }
@@ -127,8 +130,8 @@ function school(entry) {
   }
   if (!links.length) {
     // Signed in, at a school, with nothing on this platform to do there yet.
-    // Said rather than left blank: a bursar and a vice principal (academic)
-    // both land here, and neither has done anything wrong.
+    // Said rather than left blank: a bursar lands here, and has done nothing
+    // wrong.
     return (
       `<li>${esc(name)} <span class="blank">` +
       "(nothing for you to open here yet)</span></li>"
