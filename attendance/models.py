@@ -248,3 +248,49 @@ class AttendanceMark(models.Model):
             f"membership {self.student_membership_id} "
             f"{self.get_status_display().lower()} at {self.register}"
         )
+
+
+class AbsenceSettings(models.Model):
+    """What "too often absent" means at this school. One row per schema.
+
+    Decided 2026-09-24 (OPEN-2): a child is on the principal's list when their
+    absences are at least `threshold_percent` of the days they were **marked**,
+    once at least `min_marked_days` have been. Unmarked days count for nothing —
+    A4's rule, that a day with no register is not an absence — and the floor
+    keeps a child marked twice and absent once from reading as 50%.
+
+    A per-school setting because schools differ; defaults of 10% and 10 days.
+    Pinned to `id = 1` like `results.ReportCardSettings`, and `load()` returns
+    an unsaved default rather than writing on a read path.
+    """
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    threshold_percent = models.PositiveSmallIntegerField(
+        default=10, help_text="Absent on at least this share of the days marked."
+    )
+    min_marked_days = models.PositiveSmallIntegerField(
+        default=10, help_text="Only once at least this many days have been marked."
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(id=1), name="absence_settings_is_one_row"
+            ),
+            models.CheckConstraint(
+                condition=Q(threshold_percent__gte=1) & Q(threshold_percent__lte=100),
+                name="absence_threshold_is_a_percentage",
+            ),
+            models.CheckConstraint(
+                condition=Q(min_marked_days__gte=1),
+                name="absence_floor_is_at_least_one_day",
+            ),
+        ]
+
+    @classmethod
+    def load(cls):
+        return cls.objects.filter(pk=1).first() or cls()
+
+    def __str__(self):
+        return f"{self.threshold_percent}% of at least {self.min_marked_days} marked days"

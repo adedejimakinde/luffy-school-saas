@@ -1,0 +1,27 @@
+/*
+ * The absence list. A table that scrolls sideways on a phone and prints on
+ * paper, like the broadsheet: it is taken into the same meetings.
+ */
+:root{--ink:#111;--quiet:#555;--rule:#ddd}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px;background:#fff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:56rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 8px}
+h2{font-size:1.1rem;margin:20px 0 8px}
+.rule,.blank,.note{color:var(--quiet)}
+.chooser{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,input{font:inherit;padding:8px;border:1px solid var(--rule);border-radius:6px}
+input[type=number]{width:5.5em}
+button{font:inherit;min-height:44px;padding:8px 14px;background:#fff;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+.scroll{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;min-width:100%}
+th,td{padding:6px 10px;border-bottom:1px solid var(--rule);text-align:left;white-space:nowrap}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+fieldset{border:1px solid var(--rule);border-radius:8px;margin:20px 0 8px;padding:12px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+a{color:#14507d}
+@media print{
+  body{padding:0;font-size:11pt}
+  .chooser,.threshold,[data-action="sign-out"]{display:none}
+  .scroll{overflow:visible}
+  th,td{padding:3px 6px}
+}

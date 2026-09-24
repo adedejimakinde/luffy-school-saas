@@ -121,7 +121,14 @@ class TheParentDomainIsNamedOnceTests(SimpleTestCase):
         the variable, and a literal copy anywhere would be the one that is
         missed when the domain changes."""
         domain = read_env_file(PRODUCTION_ENV)["PLATFORM_DOMAIN"]
-        for name in ("deploy/compose.yml", "deploy/caddy/Caddyfile", "deploy/deploy.sh", "settings.py"):
+        for name in (
+            "deploy/compose.yml",
+            "deploy/caddy/Caddyfile",
+            "deploy/deploy.sh",
+            "deploy/restore-check.sh",
+            "deploy/cron/classnode",
+            "settings.py",
+        ):
             with self.subTest(file=name):
                 self.assertNotIn(domain, (BASE_DIR / name).read_text())
 

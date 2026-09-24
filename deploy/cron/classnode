@@ -1,0 +1,16 @@
+# /etc/cron.d/classnode — the platform's schedule on the server.
+# Installed by the launch runbook (docs/deployment.md). Times are UTC; Lagos is
+# UTC+1, so these run after the school day and before it starts.
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Nightly base backup, 00:30 UTC. Needs B2 (backup.env); until then it fails
+# loudly by design and the heartbeat says so.
+30 0 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose exec -T db classnode-backup >> /var/log/classnode-backup.log 2>&1
+
+# Nightly housekeeping, 01:15 UTC: expired sessions (SESSION_SAVE_EVERY_REQUEST
+# writes a row per active session; nothing else removes the dead ones).
+15 1 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py clearsessions >> /var/log/classnode-housekeeping.log 2>&1
+
+# Weekly restore test, Sunday 02:00 UTC.
+0 2 * * 0 root /opt/classnode/restore-check.sh >> /var/log/classnode-restore-check.log 2>&1

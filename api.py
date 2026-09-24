@@ -51,6 +51,7 @@ from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
 from attendance.api import router as attendance_router
+from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
@@ -232,6 +233,12 @@ class SchoolOut(Schema):
     #: school is one row on the landing and one row is one answer.
     may_take_a_register: bool = False
 
+    #: May this login read who is absent too often here? The same predicate
+    #: `attendance.absences.may_see()` is — principal, vice principal
+    #: (academic) and administrator — so a teacher is not sent to a list that
+    #: answers them with a 404.
+    may_see_absences: bool = False
+
     #: May this login read the school's books? `fees.authority.may_read()`'s
     #: question — bursar, administrator, principal, vice principal (academic)
     #: — so a teacher is not sent to a page that answers with a 404, and a
@@ -375,6 +382,11 @@ def _schools_of(user, *, parent_scoped=False):
         .filter(school__in=schools, role__in=MARKING_ROLES)
         .values_list("school_id", flat=True)
     )
+    absence_readers = set(
+        user.memberships.with_access()
+        .filter(school__in=schools, role__in=ABSENCE_VIEWING_ROLES)
+        .values_list("school_id", flat=True)
+    )
     book_readers = set(
         user.memberships.with_access()
         .filter(school__in=schools, role__in=FEES_READING_ROLES)
@@ -393,6 +405,7 @@ def _schools_of(user, *, parent_scoped=False):
             name=school.name,
             host=hosts.get(school.pk),
             may_take_a_register=not parent_scoped and school.pk in markers,
+            may_see_absences=not parent_scoped and school.pk in absence_readers,
             may_see_fees=not parent_scoped and school.pk in book_readers,
             has_children_here=school.pk in families,
         )

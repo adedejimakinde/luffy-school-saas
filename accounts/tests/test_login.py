@@ -141,9 +141,10 @@ class SigningInTests(SignInSetUp):
                     "slug": "st-marys",
                     "name": "St Mary's",
                     "host": SCHOOL_HOST,
-                    # A teacher marks, does not read the books, and has no
-                    # child here.
+                    # A teacher marks, reads no absence list and not the
+                    # books, and has no child here.
                     "may_take_a_register": True,
+                    "may_see_absences": False,
                     "may_see_fees": False,
                     "has_children_here": False,
                 }
@@ -602,6 +603,22 @@ class WhatEachSchoolOffersThisLoginTests(SignInSetUp):
 
         self.assertNotIn("grace", rows)
         self.assertIn("st-marys", rows)
+
+    # -- may_see_absences ----------------------------------------------------
+
+    def test_the_absence_list_is_offered_per_school_and_to_its_readers_only(self):
+        """A vice principal (academic) at Grace and a teacher at St Mary's:
+        one login, two answers. The teacher's half is the one that matters — a
+        link there would open onto the list's flat 404."""
+        grant_membership(self.teacher, self.grace, Role.VICE_PRINCIPAL_ACADEMIC)
+
+        rows = self.rows()
+
+        self.assertTrue(rows["grace"]["may_see_absences"])
+        self.assertFalse(
+            rows["st-marys"]["may_see_absences"],
+            "a teacher was offered the absence list — the answer is not per-school",
+        )
 
     # -- may_see_fees --------------------------------------------------------
 

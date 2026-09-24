@@ -20,7 +20,7 @@ from django.urls import path
 from api import api
 from academics.views import setup_page
 from accounts.views import roll_page, staff_page
-from attendance.views import register_page
+from attendance.views import absences_page, register_page
 from fees.views import fees_page
 from gradebook.views import marking_page
 from results.views import (
@@ -49,6 +49,8 @@ urlpatterns = [
     path("roll/", roll_page, name="roll"),
     path("staff/", staff_page, name="staff"),
     path("register/", register_page, name="register"),
+    # Who is absent too often: the principal's, on the broadsheet's terms.
+    path("absences/", absences_page, name="absences"),
     # The second staff surface, on the same terms as the register above.
     path("marking/", marking_page, name="marking"),
     # The third staff surface, on the same terms as the two above.
