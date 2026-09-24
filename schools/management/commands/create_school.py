@@ -29,7 +29,7 @@ class Command(BaseCommand):
         if operator is None:
             raise CommandError(f"No account {options['operator']!r}.")
         try:
-            school, host, invitation = create_school(
+            created = create_school(
                 slug=options["slug"],
                 name=options["name"],
                 admin_email=options["admin_email"],
@@ -40,9 +40,22 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
         except invitations_errors() as exc:
             raise CommandError(f"Nothing was created: {exc}") from exc
+        self.stdout.write(f"{created.school.name} answers on https://{created.host}/")
+        if created.link_to_hand_over is None:
+            self.stdout.write(
+                f"Its administrator was invited by email at {created.invitation.sent_to}."
+            )
+            return
+        # No email provider: the operator is the delivery. The link is a
+        # credential — it makes whoever opens it this school's administrator —
+        # so it is written here, to the terminal of the person who ran this, and
+        # nowhere else: not to a log, not to a file.
         self.stdout.write(
-            f"{school.name} answers on https://{host}/ ; its administrator was "
-            f"invited at {invitation.sent_to}."
+            "No email provider is configured, so nothing was sent.\n"
+            f"Give this link to {created.invitation.sent_to} yourself. Until it is "
+            f"used it makes whoever opens it {created.school.name}'s administrator, "
+            f"and it stops working at {created.invitation.expires_at:%Y-%m-%d %H:%M %Z}:\n\n"
+            f"  {created.link_to_hand_over}\n"
         )
 
 

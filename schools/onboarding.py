@@ -21,20 +21,26 @@ the deployment, not a style preference:
 ## A school arrives with its first administrator invited, or not at all
 
 The school, its schema, its `Domain` row and the invitation to its first ADMIN
-are one transaction. `invite_staff()` refuses before commit when invitations
-cannot be delivered (`DeliveryNotConfigured`), so a deployment with no email
-provider yet refuses to create a school rather than creating one nobody can
-get into.
+are one transaction.
+
+**With an email provider, the invitation is emailed**, as every other one is.
+**Without one — a deployment that has not signed up for one yet — the operator
+is the delivery** (decided 2026-09-24): the invitation is issued by hand and its
+link comes back to be printed and handed over. What still refuses the whole
+school is having no accept page to link to, because then there is nothing to
+hand over either, and a school nobody can get into is not created.
 """
 
 import re
+from typing import NamedTuple, Optional
 
 from django.conf import settings
 from django.db import transaction
 
 from accounts.models import Role
 from schools import invitations
-from schools.models import Domain, School
+from schools.delivery import DeliveryNotConfigured, get_channel
+from schools.models import Domain, Invitation, School
 
 #: A DNS label: lowercase letters, digits and inner hyphens, at most 63.
 _LABEL = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$")
@@ -46,6 +52,34 @@ RESERVED = frozenset({"app", "www", "api", "admin", "mail", "static", "portal", 
 
 class OnboardingError(Exception):
     """The portal or a school cannot be set up as asked. Nothing was written."""
+
+
+class CreatedSchool(NamedTuple):
+    school: School
+    host: str
+    invitation: Invitation
+    #: The accept link, when there was no email provider to send it and the
+    #: operator has to hand it over. None when it was emailed — and then it is
+    #: nobody's to print: it is a credential, and it went where it belongs.
+    link_to_hand_over: Optional[str]
+
+
+def email_provider_configured():
+    """Whether the configured channel can send at all.
+
+    Asked of the channel itself (`check_configured()`), the same question
+    `invitations._deliver()` asks before it sends, so "configured" cannot mean
+    one thing here and another there. A channel that defines no such check —
+    a test double — is taken at its word.
+    """
+    check = getattr(get_channel(), "check_configured", None)
+    if check is None:
+        return True
+    try:
+        check()
+    except DeliveryNotConfigured:
+        return False
+    return True
 
 
 def check_host(host):
@@ -102,8 +136,9 @@ def setup_portal():
 def create_school(*, slug, name, admin_email, operator, admin_name=""):
     """Make a school: its schema, its host, and its first administrator's invitation.
 
-    Returns `(school, host, invitation)`. Everything is checked before anything
-    is written, and everything is written in one transaction.
+    Returns a `CreatedSchool`. Everything is checked before anything is
+    written, and everything is written in one transaction. Whether the
+    invitation is emailed or handed back is `email_provider_configured()`.
     """
     slug = (slug or "").strip().lower()
     name = (name or "").strip()
@@ -128,14 +163,29 @@ def create_school(*, slug, name, admin_email, operator, admin_name=""):
             f"platform's operators, not by any school's staff."
         )
 
+    by_hand = not email_provider_configured()
     with transaction.atomic():
         school = School(name=name, slug=label, schema_name=schema_name)
         school.save()  # creates and migrates the schema
         Domain.objects.create(tenant=school, domain=host, is_primary=True)
-        invitation, _ = invitations.invite_staff(
-            operator, school, Role.ADMIN, email=admin_email, full_name=admin_name
-        )
-    return school, host, invitation
+        if by_hand:
+            invitation, link = invitations.invite_staff_by_hand(
+                operator, school, Role.ADMIN, email=admin_email, full_name=admin_name
+            )
+        else:
+            invitation, _ = invitations.invite_staff(
+                operator, school, Role.ADMIN, email=admin_email, full_name=admin_name
+            )
+            link = None
+    return CreatedSchool(school, host, invitation, link)
 
 
-__all__ = ["OnboardingError", "RESERVED", "check_host", "create_school", "setup_portal"]
+__all__ = [
+    "CreatedSchool",
+    "OnboardingError",
+    "RESERVED",
+    "check_host",
+    "create_school",
+    "email_provider_configured",
+    "setup_portal",
+]

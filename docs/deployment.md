@@ -92,9 +92,12 @@ inside a web request.
    schools; a school's own administrator never is one.
 3. `create_school <slug> "<name>" --admin-email … --operator <username>` —
    builds the school's schema, gives it `<slug>.PLATFORM_DOMAIN`, and invites
-   its first administrator. **[needs an email provider]** It refuses the whole
-   school if the invitation cannot be sent, so a school nobody can get into is
-   never created.
+   its first administrator. **With an email provider**, the invitation is
+   emailed. **Without one** (decided 2026-09-24) nothing is sent: the command
+   prints the accept link for the operator to hand to the administrator. The
+   link makes whoever opens it that school's administrator until it is used or
+   expires, so it goes to that person and nowhere else. With no accept page to
+   link to, the whole school is refused — there would be nothing to hand over.
 
 Every host is one label under `PLATFORM_DOMAIN` (`schools/onboarding.py`,
 `check_host`): under it, because the session cookie spans them all; one label,
@@ -121,7 +124,7 @@ password if the invitee has none, and ends at the staff sign-in door.
 | First CI push of images to GHCR | nothing new (GitHub's own token) |
 | Provisioning the server | Hetzner project, your SSH public key, your admin IPs |
 | DNS records and the first certificate | the domain registered, the zone on Cloudflare, a DNS-edit token for that zone |
-| Sending the first invitation | a transactional email provider, and SPF/DKIM/DMARC on the domain |
+| Emailing invitations (until then `create_school` prints the link to hand over) | a transactional email provider, and SPF/DKIM/DMARC on the domain |
 | The first backup and restore drill | B2 bucket and key, a backup encryption key held offline |
 | Error reports | Sentry (EU) project and its DSN |
 | Real children's data | your confirmation on data residency (NDPA, OPEN-9) |

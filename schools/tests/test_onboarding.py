@@ -12,6 +12,7 @@ These run real `CREATE SCHEMA` and migrations for the schools they make
 
 from io import StringIO
 
+from django.core import mail
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
@@ -19,6 +20,7 @@ from django.test import TestCase, override_settings
 
 from accounts.models import Membership, MembershipStatus, Role, User
 from schools.models import Domain, Invitation, School
+from schools.delivery import DeliveryNotConfigured
 from schools.onboarding import OnboardingError, create_school, setup_portal
 from schools.tests.test_invitations import RecordingChannel
 
@@ -28,6 +30,23 @@ PLATFORM = dict(
     INVITATION_CHANNEL="schools.tests.test_invitations.RecordingChannel",
     INVITATION_ACCEPT_URL="https://app.classnode.test/invitations/{token}/",
 )
+
+
+#: The real email channel, with nowhere to send: SMTP and no host — exactly a
+#: deployment that has not signed up with a provider yet.
+NO_PROVIDER = dict(
+    INVITATION_CHANNEL="schools.delivery.EmailChannel",
+    EMAIL_BACKEND="django.core.mail.backends.smtp.EmailBackend",
+    EMAIL_HOST="",
+)
+
+#: The real email channel, sending — into Django's test outbox.
+WITH_PROVIDER = dict(
+    INVITATION_CHANNEL="schools.delivery.EmailChannel",
+    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+)
+
+ACCEPT_PAGE = "https://app.classnode.test/invitations/"
 
 
 def schema_exists(name):
@@ -94,8 +113,9 @@ class OnboardingTests(TestCase):
     def test_a_school_gets_a_real_schema_its_host_and_an_invited_administrator(self):
         """The control: every refusal below would pass against a command that
         created nothing for anybody."""
-        school, host, invitation = self.make()
+        school, host, invitation, link = self.make()
 
+        self.assertIsNone(link, "a delivered invitation's link came back to be printed")
         self.assertEqual(host, "stmarys.classnode.test")
         self.assertTrue(schema_exists("stmarys"))
         self.assertEqual(Domain.objects.get(domain=host).tenant, school)
@@ -116,6 +136,72 @@ class OnboardingTests(TestCase):
             )
 
         self.assertIn("https://grace.classnode.test/", out.getvalue())
+
+    # -- delivery: emailed, or handed over by the operator -----------------------
+
+    def test_with_no_email_provider_the_school_is_made_and_its_link_handed_over(self):
+        """Decided 2026-09-24: before the deployment has an email provider, the
+        operator is the delivery. The school, its host and the invitation are
+        all made, and the accept link comes back — a working one.
+
+        CONTROL 9: dropping the hand-over fallback makes this red.
+        """
+        with override_settings(**NO_PROVIDER):
+            try:
+                created = self.make()
+            except DeliveryNotConfigured as exc:
+                self.fail(f"refused for want of an email provider, where the link should come back: {exc}")
+
+        self.assertTrue(schema_exists("stmarys"))
+        self.assertEqual(created.invitation.sent_to, "head@stmarys.example")
+        link = created.link_to_hand_over
+        self.assertTrue(link.startswith(ACCEPT_PAGE), link)
+        token = link[len(ACCEPT_PAGE):].rstrip("/")
+        self.assertEqual(Invitation.validate_token(token), created.invitation, "the link does not open it")
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_the_command_prints_the_link_for_the_operator_to_hand_over(self):
+        """CONTROL 9 too: without the fallback the command refuses instead."""
+        out = StringIO()
+        with override_settings(**NO_PROVIDER):
+            try:
+                call_command(
+                    "create_school", "grace", "Grace Academy",
+                    admin_email="head@grace.example", operator="ops", stdout=out,
+                )
+            except CommandError as exc:
+                self.fail(f"the command refused, where it should hand the link over: {exc}")
+
+        printed = out.getvalue()
+        self.assertIn("No email provider is configured", printed)
+        self.assertIn("Give this link to head@grace.example yourself", printed)
+        self.assertIn(ACCEPT_PAGE, printed)
+
+    def test_with_an_email_provider_it_is_emailed_and_the_link_not_printed(self):
+        """The link is a credential. Emailed, it went where it belongs, and a
+        copy in the operator's terminal would be one more place it lives."""
+        out = StringIO()
+        with override_settings(**WITH_PROVIDER):
+            with self.captureOnCommitCallbacks(execute=True):
+                call_command(
+                    "create_school", "grace", "Grace Academy",
+                    admin_email="head@grace.example", operator="ops", stdout=out,
+                )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["head@grace.example"])
+        self.assertIn(ACCEPT_PAGE, mail.outbox[0].body)
+        self.assertIn("invited by email at head@grace.example", out.getvalue())
+        self.assertNotIn("/invitations/", out.getvalue())
+
+    def test_no_provider_and_no_accept_page_still_refuses_the_whole_school(self):
+        """Then there is nothing to hand over either."""
+        with override_settings(**NO_PROVIDER, INVITATION_ACCEPT_URL=None):
+            with self.assertRaises(DeliveryNotConfigured):
+                self.make()
+
+        self.nothing_was_written()
+        self.assertFalse(schema_exists("stmarys"))
 
     # -- the host rule ------------------------------------------------------------
 
