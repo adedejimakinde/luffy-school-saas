@@ -203,8 +203,9 @@ class TheRaceWindowIsStillTheDatabasesTests(TransactionTestCase):
 
         The PARENT membership is granted first, so `grant_membership()` finds a
         row to `select_for_update()` and the two calls serialise there rather
-        than colliding. See the module note below for the cold-start case, which
-        is a different and pre-existing defect.
+        than colliding. The cold start, where there is no row to lock and the
+        two inserts do collide, is #94 and is arranged deterministically in
+        `test_membership_concurrency.py` rather than raced for here.
         """
         services.grant_membership(self.parent, self.school, Role.PARENT)
 
