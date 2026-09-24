@@ -20,7 +20,7 @@ Concurrency lives in `test_approval_concurrency.py`, which needs real threads.
 
 from datetime import date
 
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 from django.test import TestCase
 
 from academics import services as academics
@@ -432,7 +432,7 @@ class SendingBackTests(ChainSetUp):
 
             for reason in ("", "   ", "\t\n "):
                 with self.subTest(reason=repr(reason)):
-                    with self.assertRaises(IntegrityError):
+                    with self.assertRefusedBy("a_send_back_says_why"):
                         with transaction.atomic():
                             ResultSheetTransition.objects.create(
                                 sheet=sheet,
@@ -706,7 +706,7 @@ class TheCycleIsNotTheCallersToSetTests(ChainSetUp):
             services.submit(sheet, self.teacher)
             sheet.refresh_from_db()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("one_signature_per_person_per_review_cycle"):
                 with transaction.atomic():
                     ResultSheetTransition.objects.create(
                         sheet=sheet,
@@ -748,7 +748,7 @@ class OnePersonCannotTakeTwoStepsTests(ChainSetUp):
         with connected_to(self.stmarys):
             sheet = self.walk_to(SheetState.SUBMITTED)
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("one_signature_per_person_per_review_cycle"):
                 with transaction.atomic():
                     ResultSheetTransition.objects.create(
                         sheet=sheet,
@@ -794,7 +794,7 @@ class ReleaseIsTerminalTests(ChainSetUp):
         with connected_to(self.stmarys):
             sheet = self.walk_to(SheetState.RELEASED)
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("nothing_moves_out_of_released"):
                 with transaction.atomic():
                     ResultSheetTransition.objects.create(
                         sheet=sheet,
@@ -923,7 +923,7 @@ class TwoSchoolsTests(ChainSetUp):
         with connected_to(self.stmarys):
             self.sheet()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("one_result_sheet_per_class_term"):
                 with transaction.atomic():
                     ResultSheet.objects.create(
                         class_group_id=self.jss1a_id, term_id=self.term_id
