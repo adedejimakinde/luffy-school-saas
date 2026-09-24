@@ -1,0 +1,42 @@
+/*
+ * Fees. Tables that scroll sideways on a phone, and a receipt that prints on
+ * its own: the chrome is hidden on paper.
+ */
+:root{--ink:#111;--quiet:#555;--rule:#ddd;--stop:#900;--stop-bg:#fdeeee;--done:#14612f;--done-bg:#eef7f0;--owes:#7a4a00}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 16px;background:#fff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:60rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 8px}
+h2{font-size:1.1rem;margin:20px 0 8px}
+.quiet,.blank{color:var(--quiet)}
+.chooser{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+select,input{font:inherit;padding:8px;border:1px solid var(--rule);border-radius:6px;max-width:100%}
+button{font:inherit;min-height:44px;padding:8px 14px;background:#fff;border:1px solid var(--rule);border-radius:8px;cursor:pointer}
+.classes{list-style:none;padding:0;display:flex;flex-direction:column;gap:8px}
+.scroll{overflow-x:auto;margin:12px 0}
+table{border-collapse:collapse;min-width:100%}
+th,td{padding:6px 10px;border-bottom:1px solid var(--rule);text-align:left;vertical-align:top}
+.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+td small{color:var(--quiet)}
+tr.undone td{color:var(--quiet)}
+.tag{font-size:.8em;border:1px solid var(--rule);border-radius:4px;padding:0 4px}
+.balance{font-weight:600}
+.balance.owes{color:var(--owes)}
+.balance.credit{color:var(--done)}
+.standing{font-size:1.15rem}
+.note{padding:8px 12px;border-left:4px solid var(--rule)}
+.note.stop{border-color:var(--stop);background:var(--stop-bg)}
+.note.done{border-color:var(--done);background:var(--done-bg)}
+fieldset{border:1px solid var(--rule);border-radius:8px;padding:12px;display:grid;gap:10px}
+fieldset label{display:grid;gap:4px}
+.receipt{border:1px solid var(--ink);border-radius:8px;padding:16px;max-width:32rem}
+.receipt dl{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:12px 0 0}
+.receipt dt{color:var(--quiet)}
+.receipt .amount{font-size:1.3rem;font-weight:700}
+.void{border:2px solid var(--stop);color:var(--stop);padding:8px;font-weight:700}
+a{color:#14507d}
+@media print{
+  body{padding:0}
+  .back,[data-action="sign-out"],.payment{display:none}
+  .receipt{border-color:#000}
+}

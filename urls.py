@@ -21,6 +21,7 @@ from api import api
 from academics.views import setup_page
 from accounts.views import roll_page, staff_page
 from attendance.views import absences_page, register_page
+from fees.views import fees_page
 from gradebook.views import marking_page
 from results.views import (
     broadsheet_page,
@@ -57,6 +58,8 @@ urlpatterns = [
     path("broadsheet/", broadsheet_page, name="broadsheet"),
     # The fourth staff surface, on the same terms as the three above.
     path("comments/", comments_page, name="comments"),
+    # The bursar's, on the broadsheet's terms.
+    path("fees/", fees_page, name="fees"),
     path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",

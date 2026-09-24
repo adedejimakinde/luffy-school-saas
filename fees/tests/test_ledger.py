@@ -33,6 +33,7 @@ from fees.models import (
     FeeLedgerEntry,
     KOBO_PER_NAIRA,
     LedgerIsAppendOnly,
+    PaymentMethod,
 )
 from schools.tests.tenants import connected_to, make_school
 from tests.refusals import RefusalAssertions
@@ -42,6 +43,14 @@ PASSWORD = "correct-horse-battery"
 #: ₦150,000 as the column stores it. Spelled out once so the tests below read as
 #: money rather than as seven-digit integers.
 TUITION = 150_000 * KOBO_PER_NAIRA
+
+#: The three ways an amount enters the books from a caller, with what each
+#: needs besides it: a payment says how the money moved (fees 3(a)).
+EVERY_WAY_IN = (
+    (services.charge, {}),
+    (services.record_payment, {"method": PaymentMethod.CASH}),
+    (services.discount, {}),
+)
 
 #: What `fees_ledger_append_only` says, table first and operation second.
 #:
@@ -93,7 +102,11 @@ class MoneyTests(LedgerSetUp):
                 self.membership, term, TUITION, narration="First term tuition"
             )
             services.record_payment(
-                self.membership, term, 100_000 * KOBO_PER_NAIRA, reference="TLR-4471"
+                self.membership,
+                term,
+                100_000 * KOBO_PER_NAIRA,
+                method="bank_transfer",
+                reference="TLR-4471",
             )
 
             outstanding = FeeLedgerEntry.objects.for_student(self.membership.pk).balance()
@@ -114,7 +127,7 @@ class MoneyTests(LedgerSetUp):
             term = self.reload_term()
             services.charge(self.membership, term, TUITION, narration="Tuition")
             services.record_payment(
-                self.membership, term, 200_000 * KOBO_PER_NAIRA
+                self.membership, term, 200_000 * KOBO_PER_NAIRA, method="cash"
             )
             self.assertEqual(
                 FeeLedgerEntry.objects.for_student(self.membership.pk).balance(),
@@ -130,12 +143,12 @@ class MoneyTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             term = self.reload_term()
-            for function in (services.charge, services.record_payment, services.discount):
+            for function, how in EVERY_WAY_IN:
                 with self.subTest(function=function.__name__):
                     with self.assertRaises(services.NotPositive):
-                        function(self.membership, term, -5000, narration="wrong way")
+                        function(self.membership, term, -5000, narration="wrong way", **how)
                     with self.assertRaises(services.NotPositive):
-                        function(self.membership, term, 0, narration="nothing")
+                        function(self.membership, term, 0, narration="nothing", **how)
 
     def test_a_float_amount_is_refused(self):
         """The reason the column is kobo, restated where it can be enforced.
@@ -172,7 +185,7 @@ class MoneyTests(LedgerSetUp):
                 narration="Staff child concession",
             )
             services.record_payment(
-                self.membership, term, 120_000 * KOBO_PER_NAIRA
+                self.membership, term, 120_000 * KOBO_PER_NAIRA, method="cash"
             )
 
             received = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.PAYMENT).balance()
@@ -443,7 +456,8 @@ class ConstraintTests(LedgerSetUp):
             with self.assertRefusedBy(
                 "a_payment_or_discount_reduces_what_is_owed"
             ), transaction.atomic():
-                self.entry(kind=FeeEntryKind.PAYMENT, amount_kobo=TUITION)
+                # With a method, so the sign rule is the only one it breaks.
+                self.entry(kind=FeeEntryKind.PAYMENT, amount_kobo=TUITION, method="cash")
 
     def test_a_positive_discount_is_refused(self):
         with connected_to(self.stmarys):
@@ -483,7 +497,9 @@ class ConstraintTests(LedgerSetUp):
 
             for child in (self.membership, sibling):
                 services.charge(child, term, TUITION, narration="First term fees")
-                services.record_payment(child, term, TUITION, reference=teller)
+                services.record_payment(
+                    child, term, TUITION, method="bank_transfer", reference=teller
+                )
 
             self.assertEqual(
                 FeeLedgerEntry.objects.filter(
@@ -631,10 +647,10 @@ class WrongStudentTests(TestCase):
     def test_the_check_covers_every_way_in(self):
         with connected_to(self.stmarys):
             term = Term.objects.get()
-            for function in (services.charge, services.record_payment, services.discount):
+            for function, how in EVERY_WAY_IN:
                 with self.subTest(function=function.__name__):
                     with self.assertRaises(services.NotThisSchoolsStudent):
-                        function(self.theirs, term, TUITION, narration="nope")
+                        function(self.theirs, term, TUITION, narration="nope", **how)
             self.assertEqual(FeeLedgerEntry.objects.count(), 0)
 
     def test_our_own_student_is_fine(self):

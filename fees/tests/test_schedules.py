@@ -1249,6 +1249,7 @@ class ConstraintTests(BillingSetUp):
                     student_name="Ada Obi",
                     kind=FeeEntryKind.PAYMENT,
                     amount_kobo=-TUITION,
+                    method="cash",
                     narration="Payment",
                     effective_on=date(2025, 9, 20),
                     source_line=line,
@@ -1397,11 +1398,15 @@ class RefundTests(BillingSetUp):
     def test_a_refund_moves_a_credit_balance_back_towards_zero(self):
         with connected_to(self.stmarys):
             term = self.term()
-            services.record_payment(self.ada, term, 50_000 * KOBO_PER_NAIRA)
+            services.record_payment(self.ada, term, 50_000 * KOBO_PER_NAIRA, method="cash")
             self.assertEqual(self.balance_of(self.ada), -50_000 * KOBO_PER_NAIRA)
 
             services.refund(
-                self.ada, term, 50_000 * KOBO_PER_NAIRA, narration="Cash returned"
+                self.ada,
+                term,
+                50_000 * KOBO_PER_NAIRA,
+                method="cash",
+                narration="Cash returned",
             )
 
             self.assertEqual(self.balance_of(self.ada), 0)
@@ -1410,7 +1415,7 @@ class RefundTests(BillingSetUp):
         """Money handed back and a mistake undone are different facts."""
         with connected_to(self.stmarys):
             term = self.term()
-            services.refund(self.ada, term, 10_000 * KOBO_PER_NAIRA)
+            services.refund(self.ada, term, 10_000 * KOBO_PER_NAIRA, method="cash")
             entry = FeeLedgerEntry.objects.get(kind=FeeEntryKind.REFUND)
 
             self.assertGreater(entry.amount_kobo, 0)
@@ -1419,7 +1424,7 @@ class RefundTests(BillingSetUp):
     def test_a_negative_refund_is_refused_by_the_service(self):
         with connected_to(self.stmarys):
             with self.assertRaises(services.NotPositive):
-                services.refund(self.ada, self.term(), -1)
+                services.refund(self.ada, self.term(), -1, method="cash")
 
 
 class SkipIsNotTheIndexTests(BillingSetUp):
