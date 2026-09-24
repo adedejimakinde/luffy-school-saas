@@ -180,7 +180,7 @@ class SignInIdentifierTests(TestCase):
         self.assertIsNone(authenticate(username="suspended", password=PASSWORD))
 
 
-class StudentBelongsToOneSchoolTests(TestCase):
+class StudentBelongsToOneSchoolTests(TestCase, RefusalAssertions):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
         self.grace = make_school("Grace Academy", "grace", "grace")
@@ -188,7 +188,7 @@ class StudentBelongsToOneSchoolTests(TestCase):
 
     def test_a_second_live_student_membership_is_rejected_by_the_database(self):
         services.enroll_student(self.child, self.stmarys)
-        with self.assertRaises(IntegrityError), transaction.atomic():
+        with self.assertRefusedBy("one_live_student_membership_per_user"), transaction.atomic():
             Membership.objects.create(
                 user=self.child, school=self.grace, role=Role.STUDENT
             )
@@ -346,7 +346,7 @@ class TransferCarriesTheFamilyTests(TestCase):
             services.transfer_student(teacher, self.grace)
 
 
-class OnePersonManyRolesTests(TestCase):
+class OnePersonManyRolesTests(TestCase, RefusalAssertions):
     def setUp(self):
         self.school = make_school("St Mary's", "st-marys", "st_marys")
         self.teacher = make_user("ada@stmarys.ng", "Ada Obi", email="ada@stmarys.ng")
@@ -376,7 +376,7 @@ class OnePersonManyRolesTests(TestCase):
 
     def test_the_same_role_twice_at_one_school_is_rejected(self):
         services.grant_membership(self.teacher, self.school, Role.TEACHER)
-        with self.assertRaises(IntegrityError), transaction.atomic():
+        with self.assertRefusedBy("uniq_membership_user_school_role"), transaction.atomic():
             Membership.objects.create(
                 user=self.teacher, school=self.school, role=Role.TEACHER
             )

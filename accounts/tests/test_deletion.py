@@ -17,7 +17,7 @@ from unittest import mock
 from django.apps import apps
 from django.contrib.auth import authenticate
 from django.core.exceptions import ImproperlyConfigured, ValidationError
-from django.db import IntegrityError, connection, models, transaction
+from django.db import connection, models, transaction
 from django.test import TestCase
 
 from django_tenants.utils import schema_exists
@@ -41,6 +41,7 @@ from schools.tests.test_tenant_isolation import (
     make_school,
     query,
 )
+from tests.refusals import RefusalAssertions
 
 PROBE_APP = "academics"
 
@@ -148,7 +149,7 @@ class DeactivationIsTheStandardPathTests(TestCase):
                 self.user.delete()
 
 
-class HardDeleteGuardTests(TestCase):
+class HardDeleteGuardTests(RefusalAssertions, TestCase):
     """What `hard_delete_user()` refuses, and what it lets through."""
 
     @classmethod
@@ -190,7 +191,11 @@ class HardDeleteGuardTests(TestCase):
             self.DeletionProbe.objects.create(student=self.user)
 
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            # The probe's own foreign key, named by the table it leaves: Django
+            # generates the constraint's name, and the table is the probe's.
+            with self.assertRefusedBy(
+                'table "academics_deletionprobe" violates foreign key constraint'
+            ):
                 with transaction.atomic():
                     with _sanctioned_delete():
                         self.user.delete()  # raises nothing at all

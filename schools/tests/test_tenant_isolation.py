@@ -28,7 +28,7 @@ in docs/tenancy.md and `TenantTestCaseHarnessTests` at the bottom of this file.
 
 from datetime import date
 
-from django.db import IntegrityError, ProgrammingError, connection, transaction
+from django.db import ProgrammingError, connection, transaction
 from django.test import TestCase
 from django_tenants.test.cases import TenantTestCase
 
@@ -36,6 +36,7 @@ from academics.models import Term, TermName
 from accounts.models import Membership, Role, User
 from schools.models import Domain, School
 from schools.tests.tenants import connected_to, make_school, make_school_by_migrating
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -77,7 +78,7 @@ def search_path():
     return query("show search_path")[0][0]
 
 
-class RealSchemaCreationTests(TestCase):
+class RealSchemaCreationTests(RefusalAssertions, TestCase):
     """Saving a School creates a genuine Postgres schema with genuine tables."""
 
     def test_saving_a_school_creates_a_real_postgres_schema(self):
@@ -145,7 +146,7 @@ class RealSchemaCreationTests(TestCase):
 
         with connected_to(stmarys):
             make_term(is_current=True)
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("one_current_term"), transaction.atomic():
                 make_term(name=TermName.SECOND, is_current=True)
 
         # ...and St Mary's having a current term does not stop Grace having one.

@@ -51,6 +51,7 @@ from schools.tests.test_tenant_isolation import (
     make_school,
     query,
 )
+from tests.refusals import RefusalAssertions
 
 PROBE_APP = "academics"
 
@@ -81,7 +82,7 @@ def _define_probe_models():
     return ProbeCascade, ProbeProtect
 
 
-class CrossSchemaForeignKeyTests(TestCase):
+class CrossSchemaForeignKeyTests(RefusalAssertions, TestCase):
     """Deleting a shared row referenced from more than one tenant schema."""
 
     @classmethod
@@ -300,9 +301,13 @@ class CrossSchemaForeignKeyTests(TestCase):
                         user.delete()
 
         # But from the other school it raises nothing, and only the deferred
-        # constraint catches it -- as an IntegrityError, not a ProtectedError.
+        # constraint catches it -- as an IntegrityError, not a ProtectedError,
+        # and from the probe's own foreign key rather than anything else the
+        # delete touched on its way to COMMIT.
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                'table "academics_probeprotect" violates foreign key constraint'
+            ):
                 with transaction.atomic():
                     with _sanctioned_delete():
                         user.delete()

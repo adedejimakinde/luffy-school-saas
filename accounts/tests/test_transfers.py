@@ -14,7 +14,7 @@ be correct, and only the record would quietly be worth less than it claims.
 
 import inspect
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.test import TestCase
 from django.utils import timezone
 
@@ -33,6 +33,7 @@ from accounts.models import (
     User,
 )
 from schools.models import School
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
@@ -48,7 +49,7 @@ def make_user(username, full_name, **extra):
     return User.objects.create_user(username, PASSWORD, full_name=full_name, **extra)
 
 
-class HandshakeSetUp(TestCase):
+class HandshakeSetUp(RefusalAssertions, TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
         self.grace = make_school("Grace Academy", "grace", "grace")
@@ -533,19 +534,31 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
     # -- a two-party transfer cannot be dressed as single-party --------------
 
     def test_a_handshake_row_cannot_be_relabelled_single_party(self):
+        """Closed twice, so the assertion names both rules.
+
+        An accepted handshake names two people and carries a side, and a
+        single-party row may do neither — so the relabel breaks
+        `single_party_transfer_names_one_signatory` *and*
+        `transfer_side_matches_route`, and either alone refuses it. Pinning only
+        the one that happens to fire first would make this test claim an
+        identity the guarantee does not rest on: drop that rule and the relabel
+        is still refused, by the other. Each rule has its own test below.
+        """
         request = transfers.request_transfer_as(
             self.stmarys_admin, self.child, self.grace
         )
         transfers.accept_transfer_as(self.grace_admin, request)
 
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy(
+            "single_party_transfer_names_one_signatory|transfer_side_matches_route"
+        ):
             with transaction.atomic():
                 TransferRequest.objects.filter(pk=request.pk).update(
                     route=TransferRoute.SINGLE_PARTY
                 )
 
     def test_a_single_party_row_cannot_name_two_people(self):
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy("single_party_transfer_names_one_signatory"):
             with transaction.atomic():
                 TransferRequest.objects.create(
                     student=self.child,
@@ -561,10 +574,19 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
     # -- a single-party transfer cannot be dressed as a handshake ------------
 
     def test_a_single_party_row_cannot_be_relabelled_a_handshake(self):
+        """Closed twice, for the mirror of the reason above.
+
+        A single-party row names one person twice and carries no side, and a
+        handshake may do neither once answered — so
+        `answered_transfer_names_two_signatories` and `transfer_side_matches_route`
+        each refuse it on their own.
+        """
         services.transfer_student_as(self.operator, self.child, self.grace)
         record = TransferRequest.objects.get()
 
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy(
+            "answered_transfer_names_two_signatories|transfer_side_matches_route"
+        ):
             with transaction.atomic():
                 TransferRequest.objects.filter(pk=record.pk).update(
                     route=TransferRoute.HANDSHAKE
@@ -572,7 +594,7 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
 
     def test_an_accepted_handshake_row_cannot_name_one_person_twice(self):
         """`SameSignatory` one layer down, where no code path can skip it."""
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy("answered_transfer_names_two_signatories"):
             with transaction.atomic():
                 TransferRequest.objects.create(
                     student=self.child,
@@ -594,7 +616,7 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
             TransferRequestStatus.WITHDRAWN,
         ):
             with self.subTest(status=status):
-                with self.assertRaises(IntegrityError):
+                with self.assertRefusedBy("single_party_transfer_is_always_accepted"):
                     with transaction.atomic():
                         TransferRequest.objects.create(
                             student=self.child,
@@ -608,7 +630,7 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
                         )
 
     def test_a_single_party_row_cannot_carry_a_side(self):
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy("transfer_side_matches_route"):
             with transaction.atomic():
                 TransferRequest.objects.create(
                     student=self.child,
@@ -622,7 +644,7 @@ class TheRouteCannotBeForgedTests(HandshakeSetUp):
                 )
 
     def test_a_handshake_row_must_carry_a_side(self):
-        with self.assertRaises(IntegrityError):
+        with self.assertRefusedBy("transfer_side_matches_route"):
             with transaction.atomic():
                 TransferRequest.objects.create(
                     student=self.child,

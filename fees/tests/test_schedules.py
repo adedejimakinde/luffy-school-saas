@@ -952,12 +952,20 @@ class ConcessionRaceTests(BillingSetUp):
                 reason="Staff child",
             )
 
+            # Raised by the mock, so there is no constraint behind it to name
+            # and `assertRefusedBy` has nothing to match. What the test is about
+            # is that *this* error comes out: the same object, not an
+            # `IntegrityError` of some other origin standing in for it (#89).
+            refusal = IntegrityError("something else entirely")
+
             def unrelated(*args, **kwargs):
-                raise IntegrityError("something else entirely")
+                raise refusal
 
             with mock.patch.object(schedules.services, "_discount", unrelated):
-                with self.assertRaises(IntegrityError):
+                with self.assertRaises(IntegrityError) as caught:
                     self.apply()
+
+            self.assertIs(caught.exception, refusal)
 
 
     def test_a_different_unique_violation_is_still_raised(self):
@@ -2154,7 +2162,7 @@ class SubtransactionCountTests(BillingSetUp):
             ).first()
 
             with transaction.atomic():
-                with self.assertRaises(IntegrityError):
+                with self.assertRefusedBy("a_schedule_line_charges_a_child_once"):
                     services.charge(
                         self.ada,
                         self.term(),
