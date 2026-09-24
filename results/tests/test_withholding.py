@@ -1257,10 +1257,8 @@ class ThePolicyRefusesADeadEnd(WithholdingSetUp):
         data migration and a fixture are four others — so the service refusing
         first must not be mistaken for the constraint being unnecessary.
         """
-        from django.db import IntegrityError
-
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("a_withholding_school_names_who_to_call"):
                 ReportCardSettings.objects.filter(pk=1).update(
                     withhold_for_fees_enabled=True, withholding_contact=""
                 )
