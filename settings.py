@@ -644,6 +644,42 @@ LOGGING = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Error reports
+#
+# Sentry, EU region, personal data off (decided 2026-09-23). Off entirely unless
+# SENTRY_DSN is set — development, CI and a deployment that has not signed up
+# report nothing anywhere. What each option withholds, and what the two hooks
+# scrub that options cannot, is in `schools/errors.py`.
+#
+# The hooks are imported lazily: `schools.errors` reaches `schools.logging`,
+# which reaches the database connection, and neither belongs in the import of
+# the settings module itself.
+# ---------------------------------------------------------------------------
+SENTRY_DSN = os.environ.get("SENTRY_DSN") or None
+if SENTRY_DSN:
+    import sentry_sdk
+    from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.django import DjangoIntegration
+
+    def _errors():
+        from schools import errors
+
+        return errors
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration(), CeleryIntegration()],
+        send_default_pii=False,
+        include_local_variables=False,
+        max_request_body_size="never",
+        traces_sample_rate=0.0,
+        environment=os.environ.get("SENTRY_ENVIRONMENT", "production"),
+        release=os.environ.get("CLASSNODE_RELEASE") or None,
+        before_send=lambda event, hint: _errors().before_send(event, hint),
+        before_breadcrumb=lambda crumb, hint: _errors().before_breadcrumb(crumb, hint),
+    )
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = os.environ.get("TIME_ZONE", "Africa/Lagos")

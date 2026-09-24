@@ -40,6 +40,7 @@ internet ──443──▶ caddy ──http──▶ web (gunicorn) ──▶ d
 | `deploy/production.env` | everything not secret: the domain, the proxy switches, service names | yes |
 | `/etc/classnode/secrets.env` (server, mode 600) | `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`, SMTP credentials **[needs email provider]**, `SENTRY_DSN` **[needs Sentry, H3]**, WAL-G/B2 keys **[needs B2, H3]** | **never** |
 | `/etc/classnode/caddy.env` (server, mode 600) | `CLOUDFLARE_API_TOKEN` **[needs Cloudflare]**, `ACME_EMAIL` | **never** |
+| `/etc/classnode/backup.env` (server, mode 600; optional until B2 exists) | `WALG_S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT`, `AWS_REGION` **[needs B2]**, `WALG_LIBSODIUM_KEY` (the backup encryption key — **also in your password manager**), `BACKUP_HEARTBEAT_URL` **[needs Sentry]** | **never** |
 | GitHub repository secrets | `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` **[needs the server]** | **never** |
 
 Keep a copy of every secret in a password manager. A secret that exists only on
@@ -109,9 +110,51 @@ The invitation link lands on `/invitations/<token>/` on the portal
 (`INVITATION_ACCEPT_URL`, derived from `PORTAL_HOST`). The page takes a
 password if the invitee has none, and ends at the staff sign-in door.
 
+## Backups
+
+**Continuous WAL archiving to B2, plus a nightly base backup** (decided
+2026-09-23), so the database restores to any moment in the last week, losing
+at most the minute `archive_timeout` allows. `deploy/postgres/` is the image:
+Postgres 15 (Debian) with WAL-G pinned by version and checksum.
+
+- **Archiving is off until B2 is configured.** `classnode-postgres` turns it on
+  only when `WALG_S3_PREFIX` is set — an archive command that cannot succeed
+  makes Postgres keep every WAL segment until the disk fills.
+- **Nightly** (`deploy/cron/classnode`, 00:30 UTC): `classnode-backup` fails if
+  the archiver has started failing, then pushes a base backup and applies
+  retention — 7 nightly, 4 weekly, 12 monthly (`deploy/postgres/retention.py`,
+  tested in `tests/test_backup_retention.py`). It checks in to the
+  `nightly-backup` heartbeat either way.
+- **Encrypted before upload** with `WALG_LIBSODIUM_KEY`. Keep that key in a
+  password manager as well as on the server: without it the backups are noise.
+
+**[needs B2]** for all of it; until then the nightly job fails loudly by design.
+
+## The weekly restore test
+
+`deploy/restore-check.sh` (Sunday 02:00 UTC): recovers the latest backup into
+a throwaway `restore-db`, waits for recovery to finish, then runs
+`manage.py verify_restore` against it — every school has its schema, `public`
+has every shared migration, every school's schema has every tenant migration
+(`schools/restore_check.py`). It tears the throwaway database and its volume
+down whatever happened. The verdict checks in to Sentry's `restore-check`
+monitor; a restore that never becomes ready never checks in, and the monitor
+alerts on the silence. **[needs B2 and Sentry]**
+
+Before launch, once B2 exists: a **timed full restore onto a fresh server**, by
+hand, following this document. That time is the recovery time.
+
+## Error reports
+
+Sentry, EU region, **only when `SENTRY_DSN` is set** (settings.py). Personal
+data, stack-frame locals and request bodies are never sent. `schools/errors.py`
+drops cookies, query strings and most headers, scrubs invitation tokens out of
+every URL (the address is a credential), drops SQL breadcrumbs (their
+parameters are children's names), and tags every report with the school.
+**[needs Sentry]**
+
 ## Still to come
 
-- **H3** — WAL-G to B2, the weekly automatic restore test, and Sentry.
 - **The launch session** — provisioning the server, DNS, secrets, the first
   deploy, a timed full restore drill, and onboarding the first school. Every
   step there needs an account; see "What each step needs" below.
@@ -126,5 +169,5 @@ password if the invitee has none, and ends at the staff sign-in door.
 | DNS records and the first certificate | the domain registered, the zone on Cloudflare, a DNS-edit token for that zone |
 | Emailing invitations (until then `create_school` prints the link to hand over) | a transactional email provider, and SPF/DKIM/DMARC on the domain |
 | The first backup and restore drill | B2 bucket and key, a backup encryption key held offline |
-| Error reports | Sentry (EU) project and its DSN |
+| Error reports, and the backup and restore heartbeats | Sentry (EU) project, its DSN, and two cron monitors (`nightly-backup`, `restore-check`) |
 | Real children's data | your confirmation on data residency (NDPA, OPEN-9) |

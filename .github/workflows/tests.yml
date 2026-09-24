@@ -29,8 +29,11 @@ jobs:
     # or a mocked backend would turn the isolation proof into a tautology.
     services:
       postgres:
-        # Matched to docker-compose.yml so CI and the devcontainer agree.
-        image: postgres:15-alpine
+        # Matched to docker-compose.yml and to the production database image
+        # (deploy/postgres/Dockerfile), which is Debian because WAL-G ships
+        # glibc builds only. Text sorts by the C library's collation, so the
+        # tests run against the same one production does.
+        image: postgres:15-bookworm
         env:
           POSTGRES_DB: luffy_db
           POSTGRES_USER: luffy_admin
@@ -217,6 +220,7 @@ jobs:
     env:
       APP_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
       CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:${{ github.sha }}
+      POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -256,6 +260,20 @@ jobs:
           -e ACME_EMAIL=ci@example.test
           "$CADDY_IMAGE" caddy validate --config /etc/caddy/Caddyfile
 
+      - name: Build the database image
+        run: docker build -t "$POSTGRES_IMAGE" deploy/postgres
+
+      # The binary is checksummed at build time; this asks whether it *runs*
+      # in this image — a library it links against that the image lacks
+      # fails here, not on the first night the backup should have run.
+      - name: WAL-G runs in the database image, and its scripts parse
+        run: |
+          docker run --rm --entrypoint wal-g "$POSTGRES_IMAGE" --version
+          docker run --rm --entrypoint bash "$POSTGRES_IMAGE" -c \
+            'for f in /usr/local/bin/classnode-*; do bash -n "$f" || exit 1; done'
+          docker run --rm --entrypoint python3 "$POSTGRES_IMAGE" -c \
+            'import ast; ast.parse(open("/usr/local/lib/classnode/retention.py").read())'
+
       - name: The compose file is valid
         run: |
           mkdir -p "$RUNNER_TEMP/etc"
@@ -263,9 +281,10 @@ jobs:
           CLASSNODE_ETC="$RUNNER_TEMP/etc" CLASSNODE_TAG="${{ github.sha }}" \
             docker compose -f deploy/compose.yml config --quiet
 
-      - name: Push both images (main only)
+      - name: Push the images (main only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "$APP_IMAGE"
           docker push "$CADDY_IMAGE"
+          docker push "$POSTGRES_IMAGE"
