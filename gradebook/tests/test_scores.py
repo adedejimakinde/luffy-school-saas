@@ -18,7 +18,7 @@ Three properties carry the module, and each has a section:
 from datetime import date
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 from django.db.utils import ProgrammingError
 from django.test import TestCase
 
@@ -28,11 +28,12 @@ from accounts.services import enroll_student, grant_membership
 from gradebook import services
 from gradebook.models import Assessment, Score, Subject
 from schools.tests.tenants import connected_to, make_school
+from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
 
-class GradebookSetUp(TestCase):
+class GradebookSetUp(RefusalAssertions, TestCase):
     def setUp(self):
         self.stmarys = make_school("St Mary's", "st-marys", "st_marys")
 
@@ -145,7 +146,9 @@ class MarkedOrNotTests(GradebookSetUp):
     def test_a_value_is_never_null(self):
         """There is no such thing as a blank score row, at the database too."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy(
+                'null value in column "value" of relation "gradebook_score"'
+            ), transaction.atomic():
                 Score.objects.create(
                     assessment=self.first_ca(),
                     student_membership_id=self.ada.pk,
@@ -319,11 +322,17 @@ class ConcurrentEditTests(GradebookSetUp):
         foreign key (docs/tenancy.md), so a negative stamp is refused by the
         table at INSERT — a genuine, synchronous, non-collision `IntegrityError`
         of exactly the kind that must not be relabelled.
+
+        Named, because `by=-1` stamps `updated_by_id` as well and that column
+        carries the same CHECK: with this one gone, the other still refuses the
+        row, and an unnamed assertion would pass on it without noticing (#89).
+        The name is the one Postgres gives a column's inline CHECK,
+        `<table>_<column>_check`, and it is this docstring's own claim.
         """
         with connected_to(self.stmarys):
             assessment = self.exam()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("gradebook_score_recorded_by_id_check"):
                 services.set_score(assessment, self.ada, 15, by=-1)
 
             self.assertFalse(
@@ -340,7 +349,7 @@ class ConcurrentEditTests(GradebookSetUp):
         with connected_to(self.stmarys):
             assessment = self.exam()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("gradebook_score_recorded_by_id_check"):
                 services.set_score(
                     assessment,
                     self.ada,
@@ -439,7 +448,7 @@ class ConcurrentEditTests(GradebookSetUp):
         with connected_to(self.stmarys):
             assessment = self.first_ca()
             services.set_score(assessment, self.ada, 15)
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("one_score_per_student_per_assessment"), transaction.atomic():
                 Score.objects.create(
                     assessment=assessment,
                     student_membership_id=self.ada.pk,
@@ -511,7 +520,7 @@ class RangeTests(GradebookSetUp):
     def test_an_assessment_out_of_nothing_is_refused(self):
         """Zero is not a mark scheme; it is a division error somewhere else."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("an_assessment_is_worth_at_least_one_mark"), transaction.atomic():
                 Assessment.objects.create(
                     term_id=self.term_id,
                     subject_id=self.maths_id,
@@ -521,7 +530,7 @@ class RangeTests(GradebookSetUp):
 
     def test_one_assessment_of_a_given_name_per_subject_per_term(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError), transaction.atomic():
+            with self.assertRefusedBy("uniq_assessment_term_subject_name"), transaction.atomic():
                 Assessment.objects.create(
                     term_id=self.term_id,
                     subject_id=self.maths_id,
