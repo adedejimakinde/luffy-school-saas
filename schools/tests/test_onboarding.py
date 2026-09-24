@@ -180,8 +180,16 @@ class OnboardingTests(TestCase):
         self.assertFalse(Membership.objects.filter(role=Role.ADMIN).exists())
 
     def test_the_command_turns_a_refusal_into_a_message(self):
-        with self.assertRaisesMessage(CommandError, "more than one label"):
+        """A `CommandError` carrying the host rule's words — not a traceback
+        from further down, and not a school."""
+        try:
             call_command(
                 "create_school", "st.marys", "St Mary's",
                 admin_email="head@example.com", operator="ops", stdout=StringIO(),
             )
+        except CommandError as exc:
+            self.assertIn("more than one label", str(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 — the point is to name it
+            self.fail(f"the command failed with {type(exc).__name__}, not a refusal: {exc}")
+        self.fail("the command created a school on a host two labels deep")
