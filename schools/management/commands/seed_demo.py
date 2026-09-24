@@ -1,10 +1,14 @@
 """`manage.py seed_demo` — two fake schools to click through. Development only.
 
-Each school gets a current term and the one before it, two classes of ten
-children, three subjects with first-CA marks, two weeks of registers, a term's
-fees with payments, a discount and one family in credit, and one login per
-role: administrator, principal, vice principal (academic), teacher, bursar and
-parent (of two children). Everybody's password is the one printed at the end.
+Each school gets a current term, the one before it and an empty one after it
+(for "copy last term"), two classes of ten children, three subjects with
+first-CA marks, a week's timetable with a double period, a combined lesson and
+a free period, two weeks of registers, and a term's fees: each class's bill
+applied, one line added since that nobody has been charged yet, a standing
+concession and a revoked one, payments, a discount and one family in credit.
+One login per role — administrator, principal, vice principal (academic),
+teacher, bursar and parent (of two children) — and two more teachers, so each
+subject has its own. Everybody's password is the one printed at the end.
 
 **Refuses unless `DEBUG` is on.** Fake children with a published password have
 no business in a real deployment, and `DEBUG` is the one switch this project
@@ -19,7 +23,8 @@ where the demo is served, not something this command knows about.
 """
 
 import random
-from datetime import date, timedelta
+import uuid
+from datetime import date, time, timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -37,11 +42,14 @@ from accounts.services import (
     link_guardian,
 )
 from attendance import services as attendance
+from fees import billing
 from fees import services as fees
 from fees.models import KOBO_PER_NAIRA, PaymentMethod
 from gradebook import services as gradebook
 from gradebook.models import Assessment, Subject
 from schools.models import Domain, School
+from timetable import services as timetable
+from timetable.models import Weekday
 
 SCHOOLS = (
     ("sunrise-demo", "Sunrise Demo Academy"),
@@ -57,6 +65,13 @@ STAFF = (
     ("bursar", Role.BURSAR, "Bursar"),
 )
 
+#: Two more teachers, so the timetable has a teacher per subject: the one in
+#: `STAFF` teaches mathematics, these the other two. `<school prefix>.<key>`.
+MORE_TEACHERS = (
+    ("english", "English Teacher"),
+    ("science", "Science Teacher"),
+)
+
 FIRST_NAMES = (
     "Ada", "Bayo", "Chidi", "Dayo", "Efe", "Funmi", "Gbenga", "Halima", "Ife", "Jide",
     "Kemi", "Lola", "Musa", "Ngozi", "Obi", "Pelumi", "Rukky", "Segun", "Tolu", "Uche",
@@ -65,6 +80,7 @@ SURNAMES = ("Adeyemi", "Bello", "Chukwu", "Danjuma", "Eze", "Falana", "Garba", "
 
 SUBJECTS = (("Mathematics", "MTH"), ("English Language", "ENG"), ("Basic Science", "BSC"))
 TUITION = 150_000 * KOBO_PER_NAIRA
+LEVY = 15_000 * KOBO_PER_NAIRA
 DEFAULT_PASSWORD = "demo-pass-2026"
 
 
@@ -127,6 +143,10 @@ class Command(BaseCommand):
                 key: grant_membership(login(key, f"{label} {name.split()[0]}"), school, role)
                 for key, role, label in STAFF
             }
+            teachers = {
+                key: grant_membership(login(key, f"{label} {name.split()[0]}"), school, Role.TEACHER)
+                for key, label in MORE_TEACHERS
+            }
             children = []
             for i in range(20):
                 user = login(f"s{i + 1:02d}", f"{FIRST_NAMES[i]} {rng.choice(SURNAMES)}")
@@ -140,13 +160,14 @@ class Command(BaseCommand):
             activate_guardian_links(parent, school)
 
         logins = [(name, u.user.username, label) for (key, _, label), u in zip(STAFF, staff.values())]
+        logins += [(name, u.user.username, label) for (key, label), u in zip(MORE_TEACHERS, teachers.values())]
         logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[1].name})"))
 
         with schema_context(school.schema_name), transaction.atomic():
-            self._term_data(staff, children, rng)
+            self._term_data(staff, teachers, children, rng)
         return logins
 
-    def _term_data(self, staff, children, rng):
+    def _term_data(self, staff, teachers, children, rng):
         today = timezone.localdate()
         # The term is the one running today, so every "current term" screen has
         # something to show; the previous one exists so a copy has a source.
@@ -159,6 +180,12 @@ class Command(BaseCommand):
             f"{starts.year}/{starts.year + 1}", TermName.FIRST, starts, starts + timedelta(weeks=12),
         )
         academics.set_current_term(term)
+        # Next term, empty, so "copy last term" on the timetable has somewhere
+        # to copy to.
+        academics.create_term(
+            f"{starts.year}/{starts.year + 1}", TermName.SECOND,
+            starts + timedelta(weeks=14), starts + timedelta(weeks=26),
+        )
 
         groups = [ClassGroup.objects.create(name=n, level=1) for n in ("JSS 1A", "JSS 1B")]
         placed = {groups[0]: children[:10], groups[1]: children[10:]}
@@ -168,12 +195,16 @@ class Command(BaseCommand):
         academics.assign_class_teacher(groups[0], term, staff["teacher"])
 
         # Marks: a first CA in every subject, and an exam nobody has sat yet.
+        subjects = []
         for position, (subject_name, code) in enumerate(SUBJECTS):
             subject = Subject.objects.create(name=subject_name, code=code)
+            subjects.append(subject)
             ca = Assessment.objects.create(term=term, subject=subject, name="First CA", max_score=20, position=0)
             Assessment.objects.create(term=term, subject=subject, name="Exam", max_score=60, position=1)
             for child in children:
                 gradebook.set_score(ca, child, rng.randint(6, 20), by=staff["teacher"].user)
+
+        self._timetable(term, groups, subjects, staff, teachers)
 
         # Two weeks of registers. Children 3 and 14 are away often enough to be
         # on the principal's absence list.
@@ -184,14 +215,34 @@ class Command(BaseCommand):
                         or rng.random() < 0.05]
                 attendance.take_register(group, term, on=day, absent_ids=away, by=staff["teacher"].user)
 
-        # The term's fees: everybody charged; a spread of payments; one discount
-        # with its reason; and one family that overpaid, so "In credit" shows.
+        # The term's fees. Two concessions first — child 5 a staff child, whose
+        # standing concession each bill gives; child 8 a bursary since revoked,
+        # which the bill does not give and the account still shows, with who
+        # revoked it and why. Then each class's bill, applied as the bursar's
+        # "Charge the class" applies it, so every charge names its line; then a
+        # line added to JSS 1B's bill since, which nobody has been charged, so
+        # pressing "Charge the class" there has something to do. Then a spread
+        # of payments, one discount given by hand, and one family that overpaid,
+        # so "In credit" shows.
         bursar = staff["bursar"].user
+        billing.grant_concession(
+            children[4], TUITION, reason="Staff child", form_key=uuid.uuid4(), by=bursar
+        )
+        bursary, _ = billing.grant_concession(
+            children[7], 30_000 * KOBO_PER_NAIRA, reason="Bursary 2025", form_key=uuid.uuid4(), by=bursar
+        )
+        billing.revoke_concession(bursary, reason="The bursary ended with last session", by=bursar)
+        for group in groups:
+            bill = billing.open_bill(group, term)
+            billing.add_line(bill, "Tuition", TUITION)
+            billing.add_line(bill, "PTA levy", LEVY)
+            billing.apply(bill, by=bursar)
+        billing.add_line(billing.bill_for(groups[1], term), "Excursion", 5_000 * KOBO_PER_NAIRA)
+
         methods = [PaymentMethod.CASH, PaymentMethod.BANK_TRANSFER, PaymentMethod.POS, PaymentMethod.CHEQUE]
         for i, child in enumerate(children):
-            fees.charge(child, term, TUITION, narration="First term tuition", recorded_by=bursar)
-            if i % 3 == 2:
-                continue  # owes the lot
+            if i % 3 == 2 or i == 4:
+                continue  # owes the lot, or (the staff child) only the levy
             method = methods[i % len(methods)]
             amount = TUITION if i % 3 == 0 else TUITION // 2
             if i == 0:
@@ -204,3 +255,39 @@ class Command(BaseCommand):
                 recorded_by=bursar,
             )
         fees.discount(children[1], term, 25_000 * KOBO_PER_NAIRA, narration="Second child in the school", recorded_by=bursar)
+
+    def _timetable(self, term, groups, subjects, staff, teachers):
+        """Five periods and a break, and this term's week for both classes.
+
+        One teacher per subject, and the two classes take the subjects out of
+        step, so no teacher is in two rooms at once — except Friday's last
+        period, one Basic Science lesson for both classes together, which the
+        clash rule allows because it is the same subject. JSS 1A has a double
+        period of mathematics on Tuesday (two slots); JSS 1B is free on
+        Wednesday's last period (no slot). `set_lesson()` refuses a clash, so a
+        mistake here fails the seed rather than the demo.
+        """
+        bell = [
+            timetable.add_period(time(8, 0), time(8, 40), "Period 1"),
+            timetable.add_period(time(8, 40), time(9, 20), "Period 2"),
+            timetable.add_period(time(9, 20), time(10, 0), "Period 3"),
+            timetable.add_period(time(10, 20), time(11, 0), "Period 4"),
+            timetable.add_period(time(11, 0), time(11, 40), "Period 5"),
+        ]
+        maths, english, science = subjects
+        teacher_of = {maths: staff["teacher"], english: teachers["english"], science: teachers["science"]}
+        junior, other = groups
+        last = len(bell) - 1
+        for day in Weekday:
+            for p, period in enumerate(bell):
+                for offset, group in enumerate(groups):
+                    subject = subjects[(day + p + offset) % len(subjects)]
+                    if day == Weekday.FRIDAY and p == last:
+                        subject = science
+                    elif day == Weekday.TUESDAY and p == 2 and group is junior:
+                        subject = maths
+                    elif day == Weekday.WEDNESDAY and p == last and group is other:
+                        continue
+                    timetable.set_lesson(
+                        term, group, day, period, subject, teacher_of[subject], by=staff["admin"].user
+                    )
