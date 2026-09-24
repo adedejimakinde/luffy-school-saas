@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applySave, fromSheet, fromWhere, htmlFor, mount } from "../../static/marking/app.js";
+import { applySave, dismiss, fromSheet, fromWhere, htmlFor, mount } from "../../static/marking/app.js";
 import { REFUSAL, SAVE, refusalFor, provesASession } from "../../static/marking/api.js";
 import * as states from "../../static/marking/states.js";
 import { forgetToken } from "../../static/web/http.js";
@@ -168,15 +168,143 @@ test("a conflict whose current is null says cleared, not a new number", () => {
 });
 
 test("a rejected number is kept so it can be corrected", () => {
-  // Clearing it would throw away the only copy of what the teacher typed.
+  // Clearing it would throw away the only copy of what the teacher typed. This
+  // test used to assert only the sentence, and the box was in fact redrawn with
+  // the server's value — the claim in its name was not what it checked.
   const after = applySave(state(), 1, {
     ok: false,
     outcome: SAVE.INVALID,
     body: { detail: "A mark cannot be more than 20." },
-  });
+  }, 25);
 
-  assert.match(htmlFor(after), /cannot be more than 20/);
+  const html = htmlFor(after);
+  assert.match(html, /cannot be more than 20/);
+  assert.match(html, /id="mark-1"[^>]*value="25"/);
   assert.equal(after.locked, false, "an invalid number closed the sheet");
+});
+
+// -- no refused value is lost (docs/offline.md, requirement 8; slice S2) -----
+
+const CURRENT = { student_membership_id: 2, value: 17, version: 5, max_score: 20, total: { scored: 17, available: 20, marked: 1 } };
+
+test("a conflict keeps the teacher's number in the note, and the box is theirs", () => {
+  const after = applySave(state(), 2, {
+    ok: false,
+    outcome: SAVE.CONFLICT,
+    body: { detail: "moved", current: CURRENT },
+  }, 19);
+
+  const html = htmlFor(after);
+  // The box is the other person's mark and version, so overwriting is deliberate.
+  assert.match(html, /id="mark-2"[^>]*value="17"[^>]*data-version="5"/);
+  assert.match(html, /Saved as 17 by somebody else\. You entered 19\./);
+  assert.match(html, /data-action="dismiss" data-child="2"/);
+});
+
+test("a locked sheet keeps the number that did not land", () => {
+  const after = applySave(state(), 2, {
+    ok: false,
+    outcome: SAVE.LOCKED,
+    body: { detail: "JSS 1A's results are submitted." },
+  }, 19);
+
+  const html = htmlFor(after);
+  assert.equal(after.locked, true);
+  assert.match(html, /Not saved\. You entered 19\./);
+  assert.match(html, /data-action="dismiss" data-child="2"/);
+  assert.doesNotMatch(html, /data-action="retry"/, "a locked sheet offers no retry");
+});
+
+test("a refusal of authority keeps the sheet and the number, and closes the boxes", () => {
+  // It used to replace the whole sheet with "you cannot enter marks here".
+  const after = applySave(state(), 2, {
+    ok: false,
+    refusal: REFUSAL.NOT_A_MARKER,
+    body: { detail: "Kemi Bello cannot enter marks at St Mary's." },
+  }, 19);
+
+  const html = htmlFor(after);
+  assert.equal(after.step, "sheet");
+  assert.match(html, /cannot enter marks at St Mary/);
+  assert.match(html, /Not saved\. You entered 19\./);
+  assert.match(html, /id="mark-1"[^>]* disabled/);
+});
+
+test("a failed connection keeps the number in the box, with Try again", () => {
+  const after = applySave(state(), 2, {
+    ok: false,
+    refusal: REFUSAL.BROKEN,
+    body: { detail: "TypeError: Failed to fetch" },
+  }, 19);
+
+  const html = htmlFor(after);
+  assert.equal(after.step, "sheet", "the sheet was replaced and the mark went with it");
+  assert.match(html, /id="mark-2"[^>]*value="19"/);
+  assert.match(html, /the connection failed/);
+  assert.match(html, /data-action="retry" data-child="2"/);
+});
+
+test("a lapsed session keeps the sheet, says how to get back, and keeps the number", () => {
+  const after = applySave(state(), 2, {
+    ok: false,
+    refusal: REFUSAL.EXPIRED,
+    body: { code: "session_expired" },
+  }, 19);
+
+  const html = htmlFor(after, { portal: "portal.example.test" });
+  assert.equal(after.step, "sheet");
+  assert.match(html, /Your session has ended\./);
+  // A new tab, so this one — and the marks in it — is still here afterwards.
+  assert.match(html, /href="\/\/portal\.example\.test\/staff-sign-in\/" target="_blank"/);
+  assert.match(html, /id="mark-2"[^>]*value="19"/);
+  assert.match(html, /data-action="retry" data-child="2"/);
+});
+
+test("dismissing is the only thing that forgets a kept number", () => {
+  const held = applySave(state(), 1, {
+    ok: false,
+    outcome: SAVE.INVALID,
+    body: { detail: "A mark cannot be more than 20." },
+  }, 25);
+
+  const after = dismiss(held, 1);
+  const html = htmlFor(after);
+  assert.doesNotMatch(html, /value="25"/);
+  assert.doesNotMatch(html, /cannot be more than 20/);
+  assert.doesNotMatch(html, /data-action="dismiss"/);
+});
+
+test("Try again sends the kept number with the version the cell was drawn with", async () => {
+  forgetToken();
+  const sent = [];
+  let connected = false;
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: async (url, options = {}) => {
+      if (options.method === "PUT") {
+        if (!connected) throw new TypeError("Failed to fetch");
+        sent.push(JSON.parse(options.body));
+        return { status: 200, json: async () => ({ ...SHEET.rows[1], value: 19, version: 5 }) };
+      }
+      return serve([
+        ["/api/gradebook/where/", { status: 200, body: WHERE }],
+        ["/sheet/", { status: 200, body: SHEET }],
+      ])(url, options);
+    },
+  });
+  await root.click({ "data-action": "pick-assessment", "data-assessment": "3" });
+  await root.click({ "data-action": "pick-class", "data-class": "11" });
+
+  await root.blur({ "data-child": "2", "data-version": "4" }, "19");
+  assert.match(root.innerHTML, /id="mark-2"[^>]*value="19"/, "the failed mark left the box");
+  assert.match(root.innerHTML, /the connection failed/);
+
+  connected = true;
+  await root.click({ "data-action": "retry", "data-child": "2" });
+
+  assert.deepEqual(sent, [{ value: 19, expected_version: 4 }]);
+  assert.doesNotMatch(root.innerHTML, /the connection failed/);
+  assert.doesNotMatch(root.innerHTML, /data-action="retry"/);
 });
 
 test("a save that worked clears the note it is replacing", () => {

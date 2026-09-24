@@ -93,6 +93,14 @@ h1 { font-size: 1.35rem; margin: 0 0 8px; }
 .row.invalid { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding-left: 8px; }
 .row.invalid .note { color: var(--invalid); }
 
+/* A mark that did not land and is kept until the teacher saves or dismisses it
+   (docs/offline.md, D5). Colour, a rule and a sentence, never colour alone. */
+.row.unsaved { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding-left: 8px; }
+.row.unsaved .note { color: var(--invalid); }
+.row button.retry,
+.row button.dismiss { font: inherit; min-height: 44px; margin-right: 8px; }
+.session-ended { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding: 8px 12px; margin: 0 0 12px; }
+
 button.back, button.signout {
   font: inherit;
   min-height: 48px;

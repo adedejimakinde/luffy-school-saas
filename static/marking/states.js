@@ -96,6 +96,9 @@ export function sheet({
   locked_reason = "",
   rows = [],
   notes = {},
+  kept = {},
+  session = null,
+  portal = "",
 } = {}) {
   return [
     '<section class="state state-sheet" data-state="sheet">',
@@ -106,8 +109,18 @@ export function sheet({
       ? `<p class="locked" role="status">${esc(locked_reason) ||
           "This sheet has left draft, so its marks cannot be changed here."}</p>`
       : "",
+    session ? sessionEndedHere({ portal, expired: session === "expired" }) : "",
     '<ul class="roster">',
-    rows.map((row) => cell(row, { locked, max_score, note: notes[row.student_membership_id] })).join(""),
+    rows
+      .map((row) =>
+        cell(row, {
+          locked,
+          max_score,
+          note: notes[row.student_membership_id],
+          held: kept[row.student_membership_id],
+        }),
+      )
+      .join(""),
     "</ul>",
     '<button type="button" class="back" data-action="back">Another paper</button>',
     signOutButton(),
@@ -121,10 +134,17 @@ export function sheet({
  * `data-version` is what the next save sends as `expected_version`, and it is
  * deliberately empty rather than `0` for an unmarked child: null is what tells
  * `set_score()` this must be an insert, and `0` would be a version claim.
+ *
+ * `held` is a mark the teacher typed that did not land (`app.js`, `kept`). When
+ * typing again is the remedy it is what the box shows, so the teacher's number
+ * is still there to correct or resend. Otherwise the note carries it and the box
+ * shows the server's. Either way there is a **Dismiss**, because only the
+ * teacher can decide their number is no longer wanted.
  */
-function cell(row, { locked, max_score, note }) {
+function cell(row, { locked, max_score, note, held }) {
   const id = row.student_membership_id;
-  const value = row.value === null || row.value === undefined ? "" : row.value;
+  const shown = held && held.inBox ? held.value : row.value;
+  const value = shown === null || shown === undefined ? "" : shown;
   return [
     `<li class="row${note ? ` ${esc(note.kind)}` : ""}">`,
     `<label for="mark-${esc(id)}">${esc(row.student) || "(no name on record)"}</label>`,
@@ -137,7 +157,36 @@ function cell(row, { locked, max_score, note }) {
     `<span class="total">${numberOrBlank(row.total && row.total.scored)}`,
     `/${numberOrBlank(row.total && row.total.available)}</span>`,
     note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
+    held && held.retry && !locked
+      ? `<button type="button" class="retry" data-action="retry" data-child="${esc(id)}">Try again</button>`
+      : "",
+    held
+      ? `<button type="button" class="dismiss" data-action="dismiss" data-child="${esc(id)}">Dismiss</button>`
+      : "",
     "</li>",
+  ].join("");
+}
+
+/**
+ * The session lapsed while the sheet was open, and the sheet stays.
+ *
+ * It used to be replaced by the signed-out screen, and every mark not yet saved
+ * went with it. Now the marks stay in their boxes. The way back opens in a new
+ * tab, so this one, and what is typed in it, is still here to press Try again
+ * on once the teacher has signed in.
+ */
+function sessionEndedHere({ portal = "", expired = false } = {}) {
+  const link = portal
+    ? `<a href="//${esc(portal)}/staff-sign-in/" target="_blank" rel="noopener">Sign in again</a> ` +
+      "in a new tab, then come back here and press Try again on each mark."
+    : "Sign in again in a new tab, then come back here and press Try again on each mark.";
+  return [
+    '<div class="session-ended" role="alert">',
+    `<p><strong>${expired ? "Your session has ended." : "You are signed out."}</strong> `,
+    "Marks you had already saved were saved as you entered them. ",
+    "The ones below marked <em>Not saved</em> are still on this page.</p>",
+    `<p>${link}</p>`,
+    "</div>",
   ].join("");
 }
 
