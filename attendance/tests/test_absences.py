@@ -21,7 +21,7 @@ from django.test.utils import CaptureQueriesContext
 
 from academics import services as academics
 from academics.models import ClassGroup, Term
-from accounts.models import Role, User
+from accounts.models import Membership, MembershipStatus, Role, User
 from accounts.services import enroll_student, grant_membership
 from attendance import services
 from attendance.models import AbsenceSettings
@@ -310,6 +310,35 @@ class WhoMayReadItTests(AbsenceSetUp):
                 self.assertEqual(answer.status_code, 404)
                 self.assertEqual(answer.content, missing.content)
         self.assertEqual(self.read(self.head.user).json()["threshold_percent"], 10)
+
+    def test_a_principal_membership_that_grants_no_access_reads_nothing(self):
+        """`may_see()` counts only memberships that grant access. The teacher is
+        active at St Mary's, so the middleware lets her through to the route,
+        and she also holds a principal membership there — suspended, then
+        invited. Neither opens the list: she gets its flat 404.
+
+        Two schools, because the refusal must come from this school's
+        membership and not from the login: at Grace the same login is an
+        active principal, and reads Grace's list.
+
+        CONTROL 8: `may_see()` counting every membership rather than
+        `roles_at()`'s access-scoped ones makes this red.
+        """
+        Domain.objects.create(tenant=self.grace, domain=GRACE_HOST, is_primary=True)
+        grant_membership(self.teacher.user, self.grace, Role.PRINCIPAL)
+        dormant = grant_membership(self.teacher.user, self.stmarys, Role.PRINCIPAL)
+        missing = self.read(self.head.user, term_id=10**9)
+        self.assertEqual(missing.status_code, 404, "the fixture's refusal moved")
+
+        for status in (MembershipStatus.SUSPENDED, MembershipStatus.INVITED):
+            with self.subTest(status=status):
+                Membership.objects.filter(pk=dormant.pk).update(status=status)
+
+                answer = self.read(self.teacher.user)
+
+                self.assertEqual(answer.status_code, 404)
+                self.assertEqual(answer.content, missing.content)
+        self.assertEqual(self.read(self.teacher.user, host=GRACE_HOST).status_code, 200)
 
     def test_there_is_no_list_on_the_portal(self):
         self.assertEqual(self.read(self.head.user, host="testserver").status_code, 404)
