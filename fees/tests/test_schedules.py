@@ -33,8 +33,9 @@ from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
 from accounts.models import Membership, MembershipStatus, User
 from accounts.services import enroll_student
-from fees import schedules, services
+from fees import billing, schedules, services
 from fees.models import (
+    ConcessionIsFixed,
     FeeConcession,
     LedgerIsAppendOnly,
     FeeEntryKind,
@@ -180,14 +181,18 @@ class ApplyTests(BillingSetUp):
             self.assertEqual(posted.amount_kobo, TUITION)
             self.assertEqual(self.balance_of(self.ada), TUITION + LEVY)
 
-    def test_a_mid_term_move_charges_twice_and_waives_once(self):
-        """The interaction `fees.md` now states, asserted rather than described.
+    def test_a_mid_term_move_is_billed_once_and_waived_once(self):
+        """B2, decided 2026-09-24: a bill does not charge a child already
+        charged for the term.
 
         `ClassPlacement` rewrites on a move, so the child leaves JSS 1A's roster
-        — but JSS 1A's charge is a posted fact and stays. The concession is keyed
-        on the term, so the second bill does not waive again. The family owes two
-        bills less one waiver until a person reverses the one they are no longer
-        sitting for, and that is the sentence a bursar has to be able to act on.
+        for JSS 3A's — but JSS 1A's charges are posted facts and stay. JSS 3A's
+        bill used to charge them again, deliberately, until a person reversed
+        one; now it skips them and says who (`billed_elsewhere`). The concession
+        is keyed on the term, so the second bill does not waive again either.
+
+        CONTROL B2-1: `apply_to_class()` without the billed-elsewhere skip makes
+        this red — JSS 3A's bill charges Ada a second tuition.
         """
         with connected_to(self.stmarys):
             FeeConcession.objects.create(
@@ -210,21 +215,22 @@ class ApplyTests(BillingSetUp):
 
             second = schedules.apply_to_class(their_bill, by=self.bursar)
 
-            # Charged again by the new bill...
-            self.assertEqual(second.charges_posted, 1)
+            # Not charged by the new bill, and named as the reason...
+            self.assertEqual((second.charges_posted, second.charges_skipped), (0, 0))
+            self.assertEqual(second.billed_elsewhere, (self.ada.pk,))
+            self.assertEqual(second.students, 0)
+            self.assertIn("1 already billed by another class's bill", str(second))
             # ...and not waived again, because the waiver is a fact about the term.
             self.assertEqual(second.discounts_posted, 0)
             self.assertEqual(second.discounts_skipped, 1)
 
-            # The old class's charge is still standing. Nothing recomputed it away.
-            self.assertEqual(
-                self.balance_of(self.ada), TUITION + LEVY + TUITION - TUITION
-            )
+            # The old class's charges are still standing, once.
+            self.assertEqual(self.balance_of(self.ada), TUITION + LEVY - TUITION)
             self.assertEqual(
                 FeeLedgerEntry.objects.filter(
                     student_membership_id=self.ada.pk, kind=FeeEntryKind.CHARGE
                 ).count(),
-                3,
+                2,
             )
 
     def test_the_other_school_is_untouched(self):
@@ -257,6 +263,110 @@ class ApplyTests(BillingSetUp):
                 self.assertEqual(entry.recorded_by_id, self.bursar.pk)
                 self.assertEqual(entry.effective_on, date(2025, 9, 15))
                 self.assertIsNotNone(entry.source_line_id)
+
+
+class OneBillPerChildPerTermTests(BillingSetUp):
+    """B2, decided 2026-09-24: applying a bill must not charge a child already
+    charged for that term. What counts as "already charged", pinned from each
+    side, so the rule cannot quietly widen into refusing the charges it must
+    still post.
+
+    Ada moves from JSS 1A to JSS 3A after JSS 1A's bill has charged her.
+    """
+
+    def move_ada_after_billing(self):
+        self.apply()
+        senior = ClassGroup.objects.create(name="JSS 3A", level=3)
+        academics.move_student(senior, self.term(), self.ada)
+        bill = FeeSchedule.objects.create(term=self.term(), class_group=senior)
+        FeeScheduleLine.objects.create(schedule=bill, description="Tuition", amount_kobo=TUITION)
+        return bill
+
+    def ada_charges(self):
+        return FeeLedgerEntry.objects.filter(
+            student_membership_id=self.ada.pk, kind=FeeEntryKind.CHARGE
+        )
+
+    def test_a_child_whose_other_bill_was_undone_is_billed_here(self):
+        """Every charge from JSS 1A's bill reversed: nothing of it stands, so
+        JSS 3A's bill is the one that charges them. The way a bursar moves a
+        child from one bill to the other."""
+        with connected_to(self.stmarys):
+            bill = self.move_ada_after_billing()
+            for charge in self.ada_charges():
+                services.undo(charge, reason="Moved to JSS 3A", recorded_by=self.bursar)
+
+            summary = schedules.apply_to_class(bill, by=self.bursar)
+
+            self.assertEqual((summary.charges_posted, summary.billed_elsewhere), (1, ()))
+            self.assertEqual(self.balance_of(self.ada), TUITION)
+
+    def test_one_charge_still_standing_keeps_the_child_on_the_other_bill(self):
+        """Half undone is not undone. The levy reversed and the tuition left
+        standing, Ada is still JSS 1A's bill's for this term."""
+        with connected_to(self.stmarys):
+            bill = self.move_ada_after_billing()
+            services.undo(
+                self.ada_charges().get(narration="PTA levy"),
+                reason="Levy waived",
+                recorded_by=self.bursar,
+            )
+
+            summary = schedules.apply_to_class(bill, by=self.bursar)
+
+            self.assertEqual((summary.charges_posted, summary.billed_elsewhere), (0, (self.ada.pk,)))
+
+    def test_a_charge_posted_by_hand_does_not_count(self):
+        """A charge that names no line is not a bill — a broken window, a lost
+        book. The term's bill still charges them.
+
+        CONTROL B2-4: the billed-elsewhere read without `source_line__isnull=False`
+        makes this red."""
+        with connected_to(self.stmarys), transaction.atomic():
+            services.charge(self.ada, self.term(), 5_000 * KOBO_PER_NAIRA, narration="Broken window")
+
+            summary = self.apply()
+
+            self.assertEqual(summary.billed_elsewhere, ())
+            self.assertEqual(summary.charges_posted, 4)
+
+    def test_last_terms_bill_does_not_count(self):
+        """Charged by JSS 1A's first-term bill, and then billed for the second
+        term: a new term is a new bill.
+
+        CONTROL B2-2: the billed-elsewhere read without `term=` makes this red."""
+        with connected_to(self.stmarys):
+            self.apply()
+            second = Term.objects.create(
+                session="2025/2026",
+                name=TermName.SECOND,
+                starts_on=date(2026, 1, 5),
+                ends_on=date(2026, 4, 2),
+            )
+            group = ClassGroup.objects.get(pk=self.group_id)
+            academics.place_student(group, second, self.ada)
+            bill = FeeSchedule.objects.create(term=second, class_group=group)
+            FeeScheduleLine.objects.create(schedule=bill, description="Tuition", amount_kobo=TUITION)
+
+            summary = schedules.apply_to_class(bill, by=self.bursar)
+
+            self.assertEqual((summary.charges_posted, summary.billed_elsewhere), (1, ()))
+
+    def test_this_bills_own_charges_are_not_another_bills(self):
+        """A line added after the first run charges everyone that line: their
+        standing charges are this bill's, so they are not "elsewhere".
+
+        CONTROL B2-3: the read without `.exclude(source_line__schedule_id=…)`
+        makes this red, and `IdempotencyTests` with it."""
+        with connected_to(self.stmarys):
+            self.apply()
+            FeeScheduleLine.objects.create(
+                schedule=self.schedule(), description="Uniform", amount_kobo=LEVY, position=3
+            )
+
+            summary = self.apply()
+
+            self.assertEqual((summary.charges_posted, summary.billed_elsewhere), (2, ()))
 
 
 class IdempotencyTests(BillingSetUp):
@@ -452,11 +562,11 @@ class ConcessionTests(BillingSetUp):
             self.assertEqual(second.discounts_skipped, 1)
             self.assertEqual(self.balance_of(self.ada), LEVY)
 
-    def test_an_inactive_concession_posts_nothing(self):
+    def test_a_revoked_concession_posts_nothing(self):
+        """Issue #75: revoked is a row, not a flag — and the bill reads it."""
         with connected_to(self.stmarys):
             concession = self._grant(self.ada, TUITION, "Staff child")
-            concession.is_active = False
-            concession.save(update_fields=["is_active"])
+            billing.revoke_concession(concession, reason="Parent left the staff", by=self.bursar)
 
             summary = self.apply()
 
@@ -925,15 +1035,19 @@ class ConcessionRaceTests(BillingSetUp):
         the caller's language and before the write, but it is not the one the
         code said it was. The FK is the backstop behind it and is asserted
         directly by the test below, where it is actually reachable.
+
+        **Staged as an id nothing has**, since #75: a concession can no longer
+        be deleted (`fees/migrations/0006`'s trigger), so "the row this entry
+        claims to come from is gone" is now a row that never existed. The
+        claim under test is the same one.
         """
         with connected_to(self.stmarys):
-            concession = FeeConcession.objects.create(
+            stale = FeeConcession(
+                pk=987654321,
                 student_membership_id=self.ada.pk,
                 amount_kobo=LEVY,
                 reason="Staff child",
             )
-            stale = FeeConcession.objects.get(pk=concession.pk)
-            FeeConcession.objects.filter(pk=concession.pk).delete()
 
             with self.assertRaises(ValidationError) as raised:
                 with transaction.atomic():
@@ -1380,7 +1494,11 @@ class DeletabilityTests(BillingSetUp):
             self.assertFalse(FeeScheduleLine.objects.filter(schedule_id=spare.pk).exists())
 
     def test_a_concession_that_has_discounted_a_family_cannot_be_deleted(self):
-        """Which is why it has `is_active` rather than being deleted."""
+        """No concession can be, since #75 — `save()`/`delete()` refuse and a
+        trigger refuses below them (`test_billing`). Behind both, the entries
+        it produced still `PROTECT` it, which is what a queryset delete meets
+        first: Django's collector refuses before any DELETE reaches the
+        trigger."""
         with connected_to(self.stmarys):
             concession = FeeConcession.objects.create(
                 student_membership_id=self.ada.pk,
@@ -1388,8 +1506,10 @@ class DeletabilityTests(BillingSetUp):
                 reason="Staff child",
             )
             self.apply()
-            with self.assertRaises(ProtectedError):
+            with self.assertRaises(ConcessionIsFixed):
                 concession.delete()
+            with self.assertRaises(ProtectedError):
+                FeeConcession.objects.filter(pk=concession.pk).delete()
 
 
 class RefundTests(BillingSetUp):

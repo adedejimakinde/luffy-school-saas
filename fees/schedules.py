@@ -28,14 +28,32 @@ instant both pass an unlocked skip-check before either commits, which is
 `reverse_entry()`'s race exactly. `select_for_update()` on the schedule
 serialises applications of *that bill* and nothing else.
 
-**And "nothing else" is a real limit, not a boast.** The charge key is a line,
+**And "nothing else" was a real limit, not a boast.** The charge key is a line,
 and a line belongs to one bill, so every charge collision is inside the bill this
 lock holds. The *concession* key spans the term, so two runs of two different
-bills can collide on it — see the discount loop at the foot of
-`apply_to_class()`, which is the only place this module treats a database refusal
-as an outcome rather than a bug. It no longer *catches* one: `services._discount()`
-asks Postgres to decline the duplicate instead of refusing it, because catching
-needs a savepoint to roll back to and a savepoint per concession is issue #85.
+bills could collide on it. Since B2 they cannot meet through this function —
+it takes the term's row too, below — but the discount loop at the foot of
+`apply_to_class()` still treats that collision as an outcome rather than a bug,
+because the lock binds only the writers that take it. It does not *catch* one:
+`services._discount()` asks Postgres to decline the duplicate instead of
+refusing it, because catching needs a savepoint to roll back to and a savepoint
+per concession is issue #85.
+
+**One class's bill per child per term.** Decided 2026-09-24 (B2): applying a
+bill must not charge a child who is already charged for that term. A re-run of
+the same bill never did — the skip below and
+`a_schedule_line_charges_a_child_once` hold that — but a child who moved class
+mid-term used to be charged by both bills, deliberately, until a person
+reversed one. Now the second bill skips them and counts them
+(`AppliedSummary.billed_elsewhere`): a child with a standing charge from
+another class's bill this term is that bill's, until those charges are undone.
+Undone — every one reversed — they are billable here again.
+
+That check reads other bills' charges, which the schedule lock does not cover:
+two bursars billing JSS 1A and JSS 3A at once could each read the child as
+unbilled. So an application also takes the term's row, `FOR NO KEY UPDATE`,
+which serialises every bill in the term and nothing else — no `FOR KEY SHARE`
+an entry's foreign key takes on the term waits on it.
 
 **One transaction for the whole class**, because a half-applied bill is worse
 than no bill: nobody can tell by looking whether it finished, and the repair is
@@ -56,7 +74,7 @@ from dataclasses import dataclass
 
 from django.db import transaction
 
-from academics.models import ClassPlacement
+from academics.models import ClassPlacement, Term
 from accounts.models import Membership
 
 from . import services
@@ -95,6 +113,8 @@ class AppliedSummary:
     number for what was posted.
     """
 
+    #: Children this bill charged, or would have if they had not been charged
+    #: already by this bill: on the roster, enrolled, and not another bill's.
     students: int
     #: On the roster but not billed, their membership having ended. Counted so
     #: that the skip is reported rather than silent — see `apply_to_class()`.
@@ -106,6 +126,10 @@ class AppliedSummary:
     discounts_posted: int
     discounts_skipped: int
     discounted_kobo: int
+    #: Membership ids on the roster that another class's bill has already
+    #: charged this term, and so were not charged by this one. Ids rather than
+    #: a count so the screen can say who; sorted, like the roster.
+    billed_elsewhere: tuple = ()
 
     def __str__(self):
         left = (
@@ -113,10 +137,15 @@ class AppliedSummary:
             if self.students_skipped
             else ""
         )
+        elsewhere = (
+            f"; {len(self.billed_elsewhere)} already billed by another class's bill"
+            if self.billed_elsewhere
+            else ""
+        )
         return (
             f"{self.charges_posted} charged, {self.charges_skipped} skipped; "
             f"{self.discounts_posted} discounts, {self.discounts_skipped} skipped"
-            f"{left}"
+            f"{left}{elsewhere}"
         )
 
 
@@ -149,7 +178,10 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
             f"anything. Add what the class is being billed for first."
         )
 
-    term = locked.term
+    # Every bill in the term, after this one — see the module docstring.
+    # `.get()` by pk, which clears ordering, so it joins nothing; `no_key`, so
+    # it blocks no foreign key.
+    term = Term.objects.select_for_update(no_key=True).get(pk=locked.term_id)
     class_group = locked.class_group
 
     # Read once, reused by both halves. `student_ids()` returns the ids in the
@@ -225,6 +257,27 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     students_skipped = len(student_ids) - len(billable_ids)
     student_ids = billable_ids
 
+    # **A child already charged for this term by another class's bill is that
+    # bill's**, and this one does not charge them — the B2 decision in the
+    # module docstring. "Already charged" is a schedule charge in this term,
+    # from a line that is not this bill's, that nobody has reversed: a charge
+    # posted by hand names no line and does not count, and a bill's charges
+    # all undone leave the child billable here. Read after both locks, so no
+    # other bill in the term is mid-run.
+    billed_elsewhere = set(
+        FeeLedgerEntry.objects.filter(
+            kind=FeeEntryKind.CHARGE,
+            term=term,
+            source_line__isnull=False,
+            student_membership_id__in=student_ids,
+            reversed_by__isnull=True,
+        )
+        .exclude(source_line__schedule_id=locked.pk)
+        .order_by()
+        .values_list("student_membership_id", flat=True)
+    )
+    charged_here = [sid for sid in student_ids if sid not in billed_elsewhere]
+
     # Both skip-sets in one query each, and both are read *after* the lock, so a
     # concurrent application of this bill has either not started or has finished.
     # `order_by()` with no arguments on both: these collapse into a `set()`, and
@@ -234,16 +287,17 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         FeeLedgerEntry.objects.filter(
             kind=FeeEntryKind.CHARGE,
             source_line__in=lines,
-            student_membership_id__in=student_ids,
+            student_membership_id__in=charged_here,
         )
         .order_by()
         .values_list("student_membership_id", "source_line_id")
     )
 
     # **`order_by()` explicitly, because this one carries a concurrency
-    # guarantee.** Two runs of two *different* schedules in one term can both
+    # guarantee.** Two runs of two *different* schedules in one term could both
     # reach the same `(child, term, concession)` row — that is the collision the
-    # foot of this function skips. If they reach *several* such rows in
+    # foot of this function skips — and, since B2, can only by a writer that
+    # does not take the term lock above. If they reach *several* such rows in
     # different orders, Postgres does not hand back a unique violation; it hands
     # back a deadlock, SQLSTATE `40P01`, which arrives as `OperationalError`.
     #
@@ -265,11 +319,13 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # outcome the skip exists to prevent, reached by the one route the skip has
     # never been able to cover.
     #
-    # This clause is therefore **more** load-bearing after #85, not less: it is
-    # now the *only* thing standing between two concurrent bills and that
-    # deadlock, where before it was one of two. Removing it is a silent
-    # regression — nothing goes red at the moment of deletion, and the failure
-    # needs two schedules, one term and overlapping concessions to appear.
+    # This clause became **more** load-bearing after #85, not less: it was the
+    # *only* thing standing between two concurrent bills and that deadlock.
+    # Since B2 the term lock keeps two bills in one term from running at once
+    # through this function, which makes the order the second line rather than
+    # the only one — and still not optional, because the lock binds only the
+    # writers that take it. Removing it is a silent regression either way:
+    # nothing goes red at the moment of deletion.
     # ========================================================================
     #
     # A total order shared by every run is what makes the cycle impossible. That
@@ -277,10 +333,15 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # silently, so the guarantee held by accident and one `Meta` edit would have
     # removed it with nothing going red. Named here, and pinned by
     # `test_the_concession_read_is_ordered_so_two_bills_cannot_deadlock`.
+    #
+    # Standing ones only: a revoked concession (issue #75) gives nothing more.
+    # Every enrolled child on the roster, billed here or elsewhere — a waiver
+    # is a fact about the term, not the classroom, and the term key stops it
+    # posting twice.
     concessions = list(
-        FeeConcession.objects.filter(
-            is_active=True, student_membership_id__in=student_ids
-        ).order_by("student_membership_id", "id")
+        FeeConcession.objects.standing()
+        .filter(student_membership_id__in=student_ids)
+        .order_by("student_membership_id", "id")
     )
     already_discounted = set(
         FeeLedgerEntry.objects.filter(
@@ -323,7 +384,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # on the child. So this loop is counted in concessions granted, and forty-
     # five children holding two apiece is ninety savepoints, past 64 with no
     # unusual school involved. Issue #85, deliberately not fixed here.
-    for student_id in student_ids:
+    for student_id in charged_here:
         membership = memberships[student_id]
         for line in lines:
             if (student_id, line.pk) in already_charged:
@@ -369,13 +430,14 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         # savepoint so the run survived as a skip. It goes only because the catch
         # goes with it.
         #
-        # **The one race the schedule lock does not cover.** That lock serialises
+        # **The one race the schedule lock did not cover.** That lock serialises
         # applications of *this bill*; the concession index spans every bill in
         # the term. A child who moves class mid-term can be on one bursar's
         # roster snapshot and another's at the same moment -- the `ClassPlacement`
         # rewrite window issue #43 records -- so two runs of two *different*
-        # schedules can both pass the skip-check above and both reach the same
-        # `(child, term, concession)` row.
+        # schedules could both pass the skip-check above and both reach the same
+        # `(child, term, concession)` row. Since B2 the term lock keeps them
+        # apart; this is what still holds for a writer that does not take it.
         #
         # `_discount()` asks Postgres to **decline** that row rather than refuse
         # it, with an `ON CONFLICT` naming
@@ -419,7 +481,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         discounted_kobo += concession.amount_kobo
 
     return AppliedSummary(
-        students=len(student_ids),
+        students=len(charged_here),
         students_skipped=students_skipped,
         lines=len(lines),
         charges_posted=charges_posted,
@@ -428,6 +490,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         discounts_posted=discounts_posted,
         discounts_skipped=discounts_skipped,
         discounted_kobo=discounted_kobo,
+        billed_elsewhere=tuple(sorted(billed_elsewhere)),
     )
 
 

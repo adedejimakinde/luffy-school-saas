@@ -2,8 +2,9 @@
 
 What a family owes a school and what they have paid, as an append-only book.
 
-The book, and since B1 the bursar's routes and page — see "B1" below. There is
-no reporting. `fees/services.py` is the layer `fees/api.py` calls, and the rules
+The book, and since B1 the bursar's routes and page — see "B1" below — and
+since B2 the bills and concessions on that page ("B2"). There is no
+reporting. `fees/services.py` is the layer `fees/api.py` calls, and the rules
 live there rather than in a view so that an import and a management command get
 the same ones.
 
@@ -170,7 +171,8 @@ FeeSchedule                          term + class_group, unique together
     FeeScheduleLine                  description, amount_kobo, position
 
 FeeConcession                        a standing discount for one child
-    student_membership_id, amount_kobo, reason, is_active
+    student_membership_id, amount_kobo, reason      never edited (B2, #75)
+    FeeConcessionRevocation          who revoked it, when and why
 ```
 
 **The template is not the record**, which is the question this document used to
@@ -180,9 +182,10 @@ narration; editing the bill afterwards changes only what a **future**
 application would post. A school that edits after applying and wants the
 difference reflected reverses and re-posts, which the ledger already does.
 
-That is why `FeeSchedule`, `FeeScheduleLine` and `FeeConcession` are plain
-editable rows with no append-only `save()` and no trigger — `operating-rules.md`
-rule 8 in the direction that saves work. The entries they produce are the
+That is why `FeeSchedule` and `FeeScheduleLine` are plain editable rows with no
+append-only `save()` and no trigger — `operating-rules.md` rule 8 in the
+direction that saves work. `FeeConcession` was one too until B2; revoking one
+produces an absence, which is rule 8 in the other direction (see "B2"). The entries they produce are the
 financial record and are already append-only twice over; making the template
 append-only too would be a second, weaker copy of that guarantee, and it would
 stop a bursar fixing next term's bill.
@@ -241,14 +244,15 @@ have been raised, not when its *amount* was wrong. A wrong amount is fixed by
 correcting the line and reversing plus re-posting by hand, accepting that the
 new row stands on its own.
 
-**A child who moves class mid-term is charged by both bills and waived once.**
-The charge key is the line and the concession key is `(child, term,
-concession)`, so JSS 1A's bill and JSS 3A's bill both charge them while the
-concession posts once for the term. That is deliberate — a waiver is a fact
-about the term, not about the classroom — and it means the mid-term move needs
-a person either way: somebody has to reverse the bill the child is no longer
-sitting for. Until they do, the family's balance shows two terms' fees and one
-waiver.
+**A child who moves class mid-term is billed once and waived once.** Decided
+2026-09-24 (B2), replacing the old rule that both bills charged them. A child
+with a standing charge from another class's bill this term is skipped by this
+bill and named in the summary (`AppliedSummary.billed_elsewhere`). The waiver
+was already once per term: the concession key is `(child, term, concession)`,
+because a waiver is a fact about the term, not about the classroom. A bursar
+who wants the new class's bill to be theirs undoes the old bill's charges
+first; with every one reversed, the new bill charges them. See "B2" for
+exactly what counts.
 
 **The schedule keys on `ClassGroup`, and `ClassPlacement` rewrites on a
 mid-term move.** A child charged as JSS 1A in week one who moves to JSS 3 in
@@ -331,16 +335,101 @@ not the live row. A receipt reprinted next year says what it said when it was
 issued. An undone payment's receipt says so across its face. **"Received by"
 is the exception**: it is read live from the recorder's login. Issue #143.
 
+## B2: bills and concessions
+
+Built 2026-09-24. `fees/billing.py` is the service layer, and the routes and the
+page are B1's, extended: "Bills for this term" on the class list, and a
+Concessions section on a child's account.
+
+### What was decided, and where each decision holds
+
+| decision | where it holds |
+| --- | --- |
+| **The same people as B1**: the bursar and the administrator set bills and concessions; the principal and the vice principal (academic) read them; everybody else gets the flat 404 | `fees/authority.py`, asked by every route before it reads anything; the 403 sentence is "Bills and concessions are set by the bursar or an administrator." |
+| **Applying a bill must not charge a child already charged for that term** | the same bill: the per-line skip and `a_schedule_line_charges_a_child_once`, as before. Another class's bill: the billed-elsewhere skip in `apply_to_class()`, serialised by a lock on the term's row |
+| **Issue #75: revoking a concession needs a required reason and an append-only row saying who, when and why; the concession row is never edited or deleted** | `FeeConcessionRevocation`; `billing.revoke_concession()` refusing with `NoReason`; `a_revocation_says_why` at the database; `fees/migrations/0006`'s triggers on both tables |
+
+### "Already charged for that term"
+
+A child is already charged for the term when they have a CHARGE entry in the
+term that names a schedule line of **another** bill, and nobody has reversed
+it. Each part is there for a reason, and each has a test:
+
+- **This bill's own charges are not "elsewhere"**, or adding a line after the
+  first run would charge nobody the new line.
+- **A charge posted by hand names no line**, and is not a bill: a broken
+  window does not stop the term's fees being charged.
+- **Reversed charges do not count**, so undoing a bill is how a bursar moves
+  a child from one bill to another. **One standing charge is enough**: the
+  levy undone and the tuition left standing leaves the child on the old bill.
+- **Last term's bill is last term's.**
+
+The check reads other bills' charges, which the schedule lock does not cover:
+two bursars billing JSS 1A and JSS 3A at once, with a child moved between the
+two roster reads, would each read the child as unbilled. So an application
+also takes the term's row, `FOR NO KEY UPDATE`: every bill in the term waits
+for the one before it, and nothing else does, because no foreign key's
+`FOR KEY SHARE` conflicts with it. `TwoBillsOneTermTests` stages that
+interleaving and fails without the lock.
+
+### Issue #75: a concession is granted once and revoked once
+
+A concession used to be switched off with `is_active`, which recorded when (as
+`updated_at`) and never who or why. A revoked concession produces nothing from
+then on, and by `operating-rules.md` rule 8 that absence needs a log. So:
+
+- **Revoking writes a `FeeConcessionRevocation`**: the reason (required, and
+  held by `a_revocation_says_why` wherever the write comes from), the person
+  (as an id **and** their name frozen at that moment, rule 2, so it cannot
+  repeat #143), and when. One per concession, as a one-to-one.
+- **The concession row is never edited or deleted**, and neither is a
+  revocation. `save()` and `delete()` refuse with `ConcessionIsFixed`; a trigger
+  on each table refuses UPDATE and DELETE from anywhere else.
+- **#75's other two questions have the same answer.** A *reduction* is a
+  revocation and a new, smaller grant. *Re-granting* is a new concession. Both
+  leave the old one legible.
+- **What revoking does not do** is touch discounts already posted. This term's
+  discount stands, because the ledger is append-only; the next application of
+  a bill gives no more.
+- **A grant form posts once**, `a_concession_form_grants_once`, for the same
+  reason a payment form does: a double click would otherwise discount the
+  child twice every term.
+
+Migration 0005 turned each concession already switched off into a revocation
+with no person and a reason that says who and why were not kept. No school had
+any at the time, so the backfill has run on nothing; there is no test that
+drives it.
+
+### The bill
+
+A bill is still a template. Adding a line, renaming one or correcting its
+amount changes what the next application posts, and the page says so beside
+every line that has charged anybody: "The 2 already charged keep what they
+were charged." A line that has charged anybody cannot be removed. The same
+line twice is a double click (200, the existing line); the same name at
+another amount is refused (409).
+
+### The routes
+
+| route | who | what |
+| --- | --- | --- |
+| `GET bills/?term_id=` | readers | every class in use, with its bill's lines and total, billed or not |
+| `GET classes/<id>/bill/?term_id=` | readers | one bill, each line with how many it has charged |
+| `POST classes/<id>/bill/lines/` | writers | add a line, starting the bill; 201, or 200 for the same line again |
+| `PUT bill-lines/<id>/`, `DELETE bill-lines/<id>/` | writers | change a line; remove one nobody was charged by (409 otherwise) |
+| `POST classes/<id>/bill/charges/` | writers | charge the class; always 200 with what it did, including who was billed elsewhere |
+| `GET students/<id>/concessions/` | readers | every concession, revoked ones with who, when and why |
+| `POST students/<id>/concessions/` | writers | grant one, with its reason and form key |
+| `POST concessions/<id>/revocation/` | writers | revoke one, with the reason; 422 without, 409 if already revoked |
+
+Every bill write answers with the bill as it now stands, and the page draws
+that answer rather than patching what it had.
+
 ## Not built
 
-- **No billing screens.** Fee schedules and concessions have services and no
-  screen; that is B2.
 - **No refund route.** `services.refund()` exists and nothing on the page calls
   it.
 - **"Received by" on a receipt is not frozen.** [Issue #143](https://github.com/adedejimakinde/luffy-school-saas/issues/143).
-- **No revocation log for a concession.** Switching `is_active` off records
-  *when* and never who or why, which by rule 8 is an absence that wants a log.
-  Filed as [issue #75](https://github.com/adedejimakinde/luffy-school-saas/issues/75).
 - **No takings report.** What a school actually collected in a term has no home
   yet; [issue #74](https://github.com/adedejimakinde/luffy-school-saas/issues/74)
   holds the requirements this shape was built not to foreclose.

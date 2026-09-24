@@ -1,6 +1,7 @@
 /**
  * Fees: the classes for a term, a class's balances, one child's account, a
- * payment, an undo and a receipt.
+ * payment, an undo and a receipt; and (B2) each class's bill, charging the
+ * class, and a child's concessions.
  *
  * `?student=` opens an account and `?receipt=` a receipt directly, which is
  * how a reprint is reached from a bookmark.
@@ -10,19 +11,31 @@
  * records one entry per key, so a double click is one payment or one discount.
  * When the answer is lost — the connection dropped after the request left —
  * the page keeps the key and what was typed, and says so: sending it again
- * cannot record it twice.
+ * cannot record it twice. A concession's grant form works the same way.
+ *
+ * **A bill is redrawn from the server's answer** after every change, because
+ * each bill write answers with the bill as it now stands.
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   fetchAccount,
+  fetchBill,
+  fetchBills,
   fetchBooks,
   fetchClass,
+  fetchConcessions,
   fetchReceipt,
+  postBillLine,
+  postCharges,
+  postConcession,
   postDiscount,
   postPayment,
   postReversal,
+  postRevocation,
+  putBillLine,
+  removeBillLine,
 } from "./api.js";
 import * as states from "./states.js";
 
@@ -37,6 +50,10 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
       return states.account(state) + after;
     case "receipt":
       return states.receipt(state);
+    case "bills":
+      return states.bills(state) + after;
+    case "bill":
+      return states.bill(state) + after;
     case "no-terms":
       return states.noTerms() + after;
     case REFUSAL.NOT_YOURS:
@@ -66,9 +83,10 @@ export async function mount(
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
   let where = { termId: null, classId: null, studentId: null };
-  //: One key per form, because the two are two entries: a payment and a
-  //: discount sent under one key would be refused as a reused form.
-  const keys = { payment: newKey(), discount: newKey() };
+  //: One key per form, because each form is its own write: a payment, a
+  //: discount and a concession sent under one key would be refused as a
+  //: reused form.
+  const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
   let signOutFailed = false;
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
@@ -100,13 +118,72 @@ export async function mount(
   };
   const showAccount = async (studentId, extra = {}) => {
     where.studentId = studentId;
-    land(await fetchAccount({ studentId, fetchImpl }), (body) => ({
+    const [answer, concessions] = await Promise.all([
+      fetchAccount({ studentId, fetchImpl }),
+      fetchConcessions({ studentId, fetchImpl }),
+    ]);
+    // One refusal for both: the routes ask the same question of the same
+    // person, so the first read's answer stands for the pair.
+    land(answer.ok && !concessions.ok ? concessions : answer, (body) => ({
       step: "account",
       account: body,
+      concessions: concessions.body,
       termId: where.termId,
       today,
       ...extra,
     }));
+  };
+  const showBills = async (termId) => {
+    land(await fetchBills({ termId, fetchImpl }), (body) => {
+      where.termId = body.term_id;
+      return body.term_id === null ? { step: "no-terms" } : { step: "bills", bills: body };
+    });
+  };
+  const showBill = async (classId, extra = {}) => {
+    where.classId = classId;
+    land(await fetchBill({ classId, termId: where.termId, fetchImpl }), (body) => ({
+      step: "bill",
+      bill: body,
+      ...extra,
+    }));
+  };
+  /**
+   * A bill write: the answer is the bill, drawn as it comes back. A lost
+   * answer keeps what was typed and says, in `lost`, why sending again is
+   * safe for that write.
+   *
+   * **A 404 here is a line that is no longer there** — another bursar removed
+   * it, or this page's own removal landed and its answer did not. The bill is
+   * read again rather than the page turned into "not something you can
+   * open": if the refusal is real, that read gets it too.
+   */
+  const billWrite = async (answer, { draftField, draft, done, lost }) => {
+    if (answer.ok) {
+      state = { step: "bill", bill: answer.body, note: done, noteTone: "done" };
+    } else if (answer.refusal === REFUSAL.BROKEN) {
+      state = {
+        ...state,
+        ...(draftField ? { [draftField]: draft } : {}),
+        noteTone: "stop",
+        note: lost,
+      };
+    } else if (answer.refusal === REFUSAL.NOT_YOURS) {
+      await showBill(where.classId, {
+        note: "That line is no longer on this bill. This is the bill as it stands now.",
+        noteTone: "stop",
+      });
+      return;
+    } else if (answer.refusal) {
+      state = { step: answer.refusal };
+    } else {
+      state = {
+        ...state,
+        ...(draftField ? { [draftField]: draft } : {}),
+        noteTone: "stop",
+        note: answer.body.detail || "That was not saved.",
+      };
+    }
+    draw();
   };
   const showReceipt = async (entryId) => {
     land(await fetchReceipt({ entryId, fetchImpl }), (body) => ({ step: "receipt", receipt: body }));
@@ -118,8 +195,9 @@ export async function mount(
 
   root.addEventListener("change", async (event) => {
     const field = event.target;
-    if (!field || !field.dataset || field.dataset.term === undefined) return;
-    await showBooks(Number(field.value));
+    if (!field || !field.dataset) return;
+    if (field.dataset.term !== undefined) await showBooks(Number(field.value));
+    else if (field.dataset.billsTerm !== undefined) await showBills(Number(field.value));
   });
 
   /**
@@ -151,9 +229,38 @@ export async function mount(
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
-    if (!form || state.step !== "account" || !form.intent) return;
+    if (!form || !["account", "bill"].includes(state.step) || !form.intent) return;
     const intent = form.intent.value;
     if (event.preventDefault) event.preventDefault();
+
+    if (state.step === "bill") {
+      if (intent === "add-line") {
+        const draft = { description: form.description.value, amount: form.amount.value };
+        const answer = await postBillLine({
+          classId: where.classId,
+          line: { term_id: where.termId, ...draft },
+          fetchImpl,
+        });
+        await billWrite(answer, {
+          draftField: "newLineDraft",
+          draft,
+          done: `Added “${draft.description.trim()}”.`,
+          lost: "We could not tell whether that line was added. Send it again — the same line is not added twice.",
+        });
+        return;
+      }
+      if (intent === "change-line" && state.changing) {
+        const draft = { description: form.description.value, amount: form.amount.value };
+        const answer = await putBillLine({ lineId: state.changing, line: draft, fetchImpl });
+        await billWrite(answer, {
+          draftField: "lineDraft",
+          draft,
+          done: "Changed. Children already charged keep what they were charged.",
+          lost: "We could not tell whether that change was saved. Send it again — saving it twice is the same as once.",
+        });
+      }
+      return;
+    }
 
     if (intent === "payment") {
       const draft = {
@@ -187,6 +294,38 @@ export async function mount(
       return;
     }
 
+    if (intent === "concession") {
+      const draft = { amount: form.amount.value, reason: form.reason.value };
+      await keyed("concession", draft, (concession) => postConcession({ studentId: where.studentId, concession, fetchImpl }), {
+        draftField: "grantDraft",
+        done: ({ granted }) =>
+          granted
+            ? "Concession granted. Each term's bill gives it when the class is charged."
+            : "That concession was already granted; nothing new was added.",
+        again: "We could not tell whether that concession was saved. Send it again — it will not be granted twice.",
+      });
+      return;
+    }
+
+    if (intent === "revocation" && state.revoking) {
+      const answer = await postRevocation({ concessionId: state.revoking, reason: form.reason.value, fetchImpl });
+      if (answer.ok) {
+        await showAccount(where.studentId, {
+          note: "Revoked. No bill will give it from now on; what it already gave stands.",
+          noteTone: "done",
+        });
+        return;
+      }
+      if (answer.refusal) {
+        state = { step: answer.refusal };
+        draw();
+        return;
+      }
+      state = { ...state, noteTone: "stop", note: answer.body.detail || "That was not revoked." };
+      draw();
+      return;
+    }
+
     if (intent === "reversal" && state.reversing) {
       const answer = await postReversal({ entryId: state.reversing, reason: form.reason.value, fetchImpl });
       if (answer.ok) {
@@ -208,6 +347,67 @@ export async function mount(
     if (!hit) return;
     const action = hit.dataset.action;
     if (action === "open-class") return showClass(Number(hit.dataset.class));
+    if (action === "open-bills") return showBills(where.termId);
+    if (action === "open-bill") return showBill(Number(hit.dataset.class));
+    if (action === "back-to-bills") return showBills(where.termId);
+    if (action === "change-line" && state.step === "bill") {
+      state = { ...state, changing: Number(hit.dataset.line), lineDraft: {}, note: "" };
+      draw();
+      return;
+    }
+    if (action === "cancel-line" && state.step === "bill") {
+      state = { ...state, changing: null, lineDraft: {} };
+      draw();
+      return;
+    }
+    if (action === "remove-line" && state.step === "bill") {
+      return billWrite(await removeBillLine({ lineId: Number(hit.dataset.line), fetchImpl }), {
+        done: "Removed.",
+        lost: "We could not tell whether that line was removed. Press Remove again — if it is gone, the page will say so.",
+      });
+    }
+    if (action === "charge-class" && state.step === "bill") {
+      const answer = await postCharges({ classId: where.classId, termId: where.termId, fetchImpl });
+      if (answer.ok) return showBill(where.classId, { charged: answer.body });
+      if (answer.refusal === REFUSAL.BROKEN) {
+        state = {
+          ...state,
+          charged: null,
+          noteTone: "stop",
+          note: "We could not tell whether the class was charged. Press it again — nobody is charged twice.",
+        };
+        draw();
+        return;
+      }
+      if (answer.refusal) {
+        state = { step: answer.refusal };
+        draw();
+        return;
+      }
+      state = { ...state, charged: null, noteTone: "stop", note: answer.body.detail || "Nobody was charged." };
+      draw();
+      return;
+    }
+    if (action === "grant-concession" && state.step === "account") {
+      state = { ...state, granting: true, note: "" };
+      draw();
+      return;
+    }
+    if (action === "cancel-concession" && state.step === "account") {
+      state = { ...state, granting: false, grantDraft: {} };
+      draw();
+      return;
+    }
+    if (action === "revoke-concession" && state.step === "account") {
+      state = { ...state, revoking: Number(hit.dataset.concession), note: "" };
+      draw();
+      return;
+    }
+    if (action === "cancel-revocation" && state.step === "account") {
+      state = { ...state, revoking: null };
+      draw();
+      return;
+    }
     if (action === "back-to-books") return showBooks(where.termId);
     if (action === "open-account") return showAccount(Number(hit.dataset.student));
     if (action === "back-to-class") return where.classId ? showClass(where.classId) : showBooks(where.termId);

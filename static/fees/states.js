@@ -12,6 +12,14 @@
  *
  * **A receipt says what the entry recorded**, and says across its face when
  * the payment has since been undone.
+ *
+ * **A bill is a template (B2).** Beside every line it says how many children
+ * that line has charged, because changing the line does not change them, and
+ * a line that has charged anybody cannot be removed. Charging the class says
+ * what it did, including who it did not charge and why.
+ *
+ * **A revoked concession stays on the account**, with who revoked it, when
+ * and why — issue #75. Nothing about a concession is ever edited.
  */
 
 import { esc } from "../web/html.js";
@@ -43,6 +51,7 @@ export function books({ books: body = {} } = {}) {
     `<form class="chooser"><label for="term">Term</label>`,
     `<select id="term" data-term>${termOptions(terms, termId)}</select></form>`,
     `<h2>${esc(term)}</h2>`,
+    '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>',
     classes.length
       ? '<ul class="classes">' +
         classes
@@ -174,16 +183,81 @@ function entryRow(entry, { mayWrite, reversing }) {
   ].join("");
 }
 
+// -- concessions (B2) ----------------------------------------------------------
+
+function grantForm({ draft = {} }) {
+  return [
+    '<form class="concession" data-concession>',
+    '<input type="hidden" name="intent" value="concession">',
+    "<fieldset><legend>Grant a concession</legend>",
+    '<p class="quiet">Given by each term\'s bill when the class is charged, until it is revoked.</p>',
+    `<label>Amount each term (₦) <input name="amount" inputmode="decimal" autocomplete="off" value="${esc(draft.amount || "")}" required></label>`,
+    `<label>Why? <input name="reason" maxlength="255" autocomplete="off" value="${esc(draft.reason || "")}" required></label>`,
+    '<button type="submit">Grant it</button> ',
+    '<button type="button" data-action="cancel-concession">Cancel</button>',
+    "</fieldset></form>",
+  ].join("");
+}
+
+function revocationForm(concession) {
+  return [
+    `<form class="revocation" data-revocation data-concession-id="${esc(concession.concession_id)}">`,
+    '<input type="hidden" name="intent" value="revocation">',
+    `<label>Why is it being revoked? <input name="reason" maxlength="255" required></label>`,
+    '<button type="submit">Revoke it</button> ',
+    '<button type="button" data-action="cancel-revocation">Keep it</button>',
+    "</form>",
+  ].join("");
+}
+
+function concessionItem(c, { mayWrite, revoking }) {
+  const granted = `${esc(naira(c.amount_kobo))} a term — ${esc(c.reason)}` +
+    ` <small>granted ${esc(String(c.granted_at).slice(0, 10))}</small>`;
+  if (c.revoked) {
+    return [
+      '<li class="revoked" data-revoked>',
+      granted,
+      `<br><small>Revoked ${esc(String(c.revoked.revoked_at).slice(0, 10))}` +
+        `${c.revoked.revoked_by ? ` by ${esc(c.revoked.revoked_by)}` : ""}: ${esc(c.revoked.reason)}</small>`,
+      "</li>",
+    ].join("");
+  }
+  const action =
+    mayWrite && revoking !== c.concession_id
+      ? ` <button type="button" data-action="revoke-concession" data-concession="${esc(c.concession_id)}">Revoke</button>`
+      : "";
+  return `<li>${granted}${action}${revoking === c.concession_id ? revocationForm(c) : ""}</li>`;
+}
+
+function concessionsSection({ concessions = null, mayWrite, granting, revoking, grantDraft }) {
+  if (!concessions) return "";
+  const list = concessions.concessions || [];
+  return [
+    "<h2>Concessions</h2>",
+    list.length
+      ? `<ul class="concessions">${list.map((c) => concessionItem(c, { mayWrite, revoking })).join("")}</ul>`
+      : '<p class="blank">No concessions.</p>',
+    mayWrite && granting ? grantForm({ draft: grantDraft }) : "",
+    mayWrite && !granting
+      ? '<p class="more"><button type="button" data-action="grant-concession">Grant a concession</button></p>'
+      : "",
+  ].join("");
+}
+
 export function account({
   account: body = {},
+  concessions = null,
   note = "",
   noteTone = "",
   termId = null,
   today = "",
   reversing = null,
   discounting = false,
+  granting = false,
+  revoking = null,
   draft = {},
   discountDraft = {},
+  grantDraft = {},
 } = {}) {
   const { student = "", reference = "", balance_kobo = 0, may_write: mayWrite = false, entries = [] } = body;
   const current = termId ?? ((body.terms || []).find((t) => t.is_current) || (body.terms || [])[0] || {}).term_id;
@@ -209,6 +283,145 @@ export function account({
           "</tbody></table></div>",
         ].join("")
       : '<p class="blank">Nothing has been charged or paid on this account yet.</p>',
+    concessionsSection({ concessions, mayWrite, granting, revoking, grantDraft }),
+    signOutButton(),
+    "</section>",
+  ].join("");
+}
+
+// -- bills (B2) -----------------------------------------------------------------
+
+export function bills({ bills: body = {} } = {}) {
+  const { terms = [], term_id: termId, term = "", classes = [] } = body;
+  const described = (c) =>
+    c.schedule_id == null || c.lines === 0
+      ? "no bill yet"
+      : `${c.lines} ${c.lines === 1 ? "line" : "lines"}, ${naira(c.total_kobo)}`;
+  return [
+    '<section class="state state-bills" data-state="bills">',
+    '<p class="back"><button type="button" data-action="back-to-books">Balances</button></p>',
+    "<h1>Bills</h1>",
+    `<form class="chooser"><label for="bills-term">Term</label>`,
+    `<select id="bills-term" data-bills-term>${termOptions(terms, termId)}</select></form>`,
+    `<h2>${esc(term)}</h2>`,
+    classes.length
+      ? '<ul class="classes">' +
+        classes
+          .map(
+            (c) =>
+              `<li><button type="button" data-action="open-bill" data-class="${esc(c.class_group_id)}">` +
+              `${esc(c.class_group)}</button> <span class="quiet">${esc(described(c))}; ` +
+              `${esc(c.children)} ${c.children === 1 ? "child" : "children"}</span></li>`,
+          )
+          .join("") +
+        "</ul>"
+      : '<p class="blank">The school has no classes yet.</p>',
+    signOutButton(),
+    "</section>",
+  ].join("");
+}
+
+function lineForm(line, draft = {}) {
+  return [
+    `<form class="line-change" data-line-change data-line="${esc(line.line_id)}">`,
+    '<input type="hidden" name="intent" value="change-line">',
+    `<label>What for <input name="description" maxlength="255" value="${esc(draft.description ?? line.description)}" required></label> `,
+    `<label>Amount (₦) <input name="amount" inputmode="decimal" autocomplete="off" value="${esc(draft.amount ?? naira(line.amount_kobo).slice(1))}" required></label> `,
+    '<button type="submit">Save</button> ',
+    '<button type="button" data-action="cancel-line">Cancel</button>',
+    line.charged
+      ? `<p class="quiet">The ${esc(line.charged)} already charged keep what they were charged.</p>`
+      : "",
+    "</form>",
+  ].join("");
+}
+
+function lineRow(line, { mayWrite, changing, draft }) {
+  const actions = [];
+  if (mayWrite && changing !== line.line_id) {
+    actions.push(`<button type="button" data-action="change-line" data-line="${esc(line.line_id)}">Change</button>`);
+    if (!line.charged) {
+      actions.push(`<button type="button" data-action="remove-line" data-line="${esc(line.line_id)}">Remove</button>`);
+    }
+  }
+  return [
+    `<tr data-line-row="${esc(line.line_id)}">`,
+    `<td>${esc(line.description)}</td>`,
+    `<td class="num">${esc(naira(line.amount_kobo))}</td>`,
+    `<td>${line.charged ? `charged ${esc(line.charged)}` : '<span class="quiet">nobody charged yet</span>'}</td>`,
+    `<td class="actions">${actions.join(" ")}</td>`,
+    "</tr>",
+    changing === line.line_id ? `<tr><td colspan="4">${lineForm(line, draft)}</td></tr>` : "",
+  ].join("");
+}
+
+/** What charging the class did, in the bursar's terms. */
+function chargedSummary(done) {
+  if (!done) return "";
+  const elsewhere = done.billed_elsewhere || [];
+  return [
+    '<div class="summary" data-charged role="status">',
+    `<p><strong>${esc(done.charges_posted)} ${done.charges_posted === 1 ? "charge" : "charges"} posted</strong>` +
+      ` (${esc(naira(done.charged_kobo))}); ${esc(done.charges_skipped)} already charged and skipped.</p>`,
+    done.discounts_posted || done.discounts_skipped
+      ? `<p>${esc(done.discounts_posted)} concessions given (${esc(naira(done.discounted_kobo))}); ` +
+        `${esc(done.discounts_skipped)} already given this term.</p>`
+      : "",
+    done.students_skipped
+      ? `<p>${esc(done.students_skipped)} on the roster no longer enrolled, and not charged.</p>`
+      : "",
+    elsewhere.length
+      ? `<p>Not charged, because another class's bill already charged them this term: ` +
+        `${elsewhere.map((c) => esc(c.student)).join(", ")}. Undo those charges first if this bill should be theirs.</p>`
+      : "",
+    "</div>",
+  ].join("");
+}
+
+export function bill({
+  bill: body = {},
+  note = "",
+  noteTone = "",
+  changing = null,
+  lineDraft = {},
+  newLineDraft = {},
+  charged = null,
+} = {}) {
+  const { class_group = "", term = "", may_write: mayWrite = false, lines = [], total_kobo = 0, children = 0 } = body;
+  return [
+    '<section class="state state-bill" data-state="bill">',
+    '<p class="back"><button type="button" data-action="back-to-bills">All bills</button></p>',
+    `<h1>${esc(class_group)}: bill</h1>`,
+    `<p class="quiet">${esc(term)}. ${esc(children)} ${children === 1 ? "child" : "children"} in the class.</p>`,
+    note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
+    chargedSummary(charged),
+    lines.length
+      ? [
+          '<div class="scroll"><table class="lines"><thead><tr>',
+          '<th>What for</th><th class="num">Amount</th><th>Charged</th><th></th></tr></thead><tbody>',
+          lines.map((l) => lineRow(l, { mayWrite, changing, draft: lineDraft })).join(""),
+          `</tbody><tfoot><tr><th>Total</th><th class="num">${esc(naira(total_kobo))}</th><th></th><th></th></tr></tfoot>`,
+          "</table></div>",
+        ].join("")
+      : '<p class="blank">Nothing on this bill yet.</p>',
+    mayWrite
+      ? [
+          '<form class="line-add" data-line-add>',
+          '<input type="hidden" name="intent" value="add-line">',
+          "<fieldset><legend>Add a line</legend>",
+          `<label>What for <input name="description" maxlength="255" autocomplete="off" value="${esc(newLineDraft.description || "")}" required></label>`,
+          `<label>Amount (₦) <input name="amount" inputmode="decimal" autocomplete="off" value="${esc(newLineDraft.amount || "")}" required></label>`,
+          '<button type="submit">Add line</button>',
+          "</fieldset></form>",
+        ].join("")
+      : "",
+    mayWrite && lines.length
+      ? [
+          '<p class="more"><button type="button" data-action="charge-class">Charge the class</button></p>',
+          '<p class="quiet">Safe to press again: a child already charged a line is skipped for it, and a ',
+          "child another class's bill has charged this term is not charged here.</p>",
+        ].join("")
+      : "",
     signOutButton(),
     "</section>",
   ].join("");

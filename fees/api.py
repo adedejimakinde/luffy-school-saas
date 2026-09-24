@@ -1,5 +1,6 @@
 """HTTP for the school's books: balances, one child's account, a payment, a
-discount, a reversal and a receipt. B1 of the fees work; billing is B2.
+discount, a reversal and a receipt (B1); and a class's bill, charging it, and a
+child's concessions (B2, from "B2: bills and concessions" down).
 
 **Two refusals, and which one a caller gets is the disclosure decision.**
 Anybody who may not read the books — a teacher, a parent, a student — gets a
@@ -22,10 +23,11 @@ already have told the caller who she is.
 page formats it, and a float never touches it on either side.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
+from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.utils import timezone
@@ -35,9 +37,16 @@ from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role, User
 from accounts.session import session_auth
 
-from . import services
+from . import billing, schedules, services
 from .authority import may_read, may_write, receipt_number
-from .models import FeeEntryKind, FeeLedgerEntry, PaymentMethod
+from .models import (
+    FeeConcession,
+    FeeEntryKind,
+    FeeLedgerEntry,
+    FeeSchedule,
+    FeeScheduleLine,
+    PaymentMethod,
+)
 from .money import NotAnAmount, kobo_from_naira
 
 router = Router(auth=session_auth)
@@ -562,6 +571,476 @@ def reverse(request, entry_id: int, payload: ReversalIn):
         entry=_entry_out(school, reversal),
         balance_kobo=_balance_of(entry.student_membership_id),
     )
+
+
+# -- B2: bills and concessions ------------------------------------------------
+#
+# The same people and the same two refusals as B1, decided 2026-09-24: the
+# bursar and the administrator set bills and concessions, the principal and the
+# vice principal (academic) read them and are told so in a sentence, and
+# everybody else gets the flat 404 before any lookup.
+
+_MAY_NOT_BILL = "Bills and concessions are set by the bursar or an administrator."
+
+
+def _refuse_non_biller(actor, school):
+    if not may_write(actor, school):
+        return 403, MessageOut(detail=_MAY_NOT_BILL)
+    return None
+
+
+class BillLineOut(Schema):
+    line_id: int
+    description: str
+    amount_kobo: int
+    #: Children this line has charged. Not zero means it cannot be removed, and
+    #: changing it changes only what the next children are charged.
+    charged: int
+
+
+class BillOut(Schema):
+    class_group_id: int
+    class_group: str
+    term_id: int
+    term: str
+    may_write: bool
+    #: `None` until somebody adds the first line.
+    schedule_id: Optional[int]
+    lines: List[BillLineOut]
+    total_kobo: int
+    #: Placed in the class this term — the roster a charge is applied to,
+    #: before the skips `apply_to_class()` reports.
+    children: int
+
+
+class BillSummaryOut(Schema):
+    class_group_id: int
+    class_group: str
+    children: int
+    schedule_id: Optional[int]
+    lines: int
+    total_kobo: int
+
+
+class BillsOut(Schema):
+    """The way in to billing: which term, and every class in use, billed or
+    not — a bill is set before the children are placed as often as after."""
+
+    terms: List[TermChoiceOut]
+    term_id: Optional[int]
+    term: Optional[str]
+    may_write: bool
+    classes: List[BillSummaryOut]
+
+
+class BillLineIn(Schema):
+    """`amount` is the naira typed, as text, as it is for a payment."""
+
+    term_id: int
+    description: str
+    amount: str
+
+
+class LineChangeIn(Schema):
+    description: str
+    amount: str
+
+
+class ChargeClassIn(Schema):
+    term_id: int
+
+
+class ChildNamedOut(Schema):
+    student_membership_id: int
+    student: str
+
+
+class ChargedOut(Schema):
+    """What charging the class did — `schedules.AppliedSummary`, and the
+    children another class's bill had already charged this term, by name."""
+
+    students: int
+    students_skipped: int
+    charges_posted: int
+    charges_skipped: int
+    charged_kobo: int
+    discounts_posted: int
+    discounts_skipped: int
+    discounted_kobo: int
+    billed_elsewhere: List[ChildNamedOut]
+    summary: str
+
+
+class RevocationOut(Schema):
+    reason: str
+    #: The name as it stood when they revoked it — frozen on the row.
+    revoked_by: str
+    revoked_at: datetime
+
+
+class ConcessionOut(Schema):
+    concession_id: int
+    amount_kobo: int
+    reason: str
+    granted_at: datetime
+    revoked: Optional[RevocationOut]
+
+
+class ConcessionsOut(Schema):
+    student_membership_id: int
+    student: str
+    may_write: bool
+    concessions: List[ConcessionOut]
+
+
+class ConcessionIn(Schema):
+    """A standing discount, from a form. `form_key` does what it does for a
+    payment: the same form twice grants once."""
+
+    amount: str
+    reason: str
+    form_key: UUID
+
+
+class GrantedOut(Schema):
+    concession: ConcessionOut
+    #: False when this form had already granted it.
+    granted: bool
+
+
+class RevocationIn(Schema):
+    reason: str
+
+
+def _class_and_term(class_group_id, term_id):
+    group = ClassGroup.objects.filter(pk=class_group_id).first()
+    term = Term.objects.filter(pk=term_id).first()
+    if group is None or term is None:
+        raise Http404("No such account.")
+    return group, term
+
+
+def _bill_out(request, school, group, term) -> BillOut:
+    schedule = billing.bill_for(group, term)
+    lines = []
+    if schedule is not None:
+        lines = [
+            BillLineOut(
+                line_id=line.pk,
+                description=line.description,
+                amount_kobo=line.amount_kobo,
+                charged=line.charged,
+            )
+            for line in schedule.lines.annotate(
+                charged=Count("entries", filter=Q(entries__kind=FeeEntryKind.CHARGE))
+            )
+        ]
+    return BillOut(
+        class_group_id=group.pk,
+        class_group=str(group),
+        term_id=term.pk,
+        term=str(term),
+        may_write=may_write(request.user, school),
+        schedule_id=schedule.pk if schedule else None,
+        lines=lines,
+        total_kobo=sum(line.amount_kobo for line in lines),
+        children=ClassPlacement.objects.filter(class_group=group, term=term).count(),
+    )
+
+
+def _concession_out(concession) -> ConcessionOut:
+    """The times in the school's zone, not UTC, so the date the page prints
+    is the day it happened in Lagos — a revocation at 00:30 is not
+    yesterday's."""
+    revocation = getattr(concession, "revocation", None)
+    return ConcessionOut(
+        concession_id=concession.pk,
+        amount_kobo=concession.amount_kobo,
+        reason=concession.reason,
+        granted_at=timezone.localtime(concession.granted_at),
+        revoked=(
+            RevocationOut(
+                reason=revocation.reason,
+                revoked_by=revocation.revoked_by_name,
+                revoked_at=timezone.localtime(revocation.revoked_at),
+            )
+            if revocation
+            else None
+        ),
+    )
+
+
+@router.get("/bills/", response=BillsOut)
+def bills(request, term_id: Optional[int] = None):
+    """Every class in use this term, with its bill's lines and total, if any."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+
+    terms = _terms()
+    if term_id is not None:
+        term = next((t for t in terms if t.pk == term_id), None)
+        if term is None:
+            raise Http404("No such account.")
+    else:
+        term = next((t for t in terms if t.is_current), terms[0] if terms else None)
+
+    classes = []
+    if term is not None:
+        bills_here = {
+            s.class_group_id: s
+            for s in FeeSchedule.objects.filter(term=term).annotate(
+                line_count=Count("lines"), total=Sum("lines__amount_kobo")
+            )
+        }
+        classes = [
+            BillSummaryOut(
+                class_group_id=g.pk,
+                class_group=str(g),
+                children=g.children,
+                schedule_id=bills_here[g.pk].pk if g.pk in bills_here else None,
+                lines=bills_here[g.pk].line_count if g.pk in bills_here else 0,
+                total_kobo=(bills_here[g.pk].total or 0) if g.pk in bills_here else 0,
+            )
+            for g in ClassGroup.objects.filter(is_active=True)
+            .annotate(children=Count("placements", filter=Q(placements__term=term)))
+            .order_by("level", "name")
+        ]
+    return BillsOut(
+        terms=_term_choices(terms),
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        may_write=may_write(request.user, school),
+        classes=classes,
+    )
+
+
+@router.get("/classes/{int:class_group_id}/bill/", response=BillOut)
+def bill(request, class_group_id: int, term_id: int):
+    """One class's bill for one term, line by line, with what each has charged."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    group, term = _class_and_term(class_group_id, term_id)
+    return _bill_out(request, school, group, term)
+
+
+@router.post(
+    "/classes/{int:class_group_id}/bill/lines/",
+    response={201: BillOut, 200: BillOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def add_bill_line(request, class_group_id: int, payload: BillLineIn):
+    """Add a line, starting the bill if there is none. 201 with the bill as it
+    now stands; **200 when the bill already had this line at this amount** — a
+    double click — and 409 when it has the name at another amount."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    group, term = _class_and_term(class_group_id, payload.term_id)
+    try:
+        amount_kobo = kobo_from_naira(payload.amount)
+    except NotAnAmount as exc:
+        return 422, MessageOut(detail=str(exc))
+    try:
+        # One transaction, so a refused line does not leave the empty bill it
+        # would have started behind it — there is no ATOMIC_REQUESTS here.
+        with transaction.atomic():
+            _, added = billing.add_line(billing.open_bill(group, term), payload.description, amount_kobo)
+    except billing.NoDescription as exc:
+        return 422, MessageOut(detail=str(exc))
+    except billing.LineAlreadyOnBill as exc:
+        return 409, MessageOut(detail=str(exc))
+    return (201 if added else 200), _bill_out(request, school, group, term)
+
+
+def _line_or_404(line_id) -> FeeScheduleLine:
+    line = (
+        FeeScheduleLine.objects.select_related("schedule__class_group", "schedule__term")
+        .filter(pk=line_id)
+        .first()
+    )
+    if line is None:
+        raise Http404("No such account.")
+    return line
+
+
+@router.put(
+    "/bill-lines/{int:line_id}/",
+    response={200: BillOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def change_bill_line(request, line_id: int, payload: LineChangeIn):
+    """Rename a line or correct its amount. Charges already posted do not move
+    — `billing.change_line()` says why — and the page says so beside the line."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    line = _line_or_404(line_id)
+    try:
+        amount_kobo = kobo_from_naira(payload.amount)
+    except NotAnAmount as exc:
+        return 422, MessageOut(detail=str(exc))
+    try:
+        billing.change_line(line, description=payload.description, amount_kobo=amount_kobo)
+    except billing.NoDescription as exc:
+        return 422, MessageOut(detail=str(exc))
+    except billing.LineAlreadyOnBill as exc:
+        return 409, MessageOut(detail=str(exc))
+    return 200, _bill_out(request, school, line.schedule.class_group, line.schedule.term)
+
+
+@router.delete(
+    "/bill-lines/{int:line_id}/",
+    response={200: BillOut, 403: MessageOut, 409: MessageOut},
+)
+def remove_bill_line(request, line_id: int):
+    """Remove a line nobody has been charged by; 409 once somebody has."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    line = _line_or_404(line_id)
+    group, term = line.schedule.class_group, line.schedule.term
+    try:
+        billing.remove_line(line)
+    except billing.LineHasCharged as exc:
+        return 409, MessageOut(detail=str(exc))
+    return 200, _bill_out(request, school, group, term)
+
+
+@router.post(
+    "/classes/{int:class_group_id}/bill/charges/",
+    response={200: ChargedOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def charge_class(request, class_group_id: int, payload: ChargeClassIn):
+    """Charge every child on the roster the bill's lines, and post their
+    standing concessions. **Safe to press again**: a child already charged a
+    line is skipped for it, and a child another class's bill charged this term
+    is skipped and named — `schedules.apply_to_class()`. Always 200, with what
+    it did; "0 charged" is an answer, not a refusal."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    group, term = _class_and_term(class_group_id, payload.term_id)
+    schedule = billing.bill_for(group, term)
+    if schedule is None:
+        return 422, MessageOut(detail=f"{group} has no bill for {term} yet. Add a line first.")
+    try:
+        done = billing.apply(schedule, by=request.user)
+    except schedules.EmptySchedule as exc:
+        return 422, MessageOut(detail=str(exc))
+    except (schedules.UnknownStudent, services.NotThisSchoolsStudent) as exc:
+        return 409, MessageOut(detail=str(exc))
+
+    names = {
+        row["pk"]: row["display_name"] or row["user__full_name"] or ""
+        for row in Membership.objects.filter(
+            pk__in=done.billed_elsewhere, school=school, role=Role.STUDENT.value
+        ).values("pk", "display_name", "user__full_name")
+    }
+    return 200, ChargedOut(
+        students=done.students,
+        students_skipped=done.students_skipped,
+        charges_posted=done.charges_posted,
+        charges_skipped=done.charges_skipped,
+        charged_kobo=done.charged_kobo,
+        discounts_posted=done.discounts_posted,
+        discounts_skipped=done.discounts_skipped,
+        discounted_kobo=done.discounted_kobo,
+        billed_elsewhere=[
+            ChildNamedOut(student_membership_id=pk, student=names.get(pk, ""))
+            for pk in done.billed_elsewhere
+        ],
+        summary=str(done),
+    )
+
+
+@router.get("/students/{int:membership_id}/concessions/", response=ConcessionsOut)
+def concessions(request, membership_id: int):
+    """Every concession the child has been granted, revoked ones included —
+    with who revoked each, when and why (issue #75)."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    child = _student_here(school, membership_id)
+    return ConcessionsOut(
+        student_membership_id=child.pk,
+        student=child.name,
+        may_write=may_write(request.user, school),
+        concessions=[
+            _concession_out(c)
+            for c in FeeConcession.objects.filter(student_membership_id=child.pk)
+            .select_related("revocation")
+            .order_by("-granted_at", "-pk")
+        ],
+    )
+
+
+@router.post(
+    "/students/{int:membership_id}/concessions/",
+    response={201: GrantedOut, 200: GrantedOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def grant_concession(request, membership_id: int, payload: ConcessionIn):
+    """Grant a standing discount, with its reason. It is given by the next
+    application of each term's bill, not now. 201 granted; 200 already granted
+    by this form."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    child = _student_here(school, membership_id)
+    try:
+        amount_kobo = kobo_from_naira(payload.amount)
+    except NotAnAmount as exc:
+        return 422, MessageOut(detail=str(exc))
+    try:
+        concession, granted = billing.grant_concession(
+            child,
+            amount_kobo,
+            reason=payload.reason,
+            form_key=payload.form_key,
+            by=request.user,
+        )
+    except services.NotThisSchoolsStudent:
+        # Unreachable while `_student_here()` scopes its lookup, as for `pay()`.
+        raise Http404("No such account.")
+    except services.NoReason as exc:
+        return 422, MessageOut(detail=str(exc))
+    except services.FormAlreadyUsed as exc:
+        return 409, MessageOut(detail=str(exc))
+    return (201 if granted else 200), GrantedOut(
+        concession=_concession_out(concession), granted=granted
+    )
+
+
+@router.post(
+    "/concessions/{int:concession_id}/revocation/",
+    response={201: ConcessionOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def revoke_concession(request, concession_id: int, payload: RevocationIn):
+    """Revoke a concession, with the reason — issue #75. The concession stays
+    as it was granted and a revocation row says who, when and why. 422 without
+    a reason; 409 when it was revoked already."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_biller(request.user, school)
+    if refusal:
+        return refusal
+    concession = FeeConcession.objects.filter(pk=concession_id).first()
+    if concession is None:
+        raise Http404("No such account.")
+    try:
+        billing.revoke_concession(concession, reason=payload.reason, by=request.user)
+    except services.NoReason as exc:
+        return 422, MessageOut(detail=str(exc))
+    except billing.AlreadyRevoked as exc:
+        return 409, MessageOut(detail=str(exc))
+    concession = FeeConcession.objects.select_related("revocation").get(pk=concession.pk)
+    return 201, _concession_out(concession)
 
 
 __all__ = ["router"]

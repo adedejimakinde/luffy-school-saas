@@ -8,7 +8,7 @@
  * who reads the books and may not write to them, and its sentence is shown.
  */
 
-import { getJson, postJson } from "../web/http.js";
+import { deleteJson, getJson, postJson, putJson } from "../web/http.js";
 
 export const REFUSAL = {
   NOT_YOURS: "not-yours",
@@ -29,6 +29,14 @@ export const paymentUrl = (studentId) => `/api/fees/students/${q(studentId)}/pay
 export const discountUrl = (studentId) => `/api/fees/students/${q(studentId)}/discounts/`;
 export const reversalUrl = (entryId) => `/api/fees/entries/${q(entryId)}/reversal/`;
 export const receiptUrl = (entryId) => `/api/fees/entries/${q(entryId)}/receipt/`;
+export const billsUrl = (termId) =>
+  termId == null ? "/api/fees/bills/" : `/api/fees/bills/?term_id=${q(termId)}`;
+export const billUrl = (classId, termId) => `/api/fees/classes/${q(classId)}/bill/?term_id=${q(termId)}`;
+export const billLinesUrl = (classId) => `/api/fees/classes/${q(classId)}/bill/lines/`;
+export const billLineUrl = (lineId) => `/api/fees/bill-lines/${q(lineId)}/`;
+export const chargesUrl = (classId) => `/api/fees/classes/${q(classId)}/bill/charges/`;
+export const concessionsUrl = (studentId) => `/api/fees/students/${q(studentId)}/concessions/`;
+export const revocationUrl = (concessionId) => `/api/fees/concessions/${q(concessionId)}/revocation/`;
 
 export function refusalFor(status, body) {
   if (status === 404) return REFUSAL.NOT_YOURS;
@@ -54,10 +62,10 @@ async function read(url, fetchImpl) {
  * success too — the payment is in the books once. 403, 409 and 422 carry a
  * sentence for the person and keep the page where it is.
  */
-async function write(url, payload, fetchImpl) {
+async function write(url, payload, fetchImpl, send = postJson) {
   let answer;
   try {
-    answer = await postJson(url, payload, { fetchImpl });
+    answer = await send(url, payload, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
@@ -80,3 +88,21 @@ export const postDiscount = ({ studentId, discount, fetchImpl = fetch }) =>
   write(discountUrl(studentId), discount, fetchImpl);
 export const postReversal = ({ entryId, reason, fetchImpl = fetch }) =>
   write(reversalUrl(entryId), { reason }, fetchImpl);
+
+// -- B2: bills and concessions. Every bill write answers with the bill as it
+// now stands, so the page draws what the server holds rather than patching.
+
+export const fetchBills = ({ termId = null, fetchImpl = fetch } = {}) => read(billsUrl(termId), fetchImpl);
+export const fetchBill = ({ classId, termId, fetchImpl = fetch }) => read(billUrl(classId, termId), fetchImpl);
+export const fetchConcessions = ({ studentId, fetchImpl = fetch }) => read(concessionsUrl(studentId), fetchImpl);
+export const postBillLine = ({ classId, line, fetchImpl = fetch }) => write(billLinesUrl(classId), line, fetchImpl);
+export const putBillLine = ({ lineId, line, fetchImpl = fetch }) =>
+  write(billLineUrl(lineId), line, fetchImpl, putJson);
+export const removeBillLine = ({ lineId, fetchImpl = fetch }) =>
+  write(billLineUrl(lineId), undefined, fetchImpl, (url, _payload, options) => deleteJson(url, options));
+export const postCharges = ({ classId, termId, fetchImpl = fetch }) =>
+  write(chargesUrl(classId), { term_id: termId }, fetchImpl);
+export const postConcession = ({ studentId, concession, fetchImpl = fetch }) =>
+  write(concessionsUrl(studentId), concession, fetchImpl);
+export const postRevocation = ({ concessionId, reason, fetchImpl = fetch }) =>
+  write(revocationUrl(concessionId), { reason }, fetchImpl);

@@ -700,7 +700,9 @@ carries in full:
    with rule 8 quoted in it, so that whoever picks it up can see it is a real
    gap and not a tidiness request. It is not built here because it is a
    different decision type from withholding, and this PR already carries the
-   billing half and the card gate.
+   billing half and the card gate. **Settled in B2** (2026-09-24): a
+   revocation is its own append-only row with who, when and why, and the
+   concession is never edited — `docs/fees.md`, "B2".
 2. **The takings report** is deliberately out of this phase and is filed as
    [issue #74](https://github.com/adedejimakinde/luffy-school-saas/issues/74),
    so that nothing in the entry shape forecloses it. Three things it asks of

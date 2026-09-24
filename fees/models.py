@@ -35,6 +35,7 @@ from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q, Sum
+from django.utils import timezone
 
 #: Kobo in a naira. Here so that no call site has to remember it, and so that
 #: the one place it appears is next to the column it describes.
@@ -239,6 +240,16 @@ class FeeScheduleLine(models.Model):
         return f"{self.description} ({self.amount_kobo} kobo)"
 
 
+class ConcessionIsFixed(Exception):
+    """Something tried to edit or delete a concession or its revocation."""
+
+
+class FeeConcessionQuerySet(models.QuerySet):
+    def standing(self):
+        """Granted and not revoked: what the next application of a bill gives."""
+        return self.filter(revocation__isnull=True)
+
+
 class FeeConcession(models.Model):
     """A standing instruction to discount one child: a staff child, a bursary.
 
@@ -261,9 +272,23 @@ class FeeConcession(models.Model):
     entries, one per term, and they stand whatever becomes of this row.
 
     **No window and no term key.** A concession applies to every application run
-    while `is_active`, and is switched off rather than end-dated. The edge that
-    gives up is a school setting up a *future* term with a concession since
-    withdrawn; the record of what was actually granted is unaffected.
+    until it is revoked. The edge that gives up is a school setting up a
+    *future* term with a concession since withdrawn; the record of what was
+    actually granted is unaffected.
+
+    **Never edited and never deleted**, decided 2026-09-24 with issue #75. It
+    used to be switched off with an `is_active` flag, which recorded *when*
+    (through `updated_at`) and never who or why — and a revoked concession
+    produces nothing from then on, which by `docs/operating-rules.md` rule 8 is
+    exactly the absence that needs a log. So a revocation is its own row,
+    `FeeConcessionRevocation`, carrying who, when and why, and this row stays
+    as it was granted. The same rule settles #75's two other questions without
+    a flag: **a reduction** is a revocation plus a new, smaller grant, and
+    **re-granting** is a new concession. Both leave the old one legible.
+
+    Held twice, as the ledger is: `save()` and `delete()` refuse, which is what
+    a developer sees, and a trigger (`fees/migrations/0006`) refuses UPDATE and
+    DELETE, which is what a shell, an import or a `.update()` runs into.
 
     **Several concessions per child is allowed, deliberately.** A bursary and a
     sibling discount are two facts and two DISCOUNT entries, so there is no
@@ -292,25 +317,29 @@ class FeeConcession(models.Model):
         help_text='Why it was granted — "Staff child", "Bursary 2026". Becomes the narration.',
     )
 
-    is_active = models.BooleanField(
-        default=True,
-        help_text=(
-            "A concession no longer granted. Switched off rather than deleted, "
-            "because the entries it produced name it."
-        ),
-    )
-
     granted_by_id = models.PositiveBigIntegerField(
         null=True,
         blank=True,
         help_text="accounts.User id of whoever granted it, where there was one.",
     )
     granted_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    #: The form that granted it, when a form did. The same key twice is one
+    #: concession — B1's decision 4, "a form posts once", for the same reason:
+    #: a double click on "Grant" would otherwise discount the child twice every
+    #: term. `billing.grant_concession()` is the only writer.
+    form_key = models.UUIDField(null=True, blank=True, editable=False)
+
+    objects = FeeConcessionQuerySet.as_manager()
 
     class Meta:
         ordering = ["student_membership_id", "id"]
         constraints = [
+            models.UniqueConstraint(
+                fields=["form_key"],
+                condition=Q(form_key__isnull=False),
+                name="a_concession_form_grants_once",
+            ),
             models.CheckConstraint(
                 condition=Q(amount_kobo__gt=0),
                 name="a_concession_reduces_something",
@@ -328,6 +357,98 @@ class FeeConcession(models.Model):
 
     def __str__(self):
         return f"{self.reason} — membership {self.student_membership_id}"
+
+    def save(self, *args, **kwargs):
+        """Refuse to rewrite a concession. The trigger is the rule that holds;
+        this is the readable error, as `FeeLedgerEntry.save()` is."""
+        if self.pk is not None and not self._state.adding:
+            raise ConcessionIsFixed(
+                f"Concession {self.pk} cannot be changed. Revoke it, with the "
+                f"reason, and grant a new one."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ConcessionIsFixed(
+            f"Concession {self.pk} cannot be deleted. Revoke it, with the "
+            f"reason — the school has to be able to say why it stopped."
+        )
+
+
+class FeeConcessionRevocation(models.Model):
+    """Who revoked a concession, when, and why. Issue #75.
+
+    `docs/operating-rules.md` rule 8: a decision that produces an absence needs
+    a log. A revoked concession stops producing DISCOUNT entries, and without
+    this row the family asking "why did the staff-child discount stop?" would
+    be answered with nothing. The reason is required at the database, as
+    `a_concession_says_why` requires one for the grant.
+
+    **One per concession**, as a one-to-one: a concession is revoked once, and
+    re-granting is a new concession. **Append-only**, twice over like the
+    ledger: `save()`/`delete()` refuse and a trigger refuses UPDATE and DELETE.
+
+    **What a revocation does not do** is touch entries already posted. A
+    discount this term's bill already gave stands, because the ledger is
+    append-only; a school that wants it back reverses that entry, with its own
+    reason. The revocation stops the *next* application of a bill from giving
+    it again.
+
+    `revoked_by_id` is nullable for one reason: the migration that introduced
+    this table turned each concession already switched off into a revocation,
+    and nobody recorded who had switched it off. `billing.revoke_concession()`
+    refuses to write one without a person.
+
+    **Who is frozen as a name as well as an id**, `docs/operating-rules.md`
+    rule 2. The id alone would be read back through the login's live
+    `full_name`, which is issue #143's receipt again: the record of who
+    stopped a family's discount would change when that person's login did.
+    """
+
+    concession = models.OneToOneField(
+        FeeConcession, related_name="revocation", on_delete=models.PROTECT
+    )
+    reason = models.CharField(
+        max_length=255, help_text="Why it was revoked, in the school's words."
+    )
+    revoked_by_id = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="accounts.User id of whoever revoked it. Null only for the backfill.",
+    )
+    revoked_by_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Their name as it stood when they revoked it. Empty only for the backfill.",
+    )
+    revoked_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["revoked_at", "id"]
+        constraints = [
+            # A regex, for the reason `a_concession_says_why` gives.
+            models.CheckConstraint(
+                condition=Q(reason__regex=r"\S"),
+                name="a_revocation_says_why",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Revoked: {self.concession} — {self.reason}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ConcessionIsFixed(
+                f"Revocation {self.pk} cannot be changed. It is the record of why "
+                f"the concession stopped."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ConcessionIsFixed(
+            f"Revocation {self.pk} cannot be deleted. Grant a new concession "
+            f"if the child should have one again."
+        )
 
 
 class LedgerIsAppendOnly(Exception):
