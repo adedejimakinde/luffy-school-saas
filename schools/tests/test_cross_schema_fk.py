@@ -23,13 +23,28 @@ behave as it would in production — and their tables are built directly with
 `schema_editor` inside the test transaction. Nothing survives the class.
 """
 
+import os
+import subprocess
+import sys
+
 from django.apps import apps
+from django.conf import settings
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
+from django.core import checks
 from django.db import IntegrityError, connection, models, transaction
 from django.db.models.deletion import Collector, ProtectedError
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
+from django.test.utils import isolate_apps
 
+from academics.models import Term
 from accounts.deletion import _sanctioned_delete
-from accounts.models import User
+from accounts.models import Membership, User
+from schools.checks import (
+    _tenant_models,
+    no_tenant_model_has_a_relation_into_public,
+    tenant_relations_into_public,
+)
 from schools.tests.test_tenant_isolation import (
     PASSWORD,
     connected_to,
@@ -147,6 +162,10 @@ class CrossSchemaForeignKeyTests(TestCase):
 
         If this fails, the fix is almost certainly to replace the new foreign key
         with a bare id column and a service-layer check — not to relax this test.
+
+        This is the rule *as built*. `schools.E001` is the same rule as
+        declared, refused at `manage.py check` before a migration is written;
+        `test_the_system_check_refuses_the_probes` below is its end-to-end test.
         """
         rows = query(
             "select t.relname, c.conname, n.nspname "
@@ -173,6 +192,24 @@ class CrossSchemaForeignKeyTests(TestCase):
         # both are reported, which is what makes the empty list above mean
         # something.
         self.assertTrue(rows, "expected some shipped tenant foreign keys to check")
+
+    def test_the_system_check_refuses_the_probes(self):
+        """`schools.E001` fires on a real tenant model with a real foreign key.
+
+        The probes are registered in the real app registry for this class, so
+        this is the registered check walking the registry `manage.py check`
+        walks — not the helper handed a list. Both probes are reported, by
+        field, and nothing else is: every shipped tenant model stays silent.
+        """
+        reported = [
+            message.obj
+            for message in checks.run_checks(tags=[checks.Tags.models])
+            if message.id == "schools.E001"
+        ]
+        self.assertEqual(
+            sorted(f"{field.model._meta.label}.{field.name}" for field in reported),
+            ["academics.ProbeCascade.student", "academics.ProbeProtect.student"],
+        )
 
     # -- what Django's collector can see -------------------------------------
 
@@ -290,3 +327,118 @@ class CrossSchemaForeignKeyTests(TestCase):
                     self._rows_in("st_marys", "academics_probecascade"), 0
                 )
                 transaction.set_rollback(True)
+
+
+class TheBareIdCheckTests(SimpleTestCase):
+    """Which relation fields `schools.E001` refuses, one shape at a time.
+
+    Defined under `isolate_apps`, so none of these models reaches the real
+    registry and the check the rest of the suite runs never sees them.
+    """
+
+    def _reported(self, *models):
+        return sorted(
+            f"{field.model.__name__}.{field.name}"
+            for field in tenant_relations_into_public(models)
+        )
+
+    @isolate_apps("academics")
+    def test_every_relation_field_into_a_public_only_app_is_reported(self):
+        """Foreign key, one-to-one and many-to-many alike.
+
+        A many-to-many puts its foreign key on a through table in the tenant's
+        schema, and a one-to-one is a foreign key with a unique index, so all
+        three break the rule the same way.
+        """
+
+        class Probe(models.Model):
+            student = models.ForeignKey(User, on_delete=models.PROTECT)
+            membership = models.OneToOneField(Membership, on_delete=models.PROTECT)
+            watchers = models.ManyToManyField(User, related_name="+")
+
+            class Meta:
+                app_label = "academics"
+
+        self.assertEqual(
+            self._reported(Probe),
+            ["Probe.membership", "Probe.student", "Probe.watchers"],
+        )
+
+    @isolate_apps("academics")
+    def test_relations_that_stay_inside_the_schema_are_not(self):
+        """Tenant to tenant, and to an app that is in both lists.
+
+        `django.contrib.contenttypes` is in SHARED_APPS *and* TENANT_APPS, so
+        every school has its own `django_content_type` and a foreign key to it
+        binds inside the school's schema. A check that read SHARED_APPS alone
+        would refuse every generic relation a tenant model could have. The
+        `GenericForeignKey` itself stores a bare object id, the policy's own
+        shape.
+        """
+
+        class Probe(models.Model):
+            term = models.ForeignKey(Term, on_delete=models.PROTECT)
+            content_type = models.ForeignKey(ContentType, on_delete=models.PROTECT)
+            object_id = models.PositiveBigIntegerField()
+            subject = GenericForeignKey("content_type", "object_id")
+
+            class Meta:
+                app_label = "academics"
+
+        self.assertEqual(self._reported(Probe), [])
+
+    @isolate_apps("academics")
+    def test_a_subclass_of_a_shared_model_is_reported_by_its_parent_link(self):
+        """Multi-table inheritance is a one-to-one into the parent's table.
+
+        Django creates that field itself, so it is auto-created and easy to
+        skip along with the reverse accessors — which is why the helper skips
+        reverse relations by type rather than by `auto_created`.
+        """
+
+        class Probe(Membership):
+            class Meta:
+                app_label = "academics"
+
+        self.assertEqual(self._reported(Probe), ["Probe.membership_ptr"])
+
+    def test_the_app_registers_the_check_not_this_file(self):
+        """A fresh process that has only run `django.setup()` has the check.
+
+        This module imports `schools.checks`, and importing it is what
+        registers the check — so inside this process every other test here
+        passes whether or not `SchoolsConfig.ready()` imports it, and `ready()`
+        is the only thing `manage.py check` has to go on. Asked in a subprocess
+        for that reason, the way `test_background.CurrentAppTests` asks about
+        the Celery binding in the same `ready()`.
+        """
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import django; django.setup()\n"
+                "from django.core.checks import registry\n"
+                "print(*sorted(c.__name__ for c in registry.registry.get_checks()))\n",
+            ],
+            cwd=str(settings.BASE_DIR),
+            env=dict(os.environ),
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("no_tenant_model_has_a_relation_into_public", result.stdout.split())
+
+    def test_the_shipped_tenant_models_are_walked_and_pass(self):
+        """The empty answer is about something: every tenant app is walked.
+
+        Without the second half, a `_tenant_models()` that returned nothing —
+        a renamed setting, a typo in the subtraction — would pass the first.
+        """
+        self.assertEqual(no_tenant_model_has_a_relation_into_public(None), [])
+
+        walked = {model._meta.app_label for model in _tenant_models()}
+        self.assertLessEqual(
+            {"academics", "attendance", "fees", "gradebook", "results", "timetable"},
+            walked,
+        )
