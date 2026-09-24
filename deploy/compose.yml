@@ -17,6 +17,9 @@ x-app: &app
   env_file:
     - production.env
     - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+  environment:
+    # Which commit this is, for Sentry's "release" (settings.py).
+    CLASSNODE_RELEASE: ${CLASSNODE_TAG}
   restart: unless-stopped
   depends_on:
     db:
@@ -65,12 +68,18 @@ services:
     stop_grace_period: 2m
 
   db:
-    # Matched to CI and the devcontainer. A major version change is a dump and
-    # restore, not an image bump, and belongs in its own change.
-    image: postgres:15-alpine
+    # Postgres 15 with WAL-G (deploy/postgres/Dockerfile), built by CI beside
+    # the app image. Debian, and CI and the devcontainer use the same base —
+    # the Dockerfile says why. A major version change is a dump and restore,
+    # not an image bump, and belongs in its own change.
+    image: ghcr.io/adedejimakinde/luffy-school-saas/postgres:${CLASSNODE_TAG:?set CLASSNODE_TAG}
     env_file:
       - production.env
       - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+      # WAL-G's B2 credentials, prefix and encryption key. Absent until B2
+      # exists, and then archiving stays off (deploy/postgres/entrypoint.sh).
+      - path: ${CLASSNODE_ETC:-/etc/classnode}/backup.env
+        required: false
     volumes:
       # On the Hetzner Volume, not the server's own disk, so the data outlives
       # a rebuilt server. Backups are separate and off-server (H3).
@@ -82,6 +91,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # The weekly restore test's database (deploy/restore-check.sh): the latest
+  # backup, recovered from B2 into a throwaway volume, serving on the compose
+  # network only. Never started by `up` — only by its profile.
+  restore-db:
+    image: ghcr.io/adedejimakinde/luffy-school-saas/postgres:${CLASSNODE_TAG:?set CLASSNODE_TAG}
+    profiles: ["restore"]
+    entrypoint: ["classnode-restore-serve"]
+    env_file:
+      - production.env
+      - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+      - path: ${CLASSNODE_ETC:-/etc/classnode}/backup.env
+        required: false
+    volumes:
+      - restore-data:/var/lib/postgresql/restore
 
   redis:
     image: redis:7-alpine
@@ -100,3 +124,4 @@ services:
 volumes:
   caddy-data:
   caddy-config:
+  restore-data:
