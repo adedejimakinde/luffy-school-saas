@@ -135,7 +135,44 @@ def invite_staff(
     ttl=None,
     accept_url_for=None,
 ):
-    """Invite somebody to hold `role` at `school`. Returns `(invitation, raw_token)`.
+    """Invite somebody to hold `role` at `school`, and send it. Returns `(invitation, raw_token)`.
+
+    The invitation itself is `_issue_for()`; this adds the delivery, through
+    the configured channel. `invite_staff_by_hand()` is the one other way an
+    invitation leaves this module.
+    """
+    invitation, raw_token = _issue_for(
+        actor, school, role, email=email, phone=phone, full_name=full_name, ttl=ttl
+    )
+    _deliver(invitation, raw_token, accept_url_for)
+    return invitation, raw_token
+
+
+@transaction.atomic
+def invite_staff_by_hand(actor, school, role, *, email=None, phone=None, full_name="", ttl=None):
+    """Invite somebody **without sending anything**. Returns `(invitation, accept_url)`.
+
+    For the one caller that has somebody to hand the link to: the operator
+    creating a school before the deployment has an email provider
+    (`schools.onboarding.create_school`). It asks no channel anything — there
+    is no channel to ask — and returns the link, so the person running it is
+    the delivery.
+
+    **It still refuses when there is no accept page to link to.**
+    `configured_accept_url()` raises `DeliveryNotConfigured` before this commits,
+    so a caller never holds an invitation with nothing to hand over. That is the
+    difference from the silent early return `_deliver()`'s docstring records: a
+    live token minted and delivered nowhere, with a successful return value.
+    Here the return value *is* the delivery, and it cannot be empty.
+    """
+    invitation, raw_token = _issue_for(
+        actor, school, role, email=email, phone=phone, full_name=full_name, ttl=ttl
+    )
+    return invitation, configured_accept_url(raw_token)
+
+
+def _issue_for(actor, school, role, *, email=None, phone=None, full_name="", ttl=None):
+    """The invitation, minted and not sent. Returns `(invitation, raw_token)`.
 
     Authority is checked with the same `_require_grant_authority()` that guards
     every other membership write, so an admin's reach stops at their own school
@@ -201,11 +238,9 @@ def invite_staff(
     membership = grant_membership(
         user, school, role, status=MembershipStatus.INVITED
     )
-    invitation, raw_token = _issue(
+    return _issue(
         membership, actor, ttl=ttl, sent_to=_sent_to(email=email, phone=phone)
     )
-    _deliver(invitation, raw_token, accept_url_for)
-    return invitation, raw_token
 
 
 def _sent_to(*, email=None, phone=None):

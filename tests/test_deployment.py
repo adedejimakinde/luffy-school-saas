@@ -98,13 +98,23 @@ class TheParentDomainIsNamedOnceTests(SimpleTestCase):
         than being typed again, so they cannot drift apart."""
         domain = read_env_file(PRODUCTION_ENV)["PLATFORM_DOMAIN"]
         derived = production_settings(
-            "PLATFORM_DOMAIN", "SESSION_COOKIE_DOMAIN", "ALLOWED_HOSTS", "DEFAULT_FROM_EMAIL"
+            "PLATFORM_DOMAIN",
+            "SESSION_COOKIE_DOMAIN",
+            "ALLOWED_HOSTS",
+            "DEFAULT_FROM_EMAIL",
+            "PORTAL_HOST",
+            "INVITATION_ACCEPT_URL",
         )
 
         self.assertEqual(derived["PLATFORM_DOMAIN"], domain)
         self.assertEqual(derived["SESSION_COOKIE_DOMAIN"], f".{domain}")
         self.assertEqual(derived["ALLOWED_HOSTS"], [f".{domain}"])
         self.assertEqual(derived["DEFAULT_FROM_EMAIL"], f"no-reply@{domain}")
+        # The portal, and the accept page on it (urls_public.py).
+        self.assertEqual(derived["PORTAL_HOST"], f"app.{domain}")
+        self.assertEqual(
+            derived["INVITATION_ACCEPT_URL"], f"https://app.{domain}/invitations/{{token}}/"
+        )
 
     def test_the_domain_appears_nowhere_else_in_the_deployment_files(self):
         """Named once means named once: the Caddyfile and the compose file read

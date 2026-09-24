@@ -79,10 +79,38 @@ against — dropping or renaming something it reads — ships in two deploys: th
 first stops using the thing, the second removes it. A deploy that breaks that
 rule is recovered by restoring the database (H3), not by rolling back images.
 
+## Onboarding: the portal, then each school
+
+Both are commands run in a shell on the server
+(`docker compose run --rm web python manage.py …`), never from the admin:
+making a school builds and migrates a Postgres schema, which does not belong
+inside a web request.
+
+1. `setup_portal` — the portal answers on `PORTAL_HOST`, which is
+   `app.PLATFORM_DOMAIN` unless set otherwise. Safe to re-run.
+2. `createsuperuser` — the platform operator. Platform staff act across
+   schools; a school's own administrator never is one.
+3. `create_school <slug> "<name>" --admin-email … --operator <username>` —
+   builds the school's schema, gives it `<slug>.PLATFORM_DOMAIN`, and invites
+   its first administrator. **With an email provider**, the invitation is
+   emailed. **Without one** (decided 2026-09-24) nothing is sent: the command
+   prints the accept link for the operator to hand to the administrator. The
+   link makes whoever opens it that school's administrator until it is used or
+   expires, so it goes to that person and nowhere else. With no accept page to
+   link to, the whole school is refused — there would be nothing to hand over.
+
+Every host is one label under `PLATFORM_DOMAIN` (`schools/onboarding.py`,
+`check_host`): under it, because the session cookie spans them all; one label,
+because the wildcard certificate covers nothing deeper. `app`, `www`, `api`,
+`admin`, `mail`, `static`, `portal`, `public` and the portal's own label are
+reserved.
+
+The invitation link lands on `/invitations/<token>/` on the portal
+(`INVITATION_ACCEPT_URL`, derived from `PORTAL_HOST`). The page takes a
+password if the invitee has none, and ends at the staff sign-in door.
+
 ## Still to come
 
-- **H2** — the invitation accept page (without it no invited teacher can
-  join) and a `create_school` command for onboarding.
 - **H3** — WAL-G to B2, the weekly automatic restore test, and Sentry.
 - **The launch session** — provisioning the server, DNS, secrets, the first
   deploy, a timed full restore drill, and onboarding the first school. Every
@@ -96,7 +124,7 @@ rule is recovered by restoring the database (H3), not by rolling back images.
 | First CI push of images to GHCR | nothing new (GitHub's own token) |
 | Provisioning the server | Hetzner project, your SSH public key, your admin IPs |
 | DNS records and the first certificate | the domain registered, the zone on Cloudflare, a DNS-edit token for that zone |
-| Sending the first invitation | a transactional email provider, and SPF/DKIM/DMARC on the domain |
+| Emailing invitations (until then `create_school` prints the link to hand over) | a transactional email provider, and SPF/DKIM/DMARC on the domain |
 | The first backup and restore drill | B2 bucket and key, a backup encryption key held offline |
 | Error reports | Sentry (EU) project and its DSN |
 | Real children's data | your confirmation on data residency (NDPA, OPEN-9) |
