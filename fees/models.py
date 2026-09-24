@@ -70,6 +70,28 @@ class FeeEntryKind(models.TextChoices):
 INCREASES_DEBT = (FeeEntryKind.CHARGE, FeeEntryKind.REFUND)
 REDUCES_DEBT = (FeeEntryKind.PAYMENT, FeeEntryKind.DISCOUNT)
 
+class PaymentMethod(models.TextChoices):
+    """How money reached the school, or left it. Decided 2026-09-24 (fees 3(a)).
+
+    A fixed list and not a per-school one: four ways money moves in a Nigerian
+    school today, and a list each school edits is a list nobody can report
+    across. "Online" arrives with Paystack, as its own value, when there is an
+    account to take it with.
+    """
+
+    CASH = "cash", "Cash"
+    BANK_TRANSFER = "bank_transfer", "Bank transfer"
+    POS = "pos", "POS"
+    CHEQUE = "cheque", "Cheque"
+
+
+#: The kinds that are money actually moving, and so the only kinds with a
+#: method. A charge, a discount and a reversal move no money: a reversal of a
+#: payment says the payment was a mistake, not that cash went back — that is a
+#: REFUND, which has a method of its own. Tuples, for the reason above.
+MONEY_MOVED = (FeeEntryKind.PAYMENT, FeeEntryKind.REFUND)
+
+
 #: Which kinds may name a schedule line, and which may name a concession.
 #:
 #: A `REVERSAL` is in both because it inherits its target's source: undoing a
@@ -421,6 +443,22 @@ class FeeLedgerEntry(models.Model):
     #: forbids them.
     reference = models.CharField(max_length=64, blank=True)
 
+    #: How the money moved. Required on a PAYMENT and a REFUND, empty on every
+    #: other kind — `a_method_on_money_that_moved_and_nowhere_else`. A bank
+    #: transfer also names its teller or transfer reference, because that is
+    #: the only thing the school can reconcile it against
+    #: (`a_bank_transfer_names_its_reference`).
+    method = models.CharField(
+        max_length=16, choices=PaymentMethod, blank=True, default=""
+    )
+
+    #: The form this entry was posted from, where it was posted from one.
+    #: Decided 2026-09-24 (fees 4): a bursar's double click, or a phone that
+    #: retries a request whose answer it never got, must record one payment and
+    #: not two. Unique where present (`a_form_posts_once`); the page mints a
+    #: fresh key each time it draws a form.
+    form_key = models.UUIDField(null=True, blank=True, editable=False)
+
     # The entry this one undoes. Same table, same schema, so a real foreign key
     # again. PROTECT: an entry that has been reversed is part of the story and
     # cannot be removed — not that anything can remove rows here anyway.
@@ -593,6 +631,30 @@ class FeeLedgerEntry(models.Model):
                     source_line__isnull=False, source_concession__isnull=False
                 ),
                 name="an_entry_has_one_source",
+            ),
+            # Money that moved says how, and nothing else claims to have moved
+            # money. A payment with no method cannot be reconciled against a
+            # till or a statement; a charge with one reads, to anyone totalling
+            # the cash, as money received.
+            models.CheckConstraint(
+                condition=(
+                    Q(kind__in=MONEY_MOVED, method__in=PaymentMethod.values)
+                    | (~Q(kind__in=MONEY_MOVED) & Q(method=""))
+                ),
+                name="a_method_on_money_that_moved_and_nowhere_else",
+            ),
+            # A transfer with no reference is a transfer nobody can find on the
+            # school's statement. The regex, not `~Q(reference="")`, for the
+            # reason `a_concession_says_why` gives.
+            models.CheckConstraint(
+                condition=~Q(method=PaymentMethod.BANK_TRANSFER)
+                | Q(reference__regex=r"\S"),
+                name="a_bank_transfer_names_its_reference",
+            ),
+            models.UniqueConstraint(
+                fields=["form_key"],
+                condition=Q(form_key__isnull=False),
+                name="a_form_posts_once",
             ),
         ]
 

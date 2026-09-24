@@ -1368,6 +1368,7 @@ class TheBalanceNeverGates(WithholdingSetUp):
                 self.ada,
                 self.term_of(self.stmarys, TermName.FIRST.value),
                 250_000_00,
+                method="cash",
             )
 
         self.assertWithheld(self.fetch(self.mama, self.stmarys, self.ada))
@@ -1592,7 +1593,7 @@ class TheFrozenBalanceDistinguishesNothingFromZero(WithholdingSetUp):
         self.enable_withholding()
         with connected_to(self.stmarys):
             term = self.term_of(self.stmarys, TermName.FIRST.value)
-            fees_services.record_payment(self.ada, term, 250_000_00)
+            fees_services.record_payment(self.ada, term, 250_000_00, method="cash")
             row = withholding.withhold(
                 self.ada.pk, term, actor=self.principal, reason="Late again."
             )

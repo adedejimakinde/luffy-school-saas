@@ -2,10 +2,10 @@
 
 What a family owes a school and what they have paid, as an append-only book.
 
-Data structure only — there are no screens, no HTTP surface and no reporting.
-`fees/services.py` is the layer a bursar's screen will eventually call, and the
-rules live there rather than in a view so that an import and a management
-command get the same ones.
+The book, and since B1 the bursar's routes and page — see "B1" below. There is
+no reporting. `fees/services.py` is the layer `fees/api.py` calls, and the rules
+live there rather than in a view so that an import and a management command get
+the same ones.
 
 ## Three rules, and why each is where it is
 
@@ -261,9 +261,83 @@ a released report card on placement (`operating-rules.md` rule 1).
 produced: `recorded_by_id`, `effective_on`, `recorded_at`, `source_line`. A run
 row would be a second answer to a question the entries already answer.
 
+## B1: the bursar's routes and page
+
+Built 2026-09-24. `fees/api.py` under `/api/fees/`, and the page at `/fees/`.
+Billing — fee schedules and concessions on a screen — is B2.
+
+### What was decided, and where each decision holds
+
+| | decision | where it holds |
+| --- | --- | --- |
+| 1(a) | The **bursar and the administrator** write. The **principal and the vice principal (academic)** read. Everybody else gets a flat 404 | `fees/authority.py`; every route asks before it reads anything |
+| 2(a) | **Discounts and reversals** are the same people's, and each **says why** | `services.discount_once()` and `services.undo()`, both refusing with `NoReason` |
+| 3(a) | A payment's **method** is cash, bank transfer, POS or cheque, and a **bank transfer names its teller or transfer reference** | two check constraints (`a_method_on_money_that_moved_and_nowhere_else`, `a_bank_transfer_names_its_reference`), and `NoMethod` so the route can answer in a sentence |
+| 4 | A **form posts once** | the unique index `a_form_posts_once` on `form_key`, and `services._once()` |
+| 5 | A **receipt is numbered** by the school's code and the ledger entry | `authority.receipt_number()`: `ST-MARYS-000041` |
+
+### The routes
+
+| route | who | what |
+| --- | --- | --- |
+| `GET classes/?term_id=` | readers | the terms, and the classes with children placed in one |
+| `GET classes/<id>/?term_id=` | readers | every child in the class, with their whole account's balance |
+| `GET students/<id>/` | readers | one child's account: every entry, newest first |
+| `GET entries/<id>/receipt/` | readers | a payment's receipt; any other kind of entry is the flat 404 |
+| `POST students/<id>/payments/` | writers | a payment, with its form key |
+| `POST students/<id>/discounts/` | writers | a discount given by hand, with its reason and form key |
+| `POST entries/<id>/reversal/` | writers | undo any entry, with the reason |
+
+A write answers **201** when it posted and **200 when the same form had already
+posted**, with the entry that form posted. That way a retried request tells the
+page the truth: the payment is in the books once. A reader who may not write
+gets a **403** with a sentence. They read the books, so the account's existence
+is not news to them. Anybody else gets the flat 404 before any lookup, the
+answer the broadsheet and the absence list give. Without it, the routes would
+be a directory of the school's children and their debts.
+
+**The child is looked up with `school=` in the query.** `student_membership_id`
+is a bare id into the shared table, so a lookup without the school would find
+another school's child and print her name on this school's host. The services
+refuse to *post* against her anyway, but by then the read would have told the
+caller who she is.
+
+### Money in, money out
+
+**What a bursar types is naira, as text.** `fees.money.kobo_from_naira()` is
+the only thing that turns it into kobo, and it refuses rather than guesses:
+`12.345` is refused, not rounded, and a comma counts only as a thousands
+separator. **What leaves is integer kobo**, and `static/fees/money.js` formats
+it by cutting the digit string, so a float touches it nowhere.
+
+**A balance is said in words**: "Owes ₦…", "In credit ₦…", "Nothing owed". A
+minus sign is the character a phone screen most easily loses, and a family in
+credit being chased for money is the mistake this page must not make.
+
+### The form key
+
+Each payment form and each discount form the page draws carries a fresh UUID.
+The unique index is the whole mechanism. Two racing submissions both pass any
+read, and only the index sees them both. The same key with the same details is
+a double click, and the answer is the first click's entry. The same key with
+different details is refused (409), because answering with the first entry
+would tell the bursar something was recorded that was not. When the answer is
+lost, the page keeps the key and what was typed, so sending again is safe.
+
+### The receipt
+
+The student's name and admission number come from the entry's frozen snapshot,
+not the live row. A receipt reprinted next year says what it said when it was
+issued. An undone payment's receipt says so across its face. **"Received by"
+is the exception**: it is read live from the recorder's login. Issue #143.
+
 ## Not built
 
-- **No screens, no API.** Deliberate; this pass is the data structure.
+- **No billing screens.** Fee schedules and concessions have services and no
+  screen; that is B2.
+- **No refund route.** `services.refund()` exists and nothing on the page calls
+  it.
+- **"Received by" on a receipt is not frozen.** [Issue #143](https://github.com/adedejimakinde/luffy-school-saas/issues/143).
 - **No revocation log for a concession.** Switching `is_active` off records
   *when* and never who or why, which by rule 8 is an absence that wants a log.
   Filed as [issue #75](https://github.com/adedejimakinde/luffy-school-saas/issues/75).

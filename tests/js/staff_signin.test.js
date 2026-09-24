@@ -98,8 +98,9 @@ test("each school is linked to what it offers this login, and to nothing else", 
 });
 
 test("a school offering this login nothing is named and says so", () => {
-  // A bursar lands here. Named without a sentence would read as a page that
-  // failed to load, and she has done nothing wrong.
+  // Whoever lands here has nothing on this platform at this school yet.
+  // Named without a sentence would read as a page that failed to load, and
+  // they have done nothing wrong.
   const html = htmlFor(
     advance(initialState(), {
       status: 200,
@@ -384,4 +385,42 @@ test("the absence list is linked iff the login may read it there", () => {
   assert.match(html, /href="\/\/grace\.example\.test\/absences\/"/);
   assert.doesNotMatch(html, /st-marys\.example\.test\/absences\//);
   assert.equal(html.match(/\/absences\//g).length, 1);
+});
+
+test("the books are linked iff the login may read them there", () => {
+  // `may_see_fees` is `fees.authority.may_read()`: bursar, administrator,
+  // principal and vice principal (academic). A bursar had nothing to open
+  // before this; a teacher still has no link to a page that would answer her
+  // with a 404.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Bimpe Bursar",
+        schools: [
+          {
+            slug: "grace",
+            name: "Grace Academy",
+            host: "grace.example.test",
+            may_take_a_register: false,
+            may_see_fees: true,
+            has_children_here: false,
+          },
+          {
+            slug: "st-marys",
+            name: "St Mary's",
+            host: "st-marys.example.test",
+            may_take_a_register: true,
+            may_see_fees: false,
+            has_children_here: false,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.match(html, /href="\/\/grace\.example\.test\/fees\/"/);
+  assert.doesNotMatch(html, /st-marys\.example\.test\/fees\//);
+  assert.equal(html.match(/\/fees\//g).length, 1);
 });
