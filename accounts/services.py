@@ -10,7 +10,7 @@ here, so callers never have to remember them:
 """
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .models import (
@@ -120,12 +120,58 @@ def _require_grant_authority(actor, school):
         raise NotPermitted(f"{actor} cannot grant memberships at {school}.")
 
 
-@transaction.atomic
+#: The one refusal `grant_membership()` treats as "somebody else got there first".
+_MEMBERSHIP_COLLISION = "uniq_membership_user_school_role"
+
+
+def _is_the_membership_colliding(exc) -> bool:
+    """Did a concurrent first grant win the insert, or did something else refuse it?
+
+    Asked of the constraint that fired, via psycopg's `diag`, on the precedent
+    of `throttling._is_the_counter_colliding()`. `Membership` has other refusals
+    that arrive as `IntegrityError` — `one_live_student_membership_per_user`,
+    and the guardianship triggers on this table — and none of them is a race to
+    retry. A cause carrying no diagnostics is treated as "not a collision", so an
+    unrecognised failure is raised rather than retried.
+    """
+    diag = getattr(getattr(exc, "__cause__", None), "diag", None)
+    return getattr(diag, "constraint_name", None) == _MEMBERSHIP_COLLISION
+
+
 def grant_membership(user, school, role, *, status=MembershipStatus.ACTIVE, **fields):
     """Give `user` a `role` at `school`, reviving an ended membership if there is one.
 
-    Idempotent: calling it twice returns the same row.
+    Idempotent: calling it twice returns the same row — and so does calling it
+    twice at once, which is the case the lock below cannot cover (#94).
+    `SELECT ... FOR UPDATE` locks rows that exist. On a first grant there is no
+    row, so two concurrent callers both find nothing and both insert; the second
+    insert waits on the first's transaction and, once that commits, is refused
+    by `uniq_membership_user_school_role`.
+
+    The loser runs the whole grant again rather than re-reading inside it. Its
+    first attempt was rolled back to its own savepoint by `atomic()`, and the
+    second finds the winner's committed row, locks it, and treats it exactly as
+    a sequential second call would: a live row comes back untouched. Retrying
+    around the atomic block, rather than wrapping the insert in a savepoint of
+    its own, keeps the ordinary path at one savepoint — `accounts.bulk.admit()`
+    grants a membership for every child on a roll, and another for every
+    guardian, inside one transaction, and the collision is the rare case, so it
+    is the one that pays for a second.
+
+    Once only. After a collision the row exists, so a second attempt cannot
+    collide again unless the winner's row was deleted in between, and that is
+    raised rather than chased.
     """
+    try:
+        return _grant_or_revive(user, school, role, status=status, **fields)
+    except IntegrityError as exc:
+        if not _is_the_membership_colliding(exc):
+            raise
+    return _grant_or_revive(user, school, role, status=status, **fields)
+
+
+@transaction.atomic
+def _grant_or_revive(user, school, role, *, status, **fields):
     # `.order_by()` because `Membership.Meta.ordering` joins `schools_school`
     # and `accounts_user`, and Postgres locks a row in every joined table when
     # `FOR UPDATE` is used with a join. Without it this held an exclusive lock on
