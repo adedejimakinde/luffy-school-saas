@@ -137,6 +137,12 @@ TENANT_APPS = [
     # all. Two tables with opposite relationships to time do not belong in one
     # app.
     "results",
+    # Who teaches which subject to which class, and when. Separate from
+    # `academics` because it reads `gradebook`'s subjects as well as the terms
+    # and classes `academics` owns, and `academics` must not depend on the
+    # gradebook; and separate from `gradebook` because a bell schedule is set
+    # once a year by the office while marks are written daily by teachers.
+    "timetable",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

@@ -42,6 +42,7 @@ from results.views import (
     COMMENTS_MODULES,
     INDEX_MODULES,
 )
+from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
 #: `settings.STATICFILES_DIRS` for why those two being the same is the whole
@@ -65,6 +66,7 @@ PAGES = {
     "invite": INVITE_MODULES,
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
+    "timetable": TIMETABLE_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

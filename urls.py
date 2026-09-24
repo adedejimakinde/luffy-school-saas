@@ -30,6 +30,7 @@ from results.views import (
     chain_page,
     comments_page,
 )
+from timetable.views import timetable_page
 
 urlpatterns = [
     path("api/", api.urls),
@@ -60,6 +61,8 @@ urlpatterns = [
     path("comments/", comments_page, name="comments"),
     # The bursar's, on the broadsheet's terms.
     path("fees/", fees_page, name="fees"),
+    # Who teaches what, when: every teacher reads it, on the same terms.
+    path("timetable/", timetable_page, name="timetable"),
     path("cards/", card_index_page, name="report-card-index"),
     path(
         "cards/<int:student_membership_id>/<int:term_id>/",

@@ -424,3 +424,40 @@ test("the books are linked iff the login may read them there", () => {
   assert.doesNotMatch(html, /st-marys\.example\.test\/fees\//);
   assert.equal(html.match(/\/fees\//g).length, 1);
 });
+
+test("the timetable is linked iff the login may read it there", () => {
+  // `may_see_timetable` is `timetable.services.may_read()`: every teacher, the
+  // principal, the vice principal (academic) and the administrator. A bursar
+  // is not sent to a page that would answer with a 404.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Kemi Teacher",
+        schools: [
+          {
+            slug: "grace",
+            name: "Grace Academy",
+            host: "grace.example.test",
+            may_take_a_register: true,
+            may_see_timetable: true,
+            has_children_here: false,
+          },
+          {
+            slug: "st-marys",
+            name: "St Mary's",
+            host: "st-marys.example.test",
+            may_see_fees: true,
+            may_see_timetable: false,
+            has_children_here: false,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.match(html, /href="\/\/grace\.example\.test\/timetable\/"/);
+  assert.doesNotMatch(html, /st-marys\.example\.test\/timetable\//);
+  assert.equal(html.match(/\/timetable\//g).length, 1);
+});
