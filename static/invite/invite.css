@@ -1,0 +1,13 @@
+/* The invitation page: one card, readable on a phone. */
+:root{--ink:#111;--quiet:#555;--rule:#ddd;--stop:#900;--stop-bg:#fdeeee}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 16px;background:#fff;color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:28rem;margin:0 auto}
+h1{font-size:1.35rem;margin:0 0 12px}
+form{display:grid;gap:6px;margin:12px 0 0}
+label{font-weight:600;margin-top:6px}
+input{font:inherit;padding:10px;border:1px solid var(--rule);border-radius:6px;width:100%}
+button{font:inherit;min-height:44px;padding:10px 16px;background:#fff;border:1px solid var(--rule);border-radius:8px;cursor:pointer;justify-self:start;margin-top:8px}
+.note{font-size:.95rem;color:var(--stop)}
+form.rejected{background:var(--stop-bg);border-left:4px solid var(--stop);padding-left:8px}
+a{color:#14507d}

@@ -49,6 +49,17 @@ if not SECRET_KEY:
 #: Unset in development, where there is one host and none of the three needs it.
 PLATFORM_DOMAIN = os.environ.get("PLATFORM_DOMAIN", "").strip().lower().lstrip(".") or None
 
+#: **Where the portal answers**: sign-in, the staff door, the admin and the
+#: invitation accept page. `app.` under the platform domain unless a deployment
+#: says otherwise — a subdomain rather than the bare domain, so the bare domain
+#: stays free for a public site and every host the platform serves is one label
+#: under it, which is what one wildcard certificate covers. `setup_portal` makes
+#: the `Domain` row from this, and `create_school` refuses a school whose
+#: subdomain would collide with it.
+PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
+    f"app.{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else None
+)
+
 # **The `Domain` table is the real allowlist**, which is why this could be `*`
 # for as long as it was. `TenantMainMiddleware` resolves every request's host
 # against `schools.Domain` and raises `Http404` for one it does not recognise,
@@ -470,14 +481,23 @@ INVITATION_CHANNEL = os.environ.get(
 #: standing — for a page that is meant to live on a frontend which may be on
 #: neither of them, and which no urlconf in this project serves.
 #:
-#: There is deliberately **no default**. Every candidate default is wrong
-#: somewhere: a hard-coded origin is wrong for every deploy that is not ours, and
-#: falling back to the request host is the bug this setting exists to remove. So
-#: an unset value is a misconfiguration and is refused — see
-#: `invitations.configured_accept_url()`, which raises *before* the transaction
-#: commits, so a deploy that never sets this creates no orphaned placeholder
-#: accounts while failing.
-INVITATION_ACCEPT_URL = os.environ.get("INVITATION_ACCEPT_URL")
+#: There is deliberately **no default** where nothing names the platform. Every
+#: candidate default is wrong somewhere: a hard-coded origin is wrong for every
+#: deploy that is not ours, and falling back to the request host is the bug this
+#: setting exists to remove. So an unset value is a misconfiguration and is
+#: refused — see `invitations.configured_accept_url()`, which raises *before* the
+#: transaction commits, so a deploy that never sets this creates no orphaned
+#: placeholder accounts while failing.
+#:
+#: **Where a deployment does name its portal, the page is there** — the accept
+#: page lives on the portal (`urls_public.py`, `/invitations/<token>/`), so its
+#: address follows from `PORTAL_HOST` and is neither of the two wrong defaults:
+#: not a guessed origin, and not the host an admin happened to be standing on.
+#: Derived rather than written into `production.env`, so the domain is still
+#: named once. HTTPS, because a portal is only ever served behind the TLS proxy.
+INVITATION_ACCEPT_URL = os.environ.get("INVITATION_ACCEPT_URL") or (
+    f"https://{PORTAL_HOST}/invitations/{{token}}/" if PORTAL_HOST else None
+)
 
 #: Not the console backend, which is what this used to default to. An invite
 #: link is a live credential, and the console backend writes the whole message

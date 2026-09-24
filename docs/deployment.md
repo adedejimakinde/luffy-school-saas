@@ -79,10 +79,35 @@ against — dropping or renaming something it reads — ships in two deploys: th
 first stops using the thing, the second removes it. A deploy that breaks that
 rule is recovered by restoring the database (H3), not by rolling back images.
 
+## Onboarding: the portal, then each school
+
+Both are commands run in a shell on the server
+(`docker compose run --rm web python manage.py …`), never from the admin:
+making a school builds and migrates a Postgres schema, which does not belong
+inside a web request.
+
+1. `setup_portal` — the portal answers on `PORTAL_HOST`, which is
+   `app.PLATFORM_DOMAIN` unless set otherwise. Safe to re-run.
+2. `createsuperuser` — the platform operator. Platform staff act across
+   schools; a school's own administrator never is one.
+3. `create_school <slug> "<name>" --admin-email … --operator <username>` —
+   builds the school's schema, gives it `<slug>.PLATFORM_DOMAIN`, and invites
+   its first administrator. **[needs an email provider]** It refuses the whole
+   school if the invitation cannot be sent, so a school nobody can get into is
+   never created.
+
+Every host is one label under `PLATFORM_DOMAIN` (`schools/onboarding.py`,
+`check_host`): under it, because the session cookie spans them all; one label,
+because the wildcard certificate covers nothing deeper. `app`, `www`, `api`,
+`admin`, `mail`, `static`, `portal`, `public` and the portal's own label are
+reserved.
+
+The invitation link lands on `/invitations/<token>/` on the portal
+(`INVITATION_ACCEPT_URL`, derived from `PORTAL_HOST`). The page takes a
+password if the invitee has none, and ends at the staff sign-in door.
+
 ## Still to come
 
-- **H2** — the invitation accept page (without it no invited teacher can
-  join) and a `create_school` command for onboarding.
 - **H3** — WAL-G to B2, the weekly automatic restore test, and Sentry.
 - **The launch session** — provisioning the server, DNS, secrets, the first
   deploy, a timed full restore drill, and onboarding the first school. Every

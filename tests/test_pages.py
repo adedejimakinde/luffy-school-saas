@@ -30,7 +30,7 @@ from django.test import SimpleTestCase
 
 import pages
 from accounts.views import MODULES as SIGN_IN_MODULES
-from accounts.views import ROLL_MODULES, STAFF_MODULES, STAFF_PAGE_MODULES
+from accounts.views import INVITE_MODULES, ROLL_MODULES, STAFF_MODULES, STAFF_PAGE_MODULES
 from academics.views import SETUP_MODULES
 from attendance.views import REGISTER_MODULES
 from gradebook.views import MARKING_MODULES
@@ -61,6 +61,7 @@ PAGES = {
     "roll": ROLL_MODULES,
     "staff": STAFF_PAGE_MODULES,
     "broadsheet": BROADSHEET_MODULES,
+    "invite": INVITE_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

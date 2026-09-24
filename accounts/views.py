@@ -153,6 +153,38 @@ def staff_page(request):
     )
 
 
+#: The invitation accept page's own modules.
+INVITE_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "invite/api.js",
+    "invite/states.js",
+    "invite/app.js",
+)
+
+
+def invitation_page(request, token):
+    """The frame for accepting an invitation. Holds no token, name or school.
+
+    **Portal only** (`urls_public.py`): a token is a credential for a person,
+    not for a school, and the API routes it calls are the portal's. The page
+    reads the token out of its own address and asks the API about it, so the
+    frame served for a real token and for a guessed one are the same bytes.
+
+    `no-store`, because the address this was served from is a live credential
+    until it is used, and a cached copy of the page is a copy of the address in
+    whatever keeps it. The referrer policy (settings.py) already keeps the
+    address from leaking to another origin.
+    """
+    response = render(
+        request,
+        "accounts/invitation_page.html",
+        {"import_map": pages.import_map(*INVITE_MODULES)},
+    )
+    response["Cache-Control"] = "no-store"
+    return response
+
+
 def refused(request, exception=None):
     """The 403 page, which says what happened and whether anything fixes it.
 
@@ -207,9 +239,11 @@ __all__ = [
     "staff_sign_in_page",
     "roll_page",
     "staff_page",
+    "invitation_page",
     "refused",
     "ROLL_MODULES",
     "STAFF_PAGE_MODULES",
+    "INVITE_MODULES",
     "MODULES",
     "STAFF_MODULES",
 ]

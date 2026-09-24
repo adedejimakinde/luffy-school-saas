@@ -1,0 +1,28 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Your invitation</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page.
+
+The title names no school and no person. The address this is served from is a
+live credential, so nothing the server knows about it is written here: the page
+reads the token from its own address and asks the API, and a guessed token and
+a real one get the same frame. `no-referrer` because the address is the token.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'invite/invite.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'invite/app.js' %}"></script>
+
+<main id="invite">
+  <noscript>
+    <h1>Your invitation</h1>
+    <p>This page needs JavaScript to accept your invitation. Please turn it on,
+    or ask the school that invited you for help.</p>
+  </noscript>
+  <p class="state state-loading">Loading your invitation&hellip;</p>
+</main>
