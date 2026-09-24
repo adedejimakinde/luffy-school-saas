@@ -79,7 +79,9 @@ class TimetableSetUp(RefusalAssertions, TestCase):
             self.maths = Subject.objects.create(name="Mathematics", code="MTH")
             self.english = Subject.objects.create(name="English", code="ENG")
             self.p1 = Period.objects.create(starts_at=time(8, 0), ends_at=time(8, 40), label="Period 1")
-            self.p2 = Period.objects.create(starts_at=time(8, 40), ends_at=time(9, 20), label="Period 2")
+            # A five-minute changeover, so that nothing but the one test
+            # about it depends on back-to-back periods being allowed.
+            self.p2 = Period.objects.create(starts_at=time(8, 45), ends_at=time(9, 25), label="Period 2")
         with connected_to(self.grace):
             self.their_class = ClassGroup.objects.create(name="JSS 1A", level=1)
 
@@ -193,13 +195,13 @@ class TheBellScheduleTests(TimetableSetUp):
                 Period.objects.create(starts_at=time(8, 20), ends_at=time(9, 0))
 
     def test_a_period_may_start_the_minute_the_last_one_ends(self):
-        """`[)`: 08:00–08:40 and 08:40–09:20 share an instant and no time.
+        """`[)`: 08:45–09:25 and 09:25–10:05 share an instant and no time.
 
         CONTROL 3: a closed range (`[]`) makes this red — every school's
         back-to-back periods would be refused as overlapping.
         """
         with connected_to(self.stmarys):
-            Period.objects.create(starts_at=time(9, 20), ends_at=time(10, 0))
+            Period.objects.create(starts_at=time(9, 25), ends_at=time(10, 5))
 
             self.assertEqual(Period.objects.count(), 3)
 
@@ -329,6 +331,20 @@ class CopyingLastTermTests(TimetableSetUp):
 
         self.assertEqual((done.copied, done.skipped_subject, done.skipped_teacher), (0, 2, 1))
 
+    def test_a_lesson_naming_another_schools_teacher_is_not_carried_forward(self):
+        """The copy's teacher read is scoped to the schema being written. A row
+        naming Grace's teacher could only be here by a write that went round
+        the service, and the copy must not make a second one.
+
+        CONTROL 8: the read losing `school__schema_name=` makes this red."""
+        with connected_to(self.stmarys):
+            self.lesson(self.jss1a, self.maths, self.their_teacher)
+
+            done = services.copy_last_term(self.second)
+
+            self.assertFalse(TimetableSlot.objects.filter(term=self.second).exists())
+        self.assertEqual((done.copied, done.skipped_teacher), (0, 1))
+
     def test_the_first_term_there_is_has_nothing_to_copy(self):
         with connected_to(self.stmarys):
             with self.assertRaises(services.NoEarlierTerm):
@@ -434,15 +450,16 @@ class WhoMayEditTests(TimetableSetUp):
         self.assertEqual(self.slots(), [])
         self.assertEqual(self.slots(school=self.grace), [])
 
-    def test_another_schools_class_is_the_flat_404(self):
-        answer = self.put_lesson(self.admin, self.their_class)
+    def test_a_class_that_is_not_ours_is_the_flat_404(self):
+        """A class id is a row in this school's own table, so another school's
+        class is simply an id this school does not have."""
+        missing = self.missing()
 
-        # Grace's JSS 1A has an id; on St Mary's host it names no class of ours
-        # unless the ids happen to coincide, which is why the check is on the
-        # write, not the status alone.
-        self.assertIn(answer.status_code, (404, 201))
-        with connected_to(self.grace):
-            self.assertFalse(TimetableSlot.objects.exists())
+        answer = self.put_lesson(self.admin, ClassGroup(pk=NOBODY))
+
+        self.assertEqual(answer.status_code, 404)
+        self.assertEqual(answer.content, missing)
+        self.assertEqual(self.slots(), [])
 
     def test_clearing_a_slot_makes_it_a_free_period(self):
         self.put_lesson(self.admin)
@@ -472,7 +489,7 @@ class WhoMayEditTests(TimetableSetUp):
     def test_the_bell_is_set_by_the_same_people(self):
         answer = self.client.post(
             f"{API}periods/",
-            data=json.dumps({"starts_at": "09:20", "ends_at": "10:00", "label": "Period 3"}),
+            data=json.dumps({"starts_at": "09:30", "ends_at": "10:10", "label": "Period 3"}),
             content_type="application/json",
             HTTP_HOST=HOST,
         )
@@ -481,14 +498,14 @@ class WhoMayEditTests(TimetableSetUp):
         self.client.force_login(self.principal.user)
         refused = self.client.post(
             f"{API}periods/",
-            data=json.dumps({"starts_at": "09:20", "ends_at": "10:00"}),
+            data=json.dumps({"starts_at": "09:30", "ends_at": "10:10"}),
             content_type="application/json",
             HTTP_HOST=HOST,
         )
         self.client.force_login(self.vp.user)
         added = self.client.post(
             f"{API}periods/",
-            data=json.dumps({"starts_at": "09:20", "ends_at": "10:00", "label": "Period 3"}),
+            data=json.dumps({"starts_at": "09:30", "ends_at": "10:10", "label": "Period 3"}),
             content_type="application/json",
             HTTP_HOST=HOST,
         )
@@ -501,5 +518,29 @@ class WhoMayEditTests(TimetableSetUp):
 
         self.assertEqual(refused.status_code, 403)
         self.assertEqual(added.status_code, 201)
-        self.assertEqual(added.json()["starts_at"], "09:20")
+        self.assertEqual(added.json()["starts_at"], "09:30")
         self.assertEqual(overlapping.status_code, 422)
+
+
+class TheFrameTests(TimetableSetUp):
+    def test_the_frame_names_no_lesson(self):
+        with connected_to(self.stmarys):
+            self.lesson(self.jss1a, self.maths, self.kemi)
+        self.client.force_login(self.kemi.user)
+
+        page = self.client.get("/timetable/", HTTP_HOST=HOST).content.decode()
+
+        self.assertIn('id="timetable"', page)
+        self.assertIn('data-on-school="yes"', page)
+        for absent in ("Mathematics", "JSS 1A", "Kemi", "St Mary"):
+            with self.subTest(absent=absent):
+                self.assertNotIn(absent, page)
+        # Not `}}`: the import map is JSON and ends in two braces.
+        for delimiter in ("{#", "#}", "{%"):
+            with self.subTest(delimiter=delimiter):
+                self.assertNotIn(delimiter, page)
+
+    def test_the_portal_frame_says_it_is_not_a_school(self):
+        page = self.client.get("/timetable/", HTTP_HOST="testserver").content.decode()
+
+        self.assertIn('data-on-school=""', page)

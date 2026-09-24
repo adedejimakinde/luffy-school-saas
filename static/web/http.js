@@ -87,6 +87,16 @@ export async function putJson(url, payload, options = {}) {
   return sendJson("PUT", url, payload, options);
 }
 
+/**
+ * The same request again, spelled DELETE, and with no body: what is being
+ * removed is named by the URL. Shared for the retry rule, as `putJson()` is.
+ *
+ * The timetable's "make this a free period" is the first caller.
+ */
+export async function deleteJson(url, options = {}) {
+  return sendJson("DELETE", url, undefined, options);
+}
+
 async function sendJson(method, url, payload, { fetchImpl = fetch } = {}) {
   const send = async (csrf) =>
     fetchImpl(url, {

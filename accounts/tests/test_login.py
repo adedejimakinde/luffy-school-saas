@@ -142,10 +142,11 @@ class SigningInTests(SignInSetUp):
                     "name": "St Mary's",
                     "host": SCHOOL_HOST,
                     # A teacher marks, reads no absence list and not the
-                    # books, and has no child here.
+                    # books, reads the timetable, and has no child here.
                     "may_take_a_register": True,
                     "may_see_absences": False,
                     "may_see_fees": False,
+                    "may_see_timetable": True,
                     "has_children_here": False,
                 }
             ],
@@ -634,6 +635,22 @@ class WhatEachSchoolOffersThisLoginTests(SignInSetUp):
         self.assertFalse(
             rows["st-marys"]["may_see_fees"],
             "a teacher was offered the books — the answer is not per-school",
+        )
+
+    # -- may_see_timetable ---------------------------------------------------
+
+    def test_the_timetable_is_offered_per_school_and_to_its_readers_only(self):
+        """A teacher at St Mary's and a bursar at Grace: one login, two
+        answers. The bursar's half is the one that matters — a link there
+        would open onto the timetable's flat 404."""
+        grant_membership(self.teacher, self.grace, Role.BURSAR)
+
+        rows = self.rows()
+
+        self.assertTrue(rows["st-marys"]["may_see_timetable"])
+        self.assertFalse(
+            rows["grace"]["may_see_timetable"],
+            "a bursar was offered the timetable — the answer is not per-school",
         )
 
     # -- has_children_here ---------------------------------------------------

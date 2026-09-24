@@ -55,6 +55,7 @@ from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
+from timetable.services import READING_ROLES as TIMETABLE_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
 from timetable.api import router as timetable_router
@@ -250,6 +251,12 @@ class SchoolOut(Schema):
     #: bursar, who had nothing on the landing until now, has somewhere to go.
     may_see_fees: bool = False
 
+    #: May this login read the timetable here? `timetable.services.may_read()`'s
+    #: question — every teacher, the principal, the vice principal (academic)
+    #: and the administrator — so a bursar is not sent to a page that answers
+    #: with a 404.
+    may_see_timetable: bool = False
+
     #: Has this login a child at this school — their own card, or one they are
     #: a guardian of? `card_api._children_of()`'s question, which is
     #: `role=STUDENT` and (`user=actor` or `guardianships__guardian=actor`).
@@ -397,6 +404,11 @@ def _schools_of(user, *, parent_scoped=False):
         .filter(school__in=schools, role__in=FEES_READING_ROLES)
         .values_list("school_id", flat=True)
     )
+    timetable_readers = set(
+        user.memberships.with_access()
+        .filter(school__in=schools, role__in=TIMETABLE_READING_ROLES)
+        .values_list("school_id", flat=True)
+    )
     # The child's own login and the guardian's, in one query — the two halves
     # of `_children_of()`, asked as "is there any such child" per school.
     families = set(
@@ -412,6 +424,7 @@ def _schools_of(user, *, parent_scoped=False):
             may_take_a_register=not parent_scoped and school.pk in markers,
             may_see_absences=not parent_scoped and school.pk in absence_readers,
             may_see_fees=not parent_scoped and school.pk in book_readers,
+            may_see_timetable=not parent_scoped and school.pk in timetable_readers,
             has_children_here=school.pk in families,
         )
         for school in schools

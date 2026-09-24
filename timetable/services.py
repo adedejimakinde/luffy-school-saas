@@ -14,7 +14,7 @@ read; everybody else gets the flat 404 at the API.
 
 from dataclasses import dataclass
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 
 from academics.models import Term
 from accounts.models import Membership, Role
@@ -139,7 +139,7 @@ def _require_teacher(membership):
     reason = why_not_a_teacher_here(membership, subject="a timetabled lesson", holder="timetable")
     if reason:
         raise NotThisSchoolsTeacher(reason)
-    if not membership.is_live():
+    if not membership.is_live:
         raise NotThisSchoolsTeacher(
             f"{membership.name} no longer teaches here, so cannot be timetabled."
         )
@@ -258,10 +258,14 @@ def copy_last_term(term, *, by=None) -> Copied:
         rows = list(
             TimetableSlot.objects.filter(term=source).select_related("class_group", "subject")
         )
+        # Scoped to the schema being written, as `why_not_a_teacher_here()`
+        # scopes it: the ids were checked when they were set, and this is the
+        # read that decides whether they still count.
         teachers = set(
             Membership.objects.filter(
                 pk__in={r.teacher_membership_id for r in rows},
                 role=Role.TEACHER.value,
+                school__schema_name=connection.schema_name,
             )
             .live()
             .values_list("pk", flat=True)

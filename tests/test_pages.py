@@ -35,6 +35,7 @@ from academics.views import SETUP_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import FEES_MODULES
 from gradebook.views import MARKING_MODULES
+from timetable.views import TIMETABLE_MODULES
 from results.views import (
     BROADSHEET_MODULES,
     CARD_MODULES,
@@ -65,6 +66,7 @@ PAGES = {
     "invite": INVITE_MODULES,
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
+    "timetable": TIMETABLE_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

@@ -1,0 +1,30 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Timetable</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line hash-brace block: one spanning lines is
+not a comment and renders on the page.
+
+The title names no class and no school. This document is served to whoever
+opens the URL — there is no `login_required`, for the oracle reason
+`timetable/views.py` gives.
+
+`data-on-school` is the only fact the server writes here besides the portal's
+name: the routes answer a flat 404 both to a refused reader and on the portal,
+on purpose, so the page is told which host it is on rather than guessing.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'timetable/timetable.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'timetable/app.js' %}"></script>
+
+<main id="timetable" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
+  <noscript>
+    <h1>Timetable</h1>
+    <p>This page needs JavaScript. Please turn it on, or ask whoever set up
+    this system for you.</p>
+  </noscript>
+  <p class="state state-loading">Loading&hellip;</p>
+</main>
