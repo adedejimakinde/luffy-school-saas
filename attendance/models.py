@@ -207,11 +207,12 @@ class AttendanceMark(models.Model):
     )
 
     #: A bare id, not a `ForeignKey` — the `docs/tenancy.md` policy, and the
-    #: sixth table to follow it. `attendance.services` checks the id names a
-    #: student *of this school* before anything is written, via
-    #: `accounts.students.why_not_a_student_here()`, which is the check that
-    #: earns the bare id and one a foreign key could not have made anyway:
-    #: `Membership` is shared and every school's students are in that one table.
+    #: sixth table to follow it. Unlike the others, nothing here checks the id
+    #: with `accounts.students.why_not_a_student_here()`, and deliberately so:
+    #: `take_register()` only ever writes ids that survive intersection with the
+    #: roster, and the roster is `ClassPlacement`, whose rows
+    #: `academics.services.place_student()` already checked. The comment above
+    #: `take_register()` in `attendance/services.py` has the argument.
     student_membership_id = models.PositiveBigIntegerField(db_index=True)
 
     #: NOT NULL. See `AttendanceStatus` for why there is no third member and no

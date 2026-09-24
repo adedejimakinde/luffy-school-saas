@@ -40,6 +40,7 @@ state can offer a way back to a door that is on another host.
 403 page added with #122 is on the same rule.
 """
 
+from django.conf import settings
 from django.shortcuts import render
 
 import pages
@@ -65,6 +66,10 @@ def register_page(request):
     `card_index_page()` read, and for the same sentence: a staff member whose
     session has lapsed has to be sent back to `/staff-sign-in/`, which is on
     the portal while this page is on a school's host.
+
+    It also says which time zone the school's day is counted in, because the
+    page decides "today" for itself and has to decide it the way the server
+    does: `settings.TIME_ZONE`, which `timezone.localdate()` reads too.
     """
     return render(
         request,
@@ -72,6 +77,7 @@ def register_page(request):
         {
             "import_map": pages.import_map(*REGISTER_MODULES),
             "portal_host": portal_host(),
+            "time_zone": settings.TIME_ZONE,
         },
     )
 

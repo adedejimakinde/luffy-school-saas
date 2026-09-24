@@ -116,9 +116,95 @@ test("every class the school teaches is offered, not only her own", () => {
 test("today is the default day and it is still editable", () => {
   // A register entered from paper on Friday for Wednesday is ordinary office
   // work — the case `MARKING_ROLES` admits principals and administrators for.
+  // "Editable" was only half true until the page listened to the box; the
+  // tests below it are what make it a claim about the page and not the markup.
   assert.equal(today(new Date("2025-09-17T09:30:00Z")), "2025-09-17");
   const html = htmlFor(fromWhere({ ok: true, body: WHERE }, { on: "2025-09-17" }));
-  assert.match(html, /<input id="on" name="on" type="date" value="2025-09-17">/);
+  assert.match(html, /<input id="on" name="on" type="date" data-field="on" value="2025-09-17">/);
+});
+
+// -- the school's day, not Greenwich's (docs/offline.md, requirement 7) -----
+
+test("half past midnight in Lagos is already the new day", () => {
+  // 23:30 UTC on the 14th is 00:30 in Lagos on the 15th. The old
+  // `toISOString()` answer was the 14th: a register taken then was filed
+  // against yesterday.
+  assert.equal(today(new Date("2026-01-14T23:30:00Z")), "2026-01-15");
+  assert.equal(today(new Date("2026-01-14T23:30:00Z"), "Africa/Lagos"), "2026-01-15");
+  // And an hour earlier it is still the 14th there — the boundary is Lagos
+  // midnight, not UTC's.
+  assert.equal(today(new Date("2026-01-14T22:30:00Z"), "Africa/Lagos"), "2026-01-14");
+  // The zone is an argument, not a constant: UTC still gives UTC's answer.
+  assert.equal(today(new Date("2026-01-14T23:30:00Z"), "UTC"), "2026-01-14");
+});
+
+function openingOn() {
+  const asked = [];
+  const fetchImpl = serve([
+    ["/api/attendance/where/", { status: 200, body: WHERE }],
+    [
+      "/api/attendance/classes/",
+      () => ({ status: 200, body: REGISTER }),
+    ],
+  ]);
+  return {
+    asked,
+    fetchImpl: async (url, options) => {
+      if (url.includes("/api/attendance/classes/")) asked.push(url);
+      return fetchImpl(url, options);
+    },
+  };
+}
+
+test("the page counts the day in the zone the frame names", async () => {
+  // `data-time-zone` is what `register_page()` renders from settings.TIME_ZONE.
+  forgetToken();
+  const { asked, fetchImpl } = openingOn();
+  const root = fakeRoot({ timeZone: "Africa/Lagos" });
+  await mount(root, { now: new Date("2026-01-14T23:30:00Z"), fetchImpl });
+
+  assert.match(root.innerHTML, /value="2026-01-15"/);
+  await root.click({ "data-action": "open", "data-class": "11" });
+  assert.match(asked[0], /\/2026-01-15\/$/);
+});
+
+test("the zone is read from the frame, not assumed", async () => {
+  // Every other test here uses Lagos, which is also the fallback, so a page that
+  // ignored `data-time-zone` would pass all of them. A frame naming UTC is what
+  // tells the two apart.
+  forgetToken();
+  const { fetchImpl } = openingOn();
+  const root = fakeRoot({ timeZone: "UTC" });
+  await mount(root, { now: new Date("2026-01-14T23:30:00Z"), fetchImpl });
+
+  assert.match(root.innerHTML, /value="2026-01-14"/);
+});
+
+test("a day picked in the box is the day the register is opened for", async () => {
+  forgetToken();
+  const { asked, fetchImpl } = openingOn();
+  const root = fakeRoot({ timeZone: "Africa/Lagos" });
+  await mount(root, { now: new Date("2026-01-16T09:00:00Z"), fetchImpl });
+
+  await root.change({ "data-field": "on" }, "2026-01-14");
+  await root.click({ "data-action": "open", "data-class": "11" });
+  assert.match(asked[0], /\/2026-01-14\/$/);
+
+  // Back to the chooser: the box still says the day that was picked.
+  await root.click({ "data-action": "back" });
+  assert.match(root.innerHTML, /value="2026-01-14"/);
+});
+
+test("an emptied box keeps the day it had rather than filing against no day", async () => {
+  forgetToken();
+  const { asked, fetchImpl } = openingOn();
+  const root = fakeRoot({ timeZone: "Africa/Lagos" });
+  await mount(root, { now: new Date("2026-01-16T09:00:00Z"), fetchImpl });
+
+  await root.change({ "data-field": "on" }, "");
+  await root.change({ "data-field": "on" }, "2026-01");
+  await root.click({ "data-action": "open", "data-class": "11" });
+  assert.match(asked[0], /\/2026-01-16\/$/);
 });
 
 // -- marking -----------------------------------------------------------------

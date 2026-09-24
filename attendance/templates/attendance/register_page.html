@@ -25,14 +25,19 @@ imports is not.
 <script type="module" defer src="{% static 'register/app.js' %}"></script>
 
 {% comment %}
-`data-portal` is the portal's hostname, and the only thing the server writes
+`data-portal` is the portal's hostname, and one of the two things the server writes
 into this frame. The signed-out state needs it to offer a way back to
 `/staff-sign-in/`, which is on the portal while this page is on a school's
 host, so the link cannot be relative. Empty where a deployment has no portal
 domain, and the state then renders its sentence without a link — the rule
 `schools.hosts.portal_host()` states and `accounts/templates/403.html` keeps.
 {% endcomment %}
-<main id="register" data-portal="{{ portal_host }}">
+{% comment %}
+`data-time-zone` is the other: the zone the school's day is counted in, from
+`settings.TIME_ZONE`. The page works out "today" itself, and in UTC it named
+yesterday from midnight to one in the morning in Lagos.
+{% endcomment %}
+<main id="register" data-portal="{{ portal_host }}" data-time-zone="{{ time_zone }}">
   {% comment %}
   What a reader sees if the module never loads. It has to be true on its own,
   and it must not be a form: a form without the module behind it would submit
