@@ -263,6 +263,14 @@ roster at write time can differ — a child placed or moved in between — so th
 carries what it was taken against and the response names any drift rather than
 silently marking a child nobody looked at, or silently dropping one.
 
+**Sending a register twice amends it twice, unless it carries a `key`.** Harmless
+while nothing happens in between; not harmless when a register queued at 8am, whose
+answer was lost, is sent again at 4pm after the office corrected it at 10am. The
+second copy would put every corrected absence back. With a `key` the first arrival
+leaves a `sync.SyncReceipt` in the same transaction as the marks, and the second is
+answered with what the first did and writes nothing (`docs/offline.md` D3,
+`sync/tests/test_replay.py`).
+
 ### D11. The minimum status set, and why it is not a guess
 
 `PRESENT` and `ABSENT`, and nothing else, until A2 comes back.

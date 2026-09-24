@@ -52,11 +52,14 @@ exactly this reason; the routing does the same thing by having nothing to read.
 """
 
 from typing import List, Optional
+from uuid import UUID
 
 from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
+
+from sync import receipts
 
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
@@ -203,6 +206,11 @@ class SaveIn(Schema):
 
     value: int
     expected_version: Optional[int] = None
+    #: Minted by the device when it queued this write, and the same on every
+    #: attempt at it. Optional: the live page has no queue to replay from.
+    #: With one, the second arrival of a write that landed is answered with the
+    #: first arrival's answer rather than judged again (`sync.receipts.once()`).
+    key: Optional[UUID] = None
 
 
 class ConflictOut(Schema):
@@ -558,6 +566,19 @@ def save_score(
     teacher who tabs out of an unchanged cell should not create anything. The
     version check makes it conditional, not blind, so this is not the unsafe
     kind of idempotent.
+
+    **With a `key`, the second arrival of a write that landed is answered, not
+    judged.** `_is_our_write_arriving_twice()` infers a replay from the value
+    and the person, and the inference fails the case offline makes ordinary:
+    17 queued last night, 18 entered this morning on another device, and the
+    queued 17 arriving after it. Judged again, that is a conflict with
+    themselves. Answered from its receipt, it is the 200 it was the first time,
+    and the 18 stands.
+
+    **A key used for a different write is a 422**, not the 409 fees gives a
+    reused form key. Here a 409 carries `current` and the client draws the cell
+    as somebody else's mark, which this is not. A 422 is final to the outbox
+    (`docs/offline.md` D6): the device stops and shows the sentence.
     """
     school = _school_of(request)
     refused = _refuse_non_markers(request, school)
@@ -566,6 +587,22 @@ def save_score(
     assessment = get_object_or_404(Assessment, pk=assessment_id)
     student = _student_here(school, student_membership_id)
 
+    if payload.key is None:
+        return _save_score(request, assessment, student, payload)
+    try:
+        return receipts.once(
+            key=payload.key,
+            actor=request.user,
+            write=f"PUT {request.path}",
+            request=payload.model_dump(mode="json", exclude={"key"}),
+            act=lambda: _save_score(request, assessment, student, payload),
+        )
+    except receipts.KeyAlreadyUsed as exc:
+        return 422, MessageOut(detail=str(exc))
+
+
+def _save_score(request, assessment, student, payload):
+    """`save_score()`'s write, once the caller and the cell are known."""
     try:
         score = services.set_score_as(
             request.user,
