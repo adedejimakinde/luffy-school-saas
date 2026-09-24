@@ -5,11 +5,12 @@
  * `?student=` opens an account and `?receipt=` a receipt directly, which is
  * how a reprint is reached from a bookmark.
  *
- * **The form key.** Each payment form drawn gets a fresh key
- * (`crypto.randomUUID()`), sent with the payment. The server records one
- * payment per key, so a double click is one payment. When the answer is lost
- * — the connection dropped after the request left — the page keeps the key
- * and the typed payment, and says so: sending it again cannot record it twice.
+ * **The form key.** Each payment form and each discount form drawn gets a
+ * fresh key (`crypto.randomUUID()`), sent with what was typed. The server
+ * records one entry per key, so a double click is one payment or one discount.
+ * When the answer is lost — the connection dropped after the request left —
+ * the page keeps the key and what was typed, and says so: sending it again
+ * cannot record it twice.
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
@@ -19,6 +20,7 @@ import {
   fetchBooks,
   fetchClass,
   fetchReceipt,
+  postDiscount,
   postPayment,
   postReversal,
 } from "./api.js";
@@ -64,7 +66,9 @@ export async function mount(
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
   let where = { termId: null, classId: null, studentId: null };
-  let formKey = newKey();
+  //: One key per form, because the two are two entries: a payment and a
+  //: discount sent under one key would be refused as a reused form.
+  const keys = { payment: newKey(), discount: newKey() };
   let signOutFailed = false;
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
@@ -118,11 +122,40 @@ export async function mount(
     await showBooks(Number(field.value));
   });
 
+  /**
+   * A write made under a form key: a payment or a discount. Success mints the
+   * next key; a lost answer keeps it, and what was typed, so sending again is
+   * safe; a sentence from the server keeps what was typed and shows it.
+   */
+  const keyed = async (intent, draft, send, { done, again, draftField }) => {
+    const answer = await send({ ...draft, form_key: keys[intent] });
+    if (answer.ok) {
+      keys[intent] = newKey();
+      await showAccount(where.studentId, { note: done(answer.body), noteTone: "done" });
+      return;
+    }
+    if (answer.refusal === REFUSAL.BROKEN) {
+      state = { ...state, [draftField]: draft, noteTone: "stop", note: again };
+      draw();
+      return;
+    }
+    if (answer.refusal) {
+      state = { step: answer.refusal };
+      draw();
+      return;
+    }
+    keys[intent] = newKey();
+    state = { ...state, [draftField]: draft, noteTone: "stop", note: answer.body.detail || "That was not saved." };
+    draw();
+  };
+
   root.addEventListener("submit", async (event) => {
     const form = event.target;
-    if (!form || state.step !== "account") return;
-    if (form.amount) {
-      if (event.preventDefault) event.preventDefault();
+    if (!form || state.step !== "account" || !form.intent) return;
+    const intent = form.intent.value;
+    if (event.preventDefault) event.preventDefault();
+
+    if (intent === "payment") {
       const draft = {
         term_id: Number(form.term_id.value),
         amount: form.amount.value,
@@ -130,46 +163,31 @@ export async function mount(
         reference: form.reference ? form.reference.value : "",
         effective_on: form.effective_on.value,
       };
-      const answer = await postPayment({
-        studentId: where.studentId,
-        payment: { ...draft, form_key: formKey },
-        fetchImpl,
-      });
-      if (answer.ok) {
-        formKey = newKey();
-        const { entry, posted } = answer.body;
-        await showAccount(where.studentId, {
-          note: posted
+      await keyed("payment", draft, (payment) => postPayment({ studentId: where.studentId, payment, fetchImpl }), {
+        draftField: "draft",
+        done: ({ entry, posted }) =>
+          posted
             ? `Payment recorded. Receipt ${entry.receipt_number}.`
             : "That payment was already recorded; nothing new was added.",
-          noteTone: "done",
-        });
-        return;
-      }
-      if (answer.refusal === REFUSAL.BROKEN) {
         // The request may have landed. Same key, same payment: sending it
         // again records it once whichever way the first one went.
-        state = {
-          ...state,
-          draft,
-          noteTone: "stop",
-          note: "We could not tell whether that payment was saved. Send it again — it will not be recorded twice.",
-        };
-        draw();
-        return;
-      }
-      if (answer.refusal) {
-        state = { step: answer.refusal };
-        draw();
-        return;
-      }
-      formKey = newKey();
-      state = { ...state, draft, noteTone: "stop", note: answer.body.detail || "That was not saved." };
-      draw();
+        again: "We could not tell whether that payment was saved. Send it again — it will not be recorded twice.",
+      });
       return;
     }
-    if (form.reason && state.reversing) {
-      if (event.preventDefault) event.preventDefault();
+
+    if (intent === "discount") {
+      const draft = { term_id: Number(form.term_id.value), amount: form.amount.value, reason: form.reason.value };
+      await keyed("discount", draft, (discount) => postDiscount({ studentId: where.studentId, discount, fetchImpl }), {
+        draftField: "discountDraft",
+        done: ({ posted }) =>
+          posted ? "Discount given. The account below includes it." : "That discount was already given; nothing new was added.",
+        again: "We could not tell whether that discount was saved. Send it again — it will not be given twice.",
+      });
+      return;
+    }
+
+    if (intent === "reversal" && state.reversing) {
       const answer = await postReversal({ entryId: state.reversing, reason: form.reason.value, fetchImpl });
       if (answer.ok) {
         await showAccount(where.studentId, { note: "Undone. The account below includes it.", noteTone: "done" });
@@ -208,6 +226,16 @@ export async function mount(
     }
     if (action === "cancel-reversal" && state.step === "account") {
       state = { ...state, reversing: null };
+      draw();
+      return;
+    }
+    if (action === "discount" && state.step === "account") {
+      state = { ...state, discounting: true, note: "" };
+      draw();
+      return;
+    }
+    if (action === "cancel-discount" && state.step === "account") {
+      state = { ...state, discounting: false, discountDraft: {} };
       draw();
       return;
     }

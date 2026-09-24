@@ -14,6 +14,7 @@ Six claims, each with the test that fails without it:
 4. `12.345` naira is refused, not rounded.
 5. The same form twice is one payment.
 6. A credit is not a debt (the renderer; `tests/js/fees.test.js`).
+7. A reversal or a discount without a reason is refused, and writes nothing.
 """
 
 import json
@@ -135,6 +136,20 @@ class FeesApiSetUp(RefusalAssertions, TestCase):
         child = child or self.ada
         return self.post(user or self.bursar, f"students/{child.pk}/payments/", self.payment(**overrides))
 
+    def discount(self, **overrides):
+        body = {
+            "term_id": self.term_id,
+            "amount": "15,000",
+            "reason": "Second child in the school",
+            "form_key": str(uuid.uuid4()),
+        }
+        body.update(overrides)
+        return body
+
+    def give(self, user=None, child=None, **overrides):
+        child = child or self.ada
+        return self.post(user or self.bursar, f"students/{child.pk}/discounts/", self.discount(**overrides))
+
     def entries(self, kind=None, school=None):
         with connected_to(school or self.stmarys):
             rows = FeeLedgerEntry.objects.all()
@@ -205,7 +220,10 @@ class WhoMayWriteTests(FeesApiSetUp):
                 self.assertEqual(answer.status_code, 403)
                 self.assertEqual(
                     answer.json(),
-                    {"detail": "Payments and reversals are recorded by the bursar or an administrator."},
+                    {
+                        "detail": "Payments, discounts and reversals are recorded by the "
+                        "bursar or an administrator."
+                    },
                 )
         self.assertEqual(self.entries(FeeEntryKind.PAYMENT), [])
 
@@ -412,6 +430,7 @@ class UndoingTests(FeesApiSetUp):
         self.assertEqual((original.amount_kobo, original.narration), (-50_000 * KOBO_PER_NAIRA, "Payment received"))
 
     def test_an_undo_says_why(self):
+        """CONTROL 7: the write routes accepting a blank reason makes this red."""
         [charge] = self.entries(FeeEntryKind.CHARGE)
 
         for reason in ("", "   "):
@@ -438,6 +457,131 @@ class UndoingTests(FeesApiSetUp):
 
         self.assertIsNotNone(rows[charge.pk]["reversed_by_id"])
         self.assertFalse(rows[charge.pk]["may_reverse"])
+
+
+class DiscountTests(FeesApiSetUp):
+    """A discount given by hand: the bursar's or an administrator's, for one
+    term, with its reason as the narration. Decided 2026-09-24 (fees 2(a))."""
+
+    def test_the_bursar_and_the_admin_give_one_and_it_carries_its_reason(self):
+        for user, amount, reason in (
+            (self.bursar, "15,000", "Second child in the school"),
+            (self.admin, "5,000.50", "Staff child"),
+        ):
+            with self.subTest(user=user.username):
+                answer = self.give(user, amount=amount, reason=f"  {reason} ")
+
+                self.assertEqual(answer.status_code, 201, answer.content)
+                entry = answer.json()["entry"]
+                self.assertEqual(entry["kind"], "discount")
+                self.assertEqual(entry["narration"], reason)
+                self.assertEqual(entry["method"], "")
+                self.assertIsNone(entry["receipt_number"], "a discount is not money received")
+        self.assertEqual(
+            answer.json()["balance_kobo"], TUITION - 15_000 * KOBO_PER_NAIRA - 500_050
+        )
+        with connected_to(self.stmarys):
+            [first, second] = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.DISCOUNT).order_by("pk")
+        self.assertEqual((first.recorded_by_id, second.recorded_by_id), (self.bursar.pk, self.admin.pk))
+
+    def test_a_discount_without_a_reason_is_refused_and_writes_nothing(self):
+        """CONTROL 7: the write routes accepting a blank reason makes this red."""
+        for reason in ("", "   "):
+            with self.subTest(reason=reason):
+                answer = self.give(reason=reason)
+
+                self.assertEqual(answer.status_code, 422)
+                self.assertIn("Say why", answer.json()["detail"])
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT), [])
+
+    def test_the_principal_and_the_vp_may_not_give_one(self):
+        """CONTROL 1 also."""
+        for user in (self.principal, self.vp):
+            with self.subTest(user=user.username):
+                answer = self.give(user)
+
+                self.assertEqual(answer.status_code, 403)
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT), [])
+
+    def test_a_teacher_a_parent_and_a_student_get_the_flat_404(self):
+        missing = self.missing()
+
+        for user in (self.teacher, self.parent, self.student_user):
+            with self.subTest(user=user.username):
+                answer = self.give(user)
+
+                self.assertEqual(answer.status_code, 404)
+                self.assertEqual(answer.content, missing)
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT), [])
+
+    def test_another_schools_child_is_not_found_and_nothing_is_written_anywhere(self):
+        answer = self.give(child=self.zainab)
+
+        self.assertEqual(answer.status_code, 404)
+        self.assertEqual(answer.content, self.missing())
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT), [])
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT, school=self.grace), [])
+
+    def test_the_same_form_twice_is_one_discount(self):
+        body = self.discount()
+
+        first = self.post(self.bursar, f"students/{self.ada.pk}/discounts/", body)
+        again = self.post(self.bursar, f"students/{self.ada.pk}/discounts/", body)
+
+        self.assertEqual((first.status_code, again.status_code), (201, 200))
+        self.assertFalse(again.json()["posted"])
+        self.assertEqual(again.json()["entry"]["entry_id"], first.json()["entry"]["entry_id"])
+        self.assertEqual(len(self.entries(FeeEntryKind.DISCOUNT)), 1)
+
+    def test_a_payments_form_key_cannot_become_a_discount(self):
+        """One key, one entry, whatever the kind: the page reusing a payment's
+        key for a discount is told so, and neither entry is doubled."""
+        key = str(uuid.uuid4())
+        self.pay(form_key=key)
+
+        answer = self.give(form_key=key)
+
+        self.assertEqual(answer.status_code, 409)
+        self.assertIn("different discount", answer.json()["detail"])
+        self.assertEqual(self.entries(FeeEntryKind.DISCOUNT), [])
+        self.assertEqual(len(self.entries(FeeEntryKind.PAYMENT)), 1)
+
+    def test_a_discount_is_undone_like_anything_else_and_says_why(self):
+        given = self.give().json()["entry"]
+
+        answer = self.post(self.bursar, f"entries/{given['entry_id']}/reversal/", {"reason": "Sibling left"})
+
+        self.assertEqual(answer.status_code, 201)
+        self.assertEqual(answer.json()["entry"]["narration"], "Sibling left")
+        self.assertEqual(answer.json()["balance_kobo"], TUITION)
+
+
+class AReasonWithoutTheRouteTests(FeesApiSetUp):
+    """The reason rule lives in `fees.services`, not in the view, so an import
+    or a management command meets it too. CONTROL 7 also."""
+
+    def test_the_services_refuse_a_blank_reason_and_write_nothing(self):
+        with connected_to(self.stmarys):
+            term = Term.objects.get(pk=self.term_id)
+            [charge] = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE)
+
+            for reason in ("", "  \t "):
+                with self.subTest(reason=reason):
+                    with self.assertRaises(services.NoReason):
+                        services.undo(charge, reason=reason, recorded_by=self.bursar)
+                    with self.assertRaises(services.NoReason):
+                        services.discount_once(
+                            self.ada, term, 1_000, reason=reason, form_key=uuid.uuid4(), recorded_by=self.bursar
+                        )
+            self.assertEqual(FeeLedgerEntry.objects.exclude(kind=FeeEntryKind.CHARGE).count(), 0)
+
+    def test_a_reason_is_what_the_books_say(self):
+        with connected_to(self.stmarys):
+            [charge] = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE)
+
+            reversal = services.undo(charge, reason="  Wrong class ", recorded_by=self.bursar)
+
+        self.assertEqual(reversal.narration, "Wrong class")
 
 
 class ReceiptTests(FeesApiSetUp):

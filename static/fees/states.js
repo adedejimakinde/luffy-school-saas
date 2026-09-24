@@ -1,6 +1,11 @@
 /**
  * Every screen the fees page can show, as a pure function of API bodies.
  *
+ * **Each form names its intent** in a hidden field, and `app.js` dispatches on
+ * that rather than on which fields a form happens to have: a payment and a
+ * discount both have an amount, and a discount and a reversal both have a
+ * reason.
+ *
  * **Every number is the server's**, in kobo, and `money.js` is the only thing
  * that turns one into naira. A balance is said in words — "owes", "in
  * credit", "nothing owed" — never left to a minus sign.
@@ -98,6 +103,7 @@ function paymentForm(body, { termId, today, draft = {} }) {
   const chosen = draft.method || "";
   return [
     '<form class="payment" data-payment>',
+    '<input type="hidden" name="intent" value="payment">',
     "<fieldset><legend>Record a payment</legend>",
     `<label>Term <select name="term_id">${termOptions(body.terms || [], draft.term_id ?? termId)}</select></label>`,
     `<label>Amount (₦) <input name="amount" inputmode="decimal" autocomplete="off" value="${esc(draft.amount || "")}" required></label>`,
@@ -113,9 +119,30 @@ function paymentForm(body, { termId, today, draft = {} }) {
   ].join("");
 }
 
+/**
+ * A discount given by hand, for one term, with its reason. Behind a button
+ * rather than always open beside the payment form: waiving money is rarer
+ * than taking it, and a form a bursar tabs into by accident is how it would
+ * happen by mistake. `draft` as for a payment.
+ */
+function discountForm(body, { termId, draft = {} }) {
+  return [
+    '<form class="discount" data-discount>',
+    '<input type="hidden" name="intent" value="discount">',
+    "<fieldset><legend>Give a discount</legend>",
+    `<label>Term <select name="term_id">${termOptions(body.terms || [], draft.term_id ?? termId)}</select></label>`,
+    `<label>Amount (₦) <input name="amount" inputmode="decimal" autocomplete="off" value="${esc(draft.amount || "")}" required></label>`,
+    `<label>Why? <input name="reason" maxlength="255" autocomplete="off" value="${esc(draft.reason || "")}" required></label>`,
+    '<button type="submit">Give discount</button> ',
+    '<button type="button" data-action="cancel-discount">Cancel</button>',
+    "</fieldset></form>",
+  ].join("");
+}
+
 function reversalForm(entry) {
   return [
     `<form class="reversal" data-reversal data-entry="${esc(entry.entry_id)}">`,
+    '<input type="hidden" name="intent" value="reversal">',
     `<label>Why is this being undone? <input name="reason" maxlength="255" required></label>`,
     '<button type="submit">Undo it</button> ',
     '<button type="button" data-action="cancel-reversal">Keep it</button>',
@@ -154,7 +181,9 @@ export function account({
   termId = null,
   today = "",
   reversing = null,
+  discounting = false,
   draft = {},
+  discountDraft = {},
 } = {}) {
   const { student = "", reference = "", balance_kobo = 0, may_write: mayWrite = false, entries = [] } = body;
   const current = termId ?? ((body.terms || []).find((t) => t.is_current) || (body.terms || [])[0] || {}).term_id;
@@ -166,6 +195,10 @@ export function account({
     `<p class="standing">${balance(balance_kobo)}</p>`,
     note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
     mayWrite ? paymentForm(body, { termId: current, today, draft }) : "",
+    mayWrite && discounting ? discountForm(body, { termId: current, draft: discountDraft }) : "",
+    mayWrite && !discounting
+      ? '<p class="more"><button type="button" data-action="discount">Give a discount</button></p>'
+      : "",
     "<h2>Account</h2>",
     entries.length
       ? [

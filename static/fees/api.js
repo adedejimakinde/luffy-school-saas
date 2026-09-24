@@ -26,6 +26,7 @@ export const booksUrl = (termId) =>
 export const classUrl = (classId, termId) => `/api/fees/classes/${q(classId)}/?term_id=${q(termId)}`;
 export const accountUrl = (studentId) => `/api/fees/students/${q(studentId)}/`;
 export const paymentUrl = (studentId) => `/api/fees/students/${q(studentId)}/payments/`;
+export const discountUrl = (studentId) => `/api/fees/students/${q(studentId)}/discounts/`;
 export const reversalUrl = (entryId) => `/api/fees/entries/${q(entryId)}/reversal/`;
 export const receiptUrl = (entryId) => `/api/fees/entries/${q(entryId)}/receipt/`;
 
@@ -75,5 +76,7 @@ export const fetchAccount = ({ studentId, fetchImpl = fetch }) => read(accountUr
 export const fetchReceipt = ({ entryId, fetchImpl = fetch }) => read(receiptUrl(entryId), fetchImpl);
 export const postPayment = ({ studentId, payment, fetchImpl = fetch }) =>
   write(paymentUrl(studentId), payment, fetchImpl);
+export const postDiscount = ({ studentId, discount, fetchImpl = fetch }) =>
+  write(discountUrl(studentId), discount, fetchImpl);
 export const postReversal = ({ entryId, reason, fetchImpl = fetch }) =>
   write(reversalUrl(entryId), { reason }, fetchImpl);

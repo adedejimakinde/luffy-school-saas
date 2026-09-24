@@ -9,9 +9,9 @@ Everything here takes the caller's *student membership id* rather than a
 drift apart. `snapshot_student()` is the one place that turns a live membership
 into the frozen identity an entry carries.
 
-No screens, no HTTP. This is the data layer the eventual bursar's screen will
-call, and keeping the rules here rather than in a view is what makes them true
-for an import and a management command too.
+No screens, no HTTP. This is the data layer; `fees/api.py` is the bursar's
+routes and calls it, and keeping the rules here rather than in a view is what
+makes them true for an import and a management command too.
 """
 
 from django.db import IntegrityError, connection, transaction
@@ -125,6 +125,28 @@ class FormAlreadyUsed(FeeLedgerError):
     a page that reused a key it should have replaced — answering with the first
     entry would tell the bursar a payment was recorded that was not.
     """
+
+
+class NoReason(FeeLedgerError):
+    """A discount or an undo given by hand without saying why.
+
+    Decided 2026-09-24 (fees 2(a)). The reason becomes the entry's narration —
+    what the books say about the row a year later — so it is refused rather
+    than filled in: an undo left to `reverse_entry()`'s default would say only
+    "Reversal of: Payment received", which records that something was undone
+    and never why. Asked by `discount_once()` and `undo()`, the two ways a
+    person does either, and not by the primitives beneath them, which a
+    schedule and a concession call with narrations of their own.
+    """
+
+
+def _require_reason(reason):
+    text = (reason or "").strip()
+    if not text:
+        raise NoReason("Say why, in a few words. The books keep the reason.")
+    if len(text) > _NARRATION_MAX:
+        raise NoReason(f"Keep the reason under {_NARRATION_MAX} characters.")
+    return text
 
 
 def _require_method(method, reference):
@@ -504,55 +526,91 @@ def _is_the_form_key_colliding(exc) -> bool:
     return getattr(diag, "constraint_name", None) == "a_form_posts_once"
 
 
-def record_payment_once(membership, term, amount_kobo, *, method, form_key,
-                        effective_on=None, reference="", recorded_by=None):
-    """`record_payment()` for a form: the same form twice is one payment.
+def _once(post, *, form_key, what, **same):
+    """Post from a form at most once. Returns `(entry, posted)`.
 
-    Returns `(entry, posted)`. `posted` is False when this form had already
-    posted — a double click, or a retry of a request whose answer never
-    arrived — and the entry is the one the first submission posted.
+    `post` is the atomic poster, bound to everything but the key. `same` is
+    what the earlier entry must match for a second submission to be the first
+    one again — a double click, or a retry of a request whose answer never
+    arrived — rather than a page that reused a key it should have replaced.
 
     **The unique index is the whole mechanism**, not a read-then-write: two
     submissions racing each other both pass any read, and only the index sees
-    them both. `record_payment()`'s savepoint is what lets the refused insert
-    roll back without taking the caller's transaction with it — one savepoint
-    per payment, which is not issue #82's shape (that was one per child in a
-    loop).
-
-    Raises `FormAlreadyUsed` when the key posted a *different* payment.
+    them both. The poster's savepoint is what lets the refused insert roll back
+    without taking the caller's transaction with it — one savepoint per form,
+    which is not issue #82's shape (that was one per child in a loop).
     """
     try:
-        return (
-            record_payment(
-                membership,
-                term,
-                amount_kobo,
-                method=method,
-                effective_on=effective_on,
-                reference=reference,
-                recorded_by=recorded_by,
-                form_key=form_key,
-            ),
-            True,
-        )
+        return post(form_key=form_key), True
     except IntegrityError as exc:
         if not _is_the_form_key_colliding(exc):
             raise
     earlier = FeeLedgerEntry.objects.get(form_key=form_key)
-    same = (
-        earlier.kind == FeeEntryKind.PAYMENT
-        and earlier.student_membership_id == membership.pk
-        and earlier.term_id == term.pk
-        and earlier.amount_kobo == -amount_kobo
-        and earlier.method == method
-        and earlier.reference == reference
-    )
-    if not same:
+    if any(getattr(earlier, field) != value for field, value in same.items()):
         raise FormAlreadyUsed(
-            "This form was already used to record a different payment. Nothing "
-            "new was recorded; reload the page and enter it again."
+            f"This form was already used to record a different {what}. Nothing "
+            f"new was recorded; reload the page and enter it again."
         )
     return earlier, False
+
+
+def record_payment_once(membership, term, amount_kobo, *, method, form_key,
+                        effective_on=None, reference="", recorded_by=None):
+    """`record_payment()` for a form: the same form twice is one payment.
+
+    Returns `(entry, posted)`; `posted` is False when this form had already
+    posted, and the entry is the one the first submission posted. Raises
+    `FormAlreadyUsed` when the key posted a *different* payment. See `_once()`.
+    """
+    return _once(
+        lambda form_key: record_payment(
+            membership,
+            term,
+            amount_kobo,
+            method=method,
+            effective_on=effective_on,
+            reference=reference,
+            recorded_by=recorded_by,
+            form_key=form_key,
+        ),
+        form_key=form_key,
+        what="payment",
+        kind=FeeEntryKind.PAYMENT,
+        student_membership_id=membership.pk,
+        term_id=term.pk,
+        amount_kobo=-amount_kobo,
+        method=method,
+        reference=reference,
+    )
+
+
+def discount_once(membership, term, amount_kobo, *, reason, form_key,
+                  recorded_by=None):
+    """A discount given by hand, from a form: the same form twice is one.
+
+    Decided 2026-09-24 (fees 2(a) and 4): it says why — `reason`, required,
+    becomes the narration (`NoReason`) — and it is kept from a double click
+    exactly as a payment is, because a second copy of the same discount is
+    money the school did not mean to waive.
+    """
+    narration = _require_reason(reason)
+    return _once(
+        lambda form_key: discount(
+            membership,
+            term,
+            amount_kobo,
+            narration=narration,
+            recorded_by=recorded_by,
+            form_key=form_key,
+        ),
+        form_key=form_key,
+        what="discount",
+        kind=FeeEntryKind.DISCOUNT,
+        student_membership_id=membership.pk,
+        term_id=term.pk,
+        amount_kobo=-amount_kobo,
+        narration=narration,
+    )
 
 
 def _discount(membership, term, amount_kobo, *, narration, effective_on=None,
@@ -652,7 +710,7 @@ def _discount(membership, term, amount_kobo, *, narration, effective_on=None,
 
 @transaction.atomic
 def discount(membership, term, amount_kobo, *, narration, effective_on=None,
-             recorded_by=None, source_concession=None):
+             recorded_by=None, source_concession=None, form_key=None):
     """Reduce what is owed without money changing hands.
 
     A bursary, a staff child's concession, a sibling discount. Its own kind
@@ -680,6 +738,7 @@ def discount(membership, term, amount_kobo, *, narration, effective_on=None,
         effective_on=effective_on,
         recorded_by=recorded_by,
         source_concession=source_concession,
+        form_key=form_key,
     )
 
 
@@ -741,6 +800,13 @@ def _inherited_narration(narration):
     if len(inherited) <= _NARRATION_MAX:
         return inherited
     return inherited[: _NARRATION_MAX - 1] + "\u2026"
+
+
+def undo(entry, *, reason, recorded_by=None):
+    """`reverse_entry()` as a person does it: with the reason, which becomes
+    the reversal's narration. Raises `NoReason` without one, before anything
+    is written."""
+    return reverse_entry(entry, narration=_require_reason(reason), recorded_by=recorded_by)
 
 
 @transaction.atomic
@@ -835,15 +901,18 @@ __all__ = [
     "FormAlreadyUsed",
     "LedgerIsAppendOnly",
     "NoMethod",
+    "NoReason",
     "NotPositive",
     "NotThisSchoolsStudent",
     "NotThisStudentsConcession",
     "NotThisTermsLine",
     "charge",
     "discount",
+    "discount_once",
     "record_payment",
     "record_payment_once",
     "refund",
     "reverse_entry",
     "snapshot_student",
+    "undo",
 ]

@@ -1,10 +1,11 @@
 """Who may read a school's books, and who may write to them.
 
 Decided 2026-09-24 (fees 1(a) and 2(a)): the **bursar and the administrator**
-write — payments, reversals and, with B2, discounts — and the **principal and
-the vice principal (academic)** read. A teacher, a parent and a student get the
-flat 404 every route here answers with, so the books are not an existence
-oracle for anybody signed in at the school.
+write — payments, discounts and reversals, each discount and reversal with its
+reason — and the **principal and the vice principal (academic)** read. A
+teacher, a parent and a student get the flat 404 every route here answers
+with, so the books are not an existence oracle for anybody signed in at the
+school.
 
 Access-scoped through `roles_at()`, so an invited or suspended bursar holds no
 authority. Platform staff are not admitted: a school's books are the school's

@@ -1,5 +1,5 @@
 """HTTP for the school's books: balances, one child's account, a payment, a
-reversal and a receipt. B1 of the fees work; billing is B2.
+discount, a reversal and a receipt. B1 of the fees work; billing is B2.
 
 **Two refusals, and which one a caller gets is the disclosure decision.**
 Anybody who may not read the books — a teacher, a parent, a student — gets a
@@ -148,6 +148,17 @@ class PostedOut(Schema):
     balance_kobo: int
 
 
+class DiscountIn(Schema):
+    """A discount given by hand, as the form sends it. `reason` becomes the
+    entry's narration; `form_key` does what it does for a payment. No date: a
+    discount is given the day it is recorded."""
+
+    term_id: int
+    amount: str
+    reason: str
+    form_key: UUID
+
+
 class ReversalIn(Schema):
     reason: str
 
@@ -163,11 +174,13 @@ class ReversedNoteOut(Schema):
 
 
 class ReceiptOut(Schema):
-    """What the payment entry recorded, and nothing it did not.
+    """What the payment entry recorded — with one exception, below.
 
     The name and admission number are the entry's frozen snapshot, not the
     child's live row: a receipt reprinted next year must say what it said
-    when it was issued. `reversed` is set when the payment has since been
+    when it was issued. **`received_by` is not**: it is read live from the
+    recorder's login, so a reprint after that name changes prints the new one.
+    Issue #143. `reversed` is set when the payment has since been
     undone, and the page prints that across the receipt — a reprint of a
     reversed payment that looked like a good receipt would be the one document
     in this system a parent could use against the school.
@@ -208,7 +221,9 @@ def _require_reader(actor, school):
 
 #: One sentence for a reader who may not write. Not the flat 404: they read
 #: the books, so the account's existence is not news to them.
-_MAY_NOT_WRITE = "Payments and reversals are recorded by the bursar or an administrator."
+_MAY_NOT_WRITE = (
+    "Payments, discounts and reversals are recorded by the bursar or an administrator."
+)
 
 
 def _refuse_non_writer(actor, school):
@@ -467,8 +482,55 @@ def pay(request, membership_id: int, payload: PaymentIn):
     )
 
 
-#: The narration column's width, read from the field.
-_REASON_MAX = FeeLedgerEntry._meta.get_field("narration").max_length
+@router.post(
+    "/students/{int:membership_id}/discounts/",
+    response={201: PostedOut, 200: PostedOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def give_discount(request, membership_id: int, payload: DiscountIn):
+    """Give a discount by hand, with the reason — decided 2026-09-24 (fees
+    2(a)). The same people as a payment, the same refusals in the same order,
+    and the same form key: 201 posted, 200 already posted by this form.
+
+    Not a concession. A concession (B2) is a standing instruction a schedule
+    applies every term; this is one entry, once, for one term.
+    """
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_writer(request.user, school)
+    if refusal:
+        return refusal
+    child = _student_here(school, membership_id)
+
+    term = Term.objects.filter(pk=payload.term_id).first()
+    if term is None:
+        return 422, MessageOut(detail="Choose the term this discount is for.")
+    try:
+        amount_kobo = kobo_from_naira(payload.amount)
+    except NotAnAmount as exc:
+        return 422, MessageOut(detail=str(exc))
+
+    try:
+        entry, posted = services.discount_once(
+            child,
+            term,
+            amount_kobo,
+            reason=payload.reason,
+            recorded_by=request.user,
+            form_key=payload.form_key,
+        )
+    except services.NotThisSchoolsStudent:
+        # Unreachable while `_student_here()` scopes its lookup, as for `pay()`.
+        raise Http404("No such account.")
+    except services.NoReason as exc:
+        return 422, MessageOut(detail=str(exc))
+    except services.FormAlreadyUsed as exc:
+        return 409, MessageOut(detail=str(exc))
+
+    return (201 if posted else 200), PostedOut(
+        entry=_entry_out(school, entry, term=term),
+        posted=posted,
+        balance_kobo=_balance_of(child.pk),
+    )
 
 
 @router.post(
@@ -476,12 +538,9 @@ _REASON_MAX = FeeLedgerEntry._meta.get_field("narration").max_length
     response={201: ReversedOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
 )
 def reverse(request, entry_id: int, payload: ReversalIn):
-    """Undo an entry, with the reason — decided 2026-09-24 (fees 2(a)).
-
-    The reason is the reversal's narration: it is what the books say about
-    this row, and a reversal that said only "Reversal of: Payment received"
-    would tell a reader a year later that something was undone and never why.
-    """
+    """Undo an entry, with the reason — decided 2026-09-24 (fees 2(a)). The
+    reason is the reversal's narration, and `services.undo()` refuses one
+    without it (`NoReason`)."""
     school = _school_of(request)
     _require_reader(request.user, school)
     refusal = _refuse_non_writer(request.user, school)
@@ -491,14 +550,11 @@ def reverse(request, entry_id: int, payload: ReversalIn):
     if entry is None:
         raise Http404("No such account.")
 
-    reason = payload.reason.strip()
-    if not reason:
-        return 422, MessageOut(detail="Say why this is being undone.")
-    if len(reason) > _REASON_MAX:
-        return 422, MessageOut(detail=f"Keep the reason under {_REASON_MAX} characters.")
 
     try:
-        reversal = services.reverse_entry(entry, narration=reason, recorded_by=request.user)
+        reversal = services.undo(entry, reason=payload.reason, recorded_by=request.user)
+    except services.NoReason as exc:
+        return 422, MessageOut(detail=str(exc))
     except (services.AlreadyReversed, services.CannotReverse) as exc:
         return 409, MessageOut(detail=str(exc))
 
