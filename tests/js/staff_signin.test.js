@@ -98,9 +98,8 @@ test("each school is linked to what it offers this login, and to nothing else", 
 });
 
 test("a school offering this login nothing is named and says so", () => {
-  // A bursar and a vice principal (academic) both land here. Named without a
-  // sentence would read as a page that failed to load, and neither has done
-  // anything wrong.
+  // A bursar lands here. Named without a sentence would read as a page that
+  // failed to load, and she has done nothing wrong.
   const html = htmlFor(
     advance(initialState(), {
       status: 200,
@@ -347,4 +346,42 @@ test("mount signs out and the page stops naming the schools", async () => {
   assert.ok(calls.includes("/api/logout/"), "the button never posted");
   assert.equal(page.current().step, "signed-out");
   assert.doesNotMatch(root.innerHTML, /St Mary/, "the schools outlived the session");
+});
+
+test("the absence list is linked iff the login may read it there", () => {
+  // `may_see_absences` is `attendance.absences.may_see()`: principal, vice
+  // principal (academic) and administrator. A vice principal who landed on
+  // "nothing for you to open" before this now has somewhere to go, and a
+  // teacher still has no link to a list that would answer her with a 404.
+  const html = htmlFor(
+    advance(initialState(), {
+      status: 200,
+      body: {
+        full_name: "Vera",
+        schools: [
+          {
+            slug: "grace",
+            name: "Grace Academy",
+            host: "grace.example.test",
+            may_take_a_register: false,
+            may_see_absences: true,
+            has_children_here: false,
+          },
+          {
+            slug: "st-marys",
+            name: "St Mary's",
+            host: "st-marys.example.test",
+            may_take_a_register: true,
+            may_see_absences: false,
+            has_children_here: false,
+          },
+        ],
+        csrf_token: "t",
+      },
+    }),
+  );
+
+  assert.match(html, /href="\/\/grace\.example\.test\/absences\/"/);
+  assert.doesNotMatch(html, /st-marys\.example\.test\/absences\//);
+  assert.equal(html.match(/\/absences\//g).length, 1);
 });

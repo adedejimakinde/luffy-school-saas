@@ -51,6 +51,7 @@ from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
 from attendance.api import router as attendance_router
+from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
@@ -227,6 +228,12 @@ class SchoolOut(Schema):
     #: school is one row on the landing and one row is one answer.
     may_take_a_register: bool = False
 
+    #: May this login read who is absent too often here? The same predicate
+    #: `attendance.absences.may_see()` is — principal, vice principal
+    #: (academic) and administrator — so a teacher is not sent to a list that
+    #: answers them with a 404.
+    may_see_absences: bool = False
+
     #: Has this login a child at this school — their own card, or one they are
     #: a guardian of? `card_api._children_of()`'s question, which is
     #: `role=STUDENT` and (`user=actor` or `guardianships__guardian=actor`).
@@ -364,6 +371,11 @@ def _schools_of(user, *, parent_scoped=False):
         .filter(school__in=schools, role__in=MARKING_ROLES)
         .values_list("school_id", flat=True)
     )
+    absence_readers = set(
+        user.memberships.with_access()
+        .filter(school__in=schools, role__in=ABSENCE_VIEWING_ROLES)
+        .values_list("school_id", flat=True)
+    )
     # The child's own login and the guardian's, in one query — the two halves
     # of `_children_of()`, asked as "is there any such child" per school.
     families = set(
@@ -377,6 +389,7 @@ def _schools_of(user, *, parent_scoped=False):
             name=school.name,
             host=hosts.get(school.pk),
             may_take_a_register=not parent_scoped and school.pk in markers,
+            may_see_absences=not parent_scoped and school.pk in absence_readers,
             has_children_here=school.pk in families,
         )
         for school in schools

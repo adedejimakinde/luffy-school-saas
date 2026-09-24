@@ -32,7 +32,7 @@ import pages
 from accounts.views import MODULES as SIGN_IN_MODULES
 from accounts.views import INVITE_MODULES, ROLL_MODULES, STAFF_MODULES, STAFF_PAGE_MODULES
 from academics.views import SETUP_MODULES
-from attendance.views import REGISTER_MODULES
+from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from gradebook.views import MARKING_MODULES
 from results.views import (
     BROADSHEET_MODULES,
@@ -62,6 +62,7 @@ PAGES = {
     "staff": STAFF_PAGE_MODULES,
     "broadsheet": BROADSHEET_MODULES,
     "invite": INVITE_MODULES,
+    "absences": ABSENCE_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these
