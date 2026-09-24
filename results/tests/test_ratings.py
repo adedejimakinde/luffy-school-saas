@@ -54,6 +54,15 @@ from tests.refusals import RefusalAssertions
 
 PASSWORD = "correct-horse-battery"
 
+#: `results_ratings_stop_at_release`'s artefact sentence, pinned to its
+#: operation. "a released rating" is what tells it from the same sentence in
+#: `gradebook_scores_stop_at_release` and `results_comments_stop_at_release`,
+#: which say "mark" and "remark" (#89).
+CARD_RELEASED = (
+    "a released card has to keep saying what it said and {op} is not allowed. "
+    "Correcting a released rating is a revision"
+)
+
 
 class RatingsSetUp(RefusalAssertions, TestCase):
     """Two schools. St Mary's teaches JSS 1A (Kemi) and JSS 3B (Sade)."""
@@ -670,9 +679,14 @@ class ARefusedWriteSaysWhatWentWrongTests(RatingsSetUp):
         A negative stamp is therefore a genuine, synchronous, non-collision
         `IntegrityError` at INSERT — exactly the kind that must reach the caller
         as itself.
+
+        Named, because `by=-1` stamps `updated_by_id` too and that column carries
+        the same CHECK: with this one gone the other refuses the row, and an
+        unnamed assertion passes on it without noticing (#89). Postgres names a
+        column's inline CHECK `<table>_<column>_check`.
         """
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("results_traitrating_rated_by_id_check"):
                 ratings.rate(
                     self.term(),
                     self.trait("Punctuality"),
@@ -692,7 +706,7 @@ class ARefusedWriteSaysWhatWentWrongTests(RatingsSetUp):
         """
         with connected_to(self.stmarys):
             with transaction.atomic():
-                with self.assertRaises(IntegrityError):
+                with self.assertRefusedBy("results_traitrating_rated_by_id_check"):
                     ratings.rate(
                         self.term(),
                         self.trait("Punctuality"),
@@ -853,7 +867,7 @@ class RatingsFollowTheChainTests(RatingsSetUp):
         with connected_to(self.stmarys):
             self.walk_to_released()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(CARD_RELEASED.format(op="INSERT")):
                 with transaction.atomic():
                     TraitRating.objects.create(
                         term=self.term(),
@@ -1668,7 +1682,7 @@ class ARatingOutlivesTheChildsClassMoveTests(RatingsSetUp):
                 student_membership_id=self.membership_of(self.ada).pk,
                 trait=self.trait("Punctuality"),
             )
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(CARD_RELEASED.format(op="UPDATE")):
                 with transaction.atomic():
                     TraitRating.objects.filter(pk=row.pk).update(score=1)
 

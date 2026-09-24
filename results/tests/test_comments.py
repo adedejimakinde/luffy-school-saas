@@ -52,6 +52,16 @@ PASSWORD = "correct-horse-battery"
 TEACHER = CommentAuthor.CLASS_TEACHER
 PRINCIPAL = CommentAuthor.PRINCIPAL
 
+#: `results_comments_stop_at_release`'s two sentences, each pinned to its branch
+#: and its operation. "remarks" and "a released remark" are what tell them from
+#: the same two sentences in `gradebook_scores_stop_at_release` and
+#: `results_ratings_stop_at_release`, which say "marks" and "rating" (#89).
+TERM_RELEASED = "its remarks are part of a card somebody is holding and {op} is not allowed"
+CARD_RELEASED = (
+    "a released card has to keep saying what it said and {op} is not allowed. "
+    "Correcting a released remark is a revision"
+)
+
 
 class CommentsSetUp(RefusalAssertions, TestCase):
     """Two schools. St Mary's teaches JSS 1A (Kemi) and JSS 3B (Sade)."""
@@ -368,7 +378,7 @@ class WhatARemarkMaySayTests(CommentsSetUp):
     def test_the_database_refuses_a_blank_one_too(self):
         """The service is not the guarantee — an import never calls it."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("a_comment_says_something"):
                 with transaction.atomic():
                     ReportCardComment.objects.create(
                         term=self.term(),
@@ -642,7 +652,7 @@ class RemarksFollowTheChainTests(CommentsSetUp):
         with connected_to(self.stmarys):
             self.walk_to_released()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(TERM_RELEASED.format(op="INSERT")):
                 with transaction.atomic():
                     ReportCardComment.objects.create(
                         term=self.term(),
@@ -816,7 +826,9 @@ class TheFreezeTests(CommentsSetUp):
                 self.membership_of(self.ada),
             )
 
-            with self.assertRaises(IntegrityError):
+            # The artefact branch: Ada's placement is now an open class, so
+            # only her card can refuse this.
+            with self.assertRefusedBy(CARD_RELEASED.format(op="UPDATE")):
                 ReportCardComment.objects.filter(
                     term=self.term(),
                     student_membership_id=self.membership_of(self.ada).pk,
@@ -1067,10 +1079,14 @@ class TheServiceRefusesWhatTheTableWouldTests(CommentsSetUp):
         so the school's next phrase cannot be saved either. That second sentence
         is what the guard is really for: the error is recoverable, the poisoned
         transaction is not.
+
+        The refusal is named because the claim is about *the column's* check:
+        `position` is a positive integer, and Postgres names its inline CHECK
+        `<table>_<column>_check`.
         """
         with connected_to(self.stmarys):
             with transaction.atomic():
-                with self.assertRaises(IntegrityError):
+                with self.assertRefusedBy("results_commentphrase_position_check"):
                     CommentPhrase.objects.create(
                         author=TEACHER.value,
                         text="Straight to the column.",
