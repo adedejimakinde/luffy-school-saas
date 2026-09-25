@@ -1,9 +1,13 @@
 # Messaging: codes, result notices, fee reminders and the result checker
 
-Status: **draft, for review. No code.** Proposes how the platform reaches a family:
-the sign-in and verification codes guardians already need (PR D), a notice that a
-report card is ready, a fee reminder from the bursar, and a result checker for a
-family with no account. It is built behind one provider interface with a fake
+Status: **reviewed 2026-09-25 — the plan.** M1–M4 are being built, in order,
+against the fake provider; M5 and M6 wait for a real provider. The decisions taken
+in review are recorded directly below, and they override anything later in the
+document that reads as still open.
+
+How the platform reaches a family: the sign-in and verification codes guardians
+already need (code delivery), a notice that a report card is ready, a fee reminder
+from the bursar, and a result checker for a family with no account. It is built behind one provider interface with a fake
 provider for tests and development, so a real SMS, WhatsApp or email provider plugs
 in later with no change to the four. Choosing that provider is parent-access's
 OPEN-5 and stays open here.
@@ -16,14 +20,42 @@ overturned, and says so.
 Everything this document says about the code as it stands was read on `main` at
 `46fe366` and cites the line it was read from.
 
+## Decision record (review, 2026-09-25)
+
+**Build now, in this order, against the fake provider:** M1 code delivery, M2 result
+notices, M3 fee reminders, M4 the result checker. **Waiting for a real provider:** M5
+(delivery reports) and M6 (the provider itself).
+
+**"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
+parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
+are renamed in M1.
+
+| question | decided |
+| --- | --- |
+| OPEN-M1, the amount on a fee reminder | **Yes, the amount is stated, and only to a live, verified channel.** A pending or dormant channel gets no amount, because it gets no reminder at all, and a test says so (requirement 14). |
+| D9, result notices as a step after release | **Agreed.** |
+| D7, quiet hours | **Changed: held, not refused.** A school-originated message asked for between 20:00 and 07:00, Lagos time, is held and sent at 07:00. Codes are exempt, because a code held until morning would be dead fifteen minutes into its wait. |
+| D5 and D6, after the commit, at most once, codes encrypted on the broker | **Agreed.** |
+| D11, the result checker | **Agreed.** The PIN is printed in groups of four, and wrong attempts are rate-limited per admission number as well as per address. |
+
+**What holding overnight brings with it: a scheduler.** `docs/background.md` has
+"No `beat`, no scheduler", because nothing was periodic. Releasing held messages at
+07:00 is periodic. A Celery ETA task cannot do it on this broker: it is redelivered
+every `visibility_timeout` (300 seconds) until its time comes, which is about 150
+copies of each held task by morning. So M2 adds `celery beat`, running one sweep a
+minute that queues the held messages whose time has come. The sweep is safe to run
+twice, because every send is claimed first (D5). `docs/background.md` changes with
+it.
+
 ## What this is
 
 Four things, in the order they are needed:
 
-1. **PR D: guardian code delivery.** Codes are minted today and sent nowhere. The
-   raw code `request_sign_in_code()` returns is discarded
+1. **Code delivery.** Codes are minted today and sent nowhere. The raw code
+   `request_sign_in_code()` returns is discarded
    (`accounts/guardian_signin.py:289`), so outside the test suite no guardian can
-   verify a channel or sign in. PR D delivers the codes, with #111's decisions.
+   verify a channel or sign in. Code delivery sends the codes, with #111's
+   decisions.
 2. **Result notices.** When a class's cards are released, each family is told the
    card is ready and where to read it. The notice itself carries no results.
 3. **Fee reminders.** The bursar tells the families of children who owe that they
@@ -158,7 +190,7 @@ the fake on per test, the way it already substitutes a recorder for
 | reactivation | a school admin (door three) | a dormant phone | the school's name, the code |
 | school answer | a school admin (the fourth door, #135) | a guardian's proved channel | the school's name, the code |
 | result notice | the principal (D9) | each live guardian of the child | school, child, term, where to read it |
-| fee reminder | the bursar (D10) | each live guardian who receives invoices | school, child, term, the amount if OPEN-M1 says so |
+| fee reminder | the bursar (D10) | each live guardian who receives invoices | school, child, term, the amount owed |
 
 **No free text from a school.** A text box would make the platform a bulk sender
 for whatever a school types, with no template a WhatsApp provider could have
@@ -259,14 +291,17 @@ today. A half-sent batch leaves a bursar asking which families got it, and nothi
 on the page could answer.
 
 **Quiet hours: school-originated messages go between 07:00 and 20:00, Lagos time.**
-Outside them the button refuses, and says when it can be pressed. It does not hold
-the batch for the morning. There is no scheduler, and an ETA task on this Redis
-broker is redelivered every `visibility_timeout` (300 seconds, `docs/background.md`)
-until its time comes. Codes are exempt, because the guardian is asking right now.
+*(Changed in review: held, not refused.)* A batch asked for outside those hours is
+written as it would be at noon, and its messages are **held until 07:00**. The
+button says so before it is pressed: "These will be sent at 07:00." A periodic sweep
+queues them at 07:00 (see the decision record for why that needs `celery beat`). The
+cap is checked against the day a message will go out, counting what is already held
+for that day. Codes are exempt, because the guardian is asking right now and a code
+lasts fifteen minutes.
 
-### D8. PR D: code delivery, carrying #111
+### D8. Code delivery, carrying #111
 
-PR D is the first user of the seam and builds it (M1 in the slices below). Four
+Code delivery is the first user of the seam and builds it (M1 in the slices below). Four
 doors send a code, and each delivers the code its `_mint_code()` returned, after
 the commit, through the provider for its channel type:
 
@@ -276,10 +311,10 @@ the commit, through the provider for its channel type:
   phone;
 - **the fourth door, new: a school asking an already-verified guardian to answer
   it** (#135). Today `tests/guardians.py:61` stands in for it and calls
-  `activate_guardian_links()` by fiat. PR D is the door that sends that school's
+  `activate_guardian_links()` by fiat. Code delivery is the door that sends that school's
   own code to the proved channel, and answering it is what calls that function.
 
-**#111, as decided on 2026-09-24**, is in PR D because every one of its answers is a
+**#111, as decided on 2026-09-24**, is in code delivery because every one of its answers is a
 rule about sending:
 
 - `one_live_contact_per_guardian` becomes one live contact per guardian **per
@@ -348,13 +383,14 @@ preview: which children, which guardians, how many messages and segments. Then s
 - **One message per child.** A family with three children gets three. Combining
   them is OPEN-M9.
 
-**Whether the reminder states the amount is the one ruling this document asks you
-to overturn.** `docs/withholding.md` ruled balances staff-only "in this phase"
-(`results/card_api.py:564`): "a family will dispute a number the bursar has not
-reconciled". A reminder without the amount ("fees for Ada Obi for First Term are
-outstanding; please contact the bursar's office") keeps that ruling and is weak. With
-it, the number is one the bursar chose to send, having seen the preview, and it is
-frozen on the row. That is OPEN-M1, and D10 is built either way.
+**The reminder states the amount (decided in review, OPEN-M1).** This overturns
+`docs/withholding.md`'s ruling that balances are staff-only "in this phase"
+(`results/card_api.py:564`), for the reminder and nowhere else. That ruling's worry
+was "a family will dispute a number the bursar has not reconciled". Here, the number
+is one the bursar chose to send, having seen it in the preview, and it is frozen on
+the row. **It goes only to a live, verified channel**, which D4 already requires of
+every message. A pending or dormant channel gets no reminder, so it gets no amount,
+and requirement 14 tests exactly that.
 
 ### D11. The no-account result checker
 
@@ -383,11 +419,13 @@ cannot be capped per PIN without locking out the family holding it. The space do
 the work instead (10¹² against 10⁶), printed in three groups of four.
 
 **One answer for every failure.** An unknown admission number, a wrong PIN, a
-revoked PIN, and another child's PIN all get the same status and body. Guesses are
-**counted, not locked**, per address and per admission number, in a scope of their
-own. That is `accounts/throttling.py`'s reasoning, and `guardian_signin`'s for
-keeping its buckets apart: an admission number is on the child's exercise books, and
-a lockout on it would be a weapon.
+revoked PIN, and another child's PIN all get the same status and body. **Wrong
+attempts are rate-limited per admission number, and per address** (decided in
+review), in a scope of their own. After too many in a window, the next attempt waits,
+and the wait ends by itself. That is `accounts/throttling.py`'s shape, and
+`guardian_signin`'s reason for keeping its buckets apart. An admission number is on
+the child's exercise books, so a lock that somebody had to lift would be a weapon
+against the family, and a wait is not.
 
 **Why paper, and never a message.** The checker is for families with no verified
 channel. Sending a PIN to a number the school typed but nobody proved is sending a
@@ -431,12 +469,14 @@ what reaches a family's phone, and a switch would be a second branch nobody test
 
 One PR each, to `main`, in order:
 
-1. **M1 = PR D: the seam, the fake, and code delivery.** D1, D2, D5 and D6 for codes,
+1. **M1: code delivery, with the seam and the fake.** D1, D2, D5 and D6 for codes,
    D8 with #111, and D12's refusal half. The first real use, so the seam is shaped
    by a caller, not ahead of one.
 2. **M2: result notices.** The notice and attempt tables, "Tell families" on the
-   chain page, budgets and hours (D7), D9.
-3. **M3: fee reminders.** On the bursar's page, on M2's tables. D10, after OPEN-M1.
+   chain page, budgets and hours (D7), holding overnight with the `celery beat`
+   sweep, and D9.
+3. **M3: fee reminders.** On the bursar's page, on M2's tables. D10, with the
+   amount.
 4. **M4: the result checker.** D11. It sends nothing, so it depends on none of the
    above, and can be built in any order after M1's review. The slips reuse WeasyPrint.
 5. **M5: delivery reports.** D12's second half, with the first real provider.
@@ -471,17 +511,22 @@ per `docs/parent-access.md`'s requirements and the standing rule.
 10. **Each school's messages stay its own.** A guardian with a child at each school
     receives each school's notice naming only that school's child. A St Mary's PIN
     opens nothing on Grace's host.
-11. **A batch over its cap or outside its hours is refused whole**, before anything
-    is queued.
+11. **A batch over its cap is refused whole**, before anything is queued.
 12. **The checker's one refusal** is identical across its four failures, and is
     counted, never locked.
 13. **"Tell families" twice sends each notice once.**
+14. **A pending or dormant channel gets no amount** (decided in review). A fee
+    reminder reaches no unverified channel, no link still waiting for the school,
+    and no dormant phone. The test uses a guardian holding one of each beside a live
+    email, and asserts the amount appears only in the email's text.
+15. **Held overnight, sent at 07:00, once.** A batch asked for at 21:00 Lagos time
+    sends nothing before 07:00 and everything at 07:00, and the sweep run twice
+    sends each message once. At two schools, one of which asks at noon.
 
 ## Open questions
 
-- **OPEN-M1. Does a fee reminder state the amount?** Overturns withholding's "balances
-  are staff-only in this phase" if yes. Recommended yes, for D10's reason: the bursar
-  sends it having seen it, and the row freezes it.
+- ~~**OPEN-M1. Does a fee reminder state the amount?**~~ **Closed in review: yes,
+  and only to a live, verified channel.** See D10.
 - **OPEN-M2 = parent-access OPEN-5. Which provider, and which route.** SMS, WhatsApp,
   or WhatsApp with SMS fallback; sender ID registration; the transactional route for
   numbers on the do-not-disturb register. Needed by M6, and by nothing before it.
@@ -507,15 +552,17 @@ per `docs/parent-access.md`'s requirements and the standing rule.
    (`accounts/guardian_signin.py:111`) tells every caller "a code has been sent to
    it", and `request_code()` is documented as "Send a sign-in code"
    (`accounts/guardian_signin.py:255`). The raw code it mints is discarded at `:289`.
-   It is right as a neutral answer, and not true of anything the platform does. PR D
-   makes it true. Until then, guardians can only sign in inside the test suite, which
+   It is right as a neutral answer, and not true of anything the platform does. Code
+   delivery makes it true. Until then, guardians can only sign in inside the test suite, which
    takes the raw code from the return value.
 2. **"PR D" names two different pull requests.** `docs/parent-access.md:568` ("The
    parent-scoped half of that is enforced as of PR D") means the parent-access
    series' PR D, merged in #110 as `8ad3a4b`. #111, `docs/parent-access.md:220`,
    `accounts/enrolment_api.py:624`, `accounts/services.py:342` and
    `tests/guardians.py:61` mean the screens series' next one, guardian code delivery,
-   which is this document's M1. The `:568` sentence should name #110.
+   which is this document's M1. The `:568` sentence should name #110. **Resolved in
+   review:** the new one is called "code delivery", and M1 renames the code comments
+   that call it PR D.
 3. **`Guardianship.receives_invoices` is written and never read**
    (`accounts/models.py:535`). D10 would be its first reader. It is worth one question
    to a school whether "receives invoices" means the guardian who should get a fee
