@@ -130,7 +130,9 @@ release that runs once the release commits. It reads the class afresh, compares
 it with the version-1 cards on the sheet, and writes a `ReleaseOmission` for
 each child on the class with no card. The principal sees them by name on the
 chain page, and on the release step's own answer. What it cannot see is a
-placement landing after its own read, and it says so. Not a second read inside
+placement landing after its own read, and it says so (issue #165). A check that
+did not finish leaves no `ReleaseCheck`, and the page says the list is not known
+rather than showing it empty. Not a second read inside
 the locked block: `roster_ids()`'s own docstring says why, and the module
 argues why a read after the commit is not that.
 

@@ -2018,6 +2018,42 @@ class ReleaseOmission(models.Model):
         )
 
 
+class ReleaseCheck(models.Model):
+    """That the check after a release ran to its end, for one sheet.
+
+    Written by `omissions.record()` in the same transaction as the omissions it
+    found, and written when it found none. Without it, "nobody was left out"
+    and "the check never finished" were the same empty list on the principal's
+    page (the review of #164): the check runs after the commit, so it can fail
+    after a release that stands, and a failure wrote nothing. With it, a
+    released sheet with no check row says so rather than saying "none".
+
+    Append-only, as the omissions are: a check row that could be written after
+    the fact would say the class was checked when nobody knows who was on it.
+    """
+
+    sheet = models.OneToOneField(
+        ResultSheet, on_delete=models.PROTECT, related_name="release_check"
+    )
+    checked_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"sheet {self.sheet_id} checked at {self.checked_at:%Y-%m-%d %H:%M}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ReleaseOmissionsAreAppendOnly(
+                f"The check of sheet {self.sheet_id} has been recorded and cannot be changed."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ReleaseOmissionsAreAppendOnly(
+            f"The check of sheet {self.sheet_id} cannot be deleted: it is what says "
+            f"its list of children left without a card is complete."
+        )
+
+
 # ---------------------------------------------------------------------------
 # The grading scale: what letter a percentage prints as.
 #

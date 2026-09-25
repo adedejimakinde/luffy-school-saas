@@ -47,7 +47,7 @@ from django.db import connection, transaction
 from django_tenants.utils import schema_context
 
 from . import positions
-from .models import ReleasedCard, ReleaseOmission, ResultSheet
+from .models import ReleaseCheck, ReleasedCard, ReleaseOmission, ResultSheet
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,14 @@ def _notice(schema_name, sheet_id):
         with schema_context(schema_name):
             record(ResultSheet.objects.get(pk=sheet_id))
     except Exception:  # noqa: BLE001 — the release is durable; say so and stop
+        # Not "run it again": `record()` compares the class as it is when it
+        # runs, and a later run would write down every child placed since as
+        # left out by this release, in a table nothing can correct. The sheet
+        # has no `ReleaseCheck`, and the principal's page says the check did
+        # not finish (the review of #164).
         logger.exception(
             "Could not record who release of sheet %s left without a card. The "
-            "release itself stands; the check can be run again with "
-            "results.omissions.record().",
+            "release itself stands, and its sheet says the check did not finish.",
             sheet_id,
         )
 
@@ -81,41 +85,63 @@ def _notice(schema_name, sheet_id):
 def record(sheet) -> list[ReleaseOmission]:
     """Write a row for each child on the class now who has no card on `sheet`.
 
-    Safe to call again for the same sheet: a child already recorded is skipped,
-    and `a_release_omits_a_child_once` refuses a second row if two calls race.
-    Returns the rows it wrote.
+    **For the check after the commit, not for running by hand later.** It
+    compares the class as it is when it runs. Run straight after the release
+    commits, a child on the class with no card was placed while the release
+    ran; run days later, she may have arrived last week, and this would write
+    her down — in a table nothing can correct — as left out by a release she
+    was never near (the review of #164).
+
+    A child with a card for this term from another class's release is not left
+    out: she was moved in mid-release, and her card has gone home. Two runs at
+    once are safe: a child already recorded is skipped, and a row the other run
+    wrote first is let go rather than failing the batch it is in. The sheet's
+    `ReleaseCheck` is written in the same transaction, found anything or not, so
+    a release whose check never finished is one with no check row.
+
+    Returns the rows it set out to write.
     """
     # The one copy of "the school's name for the child comes first".
-    from .cards import _student_names
+    from .cards import _student_names, cards_by_student
 
     on_the_class = positions.roster_ids(sheet.class_group, sheet.term)
-    carded = set(
-        ReleasedCard.objects.filter(sheet=sheet, version=1).values_list(
-            "student_membership_id", flat=True
+    carded = set(cards_by_student(sheet))
+    missing = [student_id for student_id in on_the_class if student_id not in carded]
+    if missing:
+        carded_elsewhere = set(
+            ReleasedCard.objects.filter(
+                sheet__term=sheet.term, version=1, student_membership_id__in=missing
+            ).values_list("student_membership_id", flat=True)
         )
-    )
-    already = set(sheet.omissions.values_list("student_membership_id", flat=True))
-    missing = [
-        student_id
-        for student_id in on_the_class
-        if student_id not in carded and student_id not in already
-    ]
-    if not missing:
-        return []
-
-    names = _student_names(missing)
-    references = _references(missing)
-    return ReleaseOmission.objects.bulk_create(
-        [
-            ReleaseOmission(
-                sheet=sheet,
-                student_membership_id=student_id,
-                student_name=names.get(student_id, ""),
-                student_reference=references.get(student_id, ""),
-            )
+        already = _already_recorded(sheet)
+        missing = [
+            student_id
             for student_id in missing
+            if student_id not in carded_elsewhere and student_id not in already
         ]
-    )
+
+    written = []
+    if missing:
+        names = _student_names(missing)
+        references = _references(missing)
+        written = ReleaseOmission.objects.bulk_create(
+            [
+                ReleaseOmission(
+                    sheet=sheet,
+                    student_membership_id=student_id,
+                    student_name=names.get(student_id, ""),
+                    student_reference=references.get(student_id, ""),
+                )
+                for student_id in missing
+            ],
+            ignore_conflicts=True,
+        )
+    ReleaseCheck.objects.get_or_create(sheet=sheet)
+    return written
+
+
+def _already_recorded(sheet) -> set[int]:
+    return set(sheet.omissions.values_list("student_membership_id", flat=True))
 
 
 def _references(membership_ids) -> dict[int, str]:
@@ -123,6 +149,15 @@ def _references(membership_ids) -> dict[int, str]:
 
     return dict(
         Membership.objects.filter(pk__in=membership_ids).values_list("pk", "reference")
+    )
+
+
+def checked(sheet_ids) -> set[int]:
+    """The sheets among `sheet_ids` whose check after release ran to its end."""
+    return set(
+        ReleaseCheck.objects.filter(sheet_id__in=list(sheet_ids)).values_list(
+            "sheet_id", flat=True
+        )
     )
 
 

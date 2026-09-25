@@ -36,10 +36,16 @@ marking sheet already answers. Detail is loaded when a sheet is opened.
 A released row carries `without_a_card`, the `ReleaseOmission` rows for that
 sheet: the children placed into the class while its release ran, who got no
 card (issue #47). That is a fourth query, over the record table and never over
-a roster, so its cost is the number of omissions and not the size of a class.
+a roster, so its cost is the number of omissions and not the size of a class;
+and a fifth, over `ReleaseCheck`, one row per released sheet.
 
 **Only a login that may release sees it**, and everybody else gets `null`
 rather than an empty list, so "none" and "not yours to see" stay two answers.
+A third stays apart from both: **"not known"**. The check runs after the
+release commits and can fail after a release that stands; a sheet whose check
+did not finish has no `ReleaseCheck`, and its row carries `left_out_checked:
+false` and `without_a_card: null` rather than an empty list that would read as
+"nobody" (the review of #164).
 The rest of this list names no child for the reason above. The principal is
 the exception because she pressed release and is the one who can act on it.
 The same rows come back on the release step itself, because the check that
@@ -141,6 +147,10 @@ class SheetRowOut(Schema):
     may_release: bool = False
     may_send_back: bool = False
     without_a_card: Optional[List[NoCardOut]] = None
+    #: For a released class and a login that may release: whether the check
+    #: after the release finished. False means `without_a_card` is not known,
+    #: which is not the same as empty. Null for everybody else.
+    left_out_checked: Optional[bool] = None
 
 
 class ChainOut(Schema):
@@ -292,6 +302,7 @@ def chain(request):
                 state=state,
                 state_label=SheetState(state).label,
                 without_a_card=_no_card(left_out, sheet, state),
+                left_out_checked=_check_finished(left_out, sheet, state),
                 **_actions(state, roles, group.pk, mine),
             )
         )
@@ -299,19 +310,30 @@ def chain(request):
 
 
 def _left_out(roles, sheets):
-    """`sheet id -> its omissions` for released sheets, if this login may release.
+    """For released sheets, if this login may release: `rows`, sheet id -> its
+    omissions, and `checked`, the sheets whose check after release finished.
 
-    `None` for anybody else, so the fourth query is not even asked on their
+    `None` for anybody else, so the extra queries are not even asked on their
     behalf.
     """
     if not roles & services.RELEASING_ROLES:
         return None
     released = [s.pk for s in sheets if s.state == SheetState.RELEASED]
-    return omissions.of_sheets(released) if released else {}
+    if not released:
+        return {"rows": {}, "checked": set()}
+    return {"rows": omissions.of_sheets(released), "checked": omissions.checked(released)}
+
+
+def _check_finished(left_out, sheet, state):
+    """True or False for a released sheet this login may release; None otherwise."""
+    if left_out is None or sheet is None or state != SheetState.RELEASED:
+        return None
+    return sheet.pk in left_out["checked"]
 
 
 def _no_card(left_out, sheet, state):
-    if left_out is None or sheet is None or state != SheetState.RELEASED:
+    if not _check_finished(left_out, sheet, state):
+        # Not released, not this login's to see, or not known: none of them `[]`.
         return None
     return [
         NoCardOut(
@@ -320,7 +342,7 @@ def _no_card(left_out, sheet, state):
             reference=row.student_reference,
             noticed_at=row.noticed_at.isoformat(),
         )
-        for row in left_out.get(sheet.pk, [])
+        for row in left_out["rows"].get(sheet.pk, [])
     ]
 
 
@@ -387,13 +409,15 @@ def _step(request, class_group_id, move, *, reason=None):
     # service has only just written under its own lock.
     state = moved.to_state
     released = [moved.sheet] if state == SheetState.RELEASED else []
+    left_out = _left_out(roles, released)
     return 200, SheetRowOut(
         class_group_id=group.pk,
         class_group=group.name,
         sheet_id=moved.sheet_id,
         state=state,
         state_label=SheetState(state).label,
-        without_a_card=_no_card(_left_out(roles, released), moved.sheet, state),
+        without_a_card=_no_card(left_out, moved.sheet, state),
+        left_out_checked=_check_finished(left_out, moved.sheet, state),
         **_actions(state, roles, group.pk, _my_class_groups(request, school, term)),
     )
 
