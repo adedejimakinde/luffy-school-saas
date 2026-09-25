@@ -48,16 +48,22 @@ def is_live_at(guardian_user_id, school) -> bool:
     ).exists()
 
 
-def for_child(student_membership_id, school):
+def for_child(student_membership_id, school, *, invoices_only=False):
     """`(reachable, unreachable)` for a child: `[(guardian user, contact)]` and a count.
 
     A guardian not live at `school` is neither: they are not this school's to
     reach yet (#135), and counting them would tell the office they exist.
+
+    `invoices_only` is a fee reminder's reader (D10): only the links that say
+    `receives_invoices`. A guardian whose link does not is neither, for the same
+    reason: the bursar did not ask to reach them.
     """
     reachable, unreachable = [], 0
     links = Guardianship.objects.filter(
         student_id=student_membership_id, student__school=school
     ).select_related("guardian")
+    if invoices_only:
+        links = links.filter(receives_invoices=True)
     for link in links:
         if not is_live_at(link.guardian_id, school):
             continue
@@ -79,3 +85,12 @@ def still_reachable(notice, school) -> bool:
     if contact is None or not contact.is_live:
         return False
     return not (contact.channel_type == ContactChannel.PHONE and guardian_contacts.is_dormant(contact))
+
+
+def still_receives_invoices(notice) -> bool:
+    """A fee reminder's link, read again at the moment of sending (D10, D4)."""
+    return Guardianship.objects.filter(
+        guardian_id=notice.guardian_user_id,
+        student_id=notice.student_membership_id,
+        receives_invoices=True,
+    ).exists()

@@ -515,6 +515,11 @@ NOTICE_HOURS = (7, 20)
 #: answer costs a deploy and not a migration.
 NOTICE_DAILY_SEGMENTS = int(os.environ.get("NOTICE_DAILY_SEGMENTS", 3000))
 
+#: At most one fee reminder per child in this many days (docs/messaging.md D10),
+#: folded over the reminder rows. One the ledger moved under, which went nowhere,
+#: does not count.
+NOTICE_REMINDER_INTERVAL_DAYS = int(os.environ.get("NOTICE_REMINDER_INTERVAL_DAYS", 7))
+
 _FAKE_PROVIDER = "messaging.fake.FakeProvider"
 MESSAGING_PROVIDERS = {
     "email": os.environ.get("MESSAGING_EMAIL_PROVIDER", "").strip()

@@ -42,6 +42,8 @@ are renamed in M1.
 | D7, quiet hours | **Changed: held, not refused.** A school-originated message asked for between 20:00 and 07:00, Lagos time, is held and sent at 07:00. Codes are exempt, because a code held until morning would be dead fifteen minutes into its wait. |
 | D5 and D6, after the commit, at most once, codes encrypted on the broker | **Agreed.** |
 | D11, the result checker | **Agreed.** The PIN is printed in groups of four, and wrong attempts are rate-limited per admission number as well as per address. |
+| D10, which amount a fee reminder states (2026-09-25, before M3) | **The whole account**, the ledger's fold over every term, which is what the bursar's class page shows, **worded as the account**: "Ada Obi's fees account shows NGN 45,000 owing". The term only chooses which children. A term named beside the amount would claim last term's arrears were this term's. |
+| D10, a reminder held overnight when the account moves (2026-09-25, before M3) | **Read the ledger again at send time. If the balance has changed from the amount the reminder would state, send nothing**, record the outcome as "balance changed", do not count it against the seven-day interval, and list it on the bursar's fees page so she can send again. |
 
 **What holding overnight brings with it: a scheduler.** `docs/background.md` has
 "No `beat`, no scheduler", because nothing was periodic. Releasing held messages at
@@ -400,9 +402,14 @@ preview: which children, which guardians, how many messages and segments. Then s
   reader.
 - **Only children who owe**, by the ledger's own fold, read when the batch is sent.
   Each reminder row records the balance it states, so a later dispute is about a
-  number the platform can produce.
+  number the platform can produce. *(Decided before M3: the whole account, worded
+  as the account; and read again at send time, sending nothing if it has moved.
+  See the decision record.)*
 - **At most one reminder per child every seven days**, a setting, folded over the
-  reminder rows. A bursar pressing twice in a morning sends once.
+  reminder rows. A bursar pressing twice in a morning sends once. *(As built: the
+  fold is taken under the lock that serialises every batch at a school. Nothing in
+  the schema bounds it, because the window moves with the clock and a reminder the
+  account moved under, known only once it is sent, does not count.)*
 - **One message per child.** A family with three children gets three. Combining
   them is OPEN-M9.
 

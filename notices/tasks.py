@@ -4,7 +4,8 @@
 claims the notice, with the text as it will go, before it calls the provider,
 and a second run finds the claim and does nothing (D5). It asks D4 again first,
 because a notice held overnight can outlive the guardian's standing at the school
-or the channel's.
+or the channel's. A fee reminder also reads the ledger again, and sends nothing
+if the account has moved from the amount it would state (`Said.BALANCE_CHANGED`).
 
 `release_held()` is what 07:00 runs: every school's notices whose time has come
 and that nobody has claimed, queued. **It is a management command on the
@@ -20,7 +21,7 @@ from celery import shared_task
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from messaging import providers
+from messaging import kinds, providers
 from schools.tasks import TenantTask
 
 from . import recipients
@@ -61,14 +62,31 @@ def send_notice(schema_name, notice_id):
         message_kind, text = (
             result_message(notice.card, contact, held=held) if contact else ("", "")
         )
-    else:  # pragma: no cover — fee reminders are M3's
-        return None
+        changed = False
+    else:
+        # A fee reminder (D10). Its link must still receive invoices, and the
+        # account is read again: a balance that has moved since the bursar
+        # pressed send is a number that stopped being true, so nothing goes
+        # (decided 2026-09-25).
+        from . import reminders
 
-    claim = _claim(notice, message_kind, text if reachable else "")
+        reachable = reachable and recipients.still_receives_invoices(notice)
+        changed = reminders.balance_of(notice.student_membership_id) != notice.amount_kobo
+        message_kind = kinds.Kind.FEE_REMINDER
+        text = reminders.reminder_text(
+            school_name=school.name,
+            child_name=reminders.child_name(notice.student_membership_id),
+            amount_kobo=notice.amount_kobo,
+            channel_type=notice.channel_type,
+        )
+
+    claim = _claim(notice, message_kind, text if reachable and not changed else "")
     if claim is None:
         return None
     if not reachable:
         return _record(claim, Said.NO_LONGER_REACHABLE)
+    if changed:
+        return _record(claim, Said.BALANCE_CHANGED)
 
     outbound = providers.Outbound(
         channel_type=notice.channel_type,

@@ -26,14 +26,17 @@ import {
   fetchBooks,
   fetchClass,
   fetchConcessions,
+  fetchNotSent,
   fetchReceipt,
   postBillLine,
   postCharges,
   postConcession,
   postDiscount,
   postPayment,
+  postReminders,
   postReversal,
   postRevocation,
+  previewReminders,
   putBillLine,
   removeBillLine,
 } from "./api.js";
@@ -103,10 +106,16 @@ export async function mount(
   }
 
   const showBooks = async (termId) => {
-    const answer = await fetchBooks({ termId, fetchImpl });
+    // The reminders that went nowhere are listed under the classes (D10, as
+    // decided). Asked beside the books, and a failure there leaves the books.
+    const [answer, notSent] = await Promise.all([
+      fetchBooks({ termId, fetchImpl }),
+      fetchNotSent({ fetchImpl }),
+    ]);
     land(answer, (body) => {
       where.termId = body.term_id;
-      return body.term_id === null ? { step: "no-terms" } : { step: "books", books: body };
+      if (body.term_id === null) return { step: "no-terms" };
+      return { step: "books", books: body, notSent: notSent.ok ? notSent.body.children : [] };
     });
   };
   const showClass = async (classId) => {
@@ -346,6 +355,44 @@ export async function mount(
     const hit = event.target.closest("[data-action]");
     if (!hit) return;
     const action = hit.dataset.action;
+    if (action === "ask-reminders" && ["books", "class"].includes(state.step)) {
+      // Asks first (docs/messaging.md D10): the preview writes nothing, and
+      // nothing is sent until "Send them".
+      const scope = {
+        termId: hit.dataset.term ? Number(hit.dataset.term) : where.termId,
+        classId: hit.dataset.class ? Number(hit.dataset.class) : null,
+        children: hit.dataset.children ? hit.dataset.children.split(",").map(Number) : null,
+      };
+      const answer = await previewReminders({ ...scope, fetchImpl });
+      if (answer.refusal) state = { step: answer.refusal };
+      else if (!answer.ok) {
+        state = { ...state, reminding: null, noteTone: "stop", note: answer.body.detail || "Nothing was sent." };
+      } else state = { ...state, reminding: { ...answer.body, scope }, note: "", noteTone: "" };
+      draw();
+      return;
+    }
+    if (action === "cancel-reminders") {
+      state = { ...state, reminding: null };
+      draw();
+      return;
+    }
+    if (action === "send-reminders" && state.reminding) {
+      const answer = await postReminders({ ...state.reminding.scope, fetchImpl });
+      if (answer.refusal) {
+        state = { step: answer.refusal };
+        draw();
+        return;
+      }
+      const note = answer.body.detail || "Nothing was sent.";
+      const noteTone = answer.ok ? "done" : "stop";
+      if (state.step === "class") await showClass(where.classId);
+      else await showBooks(where.termId);
+      if (["books", "class"].includes(state.step)) {
+        state = { ...state, note, noteTone };
+        draw();
+      }
+      return;
+    }
     if (action === "open-class") return showClass(Number(hit.dataset.class));
     if (action === "open-bills") return showBills(where.termId);
     if (action === "open-bill") return showBill(Number(hit.dataset.class));
