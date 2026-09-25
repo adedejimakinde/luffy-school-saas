@@ -26,6 +26,7 @@ import {
   enqueue,
   isOverdue,
   markSent,
+  newKey,
   nextToSend,
   openOutbox,
   outboxName,
@@ -192,6 +193,14 @@ test("work older than seven days is flagged, not dropped", () => {
 
 test("sending again after a failed connection backs off, to a minute at most", () => {
   assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 10].map(retryDelay), [2000, 4000, 8000, 16000, 32000, 60000, 60000, 60000]);
+});
+
+test("a key is a version 4 UUID, with or without a secure context", () => {
+  const uuid4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  assert.match(newKey(), uuid4);
+  // Plain HTTP: no `randomUUID()`, only `getRandomValues()`.
+  const insecure = { getRandomValues: (bytes) => bytes.fill(0xff) };
+  assert.match(newKey(insecure), uuid4);
 });
 
 test("an outbox is one person's at one school", () => {
