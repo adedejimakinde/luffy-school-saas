@@ -220,7 +220,9 @@ class TheSuiteTests(SimpleTestCase):
 
         Without it, a test that sent without asking for the fake would pass on
         a developer's machine and fail in CI. CONTROL (run locally, where DEBUG
-        is on): removing the line in `schools.tests.runner` turns this red.
+        is on): removing the line in `schools.tests.runner` stops the run at
+        `messaging.E001` before any test starts, because the line also keeps the
+        fake out of the checks. Removing it with E001 silenced turns this red.
         """
         from django.conf import settings
 
