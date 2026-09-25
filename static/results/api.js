@@ -31,9 +31,15 @@ export const STEP = {
   NEEDS_A_REASON: "needs-a-reason",
   /** Not theirs to take — the class-teacher scope, or the wrong role. */
   NOT_ALLOWED: "not-allowed",
+  /**
+   * A release that could not check who it was leaving out, so it did not
+   * happen. Nothing went home, and releasing again is the recovery.
+   */
+  NOT_CHECKED: "not-checked",
 };
 
 const SESSION_EXPIRED = "session_expired";
+const LEFT_OUT_NOT_CHECKED = "left_out_not_checked";
 
 export function chainUrl() {
   return "/api/results/chain/";
@@ -97,7 +103,9 @@ export async function fetchChain({ fetchImpl = fetch } = {}) {
  * sentences: **already signed** names the step this person took and tells them
  * to ask somebody else; **moved** means somebody else advanced it and the page
  * should reload; **needs a reason** is a box to fill in; **not allowed** is a
- * standing they do not have.
+ * standing they do not have. A fifth belongs to release alone: **not checked**
+ * is a release that could not say who it left out and so did not happen, and
+ * its remedy is the same button again.
  *
  * A 409 carrying `existing` is the same-signatory rule; a 409 without it is a
  * state that moved. They share a status because both are "this did not happen
@@ -129,6 +137,11 @@ export async function takeStep({ classGroupId, step, reason, fetchImpl = fetch }
   }
   if (answer.status === 403) {
     return { ok: false, outcome: STEP.NOT_ALLOWED, body: answer.body || {} };
+  }
+  // The code, not the status alone: a 503 can come from a proxy in front of
+  // the server, and that one is the page-level "broken" below.
+  if (answer.status === 503 && answer.body && answer.body.code === LEFT_OUT_NOT_CHECKED) {
+    return { ok: false, outcome: STEP.NOT_CHECKED, body: answer.body };
   }
   return {
     ok: false,

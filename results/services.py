@@ -109,6 +109,16 @@ class ReleaseIsFinal(ResultsError):
     """A released result cannot be moved. It can only be revised."""
 
 
+class LeftOutNotChecked(ResultsError):
+    """A release could not check who it was leaving without a card, so it did not happen.
+
+    Raised from inside the release's transaction by `omissions.check()`, so the
+    cards and everything else the release wrote roll back with it. The sentence
+    says so, and says to release again: that is the recovery, and it takes its
+    own read of the class (the review of #164).
+    """
+
+
 # ---------------------------------------------------------------------------
 # Who may take which step.
 #
@@ -695,7 +705,7 @@ def release(sheet, actor):
     `locked_sheet_for()` and `ResultsError`, which are the chain's own — and a
     module-level import here would close the circle.
     """
-    from . import cards, comments, ratings, renders, sessions
+    from . import cards, comments, omissions, ratings, renders, sessions
 
     # `attendance` does not import this module, so this one could sit at the top
     # of the file. It is here beside the other four so that "what a release
@@ -765,11 +775,16 @@ def release(sheet, actor):
         registers is outside, because a broker must never be able to fail a
         release that has already happened. `results.renders` argues both.
 
-        **What used to be here.** A `_say_if_the_roster_moved()` logged the
-        children a release finished without. #60 required it to read the
-        snapshot rather than the roster, which makes it vacuous, so it was
-        deleted rather than rewritten. Nothing detects a mid-release placement
-        now — `docs/cards.md`, "The detector that went with it", and issue #47.
+        **And the check, after all of it.** `omissions.check()` reads the
+        class's roster a second time, after every frozen row is written, and
+        writes a `ReleaseOmission` for each child on it with no card here: a
+        child the office placed while this block ran. Nothing frozen hangs off
+        that read, which is why it is not the second read #60 removed. It is
+        inside the transaction so that it can stop the release: if it fails,
+        `LeftOutNotChecked` rolls everything above back, and the principal is
+        told the class was not released rather than shown an empty list that
+        reads as "nobody was left out". `results.omissions` argues it in full;
+        issue #47 and `docs/cards.md` have the history.
         """
         results = positions.class_results(locked.class_group, locked.term)
         # One read of the term's registers for the whole class, inside the same
@@ -788,6 +803,7 @@ def release(sheet, actor):
         comments.freeze_for_release(locked, card_by_student)
         sessions.freeze_for_release(locked, card_by_student, results)
         renders.mark_and_enqueue(card_by_student.values())
+        omissions.check(locked, card_by_student)
 
     return _move(
         sheet,
@@ -851,6 +867,7 @@ __all__ = [
     "SENDING_BACK_ROLES",
     "SUBMITTING_ROLES",
     "AlreadySignedThisCycle",
+    "LeftOutNotChecked",
     "NotAllowedToActOnResults",
     "ReleaseIsFinal",
     "ResultsError",

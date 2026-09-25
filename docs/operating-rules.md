@@ -323,7 +323,7 @@ The test is what the act leaves behind.
 | charging a family | a `FeeLedgerEntry`, append-only | **no** — the entry is the record |
 | applying a fee schedule to a class | forty-five entries, each carrying who posted it and when | **no** — a run table would be a second answer |
 | granting a concession | a dated `DISCOUNT` entry per term | **no** — so the instruction itself may be an editable row |
-| releasing a term's results — the *freeze* | a `ReleasedCard` per child **on the roster it read** | **no** — the card is the artefact, but see below |
+| releasing a term's results — the *freeze* | a `ReleasedCard` per child **on the roster it read** — and nothing for a child placed while it ran | **no** for the cards, which are the artefact; **yes** for the child left out — `ReleaseOmission`, and it exists (see below) |
 | releasing a term's results — the *state move* | only a column on `ResultSheet` would change | **yes** — `ResultSheetTransition`, and it exists |
 | deciding a child's promotion | nothing else; the status is the only output | **yes** — `PromotionDecision` |
 | withholding a card from a family | **nothing at all** | **yes** |
@@ -338,14 +338,23 @@ rule 4's sense — so it needs one, and has one. A reader who took "releasing a
 term's results" as a single row would conclude the transition row is redundant
 and delete the only record of who released and when.
 
-**The freeze row has a hole, and it is open.** "A card per child" means every
+**The freeze row had a hole, and #47 narrowed it.** "A card per child" means every
 child on the roster the locked block read — not a child placed into the class
 *while* the release ran. She gets none, which is an absence in rule 4's sense,
-and by this rule it needs a record. There is none: the warning that used to log
-it went with #60's one-read-per-locked-block fix, for the reasons
-`docs/cards.md` gives under "The detector that went with it". So this row says
-**no** where the rule says **yes**. Issue #47 is that gap, and until it closes
-the row describes what the platform does rather than what this rule asks of it.
+and by this rule it needs a record. For a while there was none: the warning that
+used to log it went with #60's one-read-per-locked-block fix, for the reasons
+`docs/cards.md` gives under "The detector that went with it", and the row said
+**no** where the rule says **yes**. Now the release's last step reads the class
+afresh and writes a `ReleaseOmission` for each child on it with no card on the
+sheet — the absence, written down at the moment it happened, and shown to the
+principal on the chain page. `results/omissions.py` argues why that second read
+is the detector and not the defect #60 removed. If the check fails the release
+does not happen, and the principal is told who was left out could not be
+checked; a released sheet with no record of a check is shown that way too,
+never as "nobody". **What is still open** is a placement the check's
+one read cannot see: one committing just after it, or into a class already
+released later in the term. That child has no card and no record, and the root
+fix — writing the record when she is placed — is issue #165.
 
 The withholding row is what makes the rule sharp. A card that is not served leaves no
 trace anywhere — no row, no file, no absence anyone can point at without already
