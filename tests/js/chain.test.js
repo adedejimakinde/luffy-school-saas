@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applyStep, fromChain, htmlFor, mount } from "../../static/results/app.js";
-import { REFUSAL, STEP, refusalFor, provesASession } from "../../static/results/api.js";
+import { REFUSAL, STEP, refusalFor, provesASession, takeStep } from "../../static/results/api.js";
 import * as states from "../../static/results/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -89,6 +89,121 @@ test("a released row offers nothing and says why", () => {
 
   assert.match(html, /Released — nothing further/);
   assert.doesNotMatch(html, /<button[^>]*data-step=/);
+});
+
+// -- who a release left without a card (issue #47) ---------------------------
+
+const BOLA = {
+  student_membership_id: 41,
+  name: "Bola Eze",
+  reference: "STM/7",
+  noticed_at: "2026-07-20T10:15:00+01:00",
+};
+
+test("a released row names the children the release left without a card", () => {
+  const html = states.chain({
+    rows: [row({ state: "released", state_label: "Released to parents", without_a_card: [BOLA] })],
+  });
+
+  assert.match(html, /1 child has no card from this release/);
+  assert.match(html, /placed into JSS 1A while it was being released/);
+  assert.match(html, /Bola Eze/);
+  assert.match(html, /STM\/7/);
+});
+
+test("nothing is drawn for null, which is what everybody but the principal gets", () => {
+  // `null` is "not yours to see" and `[]` is "none": neither draws anything.
+  for (const without_a_card of [null, [], undefined]) {
+    const html = states.chain({
+      rows: [row({ state: "released", state_label: "Released to parents", without_a_card })],
+    });
+    assert.doesNotMatch(html, /left-out/);
+    assert.doesNotMatch(html, /no card from this release/);
+  }
+});
+
+test("a released row nobody checked says so, and never reads as nobody", () => {
+  // `left_out_checked: false` with `without_a_card: null`: a sheet released
+  // with no record of its check. An empty space here would say "nobody was
+  // left out", which nobody knows.
+  const html = states.chain({
+    rows: [row({ state: "released", state_label: "Released to parents", without_a_card: null, left_out_checked: false })],
+  });
+
+  assert.match(html, /Couldn't check who was left out of this release/);
+  assert.match(html, /does not mean nobody was left out/);
+  assert.doesNotMatch(html, /no card from this release/);
+});
+
+test("a release that could not check is not released, and the button is the way back", async () => {
+  // The step answers 503 with the code: the release rolled back. The row
+  // stays approved with its Release button, and the sentence sits on it.
+  forgetToken();
+  const released = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/chain/11/release/", () => {
+        released.push(true);
+        return {
+          status: 503,
+          body: {
+            detail: "Couldn't check who was left out of JSS 1A, so it has not been released and no card has gone home. Try releasing it again.",
+            code: "left_out_not_checked",
+          },
+        };
+      }],
+      ["/api/results/chain/", {
+        status: 200,
+        body: { ...CHAIN, rows: [row({ state: "approved", state_label: "Approved", may_release: true })] },
+      }],
+    ]),
+  });
+
+  await root.click({ "data-action": "step", "data-step": "release", "data-class": "11" });
+
+  assert.equal(released.length, 1);
+  assert.match(root.innerHTML, /Couldn(&#39;|')t check who was left out of JSS 1A/);
+  assert.match(root.innerHTML, /has not been released/);
+  assert.match(root.innerHTML, /class="row state-approved not-checked"/);
+  assert.match(root.innerHTML, /data-step="release"/, "the recovery is the same button");
+  assert.doesNotMatch(root.innerHTML, /Released to parents/);
+});
+
+test("a 503 without that code is the page-level failure, not a release refusal", async () => {
+  // Something in front of the server can answer 503 too, with no body of ours.
+  forgetToken();
+  const result = await takeStep({
+    classGroupId: 11,
+    step: "release",
+    fetchImpl: serve([["/api/results/chain/11/release/", { status: 503, body: null }]]),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.outcome, undefined);
+  assert.equal(result.refusal, REFUSAL.BROKEN);
+});
+
+test("the release step's own answer shows them at once", () => {
+  // The check commits with the release, which is before the step answers, so
+  // the row that comes back already carries them.
+  const { state: after } = applyStep(state(), 11, {
+    ok: true,
+    row: row({ state: "released", state_label: "Released to parents", without_a_card: [BOLA, { ...BOLA, student_membership_id: 42, name: "Chidi Obi", reference: "" }] }),
+  });
+
+  const html = htmlFor(after);
+  assert.match(html, /2 children have no card from this release/);
+  assert.match(html, /Bola Eze/);
+  assert.match(html, /Chidi Obi/);
+});
+
+test("a name is text, not markup", () => {
+  const html = states.chain({
+    rows: [row({ state: "released", without_a_card: [{ ...BOLA, name: "<img src=x onerror=alert(1)>" }] })],
+  });
+  assert.doesNotMatch(html, /<img/);
+  assert.match(html, /&lt;img/);
 });
 
 // -- the four refusals are four sentences ------------------------------------

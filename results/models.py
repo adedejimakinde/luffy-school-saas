@@ -1926,6 +1926,136 @@ class WithholdingDecision(models.Model):
         )
 
 
+class ReleaseOmissionsAreAppendOnly(Exception):
+    """An omission row was edited or deleted. See `ReleaseOmission`."""
+
+
+class ReleaseOmission(models.Model):
+    """A child on the class as a release finished, with no card from it. Written once.
+
+    ## Why this exists: the freeze leaves an absence, and absences need a record
+
+    `release()` freezes a card for every child on the roster **its one read of
+    the class** found (#43, #60). A child the office places into the class while
+    the release runs is not on that read, so she gets no card — the truthful
+    outcome, and #31's dead end rather than a defect. But the release leaves
+    nothing behind about her: no card, no row, no log. `docs/operating-rules.md`
+    rule 8 is exactly this case — a decision that produces an absence needs a
+    record — and issue #47 was that rule's freeze row saying "no" where the
+    rule says "yes".
+
+    ## Written by the release, by a read that decides nothing frozen
+
+    `omissions.check()` is the last step of the release's transaction. After
+    every card is written it reads the class's roster **afresh**, deliberately
+    a second read and outside the one-read rule on purpose, and writes a row
+    for every child on it who has no card on this sheet. The frozen side of the
+    comparison is the cards the release wrote. Comparing against the snapshot
+    the freeze used instead would be vacuous by construction, which is why #60
+    deleted the last detector rather than rewrite it that way (`docs/cards.md`,
+    "The detector that went with it"). If the check fails, the release does not
+    happen.
+
+    What it cannot see is a placement that lands after its own read. That child
+    is in the class with no card too, and nothing here records her (#165).
+
+    ## The name is copied, not joined
+
+    `student_name` and `student_reference` are frozen when the row is written,
+    for the reason `ReleasedCard.student_name` is (rule 2): a record read in a
+    year has to say who it was about as the school knew her then.
+
+    ## Append-only
+
+    Both layers, as everywhere in this app: `save()` and `delete()` refuse, and a
+    trigger refuses what never calls them.
+    """
+
+    #: The release that omitted her. A real foreign key: tenant to tenant, in
+    #: one schema, so `PROTECT` protects.
+    sheet = models.ForeignKey(
+        ResultSheet, on_delete=models.PROTECT, related_name="omissions"
+    )
+
+    #: A bare id into `accounts.Membership`, as every per-child column here is.
+    student_membership_id = models.PositiveBigIntegerField()
+
+    student_name = models.CharField(max_length=255, blank=True)
+    student_reference = models.CharField(max_length=64, blank=True)
+
+    #: When the release's check found her — not when she was placed, which
+    #: `ClassPlacement` knows, and not when the release began, which the
+    #: sheet's `ResultSheetTransition` knows.
+    noticed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns only, for the reason `WithholdingDecision.Meta` gives.
+        ordering = ["sheet_id", "student_name", "student_membership_id"]
+        constraints = [
+            # One release omits a child once. The unique index is also the only
+            # index this table needs: every read is "the omissions of these
+            # sheets".
+            models.UniqueConstraint(
+                fields=["sheet", "student_membership_id"],
+                name="a_release_omits_a_child_once",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.student_name or self.student_membership_id}: no card on sheet {self.sheet_id}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ReleaseOmissionsAreAppendOnly(
+                f"Omission {self.pk} has been recorded and cannot be changed. It "
+                f"says who a release left without a card, and when that was seen."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ReleaseOmissionsAreAppendOnly(
+            f"Omission {self.pk} cannot be deleted. A child a release left out "
+            f"has to stay written down, including after she is given a card."
+        )
+
+
+class ReleaseCheck(models.Model):
+    """That a release checked who it left without a card, for one sheet.
+
+    Written by `omissions.record()` in the release's own transaction, with the
+    omissions it found, and written when it found none. Without it, "nobody was
+    left out" and "nobody checked" were the same empty list on the principal's
+    page (the review of #164). A check that fails now stops the release, so a
+    release made through `services.release()` always has this row. A released
+    sheet without one, whatever released it, is shown as "couldn't check who
+    was left out" rather than "none".
+
+    Append-only, as the omissions are: a check row that could be written after
+    the fact would say the class was checked when nobody knows who was on it.
+    """
+
+    sheet = models.OneToOneField(
+        ResultSheet, on_delete=models.PROTECT, related_name="release_check"
+    )
+    checked_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"sheet {self.sheet_id} checked at {self.checked_at:%Y-%m-%d %H:%M}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ReleaseOmissionsAreAppendOnly(
+                f"The check of sheet {self.sheet_id} has been recorded and cannot be changed."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ReleaseOmissionsAreAppendOnly(
+            f"The check of sheet {self.sheet_id} cannot be deleted: it is what says "
+            f"its list of children left without a card is complete."
+        )
+
+
 # ---------------------------------------------------------------------------
 # The grading scale: what letter a percentage prints as.
 #

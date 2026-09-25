@@ -180,6 +180,10 @@ def roster_ids(class_group, term) -> list[int]:
     the lock reaches the sheet row and not `ClassPlacement`, so a second call
     here is a second answer. Those callers take `class_results()` once and read
     `student_ids` and `placements` off it — issues #43 and #60.
+
+    The one exception wants the second answer: `omissions.record()`, at the end
+    of a release, where the difference from the first read is the children
+    placed while the release ran, and nothing frozen depends on it (#47).
     """
     return ClassPlacement.objects.student_ids(class_group, term)
 

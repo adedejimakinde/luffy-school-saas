@@ -77,8 +77,9 @@ serialise the office against every release, and it would make the two reads
 release logged a warning naming the child the roster gained. The warning came
 from `services._say_if_the_roster_moved()`, which is deleted — `docs/cards.md`,
 "The detector that went with it", says why, and this file keeps a pointer rather
-than a third copy. The platform has no detector of a mid-release move now;
-issue #47 is what building one would take.
+than a third copy. Its replacement is not a log line: #47 writes a
+`ReleaseOmission` as the release's last step, and `test_release_omissions`
+proves it against this file's own race.
 
 Two schools, and Grace is used rather than built and ignored: the placing thread
 resolves its own school from `connection.schema_name`, so a thread whose

@@ -99,6 +99,12 @@ export function applyStep(state, classGroupId, result) {
     notes[classGroupId] = { kind: "needs-a-reason", detail: result.body.detail };
     return { state: { ...state, notes, asking: classGroupId }, reload: false };
   }
+  if (result.outcome === STEP.NOT_CHECKED) {
+    // No reload: the row is as it was, approved, and its Release button is
+    // the recovery. The note says why the class is not released.
+    notes[classGroupId] = { kind: "not-checked", detail: result.body.detail };
+    return { state: { ...state, notes, asking: null }, reload: false };
+  }
   notes[classGroupId] = { kind: "not-allowed", detail: result.body.detail };
   return { state: { ...state, notes, asking: null }, reload: false };
 }
