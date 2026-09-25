@@ -24,7 +24,7 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, STEP, fetchChain, takeStep } from "./api.js";
+import { REFUSAL, STEP, fetchChain, takeStep, tellFamilies } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -161,6 +161,20 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     }
     if (action === "step") {
       await step(Number(hit.dataset.class), hit.dataset.step);
+      return;
+    }
+    if (action === "tell-families") {
+      const classGroupId = Number(hit.dataset.class);
+      const result = await tellFamilies({ classGroupId, fetchImpl });
+      if (result.refusal) {
+        state = { step: result.refusal, ...result.body };
+        draw();
+        return;
+      }
+      const notes = { ...state.notes, [classGroupId]: { kind: result.ok ? "told" : "not-told", detail: result.body.detail } };
+      await load();
+      if (state.step === "chain") state = { ...state, notes };
+      draw();
     }
   });
 

@@ -149,3 +149,26 @@ export async function takeStep({ classGroupId, step, reason, fetchImpl = fetch }
     body: answer.body || {},
   };
 }
+
+/**
+ * "Tell families" (`chain_api.tell_families`). A 200 carries the sentence the
+ * principal reads; a 409, 422 or 403 carries the refusal's. Every answer is a
+ * note on the row, and the rows are fetched again for the count.
+ */
+export async function tellFamilies({ classGroupId, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await postJson(
+      `/api/results/chain/${encodeURIComponent(classGroupId)}/tell-families/`,
+      {},
+      { fetchImpl },
+    );
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+  if ([403, 409, 422].includes(answer.status)) {
+    return { ok: false, body: answer.body || {} };
+  }
+  return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}
