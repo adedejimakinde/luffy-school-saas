@@ -77,6 +77,8 @@ is not asked about it.
 
 from typing import List, Optional
 
+from django.db.models import Count
+
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
@@ -84,6 +86,9 @@ from ninja import Router, Schema
 from academics.models import ClassGroup, ClassTeacher, Term
 from accounts.models import Role
 from accounts.session import session_auth
+
+from notices import services as notices_services
+from notices.models import Notice
 
 from . import omissions, services
 from .models import ResultSheet, SheetState
@@ -169,6 +174,12 @@ class SheetRowOut(Schema):
     #: checked who it left out. False means `without_a_card` is not known,
     #: which is not the same as empty. Null for everybody else.
     left_out_checked: Optional[bool] = None
+    #: A released class whose families this login may tell (`docs/messaging.md`
+    #: D9): the principal, at a school that sends result notices.
+    may_tell_families: bool = False
+    #: How many result notices have been asked for about this class. Null for
+    #: anybody who may not tell families, and for a class not released.
+    families_told: Optional[int] = None
 
 
 class ChainOut(Schema):
@@ -305,6 +316,7 @@ def chain(request):
         s.class_group_id: s for s in ResultSheet.objects.filter(term=term)
     }
     left_out = _left_out(roles, sheets.values())
+    telling = _telling(roles, sheets.values())
 
     rows = []
     for group in ClassGroup.objects.filter(is_active=True):
@@ -321,10 +333,36 @@ def chain(request):
                 state_label=SheetState(state).label,
                 without_a_card=_no_card(left_out, sheet, state),
                 left_out_checked=_check_finished(left_out, sheet, state),
+                **_told(telling, sheet, state),
                 **_actions(state, roles, group.pk, mine),
             )
         )
     return ChainOut(term_id=term.pk, term=str(term), rows=rows)
+
+
+def _telling(roles, sheets):
+    """`sheet id -> notices asked for`, for a login that may tell families; else None.
+
+    One query for the whole list, over the notice table, and only when the
+    school sends result notices and this login may release.
+    """
+    if not roles & services.RELEASING_ROLES or not notices_services.offered().result_notices:
+        return None
+    released = [s.pk for s in sheets if s.state == SheetState.RELEASED]
+    counts = dict.fromkeys(released, 0)
+    for row in (
+        Notice.objects.filter(card__sheet_id__in=released)
+        .values("card__sheet_id")
+        .annotate(n=Count("id"))
+    ):
+        counts[row["card__sheet_id"]] = row["n"]
+    return counts
+
+
+def _told(telling, sheet, state):
+    if telling is None or sheet is None or state != SheetState.RELEASED:
+        return {}
+    return {"may_tell_families": True, "families_told": telling.get(sheet.pk, 0)}
 
 
 def _left_out(roles, sheets):
@@ -486,6 +524,82 @@ def release(request, class_group_id: int):
     to move work that is already bounded.
     """
     return _step(request, class_group_id, services.release)
+
+
+class ToldOut(Schema):
+    """What "Tell families" did, as the principal is told it."""
+
+    detail: str
+    messages: int
+    segments: int
+    #: When the messages go, if they were asked for in quiet hours; else null.
+    held_until: Optional[str] = None
+    #: Guardians live here with no usable channel. Told, not guessed at.
+    unreachable: int = 0
+
+
+@router.post(
+    "/chain/{int:class_group_id}/tell-families/",
+    response={200: ToldOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def tell_families(request, class_group_id: int):
+    """Principal: tell each family their child's card is ready. `docs/messaging.md` D9.
+
+    Its own step after release, never part of it. Pressing it twice sends each
+    notice once: the second press finds the first's notices and writes nothing.
+    """
+    school = _school_of(request)
+    roles = set(request.user.roles_at(school))
+    refused = _refuse_outsiders(request, school, roles)
+    if refused is not None:
+        return refused
+    group = get_object_or_404(ClassGroup, pk=class_group_id)
+    term = Term.objects.filter(is_current=True).first()
+    sheet = ResultSheet.objects.filter(class_group=group, term=term).first() if term else None
+    if sheet is None:
+        return 409, MessageOut(detail="These results have not been released, so there is nothing to tell families.")
+
+    try:
+        told = notices_services.tell_families(sheet, actor=request.user)
+    except notices_services.NotAllowed:
+        return 403, MessageOut(detail=_MAY_NOT_ACT)
+    except notices_services.NotReleased as exc:
+        return 409, MessageOut(detail=str(exc))
+    except notices_services.NoticesError as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, ToldOut(detail=_told_sentence(told), **_told_fields(told))
+
+
+def _told_fields(told):
+    held = told["held_until"]
+    return {
+        "messages": told["messages"],
+        "segments": told["segments"],
+        "held_until": held.isoformat() if held else None,
+        "unreachable": told["unreachable"],
+    }
+
+
+def _told_sentence(told):
+    from notices import hours
+
+    n = told["messages"]
+    if n == 0:
+        sentence = "Every family this class can reach has been told already."
+    elif told["held_until"]:
+        sentence = (
+            f"{n} message{'s' if n != 1 else ''} will be sent at "
+            f"{hours.said(told['held_until'])}: messages are not sent between 20:00 and 07:00."
+        )
+    else:
+        sentence = f"{n} message{'s are' if n != 1 else ' is'} being sent."
+    if told["unreachable"]:
+        u = told["unreachable"]
+        sentence += (
+            f" {u} guardian{'s' if u != 1 else ''} here {'have' if u != 1 else 'has'} no "
+            f"verified phone or email, and {'were' if u != 1 else 'was'} not sent anything."
+        )
+    return sentence
 
 
 @router.post("/chain/{int:class_group_id}/send-back/", response=_STEP_RESPONSES)

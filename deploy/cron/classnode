@@ -14,3 +14,9 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Weekly restore test, Sunday 02:00 UTC.
 0 2 * * 0 root /opt/classnode/restore-check.sh >> /var/log/classnode-restore-check.log 2>&1
+
+# Held notices, 06:00 UTC = 07:00 Lagos, when a school's messages may go again,
+# then every quarter hour until 19:45 Lagos in case a run was missed. Running it
+# more often than needed sends nothing twice: every send is claimed first
+# (notices/tasks.py, docs/messaging.md D5 and D7).
+*/15 6-18 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py release_held_notices >> /var/log/classnode-notices.log 2>&1
