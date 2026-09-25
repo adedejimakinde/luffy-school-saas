@@ -62,6 +62,18 @@ async function openPage(server, shelf, { now = () => 1_000_000, userAgent = CHRO
 
 const versionOf = (server, id) => server.marks.get(id).version;
 
+/**
+ * Wait for `holds()`; fail, rather than hang, if it never does. A loop with no
+ * bound outlives the test's own timeout and keeps the run from ever ending.
+ */
+async function until(holds, what) {
+  for (let i = 0; i < 1000; i += 1) {
+    if (holds()) return;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  throw new Error(`never happened: ${what}`);
+}
+
 /** The outbox a page at `host` keeps for `owner`, read straight off the shelf. */
 async function onThePhone(shelf, host, owner = KEMI) {
   return openOutbox(memoryStore(outboxName(host, owner), shelf)).read();
@@ -369,7 +381,7 @@ test("a tap made while the opening drain waits on the network is not lost", asyn
       mint: keys(),
       userAgent: CHROME_ANDROID,
     });
-    while (!onTheWire) await new Promise((resolve) => setImmediate(resolve));
+    await until(() => onTheWire, "the write went on the wire");
 
     await root.click({ "data-action": "pick-assessment", "data-assessment": "3" });
     await root.click({ "data-action": "pick-class", "data-class": "11" });
@@ -418,7 +430,7 @@ test("a number typed while the last one was out is the one on screen when the se
     };
 
     const first = page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
-    while (!onTheWire) await new Promise((resolve) => setImmediate(resolve));
+    await until(() => onTheWire, "the write went on the wire");
     const second = page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "18");
     await new Promise((resolve) => setImmediate(resolve));
     gate(new TypeError("Failed to fetch"));
