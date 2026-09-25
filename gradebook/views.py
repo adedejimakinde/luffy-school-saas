@@ -40,6 +40,8 @@ MARKING_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/signout.js",
+    "marking/outbox.js",
+    "marking/store.js",
     "marking/api.js",
     "marking/states.js",
     "marking/app.js",

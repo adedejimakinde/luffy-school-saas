@@ -162,6 +162,15 @@ student's mark on a single assessment. There is no bulk save and a sheet is not 
 transaction: thirty independent writes is what actually happened, and it is what
 should be recorded.
 
+**The page queues a mark before it sends it** (`docs/offline.md` slice S3,
+`static/marking/outbox.js`). A blur puts the write in the teacher's outbox for this
+school, kept in the browser, and the outbox sends it at once when it can and again
+when the connection is back. It is still one PUT per mark, with the same body the
+page always sent, plus the `key` that makes a resend land once. A 423, a 422 or a
+403 is not sent again, and the teacher's number stays on the phone and on the sheet
+until they dismiss it. `/where/` names the caller's `user_id` so that the page sends
+an outbox only while the person who queued it is the one signed in.
+
 **Every write answers with the new version and the recomputed total** — the two
 things on screen that a save invalidates. Returning them in the response the
 client is already waiting for makes "refresh the total before display" true by

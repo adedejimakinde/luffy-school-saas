@@ -7,6 +7,7 @@
  */
 
 import { getJson, putJson } from "../web/http.js";
+import { HELD, STOPPED } from "./outbox.js";
 
 /** The states this page can be in, other than holding a sheet. */
 export const REFUSAL = {
@@ -124,21 +125,24 @@ export function fetchSheet({ assessmentId, classGroupId, fetchImpl = fetch }) {
  *
  * A 409 whose `current` is null is a real outcome — the mark was *cleared*
  * while this one was being typed — and is not the same as "it now reads 17".
+ *
+ * `key` is the outbox entry's (`outbox.js`, D3): the same on every attempt at
+ * one write, so an attempt whose answer was lost is answered from the server's
+ * receipt when it is sent again, rather than judged again.
  */
 export async function saveScore({
   assessmentId,
   studentMembershipId,
   value,
   expectedVersion,
+  key = null,
   fetchImpl = fetch,
 }) {
+  const body = { value, expected_version: expectedVersion };
+  if (key !== null) body.key = key;
   let answer;
   try {
-    answer = await putJson(
-      scoreUrl(assessmentId, studentMembershipId),
-      { value, expected_version: expectedVersion },
-      { fetchImpl },
-    );
+    answer = await putJson(scoreUrl(assessmentId, studentMembershipId), body, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
@@ -156,6 +160,68 @@ export async function saveScore({
   return {
     ok: false,
     refusal: refusalFor(answer.status, answer.body),
+    status: answer.status,
     body: answer.body || {},
   };
+}
+
+/**
+ * Send one outbox entry, and say what its answer means to the outbox.
+ *
+ * `docs/offline.md` D6, row by row: a 409 is held as a conflict (D5); a 423, a
+ * 422 and a 403 are held as final, because sending again cannot change them;
+ * any other refusal from the server is held too, for the same reason. What is
+ * **not** an answer — a failed connection, a 5xx — stops the drain with the
+ * entry as it was, to be sent again. A 401 stops it until the teacher signs in.
+ */
+export async function sendQueued(entry, { fetchImpl = fetch } = {}) {
+  const answer = await saveScore({
+    assessmentId: entry.assessmentId,
+    studentMembershipId: entry.studentMembershipId,
+    value: entry.value,
+    expectedVersion: entry.expectedVersion,
+    key: entry.key,
+    fetchImpl,
+  });
+  if (answer.ok) return { landed: true, cell: answer.cell };
+  const detail = (answer.body && answer.body.detail) || "";
+  if (answer.outcome === SAVE.CONFLICT) {
+    return { held: HELD.CONFLICT, detail, current: answer.body.current || null };
+  }
+  if (answer.outcome === SAVE.LOCKED) return { held: HELD.LOCKED, detail };
+  if (answer.outcome === SAVE.INVALID) return { held: HELD.INVALID, detail };
+  if (answer.refusal === REFUSAL.NOT_A_MARKER) return { held: HELD.FORBIDDEN, detail };
+  if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
+    return { stop: STOPPED.SESSION, refusal: answer.refusal };
+  }
+  // A timeout or a rate limit says "not now", not "no": a phone replaying a
+  // backlog is exactly what meets one.
+  if (NOT_NOW.has(answer.status)) return { stop: STOPPED.OFFLINE };
+  if (answer.status >= 400 && answer.status < 500) return { held: HELD.REFUSED, detail };
+  // A 5xx is not an answer either, but one that comes back for this write
+  // every time must not hold up every write behind it: it goes to the back.
+  if (answer.status >= 500) return { stop: STOPPED.OFFLINE, toTheBack: true };
+  return { stop: STOPPED.OFFLINE };
+}
+
+/** 4xx answers that mean "try later": a request timeout, too early, too many. */
+const NOT_NOW = new Set([408, 425, 429]);
+
+/**
+ * Who is signed in on this host, asked of the server (D7).
+ *
+ * `/where/` names the caller's user id, and the drain compares it with the
+ * outbox's owner before it sends anything. The cookie is the only thing that
+ * says whose session a request goes under, and it can change under an open
+ * page — a sign-in in another tab — so the page asks rather than remembers.
+ */
+export async function whoIsSignedIn({ fetchImpl = fetch } = {}) {
+  const answer = await fetchWhere({ fetchImpl });
+  if (answer.ok) return { userId: answer.body.user_id };
+  if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
+    return { stop: STOPPED.SESSION, refusal: answer.refusal };
+  }
+  if (answer.refusal === REFUSAL.NOT_A_MARKER) return { stop: STOPPED.NOT_A_MARKER };
+  // A 404 (not a school's host) or a 5xx: nothing here to send to, yet.
+  return { stop: STOPPED.OFFLINE };
 }
