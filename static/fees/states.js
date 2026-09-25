@@ -43,8 +43,10 @@ export function balance(kobo) {
 
 // -- the way in ---------------------------------------------------------------
 
-export function books({ books: body = {} } = {}) {
-  const { terms = [], term_id: termId, term = "", classes = [] } = body;
+export function books({
+  books: body = {}, notSent = [], reminding = null, note = "", noteTone = "",
+} = {}) {
+  const { terms = [], term_id: termId, term = "", classes = [], may_remind: mayRemind = false } = body;
   return [
     '<section class="state state-books" data-state="books">',
     "<h1>Fees</h1>",
@@ -64,13 +66,19 @@ export function books({ books: body = {} } = {}) {
           .join("") +
         "</ul>"
       : '<p class="blank">No class has anybody in it this term.</p>',
+    note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
+    mayRemind
+      ? '<p class="more"><button type="button" data-action="ask-reminders">Remind families who owe, in every class</button></p>'
+      : "",
+    reminding && reminding.scope.classId == null && !reminding.scope.children ? remindingBox(reminding) : "",
+    notSentSection(notSent, mayRemind, reminding),
     signOutButton(),
     "</section>",
   ].join("");
 }
 
-export function classBalances({ classBalances: body = {} } = {}) {
-  const { class_group = "", term = "", children = [] } = body;
+export function classBalances({ classBalances: body = {}, reminding = null, note = "", noteTone = "" } = {}) {
+  const { class_group = "", term = "", children = [], may_remind: mayRemind = false } = body;
   return [
     '<section class="state state-class" data-state="class">',
     '<p class="back"><button type="button" data-action="back-to-books">All classes</button></p>',
@@ -94,8 +102,81 @@ export function classBalances({ classBalances: body = {} } = {}) {
           "</tbody></table></div>",
         ].join("")
       : '<p class="blank">Nobody is in this class this term.</p>',
+    note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
+    mayRemind
+      ? `<p class="more"><button type="button" data-action="ask-reminders" data-class="${esc(body.class_group_id)}">` +
+        "Remind families who owe in this class</button></p>"
+      : "",
+    reminding ? remindingBox(reminding) : "",
     signOutButton(),
     "</section>",
+  ].join("");
+}
+
+// -- fee reminders (docs/messaging.md D10) -------------------------------------
+
+/**
+ * The question "Remind families" asks before it sends anything: the server's
+ * preview, which children, who will be sent it, and how many messages. The
+ * amounts are the whole account, as the class page shows them. With nothing to
+ * send there is nothing to confirm, only a box to close.
+ */
+function remindingBox(reminding) {
+  const { detail = "", messages = 0, children = [] } = reminding;
+  const some = messages > 0;
+  return [
+    '<div class="reminding" role="status">',
+    `<p>${esc(detail)}</p>`,
+    children.length
+      ? '<ul class="reminder-children">' +
+        children
+          .map(
+            (c) =>
+              `<li>${esc(c.student)}: ${esc(naira(c.amount_kobo))} owing. ` +
+              (c.guardians.length
+                ? `To ${esc(c.guardians.join(", "))}.`
+                : "Nobody who receives invoices can be reached.") +
+              "</li>",
+          )
+          .join("") +
+        "</ul>"
+      : "",
+    some ? '<button type="button" data-action="send-reminders">Send them</button> ' : "",
+    `<button type="button" data-action="cancel-reminders">${some ? "Cancel" : "Close"}</button>`,
+    "</div>",
+  ].join("");
+}
+
+/**
+ * Reminders that went nowhere because the account moved before they were
+ * sent (decided 2026-09-25): the amount they would have stated was no longer
+ * true. Listed so the bursar can send again, with the account as it stands.
+ */
+function notSentSection(notSent, mayRemind, reminding) {
+  if (!notSent || !notSent.length) return "";
+  return [
+    '<section class="not-sent"><h2>Reminders that did not go</h2>',
+    '<p class="quiet">The account changed after the reminder was asked for, so the amount it ',
+    "would have stated was no longer true, and nothing was sent.</p>",
+    "<ul>",
+    notSent
+      .map((c) => {
+        const again =
+          mayRemind && c.balance_kobo > 0
+            ? ` <button type="button" data-action="ask-reminders" data-term="${esc(c.term_id)}" ` +
+              `data-children="${esc(c.student_membership_id)}">Remind again</button>`
+            : "";
+        const asking =
+          reminding && reminding.scope.children && reminding.scope.children.includes(c.student_membership_id)
+            ? remindingBox(reminding)
+            : "";
+        return (
+          `<li>${esc(c.student)}${c.reference ? ` (${esc(c.reference)})` : ""}: it would have said ` +
+          `${esc(naira(c.stated_kobo))}; the account now shows ${balance(c.balance_kobo)}.${again}${asking}</li>`
+        );
+      })
+      .join(""),
+    "</ul></section>",
   ].join("");
 }
 
