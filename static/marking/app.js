@@ -24,6 +24,25 @@
  * from the response rather than from a local guess. A page that recomputed the
  * total itself would be a second implementation of a sum the server already
  * did, free to disagree.
+ *
+ * ## A mark that did not land is kept, and shown, until the teacher says so
+ *
+ * `docs/offline.md` D5 and slice S2. Every answer that is not a save keeps the
+ * value the teacher typed in `kept`, and it stays on screen until they save it
+ * or dismiss it. Where it stays depends on what the teacher can do about it:
+ *
+ * - **in the box**, when typing again is the remedy: a number the server
+ *   refused (422), a connection that failed, a session that ended. The last
+ *   two also get **Try again**, which sends the kept value with the version
+ *   the cell was drawn with. Replaying is safe; `test_session_expiry.py`
+ *   pins that.
+ * - **in the note**, when the box now belongs to somebody else's answer:
+ *   a conflict (the box shows their mark, so overwriting is deliberate), a
+ *   locked sheet (423) or a refusal of authority (403), where no box can be
+ *   typed in at all.
+ *
+ * None of these replaces the sheet any more. It used to, for a failed
+ * connection and for a lapsed session, and the typed mark went with it.
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
@@ -39,7 +58,7 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
     case "no-term":
       return states.noTerm() + after;
     case "sheet":
-      return states.sheet(state) + after;
+      return states.sheet({ ...state, portal }) + after;
     case REFUSAL.NOT_A_MARKER:
       return states.notAMarker(state) + after;
     case REFUSAL.WRONG_HOST:
@@ -69,7 +88,7 @@ export function fromWhere(answer) {
 /** Turn a `SheetOut` into the marking screen. */
 export function fromSheet(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
-  return { step: "sheet", ...answer.body, notes: {} };
+  return { step: "sheet", ...answer.body, notes: {}, kept: {}, session: null };
 }
 
 /**
@@ -85,43 +104,104 @@ export function fromSheet(answer) {
  *   is a different sentence from a new number.
  * - **locked** — the term left draft. Nothing the page can reload reopens it,
  *   so the whole sheet is marked locked rather than the one cell retried.
- * - **invalid** — the number is the problem. What was typed is left in place
- *   to be corrected, because clearing it would throw away the only copy.
+ * - **invalid** — the number is the problem. What was typed is left in the
+ *   box to be corrected, because clearing it would throw away the only copy.
+ *
+ * `typed` is what the teacher entered. Every branch that is not a save keeps
+ * it — see the module docstring for where, and why there.
  */
-export function applySave(state, id, result) {
+export function applySave(state, id, result, typed = null) {
   const notes = { ...state.notes };
+  const kept = { ...state.kept };
   if (result.ok) {
     delete notes[id];
-    return { ...state, notes, rows: replace(state.rows, id, result.cell) };
+    delete kept[id];
+    return { ...state, notes, kept, session: null, rows: replace(state.rows, id, result.cell) };
   }
   if (result.outcome === SAVE.CONFLICT) {
     const current = result.body.current;
     notes[id] = {
       kind: "conflict",
       detail: current
-        ? `Saved as ${current.value} by somebody else. Type over it to change it.`
-        : "Somebody cleared this mark while you were typing it.",
+        ? `Saved as ${current.value} by somebody else. You entered ${typed}. ` +
+          "Type over it to change it."
+        : `Somebody cleared this mark while you were typing it. You entered ${typed}.`,
     };
+    kept[id] = { value: typed, inBox: false, retry: false };
     return {
       ...state,
       notes,
+      kept,
       rows: replace(state.rows, id, current || { student_membership_id: id, value: null, version: null }),
     };
   }
   if (result.outcome === SAVE.LOCKED) {
-    return { ...state, notes, locked: true, locked_reason: result.body.detail };
+    notes[id] = { kind: "unsaved", detail: `Not saved. You entered ${typed}.` };
+    kept[id] = { value: typed, inBox: false, retry: false };
+    return { ...state, notes, kept, locked: true, locked_reason: result.body.detail };
   }
   if (result.outcome === SAVE.INVALID) {
     notes[id] = { kind: "invalid", detail: result.body.detail };
-    return { ...state, notes };
+    kept[id] = { value: typed, inBox: true, retry: false };
+    return { ...state, notes, kept };
+  }
+  if (result.refusal === REFUSAL.NOT_A_MARKER) {
+    // Authority changed under an open sheet. Nothing here can be typed any
+    // more, so the value goes in the note and the sheet closes.
+    notes[id] = { kind: "unsaved", detail: `Not saved. You entered ${typed}.` };
+    kept[id] = { value: typed, inBox: false, retry: false };
+    return {
+      ...state,
+      notes,
+      kept,
+      locked: true,
+      locked_reason:
+        (result.body && result.body.detail) ||
+        "Your account can no longer enter marks on this sheet. The school office can say why.",
+    };
+  }
+  if (
+    result.refusal === REFUSAL.EXPIRED ||
+    result.refusal === REFUSAL.SIGNED_OUT ||
+    result.refusal === REFUSAL.BROKEN
+  ) {
+    const lapsed = result.refusal !== REFUSAL.BROKEN;
+    notes[id] = {
+      kind: "unsaved",
+      detail: lapsed
+        ? "Not saved: your session has ended. Sign in again, then press Try again."
+        : "Not saved: the connection failed. Press Try again.",
+    };
+    kept[id] = { value: typed, inBox: true, retry: true };
+    return {
+      ...state,
+      notes,
+      kept,
+      session: lapsed ? (result.refusal === REFUSAL.EXPIRED ? "expired" : "signed-out") : state.session,
+    };
   }
   return { step: result.refusal, ...result.body };
+}
+
+/** The teacher is done with a kept value: forget it and the note about it. */
+export function dismiss(state, id) {
+  const notes = { ...state.notes };
+  const kept = { ...state.kept };
+  delete notes[id];
+  delete kept[id];
+  return { ...state, notes, kept };
 }
 
 function replace(rows, id, cell) {
   return (rows || []).map((row) =>
     row.student_membership_id === id ? { ...row, ...cell } : row,
   );
+}
+
+/** The version a cell's next save claims: what it was drawn with, or null. */
+function versionOf(state, id) {
+  const row = (state.rows || []).find((r) => r.student_membership_id === id);
+  return row && row.version !== null && row.version !== undefined ? row.version : null;
 }
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
@@ -138,6 +218,22 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const openSheet = async () => {
     if (!picked.assessmentId || !picked.classGroupId) return;
     state = fromSheet(await fetchSheet({ ...picked, fetchImpl }));
+    draw();
+  };
+
+  const save = async (id, value, expectedVersion) => {
+    state = applySave(
+      state,
+      id,
+      await saveScore({
+        assessmentId: picked.assessmentId,
+        studentMembershipId: id,
+        value,
+        expectedVersion,
+        fetchImpl,
+      }),
+      value,
+    );
     draw();
   };
 
@@ -179,6 +275,18 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (action === "pick-class") {
       picked = { ...picked, classGroupId: Number(hit.dataset.class) };
       await openSheet();
+      return;
+    }
+    if (action === "dismiss" && state.step === "sheet") {
+      state = dismiss(state, Number(hit.dataset.child));
+      draw();
+      return;
+    }
+    if (action === "retry" && state.step === "sheet" && !state.locked) {
+      const id = Number(hit.dataset.child);
+      const held = (state.kept || {})[id];
+      if (!held || !held.retry) return;
+      await save(id, held.value, versionOf(state, id));
     }
   });
 
@@ -197,18 +305,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (raw === "") return;
 
     const version = field.dataset.version;
-    state = applySave(
-      state,
-      id,
-      await saveScore({
-        assessmentId: picked.assessmentId,
-        studentMembershipId: id,
-        value: Number(raw),
-        expectedVersion: version === "" ? null : Number(version),
-        fetchImpl,
-      }),
-    );
-    draw();
+    await save(id, Number(raw), version === "" ? null : Number(version));
   }, true);
 
   return state;
