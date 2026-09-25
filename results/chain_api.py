@@ -538,16 +538,32 @@ class ToldOut(Schema):
     unreachable: int = 0
 
 
-@router.post(
-    "/chain/{int:class_group_id}/tell-families/",
-    response={200: ToldOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
-)
+_TELL_RESPONSES = {200: ToldOut, 403: MessageOut, 409: MessageOut, 422: MessageOut}
+
+
+@router.get("/chain/{int:class_group_id}/tell-families/", response=_TELL_RESPONSES)
+def preview_families(request, class_group_id: int):
+    """Principal: what "Tell families" would send, before anything is. D9, D7.
+
+    "The button says how many messages it will send before it sends them", and
+    in quiet hours that they will go at 07:00. Writes nothing and queues
+    nothing; refused as the press would be, over the cap included.
+    """
+    return _tell_or_ask(request, class_group_id, notices_services.preview_families, _preview_sentence)
+
+
+@router.post("/chain/{int:class_group_id}/tell-families/", response=_TELL_RESPONSES)
 def tell_families(request, class_group_id: int):
     """Principal: tell each family their child's card is ready. `docs/messaging.md` D9.
 
     Its own step after release, never part of it. Pressing it twice sends each
     notice once: the second press finds the first's notices and writes nothing.
     """
+    return _tell_or_ask(request, class_group_id, notices_services.tell_families, _told_sentence)
+
+
+def _tell_or_ask(request, class_group_id, act, say):
+    """The preview and the press: one lookup and one set of refusals for both."""
     school = _school_of(request)
     roles = set(request.user.roles_at(school))
     refused = _refuse_outsiders(request, school, roles)
@@ -560,14 +576,14 @@ def tell_families(request, class_group_id: int):
         return 409, MessageOut(detail="These results have not been released, so there is nothing to tell families.")
 
     try:
-        told = notices_services.tell_families(sheet, actor=request.user)
+        told = act(sheet, actor=request.user)
     except notices_services.NotAllowed:
         return 403, MessageOut(detail=_MAY_NOT_ACT)
     except notices_services.NotReleased as exc:
         return 409, MessageOut(detail=str(exc))
     except notices_services.NoticesError as exc:
         return 422, MessageOut(detail=str(exc))
-    return 200, ToldOut(detail=_told_sentence(told), **_told_fields(told))
+    return 200, ToldOut(detail=say(told), **_told_fields(told))
 
 
 def _told_fields(told):
@@ -580,6 +596,28 @@ def _told_fields(told):
     }
 
 
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def _preview_sentence(told):
+    from notices import hours
+
+    n = told["messages"]
+    if n == 0:
+        return "Every family this class can reach has been told already." + _unreachable(told, "will")
+    sentence = f"This will send {_plural(n, 'message')} to families"
+    if told["segments"] != n:
+        sentence += f" ({_plural(told['segments'], 'SMS segment')})"
+    sentence += "."
+    if told["held_until"]:
+        sentence += (
+            f" These will be sent at {hours.said(told['held_until'])}: "
+            "messages are not sent between 20:00 and 07:00."
+        )
+    return sentence + _unreachable(told, "will")
+
+
 def _told_sentence(told):
     from notices import hours
 
@@ -588,18 +626,21 @@ def _told_sentence(told):
         sentence = "Every family this class can reach has been told already."
     elif told["held_until"]:
         sentence = (
-            f"{n} message{'s' if n != 1 else ''} will be sent at "
+            f"{_plural(n, 'message')} will be sent at "
             f"{hours.said(told['held_until'])}: messages are not sent between 20:00 and 07:00."
         )
     else:
         sentence = f"{n} message{'s are' if n != 1 else ' is'} being sent."
-    if told["unreachable"]:
-        u = told["unreachable"]
-        sentence += (
-            f" {u} guardian{'s' if u != 1 else ''} here {'have' if u != 1 else 'has'} no "
-            f"verified phone or email, and {'were' if u != 1 else 'was'} not sent anything."
-        )
-    return sentence
+    return sentence + _unreachable(told, "was")
+
+
+def _unreachable(told, tense):
+    u = told["unreachable"]
+    if not u:
+        return ""
+    has = "has" if u == 1 else "have"
+    sent = "will not be sent" if tense == "will" else ("was not sent" if u == 1 else "were not sent")
+    return f" {_plural(u, 'guardian')} here {has} no verified phone or email, and {sent} anything."
 
 
 @router.post("/chain/{int:class_group_id}/send-back/", response=_STEP_RESPONSES)

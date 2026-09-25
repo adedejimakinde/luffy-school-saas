@@ -136,17 +136,10 @@ def _require_releasing_authority(actor, school):
         raise NotAllowed("Only whoever may release the results may tell families.")
 
 
-@transaction.atomic
-def tell_families(sheet, *, actor, now=None) -> dict:
-    """Write a result notice for each guardian of each child on a released sheet.
-
-    Returns what the principal is told: how many messages and segments, when
-    they go, and how many guardians had no usable channel. Queues the ones that
-    may go now; the rest are held for `release_held()` at 07:00.
-    """
-    from results.models import ReleasedCard, ResultSheet
+def _require_tellable(sheet, actor):
+    """`(school, sheet read afresh)`, or the refusal the principal is given."""
+    from results.models import ResultSheet
     from results.services import school_on_this_connection
-    from results.withholding import is_withheld
 
     school = school_on_this_connection()
     _require_releasing_authority(actor, school)
@@ -155,13 +148,19 @@ def tell_families(sheet, *, actor, now=None) -> dict:
     sheet = ResultSheet.objects.get(pk=sheet.pk)
     if not sheet.is_released:
         raise NotReleased("These results have not been released, so there is nothing to tell families.")
+    return school, sheet
 
-    # One batch at a time per school: the unique key stops a second press
-    # duplicating a notice, and this stops two batches both fitting a cap
-    # that only has room for one.
-    NoticeSettings.objects.select_for_update().get(pk=1)
 
-    now = now or timezone.now()
+def _batch(sheet, school, actor, now):
+    """`(unsaved notices, unreachable guardians, send_after)`: what a press would write at `now`.
+
+    One function for the preview and the press, so the number the principal is
+    shown and the number sent are counted by the same code. Families already
+    told are skipped here, which is what makes the second press write nothing.
+    """
+    from results.models import ReleasedCard
+    from results.withholding import is_withheld
+
     send_after = hours.send_after(now)
     told = set(Notice.objects.filter(card__sheet=sheet).values_list("card_id", "contact_id"))
     rows, unreachable = [], 0
@@ -188,10 +187,54 @@ def tell_families(sheet, *, actor, now=None) -> dict:
                     created_by_id=actor.pk,
                 )
             )
+    return rows, unreachable, send_after
 
-    segments = sum(row.segments for row in rows)
+
+def _answer(rows, unreachable, send_after, now):
+    return {
+        "messages": len(rows),
+        "segments": sum(row.segments for row in rows),
+        "held_until": None if send_after <= now else send_after,
+        "unreachable": unreachable,
+    }
+
+
+def preview_families(sheet, *, actor, now=None) -> dict:
+    """What "Tell families" would send if pressed now, having written nothing. D9, D7.
+
+    "The button says how many messages it will send before it sends them", and
+    in quiet hours that they will go at 07:00. Refused as the press would be,
+    over the cap included, so the principal reads a refusal before pressing
+    rather than after. Nothing is locked: the press counts again under its lock,
+    and says what it did, which can differ if somebody pressed in between.
+    """
+    school, sheet = _require_tellable(sheet, actor)
+    now = now or timezone.now()
+    rows, unreachable, send_after = _batch(sheet, school, actor, now)
     if rows:
-        _require_room(segments, send_after)
+        _require_room(sum(row.segments for row in rows), send_after)
+    return _answer(rows, unreachable, send_after, now)
+
+
+@transaction.atomic
+def tell_families(sheet, *, actor, now=None) -> dict:
+    """Write a result notice for each guardian of each child on a released sheet.
+
+    Returns what the principal is told: how many messages and segments, when
+    they go, and how many guardians had no usable channel. Queues the ones that
+    may go now; the rest are held for `release_held()` at 07:00.
+    """
+    school, sheet = _require_tellable(sheet, actor)
+
+    # One batch at a time per school: the unique key stops a second press
+    # duplicating a notice, and this stops two batches both fitting a cap
+    # that only has room for one.
+    NoticeSettings.objects.select_for_update().get(pk=1)
+
+    now = now or timezone.now()
+    rows, unreachable, send_after = _batch(sheet, school, actor, now)
+    if rows:
+        _require_room(sum(row.segments for row in rows), send_after)
         written = Notice.objects.bulk_create(rows)
         if send_after <= now:
             from .tasks import queue
@@ -199,12 +242,7 @@ def tell_families(sheet, *, actor, now=None) -> dict:
             ids = [row.pk for row in written]
             schema_name = school.schema_name
             transaction.on_commit(lambda: queue(schema_name, ids))
-    return {
-        "messages": len(rows),
-        "segments": segments,
-        "held_until": None if send_after <= now else send_after,
-        "unreachable": unreachable,
-    }
+    return _answer(rows, unreachable, send_after, now)
 
 
 def told_about(sheet) -> int:
