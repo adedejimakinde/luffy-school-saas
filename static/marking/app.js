@@ -612,10 +612,11 @@ export async function mount(
     }
   });
 
-  // **The blur is the save.** `change` would not fire for a cell retyped to
-  // the same value, and `input` would fire per keystroke — thirty requests for
-  // one two-digit mark. What it does now is queue the write and kick the
-  // outbox, which sends it straight away when it can.
+  // **The blur is the save.** `input` would fire per keystroke — thirty
+  // requests for one two-digit mark. What it does now is queue the write and
+  // kick the outbox, which sends it straight away when it can. A cell left as
+  // it was drawn is not a write (below); sending a kept number again is what
+  // Try again is for.
   root.addEventListener("blur", async (event) => {
     const field = event.target;
     if (!field || !field.dataset || field.dataset.child === undefined) return;
@@ -629,12 +630,12 @@ export async function mount(
 
     const version = field.dataset.version;
     const value = Number(raw);
-    // Tabbing through a cell that holds a kept value is not a decision about
-    // it. The box shows either the kept number or the server's, and sending
-    // back what it was drawn with would replace the kept one with nobody
+    // Tabbing through a cell is not a decision about it. A box left as it was
+    // drawn sends nothing: queued, an unchanged mark is a write that can come
+    // back hours later as a conflict the teacher never made (D2's "cry
+    // wolf"), and over a kept value it would replace that value with nobody
     // having chosen to (requirement 8).
-    const kept = (state.kept || {})[id];
-    if (kept && value === drawnValue(state, id)) return;
+    if (value === drawnValue(state, id)) return;
     await outbox.update((entries) =>
       enqueue(
         entries,

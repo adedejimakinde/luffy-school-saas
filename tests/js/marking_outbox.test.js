@@ -230,6 +230,23 @@ test("tabbing through a cell that holds a kept value does not replace it", async
   }
 });
 
+test("tabbing through a cell left as it was drawn queues nothing", async () => {
+  // Found in headless Chrome, where Tab moves focus into the next cell and a
+  // redraw blurs it. Online the server would shrug; queued, the unchanged mark
+  // is a write that can meet somebody else's change as a conflict.
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    const page = await openPage(server, shelf);
+    server.offline = true;
+
+    await page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, String(server.marks.get(2).value));
+
+    assert.deepEqual(await onThePhone(shelf, server.host), [], server.host);
+    assert.doesNotMatch(page.root.innerHTML, /Not sent yet/, server.host);
+    assert.equal(page.timers.length, 0, `${server.host}: nothing to send again`);
+  }
+});
+
 test("while offline, one retry waits at a time however many marks are typed", async () => {
   for (const server of bothSchools()) {
     const page = await openPage(server, new Map());
