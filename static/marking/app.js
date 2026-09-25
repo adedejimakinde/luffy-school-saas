@@ -561,9 +561,6 @@ export async function mount(
   }
   state = fromWhere(whereAnswer);
   draw();
-  whenOnline(() => kick());
-  // Whatever an earlier page load left queued goes now, if it can.
-  await kick();
 
   // Delegated from the root: every state is redrawn wholesale, so a listener
   // bound to an input would be bound to a node about to be replaced.
@@ -656,6 +653,12 @@ export async function mount(
     draw();
     await kick();
   }, true);
+
+  // Whatever an earlier page load left queued goes now, if it can — after the
+  // listeners, not before: a drain waits on the network, and a tap made while
+  // it waited would land on a page with nothing listening for it.
+  whenOnline(() => kick());
+  await kick();
 
   return state;
 }

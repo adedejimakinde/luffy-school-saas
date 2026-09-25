@@ -320,6 +320,48 @@ test("a drain the browser fails to keep is reported, and does not stop the next 
   }
 });
 
+test("a tap made while the opening drain waits on the network is not lost", async () => {
+  // Found in headless Chrome: the page used to wait for the drain before it
+  // listened for anything, and a teacher's first taps after a reload went
+  // nowhere while an earlier page load's queue was on the wire.
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    await openOutbox(memoryStore(outboxName(server.host, KEMI), shelf)).update((entries) =>
+      enqueue(entries, { assessmentId: 3, studentMembershipId: 1, value: 11, expectedVersion: null }, { mint: keys() }),
+    );
+    let onTheWire = false;
+    let release;
+    const answered = new Promise((resolve) => { release = resolve; });
+    const fetchImpl = async (url, options = {}) => {
+      if (options.method === "PUT") {
+        onTheWire = true;
+        await answered;
+      }
+      return server.fetch(url, options);
+    };
+    forgetToken();
+    const root = fakeRoot({});
+    const mounting = mount(root, {
+      fetchImpl,
+      host: server.host,
+      openStore: async (name) => memoryStore(name, shelf),
+      schedule: () => {},
+      whenOnline: () => {},
+      mint: keys(),
+      userAgent: CHROME_ANDROID,
+    });
+    while (!onTheWire) await new Promise((resolve) => setImmediate(resolve));
+
+    await root.click({ "data-action": "pick-assessment", "data-assessment": "3" });
+    await root.click({ "data-action": "pick-class", "data-class": "11" });
+    assert.match(root.innerHTML, /id="mark-2"/, `${server.host}: the sheet opened while the drain waited`);
+
+    release();
+    await mounting;
+    assert.deepEqual(server.puts.map((p) => p.value), [11], server.host);
+  }
+});
+
 // -- requirement 5: only the author sends ---------------------------------------
 
 test("requirement 5: a sign-in as somebody else, in another tab, sends nothing of the teacher's", async () => {
