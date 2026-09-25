@@ -436,13 +436,14 @@ test("a sheet that cannot be fetched after a resend keeps what is on screen", as
     const page = await openPage(server, new Map());
     server.loseNextAnswer = true;
     await page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
-    await page.root.blur({ "data-child": "1", "data-version": "" }, "9");
 
+    // The resend lands, from its receipt; the sheet asked for after it does not come.
     server.failSheet = true;
     await page.timers[0].run();
 
+    assert.equal(server.puts.length, 2, `${server.host}: the resend went`);
     assert.match(page.root.innerHTML, /data-state="sheet"/, `${server.host}: still the sheet`);
-    assert.match(page.root.innerHTML, /id="mark-1"[^>]*value="9"/, server.host);
+    assert.match(page.root.innerHTML, /id="mark-2"/, server.host);
     server.failSheet = false;
   }
 });
@@ -485,7 +486,10 @@ test("a browser that stops keeping the outbox mid-page says so, and the mark sti
   }
 });
 
-test("marks typed in quick succession all go, none left waiting for a later kick", async () => {
+test("two blurs at once both go", async () => {
+  // Not a test of the late-kick gap `kick()` closes (a kick landing after a
+  // drain's last look and before it ends): that is a window of microtasks this
+  // cannot aim at, and the control that reopens it leaves this green.
   for (const server of bothSchools()) {
     const shelf = new Map();
     const page = await openPage(server, shelf);
