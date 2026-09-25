@@ -274,8 +274,9 @@ while nothing happens in between; not harmless when a register queued at 8am, wh
 answer was lost, is sent again at 4pm after the office corrected it at 10am. The
 second copy would put every corrected absence back. With a `key` the first arrival
 leaves a `sync.SyncReceipt` in the same transaction as the marks, and the second is
-answered with what the first did and writes nothing (`docs/offline.md` D3,
-`sync/tests/test_replay.py`).
+told it is already saved and writes nothing (`docs/offline.md` D3,
+`sync/tests/test_replay.py`). It is told nothing else: the first arrival's answer
+named the 8am absences, which are not the register's since 10am (#161).
 
 ### D11. The minimum status set, and why it is not a guess
 

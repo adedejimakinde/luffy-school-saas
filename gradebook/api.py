@@ -51,7 +51,7 @@ schema. `services._require_student_of_this_school()` reads the connection for
 exactly this reason; the routing does the same thing by having nothing to read.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
 
 from django.db.models import Count, Sum
@@ -550,7 +550,7 @@ def marking_sheet(
 @router.put(
     "/assessments/{int:assessment_id}/scores/{int:student_membership_id}/",
     response={
-        200: ScoreOut,
+        200: Union[ScoreOut, receipts.AlreadySavedOut],
         403: MessageOut,
         409: ConflictOut,
         422: MessageOut,
@@ -572,8 +572,15 @@ def save_score(
     and the person, and the inference fails the case offline makes ordinary:
     17 queued last night, 18 entered this morning on another device, and the
     queued 17 arriving after it. Judged again, that is a conflict with
-    themselves. Answered from its receipt, it is the 200 it was the first time,
-    and the 18 stands.
+    themselves. Answered from its receipt, it is a 200 saying it is already
+    saved, and the 18 stands.
+
+    **That answer is asked for before authority, and says nothing else** (#161,
+    `sync.receipts`). A teacher whose role changed after the write landed is
+    told it landed, not refused; and a replay is told nothing about the cell,
+    because what the first arrival was told is not what the cell holds now.
+    Only this person's own write, on this path, with this body, is answered
+    early: anything else goes through the authority check as before.
 
     **A key used for a different write is a 422**, not the 409 fees gives a
     reused form key. Here a 409 carries `current` and the client draws the cell
@@ -581,6 +588,12 @@ def save_score(
     (`docs/offline.md` D6): the device stops and shows the sentence.
     """
     school = _school_of(request)
+    if payload.key is not None:
+        write, body = receipts.matched_on(request, payload)
+        if receipts.already_saved(
+            key=payload.key, actor=request.user, write=write, request=body
+        ):
+            return 200, receipts.AlreadySavedOut()
     refused = _refuse_non_markers(request, school)
     if refused is not None:
         return refused
@@ -593,8 +606,8 @@ def save_score(
         return receipts.once(
             key=payload.key,
             actor=request.user,
-            write=f"PUT {request.path}",
-            request=payload.model_dump(mode="json", exclude={"key"}),
+            write=write,
+            request=body,
             act=lambda: _save_score(request, assessment, student, payload),
         )
     except receipts.KeyAlreadyUsed as exc:

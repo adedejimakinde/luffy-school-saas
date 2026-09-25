@@ -129,12 +129,14 @@ class TwoCopiesAtOnceTests(TransactionTestCase):
         # loser queued behind the index before it committed.
         self.assertEqual(overlapped, [True, True])
         self.assertEqual(sorted(acted), ["grace", "st_marys"])
+        # Each school's winner has its own answer; each loser is told it is
+        # already saved, and nothing about what the winner wrote (#161).
         self.assertEqual(
-            sorted((s, st, a["school"]) for s, st, a in answers),
+            sorted((s, st, a.get("school", a.get("detail"))) for s, st, a in answers),
             [
+                ("grace", 200, "Already saved."),
                 ("grace", 200, "grace"),
-                ("grace", 200, "grace"),
-                ("st_marys", 200, "st_marys"),
+                ("st_marys", 200, "Already saved."),
                 ("st_marys", 200, "st_marys"),
             ],
         )

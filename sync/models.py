@@ -45,11 +45,10 @@ class SyncReceipt(models.Model):
     #: The body, less the key.
     request = models.JSONField()
 
-    #: The answer the first arrival was given, which every later one is given
-    #: too. Null only inside the transaction that writes the receipt: `once()`
-    #: fills both before it commits.
-    status = models.PositiveSmallIntegerField(null=True)
-    answer = models.JSONField(null=True)
+    # No answer is kept. A write that arrives again is told it is already
+    # saved and nothing about the cell (`receipts.py`, #161): the first
+    # arrival's answer described the cell as it was then, and a replay drew it
+    # as the cell as it is now.
 
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -24,7 +24,7 @@ import uuid
 from django.db import connection
 
 from academics.models import ClassGroup
-from accounts.models import Role, User
+from accounts.models import Membership, Role, User
 from accounts.services import grant_membership
 from attendance.models import AttendanceMark, AttendanceStatus
 from attendance.tests.fixtures import A_SCHOOL_DAY
@@ -37,6 +37,9 @@ from tests.refusals import RefusalAssertions
 
 HOST = "st-marys.testserver"
 GRACE_HOST = "grace.testserver"
+
+#: A replay's whole answer: that it landed, and nothing about the cell (#161).
+ALREADY_SAVED = {"detail": "Already saved.", "already_saved": True}
 
 
 class ReplaySetUp(MarkingSetUp):
@@ -112,7 +115,10 @@ class AMarkReplayedAfterALaterOneTests(ReplaySetUp):
         )
         return first, replayed
 
-    def test_the_replay_is_answered_with_what_the_first_arrival_was_told(self):
+    def test_the_replay_is_told_it_is_already_saved_and_nothing_else(self):
+        """Not the first arrival's answer: that was 17 at a version the 18 has
+        since moved past, and a device drawing it would show the teacher their
+        own mark as it no longer is (#161)."""
         for host, school, teacher, student, assessment_id in (
             (HOST, self.stmarys, self.teacher, self.ada.pk, self.first_ca_id),
             (GRACE_HOST, self.grace, self.grace_teacher, self.grace_child.pk,
@@ -124,7 +130,7 @@ class AMarkReplayedAfterALaterOneTests(ReplaySetUp):
                     assessment_id=assessment_id,
                 )
                 self.assertEqual(replayed.status_code, 200, replayed.content)
-                self.assertEqual(replayed.json(), first.json())
+                self.assertEqual(replayed.json(), ALREADY_SAVED)
                 # Not the key's doing: the replay carries the version it was
                 # queued with, and that alone keeps it off the 18. Asserted so
                 # that answering from a receipt is never mistaken for writing.
@@ -192,7 +198,8 @@ class ARegisterReplayedAfterTheOfficeCorrectedItTests(ReplaySetUp):
                     )
                 self.assertEqual(mark.status, AttendanceStatus.PRESENT)
 
-    def test_the_replay_is_answered_with_what_the_first_arrival_was_told(self):
+    def test_the_replay_is_told_it_is_already_saved_and_nothing_else(self):
+        """Not the 8am absences: the office has corrected them since (#161)."""
         for host, school, teacher, office, child, group, term in self.cases():
             with self.subTest(school=school.name):
                 first, replayed = self.the_story(
@@ -200,8 +207,122 @@ class ARegisterReplayedAfterTheOfficeCorrectedItTests(ReplaySetUp):
                     group=group, term=term,
                 )
                 self.assertEqual(replayed.status_code, 200, replayed.content)
-                self.assertEqual(replayed.json(), first.json())
-                self.assertEqual(replayed.json()["absent"], [child])
+                self.assertEqual(replayed.json(), ALREADY_SAVED)
+
+
+class AWriteThatLandedIsNotRefusedOnItsResendTests(ReplaySetUp):
+    """#161: the receipt is asked before authority, for this person's own write.
+
+    The case: a write lands, its answer is lost, and before the device sends it
+    again the teacher's role changes. Asked authority first, the resend is a 403
+    — final to the outbox, and shown as "not saved" about a mark that was
+    saved. Asked the receipt first, it is told the truth.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.grace_head = grant_membership(
+            User.objects.create_user("grace-head", PASSWORD, full_name="Bola Ade"),
+            self.grace,
+            Role.PRINCIPAL,
+        )
+        self.grace_bursar = grant_membership(
+            User.objects.create_user("grace-bursar", PASSWORD, full_name="Femi Ade"),
+            self.grace,
+            Role.BURSAR,
+        )
+
+    def no_longer_marks(self, membership):
+        Membership.objects.filter(pk=membership.pk).update(role=Role.BURSAR)
+
+    def mark_cases(self):
+        return (
+            (HOST, self.stmarys, self.teacher, self.ada.pk, self.first_ca_id,
+             self.head, self.bursar),
+            (GRACE_HOST, self.grace, self.grace_teacher, self.grace_child.pk,
+             self.grace_ca_id, self.grace_head, self.grace_bursar),
+        )
+
+    def test_a_mark_resent_after_the_teacher_can_no_longer_mark_is_already_saved(self):
+        for host, school, teacher, student, assessment_id, _, _ in self.mark_cases():
+            with self.subTest(school=school.name):
+                key = uuid.uuid4()
+                self.as_(teacher)
+                first = self.save(student, 17, key=key, assessment_id=assessment_id, host=host)
+                self.assertEqual(first.status_code, 200, first.content)
+
+                self.no_longer_marks(teacher)
+                resent = self.save(student, 17, key=key, assessment_id=assessment_id, host=host)
+
+                self.assertEqual(resent.status_code, 200, resent.content)
+                self.assertEqual(resent.json(), ALREADY_SAVED)
+                # The authority really is gone: anything but the resend is refused.
+                self.assertEqual(
+                    self.save(student, 16, assessment_id=assessment_id, host=host,
+                              expected_version=first.json()["version"]).status_code,
+                    403,
+                )
+                self.assertEqual(self.value_of(school, assessment_id, student), 17)
+
+    def test_a_register_resent_after_the_teacher_can_no_longer_take_it_is_already_saved(self):
+        for host, school, teacher, child, group, term in (
+            (HOST, self.stmarys, self.teacher, self.ada.pk, self.jss1a_id, self.term_id),
+            (GRACE_HOST, self.grace, self.grace_teacher, self.grace_child.pk,
+             self.grace_group_id, self.grace_term_id),
+        ):
+            with self.subTest(school=school.name):
+                key = uuid.uuid4()
+                self.as_(teacher)
+                first = self.take([child], key=key, group=group, term=term, host=host)
+                self.assertEqual(first.status_code, 200, first.content)
+
+                self.no_longer_marks(teacher)
+                resent = self.take([child], key=key, group=group, term=term, host=host)
+
+                self.assertEqual(resent.status_code, 200, resent.content)
+                self.assertEqual(resent.json(), ALREADY_SAVED)
+                self.assertEqual(
+                    self.take([], group=group, term=term, host=host).status_code, 403
+                )
+
+    def test_somebody_elses_key_is_not_answered_before_authority(self):
+        """The same request, the same key, another person: not their replay.
+
+        A bursar sending it is refused as a bursar is — not told a teacher's
+        write is saved. A principal, who may mark, meets the key's own rule.
+        """
+        for host, school, teacher, student, assessment_id, head, bursar in self.mark_cases():
+            with self.subTest(school=school.name):
+                key = uuid.uuid4()
+                self.as_(teacher)
+                self.save(student, 17, key=key, assessment_id=assessment_id, host=host)
+
+                self.as_(bursar)
+                self.assertEqual(
+                    self.save(student, 17, key=key, assessment_id=assessment_id,
+                              host=host).status_code,
+                    403,
+                )
+                self.as_(head)
+                self.assertEqual(
+                    self.save(student, 17, key=key, assessment_id=assessment_id,
+                              host=host).status_code,
+                    422,
+                )
+
+    def test_a_different_write_under_the_key_is_not_answered_before_authority(self):
+        for host, school, teacher, student, assessment_id, _, _ in self.mark_cases():
+            with self.subTest(school=school.name):
+                key = uuid.uuid4()
+                self.as_(teacher)
+                self.save(student, 17, key=key, assessment_id=assessment_id, host=host)
+
+                self.no_longer_marks(teacher)
+                self.assertEqual(
+                    self.save(student, 16, key=key, assessment_id=assessment_id,
+                              host=host).status_code,
+                    403,
+                )
 
 
 class AKeyIsOneWriteTests(ReplaySetUp):

@@ -35,7 +35,7 @@ and wrong for a phone; the field is optional in the schema and the docstring on
 """
 
 from datetime import date
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
 
 from django.http import Http404
@@ -317,7 +317,12 @@ def register(request, class_group_id: int, term_id: int, on: date):
 
 @router.put(
     "/classes/{int:class_group_id}/terms/{int:term_id}/{on}/",
-    response={200: RegisterTakenOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+    response={
+        200: Union[RegisterTakenOut, receipts.AlreadySavedOut],
+        403: MessageOut,
+        409: MessageOut,
+        422: MessageOut,
+    },
 )
 def take(
     request,
@@ -350,11 +355,19 @@ def take(
     and that is harmless only while nothing happened in between. A register
     queued at 8am whose answer was lost, and sent again at 4pm, would put back
     every absence the office corrected at 10am. Answered from its receipt, the
-    replay changes nothing and says what the first arrival did
-    (`sync.receipts.once()`, `docs/offline.md` D3). A key used for a different
-    register is a 422, final to the device's outbox.
+    replay changes nothing and says it is already saved (`sync.receipts`,
+    `docs/offline.md` D3) — asked before authority, so a teacher whose role
+    changed since is told it landed rather than refused, and told nothing about
+    the register, whose first answer is not what it holds now (#161). A key
+    used for a different register is a 422, final to the device's outbox.
     """
     school = _school_of(request)
+    if payload.key is not None:
+        write, body = receipts.matched_on(request, payload)
+        if receipts.already_saved(
+            key=payload.key, actor=request.user, write=write, request=body
+        ):
+            return 200, receipts.AlreadySavedOut()
     refusal = _refuse_non_markers(request, school)
     if refusal:
         return refusal
@@ -368,8 +381,8 @@ def take(
         return receipts.once(
             key=payload.key,
             actor=request.user,
-            write=f"PUT {request.path}",
-            request=payload.model_dump(mode="json", exclude={"key"}),
+            write=write,
+            request=body,
             act=lambda: _take(request, group, term, on, payload),
         )
     except receipts.KeyAlreadyUsed as exc:

@@ -194,7 +194,11 @@ another device, the queued 17 arriving after it. The value moved, so the inferen
 calls it a conflict with the teacher's own 18. With a `key` — a UUID the device
 mints when it queues the write — the first arrival leaves a `sync.SyncReceipt`,
 unique on the key, in the same transaction as the mark, and every later arrival
-gets the first one's answer and writes nothing. A refused write leaves no receipt,
+is told it is already saved — `{"detail": "Already saved.", "already_saved": true}`,
+with no mark, version or total, because the first arrival's were not the cell's
+now — and writes nothing. That answer is asked for **before** the authority check,
+for this person's own write only, so a teacher whose role changed after the write
+landed is told it landed rather than refused (#161). A refused write leaves no receipt,
 so it is judged again when it is sent again. The same key on a different write, or
 from a different person, is a `422`: not the `409` fees answers a reused form key
 with, because here a `409` redraws the cell as somebody else's mark.
