@@ -27,10 +27,42 @@ import { button as signOutButton, failureNote, sessionEnded, signOut } from "../
 import { REFUSAL, fetchRegister, fetchWhere, takeRegister } from "./api.js";
 import * as states from "./states.js";
 
-/** Today, in the `YYYY-MM-DD` the API's path segment parses. */
-export function today(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+/**
+ * The zone a school's day is counted in, when the page does not say.
+ *
+ * The page always says: `register_page()` renders `settings.TIME_ZONE` into
+ * `data-time-zone`, the same setting `timezone.localdate()` reads on the
+ * server, so the two cannot disagree about what "today" is.
+ */
+export const SCHOOL_TIME_ZONE = "Africa/Lagos";
+
+/**
+ * Today **in the school's time zone**, as the `YYYY-MM-DD` the API parses.
+ *
+ * It used to be `toISOString().slice(0, 10)`, which is the date in UTC. Lagos
+ * is UTC+1, so from midnight to one in the morning that named yesterday. Nobody
+ * takes a register at 00:30, which is why it went unnoticed. But a day is a
+ * fact about the school, not about Greenwich, and a register queued offline
+ * carries whatever day this computed (`docs/offline.md`, D9).
+ *
+ * `formatToParts` rather than a locale that happens to print ISO order, so the
+ * answer does not depend on how some locale chooses to lay out a date.
+ */
+export function today(now = new Date(), timeZone = SCHOOL_TIME_ZONE) {
+  const parts = {};
+  for (const { type, value } of new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now)) {
+    parts[type] = value;
+  }
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
+
+/** What the date box may hold: a whole `YYYY-MM-DD`, and nothing else. */
+const A_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The markup for one state of the page. Pure, so every branch is testable.
@@ -105,7 +137,7 @@ export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) 
   let state = { step: "loading" };
   let signOutFailed = false;
   let where = null;
-  let on = today(now);
+  let on = today(now, root.dataset.timeZone || SCHOOL_TIME_ZONE);
 
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
@@ -119,6 +151,21 @@ export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) 
   };
 
   await load();
+
+  // The day box. `states.choose()` has always drawn it, and until now nothing
+  // listened, so a register for Wednesday entered on Friday was filed against
+  // Friday. `change` rather than `input`: it fires once the date is committed,
+  // not on every keystroke of a half-typed one. A box emptied or holding
+  // something that is not a whole date keeps the day it had, because a register
+  // filed against no day is worse than one filed against the last day chosen.
+  root.addEventListener("change", (event) => {
+    const field = event.target.closest('[data-field="on"]');
+    if (!field) return;
+    const picked = String(field.value || "");
+    if (!A_DAY.test(picked)) return;
+    on = picked;
+    if (state.step === "choose") state = { ...state, on };
+  });
 
   // Delegated from the root, because every state is redrawn wholesale and a
   // listener bound to a button would be bound to a node about to be replaced.

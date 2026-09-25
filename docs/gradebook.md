@@ -148,9 +148,10 @@ in the primitive, because a management command has no actor to check.
 
 ## The HTTP surface
 
-Three endpoints, mounted at `/api/gradebook/` from `gradebook/api.py`.
+Four endpoints, mounted at `/api/gradebook/` from `gradebook/api.py`.
 
 ```
+GET    /where/                                      the assessments and classes this login may mark
 GET    /assessments/{id}/sheet/                     the roll, marked and unmarked
 PUT    /assessments/{id}/scores/{membership_id}/    enter or change one mark
 DELETE /assessments/{id}/scores/{membership_id}/    take one back

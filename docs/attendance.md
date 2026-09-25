@@ -242,10 +242,16 @@ changed.
 
 `student_membership_id` is a bare `PositiveBigIntegerField`, not a `ForeignKey`, per
 the policy in `docs/tenancy.md` that `fees.FeeLedgerEntry`, `gradebook.Score`,
-`academics.ClassPlacement` and `academics.ClassTeacher` all follow. The service checks
-the id names a student of this school before anything is written, via
-`accounts.students.why_not_a_student_here()`. `class_group` and `term` are real
-foreign keys, because both are tenant-local.
+`academics.ClassPlacement` and `academics.ClassTeacher` all follow. Unlike those,
+the register service does **not** check the id with
+`accounts.students.why_not_a_student_here()`, and that is the decision rather than
+an omission: `take_register()` writes only ids that survive intersection with the
+roster, and the roster is `ClassPlacement`, whose rows `place_student()` already
+checked. An id that is not a student of this school cannot reach a mark, which is a
+stronger guarantee than a check, and it is why `not_on_the_roster` is a report
+rather than a refusal. (This paragraph used to say the service made the check. The
+code never did; `attendance/services.py` says why.) `class_group` and `term` are
+real foreign keys, because both are tenant-local.
 
 ### D10. Default present, mark the exceptions, submit once
 

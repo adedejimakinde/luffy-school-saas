@@ -25,7 +25,11 @@ because every one of those renderers is a pure function of an API body.
 """
 
 from django.templatetags.static import static
+from django.test import override_settings
 
+from accounts.models import Role, User
+from accounts.services import grant_membership
+from attendance.tests.fixtures import PASSWORD
 from attendance.tests.test_api import HOST, RegisterApiSetUp
 from schools.models import Domain
 
@@ -100,6 +104,31 @@ class TheRegisterFrameHoldsNoRegisterTests(RegisterApiSetUp):
         page = self.get_page(self.teacher.user).content.decode()
 
         self.assertIn('data-portal=""', page)
+
+    def test_both_schools_frames_count_the_day_in_the_platforms_zone(self):
+        """Requirement 7 of `docs/offline.md`: the register's day is the school's day.
+
+        The page works out "today" itself, so the zone it counts in has to be the
+        one the server counts in: `settings.TIME_ZONE`, which
+        `timezone.localdate()` reads. Asked of two schools' hosts, and asked
+        again under a different setting, so a frame with "Africa/Lagos" typed
+        into it would pass the first half and fail the second.
+        """
+        Domain.objects.create(tenant=self.grace, domain="grace.testserver", is_primary=True)
+        grace_teacher = grant_membership(
+            User.objects.create_user("dele", PASSWORD, full_name="Dele Ojo"),
+            self.grace,
+            Role.TEACHER,
+        )
+
+        for user, host in ((self.teacher.user, HOST), (grace_teacher.user, "grace.testserver")):
+            with self.subTest(host=host):
+                page = self.get_page(user, host=host).content.decode()
+                self.assertIn('data-time-zone="Africa/Lagos"', page)
+
+        with override_settings(TIME_ZONE="Africa/Accra"):
+            page = self.get_page(self.teacher.user).content.decode()
+        self.assertIn('data-time-zone="Africa/Accra"', page)
 
     def test_the_stylesheet_and_entry_point_are_the_register_s_own(self):
         page = self.get_page(self.teacher.user).content.decode()

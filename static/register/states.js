@@ -33,7 +33,7 @@ export function choose({ term = "", classes = [], on = "" } = {}) {
     "<h1>Take a register</h1>",
     `<p class="term">${esc(term)}</p>`,
     '<label for="on">Which day</label>',
-    `<input id="on" name="on" type="date" value="${esc(on)}">`,
+    `<input id="on" name="on" type="date" data-field="on" value="${esc(on)}">`,
     "<p>Which class?</p>",
     '<ul class="classes">',
     classes
