@@ -237,8 +237,12 @@ class TheChannelTypedTests(CodeDeliverySetUp):
         self.assertEqual((len(self.sent_to(E164)), len(self.sent_to(EMAIL))), (1, 1))
 
     def test_a_dormant_phone_gets_no_code_while_the_email_still_does(self):
-        """CONTROL: `_eligible_for_a_code()` keeping dormant rows sends the
-        phone a code, and this goes red."""
+        """Two guards stand in front of the phone here: `_eligible_for_a_code()`
+        at the door, and `request_sign_in_code()` refusing a dormant channel
+        behind it. Either alone keeps this green.
+
+        CONTROL: removing both sends the phone a code, and this goes red. The
+        filter's own job is the shared-handset test below."""
         self.go_quiet(E164)
 
         self.deliver(lambda: self.ask(NUMBER))
@@ -246,6 +250,24 @@ class TheChannelTypedTests(CodeDeliverySetUp):
 
         self.assertEqual(self.sent_to(E164), [])
         self.answers(EMAIL, EMAIL)
+
+    def test_on_a_shared_handset_the_live_guardian_is_sent_the_code_the_dormant_one_is_not(self):
+        """One number, Mama's row quiet for a year and Papa's current: the code
+        is minted on Papa's row, and answering it signs Papa in with no chooser.
+
+        CONTROL: `_eligible_for_a_code()` keeping dormant rows mints on the
+        oldest row, which is Mama's; the service refuses it as dormant, the door
+        swallows that, and nobody on the handset is sent anything."""
+        self.go_quiet(E164)
+        papa = User.objects.create_user("papa", PASSWORD, full_name="Papa Obi")
+        give_verified_channel(papa, NUMBER)
+
+        self.deliver(lambda: self.ask(NUMBER))
+        self.assertEqual(len(self.sent_to(E164)), 1)
+
+        signed_in = self.answer(NUMBER, self.code_sent_to(E164))
+        self.assertEqual(signed_in.status_code, 200, signed_in.content)
+        self.assertEqual(self.handset.session["_auth_user_id"], str(papa.pk))
 
     def test_one_guardian_with_two_channels_sees_no_chooser_and_two_on_one_handset_do(self):
         """CONTROL: the same as the typed-channel test's. With every live row of
