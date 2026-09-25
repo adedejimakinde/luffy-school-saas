@@ -194,9 +194,18 @@ export async function sendQueued(entry, { fetchImpl = fetch } = {}) {
   if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
     return { stop: STOPPED.SESSION, refusal: answer.refusal };
   }
+  // A timeout or a rate limit says "not now", not "no": a phone replaying a
+  // backlog is exactly what meets one.
+  if (NOT_NOW.has(answer.status)) return { stop: STOPPED.OFFLINE };
   if (answer.status >= 400 && answer.status < 500) return { held: HELD.REFUSED, detail };
+  // A 5xx is not an answer either, but one that comes back for this write
+  // every time must not hold up every write behind it: it goes to the back.
+  if (answer.status >= 500) return { stop: STOPPED.OFFLINE, toTheBack: true };
   return { stop: STOPPED.OFFLINE };
 }
+
+/** 4xx answers that mean "try later": a request timeout, too early, too many. */
+const NOT_NOW = new Set([408, 425, 429]);
 
 /**
  * Who is signed in on this host, asked of the server (D7).
@@ -210,7 +219,7 @@ export async function whoIsSignedIn({ fetchImpl = fetch } = {}) {
   const answer = await fetchWhere({ fetchImpl });
   if (answer.ok) return { userId: answer.body.user_id };
   if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
-    return { stop: STOPPED.SESSION };
+    return { stop: STOPPED.SESSION, refusal: answer.refusal };
   }
   if (answer.refusal === REFUSAL.NOT_A_MARKER) return { stop: STOPPED.NOT_A_MARKER };
   // A 404 (not a school's host) or a 5xx: nothing here to send to, yet.

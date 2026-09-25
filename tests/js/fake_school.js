@@ -71,6 +71,13 @@ export function school(
     // write arriving: the only way a write itself meets a 403, since `/where/`
     // refuses a non-marker first.
     revokeBeforeNextPut: false,
+    // The sheet cannot be fetched (the connection drops between a write and
+    // the read after it).
+    failSheet: false,
+    // Pupils whose writes meet a server error every time.
+    failFor: new Set(),
+    // The next write is answered 429, once.
+    tooManyOnce: false,
   };
 
   const reply = (status, body) => ({ status, json: async () => body });
@@ -105,12 +112,22 @@ export function school(
       return refusal() || reply(200, { ...WHERE, user_id: server.signedIn });
     }
     if (url === "/api/gradebook/assessments/3/sheet/?class_group_id=11") {
+      if (server.failSheet) throw new TypeError("Failed to fetch");
       return refusal() || reply(200, sheetOf(server));
     }
     const hit = /^\/api\/gradebook\/assessments\/(\d+)\/scores\/(\d+)\/$/.exec(url);
     if (!hit || options.method !== "PUT") throw new Error(`no stub for ${url}`);
     const id = Number(hit[2]);
     const body = JSON.parse(options.body);
+    if (server.failFor.has(id)) {
+      server.puts.push({ id, ...body, as: server.signedIn, failed: 500 });
+      return reply(500, { detail: "Server Error (500)" });
+    }
+    if (server.tooManyOnce) {
+      server.tooManyOnce = false;
+      server.puts.push({ id, ...body, as: server.signedIn, failed: 429 });
+      return reply(429, { detail: "Too many requests." });
+    }
     if (server.revokeBeforeNextPut) {
       server.revokeBeforeNextPut = false;
       server.markers = [];

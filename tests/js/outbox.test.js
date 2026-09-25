@@ -375,6 +375,35 @@ test("somebody who cannot mark here now sends nothing, and nothing queued is dro
   }
 });
 
+test("a write the server fails every time goes to the back, and the rest still go", async () => {
+  for (const server of bothSchools()) {
+    server.failFor.add(1);
+    const page = pageAt(server, new Map());
+    await page.queue(write(1, 9, null));
+    await page.queue(write(2, 17, server.marks.get(2) ? server.marks.get(2).version : null));
+
+    assert.equal(await page.drain(), STOPPED.OFFLINE, server.host);
+    assert.equal(await page.drain(), STOPPED.OFFLINE, server.host);
+
+    assert.deepEqual(server.puts.map((p) => [p.id, p.failed || 200]), [[1, 500], [2, 200], [1, 500]], server.host);
+    const left = await page.outbox.read();
+    assert.deepEqual(left.map((e) => [e.studentMembershipId, e.held]), [[1, null]], `${server.host}: kept, not held`);
+  }
+});
+
+test("a 429 says not now, not no: the write waits and goes", async () => {
+  for (const server of bothSchools()) {
+    server.tooManyOnce = true;
+    const page = pageAt(server, new Map());
+    await page.queue(write(2, 17, server.marks.get(2) ? server.marks.get(2).version : null));
+
+    assert.equal(await page.drain(), STOPPED.OFFLINE, server.host);
+    assert.equal((await page.outbox.read())[0].held, null, server.host);
+    assert.equal(await page.drain(), STOPPED.EMPTY, server.host);
+    assert.equal(server.marks.get(2).value, 17, server.host);
+  }
+});
+
 test("requirement 6: a school's outbox reaches only that school", async () => {
   const [stMarys, grace] = bothSchools();
   const shelf = new Map();

@@ -195,7 +195,9 @@ export function markSent(entries, cell) {
  *   what they typed after the attempt left would meet the same conflict, lock
  *   or refusal of authority. A 422 is the exception — it judged only the number
  *   that was sent, so a later number is a new write and is sent.
- * - **Stop:** unchanged, key and all, to be sent again as it is.
+ * - **Stop:** unchanged, key and all, to be sent again as it is — at the back
+ *   of the queue when the answer was a server error, so that one write the
+ *   server fails every time cannot keep every other write from going.
  */
 export function settle(entries, cell, answer, { now = Date.now(), mint = newKey } = {}) {
   const at = entries.findIndex((entry) => entry.cell === cell);
@@ -236,6 +238,7 @@ export function settle(entries, cell, answer, { now = Date.now(), mint = newKey 
       },
     });
   }
+  if (answer.toTheBack) return [...without(entries, at), entry];
   return entries;
 }
 

@@ -226,6 +226,11 @@ export function dismiss(state, id) {
   return { ...state, notes, kept };
 }
 
+/** What the page says when the browser will not keep the outbox. */
+const VOLATILE =
+  "This browser is not keeping marks that have not been sent. " +
+  "Keep this page open until every mark on it is saved.";
+
 /** Is this outbox entry a cell of the sheet on screen? */
 export function onThisSheet(state, entry) {
   return (
@@ -244,7 +249,9 @@ export function afterSend(state, entries, entry, answer) {
   if (!onThisSheet(state, entry)) return state;
   const id = entry.studentMembershipId;
   const left = entries.find((e) => e.cell === entry.cell);
-  const typed = left ? left.value : entry.value;
+  // The teacher's latest: a value typed while this one was out waits in
+  // `next` until the answer comes, and a stop is no answer.
+  const typed = left ? (left.next === null || left.next === undefined ? left.value : left.next) : entry.value;
 
   if (answer.landed) {
     const landed = applySave(state, id, { ok: true, cell: answer.cell }, typed);
@@ -252,10 +259,13 @@ export function afterSend(state, entries, entry, answer) {
     return left ? queued(landed, id, left.value) : landed;
   }
   if (answer.held) return held(state, id, answer, typed);
-  if (answer.stop === STOPPED.SESSION) {
-    return applySave(state, id, { ok: false, refusal: answer.refusal || REFUSAL.EXPIRED, body: {} }, typed);
-  }
-  return applySave(state, id, { ok: false, refusal: REFUSAL.BROKEN, body: {} }, typed);
+  const stopped =
+    answer.stop === STOPPED.SESSION
+      ? applySave(state, id, { ok: false, refusal: answer.refusal || REFUSAL.EXPIRED, body: {} }, typed)
+      : applySave(state, id, { ok: false, refusal: REFUSAL.BROKEN, body: {} }, typed);
+  // Still in the outbox, and going when it can: nothing on screen may offer to
+  // forget it, because dismissing forgets only what will not be sent.
+  return { ...stopped, kept: { ...stopped.kept, [id]: { ...stopped.kept[id], queued: true } } };
 }
 
 /**
@@ -428,19 +438,74 @@ export async function mount(
   let freshToken = false;
   let retrying = false;
   let stale = false;
+  let lastRefusal = null;
+  let outboxName_ = null;
 
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
   };
 
+  /**
+   * The browser stopped keeping the outbox — its database closed under the
+   * page, the disk full. Said, and not swallowed: the page carries on with
+   * the outbox in memory, which lasts as long as the page, and the warning
+   * says exactly that. What the database already held is sent by the next
+   * page load that can open it.
+   */
+  const keptInMemoryFromNowOn = (error) => {
+    console.error("The marks outbox could not be kept.", error);
+    outbox = openOutbox(memoryStore(outboxName_));
+    warnings = [VOLATILE];
+    if (state.step === "sheet") state = { ...state, warnings };
+  };
+
+  /** A change to the outbox that a failing store cannot lose. */
+  const change = async (update) => {
+    try {
+      return await outbox.update(update);
+    } catch (error) {
+      keptInMemoryFromNowOn(error);
+      return outbox.update(update);
+    }
+  };
+
+  const readOutbox = async () => {
+    try {
+      return await outbox.read();
+    } catch (error) {
+      keptInMemoryFromNowOn(error);
+      return [];
+    }
+  };
+
+  const drawSheet = async (answer) => {
+    state = { ...fromSheet(answer), warnings };
+    if (outbox) state = withOutbox(state, await readOutbox(), { now: now() });
+    draw();
+  };
+
   const openSheet = async () => {
     if (!picked.assessmentId || !picked.classGroupId) return;
-    state = fromSheet(await fetchSheet({ ...picked, fetchImpl }));
-    if (state.step === "sheet") {
-      state = { ...state, warnings };
-      if (outbox) state = withOutbox(state, await outbox.read(), { now: now() });
+    const answer = await fetchSheet({ ...picked, fetchImpl });
+    if (!answer.ok) {
+      state = fromSheet(answer);
+      draw();
+      return;
     }
-    draw();
+    await drawSheet(answer);
+  };
+
+  /**
+   * Ask for the open sheet again, and draw it only if it came. Called after a
+   * resent write lands; a failed fetch then must not replace a sheet full of
+   * kept numbers with a broken page, so it keeps what is on screen and tries
+   * again after the next drain.
+   */
+  const refreshSheet = async () => {
+    const answer = await fetchSheet({ ...picked, fetchImpl });
+    if (!answer.ok || state.step !== "sheet") return false;
+    await drawSheet(answer);
+    return true;
   };
 
   /**
@@ -471,7 +536,11 @@ export async function mount(
         stopped = await drain({
           outbox,
           owner,
-          whoIsSignedIn: () => whoIsSignedIn({ fetchImpl }),
+          whoIsSignedIn: async () => {
+            const who = await whoIsSignedIn({ fetchImpl });
+            lastRefusal = who.refusal || null;
+            return who;
+          },
           send: (entry) => sendQueued(entry, { fetchImpl }),
           onChange: (entries, entry, answer) => {
             state = afterSend(state, entries, entry, answer);
@@ -497,10 +566,7 @@ export async function mount(
 
     return draining.then(async (stopped) => {
       draining = null;
-      if (stale) {
-        stale = false;
-        if (state.step === "sheet") await openSheet();
-      }
+      if (stale && state.step === "sheet" && (await refreshSheet())) stale = false;
       if (stopped === STOPPED.OFFLINE) {
         failures += 1;
         freshToken = true;
@@ -516,7 +582,15 @@ export async function mount(
       } else {
         failures = 0;
       }
-      if (stopped === STOPPED.SESSION) freshToken = true;
+      if (stopped === STOPPED.SESSION) {
+        freshToken = true;
+        // Stopped at "who is signed in", before anything was sent, so no cell
+        // was told: the sheet says it, as a lapsed save always has.
+        if (state.step === "sheet" && !state.session) {
+          state = { ...state, session: lastRefusal === REFUSAL.SIGNED_OUT ? "signed-out" : "expired" };
+          draw();
+        }
+      }
       if (stopped === STOPPED.NOT_A_MARKER && state.step === "sheet" && !state.locked) {
         // As a 403 on a write closes the boxes (`applySave()`), and the marks
         // not yet sent stay queued: whoever this is, nothing is final for them.
@@ -536,6 +610,12 @@ export async function mount(
           draw();
         }
       }
+      // A kick that came after the loop's last look and before `draining`
+      // cleared found a drain finishing, and nobody went round again for it.
+      if (again && stopped === STOPPED.EMPTY) {
+        again = false;
+        return kick();
+      }
       return stopped;
     });
   };
@@ -544,14 +624,11 @@ export async function mount(
   if (whereAnswer.ok) {
     where = whereAnswer.body;
     owner = where.user_id;
-    const name = outboxName(host, owner);
-    const kept = await openStore(name);
-    outbox = openOutbox(kept || memoryStore(name));
+    outboxName_ = outboxName(host, owner);
+    const kept = await openStore(outboxName_);
+    outbox = openOutbox(kept || memoryStore(outboxName_));
     if (!kept) {
-      warnings = [
-        "This browser is not keeping marks that have not been sent. " +
-          "Keep this page open until every mark on it is saved.",
-      ];
+      warnings = [VOLATILE];
     } else if (storageMayBeCleared(userAgent)) {
       warnings = [
         "On this browser, marks that have not been sent can be deleted if this " +
@@ -600,14 +677,14 @@ export async function mount(
     if (action === "dismiss" && state.step === "sheet") {
       const id = Number(hit.dataset.child);
       const cell = cellOf(picked.assessmentId, id);
-      const left = await outbox.update((entries) => dismissQueued(entries, cell));
+      const left = await change((entries) => dismissQueued(entries, cell));
       state = withOutbox(dismiss(state, id), left.filter((entry) => entry.cell === cell), { now: now() });
       draw();
       return;
     }
     if (action === "retry" && state.step === "sheet" && !state.locked) {
       const cell = cellOf(picked.assessmentId, Number(hit.dataset.child));
-      await outbox.update((entries) => release(entries, cell, { mint }));
+      await change((entries) => release(entries, cell, { mint }));
       await kick();
     }
   });
@@ -636,7 +713,7 @@ export async function mount(
     // wolf"), and over a kept value it would replace that value with nobody
     // having chosen to (requirement 8).
     if (value === drawnValue(state, id)) return;
-    await outbox.update((entries) =>
+    await change((entries) =>
       enqueue(
         entries,
         {

@@ -44,7 +44,9 @@ async function openPage(server, shelf, { now = () => 1_000_000, userAgent = CHRO
   const timers = [];
   const online = [];
   await mount(root, {
-    fetchImpl: server.fetch,
+    // Through `server.fetch` as it is when called, so a test can stand in
+    // front of it after the page is open.
+    fetchImpl: (url, options) => server.fetch(url, options),
     host: server.host,
     openStore: openStore || (async (name) => memoryStore(name, shelf)),
     schedule: (run, ms) => timers.push({ run, ms }),
@@ -376,6 +378,125 @@ test("a tap made while the opening drain waits on the network is not lost", asyn
     release();
     await mounting;
     assert.deepEqual(server.puts.map((p) => p.value), [11], server.host);
+  }
+});
+
+// -- what the review of #163 found -------------------------------------------------
+
+test("a session found lapsed before anything was sent is said on the sheet", async () => {
+  for (const server of bothSchools()) {
+    const page = await openPage(server, new Map());
+    server.signedIn = null;
+
+    await page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
+
+    assert.equal(server.puts.length, 0, server.host);
+    assert.match(page.root.innerHTML, /Your session has ended\./, server.host);
+    assert.match(page.root.innerHTML, /id="mark-2"[^>]*value="17"/, server.host);
+
+    server.signedIn = KEMI;
+    await page.root.click({ "data-action": "retry", "data-child": "2" });
+    assert.equal(server.marks.get(2).value, 17, server.host);
+    assert.doesNotMatch(page.root.innerHTML, /Your session has ended/, server.host);
+  }
+});
+
+test("a number typed while the last one was out is the one on screen when the send fails", async () => {
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    let gate;
+    const held = new Promise((_, reject) => { gate = reject; });
+    let onTheWire = false;
+    const page = await openPage(server, shelf);
+    const fetchImpl = server.fetch;
+    server.fetch = async (url, options = {}) => {
+      if (options.method === "PUT" && !onTheWire) {
+        onTheWire = true;
+        await held;
+      }
+      return fetchImpl(url, options);
+    };
+
+    const first = page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
+    while (!onTheWire) await new Promise((resolve) => setImmediate(resolve));
+    const second = page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "18");
+    await new Promise((resolve) => setImmediate(resolve));
+    gate(new TypeError("Failed to fetch"));
+    await Promise.all([first, second]);
+
+    assert.match(page.root.innerHTML, /id="mark-2"[^>]*value="18"/, `${server.host}: the latest, not the one in flight`);
+    const [entry] = await onThePhone(shelf, server.host);
+    assert.deepEqual([entry.value, entry.next], [17, 18], server.host);
+    server.fetch = fetchImpl;
+  }
+});
+
+test("a sheet that cannot be fetched after a resend keeps what is on screen", async () => {
+  for (const server of bothSchools()) {
+    const page = await openPage(server, new Map());
+    server.loseNextAnswer = true;
+    await page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
+    await page.root.blur({ "data-child": "1", "data-version": "" }, "9");
+
+    server.failSheet = true;
+    await page.timers[0].run();
+
+    assert.match(page.root.innerHTML, /data-state="sheet"/, `${server.host}: still the sheet`);
+    assert.match(page.root.innerHTML, /id="mark-1"[^>]*value="9"/, server.host);
+    server.failSheet = false;
+  }
+});
+
+test("a mark stopped on its way is not offered to be dismissed, since it will still go", async () => {
+  for (const server of bothSchools()) {
+    const page = await openPage(server, new Map());
+    server.loseNextAnswer = true;
+
+    await page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17");
+
+    assert.match(page.root.innerHTML, /Not sent yet: the connection failed/, server.host);
+    assert.doesNotMatch(page.root.innerHTML, /data-action="dismiss" data-child="2"/, server.host);
+  }
+});
+
+test("a browser that stops keeping the outbox mid-page says so, and the mark still goes", async () => {
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    let broken = false;
+    const failing = async (name) => {
+      const store = memoryStore(name, shelf);
+      return {
+        read: async () => { if (broken) throw new Error("InvalidStateError"); return store.read(); },
+        write: async (entries) => { if (broken) throw new Error("InvalidStateError"); return store.write(entries); },
+      };
+    };
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      const page = await openPage(server, shelf, { openStore: failing });
+      broken = true;
+      await page.root.blur({ "data-child": "1", "data-version": "" }, "9");
+
+      assert.deepEqual(server.puts.map((p) => p.value), [9], server.host);
+      assert.match(page.root.innerHTML, /not keeping marks that have not been sent/, server.host);
+    } finally {
+      console.error = logged;
+    }
+  }
+});
+
+test("marks typed in quick succession all go, none left waiting for a later kick", async () => {
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    const page = await openPage(server, shelf);
+
+    await Promise.all([
+      page.root.blur({ "data-child": "1", "data-version": "" }, "9"),
+      page.root.blur({ "data-child": "2", "data-version": String(versionOf(server, 2)) }, "17"),
+    ]);
+
+    assert.deepEqual(server.puts.map((p) => p.value).sort(), [17, 9], server.host);
+    assert.deepEqual(await onThePhone(shelf, server.host), [], server.host);
   }
 });
 
