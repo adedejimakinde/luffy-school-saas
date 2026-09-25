@@ -17,6 +17,7 @@ import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 
 const WHERE = {
+  user_id: 5,
   term_id: 7,
   term: "2025/2026 First term",
   assessments: [{ id: 3, name: "First CA", subject: "Mathematics", max_score: 20 }],
@@ -280,6 +281,8 @@ test("Try again sends the kept number with the version the cell was drawn with",
   let connected = false;
   const root = fakeRoot({ portal: "portal.example.test" });
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: async (url, options = {}) => {
       if (options.method === "PUT") {
         if (!connected) throw new TypeError("Failed to fetch");
@@ -302,7 +305,9 @@ test("Try again sends the kept number with the version the cell was drawn with",
   connected = true;
   await root.click({ "data-action": "retry", "data-child": "2" });
 
-  assert.deepEqual(sent, [{ value: 19, expected_version: 4 }]);
+  // The same key as the attempt that failed: if that one had landed after all,
+  // this is answered from its receipt rather than judged again (D3).
+  assert.deepEqual(sent, [{ value: 19, expected_version: 4, key: "key-1" }]);
   assert.doesNotMatch(root.innerHTML, /the connection failed/);
   assert.doesNotMatch(root.innerHTML, /data-action="retry"/);
 });
@@ -330,6 +335,8 @@ test("blurring a cell saves it, with the version it was drawn with", async () =>
   const sent = [];
   const root = fakeRoot({ portal: "portal.example.test" });
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: serve([
       ["/api/gradebook/where/", { status: 200, body: WHERE }],
       ["/sheet/", { status: 200, body: SHEET }],
@@ -350,7 +357,7 @@ test("blurring a cell saves it, with the version it was drawn with", async () =>
   await root.click({ "data-action": "pick-class", "data-class": "11" });
   await root.blur({ "data-child": "2", "data-version": "4" }, "15");
 
-  assert.deepEqual(sent, [{ value: 15, expected_version: 4 }]);
+  assert.deepEqual(sent, [{ value: 15, expected_version: 4, key: "key-1" }]);
   // Redrawn from the response, not from a local guess: the total is the
   // server's sum and a page that recomputed it would be a second implementation
   // free to disagree.
@@ -363,6 +370,8 @@ test("an unmarked cell sends a null version, which the server reads as an insert
   const sent = [];
   const root = fakeRoot({});
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: serve([
       ["/api/gradebook/where/", { status: 200, body: WHERE }],
       ["/sheet/", { status: 200, body: SHEET }],
@@ -377,7 +386,7 @@ test("an unmarked cell sends a null version, which the server reads as an insert
   await root.click({ "data-action": "pick-class", "data-class": "11" });
   await root.blur({ "data-child": "1", "data-version": "" }, "8");
 
-  assert.deepEqual(sent, [{ value: 8, expected_version: null }]);
+  assert.deepEqual(sent, [{ value: 8, expected_version: null, key: "key-1" }]);
 });
 
 test("blurring an emptied cell saves nothing", async () => {
@@ -387,6 +396,8 @@ test("blurring an emptied cell saves nothing", async () => {
   const sent = [];
   const root = fakeRoot({});
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: serve([
       ["/api/gradebook/where/", { status: 200, body: WHERE }],
       ["/sheet/", { status: 200, body: SHEET }],
@@ -406,6 +417,8 @@ test("blurring a cell on a locked sheet sends nothing", async () => {
   const sent = [];
   const root = fakeRoot({});
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: serve([
       ["/api/gradebook/where/", { status: 200, body: WHERE }],
       ["/sheet/", { status: 200, body: { ...SHEET, locked: true, locked_reason: "submitted" } }],
@@ -432,6 +445,8 @@ test("no current term is its own screen, not a refusal and not a guess", () => {
 test("on the portal the page says where the work is", async () => {
   const root = fakeRoot({ portal: "portal.example.test" });
   await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
     fetchImpl: serve([["/api/gradebook/where/", { status: 404, body: { detail: "No gradebook on this host." } }]]),
   });
 
