@@ -36,6 +36,7 @@ and wrong for a phone; the field is optional in the schema and the docstring on
 
 from datetime import date
 from typing import List, Optional
+from uuid import UUID
 
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -44,6 +45,7 @@ from ninja import Router, Schema
 from academics.models import ClassGroup, Term
 from accounts.models import Membership, Role
 from accounts.session import session_auth
+from sync import receipts
 
 from . import absences, services
 from .models import AbsenceSettings
@@ -103,6 +105,9 @@ class TakeRegisterIn(Schema):
 
     absent_ids: List[int] = []
     shown_ids: Optional[List[int]] = None
+    #: Minted by the device when it queued this register, and the same on every
+    #: attempt at it. See `take()` for what it changes.
+    key: Optional[UUID] = None
 
 
 class RegisterTakenOut(Schema):
@@ -339,6 +344,15 @@ def take(
     itself — this date and this term cannot both be right — and it is a rule no
     check constraint can hold, because a check constraint sees one row of one
     table. `services.DayOutsideTheTerm` is where it lives and why.
+
+    **With a `key`, the second arrival of a register that landed is answered,
+    not applied again.** Without one, sending a register twice amends it twice,
+    and that is harmless only while nothing happened in between. A register
+    queued at 8am whose answer was lost, and sent again at 4pm, would put back
+    every absence the office corrected at 10am. Answered from its receipt, the
+    replay changes nothing and says what the first arrival did
+    (`sync.receipts.once()`, `docs/offline.md` D3). A key used for a different
+    register is a 422, final to the device's outbox.
     """
     school = _school_of(request)
     refusal = _refuse_non_markers(request, school)
@@ -348,6 +362,22 @@ def take(
     group = get_object_or_404(ClassGroup, pk=class_group_id)
     term = get_object_or_404(Term, pk=term_id)
 
+    if payload.key is None:
+        return _take(request, group, term, on, payload)
+    try:
+        return receipts.once(
+            key=payload.key,
+            actor=request.user,
+            write=f"PUT {request.path}",
+            request=payload.model_dump(mode="json", exclude={"key"}),
+            act=lambda: _take(request, group, term, on, payload),
+        )
+    except receipts.KeyAlreadyUsed as exc:
+        return 422, MessageOut(detail=str(exc))
+
+
+def _take(request, group, term, on, payload):
+    """`take()`'s write, once the caller, the group and the term are known."""
     try:
         taken = services.take_register(
             group,
@@ -362,7 +392,7 @@ def take(
     except services.DayOutsideTheTerm as exc:
         return 422, MessageOut(detail=str(exc))
 
-    return RegisterTakenOut(
+    return 200, RegisterTakenOut(
         class_group_id=group.pk,
         taken_on=on,
         present=taken.present,

@@ -187,6 +187,19 @@ exactly the protection the version exists to give. Swallowing it is only safe wh
 the row already says precisely what this request asked for **and** the same person
 wrote it; a different value, or another person's write, is still reported.
 
+**A write sent with a `key` is answered from its receipt the second time.** The
+inference above keys on value and person, which is right online and fails the
+case offline makes ordinary: 17 queued last night, 18 entered this morning on
+another device, the queued 17 arriving after it. The value moved, so the inference
+calls it a conflict with the teacher's own 18. With a `key` — a UUID the device
+mints when it queues the write — the first arrival leaves a `sync.SyncReceipt`,
+unique on the key, in the same transaction as the mark, and every later arrival
+gets the first one's answer and writes nothing. A refused write leaves no receipt,
+so it is judged again when it is sent again. The same key on a different write, or
+from a different person, is a `422`: not the `409` fees answers a reused form key
+with, because here a `409` redraws the cell as somebody else's mark.
+`docs/offline.md` D3; the key is optional and the live page does not send one yet.
+
 **The sheet is gated on `can_enter_marks()`, not on membership.** `SchoolAccessMiddleware`
 establishes only that the caller belongs to this school — and this school's parents
 and students belong to it too. A marking sheet is the whole class's marks side by
