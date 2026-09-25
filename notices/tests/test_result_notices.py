@@ -134,6 +134,12 @@ class NoticesSetUp(SendsThroughTheFake, ChainSetUp):
         return told, [call.kwargs["args"] for call in publish.call_args_list]
 
     def send_all(self, jobs):
+        """Each job through `.apply()`, which pushes a request as a worker's tracer does.
+
+        Every `TenantTask` test here is written that way. Called in-process
+        instead, `send_notice` cached the first school it saw on Celery's
+        default request and ran Grace's jobs in St Mary's (#168).
+        """
         for args in jobs:
             tasks.send_notice.apply(args=args).get()
         connection.set_schema_to_public()
