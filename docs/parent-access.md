@@ -205,7 +205,9 @@ design must not depend on the answer.
 ### D9. The contact channel is verified in-band, and its type is a field
 
 A guardian record holds a **contact channel** — email or phone — with a type, a value,
-and a verified flag. The channel is entered by a school admin (D10) and is **not
+and a verified flag. **One of each type may be live** (#111, decided September 2026:
+one school holds an email and a phone for a guardian and uses either), and a code goes
+to the channel the guardian typed, never to another they hold. The channel is entered by a school admin (D10) and is **not
 trusted because a school typed it.** Classnode sends a verification to the channel and
 the guardian link does not go live until it comes back.
 
@@ -217,7 +219,8 @@ elsewhere would otherwise hand them a child with nobody asked. Until the guardia
 live at a school, that school is shown what it typed about them — never the account's
 stored name or channel, and never "verified", either of which would tell an office that
 a number belongs to a parent somewhere else. The door that asks an already-verified
-guardian to answer a second school is PR D, with delivery (OPEN-5).
+guardian to answer a second school is code delivery's fourth door
+(`docs/messaging.md` D8): that school's own code, sent to the proved channel.
 
 This is the one decision that makes A3 and A4 cheap to be wrong about. If schools turn
 out to hold good emails, email is the identity. If they only hold numbers, phone works.
@@ -230,7 +233,10 @@ reactivation before any further code is sent. This finishes ahead of the telco's
 active guardian, since three terms a year means a natural sign-in roughly every four
 months and the longest natural gap (the long vacation) is about two.
 
-Where the channel is email, no dormancy rule is needed.
+Where the channel is email, no dormancy rule is needed. **Dormancy is per channel**
+(#111): a dormant phone gets no code until the school reopens it, and a live email
+beside it keeps working. The rule exists so that whoever now holds a recycled number
+cannot sign in as the guardian, and that person does not hold the guardian's email.
 
 **Never auto-create a guardian from an inbound contact.** A channel the school does not
 hold gets nothing: no account creation, no enumeration, and no "we have sent you a
@@ -303,8 +309,10 @@ makes staff work around the system. Verification is the real safeguard: it matte
 who typed the new value than that the person holding it must prove control before the
 link works.
 
-Mechanically: new channel entered → old binding revoked immediately → link suspended
-until the new channel verifies. Old and new both recorded as **append-only rows, never
+Mechanically: new channel entered → old binding **of the same type** revoked
+immediately → link suspended until the new channel verifies. A guardian holds one
+live channel of each type (#111), so a new phone replaces the phone and leaves the
+email alone. Old and new both recorded as **append-only rows, never
 a mutated column**, per the operating rules. That yields an audit trail answering "who
 changed this and when" without having had to predict who would be allowed to.
 
@@ -565,7 +573,8 @@ Each of these needs a school-side answer before implementation.
   means checking in monthly never costs a second metered send, while a lost handset is
   exposed for at most a month.
 
-  **The parent-scoped half of that is enforced as of PR D**, and it landed before any
+  **The parent-scoped half of that is enforced as of this series' PR D** (#110,
+  `8ad3a4b`; not code delivery, which `docs/messaging.md` M1 is), and it landed before any
   route mints one of these sessions rather than after, which was the whole argument for
   its ordering. A code-opened session reaches a parent-scoped read of that guardian's
   own children's cards and arrears and nothing else: `SchoolAccessMiddleware` marks the

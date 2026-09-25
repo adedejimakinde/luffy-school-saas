@@ -38,4 +38,10 @@ a{color:#14507d}
 .guardian .standing{flex:1 1 100%;margin:0}
 .guardian[data-status="pending verification"]{border-left:4px solid var(--warn);background:var(--warn-bg);padding-left:8px}
 .guardian .confirm{flex:1 1 100%;margin:4px 0 0;color:var(--stop)}
+.guardian .channels{flex:1 1 100%;list-style:none;margin:0;padding:0}
+.guardian .channel{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:center;padding:2px 0}
+.guardian .channel-type{font-weight:600}
+.guardian .channel-state,.guardian .last-message{color:var(--quiet)}
+.guardian .channel[data-state="dormant"] .channel-state{color:var(--warn)}
+.guardian .add-contact{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 form.link-guardian.rejected,form.link-guardian.not-allowed{background:var(--stop-bg);border-left:4px solid var(--stop);padding-left:8px}

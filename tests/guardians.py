@@ -58,8 +58,9 @@ def give_verified_channel(
     The channel is proved with a code no school asked for, which opens nothing
     (`confirm_verification()`). Each school the guardian is waiting at is then
     answered through `services.activate_guardian_links()` — the one function
-    that turns a school live, standing in for PR D's per-school door, which
-    will reach it by sending that school's own code to this channel.
+    that turns a school live, standing in for code delivery's per-school door
+    (`request_school_answer()`), which reaches it by sending that school's own
+    code to this channel.
 
     `recorded_by` is the admin who typed it. It defaults to the guardian
     themselves, which is not a state production produces — `record_contact_as()`
@@ -95,9 +96,9 @@ def answer_at(user, school):
 
     For a guardian whose channel is already proved and who is linked at a
     further school afterwards — a second child, a second school. Since #135
-    that link waits until the guardian answers *that* school; PR D is the door
-    that asks, by sending that school's code to the proved channel. This is
-    the function the door will call, and nothing it does is by fiat:
+    that link waits until the guardian answers *that* school; code delivery's
+    fourth door asks, by sending that school's code to the proved channel.
+    This is the function that door's answer calls, and nothing it does is by fiat:
     `activate_guardian_links()` still refuses to touch a suspension.
     """
     return services.activate_guardian_links(user, school)

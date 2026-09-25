@@ -173,28 +173,76 @@ export function guardiansPanel({ body = {}, note = null, confirming = null } = {
 }
 
 function guardianRow(g, { may_link, confirming, student }) {
+  const channels = g.channels || [];
   return [
     `<li class="guardian" data-status="${esc(g.status)}">`,
     `<span class="name">${esc(g.name) || "—"}</span>`,
-    `<span class="contact">${esc(g.contact) || "—"}</span>`,
+    channels.length ? "" : `<span class="contact">${esc(g.contact) || "—"}</span>`,
     `<span class="relationship">${esc(g.relationship)}</span>`,
+    channels.length
+      ? `<ul class="channels">${channels.map((c) => channelLine(g, c, may_link)).join("")}</ul>`
+      : "",
     `<p class="standing">${standing(g, student)}</p>`,
+    may_link && g.status === "live" && channels.length < 2 ? contactForm(g) : "",
     may_link ? removeControl(g, confirming, student) : "",
     "</li>",
   ].join("");
 }
 
 /**
+ * One channel: what it is, its state as this school may see it, what happened
+ * to the last code this school sent it, and the button that sends one.
+ *
+ * **The button's words follow the state, and the server picks the code.** A
+ * dormant phone is "reopened": D9 puts a person in front of a number that may
+ * have changed hands, and the office pressing this is that person, having
+ * checked with the family. Everything else is "send a code".
+ */
+function channelLine(g, c, may_link) {
+  const kind = c.channel_type === "email" ? "Email" : "Phone";
+  const last = c.last_message
+    ? ` <span class="last-message">Last code from this school: ${esc(c.last_message)}.</span>`
+    : "";
+  const label = c.state === "dormant" ? "Send a code to reopen it" : "Send a code";
+  const button =
+    may_link && c.may_send
+      ? ` <button type="button" data-action="send-code" data-link="${esc(g.link_id)}" ` +
+        `data-channel="${esc(c.channel_type)}">${label}</button>`
+      : "";
+  return [
+    `<li class="channel" data-state="${esc(c.state)}">`,
+    `<span class="channel-type">${kind}</span> `,
+    `<span class="contact">${esc(c.value)}</span> `,
+    `<span class="channel-state">${esc(c.state)}</span>`,
+    last,
+    button,
+    "</li>",
+  ].join("");
+}
+
+/** A live guardian's other channel: an email beside a phone, or the reverse (#111). */
+function contactForm(g) {
+  return [
+    '<form class="add-contact" data-form="contact">',
+    `<input type="hidden" name="link_id" value="${esc(g.link_id)}">`,
+    `<label for="new_contact_${esc(g.link_id)}">Add their other phone number or email</label>`,
+    `<input id="new_contact_${esc(g.link_id)}" name="new_contact" required>`,
+    '<button type="submit">Add</button>',
+    "</form>",
+  ].join("");
+}
+
+/**
  * The link, in a sentence. **"Not live yet" is said out loud**, because an
  * administrator who links a parent and walks away believing they are done has
- * done half a job — and nothing on this screen can send the code yet, so it
- * says that too rather than offering a button that goes nowhere.
+ * done half a job. It says what finishes the job: send the code, and the
+ * guardian answers it on the sign-in page.
  */
 function standing(g, student) {
   if (g.status === "live") {
     return g.channel === "dormant"
       ? "Live, but their phone has been quiet for 180 days, so they cannot sign " +
-          "in until the school reactivates it."
+          "in with it until the school sends a code to reopen it."
       : `Live: they can see ${esc(student)}.`;
   }
   if (g.status === "suspended") {
@@ -202,8 +250,8 @@ function standing(g, student) {
   }
   return (
     `Pending verification — not live yet. They cannot see ${esc(student)} ` +
-    "until they confirm with this school. Sending them a code is not " +
-    "connected yet."
+    "until they confirm with this school: send them a code, and they type it " +
+    "on the sign-in page."
   );
 }
 

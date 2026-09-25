@@ -1244,14 +1244,22 @@ class GuardianAccount(models.Model):
 
     # -- the gate D9 describes, as a question anything can ask ---------------
 
-    def live_contact(self):
-        """The channel currently standing for this guardian, or None.
+    def live_contact(self, channel_type):
+        """The channel of this type currently standing for this guardian, or None.
 
-        At most one, held by `one_live_contact_per_guardian`. Verified or not:
-        a channel entered and not yet confirmed is still the live one, it just
-        does not open anything yet.
+        At most one per type, held by `one_live_contact_per_guardian_per_channel`
+        (#111: a school holds an email and a phone for one guardian, both live).
+        Verified or not: a channel entered and not yet confirmed is still the
+        live one, it just does not open anything yet.
         """
-        return self.contacts.filter(revoked_at__isnull=True).first()
+        return self.contacts.filter(revoked_at__isnull=True, channel_type=channel_type).first()
+
+    def live_contacts(self):
+        """Every unrevoked channel, phone first. At most one of each type."""
+        return sorted(
+            self.contacts.filter(revoked_at__isnull=True),
+            key=lambda contact: contact.channel_type != ContactChannel.PHONE,
+        )
 
     def has_verified_channel(self) -> bool:
         """Whether this guardian's link is live, per D9.
@@ -1325,15 +1333,16 @@ class GuardianContact(models.Model):
             models.Index(fields=["value"]),
         ]
         constraints = [
-            # D9 gives a guardian *a* channel, singular, and D11's change flow
-            # is a replacement — "new channel entered → old binding revoked
-            # immediately" — not an addition. Until that flow exists, this
-            # refuses a second channel outright rather than letting a guardian
-            # quietly acquire two live ones that disagree about who they are.
+            # One live channel **per type** (#111, decided 2026-09-24): a school
+            # holds an email and a phone for one guardian and uses either, so
+            # one of each may be live. Two phones may not: D11's change flow is
+            # a replacement within a type, not an addition, and a code goes to
+            # the channel the guardian typed, which needs one row per type to
+            # be the answer.
             models.UniqueConstraint(
-                fields=["guardian"],
+                fields=["guardian", "channel_type"],
                 condition=Q(revoked_at__isnull=True),
-                name="one_live_contact_per_guardian",
+                name="one_live_contact_per_guardian_per_channel",
             ),
         ]
 

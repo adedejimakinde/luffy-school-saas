@@ -238,36 +238,58 @@ class OneHandsetTwoGuardiansTests(TwoSchools):
 
 
 class OneLiveChannelTests(TwoSchools, RefusalAssertions):
-    def test_the_service_refuses_a_second_live_channel(self):
-        """CONTROL: deleting the `live_contact() is not None` check in
+    """One live channel of each type: an email and a phone, never two of either. #111."""
+
+    def test_a_guardian_may_hold_a_live_email_and_a_live_phone(self):
+        """The admission form one school described: both taken, both live.
+
+        CONTROL: restoring the per-guardian check in `record_contact()`
+        (`live_contact()` with no type) refuses the email, and this goes red.
+        """
+        phone = self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
+        email = self.record(self.marys_admin, self.parent, ContactChannel.EMAIL, "ada@stmarys.ng")
+        for contact in (phone, email):
+            _, raw = guardian_contacts.request_verification(contact)
+            self.assertTrue(guardian_contacts.confirm_verification(contact, raw))
+
+        account = guardian_contacts.guardian_account_for(self.parent)
+        self.assertEqual(
+            [(c.channel_type, c.is_live) for c in account.live_contacts()],
+            [(ContactChannel.PHONE, True), (ContactChannel.EMAIL, True)],
+        )
+
+    def test_the_service_refuses_a_second_live_phone(self):
+        """CONTROL: deleting the `live_contact(channel_type)` check in
         `record_contact()` lets the call through to the database, where
-        `one_live_contact_per_guardian` refuses it as an IntegrityError instead
-        — so the test goes red on the exception type, not on nothing happening.
+        `one_live_contact_per_guardian_per_channel` refuses it as an
+        IntegrityError instead — so the test goes red on the exception type,
+        not on nothing happening.
         """
         self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08031234567")
         with self.assertRaises(guardian_contacts.ChannelAlreadyRecorded):
-            self.record(
-                self.marys_admin, self.parent, ContactChannel.EMAIL, "ada@stmarys.ng"
-            )
+            self.record(self.marys_admin, self.parent, ContactChannel.PHONE, "08039999999")
 
     def test_the_database_refuses_it_too_when_the_service_is_bypassed(self):
         """The service check and the constraint agree, per operating rule 3.
 
-        CONTROL: dropping `one_live_contact_per_guardian` from the migration
-        lets the second row insert and `assertRefusedBy` goes red.
+        CONTROL: keying the constraint on `guardian` alone again lets the email
+        in below as well, and the first `create` of it goes red instead; keying
+        it on nothing lets the second phone in, and `assertRefusedBy` goes red.
         """
         account = guardian_contacts.guardian_account_for(self.parent)
-        GuardianContact.objects.create(
-            guardian=account,
-            channel_type=ContactChannel.PHONE,
-            value="+2348031234567",
-            created_by=self.marys_admin,
-        )
-        with self.assertRefusedBy("one_live_contact_per_guardian"):
+        for channel_type, value in (
+            (ContactChannel.PHONE, "+2348031234567"),
+            (ContactChannel.EMAIL, "ada@stmarys.ng"),
+        ):
+            GuardianContact.objects.create(
+                guardian=account, channel_type=channel_type, value=value,
+                created_by=self.marys_admin,
+            )
+        with self.assertRefusedBy("one_live_contact_per_guardian_per_channel"):
             GuardianContact.objects.create(
                 guardian=account,
-                channel_type=ContactChannel.EMAIL,
-                value="ada@stmarys.ng",
+                channel_type=ContactChannel.PHONE,
+                value="+2348039999999",
                 created_by=self.marys_admin,
             )
 
