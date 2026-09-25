@@ -187,3 +187,17 @@ class WhereToMarkTests(MarkingSetUp):
 
     def test_the_portal_has_no_such_route(self):
         self.assertEqual(self.where(host="testserver").status_code, 404)
+
+    def test_it_names_who_is_asking_at_each_school(self):
+        """How the marking page learns whose outbox it may send.
+
+        `docs/offline.md` D7: queued marks go only under the session of the
+        person who queued them, and the page asks this route who that is before
+        it sends. Each school's answer is its own caller.
+        """
+        Domain.objects.create(tenant=self.grace, domain=THEIR_HOST, is_primary=True)
+        for marker, host in ((self.teacher, HOST), (self.grace_teacher, THEIR_HOST)):
+            with self.subTest(host=host):
+                body = self.where(user=marker, host=host).json()
+                self.assertEqual(body["user_id"], marker.user.pk)
+        self.assertNotEqual(self.teacher.user.pk, self.grace_teacher.user.pk)

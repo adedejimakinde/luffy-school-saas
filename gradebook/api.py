@@ -188,6 +188,11 @@ class WhereToMarkOut(Schema):
     term: Optional[str]
     assessments: List[MarkableAssessmentOut]
     classes: List[MarkableGroupOut]
+    #: Who is asking. The page keeps an outbox of marks not yet sent, and sends
+    #: it only while the person who queued it is the one signed in
+    #: (`docs/offline.md` D7): the cookie can change under an open page, so the
+    #: page asks rather than remembers. The caller's own id, and nobody else's.
+    user_id: int
 
 
 class SaveIn(Schema):
@@ -415,6 +420,7 @@ def where_to_mark(request):
             MarkableGroupOut(id=g.pk, name=g.name, level=g.level)
             for g in ClassGroup.objects.filter(is_active=True)
         ],
+        user_id=request.user.pk,
     )
 
 

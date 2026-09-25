@@ -99,6 +99,8 @@ export function sheet({
   kept = {},
   session = null,
   portal = "",
+  warnings = [],
+  notTheAuthor = false,
 } = {}) {
   return [
     '<section class="state state-sheet" data-state="sheet">',
@@ -110,6 +112,12 @@ export function sheet({
           "This sheet has left draft, so its marks cannot be changed here."}</p>`
       : "",
     session ? sessionEndedHere({ portal, expired: session === "expired" }) : "",
+    warnings.map((warning) => `<p class="warning" role="note">${esc(warning)}</p>`).join(""),
+    notTheAuthor
+      ? '<p class="not-the-author" role="alert">Somebody else is signed in on this browser now. ' +
+        "Marks below that are not sent yet were entered under another account, and are sent " +
+        "only when that account is signed in again.</p>"
+      : "",
     '<ul class="roster">',
     rows
       .map((row) =>
@@ -156,11 +164,13 @@ function cell(row, { locked, max_score, note, held }) {
     ">",
     `<span class="total">${numberOrBlank(row.total && row.total.scored)}`,
     `/${numberOrBlank(row.total && row.total.available)}</span>`,
-    note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
+    note
+      ? `<span class="note" role="${note.kind === "queued" ? "status" : "alert"}">${esc(note.detail)}</span>`
+      : "",
     held && held.retry && !locked
       ? `<button type="button" class="retry" data-action="retry" data-child="${esc(id)}">Try again</button>`
       : "",
-    held
+    held && !held.queued
       ? `<button type="button" class="dismiss" data-action="dismiss" data-child="${esc(id)}">Dismiss</button>`
       : "",
     "</li>",

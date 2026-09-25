@@ -43,11 +43,44 @@
  *
  * None of these replaces the sheet any more. It used to, for a failed
  * connection and for a lapsed session, and the typed mark went with it.
+ *
+ * ## A blur queues the mark; the outbox sends it
+ *
+ * `docs/offline.md` slice S3, and `outbox.js` has the rules. A blur no longer
+ * sends: it puts the write in this teacher's outbox for this school, kept in
+ * the browser, and the outbox is drained — at once when the connection is
+ * there, again with backoff when it is not, and whenever the browser says it
+ * is back online. An outbox left by an earlier page load is drained when the
+ * page opens.
+ *
+ * What a teacher sees is still `applySave()`'s: every answer the outbox gets
+ * is handed to it in the shape a direct save used to give it, so the sentences
+ * and the in-the-box-or-in-the-note rules above stay in one place. What
+ * changes is that a value not yet sent, and a value the server refused, are
+ * now on the phone as well as on the screen, and are drawn back onto the sheet
+ * when it is opened again (`withOutbox()`), until they land or the teacher
+ * dismisses them.
  */
 
+import { csrfToken } from "../web/http.js";
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, SAVE, fetchSheet, fetchWhere, saveScore } from "./api.js";
+import { REFUSAL, SAVE, fetchSheet, fetchWhere, sendQueued, whoIsSignedIn } from "./api.js";
+import {
+  HELD,
+  STOPPED,
+  cellOf,
+  dismiss as dismissQueued,
+  drain,
+  enqueue,
+  isOverdue,
+  newKey,
+  openOutbox,
+  outboxName,
+  release,
+  retryDelay,
+} from "./outbox.js";
 import * as states from "./states.js";
+import { indexedDbStore, memoryStore } from "./store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
@@ -170,7 +203,8 @@ export function applySave(state, id, result, typed = null) {
       kind: "unsaved",
       detail: lapsed
         ? "Not saved: your session has ended. Sign in again, then press Try again."
-        : "Not saved: the connection failed. Press Try again.",
+        : "Not sent yet: the connection failed. It is kept on this phone and sent " +
+          "when the connection is back, or press Try again.",
     };
     kept[id] = { value: typed, inBox: true, retry: true };
     return {
@@ -192,24 +226,208 @@ export function dismiss(state, id) {
   return { ...state, notes, kept };
 }
 
+/** Is this outbox entry a cell of the sheet on screen? */
+export function onThisSheet(state, entry) {
+  return (
+    state.step === "sheet" &&
+    entry.assessmentId === state.assessment_id &&
+    (state.rows || []).some((row) => row.student_membership_id === entry.studentMembershipId)
+  );
+}
+
+/**
+ * One outbox answer, drawn. `entries` is the outbox after the answer was
+ * settled, which says what is now kept for the cell: the teacher's latest
+ * value, which may be one typed while the attempt was out.
+ */
+export function afterSend(state, entries, entry, answer) {
+  if (!onThisSheet(state, entry)) return state;
+  const id = entry.studentMembershipId;
+  const left = entries.find((e) => e.cell === entry.cell);
+  const typed = left ? left.value : entry.value;
+
+  if (answer.landed) {
+    const landed = applySave(state, id, { ok: true, cell: answer.cell }, typed);
+    // A value typed while this one was out is a write of its own, still queued.
+    return left ? queued(landed, id, left.value) : landed;
+  }
+  if (answer.held) return held(state, id, answer, typed);
+  if (answer.stop === STOPPED.SESSION) {
+    return applySave(state, id, { ok: false, refusal: answer.refusal || REFUSAL.EXPIRED, body: {} }, typed);
+  }
+  return applySave(state, id, { ok: false, refusal: REFUSAL.BROKEN, body: {} }, typed);
+}
+
+/**
+ * The sheet as the server drew it, with this teacher's outbox drawn over it:
+ * every value not yet sent, and every value refused and not yet dismissed
+ * (requirement 8). What a page load forgot, the phone kept.
+ */
+export function withOutbox(state, entries, { now = Date.now() } = {}) {
+  let drawn = state;
+  for (const entry of entries) {
+    if (!onThisSheet(drawn, entry)) continue;
+    const id = entry.studentMembershipId;
+    const typed = entry.next === null || entry.next === undefined ? entry.value : entry.next;
+    if (entry.held) {
+      // The row is fresh from the server, so for a conflict it already shows
+      // whatever is there now — which is what the teacher must see beside theirs.
+      const row = drawn.rows.find((r) => r.student_membership_id === id);
+      const current =
+        row.value === null || row.value === undefined
+          ? null
+          : { student_membership_id: id, value: row.value, version: row.version };
+      const closedTheSheet = [HELD.LOCKED, HELD.FORBIDDEN, HELD.REFUSED].includes(entry.held.kind);
+      drawn = closedTheSheet
+        ? heldBefore(drawn, id, entry.held, typed)
+        : held(drawn, id, { ...entry.held, held: entry.held.kind, current }, typed);
+    } else {
+      drawn = queued(drawn, id, typed);
+    }
+    if (isOverdue(entry, now)) drawn = overdue(drawn, id);
+  }
+  return drawn;
+}
+
+/**
+ * A value in the outbox and not yet answered. In the box, with Try again, and
+ * with no Dismiss: it may already be on the wire, and a write that has left
+ * cannot be called back.
+ */
+function queued(state, id, value) {
+  return {
+    ...state,
+    notes: { ...state.notes, [id]: { kind: "queued", detail: "Not sent yet." } },
+    kept: { ...state.kept, [id]: { value, inBox: true, retry: true, queued: true } },
+  };
+}
+
+/** A final answer from the outbox, told to `applySave()` as a direct save's. */
+function held(state, id, answer, typed) {
+  switch (answer.held) {
+    case HELD.CONFLICT:
+      return applySave(state, id, { ok: false, outcome: SAVE.CONFLICT, body: { current: answer.current || null } }, typed);
+    case HELD.LOCKED:
+      return applySave(state, id, { ok: false, outcome: SAVE.LOCKED, body: { detail: answer.detail } }, typed);
+    case HELD.INVALID:
+      return applySave(state, id, { ok: false, outcome: SAVE.INVALID, body: { detail: answer.detail } }, typed);
+    case HELD.FORBIDDEN:
+      return applySave(state, id, { ok: false, refusal: REFUSAL.NOT_A_MARKER, body: { detail: answer.detail } }, typed);
+    default:
+      // Any other refusal: final, and nothing typed into the box would change it.
+      return {
+        ...state,
+        notes: {
+          ...state.notes,
+          [id]: {
+            kind: "unsaved",
+            detail: `Not saved: ${answer.detail || "the school's server refused it."} You entered ${typed}.`,
+          },
+        },
+        kept: { ...state.kept, [id]: { value: typed, inBox: false, retry: false } },
+      };
+  }
+}
+
+/**
+ * A value a lock, or a refusal of authority, stopped on an earlier page load.
+ *
+ * Not drawn as the refusal was live, because it closed the sheet then and the
+ * sheet as the server draws it now is what says whether it is closed. Still
+ * locked: the note, and the boxes stay shut. Sent back since, or the teacher's
+ * authority restored: the number is in the box with Try again, which sends it
+ * as it was first queued (`release()`).
+ */
+function heldBefore(state, id, hold, typed) {
+  const said = hold.detail ? ` ${hold.detail}` : "";
+  if (state.locked) {
+    return {
+      ...state,
+      notes: { ...state.notes, [id]: { kind: "unsaved", detail: `Not saved. You entered ${typed}.` } },
+      kept: { ...state.kept, [id]: { value: typed, inBox: false, retry: false } },
+    };
+  }
+  return {
+    ...state,
+    notes: {
+      ...state.notes,
+      [id]: { kind: "unsaved", detail: `Not saved when it was sent:${said} You entered ${typed}. Press Try again to send it now.` },
+    },
+    kept: { ...state.kept, [id]: { value: typed, inBox: true, retry: true } },
+  };
+}
+
+/** OPEN-3: seven days, then flagged. Never deleted by the page. */
+function overdue(state, id) {
+  const note = state.notes[id];
+  return {
+    ...state,
+    notes: { ...state.notes, [id]: { ...note, detail: `${note.detail} Entered more than seven days ago.` } },
+  };
+}
+
+/**
+ * Browsers that may delete what this page keeps. Safari, and every browser on
+ * an iPhone or iPad, which all run Safari's engine, clear a site's stored data
+ * after seven days of use without a visit to it (OPEN-6) — the same seven days
+ * a queued mark is allowed to wait.
+ */
+export function storageMayBeCleared(userAgent = "") {
+  if (/iPhone|iPad|iPod/.test(userAgent)) return true;
+  return /Safari\//.test(userAgent) && !/(Chrome|Chromium|CriOS|Edg|OPR|Android)/.test(userAgent);
+}
+
+/** What a cell's box was drawn with: the kept number when it is in the box. */
+function drawnValue(state, id) {
+  const kept = (state.kept || {})[id];
+  if (kept && kept.inBox) return kept.value;
+  const row = (state.rows || []).find((r) => r.student_membership_id === id);
+  return row ? row.value : null;
+}
+
 function replace(rows, id, cell) {
   return (rows || []).map((row) =>
     row.student_membership_id === id ? { ...row, ...cell } : row,
   );
 }
 
-/** The version a cell's next save claims: what it was drawn with, or null. */
-function versionOf(state, id) {
-  const row = (state.rows || []).find((r) => r.student_membership_id === id);
-  return row && row.version !== null && row.version !== undefined ? row.version : null;
-}
-
-export async function mount(root, { fetchImpl = fetch } = {}) {
+/**
+ * Draw the page into `root` and wire it.
+ *
+ * Everything the outbox needs from the browser is a parameter, so the tests
+ * can hand it a store, a host and a clock: `openStore` is IndexedDB, `host` is
+ * the school's (`outboxName()`), `schedule` is the backoff timer, `whenOnline`
+ * is the browser's `online` event.
+ */
+export async function mount(
+  root,
+  {
+    fetchImpl = fetch,
+    host = root.dataset.host || (typeof location !== "undefined" ? location.host : ""),
+    openStore = indexedDbStore,
+    userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
+    schedule = (run, ms) => setTimeout(run, ms),
+    whenOnline = (run) => {
+      if (typeof window !== "undefined") window.addEventListener("online", run);
+    },
+    now = Date.now,
+    mint = newKey,
+  } = {},
+) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
   let signOutFailed = false;
   let where = null;
   let picked = { assessmentId: null, classGroupId: null };
+  let outbox = null;
+  let owner = null;
+  let warnings = [];
+  let failures = 0;
+  let draining = null;
+  let again = false;
+  let freshToken = false;
+  let retrying = false;
+  let stale = false;
 
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
@@ -218,29 +436,134 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const openSheet = async () => {
     if (!picked.assessmentId || !picked.classGroupId) return;
     state = fromSheet(await fetchSheet({ ...picked, fetchImpl }));
+    if (state.step === "sheet") {
+      state = { ...state, warnings };
+      if (outbox) state = withOutbox(state, await outbox.read(), { now: now() });
+    }
     draw();
   };
 
-  const save = async (id, value, expectedVersion) => {
-    state = applySave(
-      state,
-      id,
-      await saveScore({
-        assessmentId: picked.assessmentId,
-        studentMembershipId: id,
-        value,
-        expectedVersion,
-        fetchImpl,
-      }),
-      value,
-    );
-    draw();
+  /**
+   * Drain the outbox, one drain at a time. A kick that arrives while a drain
+   * runs is not dropped: that drain may already have found the queue empty, so
+   * it goes round again.
+   */
+  const kick = () => {
+    if (!outbox) return Promise.resolve(null);
+    if (draining) {
+      again = true;
+      return draining;
+    }
+    draining = (async () => {
+      let stopped;
+      do {
+        again = false;
+        if (freshToken) {
+          // D7: after an outage or a sign-in, the CSRF token is fetched afresh
+          // before the first write rather than found stale by it.
+          try {
+            await csrfToken({ fetchImpl, refresh: true });
+            freshToken = false;
+          } catch {
+            // No connection yet. The drain finds that out and says so.
+          }
+        }
+        stopped = await drain({
+          outbox,
+          owner,
+          whoIsSignedIn: () => whoIsSignedIn({ fetchImpl }),
+          send: (entry) => sendQueued(entry, { fetchImpl }),
+          onChange: (entries, entry, answer) => {
+            state = afterSend(state, entries, entry, answer);
+            // A resent write that landed may be answered from its receipt,
+            // which says what the *first* arrival did (`sync/receipts.py`),
+            // not what the cell holds now. The sheet is asked again once the
+            // drain is done, rather than trusting that answer as current.
+            if (answer.landed && entry.sent) stale = true;
+            draw();
+          },
+          now,
+          mint,
+        });
+      } while (again && stopped === STOPPED.EMPTY);
+      return stopped;
+    })().catch((error) => {
+      // The browser refused to keep the outbox — a full disk, storage cleared
+      // under the page. Said in the console and not swallowed; and the next
+      // kick starts afresh rather than finding this one still running.
+      console.error("The marks outbox could not be kept.", error);
+      return null;
+    });
+
+    return draining.then(async (stopped) => {
+      draining = null;
+      if (stale) {
+        stale = false;
+        if (state.step === "sheet") await openSheet();
+      }
+      if (stopped === STOPPED.OFFLINE) {
+        failures += 1;
+        freshToken = true;
+        // One retry waiting at a time. Every blur while offline ends in this
+        // branch, and a timer each would be a polling loop per mark typed.
+        if (!retrying) {
+          retrying = true;
+          schedule(() => {
+            retrying = false;
+            return kick();
+          }, retryDelay(failures));
+        }
+      } else {
+        failures = 0;
+      }
+      if (stopped === STOPPED.SESSION) freshToken = true;
+      if (stopped === STOPPED.NOT_A_MARKER && state.step === "sheet" && !state.locked) {
+        // As a 403 on a write closes the boxes (`applySave()`), and the marks
+        // not yet sent stay queued: whoever this is, nothing is final for them.
+        state = {
+          ...state,
+          locked: true,
+          locked_reason:
+            "The account signed in here cannot enter marks at this school now. The school " +
+            "office can say why. Marks not yet sent are kept on this phone.",
+        };
+        draw();
+      }
+      if (state.step === "sheet") {
+        const notTheAuthor = stopped === STOPPED.NOT_THE_AUTHOR;
+        if (Boolean(state.notTheAuthor) !== notTheAuthor) {
+          state = { ...state, notTheAuthor };
+          draw();
+        }
+      }
+      return stopped;
+    });
   };
 
   const whereAnswer = await fetchWhere({ fetchImpl });
-  if (whereAnswer.ok) where = whereAnswer.body;
+  if (whereAnswer.ok) {
+    where = whereAnswer.body;
+    owner = where.user_id;
+    const name = outboxName(host, owner);
+    const kept = await openStore(name);
+    outbox = openOutbox(kept || memoryStore(name));
+    if (!kept) {
+      warnings = [
+        "This browser is not keeping marks that have not been sent. " +
+          "Keep this page open until every mark on it is saved.",
+      ];
+    } else if (storageMayBeCleared(userAgent)) {
+      warnings = [
+        "On this browser, marks that have not been sent can be deleted if this " +
+          "site is not opened for seven days. Chrome on Android keeps them.",
+      ];
+    }
+  }
   state = fromWhere(whereAnswer);
   draw();
+  whenOnline(() => kick());
+  // Whatever an earlier page load left queued goes now, if it can.
+  await kick();
 
   // Delegated from the root: every state is redrawn wholesale, so a listener
   // bound to an input would be bound to a node about to be replaced.
@@ -278,25 +601,28 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       return;
     }
     if (action === "dismiss" && state.step === "sheet") {
-      state = dismiss(state, Number(hit.dataset.child));
+      const id = Number(hit.dataset.child);
+      const cell = cellOf(picked.assessmentId, id);
+      const left = await outbox.update((entries) => dismissQueued(entries, cell));
+      state = withOutbox(dismiss(state, id), left.filter((entry) => entry.cell === cell), { now: now() });
       draw();
       return;
     }
     if (action === "retry" && state.step === "sheet" && !state.locked) {
-      const id = Number(hit.dataset.child);
-      const held = (state.kept || {})[id];
-      if (!held || !held.retry) return;
-      await save(id, held.value, versionOf(state, id));
+      const cell = cellOf(picked.assessmentId, Number(hit.dataset.child));
+      await outbox.update((entries) => release(entries, cell, { mint }));
+      await kick();
     }
   });
 
   // **The blur is the save.** `change` would not fire for a cell retyped to
   // the same value, and `input` would fire per keystroke — thirty requests for
-  // one two-digit mark.
+  // one two-digit mark. What it does now is queue the write and kick the
+  // outbox, which sends it straight away when it can.
   root.addEventListener("blur", async (event) => {
     const field = event.target;
     if (!field || !field.dataset || field.dataset.child === undefined) return;
-    if (state.step !== "sheet" || state.locked) return;
+    if (state.step !== "sheet" || state.locked || !outbox) return;
 
     const id = Number(field.dataset.child);
     const raw = String(field.value).trim();
@@ -305,7 +631,30 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (raw === "") return;
 
     const version = field.dataset.version;
-    await save(id, Number(raw), version === "" ? null : Number(version));
+    const value = Number(raw);
+    // Tabbing through a cell that holds a kept value is not a decision about
+    // it. The box shows either the kept number or the server's, and sending
+    // back what it was drawn with would replace the kept one with nobody
+    // having chosen to (requirement 8).
+    const kept = (state.kept || {})[id];
+    if (kept && value === drawnValue(state, id)) return;
+    await outbox.update((entries) =>
+      enqueue(
+        entries,
+        {
+          assessmentId: picked.assessmentId,
+          studentMembershipId: id,
+          value,
+          expectedVersion: version === "" ? null : Number(version),
+        },
+        { now: now(), mint },
+      ),
+    );
+    // Drawn as queued before it goes, so a redraw while it is on the wire —
+    // the next cell's blur — shows the teacher's number and not the old one.
+    state = queued(state, id, value);
+    draw();
+    await kick();
   }, true);
 
   return state;
