@@ -50,13 +50,16 @@ from accounts import bulk, guardian_contacts
 from accounts import services as accounts_services
 from accounts.models import (
     LIVE_STATUSES,
+    ContactChannel,
     GuardianAccount,
+    GuardianContact,
     Guardianship,
     Membership,
     Relationship,
     Role,
 )
 from accounts.session import session_auth
+from messaging import codes as message_codes
 
 router = Router(auth=session_auth)
 
@@ -511,6 +514,30 @@ class GuardianOut(Schema):
     relationship: str
     status: str
     channel: str
+    #: The channels this school may see, each with what it can do about them.
+    #: Before the guardian is live here that is only what this school typed
+    #: (#135); once live, each channel they hold, an email and a phone at most
+    #: (#111).
+    channels: List["ChannelOut"] = []
+
+
+class ChannelOut(Schema):
+    """One channel on the panel, and whether this school can send it a code.
+
+    `state` is in the office's words and follows `GuardianOut.channel`'s rule:
+    `not verified here` until the guardian is live here, whatever the channel is
+    elsewhere. `last_message` is what happened to the last code **this school**
+    sent it, from `messaging.codes.last_message()`, or empty.
+    """
+
+    channel_type: str
+    value: str
+    state: str
+    last_message: str = ""
+    may_send: bool = False
+
+
+GuardianOut.model_rebuild()
 
 
 class GuardiansOut(Schema):
@@ -526,6 +553,16 @@ class LinkIn(Schema):
     full_name: str
     contact: str
     relationship: str = Relationship.GUARDIAN
+
+
+class SendCodeIn(Schema):
+    #: Which of a live guardian's channels. Ignored before they are live here,
+    #: when the only channel this school may address is the one it typed.
+    channel_type: Optional[str] = None
+
+
+class ContactIn(Schema):
+    contact: str
 
 
 def _child_here(school, student_membership_id):
@@ -548,9 +585,64 @@ def _child_here(school, student_membership_id):
     )
 
 
+def _typed_contact(link):
+    """The guardian's unrevoked channel whose value is what this school typed, or None."""
+    if not link.entered_contact:
+        return None
+    return (
+        GuardianContact.objects.filter(
+            guardian__user=link.guardian,
+            value=link.entered_contact,
+            revoked_at__isnull=True,
+        )
+        .order_by("created_at", "id")
+        .first()
+    )
+
+
+def _channels_out(link, school, live):
+    """`ChannelOut` rows for this link, as this school may see them."""
+    if not live:
+        typed = _typed_contact(link)
+        if typed is None:
+            return []
+        return [
+            ChannelOut(
+                channel_type=typed.channel_type,
+                value=link.entered_contact,
+                state="not verified here",
+                last_message=message_codes.last_message(typed, school.pk),
+                may_send=True,
+            )
+        ]
+    account = GuardianAccount.objects.filter(user=link.guardian).first()
+    rows = []
+    for contact in account.live_contacts() if account is not None else []:
+        dormant = contact.verified_at is not None and guardian_contacts.is_dormant(contact)
+        if dormant:
+            state = "dormant"
+        elif contact.verified_at is not None:
+            state = "verified"
+        else:
+            state = "not verified"
+        rows.append(
+            ChannelOut(
+                channel_type=contact.channel_type,
+                value=contact.value,
+                state=state,
+                last_message=message_codes.last_message(contact, school.pk),
+                # A live, current channel needs nothing from the school: the
+                # guardian asks for their own sign-in code.
+                may_send=state != "verified",
+            )
+        )
+    return rows
+
+
 def _guardian_out(link, school) -> GuardianOut:
     status = guardian_contacts.link_status_at(link.guardian, school)
     live = status == guardian_contacts.LIVE
+    channels = _channels_out(link, school, live)
     if not live:
         name, contact = link.entered_name, link.entered_contact
         channel = "not verified here" if contact else "no contact recorded here"
@@ -558,17 +650,9 @@ def _guardian_out(link, school) -> GuardianOut:
         name = link.entered_name or link.guardian.full_name
         # A read, not `guardian_account_for()`: that one creates the account,
         # and a GET that writes a row is a GET nobody can reason about.
-        account = GuardianAccount.objects.filter(user=link.guardian).first()
-        account_contact = account.live_contact() if account is not None else None
-        contact = link.entered_contact or (account_contact.value if account_contact else "")
-        if account_contact is None:
-            channel = "no contact recorded"
-        elif guardian_contacts.is_dormant(account_contact):
-            channel = "dormant"
-        elif account_contact.verified_at is not None:
-            channel = "verified"
-        else:
-            channel = "not verified"
+        first = channels[0] if channels else None
+        contact = link.entered_contact or (first.value if first else "")
+        channel = first.state if first else "no contact recorded"
     return GuardianOut(
         link_id=link.pk,
         name=name,
@@ -576,6 +660,7 @@ def _guardian_out(link, school) -> GuardianOut:
         relationship=link.relationship,
         status=status,
         channel=channel,
+        channels=channels,
     )
 
 
@@ -620,8 +705,8 @@ def link(request, student_membership_id: int, payload: LinkIn):
     Through `guardian_contacts.link_by_contact_as()`, the same code path the
     bulk import takes, so a guardian entered here and one entered in a file are
     one record with one channel. The link starts **pending verification** and
-    stays so until the guardian answers this school (#135); sending them the
-    code that asks is PR D, once there is a way to deliver one.
+    stays so until the guardian answers this school (#135); `send_code()`
+    below is how this school asks.
 
     Answers with the whole panel, because a link can change what the rest of
     it says — a sibling's guardian becoming this child's too.
@@ -655,6 +740,131 @@ def link(request, student_membership_id: int, payload: LinkIn):
     except ValidationError as exc:
         return 422, MessageOut(detail=_first(exc))
 
+    return 201, _guardians_of(child, school, True)
+
+
+def _link_here(child, link_id):
+    return (
+        Guardianship.objects.select_related("guardian")
+        .filter(pk=link_id, student=child)
+        .first()
+    )
+
+
+_NOTHING_TYPED = (
+    "This school has no phone number or email typed for this guardian, so there "
+    "is nowhere to send a code. Remove the link and link them again with one."
+)
+_LIVE_ALREADY = (
+    "They are live here already. They sign in with a code they ask for "
+    "themselves, on the sign-in page."
+)
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/guardians/{int:link_id}/send-code/",
+    response={200: GuardiansOut, 403: MessageOut, 404: MessageOut, 422: MessageOut, 429: MessageOut},
+)
+def send_code(request, student_membership_id: int, link_id: int, payload: SendCodeIn):
+    """Send a guardian this school's code. ADMIN alone. `docs/messaging.md` D8.
+
+    **Which code is the channel's own state, and the office is not asked.** An
+    unverified channel gets a channel check (door one), a dormant phone a
+    reactivation code (door three), and a proved channel whose guardian has not
+    yet answered this school gets this school's own code (door four, #135).
+    Answering any of them at the sign-in page turns the link live here.
+
+    **Before the guardian is live here, the only channel addressable is the one
+    this school typed**, and the answer does not say which door was used: the
+    difference would tell an office whether a number belongs to a parent
+    somewhere else, which #135 keeps from it.
+
+    The code is sent after this commits (`messaging.codes`), so the panel that
+    comes back says "waiting to be sent" rather than the outcome.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    child = _child_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    link = _link_here(child, link_id)
+    if link is None:
+        return 404, MessageOut(detail=_NO_SUCH_LINK)
+
+    live = guardian_contacts.link_status_at(link.guardian, school) == guardian_contacts.LIVE
+    if live:
+        account = GuardianAccount.objects.filter(user=link.guardian).first()
+        channel_type = payload.channel_type or ContactChannel.PHONE
+        if channel_type not in ContactChannel.values:
+            return 422, MessageOut(detail=f"{channel_type!r} is not a kind of contact.")
+        contact = account.live_contact(channel_type) if account is not None else None
+    else:
+        contact = _typed_contact(link)
+    if contact is None:
+        return 422, MessageOut(detail=_NOTHING_TYPED)
+
+    try:
+        with transaction.atomic():
+            if contact.verified_at is None:
+                guardian_contacts.request_verification_as(request.user, contact, school=school)
+            elif guardian_contacts.is_dormant(contact):
+                guardian_contacts.request_reactivation_as(request.user, contact, school=school)
+            elif not live:
+                guardian_contacts.request_school_answer_as(request.user, contact, school=school)
+            else:
+                return 422, MessageOut(detail=_LIVE_ALREADY)
+    except guardian_contacts.VerificationRateLimited as exc:
+        minutes = max(1, round(exc.retry_after / 60))
+        return 429, MessageOut(
+            detail=f"Too many codes have gone out to this contact or from this school "
+            f"just now. Try again in {minutes} minute{'s' if minutes != 1 else ''}."
+        )
+    except accounts_services.NotPermitted:
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    except guardian_contacts.GuardianContactError as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _guardians_of(child, school, True)
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/guardians/{int:link_id}/contacts/",
+    response={201: GuardiansOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def add_contact(request, student_membership_id: int, link_id: int, payload: ContactIn):
+    """Give a live guardian their other channel: an email beside a phone, or the reverse. #111.
+
+    **Live here only.** Before the guardian has answered this school, what they
+    hold is not this school's to know, and "they already have an email" would
+    tell it. A second channel of a type they hold is refused: replacing one is
+    D11's change flow, not this.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    child = _child_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    link = _link_here(child, link_id)
+    if link is None:
+        return 404, MessageOut(detail=_NO_SUCH_LINK)
+    if guardian_contacts.link_status_at(link.guardian, school) != guardian_contacts.LIVE:
+        return 422, MessageOut(
+            detail="They have to answer this school before another contact can be added."
+        )
+    read = guardian_contacts.read_contact(payload.contact)
+    if read is None:
+        return 422, MessageOut(detail=f"{payload.contact!r} is neither a phone number nor an email address.")
+
+    try:
+        with transaction.atomic():
+            guardian_contacts.record_contact_as(request.user, link.guardian, *read)
+    except guardian_contacts.GuardianContactError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except accounts_services.NotPermitted:
+        return 403, MessageOut(detail=_MAY_NOT_LINK)
+    except ValidationError as exc:
+        return 422, MessageOut(detail=_first(exc))
     return 201, _guardians_of(child, school, True)
 
 

@@ -339,7 +339,8 @@ def activate_guardian_links(guardian, school):
     at once — so a code St Mary's sent, answered for St Mary's, also opened
     whatever child Grace had linked to that number, typo or not. The guardian
     said yes to one school, and one school is what goes live. Grace asks for
-    its own answer; PR D is the door that asks.
+    its own answer; code delivery's fourth door
+    (`guardian_contacts.request_school_answer()`) is how it asks.
 
     **INVITED only, never SUSPENDED.** A suspension is somebody's decision about
     this person, and a verified channel is not an answer to it — promoting a

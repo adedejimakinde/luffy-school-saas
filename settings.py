@@ -99,6 +99,9 @@ SHARED_APPS = [
     "django_tenants",
     "schools",
     "accounts",
+    # Codes and the fake provider's outbox are the platform's, not a school's:
+    # docs/messaging.md, and messaging/models.py.
+    "messaging",
     "django.contrib.contenttypes",
     "django.contrib.auth",
     "django.contrib.sessions",
@@ -254,7 +257,13 @@ if TLS_TERMINATED_BY_PROXY:
 #: any timescale this project controls. Off deliberately, not by omission — and
 #: silenced so that `check --deploy --fail-level WARNING` can gate CI on every
 #: *other* warning.
-SILENCED_SYSTEM_CHECKS = ["security.W021"]
+#:
+#: `messaging.W001` is "no phone message provider", and it is true: no real
+#: provider exists yet (parent-access OPEN-5, `docs/messaging.md` M6), so a
+#: production deploy cannot send a code to a phone. Silenced so CI can gate on
+#: every other warning, and **to be removed in the same change that names a real
+#: phone provider in `deploy/production.env`**.
+SILENCED_SYSTEM_CHECKS = ["security.W021", "messaging.W001"]
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -479,6 +488,27 @@ PUBLIC_SCHEMA_URLCONF = "urls_public"
 INVITATION_CHANNEL = os.environ.get(
     "INVITATION_CHANNEL", "schools.delivery.EmailChannel"
 )
+
+# ---------------------------------------------------------------------------
+# Messaging: how a code, a notice or a reminder reaches a family.
+#
+# One provider per contact channel type, as a dotted path (docs/messaging.md
+# D1). Whether a phone message goes by SMS or WhatsApp is the phone provider's
+# business, so choosing (parent-access OPEN-5) is a new class and this line.
+#
+# **Development gets the fake, and nothing else does.** With DEBUG off and no
+# provider named, a channel type has none: a send is refused with a sentence,
+# never dropped. `messaging.E001` refuses a deploy that names the fake with DEBUG
+# off, because the fake stores codes in the clear (D2). The test suite runs with
+# DEBUG off, as CI does, and switches the fake on per test.
+# ---------------------------------------------------------------------------
+_FAKE_PROVIDER = "messaging.fake.FakeProvider"
+MESSAGING_PROVIDERS = {
+    "email": os.environ.get("MESSAGING_EMAIL_PROVIDER", "").strip()
+    or (_FAKE_PROVIDER if DEBUG else ""),
+    "phone": os.environ.get("MESSAGING_PHONE_PROVIDER", "").strip()
+    or (_FAKE_PROVIDER if DEBUG else ""),
+}
 
 #: Where the accept page lives, as a template containing `{token}`.
 #:

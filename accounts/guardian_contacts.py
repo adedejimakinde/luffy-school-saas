@@ -16,9 +16,9 @@ enumeration, and no "we have sent you a code". `resolve_guardians()` is the only
 entry point that accepts a raw value, it is a read, and it returns an empty
 queryset rather than creating a guardian to match.
 
-## Three doors, and the channel's own state is which one you are at
+## Four doors, and the channel's own state is which one you are at
 
-There is exactly one reason a code is ever minted, and three situations it is
+There is exactly one reason a code is ever minted, and four situations it is
 minted in. They share `_mint_code()` — the rate limit, the supersede sweep, the
 digest — and differ only in what state they require the channel to be in:
 
@@ -27,10 +27,19 @@ digest — and differ only in what state they require the channel to be in:
 | `request_verification` | unverified | a school admin | their school |
 | `request_sign_in_code`  | verified, not dormant | the guardian, unauthenticated | no school |
 | `request_reactivation`  | verified, **dormant** | a school admin | their school |
+| `request_school_answer` | verified, not dormant | a school admin (#135) | their school |
+
+**Every door sends what it mints** (`docs/messaging.md` D8): `_mint_and_deliver()`
+queues the code for the provider of the channel's type once the door's
+transaction commits. A code a school asked for — doors one, three and four —
+answered, is the guardian answering that school, and turns their links there
+live.
 
 **A code carries no purpose column, deliberately.** The channel is verified or
-it is not, so at any moment at most one of these doors can have a pending code,
-and the state is a better answer than a column that could disagree with it.
+it is not, and `_mint_code()` spends whatever was pending before, so at any
+moment a channel holds one pending code. The state says which confirm door
+answers it, and `requested_by_school` says whether answering it answers a
+school. That is a better answer than a column that could disagree with both.
 `_confirm_code()`'s `expect_verified` is what turns "at most one" from likely
 into true: without it a verification code could be spent at the sign-in door and
 open a session on a channel whose `verified_at` was still NULL.
@@ -84,6 +93,8 @@ from django.utils import timezone
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from messaging.codes import deliver_code
+from messaging.kinds import Kind
 
 from .identifiers import normalize_email, try_normalize_phone
 from .models import (
@@ -116,14 +127,15 @@ class GuardianContactError(Exception):
 
 
 class ChannelAlreadyRecorded(GuardianContactError):
-    """This guardian already has a live channel.
+    """This guardian already has a live channel of this type.
 
-    Replacing one is D11's change flow — revoke the old binding, verify the new
-    — and that is the next slice, not this one. Refused here rather than
-    silently creating a second live channel, which would leave two rows
-    disagreeing about how to reach one person. `one_live_contact_per_guardian`
-    refuses the same thing at the database, and the two agree by construction:
-    this asks `live_contact()`, the constraint indexes `revoked_at IS NULL`.
+    One of each type may be live, an email and a phone (#111). A second of the
+    same type is refused: replacing one is D11's change flow — revoke the old
+    binding, verify the new — not an addition, which would leave two rows
+    disagreeing about how to reach one person by one means.
+    `one_live_contact_per_guardian_per_channel` refuses the same thing at the
+    database, and the two agree by construction: this asks `live_contact(type)`,
+    the constraint indexes `revoked_at IS NULL` per type.
     """
 
 
@@ -270,6 +282,28 @@ def _require_authority_over_guardian(actor, guardian_user):
     )
 
 
+def _require_authority_over_guardian_at(actor, guardian_user, school):
+    """`_require_authority_over_guardian()`, at the school the actor is working in.
+
+    Returns that school's id. A code sent from a school's own screen has to be
+    counted against, and answered for, **that** school: answering it is what
+    turns the guardian's links there live (`confirm_verification()`). The
+    unqualified check takes the first school the actor has authority at, which
+    for an admin at two schools could be the other one.
+    """
+    school_id = getattr(school, "pk", school)
+    if not getattr(actor, "is_platform_staff", False) and not can_grant_memberships(
+        actor, school_id
+    ):
+        raise NotPermitted(f"{actor} cannot send codes at this school.")
+    has_a_child_here = Guardianship.objects.filter(
+        guardian=guardian_user, student__school_id=school_id, student__status__in=LIVE_STATUSES
+    ).exists()
+    if not has_a_child_here:
+        raise NotPermitted(f"{guardian_user} is not a guardian at this school.")
+    return school_id
+
+
 @transaction.atomic
 def record_contact(guardian_account, channel_type, value, *, created_by):
     """Write down a channel for a guardian. Unverified — it opens nothing yet.
@@ -278,9 +312,10 @@ def record_contact(guardian_account, channel_type, value, *, created_by):
     what lands in the column is E.164 or a lowercased address, never what was
     typed.
     """
-    if guardian_account.live_contact() is not None:
+    if guardian_account.live_contact(channel_type) is not None:
         raise ChannelAlreadyRecorded(
-            f"{guardian_account.user} already has a live contact channel."
+            f"{guardian_account.user} already has a live "
+            f"{ContactChannel(channel_type).label.lower()} channel."
         )
     contact = GuardianContact(
         guardian=guardian_account,
@@ -388,10 +423,11 @@ def link_by_contact_as(
     **Authority before anything is created**, so a refused call leaves no
     account behind.
 
-    **The channel is recorded only if the guardian has none.** One found by an
-    identifier with a channel of their own keeps it: changing a guardian's
-    channel is D11's clerical flow, with its own verification, and not a side
-    effect of a school typing a number.
+    **The channel is recorded only if the guardian has none of its type.** One
+    found by an identifier with a phone of their own keeps it when a school types
+    a phone: changing a guardian's channel is D11's clerical flow, with its own
+    verification, and not a side effect of a school typing a number. A school
+    typing an email for a guardian who holds only a phone adds the email (#111).
 
     The link starts INVITED and stays so until the guardian answers this
     school — `services.link_guardian()`, and #135 for why. What the school
@@ -413,7 +449,7 @@ def link_by_contact_as(
         entered_name=full_name,
         entered_contact=value,
     )
-    if guardian_account_for(guardian).live_contact() is None:
+    if guardian_account_for(guardian).live_contact(channel_type) is None:
         record_contact_as(actor, guardian, channel_type, value)
     return link
 
@@ -608,6 +644,18 @@ def _mint_code(contact, *, school_id, ttl):
     return code, raw_code
 
 
+def _mint_and_deliver(contact, kind, *, school_id, ttl):
+    """`_mint_code()`, and the code queued for its provider once this commits.
+
+    Every door goes through here, so no door can mint a code and forget to send
+    it. The raw code is still returned: the test suite answers codes with it,
+    and it is never stored (`messaging.codes`, `messaging.seal`).
+    """
+    code, raw_code = _mint_code(contact, school_id=school_id, ttl=ttl)
+    deliver_code(code, raw_code, kind)
+    return code, raw_code
+
+
 @transaction.atomic
 def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TTL):
     """Door one: prove a channel a school has just typed. Channel must be unverified.
@@ -621,20 +669,26 @@ def request_verification(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TT
         raise ChannelNotVerifiable("A revoked channel cannot be verified.")
     if contact.verified_at is not None:
         raise ChannelNotVerifiable("This channel is already verified.")
-    return _mint_code(contact, school_id=school_id, ttl=ttl)
+    return _mint_and_deliver(contact, Kind.CHANNEL_CHECK, school_id=school_id, ttl=ttl)
 
 
 @transaction.atomic
-def request_verification_as(actor, contact, *, ttl=DEFAULT_VERIFICATION_TTL):
+def request_verification_as(actor, contact, *, school=None, ttl=DEFAULT_VERIFICATION_TTL):
     """D10's send, by a school admin: the authorised way a code goes out.
 
     The school the authority was found at is what the send is counted against,
     so "may you send this?" and "whose sending rate is this?" are one question
-    asked once. A caller cannot name a different school than the one that
-    entitled them, because they never name one at all.
+    asked once. With `school`, the one the admin is working in, authority is
+    asked there and nowhere else (`_require_authority_over_guardian_at()`).
     """
-    school_id = _require_authority_over_guardian(actor, contact.guardian.user)
+    school_id = _authority(actor, contact, school)
     return request_verification(contact, school_id=school_id, ttl=ttl)
+
+
+def _authority(actor, contact, school):
+    if school is None:
+        return _require_authority_over_guardian(actor, contact.guardian.user)
+    return _require_authority_over_guardian_at(actor, contact.guardian.user, school)
 
 
 @transaction.atomic
@@ -658,7 +712,7 @@ def request_sign_in_code(contact, *, ttl=DEFAULT_VERIFICATION_TTL):
             "This channel has not been used inside the dormancy window.",
             last_authenticated_at=last_authenticated_at(contact),
         )
-    return _mint_code(contact, school_id=None, ttl=ttl)
+    return _mint_and_deliver(contact, Kind.SIGN_IN_CODE, school_id=None, ttl=ttl)
 
 
 @transaction.atomic
@@ -682,19 +736,50 @@ def request_reactivation(contact, *, school_id=None, ttl=DEFAULT_VERIFICATION_TT
         raise ChannelNotLive("This channel is not verified, so it opens nothing.")
     if not is_dormant(contact):
         raise ChannelNotDormant("This channel is not dormant; nothing to reactivate.")
-    return _mint_code(contact, school_id=school_id, ttl=ttl)
+    return _mint_and_deliver(contact, Kind.REACTIVATION, school_id=school_id, ttl=ttl)
 
 
 @transaction.atomic
-def request_reactivation_as(actor, contact, *, ttl=DEFAULT_VERIFICATION_TTL):
+def request_reactivation_as(actor, contact, *, school=None, ttl=DEFAULT_VERIFICATION_TTL):
     """D9's school-side reactivation, by an admin with authority over the guardian.
 
     Same authority check and same budget as `request_verification_as()`, for the
     same reason: the school that was entitled to act is the school the send is
     counted against.
     """
-    school_id = _require_authority_over_guardian(actor, contact.guardian.user)
+    school_id = _authority(actor, contact, school)
     return request_reactivation(contact, school_id=school_id, ttl=ttl)
+
+
+@transaction.atomic
+def request_school_answer(contact, *, school_id, ttl=DEFAULT_VERIFICATION_TTL):
+    """Door four: a school asking a guardian whose channel is already proved. #135.
+
+    A link goes live at a school only when the guardian answers *that* school,
+    so a parent verified at St Mary's and linked at Grace waits at Grace until
+    Grace asks. This is the asking: Grace's own code, sent to the proved
+    channel, counted against Grace. Answering it at the sign-in door is what
+    turns the Grace link live (`confirm_sign_in_code()`).
+
+    The channel must be live and not dormant. A dormant one needs door three
+    first, which is the human step D9 puts in front of a number that may have
+    changed hands, and a school asking it to answer would skip that step.
+    """
+    if not contact.is_live:
+        raise ChannelNotLive("This channel is not verified; send it a channel check instead.")
+    if is_dormant(contact):
+        raise ChannelDormant(
+            "This channel has not been used inside the dormancy window.",
+            last_authenticated_at=last_authenticated_at(contact),
+        )
+    return _mint_and_deliver(contact, Kind.SCHOOL_ANSWER, school_id=school_id, ttl=ttl)
+
+
+@transaction.atomic
+def request_school_answer_as(actor, contact, *, school, ttl=DEFAULT_VERIFICATION_TTL):
+    """Door four for an admin, at the school they are working in, which is required."""
+    school_id = _require_authority_over_guardian_at(actor, contact.guardian.user, school)
+    return request_school_answer(contact, school_id=school_id, ttl=ttl)
 
 
 # -- answering a code --------------------------------------------------------
@@ -779,8 +864,13 @@ def _confirm_code(contact, raw_code, *, expect_verified: bool):
 
 
 @transaction.atomic
-def confirm_verification(contact, raw_code) -> bool:
-    """Prove control of `contact` with `raw_code`. True if the channel is now verified.
+def confirm_verification_code(contact, raw_code):
+    """Prove control of `contact` with `raw_code`. Returns the answered code, or None.
+
+    The code row rather than a bare `True`, for `confirm_sign_in_code()`'s
+    reason: the sign-in door answers a channel check too (door one, delivered
+    since `docs/messaging.md` M1), and the session it opens records which
+    answered code proved the handset.
 
     The `verified_at` stamp is the whole of what this adds to `_confirm_code()`,
     and it is unconditional: `expect_verified=False` has already refused a
@@ -807,7 +897,7 @@ def confirm_verification(contact, raw_code) -> bool:
     """
     result = _confirm_code(contact, raw_code, expect_verified=False)
     if result is None:
-        return False
+        return None
 
     locked, code = result
     locked.verified_at = code.confirmed_at
@@ -815,7 +905,12 @@ def confirm_verification(contact, raw_code) -> bool:
     contact.verified_at = locked.verified_at
     if code.requested_by_school_id is not None:
         activate_guardian_links(locked.guardian.user, code.requested_by_school_id)
-    return True
+    return code
+
+
+def confirm_verification(contact, raw_code) -> bool:
+    """`confirm_verification_code()`, answered as a yes or a no."""
+    return confirm_verification_code(contact, raw_code) is not None
 
 
 @transaction.atomic
@@ -834,7 +929,12 @@ def confirm_sign_in_code(contact, raw_code):
     result = _confirm_code(contact, raw_code, expect_verified=True)
     if result is None:
         return None
-    _, code = result
+    locked, code = result
+    # A code a school asked for — door three or door four — is the guardian
+    # answering that school, as a channel check is in `confirm_verification()`.
+    # A plain sign-in code has no school behind it and opens nothing new.
+    if code.requested_by_school_id is not None:
+        activate_guardian_links(locked.guardian.user, code.requested_by_school_id)
     return code
 
 

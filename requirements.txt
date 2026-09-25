@@ -35,3 +35,9 @@ gunicorn>=22.0
 # Error reports (decided 2026-09-23: Sentry, EU region, personal data off).
 # Inert unless SENTRY_DSN is set — settings.py and schools/errors.py.
 sentry-sdk[django,celery]>=2.0
+
+# A sign-in or verification code crosses the Celery broker on its way to a
+# provider, and a code is never to be at rest in the clear (docs/messaging.md
+# D6): Redis may write its messages to disk. Fernet seals it — authenticated,
+# and dead when the code is — rather than a cipher written here.
+cryptography>=42

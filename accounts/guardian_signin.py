@@ -208,30 +208,35 @@ def _note_success(value: str) -> None:
     throttling.clear(SignInScope.CHANNEL, value)
 
 
-def _live_contacts_for(value: str):
-    """The contact rows `value` could open, oldest first.
+def _contacts_typed(value: str):
+    """The unrevoked contact rows whose value **is** what was typed, oldest first.
 
-    Ordered so that a shared handset produces the same offer twice running. The
-    rows, not the guardians, because the next thing done with them is minting
-    and spending codes — which is per row, since dormancy is per row.
+    **The row typed, never "every row of the guardians behind it"** (#111). A
+    guardian may hold a live email and a live phone, and a code goes to the one
+    they typed: through the other, a guardian typing their phone would be sent
+    the code by email and wait for an SMS that never comes, and a dormant phone
+    would open the door through the email, which is never dormant — D9's
+    reactivation step skipped without anyone deciding to skip it. Matching the
+    typed value is what makes both impossible rather than unlikely.
 
-    **This leans on `one_live_contact_per_guardian`, and would be wrong without
-    it.** `resolve_guardians()` answers who a value could reach, not which row
-    they typed; taking every live row of those guardians is the same set only
-    because each of them has exactly one. D11's change flow is a replacement and
-    keeps it that way — but if a guardian ever holds two live channels, this
-    would mint a guardian's sign-in code against whichever row is older, and a
-    dormant handset would open the door through a channel that is never dormant,
-    since dormancy is phone-only. So it is named here rather than rediscovered.
+    Normalised the way every contact is stored (`read_contact()`), so one
+    number typed two ways is one row. Ordered so that a shared handset produces
+    the same offer twice running.
     """
-    guardians = guardian_contacts.resolve_guardians(value)
+    read = guardian_contacts.read_contact(value)
+    if read is None:
+        return []
+    channel_type, normalized = read
     return list(
-        GuardianContact.objects.filter(
-            guardian__in=guardians,
-            verified_at__isnull=False,
-            revoked_at__isnull=True,
-        ).order_by("created_at", "id")
+        GuardianContact.objects.select_related("guardian")
+        .filter(channel_type=channel_type, value=normalized, revoked_at__isnull=True)
+        .order_by("created_at", "id")
     )
+
+
+def _live_contacts_for(value: str):
+    """The verified rows among `_contacts_typed(value)`: the ones a sign-in code may be minted for."""
+    return [contact for contact in _contacts_typed(value) if contact.verified_at is not None]
 
 
 def _eligible_for_a_code(contacts):
@@ -305,15 +310,28 @@ def _spend(contacts, raw_code):
     before it increments anything — so this cannot spend one channel's attempt
     budget guessing at another's.
 
+    **Every code a guardian can be sent is answered here** (`docs/messaging.md`
+    D8): a sign-in code, and the three a school sends. A channel check answers
+    an unverified row, through `confirm_verification_code()`, which stamps it
+    verified in the same transaction, so no session ever opens on a channel
+    whose `verified_at` is NULL. A reactivation code answers a dormant row: none
+    other can be pending there, because `request_sign_in_code()` refuses a
+    dormant channel, and answering it is what D9 calls reactivation. A school's
+    code answers a live row and turns that school's links live.
+
     The code row alone, not the pair it was found by: it carries `contact`
     itself, and a second name for the same thing is a second thing to keep in
     step.
     """
     for contact in contacts:
-        code = guardian_contacts.confirm_sign_in_code(contact, raw_code)
+        if contact.verified_at is None:
+            code = guardian_contacts.confirm_verification_code(contact, raw_code)
+        else:
+            code = guardian_contacts.confirm_sign_in_code(contact, raw_code)
         if code is not None:
             return code
     return None
+
 
 
 def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=None):
@@ -350,18 +368,26 @@ def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=
     if raw_code:
         request.session.pop(PENDING_PICK, None)
 
-    # Filtered once and reused. `is_dormant()` is a fold over the answered
-    # codes, so asking twice is both a second round of queries and a question
-    # whose answer the first call has already changed — `confirm_sign_in_code()`
-    # writes the `confirmed_at` that fold reads.
-    eligible = _eligible_for_a_code(_live_contacts_for(value))
-    code = _spend(eligible, raw_code)
+    code = _spend(_contacts_typed(value), raw_code)
     if code is None:
         _note_failure(value, address)
         raise BadCode(REFUSED)
 
     _note_success(value)
-    offered = [contact.guardian for contact in eligible]
+    # Asked **after** the spend, and that is the point: answering a channel
+    # check makes a row verified, and answering a reactivation code makes a
+    # dormant row current — `is_dormant()` is a fold over the `confirmed_at`
+    # the spend just wrote. Who is behind this handset now is the offer. A
+    # dormant guardian on a shared handset whose code was not answered stays out
+    # of it, as D9 requires.
+    #
+    # **Each guardian once, and by construction rather than by folding** (#111).
+    # These rows share one typed value, and a guardian holds at most one live
+    # row of a type (`one_live_contact_per_guardian_per_channel`), so a guardian
+    # holding a phone and an email is one offer: the email was never in this
+    # list. Two offers means two people on one handset, which is the only case
+    # the chooser is for.
+    offered = [contact.guardian for contact in _eligible_for_a_code(_live_contacts_for(value))]
     return _open(request, value, offered, code, guardian_public_id)
 
 

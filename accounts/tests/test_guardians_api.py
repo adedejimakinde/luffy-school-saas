@@ -13,6 +13,7 @@ number.
 
 from accounts import guardian_contacts
 from accounts.models import (
+    ContactChannel,
     GuardianAccount,
     GuardianContact,
     Guardianship,
@@ -108,11 +109,14 @@ class LinkingTests(GuardiansSetUp):
 
         Answered the way production will: St Mary's own administrator asks
         for a code on the channel the link recorded, and the guardian answers
-        it. (`give_verified_channel()` would record a second channel, which
-        `one_live_contact_per_guardian` refuses — the link already made one.)
+        it. (`give_verified_channel()` would record a second phone, which
+        `one_live_contact_per_guardian_per_channel` refuses — the link already
+        made one.)
         """
         self.link(self.admin, self.ada)
-        contact = GuardianAccount.objects.get(user__phone="+2348031234567").live_contact()
+        contact = GuardianAccount.objects.get(user__phone="+2348031234567").live_contact(
+            ContactChannel.PHONE
+        )
         _, raw = guardian_contacts.request_verification_as(self.admin.user, contact)
         self.assertTrue(guardian_contacts.confirm_verification(contact, raw))
 
@@ -187,7 +191,7 @@ class LinkingTests(GuardiansSetUp):
 
         contact = GuardianAccount.objects.get(
             user__phone="+2348031234567"
-        ).live_contact()
+        ).live_contact(ContactChannel.PHONE)
 
         self.assertEqual(contact.value, "+2348031234567")
         self.assertIsNone(contact.verified_at)

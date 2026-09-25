@@ -64,12 +64,13 @@ function serve(routes) {
 
 // -- what the panel says ------------------------------------------------------
 
-test("a pending link says plainly that it is not live, and that no code can be sent yet", () => {
+test("a pending link says plainly that it is not live, and what finishes the job", () => {
   const html = states.guardiansPanel({ body: PANEL });
 
   assert.match(html, /Pending verification — not live yet/);
   assert.match(html, /cannot see Ada Obi until they confirm with this school/);
-  assert.match(html, /Sending them a code is not connected yet/);
+  assert.match(html, /send them a code, and they type it on the sign-in page/);
+  assert.doesNotMatch(html, /not connected yet/);
   assert.doesNotMatch(html, /Live:/);
 });
 
@@ -237,4 +238,132 @@ test("a principal who tries to write is told, in the panel, and the roll stays",
 
   assert.equal(state.step, "roll");
   assert.match(states.guardiansPanel(state.panel), /role="alert">Guardians are linked by an administrator/);
+});
+
+// -- sending a code (docs/messaging.md D8) -------------------------------------
+
+const TYPED = {
+  channel_type: "phone",
+  value: "+2348031234567",
+  state: "not verified here",
+  last_message: "",
+  may_send: true,
+};
+
+const LIVE = {
+  link_id: 41,
+  name: "Papa Obi",
+  contact: "+2348039999999",
+  relationship: "father",
+  status: "live",
+  channel: "dormant",
+  channels: [
+    { channel_type: "phone", value: "+2348039999999", state: "dormant", last_message: "", may_send: true },
+  ],
+};
+
+test("a pending link offers to send a code to what this school typed", () => {
+  const html = states.guardiansPanel({ body: { ...PANEL, guardians: [{ ...PENDING, channels: [TYPED] }] } });
+
+  assert.match(html, /data-action="send-code" data-link="40" data-channel="phone">Send a code</);
+  assert.match(html, /not verified here/);
+});
+
+test("a dormant phone is reopened, in those words", () => {
+  const html = states.guardiansPanel({ body: { ...PANEL, guardians: [LIVE] } });
+
+  assert.match(html, />Send a code to reopen it</);
+  assert.match(html, /until the school sends a code to reopen it/);
+});
+
+test("the last code's outcome is said on its channel", () => {
+  const told = { ...TYPED, last_message: "could not be delivered to this contact" };
+  const html = states.guardiansPanel({ body: { ...PANEL, guardians: [{ ...PENDING, channels: [told] }] } });
+
+  assert.match(html, /Last code from this school: could not be delivered to this contact\./);
+});
+
+test("nothing is offered to a principal, who only reads the panel", () => {
+  const html = states.guardiansPanel({
+    body: { ...PANEL, may_link: false, guardians: [{ ...PENDING, channels: [TYPED] }, LIVE] },
+  });
+
+  assert.doesNotMatch(html, /data-action="send-code"/);
+  assert.doesNotMatch(html, /data-form="contact"/);
+});
+
+test("a live guardian with one channel can be given the other; one with both cannot", () => {
+  const one = states.guardiansPanel({ body: { ...PANEL, guardians: [LIVE] } });
+  assert.match(one, /data-form="contact"/);
+  assert.match(one, /name="link_id" value="41"/);
+
+  const both = {
+    ...LIVE,
+    channels: [...LIVE.channels, { channel_type: "email", value: "papa@example.com", state: "verified", last_message: "", may_send: false }],
+  };
+  const two = states.guardiansPanel({ body: { ...PANEL, guardians: [both] } });
+  assert.doesNotMatch(two, /data-form="contact"/);
+  // A verified, current channel needs nothing from the school.
+  assert.doesNotMatch(two, /data-channel="email"/);
+});
+
+test("pressing send posts to that link and channel, and the panel comes back", async () => {
+  forgetToken();
+  const posted = [];
+  const root = fakeRoot({});
+  const after = { ...PANEL, guardians: [{ ...PENDING, channels: [{ ...TYPED, last_message: "waiting to be sent" }] }] };
+  await mount(root, {
+    fetchImpl: serve([
+      ["/guardians/40/send-code/", (options, url) => {
+        posted.push([url, JSON.parse(options.body)]);
+        return { status: 200, body: after };
+      }],
+      ["/guardians/", { status: 200, body: { ...PANEL, guardians: [{ ...PENDING, channels: [TYPED] }] } }],
+      ["/api/enrolment/roll/", { status: 200, body: ROLL }],
+    ]),
+  });
+  await root.click({ "data-action": "guardians", "data-child": "1" });
+  await root.click({ "data-action": "send-code", "data-link": "40", "data-channel": "phone" });
+
+  assert.equal(posted.length, 1);
+  assert.match(posted[0][0], /\/roll\/1\/guardians\/40\/send-code\/$/);
+  assert.deepEqual(posted[0][1], { channel_type: "phone" });
+  assert.match(root.innerHTML, /Last code from this school: waiting to be sent\./);
+});
+
+test("too many codes is a sentence on the panel, not a broken page", async () => {
+  forgetToken();
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/send-code/", { status: 429, body: { detail: "Too many codes have gone out to this contact or from this school just now. Try again in 12 minutes." } }],
+      ["/guardians/", { status: 200, body: { ...PANEL, guardians: [{ ...PENDING, channels: [TYPED] }] } }],
+      ["/api/enrolment/roll/", { status: 200, body: ROLL }],
+    ]),
+  });
+  await root.click({ "data-action": "guardians", "data-child": "1" });
+  await root.click({ "data-action": "send-code", "data-link": "40", "data-channel": "phone" });
+
+  assert.match(root.innerHTML, /Try again in 12 minutes/);
+  assert.match(root.innerHTML, /data-panel="guardians"/);
+});
+
+test("adding a contact posts what was typed to that link", async () => {
+  forgetToken();
+  const posted = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/guardians/41/contacts/", (options) => {
+        posted.push(JSON.parse(options.body));
+        return { status: 201, body: { ...PANEL, guardians: [LIVE] } };
+      }],
+      ["/guardians/", { status: 200, body: { ...PANEL, guardians: [LIVE] } }],
+      ["/api/enrolment/roll/", { status: 200, body: ROLL }],
+    ]),
+  });
+  await root.click({ "data-action": "guardians", "data-child": "1" });
+  await root.submit({ link_id: "41", new_contact: "papa@example.com" });
+
+  assert.deepEqual(posted, [{ contact: "papa@example.com" }]);
 });

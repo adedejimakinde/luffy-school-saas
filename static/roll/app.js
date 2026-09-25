@@ -17,8 +17,10 @@ import {
   admit,
   fetchGuardians,
   fetchRoll,
+  addContact,
   linkGuardian,
   removeGuardian,
+  sendCode,
   setClass,
 } from "./api.js";
 import * as states from "./states.js";
@@ -145,6 +147,20 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       draw();
       return;
     }
+    if (action === "send-code" && panel) {
+      state = applyPanel(
+        state,
+        panel.childId,
+        await sendCode({
+          studentMembershipId: panel.childId,
+          linkId: Number(hit.dataset.link),
+          channelType: hit.dataset.channel,
+          fetchImpl,
+        }),
+      );
+      draw();
+      return;
+    }
     if (action === "remove-guardian" && panel) {
       // Only the link the page asked about. A stray "remove" with no question
       // in front of it is not the second click of anything.
@@ -173,6 +189,21 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
+    if (form && form.new_contact && state.panel) {
+      if (event.preventDefault) event.preventDefault();
+      state = applyPanel(
+        state,
+        state.panel.childId,
+        await addContact({
+          studentMembershipId: state.panel.childId,
+          linkId: Number(form.link_id.value),
+          contact: form.new_contact.value,
+          fetchImpl,
+        }),
+      );
+      draw();
+      return;
+    }
     if (form && form.guardian_contact && state.panel) {
       if (event.preventDefault) event.preventDefault();
       const guardian = {
