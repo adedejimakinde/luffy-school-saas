@@ -30,6 +30,7 @@ import {
   nextToSend,
   openOutbox,
   outboxName,
+  rebase,
   release,
   retryDelay,
   settle,
@@ -101,6 +102,36 @@ test("the value typed while an attempt was out is sent on the version that attem
     { value: entries[0].value, expectedVersion: entries[0].expectedVersion, sent: entries[0].sent, key: entries[0].key },
     { value: 17, expectedVersion: 5, sent: false, key: "key-2" },
   );
+});
+
+test("told only 'already saved', the value typed since waits for the sheet", () => {
+  const mint = keys();
+  let entries = enqueue([], write(1, 17, 4), { mint });
+  entries = markSent(entries, cellOf(3, 1));
+  entries = enqueue(entries, write(1, 18, 4), { mint });
+
+  entries = settle(entries, cellOf(3, 1), { landed: true, cell: null }, { mint });
+
+  assert.deepEqual(entries[0].awaiting, { landed: 17 });
+  assert.equal(entries[0].value, 18);
+  assert.equal(nextToSend(entries), null, "not sent on a version it does not know");
+});
+
+test("the sheet still holding the teacher's write: the waiting value goes on its version", () => {
+  let entries = [{ ...enqueue([], write(1, 18, null), { mint: keys() })[0], awaiting: { landed: 17 } }];
+  entries = rebase(entries, 3, [{ student_membership_id: 1, value: 17, version: 5 }]);
+
+  assert.deepEqual([entries[0].awaiting, entries[0].expectedVersion, entries[0].held], [null, 5, null]);
+  assert.equal(nextToSend(entries).value, 18);
+});
+
+test("the sheet holding somebody else's mark: the waiting value is a conflict with it", () => {
+  let entries = [{ ...enqueue([], write(1, 18, null), { mint: keys() })[0], awaiting: { landed: 17 } }];
+  entries = rebase(entries, 3, [{ student_membership_id: 1, value: 15, version: 6 }]);
+
+  assert.equal(entries[0].held.kind, HELD.CONFLICT);
+  assert.deepEqual(entries[0].held.current, { student_membership_id: 1, value: 15, version: 6 });
+  assert.equal(nextToSend(entries), null);
 });
 
 test("a write that landed with nothing typed since leaves the outbox", () => {

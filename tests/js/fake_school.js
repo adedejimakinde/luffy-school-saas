@@ -5,8 +5,8 @@
  * user, so that a test can run the same story at two schools and see that
  * neither school's writes reach the other. It judges a save as
  * `set_score_as()` does, in the same order, and nothing the device could judge
- * for it; it answers a replayed key from its receipt as `sync.receipts.once()`
- * does.
+ * for it; it answers a replayed key as `sync.receipts` does — "already saved",
+ * with no cell — and the key reused for anything else as a 422.
  */
 
 export const ST_MARYS = "st-marys.example.ng";
@@ -136,11 +136,14 @@ export function school(
 
     let answer;
     const receipt = body.key && server.receipts.get(body.key);
-    if (receipt) {
-      answer = receipt;
+    if (receipt && receipt.by === server.signedIn && receipt.id === id && receipt.value === body.value) {
+      // As `sync.receipts` answers a resend: saved, and nothing about the cell.
+      answer = [200, { detail: "Already saved.", already_saved: true }];
+    } else if (receipt) {
+      answer = [422, { detail: "This write's key was already used for a different write." }];
     } else {
       answer = judge(id, body);
-      if (body.key && answer[0] === 200) server.receipts.set(body.key, answer);
+      if (body.key && answer[0] === 200) server.receipts.set(body.key, { by: server.signedIn, id, value: body.value });
     }
     if (server.loseNextAnswer) {
       server.loseNextAnswer = false;

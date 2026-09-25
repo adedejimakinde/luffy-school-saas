@@ -170,9 +170,44 @@ export function enqueue(
   return replaceAt(entries, at, { ...entry, next: value === entry.value ? null : value });
 }
 
-/** The next entry to send, oldest first. Held entries are never sent again. */
+/**
+ * The next entry to send, oldest first. Held entries are never sent again, and
+ * one waiting for the sheet to say what version to claim is not sent yet.
+ */
 export function nextToSend(entries) {
-  return entries.find((entry) => !entry.held) || null;
+  return entries.find((entry) => !entry.held && !entry.awaiting) || null;
+}
+
+/**
+ * Settle every entry waiting on the sheet (`settle()`, #161) against the rows
+ * the sheet has now. The cell still holds the write that landed: the waiting
+ * value goes on the version it shows. It holds something else: somebody wrote
+ * after the teacher, and the waiting value is held as a conflict with it, as
+ * it would have been had it been sent.
+ */
+export function rebase(entries, assessmentId, rows) {
+  let changed = false;
+  const next = entries.map((entry) => {
+    if (!entry.awaiting || entry.assessmentId !== assessmentId) return entry;
+    const row = rows.find((r) => r.student_membership_id === entry.studentMembershipId);
+    if (!row) return entry;
+    changed = true;
+    if (row.value === entry.awaiting.landed) {
+      return { ...entry, expectedVersion: row.version, awaiting: null };
+    }
+    return {
+      ...entry,
+      awaiting: null,
+      held: {
+        kind: HELD.CONFLICT,
+        detail: "",
+        current: row.value === null || row.value === undefined
+          ? null
+          : { student_membership_id: row.student_membership_id, value: row.value, version: row.version },
+      },
+    };
+  });
+  return changed ? next : entries;
 }
 
 /** Mark an entry's attempt as having left the device: its body is now fixed. */
@@ -207,6 +242,23 @@ export function settle(entries, cell, answer, { now = Date.now(), mint = newKey 
 
   if (answer.landed) {
     if (!typedSince) return without(entries, at);
+    if (!answer.cell) {
+      // Landed, and answered "already saved" with no version (#161): the
+      // write typed since cannot know what version to claim. It waits for the
+      // sheet to be read again (`rebase()`), rather than claiming the version
+      // before the landed write — a conflict with the teacher's own mark — or
+      // a version read later, which could be somebody else's.
+      return replaceAt(entries, at, {
+        ...entry,
+        value: entry.next,
+        next: null,
+        expectedVersion: null,
+        key: mint(),
+        sent: false,
+        queuedAt: now,
+        awaiting: { landed: entry.value },
+      });
+    }
     return replaceAt(entries, at, {
       ...entry,
       value: entry.next,

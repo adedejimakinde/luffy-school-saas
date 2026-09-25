@@ -147,6 +147,12 @@ export async function saveScore({
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
 
+  // A resend of a write that landed: saved, and nothing said about the cell,
+  // because what the first arrival was told is not what the cell holds now
+  // (`sync/receipts.py`, #161).
+  if (answer.status === 200 && answer.body && answer.body.already_saved) {
+    return { ok: true, cell: null, alreadySaved: true };
+  }
   if (answer.status === 200 && answer.body) return { ok: true, cell: answer.body };
   if (answer.status === 409) {
     return { ok: false, outcome: SAVE.CONFLICT, body: answer.body || {} };

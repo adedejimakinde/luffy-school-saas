@@ -516,6 +516,49 @@ test("two blurs at once both go", async () => {
   }
 });
 
+// -- #161: a resend is told "already saved", and nothing about the cell -----------
+
+test("a value typed after a lost answer goes on the version the landed write made", async () => {
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    const page = await openPage(server, shelf);
+    const shown = versionOf(server, 2);
+    server.loseNextAnswer = true;
+    await page.root.blur({ "data-child": "2", "data-version": String(shown) }, "17");
+
+    // Corrected before the lost one was sent again.
+    await page.root.blur({ "data-child": "2", "data-version": String(shown) }, "18");
+
+    assert.deepEqual(
+      server.puts.map((p) => [p.value, p.expected_version]),
+      [[17, shown], [17, shown], [18, shown + 1]],
+      `${server.host}: the resend, then the 18 on the 17's version`,
+    );
+    assert.deepEqual(server.marks.get(2), { value: 18, version: shown + 2, by: KEMI }, server.host);
+    assert.deepEqual(await onThePhone(shelf, server.host), [], server.host);
+    assert.doesNotMatch(page.root.innerHTML, /by somebody else/, `${server.host}: no conflict with themselves`);
+  }
+});
+
+test("a value typed after a lost answer, when somebody wrote in between, is a conflict with them", async () => {
+  for (const server of bothSchools()) {
+    const shelf = new Map();
+    const page = await openPage(server, shelf);
+    const shown = versionOf(server, 2);
+    server.loseNextAnswer = true;
+    await page.root.blur({ "data-child": "2", "data-version": String(shown) }, "17");
+    // The 17 landed; before the phone hears, Tunde makes it 15.
+    server.marks.set(2, { value: 15, version: shown + 2, by: TUNDE });
+
+    await page.root.blur({ "data-child": "2", "data-version": String(shown) }, "18");
+
+    assert.deepEqual(server.puts.map((p) => p.value), [17, 17], `${server.host}: the 18 was not sent`);
+    assert.equal(server.marks.get(2).value, 15, `${server.host}: Tunde's stands`);
+    assert.match(page.root.innerHTML, /Saved as 15 by somebody else\. You entered 18\./, server.host);
+    assert.equal((await onThePhone(shelf, server.host))[0].held.kind, HELD.CONFLICT, server.host);
+  }
+});
+
 // -- requirement 5: only the author sends ---------------------------------------
 
 test("requirement 5: a sign-in as somebody else, in another tab, sends nothing of the teacher's", async () => {

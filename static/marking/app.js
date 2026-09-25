@@ -76,6 +76,7 @@ import {
   newKey,
   openOutbox,
   outboxName,
+  rebase,
   release,
   retryDelay,
 } from "./outbox.js";
@@ -478,10 +479,18 @@ export async function mount(
     }
   };
 
+  /** Draws the sheet. True if a write waiting on it (`rebase()`) can now go. */
   const drawSheet = async (answer) => {
     state = { ...fromSheet(answer), warnings };
-    if (outbox) state = withOutbox(state, await readOutbox(), { now: now() });
+    let freed = false;
+    if (outbox) {
+      const before = await readOutbox();
+      const after = await change((entries) => rebase(entries, state.assessment_id, state.rows));
+      freed = after !== before && after.some((e) => !e.held && !e.awaiting);
+      state = withOutbox(state, after, { now: now() });
+    }
     draw();
+    return freed;
   };
 
   const openSheet = async () => {
@@ -492,7 +501,7 @@ export async function mount(
       draw();
       return;
     }
-    await drawSheet(answer);
+    if (await drawSheet(answer)) kick();
   };
 
   /**
@@ -503,9 +512,8 @@ export async function mount(
    */
   const refreshSheet = async () => {
     const answer = await fetchSheet({ ...picked, fetchImpl });
-    if (!answer.ok || state.step !== "sheet") return false;
-    await drawSheet(answer);
-    return true;
+    if (!answer.ok || state.step !== "sheet") return { drawn: false, freed: false };
+    return { drawn: true, freed: await drawSheet(answer) };
   };
 
   /**
@@ -548,7 +556,7 @@ export async function mount(
             // which says what the *first* arrival did (`sync/receipts.py`),
             // not what the cell holds now. The sheet is asked again once the
             // drain is done, rather than trusting that answer as current.
-            if (answer.landed && entry.sent) stale = true;
+            if (answer.landed && (entry.sent || !answer.cell)) stale = true;
             draw();
           },
           now,
@@ -566,7 +574,11 @@ export async function mount(
 
     return draining.then(async (stopped) => {
       draining = null;
-      if (stale && state.step === "sheet" && (await refreshSheet())) stale = false;
+      if (stale && state.step === "sheet") {
+        const refreshed = await refreshSheet();
+        if (refreshed.drawn) stale = false;
+        if (refreshed.freed) again = true;
+      }
       if (stopped === STOPPED.OFFLINE) {
         failures += 1;
         freshToken = true;
