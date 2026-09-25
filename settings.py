@@ -143,6 +143,10 @@ TENANT_APPS = [
     # gradebook; and separate from `gradebook` because a bell schedule is set
     # once a year by the office while marks are written daily by teachers.
     "timetable",
+    # The receipts that make a write queued on a phone land once however often
+    # it is sent (`docs/offline.md` D3). Its own app because both `gradebook`
+    # and `attendance` write through it, and neither should import the other.
+    "sync",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]
