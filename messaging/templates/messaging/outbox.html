@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fake outbox</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 60rem; }
+  li { margin: 0 0 12px; padding: 8px; border-left: 4px solid #999; list-style: none; }
+  li.refused, li.unavailable { border-color: #b00; }
+  .meta { color: #555; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h1>Fake outbox</h1>
+<p>What the fake message provider was given, newest first. Development only: nothing here was sent.</p>
+<ul>
+{% for m in messages %}
+  <li class="{{ m.outcome }}">
+    <div class="meta">{{ m.created_at|date:"Y-m-d H:i:s" }} · {{ m.channel_type }} to {{ m.address }} · {{ m.kind }} · {{ m.outcome }}</div>
+    {% if m.subject %}<div><strong>{{ m.subject }}</strong></div>{% endif %}
+    <div>{{ m.text }}</div>
+  </li>
+{% empty %}
+  <li>Nothing yet.</li>
+{% endfor %}
+</ul>
+</body>
+</html>

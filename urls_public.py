@@ -11,6 +11,7 @@ The API is reused from `urls.py` rather than repeated, so a route added there
 cannot go missing here.
 """
 
+from django.conf import settings
 from django.contrib import admin
 from django.urls import path
 
@@ -36,6 +37,13 @@ urlpatterns = [
     path("invitations/<str:token>/", invitation_page, name="invitation"),
     *tenant_urlpatterns,
 ]
+
+# The fake provider's outbox, which shows codes in the clear: routed only under
+# DEBUG, and refused by the view as well (docs/messaging.md D2).
+if settings.DEBUG:
+    from messaging.views import outbox
+
+    urlpatterns.insert(0, path("dev/outbox/", outbox, name="dev-outbox"))
 
 #: Re-exported, not re-declared. Django looks `handler403` up as an attribute of
 #: whichever urlconf is in force, and `django_tenants` gives the public schema

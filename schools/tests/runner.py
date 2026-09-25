@@ -96,6 +96,19 @@ def terminate_backends_on(cursor, database_name):
 
 
 class TenantTemplateRunner(DiscoverRunner):
+    def setup_test_environment(self, **kwargs):
+        super().setup_test_environment(**kwargs)
+        # **No message provider, whatever DEBUG says.** Development defaults
+        # both channel types to the fake when DEBUG is on (settings.py), and a
+        # local run has DEBUG on while CI does not — so a test that sent without
+        # asking for the fake would pass here and fail there. Every test that
+        # sends switches the fake on itself (`messaging.tests.fake`); one that
+        # forgets meets `NotConfigured` on every machine alike. Set before the
+        # parallel workers fork, so each inherits it.
+        from django.conf import settings
+
+        settings.MESSAGING_PROVIDERS = {"email": "", "phone": ""}
+
     def clear_stale_backends(self):
         """Issue #61: let go of a test database the last run is still holding.
 

@@ -26,6 +26,11 @@ Everything this document says about the code as it stands was read on `main` at
 notices, M3 fee reminders, M4 the result checker. **Waiting for a real provider:** M5
 (delivery reports) and M6 (the provider itself).
 
+**Built:** M1, code delivery (#167). Where it departs from the text below, it says so
+there: the chooser offers each guardian once by construction rather than by a fold
+(D8), the code is sealed with Fernet from `cryptography` (D6), and `messaging.W001`
+is silenced in `settings.py` until a real phone provider is named (D2, M6).
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.
@@ -270,7 +275,8 @@ and how it keeps them:
   the send log (`accounts/guardian_contacts.py:451`). A shared, append-only delivery
   row beside it records the outcome and the provider's reference, and no text.
 - **The queue is storage too.** A code put in a Celery message in the clear sits in
-  Redis, and Redis may write it to disk. So a code crosses the broker **encrypted**,
+  Redis, and Redis may write it to disk. So a code crosses the broker **encrypted**
+  (as built: Fernet, from `cryptography`, `messaging/seal.py`),
   with a key the web and worker processes derive from settings, and it expires with
   the code. The broker holds ciphertext for a few seconds, and nothing that reads it
   later can use it.
@@ -324,8 +330,11 @@ rule about sending:
   row", and nothing is sent twice;
 - dormancy stays per channel, so a dormant phone gets no code while a live email
   still does;
-- `offered` is de-duplicated by guardian, so one guardian with two channels is never
-  asked to choose between two copies of themselves;
+- one guardian with two channels is never asked to choose between two copies of
+  themselves. *(As built: by construction, not by a fold. The sign-in door matches
+  the typed value's own rows, and a guardian holds one live row of a type, so a
+  guardian can be offered only once. A de-duplication step would be a branch no
+  control could turn red.)*
 - the PR C guardians panel can record both channels. D9 and D11 in parent-access,
   `GuardianAccount.live_contact()` and `OneLiveChannelTests` are rewritten to match.
 

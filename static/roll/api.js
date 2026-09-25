@@ -152,6 +152,42 @@ export async function linkGuardian({ studentMembershipId, guardian, fetchImpl = 
   }
 }
 
+/**
+ * Send a guardian this school's code (`enrolment_api.send_code`). Which code is
+ * the server's decision, from the channel's state; the page only says which of
+ * a live guardian's channels. Answers with the whole panel.
+ */
+export async function sendCode({ studentMembershipId, linkId, channelType, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(
+      await postJson(
+        `${guardiansUrl(studentMembershipId)}${encodeURIComponent(linkId)}/send-code/`,
+        channelType ? { channel_type: channelType } : {},
+        { fetchImpl },
+      ),
+      200,
+    );
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** Give a live guardian their other channel, an email or a phone (#111). */
+export async function addContact({ studentMembershipId, linkId, contact, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(
+      await postJson(
+        `${guardiansUrl(studentMembershipId)}${encodeURIComponent(linkId)}/contacts/`,
+        { contact },
+        { fetchImpl },
+      ),
+      201,
+    );
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
 /** Remove one guardian from one child. Answers with the whole panel. */
 export async function removeGuardian({ studentMembershipId, linkId, fetchImpl = fetch }) {
   try {
@@ -166,7 +202,11 @@ export async function removeGuardian({ studentMembershipId, linkId, fetchImpl = 
 
 function panelAnswer(answer, expected) {
   if (answer.status === expected && answer.body) return { ok: true, body: answer.body };
-  if (answer.status === 422) return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
+  // A 429 is "too many codes just now": a sentence on the panel with a time in
+  // it, not a page that has stopped working.
+  if (answer.status === 422 || answer.status === 429) {
+    return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
+  }
   if (answer.status === 403) return { ok: false, outcome: SAVE.NOT_ALLOWED, body: answer.body || {} };
   if (answer.status === 404) return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
   return {
