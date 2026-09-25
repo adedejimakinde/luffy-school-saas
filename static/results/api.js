@@ -150,22 +150,42 @@ export async function takeStep({ classGroupId, step, reason, fetchImpl = fetch }
   };
 }
 
+export function tellFamiliesUrl(classGroupId) {
+  return `/api/results/chain/${encodeURIComponent(classGroupId)}/tell-families/`;
+}
+
 /**
- * "Tell families" (`chain_api.tell_families`). A 200 carries the sentence the
- * principal reads; a 409, 422 or 403 carries the refusal's. Every answer is a
- * note on the row, and the rows are fetched again for the count.
+ * What "Tell families" would send, before anything is (`chain_api.preview_families`).
+ * docs/messaging.md D9: the button says how many messages before it sends them,
+ * and D7: in quiet hours, that they will go at 07:00. A GET: nothing is written.
+ */
+export async function previewFamilies({ classGroupId, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await getJson(tellFamiliesUrl(classGroupId), { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return tellingAnswer(answer);
+}
+
+/**
+ * "Tell families" (`chain_api.tell_families`), once the principal has read the
+ * preview. A 200 carries the sentence the principal reads; a 409, 422 or 403
+ * carries the refusal's. Every answer is a note on the row, and the rows are
+ * fetched again for the count.
  */
 export async function tellFamilies({ classGroupId, fetchImpl = fetch }) {
   let answer;
   try {
-    answer = await postJson(
-      `/api/results/chain/${encodeURIComponent(classGroupId)}/tell-families/`,
-      {},
-      { fetchImpl },
-    );
+    answer = await postJson(tellFamiliesUrl(classGroupId), {}, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
+  return tellingAnswer(answer);
+}
+
+function tellingAnswer(answer) {
   if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
   if ([403, 409, 422].includes(answer.status)) {
     return { ok: false, body: answer.body || {} };

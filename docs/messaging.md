@@ -47,10 +47,19 @@ are renamed in M1.
 "No `beat`, no scheduler", because nothing was periodic. Releasing held messages at
 07:00 is periodic. A Celery ETA task cannot do it on this broker: it is redelivered
 every `visibility_timeout` (300 seconds) until its time comes, which is about 150
-copies of each held task by morning. So M2 adds `celery beat`, running one sweep a
-minute that queues the held messages whose time has come. The sweep is safe to run
-twice, because every send is claimed first (D5). `docs/background.md` changes with
-it.
+copies of each held task by morning. So M2 adds a sweep that queues the held
+messages whose time has come.
+
+**As built, the sweep runs on the server's cron, not `celery beat`**, which is a
+change from what this record first said. It is `manage.py release_held_notices`,
+run by `deploy/cron/classnode`, the file that already runs the nightly backup, the
+session housekeeping and the weekly restore test. `beat` would have been a second
+scheduler beside that one: another process with its own failure modes
+(`docs/background.md`, "No `beat`"), and a second place to look for a job that did
+not run. The sweep runs at 07:00 Lagos (06:00 UTC) and every quarter hour after it
+until 19:45, so a missed run is caught up within fifteen minutes and nothing held
+is released after 20:00. It is safe to run twice, and while a worker is still
+sending, because every send is claimed first (D5).
 
 ## What this is
 
@@ -300,7 +309,8 @@ on the page could answer.
 *(Changed in review: held, not refused.)* A batch asked for outside those hours is
 written as it would be at noon, and its messages are **held until 07:00**. The
 button says so before it is pressed: "These will be sent at 07:00." A periodic sweep
-queues them at 07:00 (see the decision record for why that needs `celery beat`). The
+queues them at 07:00 (see the decision record for why that needs a scheduler, and
+why it is the server's cron). The
 cap is checked against the day a message will go out, counting what is already held
 for that day. Codes are exempt, because the guardian is asking right now and a code
 lasts fifteen minutes.
@@ -355,7 +365,11 @@ card and recipient channel. Not sent by `release()` itself, for four reasons:
 - **Hours.** A principal who releases at nine in the evening would message every
   family at nine in the evening (D7).
 - **Cost is a decision.** The button says how many messages it will send before it
-  sends them.
+  sends them. *(As built: pressing it asks first. The page shows the server's
+  preview, which is how many messages, how many guardians here have no usable
+  channel, and in quiet hours when they will go, and sends nothing until "Send
+  them". The preview and the press count with the same function; the press counts
+  again under its lock and says what it did.)*
 - **Release stays what it is.** One transaction that must not depend on anything
   outside the database. #164 just made its one post-freeze step something that can
   stop it, and a provider should not be a second.
@@ -482,8 +496,8 @@ One PR each, to `main`, in order:
    D8 with #111, and D12's refusal half. The first real use, so the seam is shaped
    by a caller, not ahead of one.
 2. **M2: result notices.** The notice and attempt tables, "Tell families" on the
-   chain page, budgets and hours (D7), holding overnight with the `celery beat`
-   sweep, and D9.
+   chain page, budgets and hours (D7), holding overnight with a sweep on the
+   server's cron, and D9.
 3. **M3: fee reminders.** On the bursar's page, on M2's tables. D10, with the
    amount.
 4. **M4: the result checker.** D11. It sends nothing, so it depends on none of the
