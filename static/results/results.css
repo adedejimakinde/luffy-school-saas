@@ -107,7 +107,9 @@ h1 { font-size: 1.35rem; margin: 0 0 8px; }
 .row.moved { background: var(--warn-bg); border-left: 4px solid var(--warn); padding-left: 8px; }
 .row.moved .note { color: var(--warn); }
 .row.needs-a-reason .note,
+.row.not-checked .note,
 .row.not-allowed .note { color: var(--stop); }
+.row.not-checked { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 8px; }
 .row.not-allowed { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 8px; }
 
 button.signout {

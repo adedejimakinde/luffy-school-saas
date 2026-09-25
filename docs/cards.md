@@ -123,16 +123,30 @@ the shape #60 required of it was not.
 produces an absence needs a record, and the freeze left a child placed
 mid-release with nothing. For a while there was no detector of one; that was #47.
 
-**#47 did not bring this function back.** It built the shape its own comments
-gave: the release's frozen side against the roster at a later, deliberate
-moment, outside any lock. `results.omissions` registers a check inside the
-release that runs once the release commits. It reads the class afresh, compares
-it with the version-1 cards on the sheet, and writes a `ReleaseOmission` for
-each child on the class with no card. The principal sees them by name on the
-chain page, and on the release step's own answer. What it cannot see is a
-placement landing after its own read, and it says so. Not a second read inside
-the locked block: `roster_ids()`'s own docstring says why, and the module
-argues why a read after the commit is not that.
+**#47 brought its shape back, as a record rather than a log line.**
+`results.omissions.check()` is the last step of the release's transaction.
+After every card is written it reads the class afresh, compares it with the
+cards the release just wrote, and writes a `ReleaseOmission` for each child on
+the class with no card, and a `ReleaseCheck` saying it looked. That is a second
+read inside the locked block, and deliberately so: nothing frozen hangs off it,
+which is the difference from the reads #43 and #60 removed, and its difference
+from the first read is exactly the children placed while the release ran.
+`roster_ids()`'s docstring warns off a second read that answers the freeze's
+question again; this one asks a different question, and the module argues it.
+
+It is inside the transaction so that it can stop the release. If the check
+fails, the release rolls back, and the principal is told who was left out could
+not be checked and that nothing went home; releasing again is the recovery. An
+earlier version ran the check after the commit, where a failure could only be
+logged beside a release that stood, and where the read also saw placements that
+committed after the release, and would have written those children down as left
+out by it (the review of #164).
+
+The principal sees the children by name on the chain page and on the release
+step's own answer. A released sheet with no `ReleaseCheck` is shown as "couldn't
+check who was left out", never as an empty list. What the check cannot see is a
+placement landing after its own read, or into the class after the release, and
+it says so (issue #165).
 
 `results/services.py` and `results/tests/test_release_roster_race.py` point at
 this section rather than keeping their own copies of it.

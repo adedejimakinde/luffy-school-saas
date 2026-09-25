@@ -3,8 +3,8 @@
 `ReleaseOmission` is the record `docs/operating-rules.md` rule 8 asks of a
 decision that produces an absence: a child placed into a class while its release
 ran is not on the roster the freeze read, gets no card, and until now left no
-trace. The row is written after the release commits, by `results.omissions`; see
-the model for why the read is a fresh one and outside the lock.
+trace. The row is written by the release's last step, `results.omissions`; see
+the model for why the read is a fresh one and why that is not #60's second read.
 
 Append-only at both layers, like every other record in this app. The trigger's
 sentence carries the table and the operation, so a test can name it rather than

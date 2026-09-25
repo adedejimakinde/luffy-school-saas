@@ -338,18 +338,23 @@ rule 4's sense — so it needs one, and has one. A reader who took "releasing a
 term's results" as a single row would conclude the transition row is redundant
 and delete the only record of who released and when.
 
-**The freeze row had a hole, and #47 closed it.** "A card per child" means every
+**The freeze row had a hole, and #47 narrowed it.** "A card per child" means every
 child on the roster the locked block read — not a child placed into the class
 *while* the release ran. She gets none, which is an absence in rule 4's sense,
 and by this rule it needs a record. For a while there was none: the warning that
 used to log it went with #60's one-read-per-locked-block fix, for the reasons
 `docs/cards.md` gives under "The detector that went with it", and the row said
-**no** where the rule says **yes**. Now a check registered inside the release
-runs once it commits, reads the class afresh, and writes a `ReleaseOmission` for
-each child on it with no card on the sheet — the absence, written down at the
-moment it happened, and shown to the principal on the chain page.
-`results/omissions.py` argues why that second read is the detector and not the
-defect #60 removed.
+**no** where the rule says **yes**. Now the release's last step reads the class
+afresh and writes a `ReleaseOmission` for each child on it with no card on the
+sheet — the absence, written down at the moment it happened, and shown to the
+principal on the chain page. `results/omissions.py` argues why that second read
+is the detector and not the defect #60 removed. If the check fails the release
+does not happen, and the principal is told who was left out could not be
+checked; a released sheet with no record of a check is shown that way too,
+never as "nobody". **What is still open** is a placement the check's
+one read cannot see: one committing just after it, or into a class already
+released later in the term. That child has no card and no record, and the root
+fix — writing the record when she is placed — is issue #165.
 
 The withholding row is what makes the rule sharp. A card that is not served leaves no
 trace anywhere — no row, no file, no absence anyone can point at without already

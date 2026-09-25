@@ -1931,7 +1931,7 @@ class ReleaseOmissionsAreAppendOnly(Exception):
 
 
 class ReleaseOmission(models.Model):
-    """A child on the class when a release committed, with no card from it. Written once.
+    """A child on the class as a release finished, with no card from it. Written once.
 
     ## Why this exists: the freeze leaves an absence, and absences need a record
 
@@ -1944,19 +1944,20 @@ class ReleaseOmission(models.Model):
     record — and issue #47 was that rule's freeze row saying "no" where the
     rule says "yes".
 
-    ## Written after the commit, by a read that decides nothing
+    ## Written by the release, by a read that decides nothing frozen
 
-    `results.omissions` registers an `on_commit` callback inside the release.
-    After the release is durable it reads the class's roster **afresh** —
-    deliberately a second read, outside the locked block, and outside the
-    one-read rule on purpose — and writes a row for every child on it who has
-    no card on this sheet. The frozen side of the comparison is the cards
-    themselves. Comparing against the snapshot the freeze used instead would be
-    vacuous by construction, which is why #60 deleted the last detector rather
-    than rewrite it that way (`docs/cards.md`, "The detector that went with it").
+    `omissions.check()` is the last step of the release's transaction. After
+    every card is written it reads the class's roster **afresh**, deliberately
+    a second read and outside the one-read rule on purpose, and writes a row
+    for every child on it who has no card on this sheet. The frozen side of the
+    comparison is the cards the release wrote. Comparing against the snapshot
+    the freeze used instead would be vacuous by construction, which is why #60
+    deleted the last detector rather than rewrite it that way (`docs/cards.md`,
+    "The detector that went with it"). If the check fails, the release does not
+    happen.
 
     What it cannot see is a placement that lands after its own read. That child
-    is in the class with no card too, and nothing here records her.
+    is in the class with no card too, and nothing here records her (#165).
 
     ## The name is copied, not joined
 
@@ -1982,9 +1983,9 @@ class ReleaseOmission(models.Model):
     student_name = models.CharField(max_length=255, blank=True)
     student_reference = models.CharField(max_length=64, blank=True)
 
-    #: When the check after the commit found her — not when she was placed,
-    #: which `ClassPlacement` knows, and not when the release committed, which
-    #: the sheet's `ResultSheetTransition` knows.
+    #: When the release's check found her — not when she was placed, which
+    #: `ClassPlacement` knows, and not when the release began, which the
+    #: sheet's `ResultSheetTransition` knows.
     noticed_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -2015,6 +2016,43 @@ class ReleaseOmission(models.Model):
         raise ReleaseOmissionsAreAppendOnly(
             f"Omission {self.pk} cannot be deleted. A child a release left out "
             f"has to stay written down, including after she is given a card."
+        )
+
+
+class ReleaseCheck(models.Model):
+    """That a release checked who it left without a card, for one sheet.
+
+    Written by `omissions.record()` in the release's own transaction, with the
+    omissions it found, and written when it found none. Without it, "nobody was
+    left out" and "nobody checked" were the same empty list on the principal's
+    page (the review of #164). A check that fails now stops the release, so a
+    release made through `services.release()` always has this row. A released
+    sheet without one, whatever released it, is shown as "couldn't check who
+    was left out" rather than "none".
+
+    Append-only, as the omissions are: a check row that could be written after
+    the fact would say the class was checked when nobody knows who was on it.
+    """
+
+    sheet = models.OneToOneField(
+        ResultSheet, on_delete=models.PROTECT, related_name="release_check"
+    )
+    checked_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"sheet {self.sheet_id} checked at {self.checked_at:%Y-%m-%d %H:%M}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ReleaseOmissionsAreAppendOnly(
+                f"The check of sheet {self.sheet_id} has been recorded and cannot be changed."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ReleaseOmissionsAreAppendOnly(
+            f"The check of sheet {self.sheet_id} cannot be deleted: it is what says "
+            f"its list of children left without a card is complete."
         )
 
 

@@ -106,6 +106,16 @@ function classRow(row, note, asking) {
  * (`accounts/refusals.py`).
  */
 function leftOut(row) {
+  if (row.left_out_checked === false) {
+    // Not the same as nobody: this release has no record of a check, and an
+    // empty list here would read as "nobody was left out".
+    return [
+      '<div class="left-out" role="status">',
+      "<p>Couldn't check who was left out of this release. ",
+      "Nobody is listed here, and that does not mean nobody was left out.</p>",
+      "</div>",
+    ].join("");
+  }
   const children = row.without_a_card || [];
   if (!children.length) return "";
   const who = children
