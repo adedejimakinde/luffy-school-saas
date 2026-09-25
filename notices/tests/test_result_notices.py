@@ -117,7 +117,14 @@ class NoticesSetUp(SendsThroughTheFake, ChainSetUp):
     # -- telling --------------------------------------------------------------
 
     def tell(self, school, sheet_id, head, *, now=None):
-        """`(what the principal is told, [queued task args])`."""
+        """`(what the principal is told, [queued task args])`.
+
+        Asked at noon yesterday unless the test says otherwise: inside the
+        sending hours, and already past for `send_notice()`'s own clock. Left
+        to the wall clock, every test here that sends would pass by day and
+        fail by night, when the batch is held for 07:00 and nothing is queued.
+        """
+        now = lagos(1, 12) if now is None else now
         with connected_to(school):
             with mock.patch("notices.tasks.send_notice.apply_async") as publish:
                 with self.captureOnCommitCallbacks(execute=True):
@@ -128,7 +135,7 @@ class NoticesSetUp(SendsThroughTheFake, ChainSetUp):
 
     def send_all(self, jobs):
         for args in jobs:
-            tasks.send_notice(*args)
+            tasks.send_notice.apply(args=args).get()
         connection.set_schema_to_public()
 
     def released_at(self, when):
