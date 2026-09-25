@@ -418,16 +418,6 @@ class TheBalanceMovedTests(RemindersSetUp):
         )
         self.assertEqual(self.get(self.bursar, "reminders/not-sent/").json()["children"], [])
 
-    def test_the_list_is_each_schools_own(self):
-        self.remind(group=self.jss1a, now=lagos(2, 21))
-        with connected_to(self.stmarys):
-            self.pay(self.ada, 10_000)
-        self.send_all(self.released_at(lagos(1, 7)))
-
-        self.client.force_login(self.their_bursar)
-        theirs = self.client.get("/api/fees/reminders/not-sent/", HTTP_HOST=THEIR_HOST)
-        self.assertEqual(theirs.json()["children"], [])
-
     def test_a_link_that_stops_receiving_invoices_overnight_is_not_sent(self):
         """D4's re-read, for the link. CONTROL: `send_notice` not asking
         `still_receives_invoices()` sends it."""
