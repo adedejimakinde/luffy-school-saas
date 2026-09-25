@@ -75,6 +75,15 @@ function classRow(row, note, asking) {
         `data-class="${esc(row.class_group_id)}">Send back</button>`,
     );
   }
+  if (row.may_tell_families) {
+    // Its own step after release (docs/messaging.md D9). The count is how many
+    // messages have been asked for already; pressing again sends only to
+    // families not yet told.
+    actions.push(
+      `<button type="button" class="tell" data-action="tell-families" ` +
+        `data-class="${esc(row.class_group_id)}">Tell families</button>`,
+    );
+  }
   return [
     `<li class="row state-${esc(row.state)}${note ? ` ${esc(note.kind)}` : ""}">`,
     `<span class="name">${esc(row.class_group)}</span>`,
@@ -89,6 +98,9 @@ function classRow(row, note, asking) {
         }</span>`,
     asking === row.class_group_id ? sendBackForm(row) : "",
     leftOut(row),
+    row.may_tell_families && row.families_told
+      ? `<span class="told">${esc(row.families_told)} message${row.families_told === 1 ? "" : "s"} to families so far.</span>`
+      : "",
     note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
     "</li>",
   ].join("");

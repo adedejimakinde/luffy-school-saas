@@ -132,6 +132,8 @@ TENANT_APPS = [
     # year. Two tables with different relationships to time do not belong in one
     # app, and `docs/attendance.md` D9 is the long form.
     "attendance",
+    # What a school tells families: docs/messaging.md, notices/models.py.
+    "notices",
     # What a school *publishes*: the approval chain a term's results go
     # through, and the snapshot frozen when they are released. Separate from
     # `gradebook` for the reason `gradebook` is separate from `fees` — a
@@ -502,6 +504,17 @@ INVITATION_CHANNEL = os.environ.get(
 # off, because the fake stores codes in the clear (D2). The test suite runs with
 # DEBUG off, as CI does, and switches the fake on per test.
 # ---------------------------------------------------------------------------
+#: A school's messages go between these hours, Lagos time; asked for outside
+#: them, they are held and sent at the opening hour (docs/messaging.md D7, as
+#: decided in review). Codes are not bound by this.
+NOTICE_HOURS = (7, 20)
+
+#: Segments a school may ask for in one Lagos day, sent or held. A batch that
+#: would cross it is refused whole, before anything is sent. A cost bound until
+#: docs/messaging.md OPEN-M3 says who pays; an environment variable, so a school's
+#: answer costs a deploy and not a migration.
+NOTICE_DAILY_SEGMENTS = int(os.environ.get("NOTICE_DAILY_SEGMENTS", 3000))
+
 _FAKE_PROVIDER = "messaging.fake.FakeProvider"
 MESSAGING_PROVIDERS = {
     "email": os.environ.get("MESSAGING_EMAIL_PROVIDER", "").strip()

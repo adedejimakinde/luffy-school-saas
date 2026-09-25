@@ -31,6 +31,10 @@ class Kind(models.TextChoices):
     SIGN_IN_CODE = "sign_in_code", "Sign-in code"
     REACTIVATION = "reactivation", "Reactivation"
     SCHOOL_ANSWER = "school_answer", "School answer"
+    RESULT_NOTICE = "result_notice", "Result notice"
+    #: A result notice for a card the school is withholding. Its own kind, so a
+    #: WhatsApp provider can hold a template for each.
+    RESULT_HELD = "result_held", "Result notice, card held"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -38,6 +42,10 @@ class Kind(models.TextChoices):
 CODE_KINDS = frozenset(
     {Kind.CHANNEL_CHECK, Kind.SIGN_IN_CODE, Kind.REACTIVATION, Kind.SCHOOL_ANSWER}
 )
+
+#: The choices a code delivery's `kind` may take: the code kinds and nothing
+#: else, so that a new kind of notice is not a migration on the code table.
+CODE_KIND_CHOICES = [(kind.value, kind.label) for kind in Kind if kind in CODE_KINDS]
 
 _NEVER_ASKED = "Nobody from the school will ask you for it."
 
@@ -61,11 +69,25 @@ _TEXT = {
     ),
 }
 
+# **No results in a result notice** (D9, requirement 7): the school, the child as
+# the card names them, the term, and where to read it. Nothing from the card.
+_TEXT[Kind.RESULT_NOTICE] = (
+    "{school}: {child}'s {term} report card is ready. Sign in {where_to_read} to read it."
+)
+# A held card says the school is holding it and who to call, and not why: the
+# gate says a card is held, and a lock screen is more public than a signed-in
+# page (docs/withholding.md, "What the 403 carries").
+_TEXT[Kind.RESULT_HELD] = (
+    "{school} is holding {child}'s {term} report card. Please contact the school: {contact}"
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
     Kind.REACTIVATION: "Your Classnode code",
     Kind.SCHOOL_ANSWER: "Your Classnode code",
+    Kind.RESULT_NOTICE: "A report card is ready",
+    Kind.RESULT_HELD: "About a report card",
 }
 
 
@@ -75,10 +97,17 @@ def _where():
     return f" Enter it at {host}." if host else ""
 
 
+def _where_to_read():
+    host = getattr(settings, "PORTAL_HOST", None)
+    return f"at {host}" if host else "on Classnode"
+
+
 def render(kind, *, channel_type, **params) -> str:
     """The text of one message of `kind`. Raises `KeyError` for a parameter it lacks."""
     what = "number" if channel_type == "phone" else "address"
-    return _TEXT[Kind(kind)].format(what=what, where=_where(), **params)
+    return _TEXT[Kind(kind)].format(
+        what=what, where=_where(), where_to_read=_where_to_read(), **params
+    )
 
 
 def subject(kind) -> str:
