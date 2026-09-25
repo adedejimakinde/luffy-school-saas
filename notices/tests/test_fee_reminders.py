@@ -402,6 +402,13 @@ class TheBalanceMovedTests(RemindersSetUp):
             [("Ada Obi", 120_000 * NAIRA, 110_000 * NAIRA)],
         )
 
+        # "Remind again" asks about Ada alone, through the route the page uses.
+        asked = self.get(self.bursar, f"reminders/?term_id={self.term_now.pk}&children={self.ada.pk}")
+        self.assertEqual(
+            [(c["student"], c["amount_kobo"]) for c in asked.json()["children"]],
+            [("Ada Obi", 110_000 * NAIRA)],
+        )
+
         again, jobs = self.remind(only=[self.ada.pk], now=lagos(1, 9))
         self.send_all(jobs)
         self.assertEqual(again["messages"], 1)
