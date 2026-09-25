@@ -329,6 +329,18 @@ class TheSwitchTests(NoticesSetUp):
         rows = self.client.get("/api/results/chain/", HTTP_HOST=HOST).json()["rows"]
         self.assertTrue(any(r["may_tell_families"] for r in rows))
 
+    def test_the_principal_or_an_administrator_turns_it_off_and_only_here(self):
+        """CONTROL: `set_offered_as()` without its roles check lets a teacher
+        switch Grace's notices off."""
+        with connected_to(self.grace):
+            with self.assertRaises(services.NotAllowed):
+                services.set_offered_as(self.grace_teacher.user, result_notices=False)
+            self.assertTrue(services.offered().result_notices)
+            services.set_offered_as(self.their_head.user, result_notices=False)
+            self.assertFalse(services.offered().result_notices)
+        with connected_to(self.stmarys):
+            self.assertTrue(services.offered().result_notices)
+
     def test_only_whoever_may_release_may_tell(self):
         self.client.force_login(self.teacher.user)
         refused = self.client.post(f"/api/results/chain/{self.jss1a_id}/tell-families/", HTTP_HOST=HOST)
@@ -348,6 +360,63 @@ class TheSwitchTests(NoticesSetUp):
             if r["class_group_id"] == self.jss1a_id
         )
         self.assertEqual(row["families_told"], 3)
+
+
+class TheQuestionTests(NoticesSetUp):
+    """D9: "The button says how many messages it will send before it sends them."
+
+    D7: and in quiet hours, "These will be sent at 07:00", before it is pressed.
+    """
+
+    def preview(self, host=HOST, group_id=None):
+        self.client.force_login(self.head.user)
+        with mock.patch("notices.tasks.send_notice.apply_async") as publish:
+            with self.captureOnCommitCallbacks(execute=True):
+                asked = self.client.get(
+                    f"/api/results/chain/{group_id or self.jss1a_id}/tell-families/", HTTP_HOST=host
+                )
+        self.assertEqual(publish.call_count, 0, "the question queued a send")
+        return asked
+
+    def test_asking_writes_nothing_and_says_how_many(self):
+        """CONTROL: the GET calling `tell_families()` writes St Mary's three
+        notices on the question, and this goes red at the count."""
+        asked = self.preview()
+
+        self.assertEqual(asked.status_code, 200, asked.content)
+        self.assertEqual((asked.json()["messages"], asked.json()["unreachable"]), (3, 1))
+        self.assertIn("This will send 3 messages to families", asked.json()["detail"])
+        for school in (self.stmarys, self.grace):
+            with connected_to(school):
+                self.assertEqual(Notice.objects.count(), 0)
+
+        self.client.force_login(self.head.user)
+        with mock.patch("notices.tasks.send_notice.apply_async"):
+            told = self.client.post(f"/api/results/chain/{self.jss1a_id}/tell-families/", HTTP_HOST=HOST)
+        self.assertEqual(told.json()["messages"], 3)
+
+    def test_asked_at_night_the_question_says_seven(self):
+        """CONTROL: the question's sentence leaving out `held_until` goes red."""
+        night = lagos(0, 21)
+        with mock.patch("notices.services.timezone", **{"now.return_value": night}):
+            asked = self.preview()
+
+        self.assertEqual(asked.json()["held_until"], lagos(-1, 7).isoformat())
+        self.assertIn(f"These will be sent at {hours.said(lagos(-1, 7))}", asked.json()["detail"])
+
+    @override_settings(NOTICE_DAILY_SEGMENTS=2)
+    def test_over_the_cap_the_question_is_the_refusal(self):
+        """Requirement 11, read before the press rather than after it.
+
+        CONTROL: the preview leaving out `_require_room()` answers 200 with a
+        count the press will then refuse.
+        """
+        asked = self.preview()
+
+        self.assertEqual(asked.status_code, 422, asked.content)
+        self.assertIn("has 2 left for", asked.json()["detail"])
+        with connected_to(self.stmarys):
+            self.assertEqual(Notice.objects.count(), 0)
 
 
 class TheRecordIsAppendOnlyTests(NoticesSetUp, RefusalAssertions):
