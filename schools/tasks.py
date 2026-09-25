@@ -153,10 +153,17 @@ class TenantTask(Task):
     them here would have told the tracer every `TenantTask` had custom handlers
     and made it call three no-ops per job.
 
-    The school is resolved once per execution and cached on `self.request`,
-    which Celery creates fresh per call — not on `self`, because a worker reuses
-    one task instance for every message it handles, and a school cached there
-    would be the *previous* job's school.
+    The school is resolved once per execution and cached on the request Celery
+    pushed for it — not on `self`, because a worker reuses one task instance for
+    every message it handles, and a school cached there would be the *previous*
+    job's school. **And not on `self.request` either, which is the same mistake
+    one step removed.** With nothing pushed — a task called in-process,
+    `record_a_term("grace", …)`, where `__call__` runs before Celery's own
+    `__call__` pushes anything — `self.request` is `_default_request`, one
+    `Context` per task instance that outlives the call. Cached there, the first
+    in-process call's school was every later one's, and a job for Grace ran in
+    St Mary's schema. So `_school()` caches only on `request_stack.top`, and a
+    call with nothing on the stack resolves its school and keeps nothing.
 
     Where the schema cannot be resolved at all, a handler runs where the worker
     started rather than not running. That case is a task that already failed —
@@ -186,12 +193,18 @@ class TenantTask(Task):
 
     def _school(self, args, kwargs):
         """The school this execution belongs to, resolved at most once."""
-        request = getattr(self, "request", None)
+        schema_name = schema_name_from(args, kwargs)
+        # The stack's top, never `self.request`: see the class docstring. And
+        # only for the schema it was resolved for, because `push_request()`
+        # copies the current request's attributes into the one it pushes: a
+        # task calling itself in-process for another school would otherwise
+        # inherit the outer call's school with everything else.
+        request = getattr(self.request_stack, "top", None)
         cached = getattr(request, "_tenant_task_school", None)
-        if cached is not None:
+        if cached is not None and cached.schema_name == schema_name:
             return cached
 
-        school = school_for(schema_name_from(args, kwargs))
+        school = school_for(schema_name)
         if request is not None:
             # `Context` takes arbitrary attributes; guard anyway, because a
             # failure to cache must not become a failure to run.

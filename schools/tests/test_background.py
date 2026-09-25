@@ -64,6 +64,26 @@ def record_a_term(schema_name, session):
     return connection.schema_name
 
 
+@shared_task(base=TenantTask)
+def record_here_then_there(schema_name, session, then=None):
+    """Write a term here, then call this task in-process for the school `then` names."""
+    Term.objects.create(
+        session=session,
+        name=TermName.FIRST,
+        starts_on=date(2025, 9, 15),
+        ends_on=date(2025, 12, 12),
+    )
+    if then:
+        record_here_then_there(then, session)
+    return connection.schema_name
+
+
+@shared_task(base=TenantTask)
+def name_the_school(schema_name):
+    """The name on the school the body is running in, as the connection has it."""
+    return connection.tenant.name
+
+
 @shared_task
 def report_the_schema():
     """A task with no base, to show what the base is actually doing."""
@@ -377,6 +397,50 @@ class TenantTaskTests(TestCase):
 
         self.assertEqual(self.terms_in(self.st_marys), ["2025/2026"])
         self.assertEqual(self.terms_in(self.grace), ["2024/2025"])
+
+    def test_called_in_process_each_call_runs_in_the_school_it_names(self):
+        """`record_a_term("grace", …)`, with no worker and no `.apply()` in front of it.
+
+        Called like that, a task starts with nothing on Celery's request stack,
+        and `self.request` is then `_default_request`: one `Context` per task
+        instance, which outlives the call.
+
+        CONTROL: `_school()` caching on `self.request`, as it did, runs every
+        in-process call in the first one's school, and Grace's term lands in
+        St Mary's.
+        """
+        self.assertEqual(record_a_term("st_marys", "2025/2026"), "st_marys")
+        self.assertEqual(record_a_term("grace", "2024/2025"), "grace")
+
+        self.assertEqual(self.terms_in(self.st_marys), ["2025/2026"])
+        self.assertEqual(self.terms_in(self.grace), ["2024/2025"])
+
+    def test_an_in_process_call_keeps_no_school_past_its_return(self):
+        """The next call reads the school afresh rather than remembering the last one's.
+
+        A rename stands in for the row changing under a process that lives
+        longer than one call — or, in a test run, for a school built again by
+        the next test under the same schema name.
+
+        CONTROL: caching on `self.request`, even keyed on the schema name,
+        answers the second call with the name the school had at the first.
+        """
+        self.assertEqual(name_the_school("grace"), "Grace Academy")
+        School.objects.filter(pk=self.grace.pk).update(name="Grace Academy, Ikeja")
+        self.assertEqual(name_the_school("grace"), "Grace Academy, Ikeja")
+
+    def test_a_task_calling_itself_for_another_school_runs_there(self):
+        """`push_request()` copies the outer request's attributes into the inner one.
+
+        CONTROL: `_school()` returning the cached school without asking which
+        schema it was resolved for runs the inner call in St Mary's, and Grace
+        gets no term.
+        """
+        landed = record_here_then_there.apply(args=["st_marys", "2025/2026", "grace"]).get()
+
+        self.assertEqual(landed, "st_marys")
+        self.assertEqual(self.terms_in(self.st_marys), ["2025/2026"])
+        self.assertEqual(self.terms_in(self.grace), ["2025/2026"])
 
     def test_the_body_runs_with_the_schools_search_path_set(self):
         landed = record_a_term.apply(args=["grace", "2024/2025"]).get()
