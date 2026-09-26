@@ -39,6 +39,7 @@ are renamed in M1.
 | --- | --- |
 | OPEN-M1, the amount on a fee reminder | **Yes, the amount is stated, and only to a live, verified channel.** A pending or dormant channel gets no amount, because it gets no reminder at all, and a test says so (requirement 14). |
 | D9, result notices as a step after release | **Agreed.** |
+| A child released in one class, moved, and released in another (2026-09-26, after M2) | **Both notices go.** They are two real report cards, and each is told once. `_batch()` keys a notice on the card and the contact, so no change was needed. |
 | D7, quiet hours | **Changed: held, not refused.** A school-originated message asked for between 20:00 and 07:00, Lagos time, is held and sent at 07:00. Codes are exempt, because a code held until morning would be dead fifteen minutes into its wait. |
 | D5 and D6, after the commit, at most once, codes encrypted on the broker | **Agreed.** |
 | D11, the result checker | **Agreed.** The PIN is printed in groups of four, and wrong attempts are rate-limited per admission number as well as per address. |
