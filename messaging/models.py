@@ -7,7 +7,7 @@ notices a school sends are its own, and live in its schema (M2).
 
 from django.db import models
 
-from .kinds import Kind
+from .kinds import CODE_KIND_CHOICES
 
 
 class DeliveriesAreAppendOnly(Exception):
@@ -53,7 +53,7 @@ class CodeDelivery(_AppendOnly):
     code = models.OneToOneField(
         "accounts.GuardianContactCode", related_name="delivery", on_delete=models.PROTECT
     )
-    kind = models.CharField(max_length=32, choices=Kind)
+    kind = models.CharField(max_length=32, choices=CODE_KIND_CHOICES)
     channel_type = models.CharField(max_length=8)
     claimed_at = models.DateTimeField(auto_now_add=True)
 

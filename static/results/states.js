@@ -31,13 +31,13 @@ const STEPS = [
  * number. Hiding those rows would make an empty list ambiguous — nothing to
  * do, or nothing you may see.
  */
-export function chain({ term = "", rows = [], notes = {}, asking = null } = {}) {
+export function chain({ term = "", rows = [], notes = {}, asking = null, telling = null } = {}) {
   return [
     '<section class="state state-chain" data-state="chain">',
     "<h1>Results</h1>",
     `<p class="term">${esc(term)}</p>`,
     '<ul class="classes">',
-    rows.map((row) => classRow(row, notes[row.class_group_id], asking)).join(""),
+    rows.map((row) => classRow(row, notes[row.class_group_id], asking, telling)).join(""),
     "</ul>",
     signOutButton(),
     "</section>",
@@ -63,7 +63,7 @@ export function noTerm() {
  * is final — a wrong card is corrected by reissuing it, not by moving the
  * sheet back — so an empty row would read as a page that failed to draw.
  */
-function classRow(row, note, asking) {
+function classRow(row, note, asking, telling) {
   const actions = STEPS.filter(([flag]) => row[flag]).map(
     ([, step, label]) =>
       `<button type="button" data-action="step" data-step="${step}" ` +
@@ -73,6 +73,16 @@ function classRow(row, note, asking) {
     actions.push(
       `<button type="button" class="send-back" data-action="ask-send-back" ` +
         `data-class="${esc(row.class_group_id)}">Send back</button>`,
+    );
+  }
+  if (row.may_tell_families) {
+    // Its own step after release (docs/messaging.md D9). Pressing it asks
+    // first — how many, and when — and sends nothing until "Send them". The
+    // count under the row is how many have been asked for already; pressing
+    // again sends only to families not yet told.
+    actions.push(
+      `<button type="button" class="tell" data-action="tell-families" ` +
+        `data-class="${esc(row.class_group_id)}">Tell families</button>`,
     );
   }
   return [
@@ -88,9 +98,33 @@ function classRow(row, note, asking) {
           row.state === "released" ? "Released — nothing further" : "Nothing for you here"
         }</span>`,
     asking === row.class_group_id ? sendBackForm(row) : "",
+    telling && telling.class_group_id === row.class_group_id ? tellingQuestion(row, telling) : "",
     leftOut(row),
+    row.may_tell_families && row.families_told
+      ? `<span class="told">${esc(row.families_told)} message${row.families_told === 1 ? "" : "s"} to families so far.</span>`
+      : "",
     note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
     "</li>",
+  ].join("");
+}
+
+/**
+ * The question "Tell families" asks before it sends anything.
+ *
+ * docs/messaging.md D9: how many messages; D7: in quiet hours, that they go at
+ * 07:00. The sentence is the server's preview, so the number read here is the
+ * number the same code counted, not one the page worked out. With nothing left
+ * to send there is nothing to confirm, only a box to close.
+ */
+function tellingQuestion(row, telling) {
+  const some = telling.messages > 0;
+  const id = esc(row.class_group_id);
+  return [
+    '<div class="telling" role="status">',
+    `<p>${esc(telling.detail)}</p>`,
+    some ? `<button type="button" data-action="send-to-families" data-class="${id}">Send them</button>` : "",
+    `<button type="button" data-action="cancel-telling" data-class="${id}">${some ? "Cancel" : "Close"}</button>`,
+    "</div>",
   ].join("");
 }
 

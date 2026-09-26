@@ -124,3 +124,10 @@ button.signout {
 }
 
 a { color: #14507d; }
+
+/* "Tell families" (docs/messaging.md D9): what was asked for so far, and what happened. */
+.row .told { grid-column: 1 / -1; color: var(--quiet); font-size: 0.95rem; }
+.row.told .note { color: var(--quiet); }
+.row.not-told .note { color: var(--stop); }
+.row .telling { grid-column: 1 / -1; }
+.row .telling p { margin: 0.25rem 0 0.5rem; }

@@ -24,7 +24,7 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, STEP, fetchChain, takeStep } from "./api.js";
+import { REFUSAL, STEP, fetchChain, previewFamilies, takeStep, tellFamilies } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -57,7 +57,7 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
 export function fromChain(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
   if (!answer.body.term_id) return { step: "no-term" };
-  return { step: "chain", ...answer.body, notes: {}, asking: null };
+  return { step: "chain", ...answer.body, notes: {}, asking: null, telling: null };
 }
 
 /** Replace one row, keeping the rest of the list as it was. */
@@ -161,6 +161,43 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     }
     if (action === "step") {
       await step(Number(hit.dataset.class), hit.dataset.step);
+      return;
+    }
+    if (action === "tell-families") {
+      // Asks first (docs/messaging.md D9): the preview writes nothing, and
+      // nothing is sent until "Send them".
+      const classGroupId = Number(hit.dataset.class);
+      const result = await previewFamilies({ classGroupId, fetchImpl });
+      if (result.refusal) {
+        state = { step: result.refusal, ...result.body };
+      } else if (!result.ok) {
+        const notes = { ...state.notes, [classGroupId]: { kind: "not-told", detail: result.body.detail } };
+        state = { ...state, notes, telling: null };
+      } else {
+        const notes = { ...state.notes };
+        delete notes[classGroupId];
+        state = { ...state, notes, telling: { class_group_id: classGroupId, ...result.body } };
+      }
+      draw();
+      return;
+    }
+    if (action === "cancel-telling") {
+      state = { ...state, telling: null };
+      draw();
+      return;
+    }
+    if (action === "send-to-families") {
+      const classGroupId = Number(hit.dataset.class);
+      const result = await tellFamilies({ classGroupId, fetchImpl });
+      if (result.refusal) {
+        state = { step: result.refusal, ...result.body };
+        draw();
+        return;
+      }
+      const notes = { ...state.notes, [classGroupId]: { kind: result.ok ? "told" : "not-told", detail: result.body.detail } };
+      await load();
+      if (state.step === "chain") state = { ...state, notes };
+      draw();
     }
   });
 

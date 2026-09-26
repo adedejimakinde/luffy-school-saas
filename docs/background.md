@@ -141,9 +141,16 @@ and the prefetch count, which no environment variable reaches.
 **No time limits and no retry policy.** Both want a measurement rather than a
 guess, and task 7 is where the measurement happens — 45 cards, timed.
 
-**No `beat`, no scheduler.** Nothing on this platform is periodic yet. Adding
-one is adding a second process with its own failure modes, and there is nothing
-for it to do.
+**No `beat`.** The platform's one periodic job so far, releasing result
+notices held overnight at 07:00 (`docs/messaging.md` D7), is a management
+command on the server's cron, `deploy/cron/classnode`, beside the nightly backup
+and the restore test: `manage.py release_held_notices`, every quarter hour from
+07:00 to 19:45 Lagos. `beat` would be a second scheduler, a second process with
+its own failure modes, and a second place to look for a job that did not run.
+The sweep only queues; the sends are ordinary tasks, claimed before they go, so
+a sweep run twice sends nothing twice. A Celery ETA task is not the alternative
+either: on this broker it is redelivered every `visibility_timeout` until its
+time comes.
 
 ## WeasyPrint is not pure Python
 
