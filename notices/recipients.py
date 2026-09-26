@@ -70,8 +70,17 @@ def for_child(student_membership_id, school):
 
 
 def still_reachable(notice, school) -> bool:
-    """D4 again, at the moment of sending, for the channel the notice chose."""
+    """D4 again, at the moment of sending, for the channel the notice chose.
+
+    **The link as well as the membership.** A guardian unlinked from this child
+    overnight is still live here if another child of theirs is, and the notice
+    names this one.
+    """
     if not is_live_at(notice.guardian_user_id, school):
+        return False
+    if not Guardianship.objects.filter(
+        guardian_id=notice.guardian_user_id, student_id=notice.student_membership_id
+    ).exists():
         return False
     from accounts.models import GuardianContact
 

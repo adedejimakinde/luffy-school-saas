@@ -23,7 +23,7 @@ from django.utils import timezone
 from messaging import providers
 from schools.tasks import TenantTask
 
-from . import recipients
+from . import hours, recipients
 from .models import Notice, NoticeClaim, NoticeKind, NoticeOutcome
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,13 @@ def send_notice(schema_name, notice_id):
     from results.withholding import is_withheld
 
     notice = Notice.objects.select_related("card").filter(pk=notice_id).first()
-    if notice is None or notice.send_after > timezone.now():
+    now = timezone.now()
+    if notice is None or notice.send_after > now:
+        return None
+    if hours.send_after(now) > now:
+        # D7 at the moment of sending, not only of asking: a job that reaches
+        # a worker after 20:00, behind a slow queue, stays unclaimed, and the
+        # 07:00 sweep sends it.
         return None
     school = school_on_this_connection()
 

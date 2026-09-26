@@ -133,15 +133,22 @@ class NoticesSetUp(SendsThroughTheFake, ChainSetUp):
                     )
         return told, [call.kwargs["args"] for call in publish.call_args_list]
 
-    def send_all(self, jobs):
+    def send_all(self, jobs, at=None):
         """Each job through `.apply()`, which pushes a request as a worker's tracer does.
 
         Every `TenantTask` test here is written that way. Called in-process
         instead, `send_notice` cached the first school it saw on Celery's
         default request and ran Grace's jobs in St Mary's (#168).
+
+        The worker's clock is noon today unless the test says otherwise.
+        `send_notice` asks the hours again when it runs, so a wall clock would
+        make every test that sends pass by day and fail by night, the trap
+        `tell()` already sidesteps.
         """
-        for args in jobs:
-            tasks.send_notice.apply(args=args).get()
+        at = lagos(0, 12) if at is None else at
+        with mock.patch("notices.tasks.timezone", **{"now.return_value": at}):
+            for args in jobs:
+                tasks.send_notice.apply(args=args).get()
         connection.set_schema_to_public()
 
     def released_at(self, when):
@@ -291,6 +298,53 @@ class HeldOvernightTests(NoticesSetUp):
             said = NoticeOutcome.objects.get(claim__notice__address=MAMA).said
         self.assertEqual(said, NoticeOutcome.Said.NO_LONGER_REACHABLE)
 
+
+    def test_a_guardian_unlinked_overnight_is_not_sent(self):
+        """D4 again at the moment of sending: the link, not only the membership.
+
+        Mama is Emeka's guardian too, so when her link to Ada goes overnight she
+        is still a parent at St Mary's, and a check of the membership alone
+        passes. Nneka's two notices, one at each school, still go.
+
+        CONTROL: `still_reachable()` without the link check sends Mama the
+        notice about Ada.
+        """
+        accounts.link_guardian(self.mama, self.children["emeka"])
+        self.tell(self.stmarys, self.ours, self.head, now=lagos(2, 21))
+        self.tell(self.grace, self.theirs, self.their_head, now=lagos(2, 21))
+        accounts.unlink_guardian(self.mama, self.children["ada"])
+
+        self.send_all(self.released_at(lagos(1, 7)))
+
+        ours = self.texts(MAMA)
+        self.assertEqual(len(ours), 1)
+        self.assertNotIn("Ada", ours[0])
+        self.assertEqual(len(self.texts(NNEKA)), 2)
+
+    def test_a_send_that_reaches_a_worker_after_eight_waits_for_seven(self):
+        """D7 at the moment of sending, not only of asking.
+
+        St Mary's asks at 19:59, inside the hours, and its jobs reach a worker
+        at 20:05 behind a slow queue: nothing goes, and the 07:00 sweep sends
+        them. Grace asks and sends at noon. The hours are the platform's, not a
+        school's, so the second school is the ordinary case beside the late one.
+
+        CONTROL: `send_notice` without its hours check sends St Mary's at 20:05.
+        """
+        told, ours = self.tell(self.stmarys, self.ours, self.head, now=lagos(1, 19, 59))
+        _, theirs = self.tell(self.grace, self.theirs, self.their_head, now=lagos(1, 12))
+        self.assertEqual((told["held_until"], len(ours)), (None, 3))
+
+        self.send_all(theirs, at=lagos(1, 12))
+        self.send_all(ours, at=lagos(1, 20, 5))
+
+        self.assertEqual(self.texts(MAMA), [])
+        self.assertEqual(len(self.texts(CHIDI_MUM)), 1)
+
+        at_seven = self.released_at(lagos(0, 7))
+        self.assertEqual(len(at_seven), 3)
+        self.send_all(at_seven, at=lagos(0, 7))
+        self.assertEqual(len(self.texts(MAMA)), 1)
 
 class TheCapTests(NoticesSetUp):
     @override_settings(NOTICE_DAILY_SEGMENTS=2)
