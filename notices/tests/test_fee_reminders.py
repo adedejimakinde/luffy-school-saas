@@ -192,9 +192,13 @@ class RemindersSetUp(SendsThroughTheFake, TestCase):
                     )
         return told, [call.kwargs["args"] for call in publish.call_args_list]
 
-    def send_all(self, jobs):
-        for args in jobs:
-            tasks.send_notice.apply(args=args).get()
+    def send_all(self, jobs, at=None):
+        """The worker's clock is noon today unless a test names one: `send_notice`
+        asks the hours again when it runs, so a wall clock fails by night."""
+        at = lagos(0, 12) if at is None else at
+        with mock.patch("notices.tasks.timezone", **{"now.return_value": at}):
+            for args in jobs:
+                tasks.send_notice.apply(args=args).get()
         connection.set_schema_to_public()
 
     def released_at(self, when):
