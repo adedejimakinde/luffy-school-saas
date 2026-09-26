@@ -418,6 +418,56 @@ class TheBalanceMovedTests(RemindersSetUp):
         )
         self.assertEqual(self.get(self.bursar, "reminders/not-sent/").json()["children"], [])
 
+    def test_a_payment_at_one_school_stops_only_that_schools_reminder(self):
+        """Mama has a child at each school, and both reminders wait for 07:00.
+        Ada's account moves at St Mary's; Zainab's at Grace does not.
+
+        CONTROL: `balance_of()` reading St Mary's ledger whatever school the
+        job is for finds nothing owing for Zainab there, and Grace's reminder
+        goes nowhere.
+        """
+        self.remind(group=self.jss1a, now=lagos(2, 21))
+        self.remind(school=self.grace, group=None, now=lagos(2, 21))
+        with connected_to(self.stmarys):
+            self.pay(self.ada, 10_000)
+
+        self.send_all(self.released_at(lagos(1, 7)))
+
+        self.assertEqual(
+            self.texts(MAMA),
+            ["Grace Academy: Zainab Musa's fees account shows NGN 90,000 owing. "
+             "Please contact the school."],
+        )
+        self.assertIn((self.ada.pk, NoticeOutcome.Said.BALANCE_CHANGED), self.said())
+        self.assertNotIn(
+            NoticeOutcome.Said.BALANCE_CHANGED, [said for _, said in self.said(self.grace)]
+        )
+
+    def test_a_family_that_paid_in_full_leaves_the_list(self):
+        """Paying is the usual reason a balance moves. Ada's account is cleared
+        overnight at St Mary's and Zainab's is only reduced at Grace: Ada has
+        nothing to be reminded of, and Zainab is still owed a reminder.
+
+        CONTROL: `not_sent()` listing every `balance_changed` child keeps Ada on
+        St Mary's list at NGN 0, where no "Remind again" can ever clear her.
+        """
+        self.remind(group=self.jss1a, now=lagos(2, 21))
+        self.remind(school=self.grace, group=None, now=lagos(2, 21))
+        with connected_to(self.stmarys):
+            self.pay(self.ada, 120_000)
+        with connected_to(self.grace):
+            self.pay(self.zainab, 10_000)
+
+        self.send_all(self.released_at(lagos(1, 7)))
+
+        self.assertEqual(self.get(self.bursar, "reminders/not-sent/").json()["children"], [])
+        theirs = self.get(self.their_bursar, "reminders/not-sent/", host=THEIR_HOST)
+        self.assertEqual(
+            [(c["student"], c["stated_kobo"], c["balance_kobo"])
+             for c in theirs.json()["children"]],
+            [("Zainab Musa", 90_000 * NAIRA, 80_000 * NAIRA)],
+        )
+
     def test_a_link_that_stops_receiving_invoices_overnight_is_not_sent(self):
         """D4's re-read, for the link. CONTROL: `send_notice` not asking
         `still_receives_invoices()` sends it."""
