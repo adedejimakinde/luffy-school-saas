@@ -296,9 +296,16 @@ class WhoIsRemindedTests(RemindersSetUp):
                 )
 
     def test_only_guardians_whose_link_receives_invoices(self):
-        """Papa's link says no. CONTROL: `for_child()` ignoring
-        `invoices_only` reminds him too."""
+        """Papa's link says no, so no reminder is even written for him.
+
+        Asserted on the notices as well as the texts: the send-time re-read
+        (`still_receives_invoices()`) would stop his text on its own, so a
+        test of the texts alone cannot see the filter at asking time.
+        CONTROL: `for_child()` ignoring `invoices_only` writes his notice.
+        """
         _, jobs = self.remind(group=self.jss1a)
+        with connected_to(self.stmarys):
+            self.assertFalse(Notice.objects.filter(address=PAPA).exists())
         self.send_all(jobs)
 
         self.assertEqual(self.texts(PAPA), [])
@@ -309,8 +316,12 @@ class WhoIsRemindedTests(RemindersSetUp):
         her uncle a phone nobody proved, and Kunle is live at Grace and still
         waiting for St Mary's. The amount is in one text: the aunt's email.
 
-        CONTROL: `for_child()` without its `is_live_at()` check reminds Kunle."""
+        CONTROL: `for_child()` without its `is_live_at()` check writes a
+        notice for Kunle. Asserted on the notices, because the send-time check
+        would stop his text on its own."""
         _, jobs = self.remind(group=self.jss1a)
+        with connected_to(self.stmarys):
+            self.assertFalse(Notice.objects.filter(address=KUNLE).exists())
         self.send_all(jobs)
 
         everything = list(FakeMessage.objects.values_list("address", "text"))
