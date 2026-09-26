@@ -278,9 +278,12 @@ def not_sent() -> list:
     """Children whose last reminder went nowhere because their balance moved.
 
     For the bursar's page (decided 2026-09-25), so she can send again. A child
-    leaves the list once a later reminder counts for them. One entry per child:
-    the latest such reminder, the amount it would have stated, and the account
-    as it stands now.
+    leaves the list once a later reminder counts for them, **or once the account
+    owes nothing**. Paying is the usual reason a balance moves overnight, and a
+    family that has paid in full has nothing to be reminded of: kept here, it
+    would stay for good, with no "Remind again" to clear it. One entry per
+    child: the latest such reminder, the amount it would have stated, and the
+    account as it stands now.
     """
     from results.services import school_on_this_connection
 
@@ -315,4 +318,5 @@ def not_sent() -> list:
             "balance_kobo": now_owed.get(child["id"], 0),
         }
         for child in _named(waiting, school)
+        if now_owed.get(child["id"], 0) > 0
     ]
