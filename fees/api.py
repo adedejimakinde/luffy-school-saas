@@ -31,7 +31,7 @@ from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.http import Http404
 from django.utils import timezone
-from ninja import Router, Schema
+from ninja import Query, Router, Schema
 
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role, User
@@ -79,6 +79,9 @@ class BooksOut(Schema):
     term: Optional[str]
     may_write: bool
     classes: List[ClassSummaryOut]
+    #: The bursar or an administrator, at a school that sends fee reminders
+    #: (docs/messaging.md D10). The page offers "Remind families" only then.
+    may_remind: bool = False
 
 
 class ChildBalanceOut(Schema):
@@ -97,6 +100,7 @@ class ClassBalancesOut(Schema):
     term_id: int
     term: str
     children: List[ChildBalanceOut]
+    may_remind: bool = False
 
 
 class EntryOut(Schema):
@@ -322,6 +326,7 @@ def books(request, term_id: Optional[int] = None):
         term=str(term) if term else None,
         may_write=may_write(request.user, school),
         classes=classes,
+        may_remind=_may_remind(request.user, school),
     )
 
 
@@ -366,6 +371,7 @@ def class_balances(request, class_group_id: int, term_id: int):
         term_id=term.pk,
         term=str(term),
         children=children,
+        may_remind=_may_remind(request.user, school),
     )
 
 
@@ -1041,6 +1047,198 @@ def revoke_concession(request, concession_id: int, payload: RevocationIn):
         return 409, MessageOut(detail=str(exc))
     concession = FeeConcession.objects.select_related("revocation").get(pk=concession.pk)
     return 201, _concession_out(concession)
+
+
+# -- fee reminders (docs/messaging.md D10) --------------------------------------
+
+
+def _may_remind(actor, school) -> bool:
+    from notices.services import offered
+
+    return may_write(actor, school) and offered().fee_reminders
+
+
+class ReminderChildOut(Schema):
+    student_membership_id: int
+    student: str
+    reference: str
+    #: The whole account, every term, as the ledger folds it now.
+    amount_kobo: int
+    #: The guardians who receive invoices and will be sent it, by name.
+    guardians: List[str] = []
+    #: Guardians who receive invoices and have no usable channel.
+    unreachable: int = 0
+
+
+class RemindersOut(Schema):
+    """What "Remind families" will send (the preview), or did (the press)."""
+
+    detail: str
+    messages: int
+    segments: int
+    held_until: Optional[str] = None
+    unreachable: int = 0
+    children: List[ReminderChildOut] = []
+    #: Owing, and reminded inside the interval already, so left out.
+    recently_reminded: List[ReminderChildOut] = []
+
+
+class RemindIn(Schema):
+    term_id: int
+    #: None is the whole school.
+    class_group_id: Optional[int] = None
+    #: Only these children: "Remind again", from the list of ones not sent.
+    children: Optional[List[int]] = None
+
+
+class NotSentOut(Schema):
+    student_membership_id: int
+    student: str
+    reference: str
+    term_id: int
+    #: What the reminder would have said, before the account moved.
+    stated_kobo: int
+    asked_for: datetime
+    #: The account now.
+    balance_kobo: int
+
+
+class NotSentListOut(Schema):
+    may_remind: bool
+    children: List[NotSentOut]
+
+
+_REMIND_RESPONSES = {200: RemindersOut, 403: MessageOut, 422: MessageOut}
+_MAY_NOT_REMIND = "Fee reminders are sent by the bursar or an administrator."
+
+
+def _reminding(request, term_id, class_group_id, children, act, say):
+    """The preview and the press: one lookup and one set of refusals for both."""
+    from notices import services as notices_services
+
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    if _refuse_non_writer(request.user, school) is not None:
+        return 403, MessageOut(detail=_MAY_NOT_REMIND)
+    term = Term.objects.filter(pk=term_id).first()
+    if term is None:
+        raise Http404("No such term.")
+    group = None
+    if class_group_id is not None:
+        group = ClassGroup.objects.filter(pk=class_group_id).first()
+        if group is None:
+            raise Http404("No such class.")
+    try:
+        answer = act(term, actor=request.user, class_group=group, only=children)
+    except notices_services.NotAllowed:
+        return 403, MessageOut(detail=_MAY_NOT_REMIND)
+    except notices_services.NoticesError as exc:
+        return 422, MessageOut(detail=str(exc))
+    held = answer["held_until"]
+    return 200, RemindersOut(
+        detail=say(answer),
+        messages=answer["messages"],
+        segments=answer["segments"],
+        held_until=held.isoformat() if held else None,
+        unreachable=answer["unreachable"],
+        children=[ReminderChildOut(**c) for c in answer["children"]],
+        recently_reminded=[ReminderChildOut(**c) for c in answer["recently_reminded"]],
+    )
+
+
+@router.get("/reminders/", response=_REMIND_RESPONSES)
+def preview_reminders(
+    request, term_id: int, class_group_id: Optional[int] = None,
+    children: List[int] = Query(None),
+):
+    """The bursar: which children, which guardians, how many messages. D10.
+
+    Writes and queues nothing, and is refused as the press would be, over the
+    cap included.
+    """
+    from notices import reminders
+
+    return _reminding(
+        request, term_id, class_group_id, children, reminders.preview_reminders,
+        lambda answer: _reminder_sentence(answer, asking=True),
+    )
+
+
+@router.post("/reminders/", response=_REMIND_RESPONSES)
+def send_reminders(request, payload: RemindIn):
+    """The bursar: remind each family who receives invoices of what the account shows."""
+    from notices import reminders
+
+    return _reminding(
+        request, payload.term_id, payload.class_group_id, payload.children,
+        reminders.send_reminders, lambda answer: _reminder_sentence(answer, asking=False),
+    )
+
+
+@router.get("/reminders/not-sent/", response=NotSentListOut)
+def reminders_not_sent(request):
+    """Children whose last reminder went nowhere because the account moved.
+
+    Decided 2026-09-25: listed on the bursar's page so she can send again. A
+    reader sees the list; only a writer is offered "Remind again".
+    """
+    from notices import reminders
+
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    return NotSentListOut(
+        may_remind=_may_remind(request.user, school),
+        children=[NotSentOut(**row) for row in reminders.not_sent()],
+    )
+
+
+def _plural(n, word, many=None):
+    return f"{n} {word if n == 1 else (many or word + 's')}"
+
+
+def _reminder_sentence(answer, *, asking):
+    """What the bursar reads: before pressing (`asking`) or after."""
+    from notices import hours, reminders
+
+    n = answer["messages"]
+    children = answer["children"]
+    skipped = answer["recently_reminded"]
+    days = reminders.interval().days
+    if not children and not skipped:
+        return "Nobody here owes anything, so there is nobody to remind."
+    if not children:
+        return f"Everybody here who owes was reminded in the last {days} days."
+    if n == 0:
+        sentence = "No guardian who receives invoices can be reached for these children."
+    else:
+        about = _plural(len([c for c in children if c["guardians"]]), "child", "children")
+        if asking:
+            sentence = f"This will send {_plural(n, 'message')} about {about}"
+        elif answer["held_until"]:
+            sentence = f"{_plural(n, 'message')} about {about} will be sent"
+        else:
+            sentence = f"{_plural(n, 'message')} about {about} {'is' if n == 1 else 'are'} being sent"
+        if answer["segments"] != n:
+            sentence += f" ({_plural(answer['segments'], 'SMS segment')})"
+        sentence += "."
+        if answer["held_until"]:
+            sentence += (
+                f" {'These will be sent' if asking else 'They go'} at "
+                f"{hours.said(answer['held_until'])}: messages are not sent between 20:00 and 07:00."
+            )
+    u = answer["unreachable"]
+    if u:
+        were = "will not be" if asking else ("was not" if u == 1 else "were not")
+        sentence += (
+            f" {_plural(u, 'guardian')} who receive{'s' if u == 1 else ''} invoices "
+            f"{'has' if u == 1 else 'have'} no verified phone or email, and {were} sent anything."
+        )
+    if skipped:
+        sentence += (
+            f" {_plural(len(skipped), 'child', 'children')} reminded in the last {days} days "
+            f"{'is' if len(skipped) == 1 else 'are'} left out."
+        )
+    return sentence
 
 
 __all__ = ["router"]

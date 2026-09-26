@@ -35,6 +35,7 @@ class Kind(models.TextChoices):
     #: A result notice for a card the school is withholding. Its own kind, so a
     #: WhatsApp provider can hold a template for each.
     RESULT_HELD = "result_held", "Result notice, card held"
+    FEE_REMINDER = "fee_reminder", "Fee reminder"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -81,6 +82,15 @@ _TEXT[Kind.RESULT_HELD] = (
     "{school} is holding {child}'s {term} report card. Please contact the school: {contact}"
 )
 
+# **The whole account, as the account** (decided 2026-09-25). The amount is the
+# ledger's fold over every term, which is what the bursar's class page shows,
+# and it is worded as the account's standing rather than a term's fees: a term
+# named beside it would claim last term's arrears were this term's. `NGN`, not
+# `₦`, which would make every SMS UCS-2 (D3).
+_TEXT[Kind.FEE_REMINDER] = (
+    "{school}: {child}'s fees account shows {amount} owing. {ask}"
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -88,6 +98,7 @@ _SUBJECT = {
     Kind.SCHOOL_ANSWER: "Your Classnode code",
     Kind.RESULT_NOTICE: "A report card is ready",
     Kind.RESULT_HELD: "About a report card",
+    Kind.FEE_REMINDER: "About school fees",
 }
 
 
@@ -100,6 +111,12 @@ def _where():
 def _where_to_read():
     host = getattr(settings, "PORTAL_HOST", None)
     return f"at {host}" if host else "on Classnode"
+
+
+def naira(kobo: int) -> str:
+    """`NGN 45,000`, or `NGN 45,000.50` when there are kobo. For a message body."""
+    whole, part = divmod(int(kobo), 100)
+    return f"NGN {whole:,}" + (f".{part:02d}" if part else "")
 
 
 def render(kind, *, channel_type, **params) -> str:

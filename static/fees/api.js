@@ -106,3 +106,31 @@ export const postConcession = ({ studentId, concession, fetchImpl = fetch }) =>
   write(concessionsUrl(studentId), concession, fetchImpl);
 export const postRevocation = ({ concessionId, reason, fetchImpl = fetch }) =>
   write(revocationUrl(concessionId), { reason }, fetchImpl);
+
+// -- fee reminders (docs/messaging.md D10). The preview writes nothing; the
+// press answers with what it did. A 403 or a 422 is a sentence on the page.
+
+export function remindersUrl({ termId, classId = null, children = null }) {
+  const parts = [`term_id=${q(termId)}`];
+  if (classId != null) parts.push(`class_group_id=${q(classId)}`);
+  for (const id of children || []) parts.push(`children=${q(id)}`);
+  return `/api/fees/reminders/?${parts.join("&")}`;
+}
+export const notSentUrl = () => "/api/fees/reminders/not-sent/";
+
+export async function previewReminders({ termId, classId = null, children = null, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await getJson(remindersUrl({ termId, classId, children }), { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+  if ([403, 422].includes(answer.status)) return { ok: false, refusal: null, body: answer.body || {} };
+  return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}
+
+export const postReminders = ({ termId, classId = null, children = null, fetchImpl = fetch }) =>
+  write("/api/fees/reminders/", { term_id: termId, class_group_id: classId, children }, fetchImpl);
+
+export const fetchNotSent = ({ fetchImpl = fetch } = {}) => read(notSentUrl(), fetchImpl);

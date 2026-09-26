@@ -94,6 +94,11 @@ class Notice(_AppendOnly):
     #: (D7): the claim's text can differ by a sentence, and the cap is a limit
     #: on what a school asked for, checked before anything goes.
     segments = models.PositiveSmallIntegerField()
+    #: A fee reminder's amount: the child's whole account as the ledger folded
+    #: it when the bursar pressed send, and the number the message states.
+    #: Null for a result notice. At send time the ledger is read again, and a
+    #: balance that has moved sends nothing (`Said.BALANCE_CHANGED`).
+    amount_kobo = models.BigIntegerField(null=True, blank=True)
     #: When it may go: now, or 07:00 Lagos time if it was asked for in quiet hours.
     send_after = models.DateTimeField()
     created_by_id = models.PositiveBigIntegerField()
@@ -107,6 +112,15 @@ class Notice(_AppendOnly):
             # notices only.
             models.UniqueConstraint(
                 fields=["card", "contact_id"], name="a_card_is_announced_to_a_contact_once"
+            ),
+            # A result notice is about a card and states no amount; a reminder
+            # states an amount owing and is about no card.
+            models.CheckConstraint(
+                condition=(
+                    Q(kind="result_notice", card__isnull=False, amount_kobo__isnull=True)
+                    | Q(kind="fee_reminder", card__isnull=True, amount_kobo__gt=0)
+                ),
+                name="a_notice_is_about_a_card_or_an_amount_owing",
             ),
         ]
 
@@ -136,6 +150,10 @@ class NoticeOutcome(_AppendOnly):
         #: The guardian or the channel stopped qualifying between the asking and
         #: the sending (D4 is read again at send time).
         NO_LONGER_REACHABLE = "no_longer_reachable", "No longer reachable"
+        #: A fee reminder whose account moved between the asking and the
+        #: sending. The number it would have stated is no longer true, so it
+        #: went nowhere, and it does not count against the reminder interval.
+        BALANCE_CHANGED = "balance_changed", "Balance changed before sending"
 
     claim = models.OneToOneField(NoticeClaim, related_name="outcome", on_delete=models.PROTECT)
     said = models.CharField(max_length=24, choices=Said)

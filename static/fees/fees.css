@@ -40,3 +40,11 @@ a{color:#14507d}
   .back,[data-action="sign-out"],.payment{display:none}
   .receipt{border-color:#000}
 }
+
+/* Fee reminders (docs/messaging.md D10): the question before sending, and the
+   ones the account moved under. */
+.reminding { margin: 0.75rem 0; padding: 0.75rem; border: 1px solid #c9d3dd; border-radius: 6px; }
+.reminding p { margin: 0 0 0.5rem; }
+.reminder-children { margin: 0 0 0.75rem; padding-left: 1.2rem; }
+.not-sent { margin-top: 1.5rem; }
+.not-sent li { margin-bottom: 0.5rem; }
