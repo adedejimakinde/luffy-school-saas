@@ -300,7 +300,8 @@ class TheHeaderPrintsInThePositionOrderTests(ReportCardApiSetUp):
             html = " ".join(pdf.html_for(card).split())
 
         printed = re.findall(
-            r'<th class="n">(.*?)<span class="max">/(\d+)</span></th>', html
+            r'<th class="n"><span class="col">(.*?)</span><span class="max">/(\d+)</span></th>',
+            html,
         )
         self.assertEqual(
             printed,
