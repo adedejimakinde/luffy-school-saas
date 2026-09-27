@@ -32,6 +32,11 @@ weasyprint>=62
 # this project now imports it itself.
 Pillow>=10.0
 
+# The roll import reads an Excel workbook as well as a CSV, and hands the office
+# a workbook template to fill in (accounts/bulk.py). Read-only, values only:
+# a formula is read as the value Excel saved, never evaluated.
+openpyxl>=3.1
+
 # What serves the application in production (`deploy/compose.yml`). Sync
 # workers: every request is short except the bulk import, and a process per
 # worker keeps a connection per request — the only topology issue #115 allows.

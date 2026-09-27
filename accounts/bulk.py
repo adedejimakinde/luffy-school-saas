@@ -62,10 +62,35 @@ Guardians go through `guardian_contacts.link_by_contact_as()`, the one code
 path D10 asks for: the same find-or-create, the same link, and the same channel
 recorded as the roll's guardians panel, so an imported guardian has a channel
 to verify.
+
+## A CSV or an Excel workbook, read into the same rows
+
+Most offices keep the roll in Excel, and "save as CSV" is a step that loses
+leading zeros and mangles names on the way. So `read_upload()` takes either and
+hands `check()` the same thing: `(line number, cells)` pairs, where the line is
+the row number the office sees in their spreadsheet. Everything after that,
+every rule above, is the same code for both.
+
+What decides the format is the file's first bytes, never its name: an
+`.xlsx` is a zip, an old `.xls` is refused with a sentence saying how to save
+it, and anything else is read as CSV text.
+
+An upload is a file somebody chose, so it is bounded before it is opened: at
+most `MAX_FILE_BYTES` sent, at most `MAX_UNPACKED_BYTES` once the workbook's zip
+is unpacked (read from the zip's own directory, before anything is inflated),
+and at most `MAX_ROWS` children. Formulas are read as the value Excel last
+saved, never evaluated.
+
+A row with nothing in any cell is skipped rather than refused: a spreadsheet
+often ends in rows that were formatted and never filled, and "line 212: a name
+is required" about a row the office cannot see would be a problem invented by
+this module.
 """
 
 import csv
+import datetime
 import io
+import zipfile
 from dataclasses import dataclass, field
 
 from django.db import transaction
@@ -81,6 +106,32 @@ from accounts.services import admit_student_as
 #: absent from the file entirely.
 REQUIRED_COLUMNS = ("full_name", "class_group")
 OPTIONAL_COLUMNS = ("username", "reference", "guardian_name", "guardian_contact")
+
+#: The columns in the order the template lays them out, and the heading each
+#: carries there. A heading is matched with its spaces read as underscores, so
+#: "Full name" and "full_name" are the same column.
+TEMPLATE_COLUMNS = (
+    ("full_name", "Full name"),
+    ("class_group", "Class group"),
+    ("reference", "Reference"),
+    ("username", "Username"),
+    ("guardian_name", "Guardian name"),
+    ("guardian_contact", "Guardian contact"),
+)
+
+#: The largest file looked at, in bytes. A school's whole roll as a workbook
+#: is a few hundred kilobytes.
+MAX_FILE_BYTES = 2 * 1024 * 1024
+
+#: The most a workbook may unpack to, read from its zip directory before any of
+#: it is inflated. A zip that claims more is refused unopened.
+MAX_UNPACKED_BYTES = 20 * 1024 * 1024
+
+#: The most children one file may admit.
+MAX_ROWS = 2000
+
+_ZIP = b"PK\x03\x04"
+_OLD_EXCEL = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 
 
 @dataclass
@@ -116,6 +167,14 @@ class GuardianLink:
 
 
 @dataclass
+class ReadRow:
+    """One row as it was read, before any verdict. For the preview."""
+
+    line: int
+    values: dict
+
+
+@dataclass
 class Report:
     """What a file would do, or did.
 
@@ -125,6 +184,8 @@ class Report:
 
     problems: list = field(default_factory=list)
     planned: list = field(default_factory=list)
+    #: Filled by `check()`: every row read, passed or not, in file order.
+    rows: list = field(default_factory=list)
     #: Filled by `admit()`: the handles this school now has to hand out.
     generated: dict = field(default_factory=dict)
     #: Filled by `admit()`: every guardian link made, in file order.
@@ -139,21 +200,218 @@ class BulkError(Exception):
     """The file cannot be read at all, or the school is not ready for one."""
 
 
-def _read(text):
+def _column_key(heading):
+    """"Full name", "full_name" and " FULL_NAME " are one column."""
+    return "_".join(str(heading or "").strip().lower().replace("-", " ").split())
+
+
+def _blank(cells):
+    return not any(str(c or "").strip() for c in cells)
+
+
+def _csv_table(text):
+    """CSV text as `(line, cells)` pairs, the line being where the row starts.
+
+    `csv.reader` rather than counting rows, because a quoted cell can hold a
+    line break and a blank line is still a line: the number given back has to
+    be the one the office's editor shows.
+    """
+    reader = csv.reader(io.StringIO(text))
+    table, last = [], 0
+    for cells in reader:
+        table.append((last + 1, cells))
+        last = reader.line_num
+    return table
+
+
+def _cell_text(value):
+    """What a workbook cell says, as the office would have typed it."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "TRUE" if value else "FALSE"
+    if isinstance(value, float) and value.is_integer():
+        # A number typed into a General cell comes back as 100.0.
+        return str(int(value))
+    if isinstance(value, datetime.datetime):
+        return value.date().isoformat() if value.time() == datetime.time() else value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return str(value).strip()
+
+
+def _xlsx_table(raw):
+    """The first sheet that has a roll's header, as `(row number, cells)` pairs."""
+    from openpyxl import load_workbook
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+        unpacked = sum(entry.file_size for entry in archive.infolist())
+    except zipfile.BadZipFile:
+        raise BulkError(_UNREADABLE)
+    if unpacked > MAX_UNPACKED_BYTES:
+        raise BulkError("That workbook is far larger than a roll needs. Save only the students' sheet and try again.")
+
+    try:
+        book = load_workbook(io.BytesIO(raw), read_only=True, data_only=True)
+    except Exception:
+        # openpyxl raises whatever its parser met: a broken zip member, bad
+        # XML, a workbook written by something that was not quite Excel. The
+        # office can act on "save it again" and on nothing more specific.
+        raise BulkError(_UNREADABLE)
+
+    try:
+        tables = []
+        for sheet in book.worksheets:
+            table = []
+            start = sheet.min_row or 1
+            for number, cells in enumerate(sheet.iter_rows(values_only=True), start=start):
+                if len(table) > MAX_ROWS + 1:
+                    break
+                cells = [_cell_text(c) for c in cells]
+                if not _blank(cells):
+                    table.append((number, cells))
+            header = {_column_key(c) for c in table[0][1]} if table else set()
+            if set(REQUIRED_COLUMNS) <= header:
+                return table
+            tables.append(table)
+        # No sheet has the header: read the first, and let `_read()` say which
+        # columns it is missing.
+        return tables[0] if tables else []
+    finally:
+        book.close()
+
+
+_UNREADABLE = (
+    "That file is not a spreadsheet this can read. Save it as an Excel "
+    "workbook (.xlsx) or as CSV, and try again."
+)
+
+
+def read_upload(raw: bytes):
+    """An uploaded file's bytes as the rows `check()` and `admit()` read.
+
+    The format is read from the file's first bytes, not from its name.
+    """
+    if len(raw) > MAX_FILE_BYTES:
+        raise BulkError("That file is over 2 MB. A roll is far smaller: save only the students and try again.")
+    if raw.startswith(_ZIP):
+        return _xlsx_table(raw)
+    if raw.startswith(_OLD_EXCEL):
+        raise BulkError(
+            "That is an older Excel file (.xls). In Excel choose File, Save As, "
+            "Excel Workbook (.xlsx), and choose the new file here."
+        )
+    try:
+        text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        # Excel on Windows saves "CSV" in the machine's own code page.
+        text = raw.decode("cp1252", errors="replace")
+    if "\x00" in text:
+        raise BulkError(_UNREADABLE)
+    return _csv_table(text)
+
+
+#: What the template's second sheet says, one line to a row.
+_HOW_TO = (
+    "How to fill in the Students sheet",
+    "",
+    "One child to a row. Leave the heading row as it is.",
+    "Full name: required.",
+    "Class group: required. Pick it from the list; it must be a class this school teaches this term.",
+    "Reference: the child's admission number. Optional, and never shared by two children.",
+    "Username: optional. Leave it blank and one is made from the admission number.",
+    "Guardian name and Guardian contact: optional, but give both or neither. "
+    "The contact is a phone number or an email address.",
+    "Two children with the same guardian contact are siblings: one guardian is linked to both.",
+    "",
+    "Nothing is saved until every row is right. The upload page shows every row "
+    "that needs fixing, by its row number here.",
+)
+
+#: Rows the template formats as text, so an admission number keeps its
+#: leading zeros and a phone number is not turned into 8.03E+09.
+_TEMPLATE_ROWS = 1000
+
+
+def template_workbook(class_names) -> bytes:
+    """The workbook an office fills in: this school's classes, and no children.
+
+    The class column is a drop-down of `class_names`, from a hidden sheet, so a
+    class is picked rather than typed. The columns that hold numbers a school
+    writes with leading zeros are formatted as text before anybody types.
+    There is no example row: an example left in would be admitted.
+    """
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.datavalidation import DataValidation
+
+    book = Workbook()
+    sheet = book.active
+    sheet.title = "Students"
+    sheet.append([heading for _, heading in TEMPLATE_COLUMNS])
+    sheet.freeze_panes = "A2"
+    for index, (key, heading) in enumerate(TEMPLATE_COLUMNS, start=1):
+        letter = get_column_letter(index)
+        sheet[f"{letter}1"].font = Font(bold=True)
+        sheet.column_dimensions[letter].width = max(16, len(heading) + 6)
+        if key in ("reference", "username", "guardian_contact"):
+            for row in range(2, _TEMPLATE_ROWS + 2):
+                sheet[f"{letter}{row}"].number_format = "@"
+
+    names = [name for name in class_names if name]
+    if names:
+        classes = book.create_sheet("Classes")
+        for name in names:
+            classes.append([name])
+        classes.sheet_state = "hidden"
+        column = get_column_letter(1 + [k for k, _ in TEMPLATE_COLUMNS].index("class_group"))
+        choice = DataValidation(
+            type="list",
+            formula1=f"=Classes!$A$1:$A${len(names)}",
+            allow_blank=True,
+            showErrorMessage=True,
+            errorTitle="Not a class here",
+            error="Choose a class from the list.",
+        )
+        choice.add(f"{column}2:{column}{_TEMPLATE_ROWS + 1}")
+        sheet.add_data_validation(choice)
+
+    notes = book.create_sheet("How to fill it in")
+    for line in _HOW_TO:
+        notes.append([line])
+    notes["A1"].font = Font(bold=True)
+    notes.column_dimensions["A"].width = 100
+
+    out = io.BytesIO()
+    book.save(out)
+    return out.getvalue()
+
+
+def _read(source):
     """The file as a list of `(line number, row dict)`, header matched by name.
+
+    `source` is CSV text, or rows already read by `read_upload()`.
 
     Case-insensitive and order-independent: a spreadsheet somebody reordered is
     still the same file, and a positional format would read the new order as
     the old one and enrol everybody into the wrong class without a word.
 
-    The header is line 1, so the first child is line 2 — which is what the
-    office sees in their editor.
+    The header is the first row with anything in it, normally line 1, so the
+    first child is line 2 — which is what the office sees in their editor.
     """
-    reader = csv.DictReader(io.StringIO(text))
-    if reader.fieldnames is None:
+    table = _csv_table(source) if isinstance(source, str) else list(source)
+    table = [(line, cells) for line, cells in table if not _blank(cells)]
+    if not table:
         raise BulkError("That file has no header row, so its columns cannot be read.")
 
-    seen = {(name or "").strip().lower(): name for name in reader.fieldnames}
+    _, header = table[0]
+    seen = {}
+    for index, heading in enumerate(header):
+        key = _column_key(heading)
+        if key and key not in seen:
+            seen[key] = index
     missing = [c for c in REQUIRED_COLUMNS if c not in seen]
     if missing:
         raise BulkError(
@@ -162,15 +420,24 @@ def _read(text):
             + ", ".join(sorted(missing))
             + "."
         )
+    if len(table) == 1:
+        # The template, downloaded and sent straight back. Admitting nobody
+        # and calling it done would tell the office the roll was in.
+        raise BulkError("That file has the headings and no children under them yet.")
+    if len(table) - 1 > MAX_ROWS:
+        raise BulkError(
+            f"That file has more than {MAX_ROWS:,} children in it. Split it into "
+            "smaller files and import them one at a time."
+        )
 
     rows = []
-    for offset, raw in enumerate(reader, start=2):
+    for line, cells in table[1:]:
         row = {
-            key: (raw.get(original) or "").strip()
-            for key, original in seen.items()
+            key: str(cells[index] if index < len(cells) else "").strip()
+            for key, index in seen.items()
             if key in REQUIRED_COLUMNS + OPTIONAL_COLUMNS
         }
-        rows.append((offset, row))
+        rows.append((line, row))
     return rows
 
 
@@ -229,7 +496,7 @@ def _generated_username(school, reference, taken):
         n += 1
 
 
-def check(school, text) -> Report:
+def check(school, source) -> Report:
     """Read a file and say what is wrong with it. **Writes nothing.**
 
     Every row is checked and every problem reported. Checks run in a fixed
@@ -245,8 +512,11 @@ def check(school, text) -> Report:
     taken_usernames = set()
     taken_references = set()
 
-    for line, row in _read(text):
+    for line, row in _read(source):
         problems_before = len(report.problems)
+        report.rows.append(
+            ReadRow(line, {c: row.get(c, "") for c in REQUIRED_COLUMNS + OPTIONAL_COLUMNS})
+        )
 
         full_name = row.get("full_name", "")
         if not full_name:
@@ -342,7 +612,7 @@ def check(school, text) -> Report:
     return report
 
 
-def admit(actor, school, term, text) -> Report:
+def admit(actor, school, term, source) -> Report:
     """Admit a whole file, or none of it.
 
     `check()` runs first and the write only starts if it found nothing. That
@@ -365,7 +635,7 @@ def admit(actor, school, term, text) -> Report:
             "current term before importing a roll."
         )
 
-    report = check(school, text)
+    report = check(school, source)
     if not report.ok:
         return report
 
@@ -415,6 +685,12 @@ def admit(actor, school, term, text) -> Report:
 
 __all__ = [
     "BulkError",
+    "MAX_FILE_BYTES",
+    "MAX_ROWS",
+    "ReadRow",
+    "TEMPLATE_COLUMNS",
+    "read_upload",
+    "template_workbook",
     "GuardianLink",
     "Report",
     "RowProblem",

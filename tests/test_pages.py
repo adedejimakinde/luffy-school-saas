@@ -30,7 +30,13 @@ from django.test import SimpleTestCase
 
 import pages
 from accounts.views import MODULES as SIGN_IN_MODULES
-from accounts.views import INVITE_MODULES, ROLL_MODULES, STAFF_MODULES, STAFF_PAGE_MODULES
+from accounts.views import (
+    INVITE_MODULES,
+    ROLL_IMPORT_MODULES,
+    ROLL_MODULES,
+    STAFF_MODULES,
+    STAFF_PAGE_MODULES,
+)
 from academics.views import SETUP_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import FEES_MODULES
@@ -63,6 +69,7 @@ PAGES = {
     "comments": COMMENTS_MODULES,
     "setup": SETUP_MODULES,
     "roll": ROLL_MODULES,
+    "roll-import": ROLL_IMPORT_MODULES,
     "staff": STAFF_PAGE_MODULES,
     "broadsheet": BROADSHEET_MODULES,
     "invite": INVITE_MODULES,

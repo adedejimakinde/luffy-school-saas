@@ -40,7 +40,7 @@ from typing import List, Optional
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 
@@ -430,41 +430,22 @@ class BulkReportOut(Schema):
     guardians_pending: int
 
 
-@router.post(
-    "/roll/import/",
-    response={200: BulkReportOut, 403: MessageOut, 422: MessageOut},
-)
-def bulk_admit(request, payload: BulkIn):
-    """Admit a whole class from a CSV, or none of it.
+def _may_import(request, school):
+    """Both authorities, asked **before the file is read** (the oracle rule).
 
-    A 200 carrying `problems` is the ordinary refusal — the file was read, every
-    row was judged, and nothing was written. It is not a 422, because the
-    request was well formed and the *file* is what disagrees; the body is the
-    answer rather than the error.
-
-    A 422 is for a file that cannot be read as a file at all: no header, a
-    missing required column, or no current term to place anybody in.
+    A bulk import places every child, so it needs both, and an administrator
+    holds both. The preview and the template ask the same question, because
+    what they show is this school's classes and what its roll would become.
     """
-    school = _school_of(request)
     if not accounts_services.can_grant_memberships(request.user, school):
         return 403, MessageOut(detail=_MAY_NOT_ADMIT)
     if not academics.can_place_students(request.user, school):
-        # A bulk import places every child, so it needs both authorities —
-        # and an administrator holds both.
         return 403, MessageOut(detail=_MAY_NOT_PLACE)
+    return None
 
-    try:
-        report = bulk.admit(request.user, school, _current_term(), payload.csv)
-    except bulk.BulkError as exc:
-        return 422, MessageOut(detail=str(exc))
-    except ValidationError as exc:
-        return 422, MessageOut(detail=_first(exc))
-    except guardian_contacts.GuardianContactError as exc:
-        # A contact two accounts answer to, found at write time. Nothing was
-        # written: `admit()` holds the whole file in one transaction.
-        return 422, MessageOut(detail=str(exc))
 
-    return 200, BulkReportOut(
+def _report_out(report) -> BulkReportOut:
+    return BulkReportOut(
         admitted=len(report.planned) if report.ok else 0,
         problems=[
             RowProblemOut(line=p.line, column=p.column, detail=p.detail)
@@ -481,6 +462,195 @@ def bulk_admit(request, payload: BulkIn):
             1 for link in report.guardian_links if link.status == guardian_contacts.PENDING
         ),
     )
+
+
+def _admit(request, school, source):
+    try:
+        report = bulk.admit(request.user, school, _current_term(), source)
+    except bulk.BulkError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except ValidationError as exc:
+        return 422, MessageOut(detail=_first(exc))
+    except guardian_contacts.GuardianContactError as exc:
+        # A contact two accounts answer to, found at write time. Nothing was
+        # written: `admit()` holds the whole file in one transaction.
+        return 422, MessageOut(detail=str(exc))
+    return 200, _report_out(report)
+
+
+@router.post(
+    "/roll/import/",
+    response={200: BulkReportOut, 403: MessageOut, 422: MessageOut},
+)
+def bulk_admit(request, payload: BulkIn):
+    """Admit a whole class from a CSV, or none of it.
+
+    A 200 carrying `problems` is the ordinary refusal — the file was read, every
+    row was judged, and nothing was written. It is not a 422, because the
+    request was well formed and the *file* is what disagrees; the body is the
+    answer rather than the error.
+
+    A 422 is for a file that cannot be read as a file at all: no header, a
+    missing required column, or no current term to place anybody in.
+    """
+    school = _school_of(request)
+    refused = _may_import(request, school)
+    if refused:
+        return refused
+    return _admit(request, school, payload.csv)
+
+
+# -- the same, from a file: an Excel workbook or a CSV -----------------------
+#
+# Multipart, as the crest upload is: a workbook is binary, and base64 inside
+# JSON would be a third larger on a metered connection for nothing. The CSRF
+# check is ninja's own either way, because both routes sit behind
+# `session_auth`.
+
+
+class ImportDoorOut(Schema):
+    """What the upload page needs before a file is chosen.
+
+    `term` is null when no term is open, and then nothing can be imported:
+    there is no class to place anybody in. `classes` are the names the file's
+    class column must use, the same list the template's drop-down offers.
+    """
+
+    term: Optional[str]
+    classes: List[str]
+
+
+class PreviewRowOut(Schema):
+    """One row of the file as it was read, and what is wrong with it."""
+
+    line: int
+    full_name: str
+    class_group: str
+    reference: str
+    username: str
+    guardian_name: str
+    guardian_contact: str
+    problems: List[RowProblemOut]
+
+
+class PreviewOut(Schema):
+    """`check()`'s verdict on every row. **Nothing has been written.**
+
+    `admissible` is the whole file's verdict: true only when no row has a
+    problem, because the file is admitted whole or not at all.
+    """
+
+    rows: List[PreviewRowOut]
+    problem_rows: int
+    admissible: bool
+
+
+def _upload(request):
+    """The chosen file's bytes, or the sentence saying why there are none."""
+    upload = request.FILES.get("file")
+    if upload is None:
+        return None, MessageOut(detail="Choose an Excel workbook (.xlsx) or a CSV file.")
+    if upload.size > bulk.MAX_FILE_BYTES:
+        return None, MessageOut(
+            detail="That file is over 2 MB. A roll is far smaller: save only the students and try again."
+        )
+    return upload.read(), None
+
+
+def _active_class_names():
+    return list(
+        ClassGroup.objects.filter(is_active=True).order_by("name").values_list("name", flat=True)
+    )
+
+
+@router.get("/roll/import/door/", response={200: ImportDoorOut, 403: MessageOut})
+def import_door(request):
+    school = _school_of(request)
+    refused = _may_import(request, school)
+    if refused:
+        return refused
+    term = _current_term()
+    return 200, ImportDoorOut(term=str(term) if term else None, classes=_active_class_names())
+
+
+@router.post(
+    "/roll/import/check/",
+    response={200: PreviewOut, 403: MessageOut, 422: MessageOut},
+)
+def import_check(request):
+    """Read a file and judge every row. **Writes nothing.**
+
+    The same `check()` the import runs first, so a file this passes is a file
+    the import will take, unless the roll changes in between, and then the
+    import says so row by row, as this does.
+    """
+    school = _school_of(request)
+    refused = _may_import(request, school)
+    if refused:
+        return refused
+    if _current_term() is None:
+        return 422, MessageOut(
+            detail="No term is open, so there is no class to place anybody in. "
+            "Set the current term before importing a roll."
+        )
+    raw, problem = _upload(request)
+    if problem:
+        return 422, problem
+    try:
+        report = bulk.check(school, bulk.read_upload(raw))
+    except bulk.BulkError as exc:
+        return 422, MessageOut(detail=str(exc))
+
+    by_line = {}
+    for p in report.problems:
+        by_line.setdefault(p.line, []).append(
+            RowProblemOut(line=p.line, column=p.column, detail=p.detail)
+        )
+    rows = [
+        PreviewRowOut(line=row.line, problems=by_line.get(row.line, []), **row.values)
+        for row in report.rows
+    ]
+    return 200, PreviewOut(
+        rows=rows,
+        problem_rows=len(by_line),
+        admissible=report.ok,
+    )
+
+
+@router.post(
+    "/roll/import/file/",
+    response={200: BulkReportOut, 403: MessageOut, 422: MessageOut},
+)
+def import_file(request):
+    """Admit a whole file, workbook or CSV, or none of it. As `bulk_admit()`."""
+    school = _school_of(request)
+    refused = _may_import(request, school)
+    if refused:
+        return refused
+    raw, problem = _upload(request)
+    if problem:
+        return 422, problem
+    try:
+        source = bulk.read_upload(raw)
+    except bulk.BulkError as exc:
+        return 422, MessageOut(detail=str(exc))
+    return _admit(request, school, source)
+
+
+@router.get("/roll/import/template/", response={403: MessageOut})
+def import_template(request):
+    """The workbook to fill in, with **this school's** classes in its drop-down."""
+    school = _school_of(request)
+    refused = _may_import(request, school)
+    if refused:
+        return refused
+    response = HttpResponse(
+        bulk.template_workbook(_active_class_names()),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = 'attachment; filename="students-template.xlsx"'
+    response["Cache-Control"] = "private, no-store"
+    return response
 
 
 # ---------------------------------------------------------------------------

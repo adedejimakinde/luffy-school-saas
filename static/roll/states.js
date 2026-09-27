@@ -28,6 +28,8 @@ export function roll({
     '<section class="state state-roll" data-state="roll">',
     "<h1>The roll</h1>",
     `<p class="term">${esc(term) || "No term is open"}</p>`,
+    // A whole class from a spreadsheet: the same authority as admitting one.
+    may_admit ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>' : "",
     panel ? guardiansPanel(panel) : "",
     children.length
       ? `<ul class="children">${children

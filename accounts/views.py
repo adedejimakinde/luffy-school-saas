@@ -125,6 +125,33 @@ def roll_page(request):
     )
 
 
+#: The roll import's own modules.
+ROLL_IMPORT_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "roll-import/api.js",
+    "roll-import/states.js",
+    "roll-import/app.js",
+)
+
+
+def roll_import_page(request):
+    """The frame for importing a roll from a spreadsheet. Holds no child.
+
+    A shell, as the roll is: who may import is `enrolment_api._may_import()`'s
+    question, asked by the page's first fetch, and a view that answered it too
+    would be a second place asking.
+    """
+    return render(
+        request,
+        "accounts/roll_import_page.html",
+        {
+            "import_map": pages.import_map(*ROLL_IMPORT_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 #: The staff page's own modules.
 STAFF_PAGE_MODULES = (
     "web/html.js",

@@ -115,7 +115,11 @@ export function fakeRoot(dataset = {}) {
     },
     async submit(formFields = {}) {
       const form = {};
-      for (const [name, value] of Object.entries(formFields)) form[name] = { value };
+      // A string is a typed value; an object is the field itself, for the
+      // fields a string cannot stand in for (a file input's `files`).
+      for (const [name, value] of Object.entries(formFields)) {
+        form[name] = value !== null && typeof value === "object" ? value : { value };
+      }
       let prevented = false;
       for (const handler of listeners.submit || []) {
         await handler({ target: form, preventDefault: () => (prevented = true) });
