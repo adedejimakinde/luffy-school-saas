@@ -1,0 +1,30 @@
+{% comment %}
+The app shell's opening half, from `menu.shell_open`: the sidebar and the top
+bar, built from the signed-in login's roles at this school. Closed by
+`shell_close.html`, around the page's own `.content > main`.
+{% endcomment %}
+<body class="has-shell{% if menu.tabs %} has-tabbar{% endif %}">
+{% include "design/icons.html" %}
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    {% if menu.groups %}
+    <div class="nav">
+      {% for group in menu.groups %}
+      {% if group.heading %}<p class="nav-heading">{{ group.heading }}</p>{% endif %}
+      {% for link in group.links %}
+      <a href="{{ link.href }}"{% if link.key == menu.current %} aria-current="page"{% endif %}><svg class="icon"><use href="#{{ link.icon }}"/></svg>{{ link.label }}</a>
+      {% endfor %}
+      {% endfor %}
+    </div>
+    {% endif %}
+  </nav>
+
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
+      <svg class="icon"><use href="#i-menu"/></svg>
+    </button>
+    <span class="spacer"></span>
+  </header>
+
+  <div class="content">

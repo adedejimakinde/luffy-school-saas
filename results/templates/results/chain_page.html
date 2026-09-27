@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Results</title>
@@ -24,27 +24,7 @@ which is on the portal while this page is on a school's host. Empty where no
 portal domain is configured, and the state then renders its sentence without a
 link — `schools.hosts.portal_host()` states the rule.
 {% endcomment %}
-<body class="has-shell has-tabbar">
-{% include "design/icons.html" %}
-<div class="shell">
-  <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo" href="/home/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
-    <div class="nav">
-      <a href="/home/"><svg class="icon"><use href="#i-home"/></svg>Home</a>
-      <a href="/results/" aria-current="page"><svg class="icon"><use href="#i-results"/></svg>Results</a>
-      <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg>Broadsheets</a>
-      <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg>Absences</a>
-    </div>
-  </nav>
-
-  <header class="topbar">
-    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
-      <svg class="icon"><use href="#i-menu"/></svg>
-    </button>
-    <span class="spacer"></span>
-  </header>
-
-  <div class="content">
+{% shell_open "results" %}
     <main id="results" data-portal="{{ portal_host }}">
       <noscript>
         <h1>Results</h1>
@@ -53,12 +33,4 @@ link — `schools.hosts.portal_host()` states the rule.
       </noscript>
       <p class="state state-loading">Finding your classes&hellip;</p>
     </main>
-  </div>
-
-  <nav class="tabbar" aria-label="Main">
-    <a href="/home/"><svg class="icon"><use href="#i-home"/></svg><span class="tab-label">Home</span></a>
-    <a href="/results/" aria-current="page"><svg class="icon"><use href="#i-results"/></svg><span class="tab-label">Results</span></a>
-    <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg><span class="tab-label">Broadsheets</span></a>
-    <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg><span class="tab-label">Absences</span></a>
-  </nav>
-</div>
+{% shell_close "results" %}

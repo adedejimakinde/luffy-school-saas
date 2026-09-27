@@ -1,0 +1,9 @@
+  </div>
+{% if menu.tabs %}
+  <nav class="tabbar" aria-label="Main">
+    {% for link in menu.tabs %}
+    <a href="{{ link.href }}"{% if link.key == menu.current %} aria-current="page"{% endif %}><svg class="icon"><use href="#{{ link.icon }}"/></svg><span class="tab-label">{{ link.label }}</span></a>
+    {% endfor %}
+  </nav>
+{% endif %}
+</div>
