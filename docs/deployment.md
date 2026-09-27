@@ -49,8 +49,10 @@ backups are lost too.
 
 ## Images
 
-CI (`.github/workflows/tests.yml`, job `image`) builds two images after the
-suite passes, and tags both with the commit's full SHA:
+CI (`.github/workflows/tests.yml`, job `image`) builds the images alongside the
+suite, and on `main` pushes them as `candidate-<sha>`. Once the suite has passed
+on that commit, job `publish` gives them the commit's full SHA as their tag,
+without rebuilding them:
 
 - `ghcr.io/adedejimakinde/luffy-school-saas:<sha>` — the application, which
   `web` and `worker` both run.
@@ -59,14 +61,15 @@ suite passes, and tags both with the commit's full SHA:
 
 Before pushing, the job renders a PDF inside the application image, runs
 `check --deploy` inside it under `production.env`, validates the Caddyfile and
-validates the compose file. It pushes from `main` only.
+validates the compose file. It pushes from `main` only, and nothing deploys a
+`candidate-` tag.
 
 ## Deploying
 
 1. Pick the commit: a full SHA on `main` whose CI passed.
 2. Run the **deploy** workflow (Actions → deploy → Run workflow) with that SHA.
    **[needs the server and the three deploy secrets]** It refuses a SHA that is
-   not on main, or on which `test` and `image` did not both pass, and then
+   not on main, or on which `test`, `image` and `publish` did not all pass, and then
    runs `/opt/classnode/deploy.sh <sha>` on the server over SSH.
 3. `deploy.sh` pulls the two images, migrates with the new image while the old
    one serves, swaps `web`, `worker` and `caddy`, and asks `/healthz/` inside

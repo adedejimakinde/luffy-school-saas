@@ -6,8 +6,27 @@ on:
   pull_request:
 
 jobs:
-  test:
+  # The suite, dealt into four jobs that run side by side on four runners.
+  #
+  # One job ran it in 36–47 minutes. The suite is about 9,660 seconds of worker
+  # time, measured per test class from run 36217583820, and four runners of four
+  # cores each bring that to about ten minutes a job. `scripts/shard_tests.py`
+  # does the dealing; its header says how, and how a job proves it ran every
+  # test it was dealt.
+  #
+  # Each job is a whole copy of the old one: its own Postgres, its own Redis,
+  # its own test database. Nothing is shared between them, so nothing one job
+  # does can make another pass.
+  shard:
+    name: tests ${{ matrix.shard }}/4
     runs-on: ubuntu-latest
+
+    strategy:
+      # All four run to the end even when one fails, so a red run shows every
+      # failure it has rather than the first job's.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
 
     defaults:
       run:
@@ -81,6 +100,9 @@ jobs:
       # `localhost` above: the service is published on the runner's network
       # here, not reachable by service name as it is under docker-compose.
       CELERY_BROKER_URL: redis://localhost:6379/0
+      # Each worker prints how long each test class took, which is what
+      # `scripts/shard_tests.py weights` rebuilds the dealing's weights from.
+      LUFFY_CLASS_SECONDS: 1
 
     steps:
       - uses: actions/checkout@v4
@@ -110,7 +132,11 @@ jobs:
 
       # Catches a model edited without its migration, which the test suite
       # would otherwise sail past — the test database is built from the models.
+      #
+      # This and the other quick checks below run in the first job only: each
+      # takes seconds and asks nothing a second copy would answer differently.
       - name: Check for missing migrations
+        if: matrix.shard == 1
         run: python manage.py makemigrations --check --dry-run
 
       # The deployment checklist, including this project's own `accounts.E001`
@@ -127,6 +153,7 @@ jobs:
       # the same check inside the suite, and the `image` job below runs it once
       # more inside the built image.
       - name: Deployment checks
+        if: matrix.shard == 1
         run: |
           set -a
           . deploy/production.env
@@ -160,56 +187,79 @@ jobs:
       # a wrong link — which is exactly why they are tested here rather than
       # eyeballed once.
       - uses: actions/setup-node@v4
+        if: matrix.shard == 1
         with:
           node-version: '22'
 
       - name: Page module tests
+        if: matrix.shard == 1
         run: npm test
 
-      # `--parallel` splits the suite across worker processes, each with its own
-      # clone of the test database. Both halves of the suite's cost are now
-      # addressed here, and they interact, so it is worth stating the order.
+      # This job's quarter of the suite: its modules, and how many tests they
+      # hold. Every job computes the whole deal from the same discovery and the
+      # same weights and keeps its own part, and the script refuses a deal that
+      # misses a module, holds one twice, or leaves a job with nothing — handed
+      # no labels, `manage.py test` would run the whole suite.
+      - name: Deal this job its quarter of the suite
+        run: python scripts/shard_tests.py ${{ matrix.shard }} 4 --github-env >> "$GITHUB_ENV"
+
+      # `--parallel` splits the job's modules across worker processes, one per
+      # core, each with its own clone of the test database.
       #
       # One tenant schema *is* baked into the test database — `tenant_template`,
       # migrated once by `schools/tests/runner.py`. It is built before Django
       # clones the database for the workers, which is deliberate: each worker
       # inherits it through `CREATE DATABASE ... TEMPLATE ...` and none of them
-      # migrates anything. Built the other way round, every worker would pay
-      # for its own. The database being copied is larger than the ~8 MB it was
-      # when nothing was baked in, and that is the trade: one bigger clone per
-      # worker, against ~1,479 schema migrations that no longer happen.
-      #
-      # `make_school()` then copies that schema per test — the ~1.65s of CREATE
-      # SCHEMA plus migrations that used to run once per test method, and was
-      # about 90% of this job's wall clock. `--parallel` remains the other half:
-      # the same work, spread over the runner's cores.
+      # migrates anything. `make_school()` then copies that schema per test,
+      # rather than running CREATE SCHEMA and every migration each time, which
+      # was about 90% of the old single job's wall clock.
       #
       # Through `scripts/run-tests.sh` rather than calling `manage.py` directly,
-      # so that CI and a developer's terminal apply the same two guards — and
-      # so "green locally" and "green in CI" are the same claim. With no
-      # arguments the script runs exactly the invocation this step used to:
-      # `--verbosity 2 --parallel`.
-      #
-      # The guard that matters here is the one for a zero exit with no `OK`
-      # line. A suite that returns success without completing would otherwise
-      # be a green tick, which is the same failure-with-no-symptom this file
-      # already refuses for an unreachable broker a few steps up.
+      # so that CI and a developer's terminal apply the same guards and "green
+      # locally" and "green in CI" are the same claim. Two of them matter here.
+      # A zero exit with no `OK` line fails: a suite that returns success without
+      # completing would otherwise be a green tick. And `EXPECT_TESTS`, set by
+      # the step above, fails a job that ran any other number of tests than it
+      # was dealt: an `OK` over a smaller suite is the same lie one level up.
       - name: Run tests
-        run: scripts/run-tests.sh
+        run: scripts/run-tests.sh --verbosity 2 --parallel $SHARD_LABELS
 
-  # The production images, built only once the suite above has passed on this
-  # commit, and tagged with its full SHA — the only name `deploy/deploy.sh`
-  # accepts, so what runs on the server is always a commit that passed here.
+  # One check named `test`, green only when all four jobs are. `deploy.yml` and
+  # the merge gate ask GitHub about a check-run of this name on a commit, and it
+  # keeps meaning what it meant when it was one job: the whole suite passed.
+  #
+  # `always()` so that a failed or cancelled job turns this red rather than
+  # skipping it: a skipped check is easy to read as one that did not matter.
+  test:
+    name: test
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All four jobs passed
+        env:
+          SHARDS: ${{ needs.shard.result }}
+        run: |
+          if [ "$SHARDS" != success ]; then
+            echo "::error::The suite's jobs finished '$SHARDS', not 'success'."
+            exit 1
+          fi
+
+  # The production images, built and checked alongside the suite rather than
+  # after it, so they add nothing to how long a run takes.
   #
   # Built on every pull request as well, because a Dockerfile nobody builds
   # until the day of a deploy is a deploy that fails for a reason unrelated to
-  # the change being shipped. Pushed to GHCR from `main` only.
+  # the change being shipped. On `main` they are pushed to GHCR as
+  # `candidate-<sha>`, a name nothing deploys; `publish` below gives them the
+  # plain SHA name once the suite has passed on this commit. The SHA is the
+  # only name `deploy/deploy.sh` accepts, so what runs on the server is always
+  # a commit that passed here.
   #
   # Each check below is something the devcontainer cannot run (there is no
   # Docker in it), so this job is the only place the image, the Caddyfile and
   # the compose file are tested at all.
   image:
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -218,9 +268,9 @@ jobs:
       run:
         shell: bash
     env:
-      APP_IMAGE: ghcr.io/${{ github.repository }}:${{ github.sha }}
-      CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:${{ github.sha }}
-      POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:${{ github.sha }}
+      APP_IMAGE: ghcr.io/${{ github.repository }}:candidate-${{ github.sha }}
+      CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:candidate-${{ github.sha }}
+      POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:candidate-${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -281,10 +331,37 @@ jobs:
           CLASSNODE_ETC="$RUNNER_TEMP/etc" CLASSNODE_TAG="${{ github.sha }}" \
             docker compose -f deploy/compose.yml config --quiet
 
-      - name: Push the images (main only)
+      - name: Push the candidates (main only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "$APP_IMAGE"
           docker push "$CADDY_IMAGE"
           docker push "$POSTGRES_IMAGE"
+
+  # The candidates get the plain SHA name, on `main`, once `test` and `image`
+  # have both passed on this commit — and not before, which is the point of
+  # this job existing at all. `imagetools create` with one source is a copy of
+  # the manifest inside the registry: nothing is rebuilt or pulled, so the image
+  # deployed is byte for byte the one `image` checked above. `deploy.yml`
+  # requires this job as well as the other two.
+  publish:
+    needs: [test, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Tag the checked images with the SHA
+        env:
+          REPO: ghcr.io/${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for image in "$REPO" "$REPO/caddy" "$REPO/postgres"; do
+            docker buildx imagetools create -t "$image:$SHA" "$image:candidate-$SHA"
+          done

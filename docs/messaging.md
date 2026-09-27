@@ -193,7 +193,7 @@ a sentence. `messaging.W001` warns when no phone provider is configured at all,
 because guardians then cannot sign in.
 
 **So the test suite does not get the fake from deploy settings.** CI deliberately
-runs with `DEBUG` off, the way production does (`.github/workflows/tests.yml:75`),
+runs with `DEBUG` off, the way production does (`.github/workflows/tests.yml:95`),
 and a fake in its settings would trip `E001` before a test ran. The suite switches
 the fake on per test, the way it already substitutes a recorder for
 `INVITATION_CHANNEL`. A test that forgets meets `NotConfigured`, which is loud.
