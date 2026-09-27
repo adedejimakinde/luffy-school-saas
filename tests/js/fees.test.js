@@ -465,7 +465,7 @@ test("a lost answer to charging says pressing again charges nobody twice", async
   await root.click({ "data-action": "charge-class" });
 
   assert.match(root.innerHTML, /data-state="bill"/);
-  assert.match(root.innerHTML, /nobody is charged twice/);
+  assert.match(root.innerHTML, /Nobody is charged twice/);
 });
 
 // -- B2: concessions ------------------------------------------------------------

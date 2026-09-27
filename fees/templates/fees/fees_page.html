@@ -21,11 +21,31 @@ on purpose, so the page is told which host it is on rather than guessing.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'fees/app.js' %}"></script>
 
-<main id="fees" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
-  <noscript>
-    <h1>Fees</h1>
-    <p>This page needs JavaScript. Please turn it on, or ask whoever set up
-    this system for you.</p>
-  </noscript>
-  <p class="state state-loading">Loading&hellip;</p>
-</main>
+<body class="has-shell">
+{% include "design/icons.html" %}
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo" href="/fees/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <div class="nav">
+      <a href="/fees/" aria-current="page"><svg class="icon"><use href="#i-fees"/></svg>Fees</a>
+    </div>
+  </nav>
+
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
+      <svg class="icon"><use href="#i-menu"/></svg>
+    </button>
+    <span class="spacer"></span>
+  </header>
+
+  <div class="content">
+    <main id="fees" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
+      <noscript>
+        <h1>Fees</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading&hellip;</p>
+    </main>
+  </div>
+</div>
