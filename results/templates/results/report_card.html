@@ -12,9 +12,17 @@ handed the model row would have all five in scope.
 Print rules live in the `@page` block: WeasyPrint honours real CSS paged media,
 so A4 and its margins are stated once and are not a stack of hard-coded
 millimetres per element.
+
+**The school leads.** Its crest (or its initials in a circle) and its name sit
+in a band of its one colour, `look.colour`, which is also the colour of the
+card's rules and of nothing else: every word stays dark ink, for the cheap
+printer most cards come off. `look` is `results.look.for_card()`, read from
+this school's own schema; the colour is six hex digits by a database
+constraint, which is what makes it safe to write into the stylesheet below.
+Classnode appears once, small, at the foot of each page.
 {% endcomment %}
 <meta charset="utf-8">
-<title>{{ card.student_name }} — {{ card.term_label }} {{ card.academic_session }}</title>
+<title>{{ card.student_name }}: {{ card.term_label }} {{ card.academic_session }}</title>
 <style>
   @page {
     size: A4;
@@ -25,14 +33,39 @@ millimetres per element.
       font: 8pt "DejaVu Sans", sans-serif;
       color: #667;
     }
+    @bottom-right {
+      content: "classnode";
+      font: 7pt "DejaVu Sans", sans-serif;
+      color: #8a8f99;
+    }
   }
 
   body { font: 9.5pt "DejaVu Sans", sans-serif; color: #111; }
   h1, h2, h3 { margin: 0; font-weight: 600; }
 
-  .masthead { text-align: center; border-bottom: 2px solid #111; padding-bottom: 6px; }
-  .masthead h1 { font-size: 15pt; letter-spacing: .4px; }
-  .masthead .term { font-size: 10pt; color: #333; margin-top: 2px; }
+  /* The header band: the school's colour, its crest or initials, its name. A
+     table rather than flex, because WeasyPrint's table layout is the one
+     that behaves the same in every version it has shipped. */
+  .band {
+    display: table; width: 100%; box-sizing: border-box;
+    background: {{ look.colour }}; color: #fff;
+    border-radius: 2.5mm; padding: 3.5mm 4.5mm;
+  }
+  .band .mark, .band .named { display: table-cell; vertical-align: middle; }
+  .band .mark { width: 21mm; }
+  .band .mark img {
+    display: block; width: 17mm; height: 17mm; padding: 1mm;
+    background: #fff; border-radius: 2mm;
+  }
+  .band .initials {
+    display: block; width: 17mm; height: 17mm; line-height: 17mm;
+    border-radius: 50%; border: .7mm solid #fff;
+    background: {{ look.colour }}; color: #fff;
+    text-align: center; font-size: 15pt; font-weight: 700; letter-spacing: .5px;
+  }
+  .band h1 { font-size: 16pt; letter-spacing: .3px; color: #fff; }
+  .band .term { font-size: 10pt; margin-top: 1.5mm; color: #fff; }
+  .masthead { margin-bottom: 2mm; }
 
   .revised {
     display: inline-block; margin-top: 4px; padding: 1px 7px;
@@ -47,18 +80,20 @@ millimetres per element.
   table.grid { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
   table.grid th, table.grid td { border: .6px solid #999; padding: 3px 5px; }
   table.grid th { background: #f0f0f2; font-weight: 600; font-size: 8.5pt; }
+  /* The school's colour, as a rule: under each table's header row. */
+  table.grid thead th { border-bottom: 1.4px solid {{ look.colour }}; }
   table.grid td.n, table.grid th.n { text-align: center; width: 8%; }
   /* A long subject list must break across pages with its header repeated. */
   table.grid thead { display: table-header-group; }
   table.grid tr { page-break-inside: avoid; }
 
   .section { margin-bottom: 10px; page-break-inside: avoid; }
-  .section h3 { font-size: 9.5pt; margin-bottom: 3px; }
+  .section h3 { font-size: 9.5pt; margin-bottom: 3px; padding-bottom: 2px; border-bottom: 1px solid {{ look.colour }}; }
 
   .remark { margin-bottom: 8px; page-break-inside: avoid; }
   .remark .by { color: #555; font-size: 8.5pt; }
   .remark .body { margin-top: 2px; }
-  .remark .rule { border-bottom: .6px dotted #999; margin-top: 10px; }
+  .remark .rule { border-bottom: .8px solid {{ look.colour }}; margin-top: 10px; }
 
   .blank { color: #888; }
   /* The parenthetical on a partial attendance line. Present rather than
@@ -69,8 +104,13 @@ millimetres per element.
 </style>
 
 <div class="masthead">
-  <h1>{{ card.school_name }}</h1>
-  <div class="term">{{ card.term_label }} &middot; {{ card.academic_session }}</div>
+  <div class="band">
+    <div class="mark">{% if look.crest %}<img src="{{ look.crest }}" alt="">{% else %}<span class="initials">{{ look.initials }}</span>{% endif %}</div>
+    <div class="named">
+      <h1>{{ card.school_name }}</h1>
+      <div class="term">Report card &middot; {{ card.term_label }} &middot; {{ card.academic_session }}</div>
+    </div>
+  </div>
   {% comment %}
   `{% comment %}`, and never the brace-hash form for a comment this long.
   Django's lexer matches that form with a non-greedy `.` and **no** `re.DOTALL`,

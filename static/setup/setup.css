@@ -23,3 +23,20 @@ input, select { width: 100%; }
 form button { justify-self: start; margin-top: 8px; }
 .note { font-size: var(--small); color: var(--stop); }
 form.rejected, form.not-allowed { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
+
+/* The report card's look: a miniature of the card's header band. Its colour is
+   the school's own, from the API; the plate behind a crest is the card's white. */
+.hint { color: var(--muted); font-size: var(--small); font-weight: 400; }
+.look-preview {
+  display: flex; align-items: center; gap: 12px;
+  max-width: 26rem; margin: 8px 0 4px; padding: 12px 14px;
+  border-radius: var(--radius); color: var(--card); font-weight: 700;
+}
+.look-preview .mark { display: grid; place-items: center; width: 48px; height: 48px; flex: none; }
+.look-preview .crest-mark { width: 48px; height: 48px; padding: 3px; background: var(--card); border-radius: 8px; }
+.look-preview .initials {
+  width: 48px; height: 48px; line-height: 44px; text-align: center;
+  border: 2px solid var(--card); border-radius: 50%;
+}
+input[type="color"] { width: 5rem; padding: 4px; }
+input[type="file"] { padding: 8px; }

@@ -38,6 +38,14 @@ closed issue #42.
 the maximum in every header cell and beside every subject total, which is the
 page's half of the `(name, max_score)` keying `card_columns()` argues for.
 
+## The school leads, and Classnode is a footnote
+
+The header is the school's: its crest (or its initials in a circle), its name,
+in a band of its one colour (`results.look`). The colour goes on that band and
+on the card's rules and nowhere else: body text stays dark ink, because most
+cards come off a cheap printer. Classnode appears once, small, at the foot of
+each page.
+
 ## No authority question is asked here
 
 Who may read a card belongs to the surface serving it. A worker rendering a
@@ -48,6 +56,7 @@ the page; a future download route asks it for the file.
 
 from django.template.loader import render_to_string
 
+from . import look
 from .card_api import card_columns, card_payload, card_rows
 
 
@@ -77,7 +86,14 @@ def html_for(card) -> str:
     columns = card_columns(payload)
     return render_to_string(
         "results/report_card.html",
-        {"card": payload, "columns": columns, "rows": card_rows(payload, columns)},
+        {
+            "card": payload,
+            "columns": columns,
+            "rows": card_rows(payload, columns),
+            # Read from this school's own schema, at render time. The PDF is
+            # stored once made, so a card keeps the crest it was printed with.
+            "look": look.for_card(payload.school_name),
+        },
     )
 
 

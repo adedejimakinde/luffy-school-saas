@@ -2,7 +2,7 @@
  * The fetches the setup screen makes, and what each answer means.
  */
 
-import { getJson, postJson, putJson } from "../web/http.js";
+import { csrfToken, getJson, postJson, putJson } from "../web/http.js";
 
 /** The states the whole page can be in, other than holding the school's shape. */
 export const REFUSAL = {
@@ -39,6 +39,14 @@ export function currentTermUrl(termId) {
 
 export function classesUrl() {
   return "/api/academics/classes/";
+}
+
+export function colourUrl() {
+  return "/api/academics/card/colour/";
+}
+
+export function crestUrl() {
+  return "/api/academics/card/crest/";
 }
 
 /**
@@ -129,4 +137,72 @@ export async function createClass({ group, fetchImpl = fetch }) {
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
+}
+
+/** The card's one colour. A 422 is a colour too light to read, and says so. */
+export async function saveColour({ colour, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(colourUrl(), { colour }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/**
+ * A new crest, as the file itself. Multipart, so the browser writes the body
+ * and its boundary; the CSRF token goes in the header as it does for JSON.
+ * Retried once on a stale token, as `postJson` does.
+ */
+export async function uploadCrest({ file, fetchImpl = fetch }) {
+  const send = async (refresh) => {
+    const body = new FormData();
+    body.append("crest", file);
+    const response = await fetchImpl(crestUrl(), {
+      method: "POST",
+      headers: { Accept: "application/json", "X-CSRFToken": await csrfToken({ fetchImpl, refresh }) },
+      credentials: "same-origin",
+      body,
+    });
+    let parsed = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = null;
+    }
+    return { status: response.status, body: parsed };
+  };
+  let answer;
+  try {
+    answer = await send(false);
+    if (answer.status === 403 && answer.body && answer.body.code === "csrf_failed") {
+      answer = await send(true);
+    }
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/** No crest: the card goes back to the school's initials. */
+export async function removeCrest({ fetchImpl = fetch }) {
+  let answer;
+  try {
+    const response = await fetchImpl(crestUrl(), {
+      method: "DELETE",
+      headers: { Accept: "application/json", "X-CSRFToken": await csrfToken({ fetchImpl }) },
+      credentials: "same-origin",
+    });
+    let parsed = null;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = null;
+    }
+    answer = { status: response.status, body: parsed };
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
 }

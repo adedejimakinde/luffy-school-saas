@@ -14,7 +14,17 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, SAVE, createClass, createTerm, fetchSetup, makeCurrent } from "./api.js";
+import {
+  REFUSAL,
+  SAVE,
+  createClass,
+  createTerm,
+  fetchSetup,
+  makeCurrent,
+  removeCrest,
+  saveColour,
+  uploadCrest,
+} from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -98,6 +108,10 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       draw();
       return;
     }
+    if (hit.dataset.action === "remove-crest") {
+      await after("crest", await removeCrest({ fetchImpl }));
+      return;
+    }
     if (hit.dataset.action === "make-current") {
       await after(
         "term",
@@ -111,6 +125,17 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (!form) return;
     if (event.preventDefault) event.preventDefault();
 
+    const which = form.dataset ? form.dataset.form : undefined;
+    if (which === "colour") {
+      await after("colour", await saveColour({ colour: form.colour.value, fetchImpl }));
+      return;
+    }
+    if (which === "crest") {
+      const file = form.crest && form.crest.files ? form.crest.files[0] : null;
+      if (!file) return;
+      await after("crest", await uploadCrest({ file, fetchImpl }));
+      return;
+    }
     if (form.session) {
       // Sent as typed. The server's `full_clean()` is what turns the model's
       // constraints into sentences, and a page that validated dates first

@@ -267,3 +267,38 @@ never re-queued, that two callers reading the same stale row enqueue once, and
 that the route serves bytes, 202s with a state, and refuses exactly as the JSON
 route does. Two schools throughout, because a publish naming the wrong school
 still satisfies a count of one.
+
+## The school leads: crest, colour, and a small footer
+
+The card's header is the school's: its crest (or, with none, its initials in a
+circle) and its name, in a band of its one colour. That colour is also the
+colour of the card's rules, and of nothing else: every word stays dark ink,
+because most cards come off a cheap printer. Classnode appears once, small, at
+the foot of each page, beside "Page N of M".
+
+Both are optional, and both are set on the setup page by whoever may set the
+school up (`academics.api`, `card/colour/` and `card/crest/`). They live on
+`ReportCardSettings`, in the school's own schema, and `results/look.py` holds
+every rule about them:
+
+- **A crest is re-drawn, never kept as sent.** PNG or JPG, at most 1 MB,
+  refused before it is opened if larger and before it is decoded if its header
+  claims more than 4096 × 4096 pixels. Pillow fits it inside a 256px
+  transparent square and writes a fresh PNG, so nothing of the upload but its
+  picture reaches a card.
+- **A colour must carry white text.** The school's name is printed in white on
+  the band, so a colour under 4.5 to 1 against white (WCAG's figure for body
+  text) is refused with a sentence. The default is the design's own `#143D8C`.
+- **One school's crest cannot reach another's card.** There is no file path or
+  shared store: the bytes are a column in the school's schema, read on that
+  school's connection. `results.tests.test_card_look` holds this with two
+  schools.
+
+The crest is read when the PDF is rendered, and the rendered file is stored
+(`ReleasedCardPdf`), so a card keeps the crest it was printed with; a crest
+changed later reaches the next card rendered, not the ones already made.
+
+The card shows the child's own average and no class average or class position:
+the payload has no slot for either (`card_api`), and
+`test_no_class_position_or_class_average_is_on_the_card` reads the rendered
+page for both.
