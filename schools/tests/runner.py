@@ -62,8 +62,12 @@ ordinary case.
 dropped, so there is no drop to lose and no reason to disconnect anybody.
 """
 
+import os
+import sys
+import time
+
 from django.db import connections
-from django.test.runner import DiscoverRunner
+from django.test.runner import DiscoverRunner, ParallelTestSuite, _run_subsuite
 
 from schools.tests.tenants import build_template
 
@@ -95,7 +99,37 @@ def terminate_backends_on(cursor, database_name):
     return [row[0] for row in cursor.fetchall()]
 
 
+def _run_subsuite_timed(args):
+    """Django's worker function, plus one `class-seconds` line when asked.
+
+    Runs in the worker, which is the only place a class's own wall-clock can be
+    read: the parent sees each class only as a burst of results replayed when it
+    finishes. `scripts/shard_tests.py weights` reads these lines back out of a CI
+    log to re-balance the four CI jobs. Off unless `LUFFY_CLASS_SECONDS` is set,
+    so a local run prints nothing new.
+    """
+    if not os.environ.get("LUFFY_CLASS_SECONDS"):
+        return _run_subsuite(args)
+    subsuite = args[2]
+    first = next(iter(subsuite))
+    label = f"{type(first).__module__}.{type(first).__qualname__}"
+    started = time.monotonic()
+    outcome = _run_subsuite(args)
+    print(
+        f"class-seconds {label} {time.monotonic() - started:.1f}",
+        file=sys.stderr,
+        flush=True,
+    )
+    return outcome
+
+
+class TimedParallelTestSuite(ParallelTestSuite):
+    run_subsuite = _run_subsuite_timed
+
+
 class TenantTemplateRunner(DiscoverRunner):
+    parallel_test_suite = TimedParallelTestSuite
+
     def setup_test_environment(self, **kwargs):
         super().setup_test_environment(**kwargs)
         # **No message provider, whatever DEBUG says.** Development defaults

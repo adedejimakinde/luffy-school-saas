@@ -34,8 +34,12 @@ SCRIPT = REPO_ROOT / "scripts" / "run-tests.sh"
 class ARunThatDidNotPassCannotLookLikeOneTests(SimpleTestCase):
     """Four ways a run ends, and what the script must report for each."""
 
-    def run_with_stub(self, stub_body):
+    def run_with_stub(self, stub_body, expect_tests=None):
         """Run the script with `python` stubbed to `stub_body`. Returns the result.
+
+        `EXPECT_TESTS` is cleared unless a case sets it: a CI job runs these with
+        its own shard's count in the environment, and a stub that ran five tests
+        is not that shard.
 
         `capture_output` rather than a pipe in the shell, deliberately: piping
         in the harness that tests a pipefail bug would be its own joke, and
@@ -49,6 +53,9 @@ class ARunThatDidNotPassCannotLookLikeOneTests(SimpleTestCase):
         env = dict(os.environ)
         env["PATH"] = f"{shim_dir}{os.pathsep}{env['PATH']}"
         env["RUN_TESTS_LOG"] = str(Path(shim_dir) / "run.log")
+        env.pop("EXPECT_TESTS", None)
+        if expect_tests is not None:
+            env["EXPECT_TESTS"] = str(expect_tests)
 
         return subprocess.run(
             [str(SCRIPT)],
@@ -66,6 +73,22 @@ class ARunThatDidNotPassCannotLookLikeOneTests(SimpleTestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("EXIT=0", result.stdout)
         self.assertIn("RESULT=OK", result.stdout)
+
+    def test_a_shard_that_ran_what_it_was_dealt_passes(self):
+        result = self.run_with_stub(
+            'echo "Ran 5 tests in 1.0s"; echo "OK"; exit 0', expect_tests=5
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_shard_that_ran_fewer_than_it_was_dealt_fails(self):
+        """An honest `OK` over a smaller suite than the job was given."""
+        result = self.run_with_stub(
+            'echo "Ran 4 tests in 1.0s"; echo "OK"; exit 0', expect_tests=5
+        )
+
+        self.assertEqual(result.returncode, 1, "A short shard was reported as a pass.")
+        self.assertIn("dealt 5 tests and ran 4", result.stderr)
 
     def test_exit_zero_with_no_result_line_is_a_failure(self):
         """**The guard.** Django prints exactly one `OK` or `FAILED` line.

@@ -2,8 +2,9 @@ name: deploy
 
 # The deploy button (decided 2026-09-23: manual, after school hours, never on
 # merge). Deploys one commit by its full SHA, and only one that is on main and
-# passed CI on that exact SHA — the `test` job and the `image` job that built
-# the images `deploy/deploy.sh` will pull.
+# passed CI on that exact SHA — the `test` check (all four of the suite's
+# jobs), the `image` job that built and checked the images, and the `publish`
+# job that gave them the SHA name `deploy/deploy.sh` will pull.
 #
 # Needs, before it can run for real: the server, and three repository secrets —
 # DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS. docs/deployment.md.
@@ -50,19 +51,21 @@ jobs:
           fi
 
       # Asked of the SHA, not of a pull request's rollup, which can still be
-      # showing the previous commit's green. Both jobs must exist and have
-      # succeeded: an empty list is "never ran", not "passed".
+      # showing the previous commit's green. All three must exist and have
+      # succeeded: an empty list is "never ran", not "passed". `publish` is the
+      # one that makes the `<sha>` tags exist at all, since `image` now pushes
+      # only `candidate-<sha>`; without it, deploy.sh would fail at the pull.
       - name: CI passed on exactly this SHA
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           verdict=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" --jq '
-            [.check_runs[] | select(.name == "test" or .name == "image")] as $runs
-            | if ($runs | map(.name) | unique | length) == 2
+            [.check_runs[] | select(.name == "test" or .name == "image" or .name == "publish")] as $runs
+            | if ($runs | map(.name) | unique | length) == 3
                  and ($runs | all(.status == "completed" and .conclusion == "success"))
               then "passed" else "not passed" end')
           if [ "$verdict" != "passed" ]; then
-            echo "::error::CI has not passed on $SHA (both 'test' and 'image' must succeed)."
+            echo "::error::CI has not passed on $SHA ('test', 'image' and 'publish' must all succeed)."
             exit 1
           fi
 

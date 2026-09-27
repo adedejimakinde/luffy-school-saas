@@ -51,14 +51,26 @@
 # what it can name: a backend held by something outside this project, or on a
 # database Django is not about to create, still lands here.
 #
+# ## 4. A run that ran something other than what it was dealt
+#
+# CI splits the suite across four jobs (`scripts/shard_tests.py`), and each job
+# is dealt a count as well as its modules. With `EXPECT_TESTS` set, a passing
+# run must also say `Ran <that many> tests`. A job that loaded fewer — a label
+# that stopped matching, a module that failed to import into nothing — would
+# otherwise be an honest `OK` over a smaller suite, which is the silence above
+# one level up.
+#
 # ## Usage
 #
-#   scripts/run-tests.sh                       # everything, as CI runs it
+#   scripts/run-tests.sh                       # everything, in one process tree
 #   scripts/run-tests.sh results.tests.test_pdf
 #   scripts/run-tests.sh --parallel 4 accounts
+#   EXPECT_TESTS=554 scripts/run-tests.sh --verbosity 2 --parallel auto \
+#     $(python scripts/shard_tests.py 3 4)     # one CI job, as CI runs it
 #
 # Arguments are passed through to `manage.py test` untouched. With none, it runs
-# what CI runs, so "green locally" and "green in CI" mean the same thing.
+# the whole suite with CI's flags; the four CI jobs between them run the same
+# tests, so "green locally" and "green in CI" still mean the same thing.
 
 set -euo pipefail
 
@@ -68,7 +80,7 @@ cd "$here"
 log="${RUN_TESTS_LOG:-$(mktemp -t luffy-tests-XXXXXX.log)}"
 
 if [ "$#" -eq 0 ]; then
-  # The same invocation as .github/workflows/tests.yml's "Run tests" step.
+  # CI's flags. Its four jobs add their own modules (scripts/shard_tests.py).
   set -- --verbosity 2 --parallel
 fi
 
@@ -117,6 +129,17 @@ if [ -z "${result_line}" ]; then
   echo "anything about the code. Treating this as a pass is the mistake this"  >&2
   echo "script exists to prevent — see issue #61 and the header above."        >&2
   exit 1
+fi
+
+if [ -n "${EXPECT_TESTS:-}" ]; then
+  ran="$(grep -E '^Ran [0-9]+ tests? in' "$log" | tail -1 | awk '{print $2}' || true)"
+  if [ "${ran}" != "${EXPECT_TESTS}" ]; then
+    echo
+    echo "FAILED LOUDLY: this run was dealt ${EXPECT_TESTS} tests and ran ${ran:-none}." >&2
+    echo "A shard that ran something else passed a different suite from the one" >&2
+    echo "it was given. See scripts/shard_tests.py and the header above."         >&2
+    exit 1
+  fi
 fi
 
 echo "==> ${result_line}"
