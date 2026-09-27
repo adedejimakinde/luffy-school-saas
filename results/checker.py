@@ -346,6 +346,11 @@ def _card_opened_by(school, number: str, pin, today) -> Optional[ReleasedCard]:
     if not number or digits is None:
         return None
 
+    # `school=` cannot be seen from outside today: a control removing it left
+    # every test green (#175). The PINs live in this school's schema and name
+    # memberships by their platform-wide id, so another school's child has no
+    # PIN here to match. It stays so that if either of those ever changes, an
+    # admission number still means only this school's children.
     children = {
         child.pk: child
         for child in Membership.objects.filter(
