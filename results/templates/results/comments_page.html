@@ -12,6 +12,7 @@ the URL — there is no `login_required`, for the oracle reason `results/views.p
 gives — and a tab title outlives the page in history.
 {% endcomment %}
 
+{% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'comments/comments.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'comments/app.js' %}"></script>

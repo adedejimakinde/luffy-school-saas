@@ -1,0 +1,12 @@
+{% load static %}{% comment %}
+The design every page shares, linked before the page's own stylesheet so the
+page's rules can narrow it. Included, not copied: one line in each page template
+and one place to change. `static/web/design.css` says what is in it.
+
+The regular weight is preloaded because it is the text of every page; the bold
+one is left to the stylesheet to ask for, since a page can draw without it.
+`crossorigin` is required on a font preload even from our own host — without it
+the browser fetches the file twice.
+{% endcomment %}
+<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{% static 'web/design.css' %}">

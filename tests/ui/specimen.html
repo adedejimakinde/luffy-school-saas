@@ -1,0 +1,232 @@
+<!doctype html>
+<!--
+  The design's parts, on one page, drawn from the stylesheet the server serves.
+
+  Not a page of the product and never served by it: `screens.test.js` hands it
+  to the browser at /__specimen__/ on the portal's host, so it is measured and
+  photographed with the rest, at every width. It is where the app shell and the
+  parts no page uses yet are checked before a page does.
+
+  The numbers are made up, and the principal's home here is a sketch of its
+  layout, not the page: that is built with the principal's restyle.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Design specimen</title>
+<link rel="preload" href="/static/web/fonts/hanken-grotesk-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/static/web/design.css">
+<style>
+  .specimen-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
+  .today-list { list-style: none; margin: 0; padding: 0; }
+  .today-list li { display: flex; gap: 12px; align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--divider); }
+  .today-list li:last-child { border-bottom: 0; }
+  .today-list time { color: var(--muted); min-width: 3.5rem; font-variant-numeric: tabular-nums; }
+  .waiting td:last-child { text-align: right; }
+  .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+  .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+</style>
+</head>
+<body class="has-shell has-tabbar">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.3 8.2l3.5 7.6M16.7 8.2l-3.5 7.6"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-register" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M9 13l2 2 4-4"/></symbol>
+  <symbol id="i-marks" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-results" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6M3 20h18"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+  <symbol id="i-absent" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 8l4 4M21 8l-4 4"/></symbol>
+  <symbol id="i-fees" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 010 8M22 21c0-3-2-5-5-6"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0112 0v5l2 2H4l2-2z"/><path d="M10 20a2 2 0 004 0"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/></symbol>
+</svg>
+
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo" href="#"><svg class="icon"><use href="#i-logo"/></svg>Classnode</a>
+
+    <button type="button" class="school-switcher">
+      <span class="crest">SD</span>
+      <span class="school-name">Sunrise Demo Academy<small>Principal</small></span>
+      <svg class="icon"><use href="#i-down"/></svg>
+    </button>
+
+    <div class="nav">
+      <a href="#" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Home</a>
+      <p class="nav-heading">Teaching</p>
+      <a href="#"><svg class="icon"><use href="#i-register"/></svg>Register</a>
+      <a href="#"><svg class="icon"><use href="#i-marks"/></svg>Marks</a>
+      <a href="#"><svg class="icon"><use href="#i-calendar"/></svg>Timetable</a>
+      <p class="nav-heading">Results</p>
+      <a href="#"><svg class="icon"><use href="#i-results"/></svg>Results</a>
+      <a href="#"><svg class="icon"><use href="#i-sheet"/></svg>Broadsheets</a>
+      <a href="#"><svg class="icon"><use href="#i-absent"/></svg>Absences</a>
+      <p class="nav-heading">Office</p>
+      <a href="#"><svg class="icon"><use href="#i-fees"/></svg>Fees</a>
+      <a href="#"><svg class="icon"><use href="#i-people"/></svg>People</a>
+    </div>
+
+    <div class="nav nav-end">
+      <a href="#"><svg class="icon"><use href="#i-settings"/></svg>Settings</a>
+    </div>
+  </nav>
+
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
+      <svg class="icon"><use href="#i-menu"/></svg>
+    </button>
+    <label class="search">
+      <span class="sr">Search</span>
+      <svg class="icon"><use href="#i-search"/></svg>
+      <input type="search" placeholder="Search pupils, classes, staff">
+    </label>
+    <span class="spacer"></span>
+    <button type="button" class="term-switcher">
+      <svg class="icon"><use href="#i-calendar"/></svg>
+      <span class="term-name">First term 2026/2027</span>
+      <svg class="icon"><use href="#i-down"/></svg>
+    </button>
+    <button type="button" class="icon-button" aria-label="Notifications">
+      <svg class="icon"><use href="#i-bell"/></svg><span class="dot"></span>
+    </button>
+    <button type="button" class="icon-button" aria-label="Your account"><span class="avatar">PS</span></button>
+  </header>
+
+  <div class="content">
+    <main>
+      <div class="page-head">
+        <div>
+          <h1>Home</h1>
+          <p>Sunrise Demo Academy &middot; First term 2026/2027</p>
+        </div>
+      </div>
+
+      <section class="stats" aria-label="This term">
+        <div class="card stat">
+          <span class="stat-name">Results released</span>
+          <span class="stat-value">3 <small>of 8 classes</small></span>
+          <div class="progress"><span style="width: 38%"></span></div>
+          <span class="stat-foot">5 classes waiting</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-name">Present today</span>
+          <span class="stat-value">94%</span>
+          <div class="minibars" aria-label="This week">
+            <span style="height: 88%"></span><span style="height: 92%"></span><span style="height: 90%"></span><span style="height: 95%"></span><span class="today" style="height: 94%"></span>
+          </div>
+          <span class="stat-foot">412 of 438 pupils</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-name">Fees collected</span>
+          <span class="stat-value">&#8358;18.4m <small>of &#8358;26.1m</small></span>
+          <div class="progress"><span style="width: 70%"></span></div>
+          <span class="stat-foot">70% of what was billed</span>
+        </div>
+        <div class="card stat">
+          <span class="stat-name">Absent too often</span>
+          <span class="stat-value">7 <small>pupils</small></span>
+          <span><span class="label label-stop">Needs a look</span></span>
+          <span class="stat-foot">3 or more days in two weeks</span>
+        </div>
+      </section>
+
+      <div class="split">
+        <section class="card">
+          <div class="card-head"><h2>Waiting for you</h2><span class="label">4</span></div>
+          <div class="table-scroll">
+            <table class="waiting">
+              <thead><tr><th>Class</th><th>What</th><th class="num">Days</th><th><span class="sr">Action</span></th></tr></thead>
+              <tbody>
+                <tr><td>JSS 1A</td><td>Results checked <span class="label label-ok">Ready</span></td><td class="num">2</td><td><button type="button" class="btn-primary">Release</button></td></tr>
+                <tr><td>JSS 1B</td><td>Results checked <span class="label label-ok">Ready</span></td><td class="num">1</td><td><button type="button" class="btn-primary">Release</button></td></tr>
+                <tr><td>JSS 2A</td><td>Remarks missing <span class="label label-warn">4 pupils</span></td><td class="num">5</td><td><button type="button">Open</button></td></tr>
+                <tr><td>SS 1</td><td>Sent back by you <span class="label label-stop">Overdue</span></td><td class="num">9</td><td><button type="button">Open</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Today</h2>
+          <ul class="today-list">
+            <li><time>07:45</time><span>Assembly</span></li>
+            <li><time>08:30</time><span>Registers: 6 of 8 classes taken <span class="label label-warn">2 left</span></span></li>
+            <li><time>11:00</time><span>3 payments recorded</span></li>
+            <li><time>14:00</time><span>Staff meeting, hall</span></li>
+          </ul>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="card">
+          <h2>Buttons</h2>
+          <div class="specimen-row">
+            <button type="submit">Save register</button>
+            <button type="button">Open</button>
+            <button type="button" class="btn-quiet">Sign out</button>
+            <button type="button" disabled>Released</button>
+          </div>
+          <h2>Labels</h2>
+          <div class="specimen-row">
+            <span class="label">Draft</span>
+            <span class="label label-brand">Revised</span>
+            <span class="label label-ok">Released</span>
+            <span class="label label-warn">Awaiting</span>
+            <span class="label label-stop">Withheld</span>
+          </div>
+          <h2>Fields</h2>
+          <div class="fields">
+            <label class="field">Pupil's name <input value="Ada Adeyemi"></label>
+            <label class="field">Class <select><option>JSS 1A</option><option>JSS 1B</option></select></label>
+            <label class="field">Amount (&#8358;) <input inputmode="decimal" value="150,000.00"><span class="hint">Whole term, before any discount</span></label>
+          </div>
+        </section>
+
+        <section class="card">
+          <h2>Messages</h2>
+          <div class="msg"><span class="label label-stop">Not saved</span><p>Ada's mark did not reach the school. It is kept here until you save it again.</p></div>
+          <div class="msg"><span class="label label-ok">Released</span><p>JSS 1A's cards are out. Families can open them now.</p></div>
+          <div class="empty">
+            <svg class="icon"><use href="#i-inbox"/></svg>
+            <h2>Nothing waiting</h2>
+            <p>When a class is submitted for release, it appears here.</p>
+            <button type="button">Open results</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>Broadsheet: JSS 1A</h2><span class="label label-warn">Not released</span></div>
+          <div class="table-scroll">
+            <table>
+              <thead><tr><th>Pupil</th><th class="num">Maths</th><th class="num">English</th><th class="num">Science</th><th class="num">Social</th><th class="num">Civic</th><th class="num">French</th><th class="num">Yoruba</th><th class="num">Agric</th><th class="num">Total</th><th class="num">Average</th></tr></thead>
+              <tbody>
+                <tr><td>Ada Adeyemi</td><td class="num">78</td><td class="num">64</td><td class="num">81</td><td class="num">70</td><td class="num">66</td><td class="num">59</td><td class="num">72</td><td class="num">80</td><td class="num">570</td><td class="num">71.3</td></tr>
+                <tr><td>Bayo Falana</td><td class="num">55</td><td class="num">71</td><td class="num">60</td><td class="num">68</td><td class="num">74</td><td class="num">62</td><td class="num">58</td><td class="num">66</td><td class="num">514</td><td class="num">64.3</td></tr>
+                <tr><td>Chidi Eze</td><td class="num">91</td><td class="num">85</td><td class="num">88</td><td class="num">79</td><td class="num">83</td><td class="num">77</td><td class="num">69</td><td class="num">90</td><td class="num">662</td><td class="num">82.8</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <h3>A subject on the parent's page</h3>
+          <div class="specimen-row" style="justify-content: space-between"><span>Mathematics</span><strong class="num">78</strong></div>
+          <div class="scorebar"><span style="width: 78%"></span></div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <nav class="tabbar" aria-label="Main">
+    <a href="#" aria-current="page"><svg class="icon"><use href="#i-home"/></svg><span class="tab-label">Home</span></a>
+    <a href="#"><svg class="icon"><use href="#i-register"/></svg><span class="tab-label">Register</span></a>
+    <a href="#"><svg class="icon"><use href="#i-results"/></svg><span class="tab-label">Results</span></a>
+    <a href="#"><svg class="icon"><use href="#i-fees"/></svg><span class="tab-label">Fees</span></a>
+  </nav>
+</div>
+</body>
+</html>

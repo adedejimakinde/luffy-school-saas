@@ -1,0 +1,859 @@
+/*
+ * Classnode's design, "One Blue": the tokens and the parts every page shares.
+ *
+ * Loaded first on every page (`templates/design/head.html`), and each page's
+ * own stylesheet after it holds only what is that page's: its width, its rows,
+ * its layout. **No page declares a colour.** `tests/test_design.py` refuses a
+ * hex, rgb() or hsl() anywhere in `static/` outside this file, and refuses one
+ * here that is not in the palette below — which is the whole of the palette.
+ *
+ * ## The rules this file is written to
+ *
+ * - One brand colour, #143D8C: buttons, links, the active nav item, the logo.
+ *   No other accent and no gradients. Where something needs to be lighter, it
+ *   is this blue with less of it (`--brand-tint`), not a second colour.
+ * - Status colours — green, amber, red — belong on **small labels** (`.label`).
+ *   The row notes pages still tint (`.note`, `.problem`, `.row.conflict`) move
+ *   to a neutral message with a label when their page is restyled.
+ * - Hanken Grotesk, self-hosted here, Latin only, 400 and 700 and nothing in
+ *   between: a `font-weight: 600` would be a third face the browser has to
+ *   fake. `swap`, so text is never invisible on a slow connection, and the
+ *   system stack behind it for the glyphs Latin does not cover (the naira sign
+ *   among them).
+ * - Numbers in tables are tabular and right-aligned (`.num`).
+ * - 10px radius on controls, 12px on cards. Controls 44px tall at least, the
+ *   primary action 48px.
+ * - Phones: nothing a finger has to hit is under 44px, and no body text is
+ *   under 15px. `tests/ui/screens.test.js` measures both at 360px.
+ *
+ * ## No framework, no build, no CDN
+ *
+ * Plain CSS the browser reads as written. The fonts are files beside this one,
+ * so a page asks nothing of any host but its school's. The page budget
+ * (`tests/test_budget.py`) counts this file on every page.
+ */
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/hanken-grotesk-400.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/hanken-grotesk-700.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+    U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+    U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Tokens                                                                    */
+/* ------------------------------------------------------------------------ */
+
+:root {
+  --brand: #143D8C;
+  --text: #0E1726;
+  --muted: #5B6475;
+  --bg: #F5F6F8;
+  --card: #FFFFFF;
+  --border: #E3E6EB;
+  --divider: #EEF0F3;
+
+  --ok: #16693F;
+  --ok-bg: #E7F4EC;
+  --warn: #8A5A00;
+  --warn-bg: #FDF1DC;
+  --stop: #B42318;
+  --stop-bg: #FDECEA;
+
+  /* The blue, lighter and darker, for hover, the active nav item and bars.
+     Mixed from the one colour rather than named as another. */
+  --brand-strong: color-mix(in srgb, var(--brand) 82%, var(--text));
+  --brand-tint: color-mix(in srgb, var(--brand) 8%, var(--card));
+  --brand-soft: color-mix(in srgb, var(--brand) 30%, var(--card));
+
+  /* A field's edge has to be visible against white (3:1), which --border is
+     not. It is the secondary text colour, thinned. */
+  --field-border: color-mix(in srgb, var(--muted) 70%, var(--card));
+
+  --radius: 10px;
+  --radius-card: 12px;
+  --control: 44px;
+  --control-lg: 48px;
+
+  --font: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* 15px: the smallest body text on a phone. */
+  --small: 0.9375rem;
+
+  --sidebar: 256px;
+  --topbar: 64px;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Base                                                                      */
+/* ------------------------------------------------------------------------ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  padding: 16px;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 1rem/1.5 var(--font);
+  overflow-wrap: break-word;
+}
+
+@media (min-width: 640px) {
+  body { padding: 32px 24px; }
+}
+
+/*
+ * A page without the app shell — the sign-in doors, the card, and every staff
+ * page until its role is restyled — is one white card on the grey. Each page's
+ * stylesheet gives it a width; this gives it everything else.
+ */
+body > main {
+  margin: 0 auto;
+  padding: 20px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+@media (min-width: 640px) {
+  body > main { padding: 28px 32px; }
+}
+
+h1, h2, h3 { font-weight: 700; line-height: 1.25; color: var(--text); }
+h1 { font-size: 1.5rem; margin: 0 0 8px; }
+h2 { font-size: 1.125rem; margin: 24px 0 8px; }
+h3 { font-size: 1rem; margin: 16px 0 6px; }
+
+p { margin: 0 0 12px; }
+
+a { color: var(--brand); text-underline-offset: 2px; }
+a:hover { color: var(--brand-strong); }
+
+strong, b, th { font-weight: 700; }
+
+small { font-size: var(--small); }
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.quiet, .blank { color: var(--muted); }
+
+/* For a screen reader only. */
+.sr, .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Icons: inline stroke SVG, no icon pack                                    */
+/* ------------------------------------------------------------------------ */
+
+.icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Buttons                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Every button is at least a finger tall. The plain one is white with a rule;
+ * a form's submit is the page's primary action and is the blue. Inline-block
+ * rather than flex, so a page's full-width, left-aligned list buttons (the
+ * register's names, the marking sheet's classes) keep their alignment.
+ */
+button, .btn {
+  display: inline-block;
+  min-height: var(--control);
+  padding: 10px 18px;
+  font: inherit;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+}
+
+button:hover, .btn:hover { border-color: var(--field-border); }
+
+button[type="submit"], button.submit, .btn-primary {
+  min-height: var(--control-lg);
+  color: var(--card);
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 700;
+}
+
+button[type="submit"]:hover, button.submit:hover, .btn-primary:hover {
+  color: var(--card);
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+
+/* The quiet ones: sign out, try again. Not what the reader came to do, so they
+   do not compete with what is — but still a whole target. */
+button.signout, button.again, .btn-quiet {
+  color: var(--muted);
+  background: none;
+  border-color: transparent;
+}
+
+button.signout:hover, button.again:hover, .btn-quiet:hover {
+  color: var(--brand);
+  border-color: transparent;
+}
+
+button:disabled, .btn[aria-disabled="true"] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ------------------------------------------------------------------------ */
+/* Fields                                                                    */
+/* ------------------------------------------------------------------------ */
+
+input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea {
+  min-height: var(--control);
+  max-width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--field-border);
+  border-radius: var(--radius);
+}
+
+textarea { line-height: 1.5; }
+
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 0;
+  border-color: var(--brand);
+}
+
+input:disabled, select:disabled, textarea:disabled {
+  color: var(--muted);
+  background: var(--bg);
+}
+
+input[type="checkbox"], input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--brand);
+}
+
+fieldset {
+  margin: 20px 0 8px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+legend { padding: 0 6px; font-weight: 700; }
+
+/* A labelled field, one above the other: `<label class="field">Name <input></label>`. */
+.field { display: grid; gap: 6px; font-weight: 700; }
+.field input, .field select, .field textarea { font-weight: 400; width: 100%; }
+.field .hint { color: var(--muted); font-weight: 400; }
+
+/* ------------------------------------------------------------------------ */
+/* Labels: the one place status colour goes                                  */
+/* ------------------------------------------------------------------------ */
+
+.label, .tag {
+  display: inline-block;
+  padding: 2px 10px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+  color: var(--muted);
+  background: var(--divider);
+  border: 0;
+  border-radius: 999px;
+  vertical-align: 0.1em;
+}
+
+.label-ok { color: var(--ok); background: var(--ok-bg); }
+.label-warn { color: var(--warn); background: var(--warn-bg); }
+.label-stop, .tag.held { color: var(--stop); background: var(--stop-bg); }
+.label-brand, .tag.revised { color: var(--brand); background: var(--brand-tint); }
+
+/* ------------------------------------------------------------------------ */
+/* Cards                                                                     */
+/* ------------------------------------------------------------------------ */
+
+.card {
+  min-width: 0;
+  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.card > h2:first-child, .card > h3:first-child { margin-top: 0; }
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin: 0 0 12px;
+}
+
+.card-head h2 { margin: 0; }
+
+/* ------------------------------------------------------------------------ */
+/* Tables                                                                    */
+/* ------------------------------------------------------------------------ */
+
+table {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+th, td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--divider);
+}
+
+thead th {
+  color: var(--muted);
+  font-size: var(--small);
+  white-space: nowrap;
+  border-bottom-color: var(--border);
+}
+
+.num, td.num, th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+td small { color: var(--muted); }
+
+/*
+ * A table wider than its card scrolls sideways **inside** it; the page never
+ * does. The first column — the child, the class, the day — stays put while the
+ * numbers move under it, so a row can still be read at 360px.
+ */
+.scroll, .grid-scroll, .table-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 12px 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scroll :is(th, td):first-child,
+.grid-scroll :is(th, td):first-child,
+.table-scroll :is(th, td):first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Messages and empty states                                                 */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A message is neutral: white, a rule, the sentence in body text. What kind of
+ * message it is rides on a small label at its start — `<div class="msg">
+ * <span class="label label-stop">Not saved</span> <p>…</p></div>` — so status
+ * colour stays on labels, where the rules put it.
+ */
+.msg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.msg > p { flex: 1 1 16rem; margin: 0; }
+
+/* The notes pages already draw, until each is moved onto `.msg`. */
+.problem {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  color: var(--stop);
+  background: var(--stop-bg);
+  border: 0;
+  border-radius: var(--radius);
+}
+
+.empty {
+  padding: 40px 16px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.empty .icon { width: 40px; height: 40px; margin: 0 auto 12px; display: block; }
+.empty h2 { margin: 0 0 6px; }
+.empty p { margin: 0 auto 16px; max-width: 28rem; }
+
+/* ------------------------------------------------------------------------ */
+/* Stat cards                                                                */
+/* ------------------------------------------------------------------------ */
+
+.stats {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin: 0 0 24px;
+}
+
+@media (min-width: 640px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.stat { display: grid; gap: 8px; align-content: start; }
+.stat-name { color: var(--muted); font-size: var(--small); }
+.stat-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat-value small { color: var(--muted); font-size: 1rem; font-weight: 400; }
+.stat-foot { color: var(--muted); font-size: var(--small); }
+
+.progress {
+  height: 8px;
+  overflow: hidden;
+  background: var(--divider);
+  border-radius: 999px;
+}
+
+.progress > span {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  border-radius: inherit;
+}
+
+/* A week in five bars; today is the full blue, the days before it lighter. */
+.minibars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 36px;
+}
+
+.minibars > span {
+  flex: 1;
+  min-height: 3px;
+  background: var(--brand-soft);
+  border-radius: 3px 3px 0 0;
+}
+
+.minibars > span.today { background: var(--brand); }
+
+/* A score out of 100 on a subject row. */
+.scorebar {
+  height: 6px;
+  overflow: hidden;
+  background: var(--divider);
+  border-radius: 999px;
+}
+
+.scorebar > span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
+
+/* ------------------------------------------------------------------------ */
+/* The app shell: the staff desktop                                          */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * A white sidebar on the left, a white bar across the top, the work on the
+ * grey. `body.has-shell` drops the lone-card padding the frame pages use.
+ *
+ * Below 1024px the sidebar is a `popover`, opened from the bar's menu button:
+ * the browser gives it light dismiss, Escape and focus return with no script.
+ * A browser without popovers never matches `:popover-open`, drops the rule that
+ * hides it, and shows the sidebar above the page instead — worse, but whole.
+ */
+body.has-shell { padding: 0; }
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 0;
+  border-right: 1px solid var(--border);
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control);
+  padding: 0 8px;
+  color: var(--brand);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.logo .icon { width: 28px; height: 28px; stroke-width: 2; }
+
+.school-switcher {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 10px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.school-switcher .school-name { flex: 1; min-width: 0; font-weight: 700; line-height: 1.25; }
+.school-switcher .school-name small { display: block; color: var(--muted); font-weight: 400; }
+
+/* The school's crest; its initials on the school's own ground until one is uploaded. */
+.crest {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  overflow: hidden;
+  color: var(--card);
+  background: var(--brand);
+  border-radius: 8px;
+  font-size: var(--small);
+  font-weight: 700;
+}
+
+.crest img { width: 100%; height: 100%; object-fit: cover; }
+
+.nav { display: grid; gap: 2px; }
+
+.nav-heading {
+  margin: 12px 12px 4px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--control);
+  padding: 0 12px;
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.nav a:hover { color: var(--brand); background: var(--bg); }
+
+.nav a[aria-current="page"] {
+  color: var(--brand);
+  background: var(--brand-tint);
+  font-weight: 700;
+}
+
+.nav a .icon { color: var(--muted); }
+.nav a:hover .icon, .nav a[aria-current="page"] .icon { color: var(--brand); }
+
+/* Settings sits at the bottom of the sidebar, whatever is above it. */
+.sidebar .nav-end { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--divider); }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--topbar);
+  padding: 8px 16px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  position: relative;
+  width: var(--control);
+  min-width: var(--control);
+  height: var(--control);
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border-color: transparent;
+}
+
+.icon-button:hover { color: var(--brand); border-color: transparent; background: var(--bg); }
+
+/* Something waiting: a dot in the blue, not a red one — this is not an error. */
+.icon-button .dot {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 8px;
+  height: 8px;
+  background: var(--brand);
+  border: 2px solid var(--card);
+  border-radius: 50%;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.search .icon {
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.search input {
+  width: 100%;
+  padding-left: 40px;
+  background: var(--bg);
+  border-color: var(--border);
+}
+
+.term-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.topbar .spacer { flex: 1; }
+
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: var(--card);
+  background: var(--brand);
+  border-radius: 50%;
+  font-size: var(--small);
+  font-weight: 700;
+}
+
+.content {
+  min-width: 0;
+  padding: 16px;
+}
+
+.content > main {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 16px;
+  margin: 0 0 20px;
+}
+
+.page-head h1 { margin: 0; }
+.page-head p { margin: 4px 0 0; color: var(--muted); }
+
+/* Two columns on a desktop — the work and a side panel — one on a phone. */
+.split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+
+@media (min-width: 1024px) {
+  .split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+}
+
+/* Below 1024px: the sidebar slides out, and the bar grows a menu button. */
+@media (max-width: 1023.98px) {
+  .sidebar[popover] {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(300px, 85vw);
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    overflow-y: auto;
+    box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--text) 35%, transparent);
+  }
+
+  .sidebar[popover]:not(:popover-open) { display: none; }
+
+  .topbar .search { display: none; }
+}
+
+@media (min-width: 640px) {
+  .content { padding: 24px; }
+  .topbar { padding: 8px 24px; }
+}
+
+@media (min-width: 1024px) {
+  .shell {
+    position: relative;
+    grid-template-columns: var(--sidebar) minmax(0, 1fr);
+    grid-template-rows: var(--topbar) 1fr;
+  }
+
+  /* The sidebar is a screen tall and stays put; this is the white column
+     behind it, so a long page does not run out of sidebar below the fold. */
+  .shell::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: var(--sidebar);
+    background: var(--card);
+    border-right: 1px solid var(--border);
+  }
+
+  .sidebar { z-index: 1; }
+
+  /* Out of the popover and into the page: always there, never on top. */
+  .sidebar,
+  .sidebar[popover] {
+    display: flex;
+    position: sticky;
+    top: 0;
+    inset: auto;
+    grid-row: 1 / -1;
+    width: auto;
+    height: 100vh;
+    margin: 0;
+    overflow-y: auto;
+  }
+
+  .topbar { grid-column: 2; }
+  .content { grid-column: 2; padding: 32px; }
+  .menu-button { display: none; }
+}
+
+/* Below 640px staff pages also get a tab bar: the role's four main screens. */
+.tabbar { display: none; }
+
+@media (max-width: 639.98px) {
+  .topbar .term-switcher .term-name { display: none; }
+
+  .tabbar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 10;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    padding: 0 4px env(safe-area-inset-bottom);
+    background: var(--card);
+    border-top: 1px solid var(--border);
+  }
+
+  .tabbar a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 60px;
+    color: var(--muted);
+    text-decoration: none;
+  }
+
+  .tabbar a[aria-current="page"] { color: var(--brand); }
+  .tabbar .tab-label { font-size: 0.8125rem; font-weight: 700; }
+
+  body.has-tabbar .content { padding-bottom: 88px; }
+}
+
+/* A save button that stays in reach on a long list: the register on a phone. */
+.sticky-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  margin: 16px -16px -20px;
+  padding: 12px 16px;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+}
+
+.sticky-actions button { width: 100%; }
+
+/* ------------------------------------------------------------------------ */
+/* Paper                                                                     */
+/* ------------------------------------------------------------------------ */
+
+@media print {
+  body, body.has-shell { padding: 0; background: var(--card); }
+  body > main, .content > main { max-width: none; padding: 0; border: 0; }
+  .sidebar, .topbar, .tabbar, .sticky-actions { display: none; }
+  .shell { display: block; }
+  .scroll, .grid-scroll, .table-scroll { overflow: visible; }
+  .scroll :is(th, td):first-child,
+  .grid-scroll :is(th, td):first-child,
+  .table-scroll :is(th, td):first-child { position: static; box-shadow: none; }
+}

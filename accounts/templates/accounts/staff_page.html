@@ -12,6 +12,7 @@ opens the URL — there is no `login_required`, for the oracle reason
 `accounts/views.py` gives. The slug is already in the host.
 {% endcomment %}
 
+{% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'staff/staff.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'staff/app.js' %}"></script>

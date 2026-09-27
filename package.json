@@ -2,8 +2,9 @@
   "name": "luffy-school-saas",
   "private": true,
   "type": "module",
-  "description": "No dependencies and no build step. This file exists so that node reads the page modules in static/ as modules (`type: module`) and so `npm test` names the one command that runs their tests. There is no node_modules, nothing to install, and nothing here is served to a browser.",
+  "description": "No dependencies and no build step. This file exists so that node reads the page modules in static/ as modules (`type: module`) and so `npm test` names the one command that runs their tests. There is no node_modules, nothing to install, and nothing here is served to a browser. The one exception is `npm run screens` (tests/ui/), which drives a real browser against the demo and needs `playwright`: CI's `screens` job installs it for that run only, and it is never a dependency of a page (tests/test_budget.py refuses a page module that imports a package).",
   "scripts": {
-    "test": "node --test tests/js/*.test.js"
+    "test": "node --test tests/js/*.test.js",
+    "screens": "node --test tests/ui/*.test.js"
   }
 }

@@ -6,82 +6,29 @@
  * detail is the only real constraint here: the code field has to be reachable
  * and legible while the reader switches between two apps, so the type is big
  * and the field is not hidden behind anything.
+ *
+ * Colours, type and controls are `web/design.css`'s; this is the layout.
  */
 
-:root {
-  --ink: #111;
-  --quiet: #555;
-  --rule: #999;
-  --wrong: #900;
-}
+main { max-width: 26rem; }
 
-* { box-sizing: border-box; }
+label { display: block; margin: 16px 0 6px; font-weight: 700; }
 
-body {
-  margin: 0;
-  padding: 24px 16px;
-  background: #fff;
-  color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
+input { width: 100%; font-size: 1.15rem; }
 
-main { max-width: 26rem; margin: 0 auto; }
+button { width: 100%; margin-top: 16px; }
 
-h1 { font-size: 1.3rem; margin: 0 0 8px; }
-
-label { display: block; margin: 16px 0 4px; color: var(--quiet); }
-
-input {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  font: inherit;
-  font-size: 1.15rem;
-}
-
-button {
-  margin-top: 16px;
-  width: 100%;
-  padding: 13px;
-  border: 0;
-  border-radius: 6px;
-  background: var(--ink);
-  color: #fff;
-  font: inherit;
-  font-weight: 600;
-}
-
-button.again {
-  margin-top: 8px;
-  background: none;
-  color: var(--quiet);
-  font-weight: 400;
-  text-decoration: underline;
-}
+button.again { margin-top: 8px; }
 
 /* The refusal sentence sits above the field it is about, and is announced:
    `role="alert"` is what makes a screen reader say it, and a parent who cannot
    see the red text is exactly the reader who needs telling. */
-.problem {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  border-left: 3px solid var(--wrong);
-  background: #fff5f5;
-  color: var(--wrong);
-}
+.problem { margin: 12px 0 0; }
 
 .guardians, .schools { list-style: none; margin: 16px 0 0; padding: 0; }
 .guardians li, .schools li { margin-bottom: 8px; }
 .schools a { font-size: 1.1rem; }
-.blank { color: var(--quiet); }
 
 /* Sign-out, on the two states that stop with a live session on the page. Quiet
    for `staff-signin.css`'s reason: it is not what the reader came to do. */
-button.signout {
-  margin-top: 8px;
-  background: none;
-  color: var(--quiet);
-  font-weight: 400;
-  text-decoration: underline;
-}
+button.signout { margin-top: 8px; }

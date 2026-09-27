@@ -10,36 +10,19 @@
   margin: 16px 0;
 }
 
-.checker-form label { font-weight: 600; margin-top: 8px; }
-
-.checker-form input {
-  font: inherit;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-}
+.checker-form label { font-weight: 700; margin-top: 8px; }
 
 #pin { letter-spacing: 1px; }
 
-.checker-form button,
-.another button {
-  font: inherit;
-  min-height: 44px;
-  padding: 10px 16px;
-  margin-top: 8px;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  cursor: pointer;
-}
+.checker-form button { justify-self: start; margin-top: 8px; }
+.another button { margin-top: 8px; }
 
 .note { max-width: 32rem; }
 .note-not-opened,
 .note-wait,
-.note-broken { color: var(--held); }
+.note-broken { color: var(--stop); }
 
-.sign-in { color: var(--quiet); }
+.sign-in { color: var(--muted); }
 
 @media print {
   .another { display: none; }

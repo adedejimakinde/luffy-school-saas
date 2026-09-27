@@ -14,6 +14,7 @@ reads the token from its own address and asks the API, and a guessed token and
 a real one get the same frame. `no-referrer` because the address is the token.
 {% endcomment %}
 
+{% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'invite/invite.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'invite/app.js' %}"></script>

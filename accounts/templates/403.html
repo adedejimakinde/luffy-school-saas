@@ -42,14 +42,22 @@ and then there is no link at all, only the sentence. A dead link is worse than
 being told to go back the way you came.
 {% endcomment %}
 
+{% comment %}
+Inline and self-contained for the reason above, so it carries its own copy of
+the few values it uses from `static/web/design.css` — the only page that does,
+and `tests/test_design.py` holds every one of them to that file's palette. No
+web font: the system stack is design.css's own fallback, and a font file is an
+asset.
+{% endcomment %}
 <style>
-  body { font: 16px/1.6 system-ui, sans-serif; margin: 0; padding: 2rem 1.25rem;
-         color: #1c1c1c; background: #fff; }
-  main { max-width: 34rem; margin: 0 auto; }
-  h1 { font-size: 1.5rem; margin: 0 0 1rem; }
+  body { font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         margin: 0; padding: 16px; color: #0E1726; background: #F5F6F8; }
+  main { max-width: 34rem; margin: 0 auto; padding: 24px 20px; background: #FFFFFF;
+         border: 1px solid #E3E6EB; border-radius: 12px; }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 1rem; }
   p { margin: 0 0 1rem; }
-  .quiet { color: #555; font-size: 0.95rem; }
-  a { color: #14507d; }
+  .quiet { color: #5B6475; }
+  a { color: #143D8C; }
 </style>
 
 <main>

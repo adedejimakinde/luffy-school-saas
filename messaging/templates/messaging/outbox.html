@@ -4,14 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fake outbox</title>
+{% include "design/head.html" %}
 <style>
-  body { font-family: system-ui, sans-serif; margin: 16px; max-width: 60rem; }
-  li { margin: 0 0 12px; padding: 8px; border-left: 4px solid #999; list-style: none; }
-  li.refused, li.unavailable { border-color: #b00; }
-  .meta { color: #555; font-size: 0.9rem; }
+  main { max-width: 60rem; }
+  ul { padding: 0; }
+  li { margin: 0 0 12px; padding: 10px 14px; border-left: 4px solid var(--border); list-style: none; }
+  li.refused, li.unavailable { border-color: var(--stop); }
+  .meta { color: var(--muted); font-size: var(--small); }
 </style>
 </head>
 <body>
+<main>
 <h1>Fake outbox</h1>
 <p>What the fake message provider was given, newest first. Development only: nothing here was sent.</p>
 <ul>
@@ -25,5 +28,6 @@
   <li>Nothing yet.</li>
 {% endfor %}
 </ul>
+</main>
 </body>
 </html>
