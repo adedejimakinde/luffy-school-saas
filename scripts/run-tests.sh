@@ -65,7 +65,7 @@
 #   scripts/run-tests.sh                       # everything, in one process tree
 #   scripts/run-tests.sh results.tests.test_pdf
 #   scripts/run-tests.sh --parallel 4 accounts
-#   EXPECT_TESTS=554 scripts/run-tests.sh --verbosity 2 --parallel \
+#   EXPECT_TESTS=554 scripts/run-tests.sh --verbosity 2 --parallel auto \
 #     $(python scripts/shard_tests.py 3 4)     # one CI job, as CI runs it
 #
 # Arguments are passed through to `manage.py test` untouched. With none, it runs

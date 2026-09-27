@@ -204,7 +204,9 @@ jobs:
         run: python scripts/shard_tests.py ${{ matrix.shard }} 4 --github-env >> "$GITHUB_ENV"
 
       # `--parallel` splits the job's modules across worker processes, one per
-      # core, each with its own clone of the test database.
+      # core, each with its own clone of the test database. `auto` is spelled
+      # out because the flag takes an optional value: bare, it would swallow
+      # the first module label as its worker count and refuse to start.
       #
       # One tenant schema *is* baked into the test database — `tenant_template`,
       # migrated once by `schools/tests/runner.py`. It is built before Django
@@ -222,7 +224,7 @@ jobs:
       # the step above, fails a job that ran any other number of tests than it
       # was dealt: an `OK` over a smaller suite is the same lie one level up.
       - name: Run tests
-        run: scripts/run-tests.sh --verbosity 2 --parallel $SHARD_LABELS
+        run: scripts/run-tests.sh --verbosity 2 --parallel auto $SHARD_LABELS
 
   # One check named `test`, green only when all four jobs are. `deploy.yml` and
   # the merge gate ask GitHub about a check-run of this name on a commit, and it
