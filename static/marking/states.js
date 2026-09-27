@@ -226,7 +226,7 @@ export function wrongHost() {
     '<section class="state state-wrong-host" data-state="wrong-host">',
     "<h1>Marks live on your school's own web address</h1>",
     "<p>This page is open on the sign-in site. Open it again from your ",
-    "school's own address — the link on the page you signed in on.</p>",
+    "school's own address, the link on the page you signed in on.</p>",
     "</section>",
   ].join("");
 }
