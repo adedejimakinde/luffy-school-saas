@@ -13,6 +13,33 @@ main { max-width: 34rem; }
 h1 { margin: 0 0 16px; }
 h2 { font-size: 1.05rem; margin: 20px 0 6px; }
 
+/*
+ * The child switcher, one tab per child, shown only where there is more than
+ * one to switch between — a lone child needs no control for a choice that has
+ * only one answer. `[hidden]` on the inactive sections is the whole of the
+ * showing and hiding; no CSS makes that rule, the attribute already does.
+ */
+.child-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.child-switcher button {
+  min-height: var(--control);
+  padding: 8px 16px;
+  color: var(--muted);
+  background: var(--card);
+}
+
+.child-switcher button[aria-selected="true"] {
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-color: var(--brand-soft);
+  font-weight: 700;
+}
+
 .cards { list-style: none; margin: 0; padding: 0; }
 
 .cards li {

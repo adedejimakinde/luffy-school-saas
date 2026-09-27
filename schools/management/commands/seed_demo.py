@@ -6,13 +6,25 @@ first-CA marks, a week's timetable with a double period, a combined lesson and
 a free period, two weeks of registers, and a term's fees: each class's bill
 applied, one line added since that nobody has been charged yet, a standing
 concession and a revoked one, payments, a discount and one family in credit.
+JSS 1B's first-CA results are walked through the chain and released, with a
+principal's remark on each card, so a parent has a card to open; JSS 1A's stay
+in draft, so a teacher has a sheet left to mark. Result notices are turned on
+and told for JSS 1B's release, to a verified phone the demo parent already
+holds, so the fake outbox (`/dev/outbox/`) has a real message in it too.
 One login per role — administrator, principal, vice principal (academic),
-teacher, bursar and parent (of two children) — and two more teachers, so each
-subject has its own. Everybody's password is the one printed at the end.
+teacher, bursar and parent (of two children, one in each class, so the parent
+page shows one child with a card and one without) — and two more teachers, so
+each subject has its own. Everybody's password is the one printed at the end.
 
 **Refuses unless `DEBUG` is on.** Fake children with a published password have
 no business in a real deployment, and `DEBUG` is the one switch this project
 already ties "this is not production" to (`settings.py`).
+
+**Refuses unless the phone channel's provider is the fake one.** The parent's
+phone number is a real number's shape (`messaging.fake` is the one place that
+is safe), and this command calls `tell_families()`: a deploy whose
+`MESSAGING_PHONE_PROVIDER` points at Termii, `DEBUG` on or not, must never be
+handed a real send to a number nobody here asked for.
 
 **Refuses to run twice** rather than guessing what a second run should do to
 the first run's data. Reset a development database to start again.
@@ -24,7 +36,8 @@ where the demo is served, not something this command knows about.
 
 import random
 import uuid
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
@@ -34,7 +47,7 @@ from django_tenants.utils import schema_context
 
 from academics import services as academics
 from academics.models import ClassGroup, Term, TermName
-from accounts.models import Role, User
+from accounts.models import ContactChannel, GuardianAccount, GuardianContact, Role, User
 from accounts.services import (
     activate_guardian_links,
     enroll_student,
@@ -47,6 +60,8 @@ from fees import services as fees
 from fees.models import KOBO_PER_NAIRA, PaymentMethod
 from gradebook import services as gradebook
 from gradebook.models import Assessment, Subject
+from messaging.fake import FakeProvider
+from messaging.providers import provider_for
 from schools.models import Domain, School
 from timetable import services as timetable
 from timetable.models import Weekday
@@ -83,6 +98,13 @@ TUITION = 150_000 * KOBO_PER_NAIRA
 LEVY = 15_000 * KOBO_PER_NAIRA
 DEFAULT_PASSWORD = "demo-pass-2026"
 
+#: The demo parent's phone, already verified: nobody clicks through code
+#: delivery to seed a demo. A real number's shape, `identifiers.normalize_phone`
+#: stores it as E.164.
+PARENT_PHONE = "08031234567"
+
+LAGOS = ZoneInfo("Africa/Lagos")
+
 
 def _weekdays(start, end):
     day = start
@@ -108,6 +130,14 @@ class Command(BaseCommand):
             raise CommandError(
                 "seed_demo only runs with DEBUG on: it writes fake children and "
                 "a published password."
+            )
+        if not isinstance(provider_for("phone"), FakeProvider):
+            raise CommandError(
+                "seed_demo only runs with the fake message provider on the phone "
+                "channel: it tells families about a release, to a real-shaped "
+                "phone number, and this deploy's MESSAGING_PHONE_PROVIDER is "
+                "something else. That number could belong to somebody; the demo "
+                "must never hand it to a real provider."
             )
         taken = [slug for slug, _ in SCHOOLS if School.objects.filter(slug=slug).exists()]
         if taken:
@@ -152,16 +182,31 @@ class Command(BaseCommand):
                 user = login(f"s{i + 1:02d}", f"{FIRST_NAMES[i]} {rng.choice(SURNAMES)}")
                 children.append(enroll_student(user, school, reference=f"{prefix[:3].upper()}/{i + 1:03d}"))
             parent = login("parent", f"Parent {name.split()[0]}")
-            for child in children[:2]:
+            # One child in each class: JSS 1B's results are released below and
+            # JSS 1A's are not, so the parent page shows both a card and a
+            # child with none yet.
+            for child in (children[0], children[10]):
                 link_guardian(parent, child)
             # `link_guardian()` grants INVITED until the guardian answers the
             # school's code, and this is what answering does. A demo parent has
             # no phone to answer with, and an INVITED one can open nothing.
             activate_guardian_links(parent, school)
+            # A verified channel too, written directly rather than clicked
+            # through code delivery, so "tell families" below has somewhere
+            # real to land: `GuardianContact` only refuses a channel changing
+            # after it is written, not a verified one arriving with it.
+            account, _ = GuardianAccount.objects.get_or_create(user=parent)
+            GuardianContact.objects.create(
+                guardian=account,
+                channel_type=ContactChannel.PHONE,
+                value=PARENT_PHONE,
+                created_by=staff["admin"].user,
+                verified_at=timezone.now(),
+            )
 
         logins = [(name, u.user.username, label) for (key, _, label), u in zip(STAFF, staff.values())]
         logins += [(name, u.user.username, label) for (key, label), u in zip(MORE_TEACHERS, teachers.values())]
-        logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[1].name})"))
+        logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[10].name})"))
 
         with schema_context(school.schema_name), transaction.atomic():
             self._term_data(staff, teachers, children, rng)
@@ -205,6 +250,7 @@ class Command(BaseCommand):
                 gradebook.set_score(ca, child, rng.randint(6, 20), by=staff["teacher"].user)
 
         self._timetable(term, groups, subjects, staff, teachers)
+        self._release(term, groups[1], placed[groups[1]], staff)
 
         # Two weeks of registers. Children 3 and 14 are away often enough to be
         # on the principal's absence list.
@@ -255,6 +301,48 @@ class Command(BaseCommand):
                 recorded_by=bursar,
             )
         fees.discount(children[1], term, 25_000 * KOBO_PER_NAIRA, narration="Second child in the school", recorded_by=bursar)
+
+    def _release(self, term, group, members, staff):
+        """JSS 1B's results, walked the whole chain and released, and told.
+
+        The ordinary way, one step per role, so the demo holds what a real
+        release leaves behind: the frozen card, the transitions, and a render
+        owed for each card. The render is queued after the commit and a
+        broker that is not there is logged rather than raised
+        (`results.renders._enqueue()`), so the demo seeds without Redis and
+        the card page still opens — just without a PDF to download yet.
+
+        JSS 1B has no class teacher (only JSS 1A does — see `_term_data()`),
+        so the administrator submits it: the other role `SUBMITTING_ROLES`
+        admits, and the one that is not scoped to a class.
+
+        "Tell families" (D9) is its own step after release, off by default per
+        school, so the demo turns it on and presses it itself: otherwise the
+        fake outbox would never show a release notice at all. `now` is a fixed
+        Lagos daytime moment rather than the real clock, so the notice always
+        sends at once (`notices.hours.send_after()`) whatever time the seed
+        happens to be run at.
+        """
+        from notices import services as notices_service
+        from results import comments
+        from results import services as chain
+        from results.models import CommentAuthor
+
+        principal = staff["principal"].user
+        for child in members:
+            comments.write(
+                term, child, CommentAuthor.PRINCIPAL,
+                "A steady term. Keep reading every evening.", by=principal,
+            )
+        sheet = chain.open_sheet(group, term, principal)
+        chain.submit(sheet, staff["admin"].user)
+        chain.check(sheet, staff["vp"].user)
+        chain.approve(sheet, principal)
+        chain.release(sheet, principal)
+
+        notices_service.set_offered_as(principal, result_notices=True)
+        now = datetime.combine(term.starts_on, time(9, 0), tzinfo=LAGOS)
+        notices_service.tell_families(sheet, actor=principal, now=now)
 
     def _timetable(self, term, groups, subjects, staff, teachers):
         """Five periods and a break, and this term's week for both classes.

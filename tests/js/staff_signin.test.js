@@ -58,6 +58,12 @@ const REFUSED = {
   },
 };
 
+test("the form offers the guardian door, relative, since both live on the portal", () => {
+  const html = htmlFor(initialState());
+  assert.match(html, /I'm a parent/);
+  assert.match(html, /href="\/sign-in\/"/);
+});
+
 test("a password signs a member of staff in and names the account that answered", () => {
   const state = advance({ ...initialState(), identifier: "ada@stmarys.test" }, TWO_SCHOOLS);
 

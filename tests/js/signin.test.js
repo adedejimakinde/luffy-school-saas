@@ -51,6 +51,12 @@ function atTheCodeStep() {
   return advance({ ...initialState(), value: "08031234567" }, CODE_SENT);
 }
 
+test("the first step offers the staff door, relative, since both live on the portal", () => {
+  const html = htmlFor(initialState());
+  assert.match(html, /Are you a member of staff/i);
+  assert.match(html, /href="\/staff-sign-in\/"/);
+});
+
 test("asking for a code moves to the code step and never promises delivery", () => {
   const state = atTheCodeStep();
   assert.equal(state.step, "code");

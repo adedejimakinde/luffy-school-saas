@@ -44,6 +44,17 @@ main { max-width: none; }
 
 .conduct, .remark, .session, .promotion { page-break-inside: avoid; }
 
+/*
+ * The summary's blue and the bars under a subject's name are both screen
+ * ink rule 3 above is about: a fill a printer has to lay down for no reading
+ * gain, on a document a family may print several copies of. The numbers they
+ * stand in for are still printed as text, which is the whole of what paper
+ * needs.
+ */
+.summary { background: none; padding: 0; border: 1px solid var(--text); }
+.who th, .who td { color: var(--text); }
+.scorebar { display: none; }
+
 /* A link is a thing to tap. On paper it is a sentence that cannot be obeyed. */
 .state a { display: none; }
 

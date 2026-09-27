@@ -89,6 +89,60 @@ test("a child with no cards is listed rather than dropped", () => {
   assert.match(html, /No cards released yet/);
 });
 
+test("more than one child gets a switcher; one child gets none", () => {
+  const html = htmlFor(FAMILY);
+  assert.match(html, /class="child-switcher"/);
+  assert.match(html, /data-action="switch-child"[^>]*data-child="12"/);
+  assert.match(html, /data-action="switch-child"[^>]*data-child="13"/);
+
+  const oneChild = htmlFor({
+    status: 200,
+    body: { children: [{ student_membership_id: 1, student_name: "Ada", cards: FAMILY.body.children[0].cards }] },
+  });
+  assert.doesNotMatch(oneChild, /class="child-switcher"/, "one child is not a choice");
+});
+
+test("the first child shows and the rest wait behind the switcher, hidden not gone", () => {
+  const html = htmlFor(FAMILY);
+  const ada = html.match(/<section class="child" data-child="12"[^>]*>/)[0];
+  const bola = html.match(/<section class="child" data-child="13"[^>]*>/)[0];
+  assert.doesNotMatch(ada, /hidden/, "the active child is not hidden");
+  assert.match(bola, /hidden/, "the inactive child is hidden, not dropped");
+  // Both names are still in the document — a phrase search or a screen
+  // reader that ignores `hidden` still finds them.
+  assert.match(html, /Ada Obi/);
+  assert.match(html, /Bola Obi/);
+});
+
+test("activeChild picks which section shows, and an id from nowhere falls back to the first", () => {
+  const picked = htmlFor(FAMILY, { activeChild: 13 });
+  assert.doesNotMatch(picked.match(/<section class="child" data-child="13"[^>]*>/)[0], /hidden/);
+  assert.match(picked.match(/<section class="child" data-child="12"[^>]*>/)[0], /hidden/);
+
+  const stray = htmlFor(FAMILY, { activeChild: 999 });
+  assert.doesNotMatch(stray.match(/<section class="child" data-child="12"[^>]*>/)[0], /hidden/);
+});
+
+test("clicking a tab switches which child is showing, with no second fetch", async () => {
+  forgetToken();
+  const root = fakeRoot({});
+  let fetches = 0;
+  await mount(root, {
+    fetchImpl: async (url) => {
+      if (url === "/api/results/cards/") fetches += 1;
+      return { status: 200, json: async () => FAMILY.body };
+    },
+  });
+
+  assert.doesNotMatch(root.innerHTML.match(/<section class="child" data-child="12"[^>]*>/)[0], /hidden/);
+
+  await root.click({ "data-action": "switch-child", "data-child": "13" });
+
+  assert.match(root.innerHTML.match(/<section class="child" data-child="12"[^>]*>/)[0], /hidden/);
+  assert.doesNotMatch(root.innerHTML.match(/<section class="child" data-child="13"[^>]*>/)[0], /hidden/);
+  assert.equal(fetches, 1, "switching tabs reads no second answer");
+});
+
 test("two silences, told apart because they send a parent to different people", () => {
   const noCards = htmlFor({ status: 200, body: { children: [{ student_membership_id: 1, student_name: "Ada", cards: [] }] } });
   assert.match(noCards, /No report cards yet/);

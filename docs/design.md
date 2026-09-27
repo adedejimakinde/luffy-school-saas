@@ -25,7 +25,21 @@ nothing else: no page declares a colour.
 - **Radii** 10px on buttons and fields, 12px on cards. **Buttons** are 44px
   tall, and the primary action is 48px.
 - **Icons** are inline stroke SVG (`<svg class="icon">`), drawn here: no icon
-  pack, no emoji.
+  pack, no emoji. The defs live once in `templates/design/icons.html`
+  (a `<symbol>` sprite, invisible on its own) and a page includes it wherever
+  it draws its first `<use href="#i-…">` — not from `design/head.html`,
+  which is head-only content; an `<svg>` there would end the page's implicit
+  `<head>` early. Grown page by page as pages restyle.
+- **The logo is the one mark that is filled, not stroked**: `#i-brand-mark`
+  (`.logo-mark`, not `.icon`) — a rounded blue square, three white dots joined
+  by a triangle — beside the lowercase wordmark `classnode`. Every other icon
+  stays plain stroke.
+- **No em dashes in rendered UI copy.** A colon, a comma or a full stop
+  instead. Code comments and docstrings are prose and keep writing however
+  they already do — this is about what a reader sees on the page. The one
+  exception is an em dash used as a placeholder for "nothing to show" (the
+  broadsheet's `DASH`, a session table's default) — that is data, not a
+  sentence, and stays.
 
 ## Widths
 

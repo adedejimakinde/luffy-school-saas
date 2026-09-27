@@ -37,9 +37,39 @@ h2 { font-size: 1rem; margin: 0 0 4px; }
 
 table { width: 100%; }
 
-.who { margin: 10px 0 14px; }
-.who th, .who td { padding: 3px 0; text-align: left; vertical-align: top; font-weight: 400; border: 0; }
-.who th { color: var(--muted); width: 22%; }
+/*
+ * The blue summary card: the two numbers a parent opens this page for —
+ * average and attendance — beside who it is for. `render.js` still draws the
+ * plain `<table class="who">` it always did; this only colours the section
+ * around it, so the DOM `tests/js/card_render.test.js` reads
+ * (`Attendance</th><td>`) is exactly what it was before this had a colour.
+ */
+.summary {
+  margin: 10px 0 14px;
+  padding: 16px 20px;
+  background: var(--brand);
+  border-radius: var(--radius-card);
+}
+
+/* `table-layout: fixed` so the four columns hold the widths given them —
+   without it a long value ("Not recorded this term") can force the table
+   wider than its own blue box on a phone, which `overflow-x` on nothing
+   catches. */
+.who { margin: 0; width: 100%; table-layout: fixed; }
+.who th, .who td { padding: 3px 8px 3px 0; text-align: left; vertical-align: top; font-weight: 400; border: 0; color: var(--card); overflow-wrap: break-word; }
+.who th { width: 22%; opacity: .78; }
+.who td { width: 28%; font-weight: 700; }
+
+/* Four columns of a percentage each leave too little room for a phrase like
+   "Not recorded this term" to read at all. Below 480px the table stacks into
+   one label above its value, each getting the box's whole width. */
+@media (max-width: 480px) {
+  .who, .who tbody, .who tr, .who th, .who td { display: block; width: auto; }
+  .who tr { margin: 0 0 10px; }
+  .who tr:last-child { margin-bottom: 0; }
+  .who th { padding: 0; }
+  .who td { padding: 0 0 2px; }
+}
 
 /*
  * The marks table is the one thing on this page that can be wider than a
@@ -54,6 +84,11 @@ table { width: 100%; }
 .grid thead th { color: var(--text); background: var(--bg); }
 .grid .n { text-align: right; }
 .grid .max { display: block; color: var(--muted); font-weight: 400; }
+
+/* One bar per subject, under its name — the row's percentage, seen at a
+   glance before reading the number in the `%` column. */
+.grid tbody td:first-child { min-width: 8rem; }
+.grid .scorebar { margin-top: 6px; }
 
 /* The parenthetical on a partial attendance line: "register kept on 40 of 62
    days". Smaller and greyer than the counts beside it, because it is the

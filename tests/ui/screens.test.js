@@ -121,10 +121,21 @@ export const SCREENS = [
   },
   { name: "staff", as: "sunrise.admin", url: `${SUNRISE}/staff/` },
 
-  // A parent.
-  // The demo releases no card, so the index is its empty state and there is
-  // no card to open from it yet.
-  { name: "cards", as: "sunrise.parent", url: `${SUNRISE}/cards/` },
+  // A parent, of one child with a released card and one without —
+  // `seed_demo`'s own reason for releasing one class and not the other. The
+  // switcher sorts by name (`_children_of()`'s own order), so "Ada", child 0
+  // of JSS 1A, is always first and "Kemi", child 10 of JSS 1B, is always
+  // second — a fact about the alphabet, not a guess about a random surname.
+  // The second switcher tab is Kemi's, whichever school this is.
+  {
+    name: "cards",
+    as: "sunrise.parent",
+    url: `${SUNRISE}/cards/`,
+    steps: [
+      ["cards-second-child", ".child-switcher button:nth-of-type(2)"],
+      ["card", ".cards a"],
+    ],
+  },
 
   // The design's own parts, drawn from `specimen.html` against the served
   // stylesheet: the shell, stat cards, a wide table, labels, messages.

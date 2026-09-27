@@ -14,17 +14,19 @@ from django.test import TestCase, override_settings
 from django_tenants.utils import schema_context
 
 from academics.models import ClassPlacement, Term
-from accounts.models import Membership, MembershipStatus, Role
+from accounts.models import GuardianContact, Membership, MembershipStatus, Role
 from attendance.models import Register
 from fees.models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
 from gradebook.models import Score
+from messaging.tests.fake import SendsThroughTheFake
+from notices.models import Notice
 from schools.models import Domain, School
 from timetable.models import Period, TimetableSlot, Weekday
 
 SLUGS = ("sunrise-demo", "harbour-demo")
 
 
-class SeedDemoTests(TestCase):
+class SeedDemoTests(SendsThroughTheFake, TestCase):
     def tearDown(self):
         connection.set_schema_to_public()
 
@@ -38,6 +40,18 @@ class SeedDemoTests(TestCase):
         with override_settings(DEBUG=False):
             with self.assertRaisesMessage(CommandError, "only runs with DEBUG on"):
                 self.seed()
+
+        self.assertFalse(School.objects.filter(slug__in=SLUGS).exists())
+
+    @override_settings(DEBUG=True, MESSAGING_PROVIDERS={"email": "", "phone": ""})
+    def test_it_will_not_run_without_the_fake_phone_provider(self):
+        """CONTROL 3: removing the provider guard makes this red.
+
+        The parent's phone number is a real number's shape, and `tell_families()`
+        would hand it straight to whatever `MESSAGING_PHONE_PROVIDER` names.
+        """
+        with self.assertRaisesMessage(CommandError, "only runs with the fake message provider"):
+            self.seed()
 
         self.assertFalse(School.objects.filter(slug__in=SLUGS).exists())
 
@@ -60,16 +74,23 @@ class SeedDemoTests(TestCase):
                 self.assertEqual(roles.count(Role.TEACHER.value), 3)
                 # CONTROL 2: leaving the parent INVITED, as `link_guardian()`
                 # grants it, makes this red — and the demo parent sees nothing.
-                self.assertEqual(
-                    Membership.objects.get(school=school, role=Role.PARENT).status,
-                    MembershipStatus.ACTIVE,
-                )
+                parent_membership = Membership.objects.get(school=school, role=Role.PARENT)
+                self.assertEqual(parent_membership.status, MembershipStatus.ACTIVE)
+                # A verified channel too, so "tell families" below has
+                # somewhere real to land.
+                contact = GuardianContact.objects.get(guardian__user=parent_membership.user)
+                self.assertTrue(contact.is_live)
+                self.assertEqual(contact.value, "+2348031234567")
 
                 with schema_context(school.schema_name):
                     term = Term.objects.get(is_current=True)
                     self.assertEqual(ClassPlacement.objects.filter(term=term).count(), 20)
                     self.assertEqual(Score.objects.count(), 60)
                     self.assertEqual(Register.objects.count(), 20)
+                    # "Tell families" (D9) was turned on and pressed for JSS 1B's
+                    # release: one guardian, the demo parent, is reachable there.
+                    [notice] = Notice.objects.all()
+                    self.assertEqual(notice.contact_id, contact.pk)
                     # Every child charged both lines of their class's bill, by the
                     # bill: each charge names the line that billed it.
                     charges = FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE)
