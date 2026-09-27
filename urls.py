@@ -23,6 +23,7 @@ from accounts.views import roll_page, staff_page
 from attendance.views import absences_page, register_page
 from fees.views import fees_page
 from gradebook.views import marking_page
+from home.views import home_page
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -47,6 +48,8 @@ urlpatterns = [
     # raises `Http404` on the portal because the register tables do not exist
     # in the public schema. The page has a state for that answer.
     # The office's own surface: the calendar and the class groups.
+    # The principal's and the vice principal's first screen.
+    path("home/", home_page, name="home"),
     path("setup/", setup_page, name="school-setup"),
     path("roll/", roll_page, name="roll"),
     path("staff/", staff_page, name="staff"),

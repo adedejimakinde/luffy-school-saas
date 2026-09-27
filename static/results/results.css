@@ -11,7 +11,7 @@
  * Colours, type and controls are `web/design.css`'s; this is the layout.
  */
 
-main { max-width: 42rem; }
+.content > main { max-width: 48rem; }
 
 .term { color: var(--muted); margin: 0 0 16px; }
 
@@ -30,44 +30,23 @@ main { max-width: 42rem; }
 .actions { grid-column: 1 / -1; }
 .actions.quiet { color: var(--muted); display: block; }
 
-.row.state-released .standing { color: var(--ok); font-weight: 700; }
-
-.actions button.send-back { color: var(--warn); }
-
 .send-back-form { grid-column: 1 / -1; display: grid; gap: 6px; }
 .send-back-form textarea { width: 100%; }
 .send-back-form button { justify-self: start; }
 
-.note { grid-column: 1 / -1; font-size: var(--small); }
-
-/* The children a release left without a card (issue #47): a warning, not an
-   error — the release stands, and these children are simply not on it. */
-.left-out {
-  grid-column: 1 / -1;
-  background: var(--warn-bg);
-  color: var(--warn);
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  font-size: var(--small);
-}
+/* What a press did, and the children a release left without a card (issue
+   #47): neutral messages carrying their label, so each is a word and a colour
+   and a sentence, never colour alone. The label is the only colour. */
+.note, .left-out { grid-column: 1 / -1; margin: 4px 0 0; }
+.left-out .said { flex: 1 1 16rem; }
 .left-out p { margin: 0 0 4px; }
 .left-out ul { margin: 0; padding-left: 20px; }
 .left-out .reference { color: var(--muted); }
-
-/* Each note is colour *and* a rule *and* a sentence, never colour alone. */
-.row.already-signed, .row.moved { background: var(--warn-bg); border-left: 4px solid var(--warn); padding-left: 10px; }
-.row.already-signed .note, .row.moved .note { color: var(--warn); }
-.row.needs-a-reason .note,
-.row.not-checked .note,
-.row.not-allowed .note { color: var(--stop); }
-.row.not-checked, .row.not-allowed { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 10px; }
 
 button.signout { margin-top: 16px; }
 
 /* "Tell families" (docs/messaging.md D9): what was asked for so far, and what happened. */
 .row .told { grid-column: 1 / -1; color: var(--muted); font-size: var(--small); }
-.row.told .note { color: var(--muted); }
-.row.not-told .note { color: var(--stop); }
 .row .telling { grid-column: 1 / -1; }
 .row .telling p { margin: 0.25rem 0 0.5rem; }
 
@@ -76,5 +55,18 @@ button.signout { margin-top: 16px; }
 .row .slips p { margin: 0.25rem 0; }
 .lost-slip-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .lost-slip-form .hint { color: var(--muted); }
-.row.slips-printed .note { color: var(--muted); }
-.row.not-printed .note { color: var(--stop); }
+
+/* The class the page was opened for from the home page (`?class=`): the same
+   blue as the active nav item, mixed lighter, and a rule, so it is found
+   without reading colour alone. */
+.row.focus { background: var(--brand-tint); border-left: 4px solid var(--brand); padding-left: 10px; }
+
+/* "Release to parents" asks first: a release cannot be taken back. */
+.confirm-release {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.confirm-release p { margin: 0 0 10px; }

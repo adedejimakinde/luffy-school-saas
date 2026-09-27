@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applyStep, fromChain, htmlFor, mount } from "../../static/results/app.js";
+import { applyStep, focusFrom, fromChain, htmlFor, mount } from "../../static/results/app.js";
 import { REFUSAL, STEP, refusalFor, provesASession, takeStep } from "../../static/results/api.js";
 import * as states from "../../static/results/states.js";
 import { forgetToken } from "../../static/web/http.js";
@@ -87,7 +87,7 @@ test("a released row offers nothing and says why", () => {
   // the sheet back. An empty row would read as a page that failed to draw.
   const html = states.chain({ rows: [row({ state: "released", state_label: "Released to parents" })] });
 
-  assert.match(html, /Released — nothing further/);
+  assert.match(html, /Released: nothing further/);
   assert.doesNotMatch(html, /<button[^>]*data-step=/);
 });
 
@@ -160,13 +160,15 @@ test("a release that could not check is not released, and the button is the way 
     ]),
   });
 
+  await root.click({ "data-action": "ask-release", "data-class": "11" });
   await root.click({ "data-action": "step", "data-step": "release", "data-class": "11" });
 
   assert.equal(released.length, 1);
   assert.match(root.innerHTML, /Couldn(&#39;|')t check who was left out of JSS 1A/);
   assert.match(root.innerHTML, /has not been released/);
   assert.match(root.innerHTML, /class="row state-approved not-checked"/);
-  assert.match(root.innerHTML, /data-step="release"/, "the recovery is the same button");
+  assert.match(root.innerHTML, /data-action="ask-release"/, "the recovery is the same button");
+  assert.doesNotMatch(root.innerHTML, /data-step="release"/, "and it asks again before releasing");
   assert.doesNotMatch(root.innerHTML, /Released to parents/);
 });
 
@@ -404,4 +406,79 @@ test("every row links to its class's broadsheet", () => {
   });
 
   assert.match(html, /<a class="broadsheet" href="\/broadsheet\/\?class=11">Broadsheet<\/a>/);
+});
+
+// -- a release asks first ----------------------------------------------------
+
+test("Release to parents asks first, and nothing is sent until it is answered", async () => {
+  // A release cannot be taken back: a wrong card is corrected by reissuing
+  // it. So the row's button only opens the question, and the question's own
+  // button, naming the class, is the one that releases.
+  forgetToken();
+  const released = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/chain/11/release/", () => {
+        released.push(true);
+        return { status: 200, body: row({ state: "released", state_label: "Released to parents" }) };
+      }],
+      ["/api/results/chain/", {
+        status: 200,
+        body: { ...CHAIN, rows: [row({ state: "approved", state_label: "Approved", may_release: true })] },
+      }],
+    ]),
+  });
+
+  assert.doesNotMatch(root.innerHTML, /data-step="release"/, "one tap would release");
+  await root.click({ "data-action": "ask-release", "data-class": "11" });
+
+  assert.equal(released.length, 0, "asking sent the release");
+  assert.match(root.innerHTML, /Release JSS 1A&#39;s results to parents\?|Release JSS 1A's results to parents\?/);
+  assert.match(root.innerHTML, /<button[^>]*data-step="release"[^>]*>Release JSS 1A<\/button>/);
+
+  await root.click({ "data-action": "step", "data-step": "release", "data-class": "11" });
+
+  assert.equal(released.length, 1);
+  assert.match(root.innerHTML, /Released to parents/);
+  assert.doesNotMatch(root.innerHTML, /results to parents\?/, "the question outlived the release");
+});
+
+test("Cancel closes the question and releases nothing", async () => {
+  forgetToken();
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/chain/", {
+        status: 200,
+        body: { ...CHAIN, rows: [row({ state: "approved", state_label: "Approved", may_release: true })] },
+      }],
+    ]),
+  });
+
+  await root.click({ "data-action": "ask-release", "data-class": "11" });
+  await root.click({ "data-action": "cancel-release", "data-class": "11" });
+
+  assert.doesNotMatch(root.innerHTML, /data-step="release"/);
+  assert.match(root.innerHTML, /data-action="ask-release"/);
+});
+
+test("a login that may not release is never asked", () => {
+  const html = states.chain({ rows: [row({ state: "approved", may_release: false })], confirming: 11 });
+
+  assert.doesNotMatch(html, /ask-release/);
+  assert.doesNotMatch(html, /results to parents\?/);
+});
+
+// -- opened for one class, from the home page --------------------------------
+
+test("?class= marks the row the home page linked to, and nothing else", () => {
+  assert.equal(focusFrom("?class=12"), 12);
+  for (const search of ["", "?class=", "?class=abc", "?class=-3", "?class=1.5"]) {
+    assert.equal(focusFrom(search), null, search);
+  }
+
+  const html = htmlFor(fromChain({ ok: true, body: CHAIN }, { focus: 12 }));
+  assert.match(html, /<li id="class-12" class="row state-draft focus">/);
+  assert.match(html, /<li id="class-11" class="row state-draft">/);
 });

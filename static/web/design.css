@@ -462,7 +462,10 @@ td small { color: var(--muted); }
 
 .stat { display: grid; gap: 8px; align-content: start; }
 .stat-name { color: var(--muted); font-size: var(--small); }
-.stat-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+/* A figure is one line: a card's value never wraps, so it is kept short
+   (`home/states.js`'s `shortNaira()`), and what qualifies it goes in the
+   foot. The screens test measures this at 1024px and wider. */
+.stat-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stat-value small { color: var(--muted); font-size: 1rem; font-weight: 400; }
 .stat-foot { color: var(--muted); font-size: var(--small); }
 
@@ -853,7 +856,10 @@ body.has-shell { padding: 0; }
   .tabbar a[aria-current="page"] { color: var(--brand); }
   .tabbar .tab-label { font-size: 0.8125rem; font-weight: 700; }
 
-  body.has-tabbar .content { padding-bottom: 88px; }
+  /* The bar's 60px links and its rule, the phone's own safe area under them
+     (the bar pads itself by the same amount), and 24px so the last row is
+     read above the bar rather than against it. */
+  body.has-tabbar .content { padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* A save button that stays in reach on a long list: the register on a phone. */

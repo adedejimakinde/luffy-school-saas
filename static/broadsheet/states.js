@@ -39,12 +39,16 @@ function countsOf(ranks) {
   return counts;
 }
 
+/**
+ * Which figures these are. A neutral message carrying its label, the design's
+ * one place for status colour (`docs/design.md`), rather than a tinted banner.
+ */
 export function banner(fromSnapshot) {
   return fromSnapshot
-    ? '<p class="banner released" data-figures="released">Released: these are the ' +
-        "figures that went home, and they do not change.</p>"
-    : '<p class="banner live" data-figures="live">Not released: these are live ' +
-        "marks, and they change as teachers mark.</p>";
+    ? '<div class="msg" data-figures="released"><span class="label label-ok">Released</span>' +
+        "<p>These are the figures that went home, and they do not change.</p></div>"
+    : '<div class="msg" data-figures="live"><span class="label label-warn">Not released</span>' +
+        "<p>These are live marks, and they change as teachers mark.</p></div>";
 }
 
 function termChooser(terms, termId) {
