@@ -13,49 +13,33 @@
  * the person reading it.
  */
 
-:root {
-  --ink: #111;
-  --quiet: #555;
-  --rule: #999;
-  --wash: #f0f0f2;
-  --held: #900;
-}
+main { max-width: 900px; }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  padding: 16px;
-  background: #fff;
-  color: var(--ink);
-  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-main { max-width: 900px; margin: 0 auto; }
-
-h1 { font-size: 1.35rem; margin: 0; }
+h1 { margin: 0; }
 h2 { font-size: 1rem; margin: 0 0 4px; }
 
-.masthead { text-align: center; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
-.masthead .term { margin: 2px 0 0; color: var(--quiet); }
+.masthead { text-align: center; border-bottom: 2px solid var(--text); padding-bottom: 8px; }
+.masthead .term { margin: 2px 0 0; color: var(--muted); }
 
+/* A label, design.css's red one: a revised card says so where it is seen. */
 .revised {
   display: inline-block;
   margin: 6px 0 0;
-  padding: 1px 8px;
-  border: 1px solid var(--held);
-  border-radius: 9px;
-  color: var(--held);
-  font-size: .75rem;
-  letter-spacing: .08em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: var(--stop);
+  background: var(--stop-bg);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: .06em;
   text-transform: uppercase;
 }
 
-table { border-collapse: collapse; width: 100%; }
+table { width: 100%; }
 
 .who { margin: 10px 0 14px; }
-.who th, .who td { padding: 3px 0; text-align: left; vertical-align: top; font-weight: 400; }
-.who th { color: var(--quiet); width: 22%; }
+.who th, .who td { padding: 3px 0; text-align: left; vertical-align: top; font-weight: 400; border: 0; }
+.who th { color: var(--muted); width: 22%; }
 
 /*
  * The marks table is the one thing on this page that can be wider than a
@@ -64,22 +48,19 @@ table { border-collapse: collapse; width: 100%; }
  * sideways in its own box rather than shrinking the type to unreadable or
  * letting the whole page scroll, which would take the headings off screen.
  */
-.grid-scroll { overflow-x: auto; }
 
-.grid { margin-bottom: 14px; font-size: .9rem; }
-.grid th, .grid td { border: .6px solid var(--rule); padding: 4px 6px; text-align: left; }
-.grid thead th { background: var(--wash); font-size: .8rem; }
-.grid .n { text-align: center; }
-.grid .max { color: var(--quiet); font-size: .72rem; }
-
-.blank { color: #888; }
+.grid { margin-bottom: 14px; }
+.grid th, .grid td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; }
+.grid thead th { color: var(--text); background: var(--bg); }
+.grid .n { text-align: right; }
+.grid .max { display: block; color: var(--muted); font-weight: 400; }
 
 /* The parenthetical on a partial attendance line: "register kept on 40 of 62
    days". Smaller and greyer than the counts beside it, because it is the
    school's own gap rather than a fact about this child -- but present, not
    hidden, since a line that omitted it would let a reader subtract 40 from 62
    and call the difference absence. */
-.note { color: #666; font-size: 0.85em; }
+.note { color: var(--muted); }
 
 .conduct, .remark, .session, .promotion { margin-bottom: 12px; }
 .remark p { margin: 2px 0 0; }
@@ -93,8 +74,8 @@ table { border-collapse: collapse; width: 100%; }
 .state { padding: 24px 0; }
 .state h1 { margin-bottom: 8px; }
 .state-withheld .contact { font-size: 1.05rem; }
-.state-withheld h1 { color: var(--held); }
-.state-loading { color: var(--quiet); }
+.state-withheld h1 { color: var(--stop); }
+.state-loading { color: var(--muted); }
 
 /*
  * Sign-out, below the card.
@@ -104,21 +85,4 @@ table { border-collapse: collapse; width: 100%; }
  * card has no other way off this page, and the handset this platform is built
  * for is one somebody else picks up next. `print.css` removes it.
  */
-button.signout {
-  display: block;
-  margin: 24px auto 0;
-  padding: 10px 16px;
-  border: 0;
-  background: none;
-  color: #555;
-  font: inherit;
-  text-decoration: underline;
-}
-
-.problem {
-  margin: 16px 0 0;
-  padding: 10px 12px;
-  border-left: 3px solid #900;
-  background: #fff5f5;
-  color: #900;
-}
+button.signout { display: block; margin: 24px auto 0; }

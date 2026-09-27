@@ -11,6 +11,7 @@ The title names no child, because this document is served before anybody is
 authenticated and a tab title outlives the page in history and bookmarks.
 {% endcomment %}
 
+{% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'index/index.css' %}">
 
 <script type="importmap">{{ import_map|safe }}</script>

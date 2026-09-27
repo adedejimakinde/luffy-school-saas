@@ -8,56 +8,31 @@
  *
  * The two notes a save can leave — a conflict and a rejected number — are
  * colour *and* a rule *and* a sentence, never colour alone.
+ *
+ * Colours, type and controls are `web/design.css`'s; this is the layout.
  */
 
-:root {
-  --ink: #111;
-  --quiet: #555;
-  --rule: #ddd;
-  --conflict: #7a4a00;
-  --conflict-bg: #fff6e5;
-  --invalid: #900;
-  --invalid-bg: #fdeeee;
-}
+main { max-width: 34rem; }
 
-* { box-sizing: border-box; }
+.term, .when { color: var(--muted); margin: 0 0 16px; }
 
-body {
-  margin: 0;
-  padding: 20px 16px;
-  background: #fff;
-  color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-main { max-width: 34rem; margin: 0 auto; }
-
-h1 { font-size: 1.35rem; margin: 0 0 8px; }
-
-.term, .when { color: var(--quiet); margin: 0 0 16px; }
-
-.quiet { color: var(--quiet); font-weight: 400; }
+.quiet { font-weight: 400; }
 
 .locked {
-  background: #f4f4f4;
-  border-left: 4px solid var(--rule);
-  padding: 8px 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  padding: 10px 14px;
   margin: 0 0 12px;
 }
 
 .assessments, .classes, .roster { list-style: none; margin: 8px 0 0; padding: 0; }
 
 .assessments button, .classes button {
-  font: inherit;
   text-align: left;
   width: 100%;
-  min-height: 48px;
+  min-height: var(--control-lg);
   padding: 12px 14px;
   margin: 0 0 8px;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  cursor: pointer;
 }
 
 .roster .row {
@@ -66,50 +41,38 @@ h1 { font-size: 1.35rem; margin: 0 0 8px; }
   gap: 8px 12px;
   align-items: center;
   padding: 10px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--divider);
 }
 
 .roster label { grid-column: 1; }
 
 .roster input {
   grid-column: 2;
-  font: inherit;
+  width: 100%;
   /* 48px so a thumb can reach it; right-aligned so two-digit marks line up. */
-  min-height: 48px;
-  padding: 10px;
+  min-height: var(--control-lg);
   text-align: right;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
+  font-variant-numeric: tabular-nums;
 }
 
-.roster input:disabled { background: #f4f4f4; color: var(--quiet); }
+.total { grid-column: 3; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.total { grid-column: 3; color: var(--quiet); font-variant-numeric: tabular-nums; }
+.note { grid-column: 1 / -1; font-size: var(--small); }
 
-.note { grid-column: 1 / -1; font-size: 0.95rem; }
-
-.row.conflict { background: var(--conflict-bg); border-left: 4px solid var(--conflict); padding-left: 8px; }
-.row.conflict .note { color: var(--conflict); }
-.row.invalid { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding-left: 8px; }
-.row.invalid .note { color: var(--invalid); }
+.row.conflict { background: var(--warn-bg); border-left: 4px solid var(--warn); padding-left: 10px; }
+.row.conflict .note { color: var(--warn); }
+.row.invalid { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 10px; }
+.row.invalid .note { color: var(--stop); }
 
 /* A mark that did not land and is kept until the teacher saves or dismisses it
    (docs/offline.md, D5). Colour, a rule and a sentence, never colour alone. */
-.row.unsaved { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding-left: 8px; }
-.row.unsaved .note { color: var(--invalid); }
+.row.unsaved { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 10px; }
+.row.unsaved .note { color: var(--stop); }
 .row button.retry,
-.row button.dismiss { font: inherit; min-height: 44px; margin-right: 8px; }
-.session-ended { background: var(--invalid-bg); border-left: 4px solid var(--invalid); padding: 8px 12px; margin: 0 0 12px; }
+.row button.dismiss { margin-right: 8px; }
+.session-ended { background: var(--stop-bg); color: var(--stop); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 12px; }
 
 button.back, button.signout {
-  font: inherit;
-  min-height: 48px;
-  padding: 12px 18px;
+  min-height: var(--control-lg);
   margin: 12px 8px 0 0;
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 8px;
-  cursor: pointer;
 }
-
-a { color: #14507d; }

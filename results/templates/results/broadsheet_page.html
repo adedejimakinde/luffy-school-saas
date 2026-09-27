@@ -16,6 +16,7 @@ name: the routes answer a flat 404 both to a refused reader and on the portal,
 on purpose, so the page is told which host it is on rather than guessing.
 {% endcomment %}
 
+{% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'broadsheet/broadsheet.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'broadsheet/app.js' %}"></script>

@@ -4,35 +4,20 @@
  * Deliberately a list and not a table: the rows are links a parent taps, and a
  * table of one column per card attribute is a layout that stops working on the
  * device most of them are holding.
+ *
+ * Colours, type, buttons and labels are `web/design.css`'s; this is the layout.
  */
 
-:root {
-  --ink: #111;
-  --quiet: #555;
-  --rule: #ddd;
-  --held: #900;
-}
+main { max-width: 34rem; }
 
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  padding: 20px 16px;
-  background: #fff;
-  color: var(--ink);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-main { max-width: 34rem; margin: 0 auto; }
-
-h1 { font-size: 1.35rem; margin: 0 0 16px; }
+h1 { margin: 0 0 16px; }
 h2 { font-size: 1.05rem; margin: 20px 0 6px; }
 
 .cards { list-style: none; margin: 0; padding: 0; }
 
 .cards li {
   padding: 12px 0;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--divider);
 }
 
 .cards a { font-size: 1.05rem; }
@@ -40,22 +25,11 @@ h2 { font-size: 1.05rem; margin: 20px 0 6px; }
 /*
  * A held card is marked, not dimmed and not hidden. Dimming it would say "this
  * one does not matter", and it is the one the parent most needs to open: the
- * card page's 403 is what names the school's contact.
+ * card page's 403 is what names the school's contact. The mark is a label —
+ * `.tag` and `.tag.held` are design.css's.
  */
-.tag {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 7px;
-  border: 1px solid var(--quiet);
-  border-radius: 9px;
-  color: var(--quiet);
-  font-size: .75rem;
-}
+.tag { margin-left: 8px; }
 
-.tag.held { border-color: var(--held); color: var(--held); }
-.tag.revised { border-color: var(--ink); color: var(--ink); }
-
-.blank { color: var(--quiet); }
 .state { padding: 24px 0; }
 
 /*
@@ -63,21 +37,4 @@ h2 { font-size: 1.05rem; margin: 20px 0 6px; }
  * — but present on every page that has a session, which is the rule the two
  * sign-in pages and the card page are on as well.
  */
-button.signout {
-  display: block;
-  margin: 24px 0 0;
-  padding: 10px 0;
-  border: 0;
-  background: none;
-  color: var(--quiet);
-  font: inherit;
-  text-decoration: underline;
-}
-
-.problem {
-  margin: 16px 0 0;
-  padding: 10px 12px;
-  border-left: 3px solid var(--held);
-  background: #fff5f5;
-  color: var(--held);
-}
+button.signout { display: block; margin: 24px 0 0; padding-left: 0; }

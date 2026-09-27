@@ -642,7 +642,9 @@ DATABASE_ROUTERS = ["django_tenants.routers.TenantSyncRouter"]
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        # The one project-level template: the design's `<head>` lines, which
+        # every page includes and no single app owns (`templates/design/`).
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
