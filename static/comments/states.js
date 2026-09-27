@@ -47,7 +47,7 @@ export function choose({ term = "", classes = [] } = {}) {
 export function classList({ class_group = "", term = "", rows = [] } = {}) {
   return [
     '<section class="state state-class" data-state="class">',
-    `<h1>Remarks — ${esc(class_group)}</h1>`,
+    `<h1>Remarks: ${esc(class_group)}</h1>`,
     `<p class="term">${esc(term)}</p>`,
     '<ul class="children">',
     rows
@@ -134,9 +134,9 @@ function remark(r, { locked, bank, note }) {
     body.push(`<p class="written">${esc(r.body)}</p>`);
   } else {
     body.push(
-      `<p class="blank">Not written yet${
-        r.may_edit ? "" : ` — this remark is ${esc(r.author_label).toLowerCase()}'s`
-      }.</p>`,
+      `<p class="blank">Not written yet.${
+        r.may_edit ? "" : ` This remark is ${esc(r.author_label).toLowerCase()}'s.`
+      }</p>`,
     );
   }
   if (note) body.push(`<p class="note" role="alert">${esc(note.detail)}</p>`);
@@ -209,7 +209,7 @@ function trait(t, { may_rate, scale }) {
         (p) =>
           `<option value="${esc(p.value)}"${
             current === String(p.value) ? " selected" : ""
-          }>${esc(p.value)} — ${esc(p.label)}</option>`,
+          }>${esc(p.value)}: ${esc(p.label)}</option>`,
       )
       .join(""),
     "</select></li>",
@@ -236,7 +236,7 @@ export function wrongHost() {
     '<section class="state state-wrong-host" data-state="wrong-host">',
     "<h1>Remarks live on your school's own web address</h1>",
     "<p>This page is open on the sign-in site. Open it again from your ",
-    "school's own address — the link on the page you signed in on.</p>",
+    "school's own address, the link on the page you signed in on.</p>",
     "</section>",
   ].join("");
 }

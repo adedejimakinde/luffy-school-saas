@@ -41,7 +41,7 @@ input[type="date"] { width: 100%; }
   font-weight: 700;
 }
 
-.roster li.absent button::after { content: " — absent"; font-weight: 400; }
+.roster li.absent button::after { content: ", absent"; font-weight: 400; }
 
 .tally { color: var(--muted); margin: 12px 0; }
 

@@ -22,16 +22,46 @@ gives — and a tab title outlives the page in history.
 into this frame. The signed-out state needs it to reach `/staff-sign-in/`,
 which is on the portal while this page is on a school's host.
 {% endcomment %}
-<main id="comments" data-portal="{{ portal_host }}">
-  {% comment %}
-  What a reader sees if the module never loads. It must not be a form: a form
-  without the module behind it would submit to this page, and here that loses a
-  paragraph somebody has just written.
-  {% endcomment %}
-  <noscript>
-    <h1>Remarks</h1>
-    <p>This page needs JavaScript to load your class. Please turn it on, or ask
-    your school office for help.</p>
-  </noscript>
-  <p class="state state-loading">Finding your class&hellip;</p>
-</main>
+<body class="has-shell has-tabbar">
+{% include "design/icons.html" %}
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo" href="/register/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <div class="nav">
+      <a href="/register/"><svg class="icon"><use href="#i-register"/></svg>Register</a>
+      <a href="/marking/"><svg class="icon"><use href="#i-marks"/></svg>Marks</a>
+      <a href="/comments/" aria-current="page"><svg class="icon"><use href="#i-comments"/></svg>Remarks</a>
+      <a href="/timetable/"><svg class="icon"><use href="#i-calendar"/></svg>Timetable</a>
+    </div>
+  </nav>
+
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
+      <svg class="icon"><use href="#i-menu"/></svg>
+    </button>
+    <span class="spacer"></span>
+  </header>
+
+  <div class="content">
+    <main id="comments" data-portal="{{ portal_host }}">
+      {% comment %}
+      What a reader sees if the module never loads. It must not be a form: a
+      form without the module behind it would submit to this page, and here
+      that loses a paragraph somebody has just written.
+      {% endcomment %}
+      <noscript>
+        <h1>Remarks</h1>
+        <p>This page needs JavaScript to load your class. Please turn it on,
+        or ask your school office for help.</p>
+      </noscript>
+      <p class="state state-loading">Finding your class&hellip;</p>
+    </main>
+  </div>
+
+  <nav class="tabbar" aria-label="Main">
+    <a href="/register/"><svg class="icon"><use href="#i-register"/></svg><span class="tab-label">Register</span></a>
+    <a href="/marking/"><svg class="icon"><use href="#i-marks"/></svg><span class="tab-label">Marks</span></a>
+    <a href="/comments/" aria-current="page"><svg class="icon"><use href="#i-comments"/></svg><span class="tab-label">Remarks</span></a>
+    <a href="/timetable/"><svg class="icon"><use href="#i-calendar"/></svg><span class="tab-label">Timetable</span></a>
+  </nav>
+</div>

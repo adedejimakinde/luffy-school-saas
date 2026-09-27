@@ -11,7 +11,8 @@ main { max-width: 38rem; }
 h2 { font-size: 1.05rem; margin: 20px 0 6px; }
 h3 { font-size: 1rem; margin: 14px 0 4px; color: var(--muted); }
 .term, .when { color: var(--muted); margin: 0 0 16px; }
-.children, .phrases, .traits { list-style: none; margin: 8px 0 0; padding: 0; }
+.classes, .children, .phrases, .traits { list-style: none; margin: 8px 0 0; padding: 0; }
+.classes button { text-align: left; width: 100%; min-height: var(--control-lg); padding: 12px 14px; margin: 0 0 8px; }
 .child { display: flex; gap: 12px; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--divider); padding: 6px 0; }
 .child button { text-align: left; flex: 1; min-height: var(--control-lg); padding: 12px 14px; }
 .child .left { color: var(--muted); font-size: var(--small); white-space: nowrap; }
