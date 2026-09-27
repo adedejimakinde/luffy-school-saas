@@ -1110,11 +1110,22 @@ class SignInScope(models.TextChoices):
     `accounts.throttling` refuses to let anyone weaponise. Shared, it would let
     whoever can read that form close a teacher's password door by guessing codes
     at it. Two doors, two buckets. See `accounts.guardian_signin`.
+
+    The two CHECKER scopes are the result checker's (`results.checker`,
+    `docs/messaging.md` D11), which is not a sign-in at all and is counted here
+    because this is the counter the project has. A PIN is guessed against an
+    admission number, and an admission number is on a child's exercise books,
+    so it is the semi-public identifier again and gets a bucket of its own.
+    Both keys carry the school: an admission number means nothing outside the
+    school that issued it, and a wrong guess at one school must not make a
+    family at another wait.
     """
 
     IDENTIFIER = "identifier", "Identifier"
     ADDRESS = "address", "Network address"
     CHANNEL = "channel", "Guardian contact channel"
+    CHECKER_NUMBER = "checker_number", "Result checker admission number"
+    CHECKER_ADDRESS = "checker_address", "Result checker network address"
 
 
 class SignInAttempts(models.Model):

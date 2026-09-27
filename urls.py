@@ -28,6 +28,7 @@ from results.views import (
     card_index_page,
     card_page,
     chain_page,
+    checker_page,
     comments_page,
 )
 from timetable.views import timetable_page
@@ -69,6 +70,9 @@ urlpatterns = [
         card_page,
         name="report-card-page",
     ),
+    # The result checker: a family with no account opens a card with the
+    # admission number and the PIN from a slip (docs/messaging.md D11).
+    path("check/", checker_page, name="result-checker"),
 ]
 
 #: The 403 page, named here so **a school's host** has one — which is the host

@@ -1,0 +1,46 @@
+/*
+ * The result checker's form. The card itself is `card/card.css`'s, loaded
+ * beside this, so a card opened here looks like one opened after signing in.
+ */
+
+.checker-form {
+  display: grid;
+  gap: 8px;
+  max-width: 24rem;
+  margin: 16px 0;
+}
+
+.checker-form label { font-weight: 600; margin-top: 8px; }
+
+.checker-form input {
+  font: inherit;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+
+#pin { letter-spacing: 1px; }
+
+.checker-form button,
+.another button {
+  font: inherit;
+  min-height: 44px;
+  padding: 10px 16px;
+  margin-top: 8px;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.note { max-width: 32rem; }
+.note-not-opened,
+.note-wait,
+.note-broken { color: var(--held); }
+
+.sign-in { color: var(--quiet); }
+
+@media print {
+  .another { display: none; }
+}

@@ -48,6 +48,7 @@ different school is refused before this view — by the same middleware that
 refuses them the API, rather than by a check written again here.
 """
 
+from django.http import Http404
 from django.shortcuts import render
 
 import pages
@@ -222,9 +223,52 @@ def broadsheet_page(request):
     )
 
 
+#: The result checker's own modules (`docs/messaging.md` D11). It reuses the
+#: card page's renderer and its withheld state rather than drawing a card of its
+#: own: the checker is a third reader of one payload, and a second renderer
+#: would be a second answer to what a card looks like.
+CHECKER_MODULES = (
+    "web/html.js",
+    "card/render.js",
+    "card/states.js",
+    "checker/api.js",
+    "checker/states.js",
+    "checker/app.js",
+)
+
+
+def checker_page(request):
+    """The frame for the result checker. A form, and no card until the API answers.
+
+    The one page on a school's host meant for somebody with no account: a
+    family types the admission number and the PIN from the slip, and the card
+    arrives from `POST /api/results/check/`, which is the route that asks the
+    question. Like every other page here it is a shell, so it holds no child,
+    no name and no card, and it asks nothing about who is looking.
+
+    **Not on the portal**, and the view says so itself, because `urls_public.py`
+    serves every pattern in `urls.py` there too. Other frames are harmless on
+    the portal: they meet a 404 from the API and have a state for it. This one
+    would take an admission number and a PIN on a host with no cards behind it
+    and answer that they were wrong, which they were not. The slip prints the
+    school's own address, so the portal is not where a family is sent.
+    """
+    if getattr(request, "school", None) is None:
+        raise Http404("The result checker is on each school's own address.")
+    return render(
+        request,
+        "results/checker_page.html",
+        {
+            "import_map": pages.import_map(*CHECKER_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 __all__ = [
     "broadsheet_page",
     "card_page",
+    "checker_page",
     "card_index_page",
     "chain_page",
     "comments_page",
@@ -233,4 +277,5 @@ __all__ = [
     "CHAIN_MODULES",
     "COMMENTS_MODULES",
     "BROADSHEET_MODULES",
+    "CHECKER_MODULES",
 ]

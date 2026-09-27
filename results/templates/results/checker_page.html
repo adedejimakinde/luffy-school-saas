@@ -1,0 +1,44 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Result checker</title>
+
+{% comment %}
+The result checker (docs/messaging.md D11): a family with no account types the
+admission number and the PIN from a paper slip, and the card arrives from
+`POST /api/results/check/`. This document holds no child and no card, and the
+title names neither, because a tab title outlives the page in history and
+bookmarks — on a shared computer, the next person's.
+
+Every comment in this file is `{% comment %}` and not a `{#` block spanning
+lines. A `{#` comment is single-line only: across lines it is not a comment at
+all, and every word of it renders on the page. This project has shipped that
+bug before.
+{% endcomment %}
+
+<link rel="stylesheet" href="{% static 'card/card.css' %}">
+<link rel="stylesheet" href="{% static 'card/print.css' %}" media="print">
+<link rel="stylesheet" href="{% static 'checker/checker.css' %}">
+
+{% comment %}
+The import map comes before the module that uses it, which is the only order a
+browser honours; `results/views.py` and `tests/test_pages.py` say why a page
+without one quietly loses cache-busting for every module behind its entry point.
+{% endcomment %}
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'checker/app.js' %}"></script>
+
+{% comment %}
+`data-portal` is the portal's hostname, and it is the only thing the server
+writes into this frame. The form offers a family who does have an account the
+way to sign in instead, which lives on another host. Empty where a deployment
+has no portal domain, and the page then says nothing about signing in rather
+than drawing a dead link.
+{% endcomment %}
+<main id="checker" data-portal="{{ portal_host }}">
+  {% comment %}
+  What a reader sees before the module runs, and the only state written in HTML
+  rather than by the client: if the script never loads, this is the page.
+  {% endcomment %}
+  <p class="state state-loading">Loading the result checker&hellip;</p>
+</main>

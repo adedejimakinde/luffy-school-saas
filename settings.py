@@ -394,6 +394,23 @@ SIGN_IN_MAX_FAILURES_PER_CHANNEL = int(
     os.environ.get("SIGN_IN_MAX_FAILURES_PER_CHANNEL", 10)
 )
 
+# The result checker's wrong answers (`results.checker`, docs/messaging.md D11),
+# in the same quarter-hour window and in buckets of their own.
+#
+# Ten per admission number, for the identifier's reason: a family that mistypes
+# a twelve-digit PIN a few times is nowhere near it, and against 10^12 PINs it
+# leaves a guesser about a thousand tries a day at one child. The PIN cannot be
+# capped per PIN instead, because it is meant to be used all session.
+#
+# Fifty per address, because a cybercafe or a school's computer room is one
+# address with many families behind it, and only failures count.
+CHECKER_MAX_FAILURES_PER_ADMISSION_NUMBER = int(
+    os.environ.get("CHECKER_MAX_FAILURES_PER_ADMISSION_NUMBER", 10)
+)
+CHECKER_MAX_FAILURES_PER_ADDRESS = int(
+    os.environ.get("CHECKER_MAX_FAILURES_PER_ADDRESS", 50)
+)
+
 # ---------------------------------------------------------------------------
 # How many guardian verification codes may be SENT, and this counts successes
 # rather than failures — which is the opposite of the sign-in throttle above

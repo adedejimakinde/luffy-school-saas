@@ -835,6 +835,43 @@ class AThirdServingSurfaceCannotBeAddedUngated(WithholdingSetUp):
             "a surface was added or removed and this test has not been read",
         )
 
+    def test_the_checker_is_enumerated_and_held_to_the_same_gate(self):
+        """The result checker is the third serving surface (D11), on its own router.
+
+        Its own because it has no session, so it cannot sit on `card_router`,
+        whose every operation authenticates. Enumerated the same way and for
+        the same reason: a second route added to it is found here, not missed.
+        """
+        from results import checker
+        from results.card_api import checker_router
+        from results.models import ResultSheet
+
+        Membership.objects.filter(pk=self.ada.pk).update(reference="SM/001")
+        with connected_to(self.stmarys):
+            sheet = ResultSheet.objects.get(
+                class_group_id=self.group_id,
+                term=self.term_of(self.stmarys, TermName.FIRST.value),
+            )
+            (pin,) = [
+                slip.pin
+                for slip in checker.print_slips(sheet, actor=self.principal).slips
+                if slip.student_name == "Ada Obi"
+            ]
+
+        self.assertEqual(set(checker_router.path_operations), {"/check/"})
+        self.client.logout()
+        for path, path_op in checker_router.path_operations.items():
+            for operation in path_op.operations:
+                with self.subTest(path=path, methods=operation.methods):
+                    self.assertEqual(list(operation.methods), ["POST"])
+                    response = self.client.post(
+                        f"{PREFIX}{path}",
+                        {"admission_number": "SM/001", "pin": pin},
+                        content_type="application/json",
+                        HTTP_HOST=HOST,
+                    )
+                    self.assertWithheld(response, f"the slip's holder at {path}")
+
     #: What "card content" means, as bytes. Crude on purpose, like every other
     #: exclusion assertion in this suite: a leak that renamed a field, nested it
     #: a level deeper or moved it into an error body would still be a leak, and

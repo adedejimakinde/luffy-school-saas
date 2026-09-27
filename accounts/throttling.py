@@ -74,6 +74,10 @@ def _limit(scope) -> int:
         return settings.SIGN_IN_MAX_FAILURES_PER_ADDRESS
     if scope == SignInScope.CHANNEL:
         return settings.SIGN_IN_MAX_FAILURES_PER_CHANNEL
+    if scope == SignInScope.CHECKER_NUMBER:
+        return settings.CHECKER_MAX_FAILURES_PER_ADMISSION_NUMBER
+    if scope == SignInScope.CHECKER_ADDRESS:
+        return settings.CHECKER_MAX_FAILURES_PER_ADDRESS
     return settings.SIGN_IN_MAX_FAILURES_PER_IDENTIFIER
 
 
@@ -123,9 +127,15 @@ def key_for(scope, value: str) -> str:
     account, so counting them as three would give an attacker three windows for
     one target — and then hashed, because what arrives here is not reliably an
     identifier. See `SignInAttempts`.
+
+    The checker's admission number is hashed without `canonical_username()`,
+    which would read it as a phone number or an email. Its caller has already
+    put the school in front of it.
     """
-    if scope == SignInScope.ADDRESS:
+    if scope in (SignInScope.ADDRESS, SignInScope.CHECKER_ADDRESS):
         return value
+    if scope == SignInScope.CHECKER_NUMBER:
+        return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
     normalized = canonical_username((value or "").strip()).casefold()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 

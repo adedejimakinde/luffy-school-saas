@@ -324,6 +324,17 @@ Identical in both routes:
 - A **guardian of a child whose card is withheld** gets 403, on both routes.
 - **Staff** get the card, on both routes.
 
+**The result checker keeps the same order, with a PIN as the claim**
+(`docs/messaging.md` D11). It has no session, so `_the_child()`,
+`_require_may_read()` and `card_for()` are one call, `checker.open_card()`: the
+admission number names the candidates, the PIN proves which one, and
+`card_for()` picks the card. Every failure there is the checker's one refusal, a
+404. Only then does `_require_servable(CardClaim.PIN, card)` run, so the 403
+naming somebody to ring reaches only a caller holding the slip, and somebody
+typing an admission number off a child's exercise book learns nothing about fees.
+`CardClaim.PIN` is in `FAMILY_CLAIMS`: a family reading the card off a slip is
+held back exactly as a signed-in one is.
+
 **On the PDF route the gate must sit before the marker is consulted.** Today the
 route reads `renders.marker_for(card)` and answers either the file or a 202
 carrying `state`, `state_label` and a detail string. A withheld family reaching

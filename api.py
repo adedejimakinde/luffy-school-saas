@@ -57,6 +57,7 @@ from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from results.api import router as results_router
+from results.card_api import checker_router
 from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
@@ -103,6 +104,11 @@ api.add_router("/results/", results_router, tags=["results"])
 # modules is what makes that structural instead of a convention — there is
 # nothing importable in `card_api` that carries a staff-only field.
 api.add_router("/results/", report_card_router, tags=["results"])
+# The result checker: the same card, opened with an admission number and a PIN
+# by a family with no account (`docs/messaging.md` D11). Unauthenticated, which
+# is why it is a router of its own; its one route puts the card through the
+# same gate as the two above.
+api.add_router("/results/", checker_router, tags=["results"])
 api.add_router("/results/", chain_router, tags=["results"])
 api.add_router("/results/", comments_router, tags=["results"])
 # The bell schedule and who teaches what, per class per term. Tenant-host only

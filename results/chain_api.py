@@ -56,6 +56,12 @@ recovery, and the row still offers it.
 
 The rest of this list names no child for the reason above. The principal is
 the exception because she pressed release and is the one who can act on it.
+
+**The slip count is a second exception of the same kind.** A released row
+carries `slips_printed` for a login that may print result-checker slips (the
+principal or an administrator, `docs/messaging.md` D11): one more query, over the
+released cards and the PINs, never over a roster. It is a number, and it names
+nobody.
 The same rows come back on the release step itself, because the check that
 writes them commits with the release, before this module builds its answer.
 
@@ -79,8 +85,11 @@ from typing import List, Optional
 
 from django.db.models import Count
 
-from django.http import Http404
+from django.db import transaction
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.urls import reverse
+from django.utils.text import slugify
 from ninja import Router, Schema
 
 from academics.models import ClassGroup, ClassTeacher, Term
@@ -90,7 +99,7 @@ from accounts.session import session_auth
 from notices import services as notices_services
 from notices.models import Notice
 
-from . import omissions, services
+from . import checker, omissions, pdf, services
 from .models import ResultSheet, SheetState
 
 router = Router(auth=session_auth)
@@ -180,6 +189,12 @@ class SheetRowOut(Schema):
     #: How many result notices have been asked for about this class. Null for
     #: anybody who may not tell families, and for a class not released.
     families_told: Optional[int] = None
+    #: A released class this login may print result-checker slips for
+    #: (`docs/messaging.md` D11): the principal or an administrator.
+    may_print_slips: bool = False
+    #: How many children on this released class have a slip. Null for anybody
+    #: who may not print them, and for a class not released.
+    slips_printed: Optional[int] = None
 
 
 class ChainOut(Schema):
@@ -317,6 +332,7 @@ def chain(request):
     }
     left_out = _left_out(roles, sheets.values())
     telling = _telling(roles, sheets.values())
+    printing = _printing(roles, sheets.values())
 
     rows = []
     for group in ClassGroup.objects.filter(is_active=True):
@@ -334,6 +350,7 @@ def chain(request):
                 without_a_card=_no_card(left_out, sheet, state),
                 left_out_checked=_check_finished(left_out, sheet, state),
                 **_told(telling, sheet, state),
+                **_printed(printing, sheet, state),
                 **_actions(state, roles, group.pk, mine),
             )
         )
@@ -357,6 +374,19 @@ def _telling(roles, sheets):
     ):
         counts[row["card__sheet_id"]] = row["n"]
     return counts
+
+
+def _printing(roles, sheets):
+    """`sheet id -> children with a slip`, for a login that may print them; else None."""
+    if not roles & checker.PRINTING_ROLES:
+        return None
+    return checker.slips_printed(s for s in sheets if s.state == SheetState.RELEASED)
+
+
+def _printed(printing, sheet, state):
+    if printing is None or sheet is None or state != SheetState.RELEASED:
+        return {}
+    return {"may_print_slips": True, "slips_printed": printing.get(sheet.pk, 0)}
 
 
 def _told(telling, sheet, state):
@@ -641,6 +671,76 @@ def _unreachable(told, tense):
     has = "has" if u == 1 else "have"
     sent = "will not be sent" if tense == "will" else ("was not sent" if u == 1 else "were not sent")
     return f" {_plural(u, 'guardian')} here {has} no verified phone or email, and {sent} anything."
+
+
+class SlipsIn(Schema):
+    """Blank for the class; an admission number for one child's lost slip."""
+
+    admission_number: Optional[str] = None
+
+
+@router.post(
+    "/chain/{int:class_group_id}/checker-slips/",
+    response={200: None, 403: MessageOut, 404: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def checker_slips(request, class_group_id: int, payload: SlipsIn):
+    """Principal or administrator: result-checker slips for a released class. D11.
+
+    Answers with the PDF itself, one slip per child, and that response is the
+    only place the PINs are ever written out: they are minted in this request,
+    kept only as digests, and the file is not stored. `Cache-Control: no-store`
+    keeps a shared computer's browser from holding on to it either. `200: None`
+    is `report_card_pdf()`'s: django-ninja hands the `HttpResponse` back
+    untouched.
+
+    With no admission number it prints the children who have no slip yet; with
+    one, it prints a new slip for that child, and their old PIN stops working.
+    See `checker.print_slips()` for why a second press does not reprint the
+    class.
+
+    The PINs are minted and the file rendered in **one transaction**, so a
+    render that fails mints nothing: otherwise the class would hold PINs nobody
+    ever saw, and the next press would skip every child on it.
+    """
+    school = _school_of(request)
+    roles = set(request.user.roles_at(school))
+    refused = _refuse_outsiders(request, school, roles)
+    if refused is not None:
+        return refused
+    group = get_object_or_404(ClassGroup, pk=class_group_id)
+    term = Term.objects.filter(is_current=True).first()
+    sheet = ResultSheet.objects.filter(class_group=group, term=term).first() if term else None
+    if sheet is None:
+        return 409, MessageOut(detail=_NO_CARD_FOR_A_SLIP)
+
+    wanted = (payload.admission_number or "").strip() or None
+    try:
+        with transaction.atomic():
+            slips = checker.print_slips(sheet, actor=request.user, admission_number=wanted)
+            if not slips.slips and not slips.without_a_number:
+                return 409, MessageOut(detail=_EVERY_CHILD_HAS_A_SLIP)
+            content = pdf.render_slips(slips, f"{request.get_host()}{reverse('result-checker')}")
+    except checker.NotAllowed:
+        return 403, MessageOut(detail=_MAY_NOT_ACT)
+    except checker.NotReleased:
+        return 409, MessageOut(detail=_NO_CARD_FOR_A_SLIP)
+    except checker.NoSuchChild as exc:
+        return 422, MessageOut(detail=str(exc))
+
+    response = HttpResponse(content, content_type="application/pdf")
+    name = f"checker slips {group.name} {term}" if wanted is None else f"checker slip {wanted}"
+    response["Content-Disposition"] = f'attachment; filename="{slugify(name)}.pdf"'
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+_NO_CARD_FOR_A_SLIP = (
+    "These results have not been released, so there is no card for a slip to open."
+)
+_EVERY_CHILD_HAS_A_SLIP = (
+    "Every child in this class already has a slip. To replace a lost one, give "
+    "that child's admission number."
+)
 
 
 @router.post("/chain/{int:class_group_id}/send-back/", response=_STEP_RESPONSES)

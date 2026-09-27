@@ -131,3 +131,12 @@ a { color: #14507d; }
 .row.not-told .note { color: var(--stop); }
 .row .telling { grid-column: 1 / -1; }
 .row .telling p { margin: 0.25rem 0 0.5rem; }
+
+/* Result-checker slips (docs/messaging.md D11): how many, and replacing a lost one. */
+.row .slips { grid-column: 1 / -1; color: var(--quiet); font-size: 0.95rem; }
+.row .slips p { margin: 0.25rem 0; }
+.lost-slip-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.lost-slip-form input { font: inherit; min-height: 36px; padding: 4px 8px; }
+.lost-slip-form .hint { color: var(--quiet); }
+.row.slips-printed .note { color: var(--quiet); }
+.row.not-printed .note { color: var(--stop); }
