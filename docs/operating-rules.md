@@ -150,7 +150,7 @@ only there:**
 
 | area | what a test passing for the wrong reason would let through |
 | --- | --- |
-| **money** | a wrong amount on a ledger entry, an invoice, a receipt or a reminder |
+| **money and fees** | a wrong amount on a ledger entry, an invoice, a receipt or a fee reminder |
 | **results and release** | a mark, grade, position or remark reaching someone it was not released to, or a released card changing |
 | **tenant isolation** | one school's rows, files or messages reaching another school |
 | **access and authority** | someone reading or doing what their role, link, code or PIN does not allow |
@@ -432,7 +432,7 @@ The short form of everything above, as the checklist actually used this phase:
 - [ ] Is every "never changes" I rely on enforced by a **trigger or constraint**?
       (Rule 3)
 - [ ] Did I add a **mutable column** where the history matters? (Rule 4)
-- [ ] For each claim about **money, results and release, tenant isolation,
+- [ ] For each claim about **money and fees, results and release, tenant isolation,
       access and authority, or data deletion**: have I **broken it
       deliberately** and watched the right tests fail — and did any control
       leave the suite green? Everything else: an ordinary test, run and shown.
