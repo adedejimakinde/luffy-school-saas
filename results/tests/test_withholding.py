@@ -1671,10 +1671,14 @@ class TheClaimIsNotABool(WithholdingSetUp):
             "a guardian who is also a bursar",
         )
 
-    def test_family_claims_are_the_two_family_ones(self):
+    def test_family_claims_are_the_three_family_ones(self):
+        """The child, a guardian, and the result checker's PIN (D11). Never staff."""
         from results.card_api import FAMILY_CLAIMS
 
-        self.assertEqual(FAMILY_CLAIMS, frozenset({CardClaim.SELF, CardClaim.GUARDIAN}))
+        self.assertEqual(
+            FAMILY_CLAIMS,
+            frozenset({CardClaim.SELF, CardClaim.GUARDIAN, CardClaim.PIN}),
+        )
 
     def tearDown(self):
         connection.set_schema_to_public()
