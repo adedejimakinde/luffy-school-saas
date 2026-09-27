@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>School setup</title>
@@ -16,26 +16,7 @@ there is no `login_required`, for the oracle reason `academics/views.py` gives.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'setup/app.js' %}"></script>
 
-<body class="has-shell">
-{% include "design/icons.html" %}
-<div class="shell">
-  <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo" href="/setup/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
-    <div class="nav">
-      <a href="/setup/" aria-current="page"><svg class="icon"><use href="#i-settings"/></svg>Setup</a>
-      <a href="/roll/"><svg class="icon"><use href="#i-people"/></svg>Roll</a>
-      <a href="/staff/"><svg class="icon"><use href="#i-inbox"/></svg>Staff</a>
-    </div>
-  </nav>
-
-  <header class="topbar">
-    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
-      <svg class="icon"><use href="#i-menu"/></svg>
-    </button>
-    <span class="spacer"></span>
-  </header>
-
-  <div class="content">
+{% shell_open "setup" %}
     <main id="setup" data-portal="{{ portal_host }}">
       {% comment %}
       What a reader sees if the module never loads. It must not be a form: a
@@ -49,5 +30,4 @@ there is no `login_required`, for the oracle reason `academics/views.py` gives.
       </noscript>
       <p class="state state-loading">Loading your school&hellip;</p>
     </main>
-  </div>
-</div>
+{% shell_close "setup" %}

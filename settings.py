@@ -654,7 +654,11 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
-            ]
+            ],
+            # `{% load shell %}`: the app shell's two tags, built from the
+            # signed-in login's roles. Project-level (`menu.py`), like
+            # `pages.py`, because it is every staff page's and no one app's.
+            "libraries": {"shell": "menu"},
         },
     }
 ]

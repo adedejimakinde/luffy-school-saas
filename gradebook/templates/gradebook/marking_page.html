@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enter marks</title>
@@ -29,27 +29,7 @@ which is on the portal while this page is on a school's host. Empty where no
 portal domain is configured, and the state then renders its sentence without a
 link — `schools.hosts.portal_host()` states the rule.
 {% endcomment %}
-<body class="has-shell has-tabbar">
-{% include "design/icons.html" %}
-<div class="shell">
-  <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo" href="/register/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
-    <div class="nav">
-      <a href="/register/"><svg class="icon"><use href="#i-register"/></svg>Register</a>
-      <a href="/marking/" aria-current="page"><svg class="icon"><use href="#i-marks"/></svg>Marks</a>
-      <a href="/comments/"><svg class="icon"><use href="#i-comments"/></svg>Remarks</a>
-      <a href="/timetable/"><svg class="icon"><use href="#i-calendar"/></svg>Timetable</a>
-    </div>
-  </nav>
-
-  <header class="topbar">
-    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
-      <svg class="icon"><use href="#i-menu"/></svg>
-    </button>
-    <span class="spacer"></span>
-  </header>
-
-  <div class="content">
+{% shell_open "marking" %}
     <main id="marking" data-portal="{{ portal_host }}">
       {% comment %}
       What a reader sees if the module never loads. It must not be a form: a
@@ -63,12 +43,4 @@ link — `schools.hosts.portal_host()` states the rule.
       </noscript>
       <p class="state state-loading">Finding your classes&hellip;</p>
     </main>
-  </div>
-
-  <nav class="tabbar" aria-label="Main">
-    <a href="/register/"><svg class="icon"><use href="#i-register"/></svg><span class="tab-label">Register</span></a>
-    <a href="/marking/" aria-current="page"><svg class="icon"><use href="#i-marks"/></svg><span class="tab-label">Marks</span></a>
-    <a href="/comments/"><svg class="icon"><use href="#i-comments"/></svg><span class="tab-label">Remarks</span></a>
-    <a href="/timetable/"><svg class="icon"><use href="#i-calendar"/></svg><span class="tab-label">Timetable</span></a>
-  </nav>
-</div>
+{% shell_close "marking" %}

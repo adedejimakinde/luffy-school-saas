@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Home</title>
@@ -16,27 +16,7 @@ with no `login_required`, for the oracle reason `home/views.py` gives.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'home/app.js' %}"></script>
 
-<body class="has-shell has-tabbar">
-{% include "design/icons.html" %}
-<div class="shell">
-  <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo" href="/home/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
-    <div class="nav">
-      <a href="/home/" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Home</a>
-      <a href="/results/"><svg class="icon"><use href="#i-results"/></svg>Results</a>
-      <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg>Broadsheets</a>
-      <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg>Absences</a>
-    </div>
-  </nav>
-
-  <header class="topbar">
-    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
-      <svg class="icon"><use href="#i-menu"/></svg>
-    </button>
-    <span class="spacer"></span>
-  </header>
-
-  <div class="content">
+{% shell_open "home" %}
     <main id="home" data-portal="{{ portal_host }}">
       <noscript>
         <h1>Home</h1>
@@ -45,12 +25,4 @@ with no `login_required`, for the oracle reason `home/views.py` gives.
       </noscript>
       <p class="state state-loading">Loading&hellip;</p>
     </main>
-  </div>
-
-  <nav class="tabbar" aria-label="Main">
-    <a href="/home/" aria-current="page"><svg class="icon"><use href="#i-home"/></svg><span class="tab-label">Home</span></a>
-    <a href="/results/"><svg class="icon"><use href="#i-results"/></svg><span class="tab-label">Results</span></a>
-    <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg><span class="tab-label">Broadsheets</span></a>
-    <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg><span class="tab-label">Absences</span></a>
-  </nav>
-</div>
+{% shell_close "home" %}

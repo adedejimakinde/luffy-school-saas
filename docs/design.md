@@ -48,6 +48,11 @@ Mobile first, checked at 360, 768 and 1280.
 - Below 1024px the staff sidebar is a slide-out (a `popover`, opened from the
   top bar's menu button). Below 640px staff pages also get a bottom tab bar
   with the role's four main screens.
+- The sidebar and the tab bar are built from the signed-in login's roles at
+  this school (`menu.py`, `{% shell_open %}` and `{% shell_close %}`), never
+  written per page. Each link carries the role set its own page's API gates on,
+  so no link leads to a refusal; `tests/test_menu.py` checks that against the
+  real routes, both ways.
 - Stat cards run four across on a desktop, two on a tablet, one on a phone.
 - A wide table scrolls sideways inside its card (`.scroll`, `.table-scroll`),
   with its first column fixed. The page itself never scrolls sideways.
