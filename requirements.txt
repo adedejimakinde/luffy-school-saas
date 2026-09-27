@@ -37,6 +37,14 @@ Pillow>=10.0
 # a formula is read as the value Excel saved, never evaluated.
 openpyxl>=3.1
 
+# How a failing test reaches the parent of a parallel run (issue #193). Django's
+# parallel runner pickles each failure to send it back; a traceback cannot be
+# pickled without tblib, so the worker re-raises inside the test. That skips
+# the test's cleanups and its class's, leaves an override_settings or a
+# database guard in place for every later test in that worker, and ends the run
+# with no OK or FAILED line. One real failure became several unrelated ones.
+tblib>=3.0
+
 # What serves the application in production (`deploy/compose.yml`). Sync
 # workers: every request is short except the bulk import, and a process per
 # worker keeps a connection per request — the only topology issue #115 allows.
