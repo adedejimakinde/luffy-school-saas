@@ -123,9 +123,9 @@ class SheetOut(Schema):
     `services._require_the_sheet_is_open()` resolves a child through
     `placement_of(student, term)`; `ClassPlacement` is unique per
     `(term, student_membership_id)` by constraint; and
-    `results_services.locked_sheet_for()` answers per `(class_group, term)`. So
-    every child in a scoped sheet resolves to the *same* `ResultSheet`, and a
-    per-row flag would be N copies of one answer costing N queries.
+    `results_services.sheet_for()` answers per `(class_group, term)`. So every
+    child in a scoped sheet resolves to the *same* `ResultSheet`, and a per-row
+    flag would be N copies of one answer costing N queries.
 
     It exists at all because this screen saves on blur. Without it a teacher
     types a mark into a cell that cannot accept it, tabs away, and learns from
@@ -134,8 +134,8 @@ class SheetOut(Schema):
 
     `locked` is `False` where no `ResultSheet` row exists yet, which is the
     ordinary case for a term nobody has submitted: `is_open_for_writing(None)`
-    is what `locked_sheet_for()` returning `None` means, and a term with no
-    sheet is open rather than closed.
+    is what `sheet_for()` returning `None` means, and a term with no sheet is
+    open rather than closed.
     """
 
     assessment_id: int
@@ -527,7 +527,14 @@ def marking_sheet(
 
     # One read for the whole sheet — see `SheetOut.locked` for why this is a
     # sheet-level fact once the class group is required.
-    sheet = results_services.locked_sheet_for(group, assessment.term)
+    #
+    # `sheet_for()`, not `locked_sheet_for()`: this is a GET, and the doc on
+    # `sheet_for()` gives the reason — a `SELECT ... FOR UPDATE` needs a
+    # transaction it does not otherwise have (that is the 500 issue #179 pinned
+    # down to), and even inside one it would take a write lock on every page
+    # load of a marking sheet, which is exactly the hazard `sheet_for()` exists
+    # to avoid for a read.
+    sheet = results_services.sheet_for(group, assessment.term)
     open_for_writing = results_services.is_open_for_writing(sheet)
 
     return SheetOut(
