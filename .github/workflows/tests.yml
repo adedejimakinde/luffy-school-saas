@@ -343,10 +343,17 @@ jobs:
 
   # The candidates get the plain SHA name, on `main`, once `test` and `image`
   # have both passed on this commit — and not before, which is the point of
-  # this job existing at all. `imagetools create` with one source is a copy of
-  # the manifest inside the registry: nothing is rebuilt or pulled, so the image
-  # deployed is byte for byte the one `image` checked above. `deploy.yml`
-  # requires this job as well as the other two.
+  # this job existing at all. Nothing is rebuilt or pulled: the tag is written
+  # inside the registry, pointing at the manifest `image` pushed, so the image
+  # deployed is the one `image` checked above. `deploy.yml` requires this job
+  # as well as the other two.
+  #
+  # `--prefer-index=false` makes that a plain copy, same digest as the
+  # candidate. Without it `imagetools create` wraps a single image in a new
+  # one-entry manifest list: the first run on main (4c78c87) tagged an index
+  # `910e007…` around the candidate's `544fc75…`. That still pulls the same
+  # image, but it is a different digest and a different shape from every tag
+  # before it, and "the tag is the candidate" should be literally true.
   publish:
     needs: [test, image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -365,5 +372,5 @@ jobs:
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           for image in "$REPO" "$REPO/caddy" "$REPO/postgres"; do
-            docker buildx imagetools create -t "$image:$SHA" "$image:candidate-$SHA"
+            docker buildx imagetools create --prefer-index=false -t "$image:$SHA" "$image:candidate-$SHA"
           done
