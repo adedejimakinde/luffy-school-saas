@@ -203,6 +203,10 @@ class PrintingSlipsTests(CheckerSetUp):
             self.assertIn(slip.printed_pin, html)
         self.assertIn(ADA_NO, html)
         self.assertIn("st-marys.testserver/check/", html)
+        # The PINs are random digits and can contain Ada's 88 by chance (it did,
+        # on CI), so they come out before the page is searched for a mark.
+        for slip in slips.slips:
+            html = html.replace(slip.printed_pin, "")
         for card_content in ("Mathematics", "English", "88", "position", "average"):
             self.assertNotIn(card_content, html)
 
