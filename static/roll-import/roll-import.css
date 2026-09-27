@@ -1,0 +1,20 @@
+/*
+ * The roll import. Colours, type, cards, messages and tables are
+ * `web/design.css`'s; this is the layout of the two cards and the preview.
+ */
+.chooser form { display: grid; gap: 16px; }
+.chooser form button { justify-self: start; }
+.template p { margin: 0 0 12px; }
+.template .classes { overflow-wrap: anywhere; }
+
+/*
+ * The preview: every row, in file order, its problems under the check. Status
+ * colour stays on the labels (`docs/design.md`); a cell a problem names is
+ * underlined, and an empty one says so, so it reads the same in grey.
+ */
+.rows td { white-space: nowrap; }
+.rows td.check { white-space: normal; min-width: min(18rem, 60vw); }
+.rows td.bad { font-weight: 700; text-decoration: underline wavy; text-underline-offset: 3px; }
+.rows td.bad:empty::after { content: "Missing"; }
+.problems { margin: 6px 0 0; padding-left: 18px; }
+.problems li + li { margin-top: 4px; }

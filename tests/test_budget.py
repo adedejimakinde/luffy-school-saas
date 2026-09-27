@@ -55,6 +55,7 @@ SCHOOL_PAGES = (
     "/home/",
     "/setup/",
     "/roll/",
+    "/roll/import/",
     "/staff/",
     "/register/",
     "/absences/",

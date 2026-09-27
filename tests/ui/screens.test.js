@@ -124,6 +124,7 @@ export const SCREENS = [
     steps: [["roll-guardians", '[data-action="guardians"]']],
   },
   { name: "staff", as: "sunrise.admin", url: `${SUNRISE}/staff/` },
+  { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
 
   // A parent, of one child with a released card and one without —
   // `seed_demo`'s own reason for releasing one class and not the other. The
@@ -346,4 +347,38 @@ describe("the phone menu", () => {
       }
     });
   }
+});
+
+describe("the roll import's preview", () => {
+  // A file is chosen, not tapped, so the drill-down above cannot reach the
+  // preview. One good row and one with three problems, checked and never
+  // admitted: the demo's roll is the same after this test as before it.
+  const FILE = [
+    "Full name,Class group,Reference,Username,Guardian name,Guardian contact",
+    "Adaeze Okonkwo-Bamidele,JSS 1A,SD/2026/9001,,Mrs Chinwe Okonkwo-Bamidele,08031234567",
+    ",JSS 9Z,SD/2026/9001,,Mr Eze,not a number",
+  ].join("\r\n");
+
+  test("roll-import-preview", async () => {
+    const context = await signedIn("sunrise.admin");
+    const page = await context.newPage();
+    const problems = [];
+    try {
+      for (const width of WIDTHS) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${SUNRISE}/roll/import/`);
+        await settle(page);
+        await page.setInputFiles("#file", { name: "jss1.csv", mimeType: "text/csv", buffer: Buffer.from(FILE) });
+        await page.click('[data-form="check"] button[type="submit"]');
+        await page.waitForSelector('[data-state="preview"]');
+        await settle(page);
+        assert.equal(await page.locator('[data-action="admit"]').count(), 0, "a file with problems offered to admit");
+        assert.equal(await page.locator("tr.to-fix").count(), 1);
+        problems.push(...(await check(page, width, "roll-import-preview")));
+      }
+    } finally {
+      await page.close();
+    }
+    assert.deepEqual(problems, []);
+  });
 });
