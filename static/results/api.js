@@ -8,7 +8,7 @@
  * implementation of the chain, free to disagree with the one in `services`.
  */
 
-import { getJson, postJson } from "../web/http.js";
+import { csrfToken, getJson, postJson } from "../web/http.js";
 
 /** The states the whole page can be in, other than holding the chain. */
 export const REFUSAL = {
@@ -191,4 +191,86 @@ function tellingAnswer(answer) {
     return { ok: false, body: answer.body || {} };
   }
   return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}
+
+export function slipsUrl(classGroupId) {
+  return `/api/results/chain/${encodeURIComponent(classGroupId)}/checker-slips/`;
+}
+
+/**
+ * Result-checker slips for a released class (`chain_api.checker_slips`,
+ * docs/messaging.md D11). With no admission number it prints the children who
+ * have no slip yet; with one, a new slip for that child, and their old PIN stops
+ * working.
+ *
+ * Resolves to `{ok: true, blob, filename}` — **the PDF itself, which is the only
+ * place the PINs are ever written out** — or `{ok: false, status, detail}` for
+ * a refusal the row can say. A 401 or anything unexplained also carries
+ * `refusal`, for the page, as `tellFamilies()`'s answers do.
+ *
+ * Not `postJson()`, because a 200 here is a file, not JSON. The CSRF rule is
+ * `web/http.js`'s all the same: the token from the API, and one retry on a
+ * stale one — once, not until it works.
+ */
+export async function printSlips({ classGroupId, admissionNumber = "", fetchImpl = fetch }) {
+  const payload = admissionNumber ? { admission_number: admissionNumber } : {};
+  const send = async (csrf) =>
+    fetchImpl(slipsUrl(classGroupId), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/pdf, application/json",
+        "X-CSRFToken": csrf,
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(payload),
+    });
+
+  let response;
+  let body = null;
+  try {
+    response = await send(await csrfToken({ fetchImpl }));
+    if (response.status !== 200) {
+      body = await jsonOf(response);
+      if (response.status === 403 && body && body.code === "csrf_failed") {
+        response = await send(await csrfToken({ fetchImpl, refresh: true }));
+        body = response.status === 200 ? null : await jsonOf(response);
+      }
+    }
+    if (response.status === 200) {
+      return {
+        ok: true,
+        blob: await response.blob(),
+        filename: filenameOf(response.headers.get("Content-Disposition")),
+      };
+    }
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+
+  body = body || {};
+  if ([403, 404, 409, 422].includes(response.status)) {
+    return { ok: false, status: response.status, detail: body.detail || "" };
+  }
+  return {
+    ok: false,
+    status: response.status,
+    detail: body.detail || "",
+    refusal: refusalFor(response.status, body),
+    body,
+  };
+}
+
+/** The server's name for the file, or a plain one if it gave none. */
+export function filenameOf(disposition) {
+  const named = /filename="([^"]+)"/.exec(disposition || "");
+  return named ? named[1] : "checker-slips.pdf";
+}
+
+async function jsonOf(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }

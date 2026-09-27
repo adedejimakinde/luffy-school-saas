@@ -1,0 +1,61 @@
+{% comment %}
+Result-checker slips for one class, one per child. Rendered by
+`results.pdf.render_slips()`, in the request that mints the PINs, and stored
+nowhere: this document is the only place the raw PINs ever exist
+(`results.checker`, `docs/messaging.md` D11).
+
+No marks, no average, no remark. A slip opens a card; it is not one, and it
+travels home beside the paper card, possibly in a child's bag.
+
+Six slips to an A4 page, each a box that does not break across pages, so the
+school can cut along the borders.
+{% endcomment %}
+<meta charset="utf-8">
+<title>Result checker slips — {{ school_name }}</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  body { font: 10pt "DejaVu Sans", sans-serif; color: #111; margin: 0; }
+  .slip {
+    border: 1px dashed #666; padding: 5mm 6mm; margin-bottom: 4mm;
+    height: 36mm; page-break-inside: avoid;
+  }
+  .slip h1 { font-size: 11pt; margin: 0 0 2mm; font-weight: 600; }
+  .slip .who { margin-bottom: 2mm; }
+  .slip .label { color: #555; }
+  .slip .pin { font: 600 15pt "DejaVu Sans Mono", monospace; letter-spacing: 1px; }
+  .slip .how { font-size: 8.5pt; color: #333; margin-top: 2mm; }
+  .unprinted h1 { font-size: 12pt; }
+  .after-slips { page-break-before: always; }
+</style>
+
+{% for slip in slips %}
+<div class="slip">
+  <h1>{{ school_name }} — result checker</h1>
+  <div class="who">
+    {{ slip.student_name }}, {{ slip.class_group_name }}.
+    {{ slip.term_label }}, {{ slip.session }}.
+  </div>
+  <div><span class="label">Admission number:</span> {{ slip.admission_number }}</div>
+  <div><span class="label">PIN:</span> <span class="pin">{{ slip.printed_pin }}</span></div>
+  <div class="how">
+    Go to {{ checker_address }} and type the admission number and the PIN to read
+    this report card. Keep this slip: the PIN works until next session starts.
+    If it is lost, ask the school for a new one, and this PIN will stop working.
+  </div>
+</div>
+{% endfor %}
+
+{% if without_a_number %}
+<div class="unprinted{% if slips %} after-slips{% endif %}">
+  <h1>No slip was printed for {{ without_a_number|length }} child{{ without_a_number|length|pluralize:"ren" }}</h1>
+  <p>
+    A slip opens a card with the child's admission number, and
+    {% if without_a_number|length == 1 %}this child has{% else %}these children have{% endif %}
+    none on the roll. Add one, then print slips again: this class's other
+    slips will not be printed a second time.
+  </p>
+  <ul>
+    {% for name in without_a_number %}<li>{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}

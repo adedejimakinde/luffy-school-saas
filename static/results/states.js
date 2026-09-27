@@ -85,6 +85,15 @@ function classRow(row, note, asking, telling) {
         `data-class="${esc(row.class_group_id)}">Tell families</button>`,
     );
   }
+  if (row.may_print_slips) {
+    // Result-checker slips (docs/messaging.md D11): a PDF with a PIN for each
+    // child who has none yet. Pressing it again prints only the children still
+    // without one, so no slip already handed out stops working.
+    actions.push(
+      `<button type="button" class="slips" data-action="print-slips" ` +
+        `data-class="${esc(row.class_group_id)}">Print checker slips</button>`,
+    );
+  }
   return [
     `<li class="row state-${esc(row.state)}${note ? ` ${esc(note.kind)}` : ""}">`,
     `<span class="name">${esc(row.class_group)}</span>`,
@@ -103,6 +112,7 @@ function classRow(row, note, asking, telling) {
     row.may_tell_families && row.families_told
       ? `<span class="told">${esc(row.families_told)} message${row.families_told === 1 ? "" : "s"} to families so far.</span>`
       : "",
+    row.may_print_slips ? slips(row) : "",
     note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
     "</li>",
   ].join("");
@@ -124,6 +134,36 @@ function tellingQuestion(row, telling) {
     `<p>${esc(telling.detail)}</p>`,
     some ? `<button type="button" data-action="send-to-families" data-class="${id}">Send them</button>` : "",
     `<button type="button" data-action="cancel-telling" data-class="${id}">${some ? "Cancel" : "Close"}</button>`,
+    "</div>",
+  ].join("");
+}
+
+/**
+ * How many children have a result-checker slip, and the way to replace a lost one.
+ *
+ * docs/messaging.md D11. A new slip for a child **stops the old PIN working**,
+ * and the form says so before it is pressed: a slip that is only mislaid, not
+ * lost, is a slip the family can no longer use once this has been done.
+ *
+ * The class id travels in a hidden field rather than on the form's `data-`
+ * attribute, so the submit handler reads it the way it reads the admission
+ * number.
+ */
+function slips(row) {
+  const n = row.slips_printed || 0;
+  const id = esc(row.class_group_id);
+  return [
+    '<div class="slips">',
+    n
+      ? `<p>Result-checker slips printed for ${n} ${n === 1 ? "child" : "children"}.</p>`
+      : "<p>No result-checker slips printed yet.</p>",
+    `<form class="lost-slip-form" data-class="${id}">`,
+    `<input type="hidden" name="class_group_id" value="${id}">`,
+    `<label for="lost-slip-${id}">Replace a lost slip: admission number</label>`,
+    `<input id="lost-slip-${id}" name="admission_number" autocomplete="off" required>`,
+    '<button type="submit">Print a new slip</button>',
+    '<span class="hint">The old slip\'s PIN stops working.</span>',
+    "</form>",
     "</div>",
   ].join("");
 }

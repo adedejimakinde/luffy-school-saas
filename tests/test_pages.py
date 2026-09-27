@@ -39,6 +39,7 @@ from results.views import (
     BROADSHEET_MODULES,
     CARD_MODULES,
     CHAIN_MODULES,
+    CHECKER_MODULES,
     COMMENTS_MODULES,
     INDEX_MODULES,
 )
@@ -67,6 +68,7 @@ PAGES = {
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
     "timetable": TIMETABLE_MODULES,
+    "checker": CHECKER_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

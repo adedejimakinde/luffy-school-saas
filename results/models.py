@@ -2964,3 +2964,82 @@ class ReleasedCardPdf(models.Model):
         if self.content is None:
             return f"{self.card_id}: no file — {self.error[:40]}"
         return f"{self.card_id}: {self.byte_size} bytes"
+
+
+class CheckerPinsAreAppendOnly(Exception):
+    """A checker PIN row was edited or deleted. See `CheckerPin`."""
+
+
+class CheckerPin(models.Model):
+    """The digest of one result-checker PIN, for one child and one term. D11.
+
+    `docs/messaging.md` D11: a family with no account opens their child's card on
+    the school's own host with the admission number and a twelve-digit PIN from
+    a paper slip. `results.checker` mints the PINs and checks them.
+
+    **Only the digest is kept**, `schools.models.hash_token()`'s SHA-256, as
+    codes and invitation tokens are kept. The raw PIN exists in one place, the
+    slips PDF the principal downloads, and that is not stored either. Like a
+    sign-in code and unlike an invitation token, a PIN is short enough that a
+    lookup by digest alone could land on somebody else's, so every lookup is
+    scoped to the child the admission number names first
+    (`GuardianContactCode` makes the same argument).
+
+    ## The newest row is the live one, and that is how a PIN is revoked
+
+    Printing a new slip for a lost one writes a new row; the older rows for the
+    same child and term stop opening anything, because `results.checker` reads
+    only the newest. So revoking is writing, and nothing here is ever updated.
+    A `revoked_at` column would be a mutable column where the history matters
+    (operating rule 4), and this way the table also says every slip that was
+    ever printed for a child, by whom, and when.
+
+    ## Append-only
+
+    Both layers, as everywhere in this app: `save()` and `delete()` refuse, and
+    a trigger refuses what never calls them.
+    """
+
+    #: A bare id into `accounts.Membership`, as every per-child column here is.
+    student_membership_id = models.PositiveBigIntegerField()
+
+    #: The term whose card this PIN opens. `cards.card_for()` picks the card, the
+    #: same call the card route makes, so a revised card is the one served.
+    term = models.ForeignKey(
+        "academics.Term", related_name="checker_pins", on_delete=models.PROTECT
+    )
+
+    #: SHA-256 of the twelve digits. Not unique: see the class docstring.
+    pin_hash = models.CharField(max_length=64)
+
+    #: The `User` who printed the slip, like `ReleasedCard.released_by_id`.
+    minted_by_id = models.PositiveBigIntegerField()
+    minted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["student_membership_id", "term_id", "id"]
+        indexes = [
+            # Every read is "the newest PIN of these children", so this is the
+            # one index the table needs.
+            models.Index(
+                fields=["student_membership_id", "term", "-id"],
+                name="checker_pin_newest_first",
+            ),
+        ]
+
+    def __str__(self):
+        return f"PIN for {self.student_membership_id}, term {self.term_id}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise CheckerPinsAreAppendOnly(
+                f"PIN {self.pk} has been printed and cannot be changed. Print a "
+                f"new slip instead, which stops this one opening anything."
+            )
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise CheckerPinsAreAppendOnly(
+            f"PIN {self.pk} cannot be deleted. Print a new slip instead, which "
+            f"stops this one opening anything."
+        )

@@ -105,8 +105,9 @@ from ninja import Router, Schema
 from academics.models import Term, TermName
 from accounts.models import Guardianship, Membership, Role
 from accounts.session import session_auth
+from accounts.throttling import client_address
 
-from . import cards, renders, withholding
+from . import cards, checker, renders, withholding
 from .withholding import CardWithheld
 from .models import (
     CommentAuthor,
@@ -169,16 +170,21 @@ class CardClaim(enum.Enum):
     SELF = "self"
     GUARDIAN = "guardian"
     STAFF = "staff"
+    #: The result checker's reader (`checker_router`): whoever holds the slip.
+    #: Not a login at all, and a family's claim all the same.
+    PIN = "pin"
 
 
-#: The two claims a *family* holds, and the only ones the fee gate applies to.
+#: The claims a *family* holds, and the only ones the fee gate applies to. The
+#: result checker's PIN is the third (`docs/messaging.md` D11): a family reading
+#: the card off a slip is held back exactly as one signed in would be.
 #:
 #: **Not `accounts.FAMILY_ROLES`.** A claim is not a role: a guardian's claim
 #: comes from `Guardianship`, which links a login to *one child*, while holding
 #: PARENT at a school says only that somebody is *a* parent there. That
 #: distinction is the whole reason `_may_read()` is a function and not a role
 #: test, and this constant must not blur it.
-FAMILY_CLAIMS = frozenset({CardClaim.SELF, CardClaim.GUARDIAN})
+FAMILY_CLAIMS = frozenset({CardClaim.SELF, CardClaim.GUARDIAN, CardClaim.PIN})
 
 
 # -- what a family sees ------------------------------------------------------
@@ -862,10 +868,16 @@ def _require_servable(claim: CardClaim, card):
     goes stale (`operating-rules.md` rule 7) and this is the one place a person
     adding the third surface is certain to read.
 
+    **The result checker is the third surface, and it was added that way**
+    (`docs/messaging.md` D11): `check_result()` on `checker_router` calls this
+    with `CardClaim.PIN`, after the PIN and before the payload, which is the
+    order the two card routes keep.
+
     `test_withholding.AThirdServingSurfaceCannotBeAddedUngated` enumerates
     `router.path_operations` and drives every one of them as the guardian of a
     withheld child, so a third route on *this* router is covered the day it is
-    written. Its reach stops at the router: a surface serving card content from
+    written. `checker_router` is enumerated beside it and driven with the
+    withheld child's PIN. Its reach stops at the router: a surface serving card content from
     somewhere else — a staff export in `results/api.py`, an emailed attachment,
     a management command — is outside it, because the only thing tying this
     helper to a route is that the route calls it, and no test can enumerate
@@ -1453,8 +1465,81 @@ def report_card_pdf(request, student_membership_id: int, term_id: int):
     )
 
 
+# -- the result checker -------------------------------------------------------
+
+#: The result checker's route, and the only route in this module with no
+#: session behind it. Its own router because `router` authenticates every
+#: operation it holds, and this one's whole point is that the caller has no
+#: account (`docs/messaging.md` D11).
+checker_router = Router()
+
+
+class CheckIn(Schema):
+    """What the family types. Both strings, and neither is trusted.
+
+    Blank is accepted rather than refused as invalid input, so that a missing
+    field gets the one refusal and is counted like any other wrong answer. A
+    422 naming the missing field would be a second kind of answer.
+    """
+
+    admission_number: str = ""
+    pin: str = ""
+
+
+class NotOpenedOut(Schema):
+    """The one refusal (404), or the wait (429) with `retry_after` in seconds."""
+
+    detail: str
+    retry_after: Optional[int] = None
+
+
+@checker_router.post(
+    "/check/",
+    response={200: ReportCardOut, 403: WithheldOut, 404: NotOpenedOut, 429: NotOpenedOut},
+    tags=["results"],
+)
+def check_result(request, payload: CheckIn):
+    """A family with no account opens a card with an admission number and a PIN.
+
+    **The answer is `card_payload()`**, byte for byte what a signed-in guardian
+    is served for the same card: this is a third reader of the one assembly, so
+    it has no field the family page does not have, `position` and
+    `class_average` included (#21, requirement 8).
+
+    **The gate's order, with the PIN as the claim.** `_school_of()` is the host;
+    `checker.open_card()` is `_the_child()`, the claim and `card_for()` in one,
+    because an admission number is only a child once the PIN agrees; then
+    `_require_servable()`; then the payload. So the 403 that names somebody to
+    ring reaches only a caller who has proved the slip, and every failure before
+    it is the one refusal.
+
+    **POST, never GET**, so that the PIN is never in a URL: not in the address
+    bar, not in the browser's history and not in an access log.
+
+    The address counted is `throttling.client_address()`'s, the one sign-in
+    counts, trusted only as far as `TRUSTED_PROXY_COUNT` says.
+    """
+    school = _school_of(request)
+    try:
+        card = checker.open_card(
+            school,
+            admission_number=payload.admission_number,
+            pin=payload.pin,
+            address=client_address(request),
+        )
+    except checker.TooManyAttempts as exc:
+        return 429, NotOpenedOut(detail=checker.WAIT, retry_after=exc.retry_after)
+    except checker.NotOpened:
+        return 404, NotOpenedOut(detail=checker.NOT_OPENED)
+
+    _require_servable(CardClaim.PIN, card)
+
+    return 200, card_payload(card)
+
+
 __all__ = [
     "router",
+    "checker_router",
     "card_index",
     "CARD_VIEWING_ROLES",
     "CardClaim",

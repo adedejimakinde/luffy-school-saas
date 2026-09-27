@@ -26,8 +26,8 @@ Everything this document says about the code as it stands was read on `main` at
 notices, M3 fee reminders, M4 the result checker. **Waiting for a real provider:** M5
 (delivery reports) and M6 (the provider itself).
 
-**Built:** M1, code delivery (#167). Where it departs from the text below, it says so
-there: the chooser offers each guardian once by construction rather than by a fold
+**Built:** M1, code delivery (#167); M4, the result checker (D11, "As built").
+Where M1 departs from the text below, it says so there: the chooser offers each guardian once by construction rather than by a fold
 (D8), the code is sealed with Fernet from `cryptography` (D6), and `messaging.W001`
 is silenced in `settings.py` until a real phone provider is named (D2, M6).
 
@@ -467,6 +467,40 @@ points them at sign-in.
 **Not decided here:** whether a school may sell PINs, the way scratch cards are sold.
 That is a business question and a payment feature (OPEN-M5). The checker works the
 same either way.
+
+**As built (M4).** `results/checker.py` does both halves; the page is `/check/` on
+the school's host, and the one route behind it is `POST /api/results/check/`. Where
+the text above left something open, or the code departs from it:
+
+- **Who prints, and where.** The principal or an administrator, from the released
+  row on the chain page: "Print slips" for the class, or one child's admission
+  number for a lost slip. The PDF is the response to that press, rendered in the
+  request and stored nowhere, with `Cache-Control: no-store`. The raw PINs exist
+  nowhere else.
+- **Revoking is writing.** `CheckerPin` is append-only, and the newest row for a
+  child and term is the live PIN, so a new slip for a lost one stops the old PIN
+  without any row being changed. The table keeps every slip ever printed, by whom
+  and when.
+- **A second press prints only the children without a slip.** Reprinting the
+  class would kill every slip already sent home, without saying so. A lost slip is
+  asked for by admission number, one child at a time.
+- **A child with no admission number gets no slip**, because it could open
+  nothing. The PDF names them on a last page, and the next press prints them once
+  they have a number.
+- **"Until the end of the session" is read as "until the next session starts":**
+  the first day of any term in a later session. Nothing records when a session
+  ends, and its third term ends days after third-term cards go home, so a
+  third-term slip would have died in its first week. OPEN-M5 still asks whether a
+  session is the right lifetime.
+- **The one refusal is a 404** with one fixed sentence, whatever was wrong. The
+  wait is a 429 with `retry_after`. Both buckets carry the school, so wrong guesses
+  at St Mary's never make a family at Grace wait. The admission number is counted
+  as typed, whether or not any child has it, so a wait says nothing about whether
+  the number exists.
+- **The card served is `cards.card_for()`'s**, the call the card route makes, so a
+  revised card is the one a slip opens. A withheld card answers `WithheldOut` to
+  whoever has proved the PIN, and the one refusal to everybody else
+  (`docs/withholding.md`, "The order").
 
 ### D12. A failed delivery is the signal OPEN-2 is missing
 

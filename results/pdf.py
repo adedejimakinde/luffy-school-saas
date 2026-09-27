@@ -81,4 +81,30 @@ def html_for(card) -> str:
     )
 
 
-__all__ = ["render", "html_for"]
+def render_slips(slips, checker_address: str) -> bytes:
+    """One class's result-checker slips as PDF bytes. `docs/messaging.md` D11.
+
+    Rendered **in the request that mints the PINs**, unlike a card, because the
+    raw PINs exist only here: a worker would need them on the broker, and a file
+    stored for later would be the PINs at rest. A class is a page or eight of
+    plain text, not a card each.
+    """
+    from weasyprint import HTML
+
+    return HTML(string=slips_html(slips, checker_address)).write_pdf()
+
+
+def slips_html(slips, checker_address: str) -> str:
+    """The slips' HTML before WeasyPrint sees it, so a test can read it as text."""
+    return render_to_string(
+        "results/checker_slips.html",
+        {
+            "school_name": slips.school_name,
+            "slips": slips.slips,
+            "without_a_number": slips.without_a_number,
+            "checker_address": checker_address,
+        },
+    )
+
+
+__all__ = ["render", "html_for", "render_slips", "slips_html"]

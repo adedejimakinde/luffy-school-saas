@@ -24,7 +24,15 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, STEP, fetchChain, previewFamilies, takeStep, tellFamilies } from "./api.js";
+import {
+  REFUSAL,
+  STEP,
+  fetchChain,
+  previewFamilies,
+  printSlips,
+  takeStep,
+  tellFamilies,
+} from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -109,7 +117,36 @@ export function applyStep(state, classGroupId, result) {
   return { state: { ...state, notes, asking: null }, reload: false };
 }
 
-export async function mount(root, { fetchImpl = fetch } = {}) {
+/**
+ * Hand the browser a file to save, from a `Blob` already in memory.
+ *
+ * The slips PDF is the only place the PINs are ever written out, so it is
+ * handed over and let go: the object URL is revoked once the download has had
+ * time to start, rather than kept for the life of the page.
+ */
+export function saveFile(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
+/** What the row says after a press, from `printSlips()`'s answer. */
+export function slipsNote(result) {
+  if (result.ok) {
+    return {
+      kind: "slips-printed",
+      detail: `The slips are downloading as ${result.filename}. Print them, and give each child theirs with the report card.`,
+    };
+  }
+  return { kind: "not-printed", detail: result.detail || "No slips were printed." };
+}
+
+export async function mount(root, { fetchImpl = fetch, download = saveFile } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
   let signOutFailed = false;
@@ -133,6 +170,27 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const notes = state.notes;
       await load();
       if (state.step === "chain") state = { ...state, notes };
+    }
+    draw();
+  };
+
+  // Result-checker slips (docs/messaging.md D11). A PDF on success, which is
+  // saved and then the rows fetched again for the count; a refusal is a
+  // sentence on the row.
+  const printing = async (classGroupId, admissionNumber) => {
+    const result = await printSlips({ classGroupId, admissionNumber, fetchImpl });
+    if (result.refusal) {
+      state = { step: result.refusal, ...(result.body || {}) };
+      draw();
+      return;
+    }
+    const notes = { ...state.notes, [classGroupId]: slipsNote(result) };
+    if (result.ok) {
+      download(result.blob, result.filename);
+      await load();
+      if (state.step === "chain") state = { ...state, notes };
+    } else {
+      state = { ...state, notes };
     }
     draw();
   };
@@ -181,6 +239,10 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       draw();
       return;
     }
+    if (action === "print-slips") {
+      await printing(Number(hit.dataset.class), "");
+      return;
+    }
     if (action === "cancel-telling") {
       state = { ...state, telling: null };
       draw();
@@ -203,6 +265,13 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
+    if (form && form.admission_number && form.class_group_id) {
+      // A lost slip. Sent as typed: the server trims it, and says so if no
+      // child in the class has that number.
+      if (event.preventDefault) event.preventDefault();
+      await printing(Number(form.class_group_id.value), form.admission_number.value);
+      return;
+    }
     if (!form || !form.reason) return;
     if (event.preventDefault) event.preventDefault();
     // Sent even when empty, deliberately: the server's refusal is the one that
