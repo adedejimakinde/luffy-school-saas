@@ -67,7 +67,7 @@ function serve(routes) {
 test("a pending link says plainly that it is not live, and what finishes the job", () => {
   const html = states.guardiansPanel({ body: PANEL });
 
-  assert.match(html, /Pending verification — not live yet/);
+  assert.match(html, /Pending verification: not live yet/);
   assert.match(html, /cannot see Ada Obi until they confirm with this school/);
   assert.match(html, /send them a code, and they type it on the sign-in page/);
   assert.doesNotMatch(html, /not connected yet/);

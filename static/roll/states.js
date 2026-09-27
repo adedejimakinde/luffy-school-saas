@@ -249,7 +249,7 @@ function standing(g, student) {
     return `Suspended by the school: they cannot see ${esc(student)}.`;
   }
   return (
-    `Pending verification — not live yet. They cannot see ${esc(student)} ` +
+    `Pending verification: not live yet. They cannot see ${esc(student)} ` +
     "until they confirm with this school: send them a code, and they type it " +
     "on the sign-in page."
   );
@@ -329,7 +329,7 @@ export function wrongHost() {
     '<section class="state state-wrong-host" data-state="wrong-host">',
     "<h1>The roll lives on your school's own web address</h1>",
     "<p>This page is open on the sign-in site. Open it again from your ",
-    "school's own address — the link on the page you signed in on.</p>",
+    "school's own address, the link on the page you signed in on.</p>",
     "</section>",
   ].join("");
 }
