@@ -139,9 +139,52 @@ The method: **break the thing deliberately, re-run, and read the failure.** A
 test suite that passes tells you nothing on its own — you have not learned that
 the tests would catch the bug, only that they do not currently fire.
 
-Every substantial change in this phase records its controls in a table
-(`docs/positions.md` has the longest). The table has three columns: what was
-broken, what failed, and what that says.
+Every substantial change records its controls in a table (`docs/positions.md`
+has the longest), for the claims in the five areas below. The table has three
+columns: what was broken, what failed, and what that says.
+
+### Where a control is owed, and where an ordinary test is enough
+
+Decided 2026-09-27. **A control is owed for a claim in one of five areas, and
+only there:**
+
+| area | what a test passing for the wrong reason would let through |
+| --- | --- |
+| **money** | a wrong amount on a ledger entry, an invoice, a receipt or a reminder |
+| **results and release** | a mark, grade, position or remark reaching someone it was not released to, or a released card changing |
+| **tenant isolation** | one school's rows, files or messages reaching another school |
+| **access and authority** | someone reading or doing what their role, link, code or PIN does not allow |
+| **data deletion** | a row, a file or a backup destroyed that should have been kept, or kept that should be gone |
+
+**Everything else gets ordinary tests**: wording, layout, scheduling, previews,
+counts on a page, tooling. Written, run and shown like any test, with no control
+behind it and no control table. Two schools still, wherever the behaviour could
+differ between them (see the process rules at the end).
+
+**Why.** A control is a source edit, a test run and a row in a table, and every
+messaging slice carried a table of them. That cost buys something where a test
+that is lying lets the wrong thing reach a family, a school's money or another
+school's data, and nobody finds out until it has. A wrong sentence or a
+misplaced button is found by the first person who looks at it, and fixed as
+cheaply as it was found.
+
+**What taught it.** #170's table (result notices) has fourteen rows. Two are the
+preview sentence leaving out `held_until` and `hours.send_after()` returning
+`now`. Both
+controls were aimed correctly and both went red, so nothing was wrong with them;
+but neither guard stood between anyone and a result, an amount or another
+school's data. Under this rule each keeps its test and loses its row.
+
+**When a change touches both sides,** control the claims in the five areas and
+test the rest ordinarily. A guard in one of the areas keeps its control however
+cosmetic the change around it. If it is not clear which side a claim is on, ask
+what reaches whom if its test is lying: if the answer is in the table, control
+it.
+
+**Plans written before this date** promise a control for every requirement or
+every guard (`docs/messaging.md`, `docs/offline.md`, `docs/parent-access.md`).
+Read them through this rule: the controls they promise are owed for the
+requirements in the five areas, and the rest are owed ordinary tests.
 
 **A control that breaks nothing is a result, not a formality.** It has told you
 that the claim you were about to ship is unasserted. Two instances, and both
@@ -389,8 +432,11 @@ The short form of everything above, as the checklist actually used this phase:
 - [ ] Is every "never changes" I rely on enforced by a **trigger or constraint**?
       (Rule 3)
 - [ ] Did I add a **mutable column** where the history matters? (Rule 4)
-- [ ] Have I **broken each claim deliberately** and watched the right tests fail —
-      and did any control leave the suite green? (Rule 5)
+- [ ] For each claim about **money, results and release, tenant isolation,
+      access and authority, or data deletion**: have I **broken it
+      deliberately** and watched the right tests fail — and did any control
+      leave the suite green? Everything else: an ordinary test, run and shown.
+      (Rule 5)
 - [ ] Is there a claim in a docstring, a refusal message, or a doc that **nothing
       asserts**? (Rule 6)
 - [ ] Did this change make any existing prose **stale**, anywhere — including
