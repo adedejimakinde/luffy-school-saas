@@ -60,14 +60,22 @@ function masthead(payload) {
   ].join("");
 }
 
+/**
+ * The blue summary card: who this is, and the two numbers a parent opens the
+ * card for. The table inside is unchanged from before this had a colour —
+ * `tests/js/card_render.test.js` reads `Attendance</th><td>` straight out of
+ * it — this only wraps it.
+ */
 function who(payload) {
   return [
+    '<section class="summary">',
     '<table class="who">',
     `<tr><th scope="row">Name</th><td>${esc(payload.student_name)}</td>`,
     `<th scope="row">Class</th><td>${esc(payload.class_group_name)}</td></tr>`,
     `<tr><th scope="row">Average</th><td>${percentage(payload.own_average)}</td>`,
     `<th scope="row">Attendance</th><td>${attendance(payload)}</td></tr>`,
     "</table>",
+    "</section>",
   ].join("");
 }
 
@@ -121,7 +129,7 @@ function row(line, columnCount) {
   const cells = (line.cells || []).map((cell) => `<td class="n">${mark(cell)}</td>`).join("");
   return [
     "<tr>",
-    `<td>${esc(line.subject_name)}</td>`,
+    `<td>${esc(line.subject_name)}${scorebar(line.percentage)}</td>`,
     cells,
     `<td class="n">${esc(line.total_scored)}<span class="max">/${esc(
       line.total_available,
@@ -154,6 +162,26 @@ function percentage(value) {
   if (value === null || value === undefined || value === "")
     return '<span class="blank">&mdash;</span>';
   return `${esc(value)}%`;
+}
+
+/**
+ * The bar under a subject's name, reading `line.percentage` — the same string
+ * `percentage()` prints, so the bar and the number in the row's own `%`
+ * column never disagree.
+ *
+ * Absent, not zero-width, where there is nothing to show: a subject with no
+ * percentage (nobody marked, or none of its papers carry a maximum yet) is
+ * `percentage()`'s blank dash, and a bar under a dash would be a measurement
+ * this page did not make. `parseFloat` rather than `Number` so a string with
+ * trailing content the server never sends still fails safe to `NaN` rather
+ * than `0`.
+ */
+function scorebar(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const width = parseFloat(value);
+  if (Number.isNaN(width)) return "";
+  const clamped = Math.max(0, Math.min(100, width));
+  return `<div class="scorebar"><span style="width:${clamped}%"></span></div>`;
 }
 
 /**

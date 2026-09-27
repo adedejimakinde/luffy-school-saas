@@ -36,6 +36,8 @@ way to sign in instead, which lives on another host. Empty where a deployment
 has no portal domain, and the page then says nothing about signing in rather
 than drawing a dead link.
 {% endcomment %}
+{% include "design/icons.html" %}
+<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
 <main id="checker" data-portal="{{ portal_host }}">
   {% comment %}
   What a reader sees before the module runs, and the only state written in HTML

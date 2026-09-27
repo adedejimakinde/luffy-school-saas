@@ -53,8 +53,18 @@ export function ask({ error = "", identifier = "" } = {}) {
     '<input id="password" name="password" type="password" ',
     'autocomplete="current-password" required>',
     '<button type="submit">Sign in</button>',
+    parentLink(),
     "</form>",
   ].join("");
+}
+
+/** The way to the guardian door, the same rule `signin.js`'s `staffLink()`
+ * carries: a stranger could land on this door as easily as the other one,
+ * and there is no code and no password field that gets a parent anywhere
+ * from here. */
+function parentLink() {
+  return '<p class="switch-door">See your child\'s report card? ' +
+    '<a href="/sign-in/">I\'m a parent</a></p>';
 }
 
 /**
@@ -131,7 +141,7 @@ function school(entry) {
   if (!host) {
     return (
       `<li>${esc(name)} <span class="blank">` +
-      "(this school has no web address set up yet — ask the school office)" +
+      "(this school has no web address set up yet, ask the school office)" +
       "</span></li>"
     );
   }
@@ -168,7 +178,7 @@ export function nowhere({ full_name = "" } = {}) {
     "<p>This account is not an active member of staff at any school right ",
     "now.</p>",
     "<p>If a school has just invited you, open the link in the invitation they ",
-    "sent — accepting it is what creates the membership. Otherwise the school ",
+    "sent. Accepting it is what creates the membership. Otherwise the school ",
     "office can tell you where this stands.</p>",
     signOutButton(),
     "</section>",

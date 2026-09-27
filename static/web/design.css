@@ -247,6 +247,11 @@ button:disabled, .btn[aria-disabled="true"] {
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+/* The way back from the wrong door: `signin.js` and `staff-signin.js` each
+   carry one, to the other. Quiet and last in the form, because a stranger who
+   opened the right door never reads this far. */
+.switch-door { margin: 12px 0 0; font-size: var(--small); color: var(--muted); text-align: center; }
+
 /* ------------------------------------------------------------------------ */
 /* Fields                                                                    */
 /* ------------------------------------------------------------------------ */
@@ -503,6 +508,24 @@ td small { color: var(--muted); }
 .scorebar > span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
 
 /* ------------------------------------------------------------------------ */
+/* The brand bar: the family-facing pages                                    */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * Sign-in, the card index, a report card, the checker: pages with no shell,
+ * above the lone card `body > main` draws. `.logo` is the shell's own mark,
+ * reused here rather than redrawn — the icon and the wordmark are one thing
+ * wherever they appear, and a second definition is a second thing to keep
+ * blue. Not a link: none of these pages has anywhere to send a reader back
+ * to, and `results/views.py` says `/` is routed nowhere.
+ */
+.brand-bar {
+  display: flex;
+  justify-content: center;
+  margin: 0 0 16px;
+}
+
+/* ------------------------------------------------------------------------ */
 /* The app shell: the staff desktop                                          */
 /* ------------------------------------------------------------------------ */
 
@@ -547,7 +570,10 @@ body.has-shell { padding: 0; }
   text-decoration: none;
 }
 
-.logo .icon { width: 28px; height: 28px; stroke-width: 2; }
+/* `i-brand-mark`, not a generic stroke `.icon`: it is drawn filled, in the
+   square-and-`.logo`'s own colour plus white, not stroked in `currentColor`
+   alone — see `templates/design/icons.html`. */
+.logo-mark { width: 28px; height: 28px; flex: none; }
 
 .school-switcher {
   display: flex;
@@ -850,7 +876,7 @@ body.has-shell { padding: 0; }
 @media print {
   body, body.has-shell { padding: 0; background: var(--card); }
   body > main, .content > main { max-width: none; padding: 0; border: 0; }
-  .sidebar, .topbar, .tabbar, .sticky-actions { display: none; }
+  .sidebar, .topbar, .tabbar, .sticky-actions, .brand-bar { display: none; }
   .shell { display: block; }
   .scroll, .grid-scroll, .table-scroll { overflow: visible; }
   .scroll :is(th, td):first-child,

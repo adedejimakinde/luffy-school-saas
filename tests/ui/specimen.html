@@ -26,11 +26,42 @@
   .waiting td:last-child { text-align: right; }
   .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
   .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+
+  /*
+   * "Waiting for you" is a table on a desktop and a stack of cards below
+   * 640px: a table's own row scrolls sideways to reach its action, and the
+   * whole point of this list is that the action is the thing to press. Below
+   * that width every table part turns to a block, the header (which named
+   * columns nothing stacked still has) is dropped, and the button takes the
+   * row's full width so it is never the part a phone crops. The sticky
+   * first-column rule `design.css`'s `.table-scroll` gives every wide table
+   * is undone here for the same reason it is undone in print — nothing left
+   * to pin once nothing scrolls sideways.
+   */
+  @media (max-width: 640px) {
+    .waiting-scroll { overflow: visible; }
+    .waiting, .waiting thead, .waiting tbody, .waiting tr, .waiting th, .waiting td {
+      display: block; width: auto;
+    }
+    .waiting :is(th, td):first-child { position: static; box-shadow: none; }
+    .waiting thead { display: none; }
+    .waiting tr { padding: 12px 0; border-bottom: 1px solid var(--divider); }
+    .waiting tr:last-child { border-bottom: 0; }
+    .waiting td { padding: 2px 0; text-align: left; }
+    .waiting td:last-child { margin-top: 8px; text-align: left; }
+    .waiting td:last-child button { width: 100%; }
+  }
 </style>
 </head>
 <body class="has-shell has-tabbar">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-logo" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.3 8.2l3.5 7.6M16.7 8.2l-3.5 7.6"/></symbol>
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="17" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
   <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
   <symbol id="i-register" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M9 13l2 2 4-4"/></symbol>
   <symbol id="i-marks" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></symbol>
@@ -50,7 +81,7 @@
 
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo" href="#"><svg class="icon"><use href="#i-logo"/></svg>Classnode</a>
+    <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
 
     <button type="button" class="school-switcher">
       <span class="crest">SD</span>
@@ -140,7 +171,7 @@
       <div class="split">
         <section class="card">
           <div class="card-head"><h2>Waiting for you</h2><span class="label">4</span></div>
-          <div class="table-scroll">
+          <div class="table-scroll waiting-scroll">
             <table class="waiting">
               <thead><tr><th>Class</th><th>What</th><th class="num">Days</th><th><span class="sr">Action</span></th></tr></thead>
               <tbody>

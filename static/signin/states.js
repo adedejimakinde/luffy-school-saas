@@ -19,7 +19,14 @@
 import { esc, hostHref, waitInWords } from "../web/html.js";
 import { button as signOutButton } from "../web/signout.js";
 
-/** Step 1. The number, and no claim about whether we know it. */
+/**
+ * Step 1. The number, and no claim about whether we know it.
+ *
+ * `staffLink()` is the door back: a member of staff who lands here — the
+ * portal's own root is this page, so a staff bookmark or a search result can
+ * put anybody on it — has one tap to the door that is actually theirs, rather
+ * than a code sent to a number that opens nothing for them.
+ */
 export function ask({ error = "", value = "" } = {}) {
   return [
     '<form class="step step-ask" data-step="ask">',
@@ -31,8 +38,16 @@ export function ask({ error = "", value = "" } = {}) {
     `<input id="value" name="value" type="text" autocomplete="username" `,
     `inputmode="tel" required value="${esc(value)}">`,
     '<button type="submit">Send me a code</button>',
+    staffLink(),
     "</form>",
   ].join("");
+}
+
+/** The way to the other door, from the one screen a stranger could land on
+ * without meaning to: everything past it already knows which door it is. */
+function staffLink() {
+  return '<p class="switch-door">Are you a member of staff? ' +
+    '<a href="/staff-sign-in/">Sign in</a></p>';
 }
 
 /**
@@ -123,7 +138,7 @@ export function schools({ full_name = "", schools: list = [] } = {}) {
         return href
           ? `<li><a href="${href}">${esc(school.name)}</a></li>`
           : `<li>${esc(school.name)} <span class="blank">` +
-            "(this school has no web address set up yet — ask the school office)</span></li>";
+            "(this school has no web address set up yet, ask the school office)</span></li>";
       })
       .join(""),
     "</ul>",

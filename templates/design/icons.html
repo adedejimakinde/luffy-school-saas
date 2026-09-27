@@ -1,0 +1,28 @@
+{% comment %}
+The icon sprite every page draws its `<svg class="icon"><use href="#i-…"/></svg>`
+from. One file, included once per page wherever it needs an icon — not inside
+`design/head.html`, deliberately: that file is head-only content, and an
+`<svg>` there would end the implicit `<head>` early and push the rest of a
+template's `<link>`/`<script>` tags into the body. A page includes this where
+its markup actually needs an icon instead.
+
+`i-brand-mark` is drawn, not stroked, and does not take `class="icon"`: the
+square is `currentColor` (so `.logo`'s `color: var(--brand)` reaches it) and
+the triangle and its three dots are `var(--card)`, white — both design.css
+tokens, never a literal colour, the same rule the rest of the palette is held
+to. `.logo-mark` in design.css is its own sizing, next to `.logo`.
+
+Grown page by page as pages restyle. `tests/ui/specimen.html` carries its own
+copy for the parts no page uses yet; a symbol both files define has to stay
+the same shape in both, or the specimen would be showing something no page
+draws.
+{% endcomment %}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="17" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+</svg>

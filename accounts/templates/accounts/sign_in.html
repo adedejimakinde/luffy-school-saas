@@ -25,6 +25,8 @@ imports is not.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'signin/app.js' %}"></script>
 
+{% include "design/icons.html" %}
+<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
 <main id="signin">
   {% comment %}
   What a reader sees if the module never loads. It has to be true on its own,

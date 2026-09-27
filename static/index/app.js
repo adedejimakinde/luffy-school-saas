@@ -43,7 +43,13 @@ const INDEX_URL = "/api/results/cards/";
  * below the list rather than in place of it: the cards are still there and
  * still readable, and what changed is only that the session is still open.
  */
-export function htmlFor({ status, body }, { portal = "", signOutFailed = false } = {}) {
+/**
+ * `activeChild` picks which child's section shows when there is more than
+ * one; the rest still render, `hidden`, so `mount()`'s tab can switch
+ * between them with no second fetch — the whole family arrived on the one
+ * answer this page reads.
+ */
+export function htmlFor({ status, body }, { portal = "", signOutFailed = false, activeChild = null } = {}) {
   if (status === 401) {
     return states.signedOut({ portal, expired: body && body.code === "session_expired" });
   }
@@ -54,19 +60,46 @@ export function htmlFor({ status, body }, { portal = "", signOutFailed = false }
   const after = (signOutFailed ? failureNote() : "") + signOutButton();
   if (!cards) return states.nothing({ hasChildren: children.length > 0 }) + after;
 
+  const active = children.some((c) => c.student_membership_id === activeChild)
+    ? activeChild
+    : children[0] && children[0].student_membership_id;
+
   return [
     '<section class="index" data-state="cards">',
     "<h1>Report cards</h1>",
-    children.map(child).join(""),
+    children.length > 1 ? switcher(children, active) : "",
+    children.map((record) => child(record, record.student_membership_id === active)).join(""),
     "</section>",
     after,
   ].join("");
 }
 
-function child(record) {
+/**
+ * One child per tab, so a parent of several goes straight to one at a time
+ * on a phone rather than scrolling past everybody else's cards to find them.
+ * `role="tablist"`/`role="tab"` and `aria-selected` are the whole of what
+ * makes this a switcher to a screen reader — no script runs to announce it.
+ */
+function switcher(children, active) {
+  return [
+    '<div class="child-switcher" role="tablist">',
+    children
+      .map(
+        (c) =>
+          `<button type="button" role="tab" data-action="switch-child" ` +
+          `data-child="${esc(c.student_membership_id)}" ` +
+          `aria-selected="${c.student_membership_id === active}">` +
+          `${esc(c.student_name)}</button>`,
+      )
+      .join(""),
+    "</div>",
+  ].join("");
+}
+
+function child(record, active) {
   const cards = record.cards || [];
   return [
-    '<section class="child">',
+    `<section class="child" data-child="${esc(record.student_membership_id)}"${active ? "" : " hidden"}>`,
     `<h2>${esc(record.student_name)}</h2>`,
     cards.length
       ? `<ul class="cards">${cards.map((c) => card(record, c)).join("")}</ul>`
@@ -108,8 +141,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     answer = { status: 0, body: null };
   }
   let signOutFailed = false;
+  let activeChild = null;
   const draw = () => {
-    root.innerHTML = htmlFor(answer, { portal, signOutFailed });
+    root.innerHTML = htmlFor(answer, { portal, signOutFailed, activeChild });
   };
   draw();
 
@@ -117,6 +151,12 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   // a listener bound to the element itself would be bound to a node that is
   // about to be replaced.
   root.addEventListener("click", async (event) => {
+    const switchTo = event.target.closest('[data-action="switch-child"]');
+    if (switchTo) {
+      activeChild = Number(switchTo.dataset.child);
+      draw();
+      return;
+    }
     if (!event.target.closest('[data-action="sign-out"]')) return;
     const ended = sessionEnded(await signOut({ fetchImpl }));
     if (ended) {
