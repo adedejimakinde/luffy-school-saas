@@ -158,8 +158,19 @@ def _menu(context, current):
 
 @register.inclusion_tag("design/shell_open.html", takes_context=True)
 def shell_open(context, current):
-    """`<body>` through the start of `.content`: the sidebar and the top bar."""
-    return {"menu": _menu(context, current)}
+    """`<body>` through the start of `.content`: the sidebar and the top bar.
+
+    Sign out is offered to anybody signed in, whatever their roles here: a
+    parent or a refused teacher still has a session to end.
+    """
+    request = context.get("request")
+    user = getattr(request, "user", None)
+    return {
+        "menu": _menu(context, current),
+        "signed_in": bool(user is not None and user.is_authenticated),
+        "csrf_token": context.get("csrf_token"),
+        "path": request.path if request is not None else "/",
+    }
 
 
 @register.inclusion_tag("design/shell_close.html", takes_context=True)

@@ -19,7 +19,7 @@ from django.urls import path
 
 from api import api
 from academics.views import setup_page
-from accounts.views import roll_page, staff_page
+from accounts.views import roll_page, sign_out, staff_page
 from attendance.views import absences_page, register_page
 from fees.views import fees_page
 from gradebook.views import marking_page
@@ -48,6 +48,8 @@ urlpatterns = [
     # raises `Http404` on the portal because the register tables do not exist
     # in the public schema. The page has a state for that answer.
     # The office's own surface: the calendar and the class groups.
+    # The menu's Sign out, on every staff page: a POST, CSRF-checked.
+    path("sign-out/", sign_out, name="sign-out"),
     # The principal's and the vice principal's first screen.
     path("home/", home_page, name="home"),
     path("setup/", setup_page, name="school-setup"),

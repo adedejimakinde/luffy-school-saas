@@ -18,6 +18,19 @@ bar, built from the signed-in login's roles at this school. Closed by
       {% endfor %}
     </div>
     {% endif %}
+    {% if signed_in %}
+    {% comment %}
+    Sign out, for every signed-in login, on every staff page: a staff-room
+    computer is shared. A plain form rather than a button a page's module has
+    to wire up, so it works on every page whatever that page loads, and the
+    CSRF token is Django's own. `accounts.views.sign_out` says where it lands.
+    {% endcomment %}
+    <form class="nav nav-end" method="post" action="/sign-out/">
+      {% csrf_token %}
+      <input type="hidden" name="next" value="{{ path }}">
+      <button type="submit" class="nav-button"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
+    </form>
+    {% endif %}
   </nav>
 
   <header class="topbar">
