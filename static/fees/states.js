@@ -292,7 +292,7 @@ function revocationForm(concession) {
 }
 
 function concessionItem(c, { mayWrite, revoking }) {
-  const granted = `${esc(naira(c.amount_kobo))} a term — ${esc(c.reason)}` +
+  const granted = `${esc(naira(c.amount_kobo))} a term: ${esc(c.reason)}` +
     ` <small>granted ${esc(String(c.granted_at).slice(0, 10))}</small>`;
   if (c.revoked) {
     return [

@@ -254,7 +254,7 @@ export async function mount(
           draftField: "newLineDraft",
           draft,
           done: `Added “${draft.description.trim()}”.`,
-          lost: "We could not tell whether that line was added. Send it again — the same line is not added twice.",
+          lost: "We could not tell whether that line was added. Send it again. The same line is not added twice.",
         });
         return;
       }
@@ -265,7 +265,7 @@ export async function mount(
           draftField: "lineDraft",
           draft,
           done: "Changed. Children already charged keep what they were charged.",
-          lost: "We could not tell whether that change was saved. Send it again — saving it twice is the same as once.",
+          lost: "We could not tell whether that change was saved. Send it again. Saving it twice is the same as once.",
         });
       }
       return;
@@ -287,7 +287,7 @@ export async function mount(
             : "That payment was already recorded; nothing new was added.",
         // The request may have landed. Same key, same payment: sending it
         // again records it once whichever way the first one went.
-        again: "We could not tell whether that payment was saved. Send it again — it will not be recorded twice.",
+        again: "We could not tell whether that payment was saved. Send it again. It will not be recorded twice.",
       });
       return;
     }
@@ -298,7 +298,7 @@ export async function mount(
         draftField: "discountDraft",
         done: ({ posted }) =>
           posted ? "Discount given. The account below includes it." : "That discount was already given; nothing new was added.",
-        again: "We could not tell whether that discount was saved. Send it again — it will not be given twice.",
+        again: "We could not tell whether that discount was saved. Send it again. It will not be given twice.",
       });
       return;
     }
@@ -311,7 +311,7 @@ export async function mount(
           granted
             ? "Concession granted. Each term's bill gives it when the class is charged."
             : "That concession was already granted; nothing new was added.",
-        again: "We could not tell whether that concession was saved. Send it again — it will not be granted twice.",
+        again: "We could not tell whether that concession was saved. Send it again. It will not be granted twice.",
       });
       return;
     }
@@ -410,7 +410,7 @@ export async function mount(
     if (action === "remove-line" && state.step === "bill") {
       return billWrite(await removeBillLine({ lineId: Number(hit.dataset.line), fetchImpl }), {
         done: "Removed.",
-        lost: "We could not tell whether that line was removed. Press Remove again — if it is gone, the page will say so.",
+        lost: "We could not tell whether that line was removed. Press Remove again. If it is gone, the page will say so.",
       });
     }
     if (action === "charge-class" && state.step === "bill") {
@@ -421,7 +421,7 @@ export async function mount(
           ...state,
           charged: null,
           noteTone: "stop",
-          note: "We could not tell whether the class was charged. Press it again — nobody is charged twice.",
+          note: "We could not tell whether the class was charged. Press it again. Nobody is charged twice.",
         };
         draw();
         return;
