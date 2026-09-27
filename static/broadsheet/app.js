@@ -7,21 +7,19 @@
  * about to release.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, fetchBroadsheet, fetchOverview, fetchTerms } from "./api.js";
 import * as states from "./states.js";
 
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "overview":
-      return states.overview(state) + after;
+      return states.overview(state);
     case "sheet":
-      return states.sheet(state) + after;
+      return states.sheet(state);
     case "no-terms":
-      return states.noTerms() + after;
+      return states.noTerms();
     case REFUSAL.NOT_YOURS:
-      return states.notYours() + after;
+      return states.notYours();
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -44,9 +42,8 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
   const portal = root.dataset.portal || "";
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
-  let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const refused = (answer) => {
     state = { step: answer.refusal };
@@ -102,14 +99,6 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
       await showOverview(state.termId);
       return;
     }
-    if (action !== "sign-out") return;
-    const ended = sessionEnded(await signOut({ fetchImpl }));
-    if (ended) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
-    draw();
   });
 
   return state;

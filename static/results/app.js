@@ -23,7 +23,6 @@
  * - **not allowed** — a standing they do not have. No amount of retrying helps.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   STEP,
@@ -36,15 +35,14 @@ import {
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "chain":
-      return states.chain(state) + after;
+      return states.chain(state);
     case "no-term":
-      return states.noTerm() + after;
+      return states.noTerm();
     case REFUSAL.NOT_ON_THE_CHAIN:
-      return states.notOnTheChain(state) + after;
+      return states.notOnTheChain(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -167,10 +165,9 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile, sear
   const portal = root.dataset.portal || "";
   const focus = focusFrom(search);
   let state = { step: "loading" };
-  let signOutFailed = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const load = async () => {
     state = fromChain(await fetchChain({ fetchImpl }), { focus });
@@ -224,16 +221,6 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile, sear
     if (!hit) return;
     const action = hit.dataset.action;
 
-    if (action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
     if (action === "ask-send-back") {
       state = { ...state, asking: Number(hit.dataset.class), confirming: null };
       draw();

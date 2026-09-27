@@ -13,7 +13,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 function select(id, attribute, options, chosen) {
   return [
@@ -161,7 +160,6 @@ export function week({ index, week: body = null, classId = null, note: said = ""
     middle,
     body ? lessonForm(index) : "",
     bellForm(index),
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -176,7 +174,6 @@ export function noTerm({ index = {} } = {}) {
       ? `<p>No term is marked current. Choose one:</p>${chooser({ ...index, classes: [] }, null)}`
       : "<p>Your school has not set up a term, so there is no timetable yet. " +
         "The school office sets terms up.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -192,7 +189,6 @@ export function notYours() {
     "<p>The timetable is read by the school's teachers, the principal, the vice ",
     "principal (academic) and the administrators. If that should include you, ",
     "whoever runs this system for your school can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

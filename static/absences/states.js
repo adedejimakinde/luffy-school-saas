@@ -13,7 +13,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 function termChooser(terms, termId) {
   return [
@@ -99,7 +98,6 @@ export function list({ absences: body = {}, note = "" } = {}) {
     `<p class="rule">${rule(body)} A day with no register counts for nothing.</p>`,
     children.length ? table(children) : emptyReason(body),
     thresholdForm(body, note),
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -114,7 +112,6 @@ export function noTerm({ absences: body = {} } = {}) {
       ? `<p>No term is marked current. Choose one:</p><form class="chooser">${termChooser(terms, null)}</form>`
       : "<p>Your school has not set up a term, so there is nothing to count yet. " +
         "The school office sets terms up.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -130,7 +127,6 @@ export function notYours() {
     "<p>This list is read by the principal, the vice principal (academic) and ",
     "the school's administrators. If that should include you, whoever runs ",
     "this system for your school can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

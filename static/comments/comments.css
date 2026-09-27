@@ -26,4 +26,4 @@ h3 { font-size: 1rem; margin: 14px 0 4px; color: var(--muted); }
 .locked { background: var(--bg); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 12px; }
 .note { font-size: var(--small); color: var(--stop); }
 .rejected, .not-allowed { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 10px; }
-button[data-action="save"], button.back, button.signout { margin: 8px 8px 0 0; }
+button[data-action="save"], button.back { margin: 8px 8px 0 0; }

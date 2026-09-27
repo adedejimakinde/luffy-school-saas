@@ -10,7 +10,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /** What each status means to the person reading the list. */
 const STANDING = {
@@ -27,7 +26,6 @@ export function list({ invitations = [], roles = [], note = null, typed = null }
     invitations.length
       ? `<ul class="invitations">${invitations.map(row).join("")}</ul>`
       : '<p class="blank">Nobody is waiting on an invitation from this school.</p>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -83,7 +81,6 @@ export function notTheOffice({ detail = "" } = {}) {
     `<p>${esc(detail) || "Staff are invited by an administrator of the school."}</p>`,
     "<p>If that should be you, whoever runs this system for your school can ",
     "arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

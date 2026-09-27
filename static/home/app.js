@@ -1,20 +1,19 @@
 /**
- * The principal's home: one read, drawn once. Nothing on it writes except
- * sign-out; every row's button is a link to the screen that does the work.
+ * The principal's home: one read, drawn once. Nothing on it writes: every
+ * row's button is a link to the screen that does the work. Sign out is the
+ * menu's, not this page's.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, fetchHome } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "home":
-      return states.home(state) + after;
+      return states.home(state);
     case REFUSAL.NOT_YOURS:
-      return states.notYours(state) + after;
+      return states.notYours(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -33,24 +32,8 @@ export function fromHome(answer) {
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
-  let signOutFailed = false;
   const state = fromHome(await fetchHome({ fetchImpl }));
-  const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
-  };
-  draw();
-
-  root.addEventListener("click", async (event) => {
-    const hit = event.target.closest("[data-action]");
-    if (!hit || hit.dataset.action !== "sign-out") return;
-    if (sessionEnded(await signOut({ fetchImpl }))) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
-    draw();
-  });
-
+  root.innerHTML = htmlFor(state, { portal });
   return state;
 }
 

@@ -147,16 +147,17 @@ test("sent back opens that class's results", () => {
 
 test("each row carries the parts a phone stacks: class, days, what, button", () => {
   // Below 640px `home.css` lays these out as class and days, then what, then
-  // the button across the row. The days' unit is in the markup for that
-  // layout, where no column header is left to name it.
+  // the button across the row. No column header is left there to say what a
+  // bare "2" counts, so the unit is part of the text, in every layout, and
+  // never left to a stylesheet to show.
   const html = states.waiting(HOME.waiting);
   const first = html.slice(html.indexOf("<tr data-kind"), html.indexOf("</tr>", html.indexOf("<tr data-kind")));
 
   for (const cell of ['class="class"', 'class="what"', 'class="num days"', 'class="act"']) {
     assert.match(first, new RegExp(cell), cell);
   }
-  assert.match(first, /2<span class="unit"> days<\/span>/);
-  assert.match(states.waiting([{ ...HOME.waiting[0], days: 1 }]), /1<span class="unit"> day<\/span>/);
+  assert.match(first, /<td class="num days">2 days<\/td>/);
+  assert.match(states.waiting([{ ...HOME.waiting[0], days: 1 }]), /<td class="num days">1 day<\/td>/);
 });
 
 test("a button names its class to a screen reader", () => {

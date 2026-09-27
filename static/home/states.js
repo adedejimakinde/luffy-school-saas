@@ -11,7 +11,6 @@
 
 import { naira } from "../fees/money.js";
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /** Nothing to show: data, not a sentence (`docs/design.md`). */
 const DASH = "—";
@@ -67,7 +66,6 @@ export function home(body) {
     waiting(body.waiting || []),
     today(body.happened, body.today),
     "</div>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -169,9 +167,10 @@ function whatFor(row) {
   return { ...kind, html: `${esc(kind.what)}${label}` };
 }
 
+/** "2 days", with its unit, in the table and in the phone's stacked rows alike. */
 function days(n) {
   if (n === null || n === undefined) return DASH;
-  return `${n}<span class="unit"> ${n === 1 ? "day" : "days"}</span>`;
+  return `${n} ${n === 1 ? "day" : "days"}`;
 }
 
 export function waiting(rows) {
@@ -194,7 +193,7 @@ export function waiting(rows) {
     head,
     '<div class="waiting-wrap">',
     '<table class="waiting">',
-    '<thead><tr><th>Class</th><th>What</th><th class="num">Days</th><th><span class="sr">Action</span></th></tr></thead>',
+    '<thead><tr><th>Class</th><th>What</th><th class="num">Waiting</th><th><span class="sr">Action</span></th></tr></thead>',
     "<tbody>",
     rows
       .map((row) => {
@@ -256,7 +255,6 @@ export function notYours({ detail = "" } = {}) {
     '<section class="state state-not-yours" data-state="not-yours">',
     "<h1>This page is not yours</h1>",
     `<p>${esc(detail) || "This page is the principal's and the vice principal's."}</p>`,
-    signOutButton(),
     "</section>",
   ].join("");
 }

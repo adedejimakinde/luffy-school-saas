@@ -72,7 +72,7 @@ main { max-width: 34rem; }
 .row button.dismiss { margin-right: 8px; }
 .session-ended { background: var(--stop-bg); color: var(--stop); border-radius: var(--radius); padding: 10px 14px; margin: 0 0 12px; }
 
-button.back, button.signout {
+button.back {
   min-height: var(--control-lg);
   margin: 12px 8px 0 0;
 }

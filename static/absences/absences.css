@@ -13,6 +13,6 @@ th, td { white-space: nowrap; }
 fieldset { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 @media print {
   body { font-size: 11pt; }
-  .chooser, .threshold, [data-action="sign-out"] { display: none; }
+  .chooser, .threshold { display: none; }
   th, td { padding: 3px 6px; }
 }

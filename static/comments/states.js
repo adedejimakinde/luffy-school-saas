@@ -9,7 +9,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
  * Which class to open. Issue #180: the frame never named one, so this always
@@ -38,7 +37,6 @@ export function choose({ term = "", classes = [] } = {}) {
           "</ul>",
         ].join("")
       : '<p class="blank">Your school has no classes set up yet.</p>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -67,7 +65,6 @@ export function classList({ class_group = "", term = "", rows = [] } = {}) {
     "</ul>",
     '<button type="button" class="back" data-action="back-to-classes">',
     "Choose a different class</button>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -103,7 +100,6 @@ export function child({
     remarks.map((r) => remark(r, { locked, bank: phrases[r.author], note: notes[r.author] })).join(""),
     conduct({ may_rate, sections, scale, locked, note: notes.rating }),
     '<button type="button" class="back" data-action="back">Back to the class</button>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -225,7 +221,6 @@ export function notASignatory({ detail = "" } = {}) {
       "A card is signed by the class teacher and the principal of the school " +
         "the child attends."}</p>`,
     "<p>If that should be you, the school office is who can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

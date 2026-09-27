@@ -54,4 +54,4 @@ input[type="date"] { width: 100%; }
 
 .warn { color: var(--warn); }
 
-button.submit, button.again, button.back, button.signout { margin: 4px 8px 4px 0; }
+button.submit, button.again, button.back { margin: 4px 8px 4px 0; }

@@ -17,7 +17,6 @@ from schools.hosts import portal_host
 FEES_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "fees/money.js",
     "fees/api.js",
     "fees/states.js",

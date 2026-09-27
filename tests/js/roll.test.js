@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applyWrite, fromRoll, htmlFor, mount } from "../../static/roll/app.js";
-import { REFUSAL, SAVE, refusalFor, provesASession } from "../../static/roll/api.js";
+import { REFUSAL, SAVE, refusalFor } from "../../static/roll/api.js";
 import * as states from "../../static/roll/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -222,11 +222,6 @@ test("a successful write re-reads the roll rather than patching a row", async ()
 test("403 and 404 are different page-level refusals", () => {
   assert.equal(refusalFor(403, {}), REFUSAL.NOT_THE_OFFICE);
   assert.equal(refusalFor(404, {}), REFUSAL.WRONG_HOST);
-});
-
-test("only answers that prove a session carry a sign-out button", () => {
-  assert.ok(provesASession({ ok: false, refusal: REFUSAL.NOT_THE_OFFICE }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.WRONG_HOST }));
 });
 
 test("the refusal a teacher reads does not offer her the staff door", () => {

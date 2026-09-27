@@ -29,22 +29,20 @@
  * second button for each of a dozen traits.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, SAVE, fetchChild, fetchClass, fetchClasses, saveRating, saveRemark } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose(state) + after;
+      return states.choose(state);
     case "class":
-      return states.classList(state) + after;
+      return states.classList(state);
     case "child":
-      return states.child(state) + after;
+      return states.child(state);
     case REFUSAL.NOT_A_SIGNATORY:
-      return states.notASignatory(state) + after;
+      return states.notASignatory(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -108,14 +106,13 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
   // starts at the chooser rather than asking for class 0.
   let group = classGroupId !== null ? classGroupId : Number(root.dataset.class || 0) || null;
   let state = { step: "loading" };
-  let signOutFailed = false;
   let openChild = null;
   // What is in each box right now, so a redraw after a save does not lose
   // typing the server has not been told about yet.
   let typed = {};
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const loadClasses = async () => {
     group = null;
@@ -145,16 +142,6 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
     if (!hit) return;
     const action = hit.dataset.action;
 
-    if (action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
     if (action === "pick-class") {
       group = Number(hit.dataset.class);
       await loadClass();

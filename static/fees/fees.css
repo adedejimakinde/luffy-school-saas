@@ -25,7 +25,7 @@ fieldset label { display: grid; gap: 4px; }
 .receipt .amount { font-size: 1.3rem; font-weight: 700; }
 .void { border: 2px solid var(--stop); border-radius: var(--radius); color: var(--stop); padding: 8px 12px; font-weight: 700; }
 @media print {
-  .back, [data-action="sign-out"], .payment { display: none; }
+  .back, .payment { display: none; }
   .receipt { border-color: var(--text); }
 }
 

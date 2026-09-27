@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applySave, fromChild, fromClass, fromClasses, htmlFor, mount } from "../../static/comments/app.js";
-import { REFUSAL, SAVE, refusalFor, provesASession } from "../../static/comments/api.js";
+import { REFUSAL, SAVE, refusalFor } from "../../static/comments/api.js";
 import * as states from "../../static/comments/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -330,11 +330,6 @@ test("fromClasses carries a refusal the same way every other loader does", () =>
 test("403 and 404 are different page-level refusals", () => {
   assert.equal(refusalFor(403, {}), REFUSAL.NOT_A_SIGNATORY);
   assert.equal(refusalFor(404, {}), REFUSAL.WRONG_HOST);
-});
-
-test("only answers that prove a session carry a sign-out button", () => {
-  assert.ok(provesASession({ ok: false, refusal: REFUSAL.NOT_A_SIGNATORY }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.WRONG_HOST }));
 });
 
 test("the refusal a bursar reads does not offer her the staff door", () => {

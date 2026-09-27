@@ -52,7 +52,6 @@ from schools.hosts import portal_host
 REGISTER_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "register/api.js",
     "register/states.js",
     "register/app.js",
@@ -86,7 +85,6 @@ def register_page(request):
 ABSENCE_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "absences/api.js",
     "absences/states.js",
     "absences/app.js",

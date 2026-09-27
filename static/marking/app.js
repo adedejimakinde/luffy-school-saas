@@ -63,7 +63,6 @@
  */
 
 import { csrfToken } from "../web/http.js";
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, SAVE, fetchSheet, fetchWhere, sendQueued, whoIsSignedIn } from "./api.js";
 import {
   HELD,
@@ -83,17 +82,16 @@ import * as states from "./states.js";
 import { indexedDbStore, memoryStore } from "./store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose(state) + after;
+      return states.choose(state);
     case "no-term":
-      return states.noTerm() + after;
+      return states.noTerm();
     case "sheet":
-      return states.sheet({ ...state, portal }) + after;
+      return states.sheet({ ...state, portal });
     case REFUSAL.NOT_A_MARKER:
-      return states.notAMarker(state) + after;
+      return states.notAMarker(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -426,7 +424,6 @@ export async function mount(
 ) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
-  let signOutFailed = false;
   let where = null;
   let picked = { assessmentId: null, classGroupId: null };
   let outbox = null;
@@ -442,7 +439,7 @@ export async function mount(
   let outboxName_ = null;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
 
   /**
@@ -646,18 +643,6 @@ export async function mount(
     if (!hit) return;
     const action = hit.dataset.action;
 
-    if (action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        // Not `expired: true`. Signing out on purpose deletes the cookie as
-        // well as the session, so nothing lapsed.
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
     if (action === "back") {
       picked = { assessmentId: null, classGroupId: null };
       state = fromWhere({ ok: true, body: where });

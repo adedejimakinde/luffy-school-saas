@@ -12,7 +12,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
  * Which class, and for which day.
@@ -45,7 +44,6 @@ export function choose({ term = "", classes = [], on = "" } = {}) {
       )
       .join(""),
     "</ul>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -63,7 +61,6 @@ export function noTerm() {
     "<h1>No term is open</h1>",
     "<p>Your school has not marked a term as the current one, so there is ",
     "nothing to file a register against yet. The school office sets this.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -153,7 +150,6 @@ export function done({
         `was recorded for them: ${not_on_the_roster.map(nameOf).join(", ")}.</p>`
       : "",
     '<button type="button" class="again" data-action="back">Another class</button>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -168,7 +164,6 @@ export function refused({ detail = "" } = {}) {
     // A 409 or a 422 came back to a caller `session_auth` had already
     // identified, so this state stops with a live session on the page — which
     // is the platform's rule for where the button goes.
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -189,7 +184,6 @@ export function notAMarker({ detail = "" } = {}) {
       "A register is taken by a teacher, a principal or an administrator of " +
         "the school the class belongs to."}</p>`,
     "<p>If that should be you, the school office is who can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

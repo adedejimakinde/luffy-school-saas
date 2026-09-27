@@ -15,7 +15,7 @@
 .waiting tbody tr:last-child td { border-bottom: 0; }
 .waiting td.class { font-weight: 700; white-space: nowrap; }
 .waiting td.act { text-align: right; white-space: nowrap; }
-.waiting .unit { display: none; }
+.waiting td.days { white-space: nowrap; }
 
 /*
  * A row's button: 44px to a finger (`docs/design.md`'s touch rule, which the
@@ -70,7 +70,6 @@
   .waiting td.days { grid-area: days; color: var(--muted); }
   .waiting td.what { grid-area: what; }
   .waiting td.act { grid-area: act; margin-top: 6px; }
-  .waiting .unit { display: inline; }
   .waiting .row-btn { display: flex; width: 100%; }
   .waiting .row-btn > span:first-child { flex: 1; }
 }
@@ -87,4 +86,3 @@
 .today-list li:last-child { border-bottom: 0; }
 .today-list time { color: var(--muted); min-width: 3.5rem; flex: none; font-variant-numeric: tabular-nums; }
 
-button.signout { margin-top: 24px; }

@@ -87,3 +87,22 @@ test("a transport that never lands is an answer, not a throw", async () => {
   assert.deepEqual(answer, { status: 0, body: {} });
   assert.equal(sessionEnded(answer), false);
 });
+
+test("a page with the menu leaves sign-out to the menu", async () => {
+  // Every staff page draws the shell, and the shell's sidebar ends with a
+  // Sign out form (`templates/design/shell_open.html`). A second one in the
+  // page body said the same thing twice. The pages without the menu (the
+  // family's cards, the portal's landing and the two sign-in doors) keep theirs,
+  // because it is the only one they have.
+  const { readFileSync } = await import("node:fs");
+  const shellPages = [
+    "absences", "broadsheet", "comments", "fees", "home", "marking",
+    "register", "results", "roll", "setup", "staff", "timetable",
+  ];
+  for (const page of shellPages) {
+    for (const file of ["states.js", "app.js"]) {
+      const source = readFileSync(new URL(`../../static/${page}/${file}`, import.meta.url), "utf8");
+      assert.doesNotMatch(source, /web\/signout\.js|data-action="sign-out"/, `${page}/${file}`);
+    }
+  }
+});

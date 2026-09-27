@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applySave, dismiss, fromSheet, fromWhere, htmlFor, mount } from "../../static/marking/app.js";
-import { REFUSAL, SAVE, refusalFor, provesASession } from "../../static/marking/api.js";
+import { REFUSAL, SAVE, refusalFor } from "../../static/marking/api.js";
 import * as states from "../../static/marking/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -60,14 +60,6 @@ const state = () => fromSheet({ ok: true, body: SHEET });
 test("403 and 404 are different answers with different remedies", () => {
   assert.equal(refusalFor(403, {}), REFUSAL.NOT_A_MARKER);
   assert.equal(refusalFor(404, {}), REFUSAL.WRONG_HOST);
-});
-
-test("only answers that prove a session carry a sign-out button", () => {
-  // The 403 is reached only after `session_auth` identified the caller. The
-  // 404 is raised by `_school_of()` before any authority question, so it says
-  // nothing about the cookie.
-  assert.ok(provesASession({ ok: false, refusal: REFUSAL.NOT_A_MARKER }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.WRONG_HOST }));
 });
 
 test("the refusal a bursar reads does not offer her the staff door", () => {

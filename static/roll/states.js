@@ -13,7 +13,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /** The roll: every child, where they sit, and what may be done about it. */
 export function roll({
@@ -37,7 +36,6 @@ export function roll({
       : '<p class="blank">Nobody is enrolled here yet.</p>',
     may_admit ? admitForm(classes, notes.admit) : notTheAdmissionsOffice(),
     notes.place ? `<p class="note" role="alert">${esc(notes.place.detail)}</p>` : "",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -318,7 +316,6 @@ export function notTheOffice({ detail = "" } = {}) {
         "school."}</p>`,
     "<p>If that should be you, whoever runs this system for your school can ",
     "arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

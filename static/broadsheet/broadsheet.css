@@ -13,6 +13,6 @@ th, td { white-space: nowrap; }
 tfoot th, tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
 @media print {
   body { font-size: 11pt; }
-  .chooser, .back, [data-action="sign-out"] { display: none; }
+  .chooser, .back { display: none; }
   th, td { padding: 3px 6px; }
 }

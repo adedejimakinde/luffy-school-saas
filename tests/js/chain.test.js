@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { applyStep, focusFrom, fromChain, htmlFor, mount } from "../../static/results/app.js";
-import { REFUSAL, STEP, refusalFor, provesASession, takeStep } from "../../static/results/api.js";
+import { REFUSAL, STEP, refusalFor, takeStep } from "../../static/results/api.js";
 import * as states from "../../static/results/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -265,11 +265,6 @@ test("not-allowed is its own sentence, and no retry helps", () => {
 test("403 and 404 are different page-level refusals", () => {
   assert.equal(refusalFor(403, {}), REFUSAL.NOT_ON_THE_CHAIN);
   assert.equal(refusalFor(404, {}), REFUSAL.WRONG_HOST);
-});
-
-test("only answers that prove a session carry a sign-out button", () => {
-  assert.ok(provesASession({ ok: false, refusal: REFUSAL.NOT_ON_THE_CHAIN }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.WRONG_HOST }));
 });
 
 test("the refusal a bursar reads does not offer her the staff door", () => {

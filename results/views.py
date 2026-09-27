@@ -84,7 +84,6 @@ INDEX_MODULES = (
 CHAIN_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "results/api.js",
     "results/states.js",
     "results/app.js",
@@ -142,7 +141,6 @@ def card_index_page(request):
 COMMENTS_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "comments/api.js",
     "comments/states.js",
     "comments/app.js",
@@ -193,7 +191,6 @@ def chain_page(request):
 BROADSHEET_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "broadsheet/api.js",
     "broadsheet/states.js",
     "broadsheet/app.js",

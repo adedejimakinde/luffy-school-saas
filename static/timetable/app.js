@@ -11,7 +11,6 @@
  * matters most exactly when a write was refused.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   addPeriod,
@@ -24,15 +23,14 @@ import {
 } from "./api.js";
 import * as states from "./states.js";
 
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "week":
-      return states.week(state) + after;
+      return states.week(state);
     case "no-term":
-      return states.noTerm(state) + after;
+      return states.noTerm(state);
     case REFUSAL.NOT_YOURS:
-      return states.notYours() + after;
+      return states.notYours();
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -48,9 +46,8 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
   const portal = root.dataset.portal || "";
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
-  let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
 
   if (root.dataset.onSchool !== "yes") {
@@ -166,16 +163,6 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
     const hit = event.target.closest("[data-action]");
     if (!hit) return;
     const action = hit.dataset.action;
-    if (action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
     if (state.step !== "week") return;
     if (action === "clear") {
       const answer = await clearLesson({
