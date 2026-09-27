@@ -8,7 +8,9 @@ applied, one line added since that nobody has been charged yet, a standing
 concession and a revoked one, payments, a discount and one family in credit.
 JSS 1B's first-CA results are walked through the chain and released, with a
 principal's remark on each card, so a parent has a card to open; JSS 1A's stay
-in draft, so a teacher has a sheet left to mark. Result notices are turned on
+in draft, so a teacher has a sheet left to mark, with the principal's remark
+written for four of its ten children, so the principal's home has a class
+waiting on her (remarks missing for six). Result notices are turned on
 and told for JSS 1B's release, to a verified phone the demo parent already
 holds, so the fake outbox (`/dev/outbox/`) has a real message in it too.
 One login per role — administrator, principal, vice principal (academic),
@@ -251,6 +253,7 @@ class Command(BaseCommand):
 
         self._timetable(term, groups, subjects, staff, teachers)
         self._release(term, groups[1], placed[groups[1]], staff)
+        self._remarks_begun(term, groups[0], placed[groups[0]], staff)
 
         # Two weeks of registers. Children 3 and 14 are away often enough to be
         # on the principal's absence list.
@@ -343,6 +346,26 @@ class Command(BaseCommand):
         notices_service.set_offered_as(principal, result_notices=True)
         now = datetime.combine(term.starts_on, time(9, 0), tzinfo=LAGOS)
         notices_service.tell_families(sheet, actor=principal, now=now)
+
+    def _remarks_begun(self, term, group, members, staff):
+        """JSS 1A's sheet opened and left in draft, four remarks in.
+
+        Draft, because that is the only state a remark can be written in
+        (`comments.write()` refuses one on a submitted sheet), and so the only
+        state in which the home's "Remarks missing" row has somewhere useful
+        to send the principal.
+        """
+        from results import comments
+        from results import services as chain
+        from results.models import CommentAuthor
+
+        principal = staff["principal"].user
+        chain.open_sheet(group, term, principal)
+        for child in members[:4]:
+            comments.write(
+                term, child, CommentAuthor.PRINCIPAL,
+                "Settling in well. Keep asking questions in class.", by=principal,
+            )
 
     def _timetable(self, term, groups, subjects, staff, teachers):
         """Five periods and a break, and this term's week for both classes.

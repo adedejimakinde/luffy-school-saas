@@ -115,6 +115,23 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                     self.assertTrue(any(b > 0 for b in balances.values()), "nobody owes anything")
                     self.assertTrue(FeeLedgerEntry.objects.filter(kind=FeeEntryKind.DISCOUNT).exists())
 
+                    # JSS 1A is left open with four of ten principal's
+                    # remarks written, so the principal's home has a class
+                    # waiting on her, and a teacher still has a sheet to mark.
+                    from results.models import CommentAuthor, ReportCardComment, ResultSheet
+
+                    self.assertEqual(
+                        ResultSheet.objects.get(term=term, class_group__name="JSS 1A").state, "draft"
+                    )
+                    jss1a = ClassPlacement.objects.filter(term=term, class_group__name="JSS 1A")
+                    self.assertEqual(
+                        ReportCardComment.objects.filter(
+                            term=term, author=CommentAuthor.PRINCIPAL,
+                            student_membership_id__in=jss1a.values("student_membership_id"),
+                        ).count(),
+                        4,
+                    )
+
                     # The week: five periods, both classes, one free period.
                     self.assertEqual(Period.objects.count(), 5)
                     week = TimetableSlot.objects.filter(term=term)
