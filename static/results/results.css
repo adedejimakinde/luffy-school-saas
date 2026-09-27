@@ -59,7 +59,7 @@ button.signout { margin-top: 16px; }
 /* The class the page was opened for from the home page (`?class=`): the same
    blue as the active nav item, mixed lighter, and a rule, so it is found
    without reading colour alone. */
-.row.focus { background: var(--brand-tint); border-left: 4px solid var(--brand); padding-left: 10px; }
+.row.focus { background: var(--brand-tint); border-left: 4px solid var(--brand); padding-left: 10px; padding-right: 10px; }
 
 /* "Release to parents" asks first: a release cannot be taken back. */
 .confirm-release {
