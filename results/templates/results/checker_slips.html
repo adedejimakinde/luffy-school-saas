@@ -11,7 +11,7 @@ Six slips to an A4 page, each a box that does not break across pages, so the
 school can cut along the borders.
 {% endcomment %}
 <meta charset="utf-8">
-<title>Result checker slips — {{ school_name }}</title>
+<title>Result checker slips: {{ school_name }}</title>
 <style>
   @page { size: A4; margin: 10mm; }
   body { font: 10pt "DejaVu Sans", sans-serif; color: #111; margin: 0; }
@@ -30,7 +30,7 @@ school can cut along the borders.
 
 {% for slip in slips %}
 <div class="slip">
-  <h1>{{ school_name }} — result checker</h1>
+  <h1>{{ school_name }}: result checker</h1>
   <div class="who">
     {{ slip.student_name }}, {{ slip.class_group_name }}.
     {{ slip.term_label }}, {{ slip.session }}.

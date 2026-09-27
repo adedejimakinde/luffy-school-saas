@@ -162,6 +162,20 @@ class ClassRowOut(Schema):
     is_active: bool
 
 
+class CardLookOut(Schema):
+    """How this school's report card looks: its one colour, and whether it has
+    a crest. The crest itself is `GET card/crest/`, an image, so this answer
+    stays small. `crest_version` changes whenever the crest does, for the page
+    to put on the image's URL."""
+
+    colour: str
+    default_colour: str
+    has_crest: bool
+    crest_version: Optional[str] = None
+    #: What the card prints in the circle when there is no crest.
+    initials: str = ""
+
+
 class SetUpOut(Schema):
     """The school's shape: every term and every class group.
 
@@ -174,6 +188,7 @@ class SetUpOut(Schema):
     terms: List[TermRowOut]
     classes: List[ClassRowOut]
     may_set_up: bool
+    card: Optional[CardLookOut] = None
 
 
 class NewTermIn(Schema):
@@ -238,6 +253,7 @@ def setup(request):
         terms=[_term_row(t) for t in Term.objects.all()],
         classes=[_class_row(g) for g in ClassGroup.objects.all()],
         may_set_up=True,
+        card=_card_look(school),
     )
 
 
@@ -330,3 +346,126 @@ def create_class_group(request, payload: NewClassIn):
         return 422, MessageOut(detail=_first_message(exc))
 
     return 201, _class_row(group)
+
+
+# ---------------------------------------------------------------------------
+# The report card's look: the school's crest and its one colour.
+#
+# Both live on `results.ReportCardSettings`, in this school's own schema, and
+# `results.look` holds every rule about them. These routes are here because
+# the setup page is where a school sets them, and they are gated exactly as
+# the rest of setup is: host, then authority, then what was sent.
+# ---------------------------------------------------------------------------
+
+from django.http import HttpResponse  # noqa: E402
+
+from results import look  # noqa: E402
+
+_MAY_NOT_SET_THE_LOOK = (
+    "A school's crest and colour are set by its principal or an administrator."
+)
+
+
+class ColourIn(Schema):
+    #: Six hex digits; blank or null is the default blue.
+    colour: Optional[str] = None
+
+
+def _card_look(school) -> CardLookOut:
+    row = look.settings()
+    has_crest = bool(row.crest)
+    return CardLookOut(
+        colour=row.colour or look.DEFAULT_COLOUR,
+        default_colour=look.DEFAULT_COLOUR,
+        has_crest=has_crest,
+        crest_version=(
+            str(int(row.updated_at.timestamp())) if has_crest and row.updated_at else None
+        ),
+        initials=look.initials(school.name),
+    )
+
+
+def _refuse_look_outsiders(request, school):
+    if not services.can_set_up(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
+    return None
+
+
+@router.put("/card/colour/", response={200: CardLookOut, 403: MessageOut, 422: MessageOut})
+def set_card_colour(request, payload: ColourIn):
+    """The card's one colour. Refused, with a sentence, if white text on it
+    would not read (`results.look.clean_colour()`)."""
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        look.set_colour_as(request.user, school, payload.colour)
+    except look.NotAllowedToSetTheLook:
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
+    except look.LookRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _card_look(school)
+
+
+@router.post("/card/crest/", response={200: CardLookOut, 403: MessageOut, 422: MessageOut})
+def set_card_crest(request):
+    """A new crest, as a multipart `crest` file: PNG or JPG, at most 1 MB.
+
+    Read from `request.FILES` by hand rather than declared as a required
+    parameter, so a caller who may not set the look is told so before being
+    told what the route wants: host, then authority, then the field, the
+    order every route in this codebase keeps. The size is checked before the
+    file is read.
+    """
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    upload = request.FILES.get("crest")
+    if upload is None:
+        return 422, MessageOut(detail="Choose a PNG or JPG file for the crest.")
+    if upload.size > look.MAX_UPLOAD_BYTES:
+        return 422, MessageOut(detail="A crest can be at most 1 MB. Save it smaller and try again.")
+    try:
+        look.set_crest_as(request.user, school, upload.read())
+    except look.NotAllowedToSetTheLook:
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
+    except look.LookRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _card_look(school)
+
+
+@router.delete("/card/crest/", response={200: CardLookOut, 403: MessageOut})
+def clear_card_crest(request):
+    """No crest: the card prints the school's initials in its colour."""
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        look.clear_crest_as(request.user, school)
+    except look.NotAllowedToSetTheLook:
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
+    return 200, _card_look(school)
+
+
+@router.get("/card/crest/", response={403: MessageOut, 404: MessageOut})
+def card_crest(request):
+    """This school's crest, as the card prints it: a PNG, from this schema.
+
+    There is no id in the path to guess at. The school is the host's, so the
+    only crest this can answer with is the one belonging to the school whose
+    address it was asked on.
+    """
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    row = look.settings()
+    if not row.crest:
+        return 404, MessageOut(detail="This school has no crest yet.")
+    response = HttpResponse(bytes(row.crest), content_type="image/png")
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

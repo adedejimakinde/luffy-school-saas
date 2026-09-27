@@ -417,6 +417,20 @@ class ReportCardSettings(models.Model):
         help_text="Who a family should contact about a held card. Required to hold one.",
     )
 
+    #: The school's crest, as the card prints it: a PNG, square, re-encoded by
+    #: `results.look.set_crest_as()` from whatever was uploaded. Null until a
+    #: school sets one, and the card then prints the school's initials.
+    #:
+    #: **In this schema, and nowhere else.** A crest is one school's, so it is
+    #: kept where only that school's connection can read it: there is no file
+    #: path a second school could be handed, and no shared store to get wrong.
+    crest = models.BinaryField(null=True, blank=True)
+
+    #: The one colour the card is allowed: its header band and its rules. Body
+    #: text stays dark ink, for the cheap printer most cards come off.
+    #: `results.look` refuses a colour too light to carry white text.
+    colour = models.CharField(max_length=7, default="#143D8C")
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -447,6 +461,12 @@ class ReportCardSettings(models.Model):
                     | Q(withholding_contact__regex=r"\S")
                 ),
                 name="a_withholding_school_names_who_to_call",
+            ),
+            # Six hex digits, upper case: the one spelling `results.look`
+            # writes, so two schools' identical colours compare equal.
+            models.CheckConstraint(
+                condition=Q(colour__regex=r"^#[0-9A-F]{6}$"),
+                name="a_card_colour_is_six_hex_digits",
             ),
         ]
 

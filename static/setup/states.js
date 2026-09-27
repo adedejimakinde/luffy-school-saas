@@ -16,7 +16,7 @@ import { button as signOutButton } from "../web/signout.js";
  * old one in the same transaction — so the screen never has to ask anybody to
  * unset a term first, and never shows two as current.
  */
-export function shape({ terms = [], classes = [], notes = {} } = {}) {
+export function shape({ terms = [], classes = [], card = null, notes = {} } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
     "<h1>School setup</h1>",
@@ -33,7 +33,8 @@ export function shape({ terms = [], classes = [], notes = {} } = {}) {
       : '<p class="blank">No class groups yet.</p>',
     newClassForm(notes.class),
 
-    signOutButton(),
+    card ? cardLook(card, notes) : "",
+
     "</section>",
   ].join("");
 }
@@ -112,6 +113,54 @@ function newClassForm(note) {
     '<input id="level" name="level" type="number" min="0" value="0">',
     '<button type="submit">Open the group</button>',
     note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * The report card's look: the school's crest and its one colour. Both optional.
+ *
+ * The preview is the card's own header in miniature: on white, the crest or,
+ * with none, the initials in a circle of the colour, the name in the colour,
+ * and the colour's rule under it. The colour is the school's, from the API,
+ * which is why it may be written into a `style`: it is data here, not a
+ * design choice.
+ */
+function cardLook(card, notes) {
+  const colour = card.colour || card.default_colour;
+  const mark = card.has_crest
+    ? `<img class="crest-mark" src="/api/academics/card/crest/?v=${esc(card.crest_version || "")}" alt="Your crest">`
+    : `<span class="initials" aria-hidden="true" style="background: ${esc(colour)}">${esc(card.initials || "")}</span>`;
+  return [
+    '<h2 id="report-card">Report card</h2>',
+    "<p class=\"hint\">Your crest and one colour lead every report card. Both are optional.</p>",
+    '<div class="look-preview">',
+    '<div class="look-head">',
+    `<span class="mark">${mark}</span>`,
+    `<span class="look-name" style="color: ${esc(colour)}">Your school&#39;s name</span>`,
+    "</div>",
+    `<div class="look-rule" style="background: ${esc(colour)}"></div>`,
+    "</div>",
+
+    `<form class="colour-form${notes.colour ? ` ${esc(notes.colour.kind)}` : ""}" data-form="colour">`,
+    '<label for="colour">School colour</label>',
+    `<input id="colour" name="colour" type="color" value="${esc(colour)}">`,
+    '<span class="hint">Used for the school&#39;s name and the rules on the card. It has to ',
+    "read clearly on white paper, so a colour too light to read is refused.</span>",
+    '<button type="submit">Save colour</button>',
+    notes.colour ? `<p class="note" role="alert">${esc(notes.colour.detail)}</p>` : "",
+    "</form>",
+
+    `<form class="crest-form${notes.crest ? ` ${esc(notes.crest.kind)}` : ""}" data-form="crest" enctype="multipart/form-data">`,
+    '<label for="crest">Crest</label>',
+    '<input id="crest" name="crest" type="file" accept="image/png,image/jpeg" required>',
+    '<span class="hint">PNG or JPG, up to 1 MB. It is resized to a small square. ',
+    "With no crest, the card shows your school&#39;s initials in a circle.</span>",
+    '<span class="actions">',
+    '<button type="submit">Upload crest</button>',
+    card.has_crest ? '<button type="button" data-action="remove-crest">Remove crest</button>' : "",
+    "</span>",
+    notes.crest ? `<p class="note" role="alert">${esc(notes.crest.detail)}</p>` : "",
     "</form>",
   ].join("");
 }

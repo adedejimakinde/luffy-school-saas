@@ -38,6 +38,34 @@ closed issue #42.
 the maximum in every header cell and beside every subject total, which is the
 page's half of the `(name, max_score)` keying `card_columns()` argues for.
 
+## The school leads, and Classnode is a footnote
+
+The header is the school's, on white: its crest (or its initials in a circle),
+its name in its one colour (`results.look`), and a 3mm rule of that colour
+under it. A solid band of colour was the first draft; schools print hundreds
+of cards, and a band uses a lot of ink and streaks on a cheap printer. The
+colour is on the name and the card's rules and nowhere else, so every other
+word is dark ink. Classnode appears once, small, at the foot of each page.
+
+## Three things the payload does not carry, read here
+
+The admission number, the date the next term begins, and the grade key are not
+on `ReportCardOut`: the family page has never printed them, and none is a
+staff-only figure this module has to keep off the page. They are read here, at
+render time, beside the crest:
+
+- **The admission number** is `Membership.reference`, which the card row does
+  not freeze. The PDF is rendered when the card is released and stored
+  (`ReleasedCardPdf`), so the number on it is the one on record at release.
+- **"Next term begins"** is `Term.next_term_starts_on`, and the line is left
+  out when the school has not set it. Parents look for it first.
+- **The grade key** is this school's own scale (`grades.scale()`), one line,
+  highest band first, so a parent can read a letter without asking.
+
+The font is the design's own Hanken Grotesk, from the same self-hosted files
+the pages serve, loaded by path. WeasyPrint subsets it, so a card is about the
+size it was.
+
 ## No authority question is asked here
 
 Who may read a card belongs to the surface serving it. A worker rendering a
@@ -46,9 +74,19 @@ be answering with whatever the last caller left behind. `card_api` asks it for
 the page; a future download route asks it for the file.
 """
 
+from decimal import Decimal
+from pathlib import Path
+
+from django.conf import settings
 from django.template.loader import render_to_string
 
+from accounts.models import Membership
+
+from . import grades, look
 from .card_api import card_columns, card_payload, card_rows
+
+#: The design's two weights, self-hosted beside `design.css`.
+FONTS = Path(settings.BASE_DIR) / "static" / "web" / "fonts"
 
 
 def render(card) -> bytes:
@@ -77,8 +115,54 @@ def html_for(card) -> str:
     columns = card_columns(payload)
     return render_to_string(
         "results/report_card.html",
-        {"card": payload, "columns": columns, "rows": card_rows(payload, columns)},
+        {
+            "card": payload,
+            "columns": columns,
+            "rows": card_rows(payload, columns),
+            # Read from this school's own schema, at render time. The PDF is
+            # stored once made, so a card keeps the crest it was printed with.
+            "look": look.for_card(payload.school_name),
+            "admission_number": _admission_number(card),
+            "next_term_begins": card.term.next_term_starts_on,
+            "grade_key": grade_key(grades.scale()),
+            "fonts": FONTS.as_uri(),
+        },
     )
+
+
+def _admission_number(card) -> str:
+    """The child's admission number as the school holds it. Blank if none."""
+    return (
+        Membership.objects.filter(pk=card.student_membership_id)
+        .values_list("reference", flat=True)
+        .first()
+        or ""
+    )
+
+
+def _number(value: Decimal) -> str:
+    """75 for 75.00, 74.5 for 74.50: a mark as a person writes it."""
+    text = f"{value:f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
+def grade_key(bands) -> list[str]:
+    """"A1 75 to 100", "B2 70 to 74", ...: each band's letter and range.
+
+    Bands are stored as minimums, highest first (`GradeBand` says why), so a
+    band runs from its own minimum to just under the one above it. "Just
+    under" is a whole mark when every minimum is whole, and a hundredth when
+    the school has used decimals, so the key never shows a range the scale
+    does not have.
+    """
+    bands = list(bands)
+    whole = all(b.minimum == b.minimum.to_integral_value() for b in bands)
+    step = Decimal(1) if whole else Decimal("0.01")
+    key, top = [], Decimal(100)
+    for band in bands:
+        key.append(f"{band.letter} {_number(band.minimum)} to {_number(top)}")
+        top = band.minimum - step
+    return key
 
 
 def render_slips(slips, checker_address: str) -> bytes:

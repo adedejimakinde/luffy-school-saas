@@ -27,6 +27,11 @@ celery>=5.4
 redis>=5.0
 weasyprint>=62
 
+# A school's crest is re-drawn as a square PNG on upload (results/look.py), never
+# kept as sent. WeasyPrint already brings Pillow in; it is named here because
+# this project now imports it itself.
+Pillow>=10.0
+
 # What serves the application in production (`deploy/compose.yml`). Sync
 # workers: every request is short except the bulk import, and a process per
 # worker keeps a connection per request — the only topology issue #115 allows.
