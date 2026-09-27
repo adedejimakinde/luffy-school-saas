@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applySave, fromChild, fromClass, htmlFor, mount } from "../../static/comments/app.js";
+import { applySave, fromChild, fromClass, fromClasses, htmlFor, mount } from "../../static/comments/app.js";
 import { REFUSAL, SAVE, refusalFor, provesASession } from "../../static/comments/api.js";
 import * as states from "../../static/comments/states.js";
 import { forgetToken } from "../../static/web/http.js";
@@ -27,6 +27,15 @@ const CLASS = {
   rows: [
     { student_membership_id: 1, student: "Ada Obi", outstanding: [TEACHER, PRINCIPAL] },
     { student_membership_id: 2, student: "Emeka Nwosu", outstanding: [] },
+  ],
+};
+
+const CLASSES = {
+  term_id: 7,
+  term: "2025/2026 First term",
+  classes: [
+    { class_group_id: 11, class_group: "JSS 1A" },
+    { class_group_id: 12, class_group: "JSS 1B" },
   ],
 };
 
@@ -242,6 +251,78 @@ test("the class list says who is still outstanding", () => {
   assert.match(html, /Ada Obi/);
   assert.match(html, /2 still to write/);
   assert.match(html, /Both written/);
+});
+
+test("the class list offers a way to choose a different class", () => {
+  assert.match(states.classList(CLASS), /data-action="back-to-classes"/);
+});
+
+// -- issue #180: which class, before anything else ---------------------------
+
+test("with no class given, the page opens on a chooser rather than asking for class 0", async () => {
+  let asked = 0;
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/comments/classes/", () => {
+        asked += 1;
+        return { status: 200, body: CLASSES };
+      }],
+    ]),
+  });
+
+  assert.equal(asked, 1);
+  assert.match(root.innerHTML, /data-state="choose"/);
+  assert.match(root.innerHTML, /JSS 1A/);
+  assert.match(root.innerHTML, /JSS 1B/);
+});
+
+test("picking a class loads its list", async () => {
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/comments/classes/", { status: 200, body: CLASSES }],
+      ["/api/results/comments/?", { status: 200, body: CLASS }],
+    ]),
+  });
+
+  await root.click({ "data-action": "pick-class", "data-class": "11" });
+
+  assert.match(root.innerHTML, /data-state="class"/);
+  assert.match(root.innerHTML, /Ada Obi/);
+});
+
+test("choosing a different class returns to the chooser", async () => {
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/comments/classes/", { status: 200, body: CLASSES }],
+      ["/api/results/comments/?", { status: 200, body: CLASS }],
+    ]),
+  });
+
+  await root.click({ "data-action": "pick-class", "data-class": "11" });
+  await root.click({ "data-action": "back-to-classes" });
+
+  assert.match(root.innerHTML, /data-state="choose"/);
+});
+
+test("a school with no classes says so rather than showing an empty list", () => {
+  assert.match(states.choose({ term: "2025/2026 First term", classes: [] }), /no classes set up/);
+});
+
+test("a class group given directly skips the chooser, for a page that one day links to one", async () => {
+  const root = fakeRoot({});
+  await mount(root, {
+    classGroupId: 11,
+    fetchImpl: serve([["/api/results/comments/?", { status: 200, body: CLASS }]]),
+  });
+
+  assert.match(root.innerHTML, /data-state="class"/);
+});
+
+test("fromClasses carries a refusal the same way every other loader does", () => {
+  assert.equal(fromClasses({ ok: false, refusal: REFUSAL.WRONG_HOST, body: {} }).step, REFUSAL.WRONG_HOST);
 });
 
 // -- refusals and hosts ------------------------------------------------------

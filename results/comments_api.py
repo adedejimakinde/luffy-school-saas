@@ -75,6 +75,21 @@ class ClassListOut(Schema):
     rows: List[ChildRowOut]
 
 
+class ClassChoiceOut(Schema):
+    class_group_id: int
+    class_group: str
+
+
+class ClassesOut(Schema):
+    """Which class to open, before anything is opened. `docs/comments.md`
+    calls this the page's real gap (issue #180): nothing before it ever told
+    the frame which class it was for."""
+
+    term_id: Optional[int]
+    term: Optional[str]
+    classes: List[ClassChoiceOut]
+
+
 class RemarkOut(Schema):
     """One signatory's remark, and whether this login may sign it.
 
@@ -189,6 +204,43 @@ def _names_for(school, student_ids) -> dict:
             school=school, role=Role.STUDENT.value, pk__in=list(student_ids)
         ).values("pk", "display_name", "user__full_name")
     }
+
+
+@router.get("/comments/classes/", response={200: ClassesOut, 403: MessageOut})
+def classes(request):
+    """Which class to open. Issue #180: nothing served this before.
+
+    **Every active class is listed, on `chain()`'s reasoning**: who may
+    actually sign is a question about one class (the class teacher of that
+    group, or the principal for any of them — `_may_sign()`), and a list
+    narrowed to "yours" here would be a second, weaker copy of that check,
+    drawn before the child is even known. `class_list()` below asks the real
+    question when a class is opened, and refuses the wrong caller there
+    instead. So this route asks only "does this login sign remarks at all" —
+    `VIEWING_ROLES`, the same gate `class_list()` opens with.
+
+    Term-scoped only in what it is silent about: a school with no current term
+    still gets its classes back, because the frame's next step
+    (`class_list()`) is what says there is no term to write against. Deciding
+    that twice would risk the two answers disagreeing.
+    """
+    school = _school_of(request)
+    roles = set(request.user.roles_at(school))
+    refused = _refuse_outsiders(request, school, roles)
+    if refused is not None:
+        return refused
+
+    term = _current_term()
+    return ClassesOut(
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        classes=[
+            ClassChoiceOut(class_group_id=group.pk, class_group=group.name)
+            for group in ClassGroup.objects.filter(is_active=True).order_by(
+                "level", "name"
+            )
+        ],
+    )
 
 
 @router.get("/comments/", response={200: ClassListOut, 403: MessageOut, 422: MessageOut})

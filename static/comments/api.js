@@ -27,6 +27,8 @@ export const SAVE = {
 
 const SESSION_EXPIRED = "session_expired";
 
+export const CLASSES_URL = "/api/results/comments/classes/";
+
 export function listUrl(classGroupId) {
   return `/api/results/comments/?class_group_id=${encodeURIComponent(classGroupId)}`;
 }
@@ -83,6 +85,11 @@ async function read(url, fetchImpl) {
     refusal: refusalFor(answer.status, answer.body),
     body: answer.body || {},
   };
+}
+
+/** Which class to open. Issue #180: the frame never had this before. */
+export function fetchClasses({ fetchImpl = fetch } = {}) {
+  return read(CLASSES_URL, fetchImpl);
 }
 
 /** Who in this class still needs which remark. */
