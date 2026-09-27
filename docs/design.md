@@ -54,8 +54,17 @@ Mobile first, checked at 360, 768 and 1280.
   so no link leads to a refusal; `tests/test_menu.py` checks that against the
   real routes, both ways.
 - Stat cards run four across on a desktop, two on a tablet, one on a phone.
-- A wide table scrolls sideways inside its card (`.scroll`, `.table-scroll`),
-  with its first column fixed. The page itself never scrolls sideways.
+- **Below 640px every list table is a stack of cards, one per row**
+  (`table.stack`): the row's name or number heads the card, each other cell is
+  a "label  value" line from its `data-label`, and a row's problems or buttons
+  close the card. A list that is already a `ul` (the roll, results, staff) is
+  the same card (`.stack-list`).
+- **Three tables keep scrolling sideways on a phone**, because their columns
+  are the point: the broadsheet, the timetable and the marking sheet. They sit
+  in a `.wide` scroller with the first column fixed (the broadsheet fixes the
+  name too) and a "Swipe for more" cue above. `tests/ui/screens.test.js`
+  fails any other table wider than a 360px screen. The page itself never
+  scrolls sideways, and no scroller has a minimum height.
 - Forms and side panels (`.split`) stack into one column on a phone.
 - Touch targets are at least 44px. Body text on a phone is never under 15px.
 

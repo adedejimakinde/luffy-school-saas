@@ -12,6 +12,11 @@
  * - **text on a phone is under 15px.** At 360 only, and not for the small
  *   labels the design sets smaller on purpose (`.label`, `.tag`, `.revised`,
  *   `.nav-heading`, `.tab-label`);
+ * - **a table is wider than a phone's screen.** Below 640px a list table is a
+ *   stack of cards (`design.css`'s `table.stack`). Only the three whose columns
+ *   are the point may scroll sideways, `WIDE_TABLES`, and each of those needs
+ *   a `.wide` scroller and a visible "swipe for more" cue before it;
+ * - **"Waiting for you" says a bare number** where it means days;
  * - **a stat card's figure wraps or spills out of its card** at 1024px or
  *   wider, where the cards run four across and are narrowest. A screen can
  *   ask for extra widths (`widths`) to be measured at that edge exactly.
@@ -53,6 +58,13 @@ const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
+
+/**
+ * The only tables that may be wider than a phone: the broadsheet, the
+ * timetable and the marking sheet (which is a list today, and would join
+ * here if it ever became a table).
+ */
+const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet";
 
 /** Labels the design sets below body size on purpose. */
 const SMALL_ON_PURPOSE = ".label, .tag, .revised, .nav-heading, .tab-label";
@@ -154,7 +166,7 @@ export const SCREENS = [
 ];
 
 /** What a screen breaks, measured in the page. Pure, so it can run anywhere. */
-function measure({ smallOnPurpose, phone, wide }) {
+function measure({ smallOnPurpose, phone, wide, wideTables }) {
   const problems = [];
   const root = document.documentElement;
   if (root.scrollWidth > root.clientWidth) {
@@ -188,6 +200,28 @@ function measure({ smallOnPurpose, phone, wide }) {
   }
 
   if (phone) {
+    for (const table of document.querySelectorAll("table")) {
+      if (!visible(table)) continue;
+      const holder = table.parentElement;
+      const room = Math.min(root.clientWidth, holder ? holder.clientWidth : root.clientWidth);
+      const width = Math.round(table.getBoundingClientRect().width);
+      if (!table.matches(wideTables)) {
+        if (width > room + 1) problems.push(`table ${width}px wide in ${room}px, and not one of the three that may scroll: ${describe(table)}`);
+        continue;
+      }
+      const scroller = table.closest(".wide");
+      if (!scroller) problems.push(`a wide table outside a .wide scroller: ${describe(table)}`);
+      const cue = scroller && scroller.previousElementSibling;
+      if (width > room + 1 && !(cue && cue.matches(".swipe-cue") && visible(cue))) {
+        problems.push(`a wide table with no visible "swipe for more" cue: ${describe(table)}`);
+      }
+    }
+    for (const cell of document.querySelectorAll(".waiting td.days")) {
+      if (visible(cell) && /^\d+$/.test(cell.textContent.trim())) {
+        problems.push(`"Waiting for you" says a bare "${cell.textContent.trim()}", not days`);
+      }
+    }
+
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const seen = new Set();
     while (walker.nextNode()) {
@@ -256,7 +290,12 @@ async function check(page, width, name) {
   mkdirSync(join(OUT, String(width)), { recursive: true });
   await page.screenshot({ path: join(OUT, String(width), `${name}.png`), fullPage: true });
   return (
-    await page.evaluate(measure, { smallOnPurpose: SMALL_ON_PURPOSE, phone: width < 640, wide: width >= 1024 })
+    await page.evaluate(measure, {
+      smallOnPurpose: SMALL_ON_PURPOSE,
+      phone: width < 640,
+      wide: width >= 1024,
+      wideTables: WIDE_TABLES,
+    })
   ).map(
     (problem) => `${width}px ${name}: ${problem}`,
   );

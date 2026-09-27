@@ -18,3 +18,17 @@
 .rows td.bad:empty::after { content: "Missing"; }
 .problems { margin: 6px 0 0; padding-left: 18px; }
 .problems li + li { margin-top: 4px; }
+
+/* The phone's card: "Row 3" and its verdict, the values, then the problems.
+   A problem's empty cell still says "Missing" there. */
+.rows td.card-only { display: none; }
+@media (max-width: 639.98px) {
+  table.rows.stack td.card-only { display: flex; justify-content: flex-start; gap: 10px; }
+  table.rows.stack td.check { order: 99; }
+  table.rows.stack td.check > .label { display: none; }
+  table.rows.stack td.bad:empty { display: flex; }
+  /* A decoration would reach the cell's label too; bold and the problems
+     list under the card say which value is wrong. */
+  table.rows.stack td.bad { text-decoration: none; }
+  .rows td.check { min-width: 0; }
+}

@@ -16,3 +16,14 @@ tfoot th, tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
   .chooser, .back { display: none; }
   th, td { padding: 3px 6px; }
 }
+
+/* The position and the name both stay put while the subjects scroll under
+   them: a position alone does not say whose row it is. */
+.broadsheet :is(th, td):first-child { width: 3.5rem; min-width: 3.5rem; box-shadow: none; }
+.broadsheet tbody td:nth-child(2), .broadsheet thead th:nth-child(2) {
+  position: sticky;
+  left: 3.5rem;
+  z-index: 1;
+  background: var(--card);
+  box-shadow: inset -1px 0 0 var(--border);
+}

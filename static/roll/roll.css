@@ -37,3 +37,13 @@ form.handle-taken, form.rejected, form.not-allowed { background: var(--stop-bg);
 .guardian .channel[data-state="dormant"] .channel-state { color: var(--warn); }
 .guardian .add-contact { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 form.link-guardian.rejected, form.link-guardian.not-allowed { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
+
+/* On a phone each child is a card (`design.css`'s `.stack-list`): the name and
+   handle, then "Admission no." and "Class" as labelled lines, then Guardians. */
+.class-line { display: contents; }
+@media (max-width: 639.98px) {
+  .child .class-line { display: flex; align-items: center; }
+  .child .reference { font-size: inherit; color: var(--text); }
+  .child select { flex: 1 1 10rem; max-width: 14rem; }
+  .child > button { flex: 1 1 100%; }
+}

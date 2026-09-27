@@ -98,15 +98,17 @@ function marks(payload) {
     )
     .join("");
 
-  const body = (payload.subjects || []).map((line) => row(line, columns.length)).join("");
+  const body = (payload.subjects || []).map((line) => row(line, columns)).join("");
 
   return [
     // The scroll box `card.css` needs: eleven columns cannot fit a phone, and
     // the honest answer is a table that scrolls inside its own box rather than
     // a page that scrolls sideways and takes the headings with it. `print.css`
     // unsets it, because paper has no scroll.
+    // Below 640px `design.css` stacks it instead: one card per subject, each
+    // paper a labelled line.
     '<div class="grid-scroll">',
-    '<table class="grid">',
+    '<table class="grid stack">',
     "<thead><tr>",
     '<th scope="col">Subject</th>',
     head,
@@ -122,21 +124,28 @@ function marks(payload) {
   ].join("");
 }
 
-function row(line, columnCount) {
+function row(line, columns) {
   // `cells` is already the length of `columns`; slicing or padding here would
   // be this file deciding the alignment after all. If the two ever disagree
   // that is a payload bug, and a short row is visible rather than papered over.
-  const cells = (line.cells || []).map((cell) => `<td class="n">${mark(cell)}</td>`).join("");
+  // Each cell names its paper for the phone's card, where there is no header.
+  const cells = (line.cells || [])
+    .map((cell, i) => {
+      const column = columns[i];
+      const label = column ? ` data-label="${esc(column.name)} /${esc(column.max_score)}"` : "";
+      return `<td class="n"${label}>${mark(cell)}</td>`;
+    })
+    .join("");
   return [
     "<tr>",
-    `<td>${esc(line.subject_name)}${scorebar(line.percentage)}</td>`,
+    `<td class="stack-head">${esc(line.subject_name)}${scorebar(line.percentage)}</td>`,
     cells,
-    `<td class="n">${esc(line.total_scored)}<span class="max">/${esc(
+    `<td class="n" data-label="Total">${esc(line.total_scored)}<span class="max">/${esc(
       line.total_available,
     )}</span></td>`,
-    `<td class="n">${percentage(line.percentage)}</td>`,
-    `<td class="n">${esc(line.grade_letter)}</td>`,
-    `<td>${esc(line.grade_remark)}</td>`,
+    `<td class="n" data-label="%">${percentage(line.percentage)}</td>`,
+    `<td class="n" data-label="Grade">${esc(line.grade_letter)}</td>`,
+    `<td data-label="Remark">${esc(line.grade_remark)}</td>`,
     "</tr>",
   ].join("");
 }

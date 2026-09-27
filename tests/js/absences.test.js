@@ -60,8 +60,8 @@ test("the children are drawn in the server's order, with the server's rate", () 
   const html = states.list({ absences: LIST });
 
   assert.ok(html.indexOf("Emeka E") < html.indexOf("Ada A"), "the page re-sorted the list");
-  assert.match(html, /<td class="num">30\.0%<\/td>/);
-  assert.match(html, /<td class="num">12\.5%<\/td>/);
+  assert.match(html, /<td class="num" data-label="Absent">30\.0%<\/td>/);
+  assert.match(html, /<td class="num" data-label="Absent">12\.5%<\/td>/);
   assert.match(html, /Absent on at least 10% of the days marked, once 10 days have been marked\./);
   assert.match(html, /A day with no register counts for nothing/);
 });

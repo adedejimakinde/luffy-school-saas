@@ -150,8 +150,8 @@ test("a gap and an unmarked paper do not print the same", () => {
   // `·` is "this subject has no such paper"; `—` is "the child was not marked
   // in it". Two absences that mean different things, on a page somebody will
   // ask a teacher about.
-  const row = card(payload()).match(/<tr><td>Mathematics.*?<\/td>(.*?)<\/tr>/)[1];
-  const cells = [...row.matchAll(/<td class="n">(.*?)<\/td>/g)].map((m) => m[1]);
+  const row = card(payload()).match(/<tr><td class="stack-head">Mathematics.*?<\/td>(.*?)<\/tr>/)[1];
+  const cells = [...row.matchAll(/<td class="n"[^>]*>(.*?)<\/td>/g)].map((m) => m[1]);
   assert.match(cells[0], /^17$/, "the mark");
   assert.match(cells[1], /&middot;/, "Mathematics has no Exam out of 100: a gap");
   assert.match(cells[2], /&mdash;/, "nobody marked the Mid-term: a dash");
@@ -160,11 +160,11 @@ test("a gap and an unmarked paper do not print the same", () => {
 
 test("every row is as long as the header", () => {
   const html = card(payload());
-  const rows = [...html.matchAll(/<tr><td>(?:English|Mathematics).*?<\/td>(.*?)<\/tr>/g)];
+  const rows = [...html.matchAll(/<tr><td class="stack-head">(?:English|Mathematics).*?<\/td>(.*?)<\/tr>/g)];
   assert.equal(rows.length, 2);
   for (const [, row] of rows) {
     // Four column cells, plus total, percentage, grade.
-    assert.equal([...row.matchAll(/<td class="n">/g)].length, 7);
+    assert.equal([...row.matchAll(/<td class="n"[ >]/g)].length, 7);
   }
 });
 
@@ -172,8 +172,8 @@ test("each subject row carries a bar reading its own percentage", () => {
   const html = card(payload());
   // English: 74.17%. Mathematics: 90.71%. Neither is rounded for the bar —
   // the same string `percentage()` prints under the same subject.
-  assert.match(html, /<td>English<div class="scorebar"><span style="width:74\.17%">/);
-  assert.match(html, /<td>Mathematics<div class="scorebar"><span style="width:90\.71%">/);
+  assert.match(html, /<td class="stack-head">English<div class="scorebar"><span style="width:74\.17%">/);
+  assert.match(html, /<td class="stack-head">Mathematics<div class="scorebar"><span style="width:90\.71%">/);
 });
 
 test("a subject with no percentage gets no bar, not a zero-width one", () => {
@@ -192,7 +192,7 @@ test("a subject with no percentage gets no bar, not a zero-width one", () => {
       ],
     }),
   );
-  assert.match(html, /<td>French<\/td>/, "no scorebar div at all");
+  assert.match(html, /<td class="stack-head">French<\/td>/, "no scorebar div at all");
 });
 
 test("a percentage past the ends of the scale is clamped, not overflowed", () => {

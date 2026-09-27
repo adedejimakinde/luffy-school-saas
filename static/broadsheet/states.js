@@ -81,18 +81,18 @@ export function overview({ terms = [], overview: body = {} } = {}) {
     `<h2>${esc(term)}</h2>`,
     classes.length
       ? [
-          '<div class="scroll"><table class="overview">',
+          '<div class="scroll"><table class="overview stack">',
           "<thead><tr><th>Class</th><th>Class average</th>",
           "<th>Children with an average</th><th>Figures</th></tr></thead><tbody>",
           classes
             .map(
               (c) =>
                 "<tr>" +
-                `<td><button type="button" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
+                `<td class="stack-head"><button type="button" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
                 `${esc(c.class_group)}</button></td>` +
-                `<td class="num">${figure(c.class_average)}</td>` +
-                `<td class="num">${esc(c.children_with_an_average)}</td>` +
-                `<td>${c.from_snapshot ? "Released" : "Live"}</td>` +
+                `<td class="num" data-label="Class average">${figure(c.class_average)}</td>` +
+                `<td class="num" data-label="Children with an average">${esc(c.children_with_an_average)}</td>` +
+                `<td data-label="Figures">${c.from_snapshot ? "Released" : "Live"}</td>` +
                 "</tr>",
             )
             .join(""),
@@ -132,7 +132,10 @@ export function sheet({ broadsheet: body = {} } = {}) {
     banner(from_snapshot),
     rows.length
       ? [
-          '<div class="scroll"><table class="broadsheet">',
+          // One of the three tables that scroll sideways on a phone: its
+          // columns are the point. Position and name stay put.
+          '<p class="swipe-cue">Swipe for more subjects</p>',
+          '<div class="scroll wide"><table class="broadsheet">',
           "<thead><tr><th>Pos.</th><th>Name</th>",
           subjects.map(([, name]) => `<th>${esc(name)}</th>`).join(""),
           "<th>Average</th></tr></thead><tbody>",

@@ -55,7 +55,7 @@ function thresholdForm(body, note) {
 
 function table(children) {
   return [
-    '<div class="scroll"><table class="absences">',
+    '<div class="scroll"><table class="absences stack">',
     "<thead><tr><th>Name</th><th>Class</th>",
     '<th class="num">Days absent</th><th class="num">Days marked</th>',
     '<th class="num">Absent</th></tr></thead><tbody>',
@@ -63,11 +63,11 @@ function table(children) {
       .map(
         (c) =>
           "<tr>" +
-          `<td>${esc(c.student)}</td>` +
-          `<td>${esc(c.class_group)}</td>` +
-          `<td class="num">${esc(c.absent)}</td>` +
-          `<td class="num">${esc(c.marked)}</td>` +
-          `<td class="num">${esc(c.rate)}%</td>` +
+          `<td class="stack-head">${esc(c.student)}</td>` +
+          `<td data-label="Class">${esc(c.class_group)}</td>` +
+          `<td class="num" data-label="Days absent">${esc(c.absent)}</td>` +
+          `<td class="num" data-label="Days marked">${esc(c.marked)}</td>` +
+          `<td class="num" data-label="Absent">${esc(c.rate)}%</td>` +
           "</tr>",
       )
       .join(""),

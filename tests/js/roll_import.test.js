@@ -118,10 +118,12 @@ test("a file with problems has no admit button, and each problem sits under its 
   assert.match(html, /1 row to fix/);
   assert.match(html, /Nothing has been saved/);
   const three = html.slice(html.indexOf('data-line="3"'));
-  assert.match(three, /<td class="num">3<\/td>/);
+  assert.match(three, /<td class="stack-head card-only">Row 3 <span class="label label-stop">Fix<\/span><\/td>/);
+  assert.match(three, /<td class="num stack-hide">3<\/td>/);
   assert.match(three, /<strong>Full name:<\/strong> A name is required\./);
   assert.match(three, /<strong>Reference:<\/strong> &#39;0100&#39; appears twice in this file\./);
-  assert.match(three, /<td class="bad">JSS 9Z<\/td>/);
+  assert.match(three, /<td data-label="Class" class="bad">JSS 9Z<\/td>/);
+  assert.match(three, /<td class="check stack-full">/, "the problems close the phone's card");
   // Row 2 passed, and says so, in the same table.
   const two = html.slice(html.indexOf('data-line="2"'), html.indexOf('data-line="3"'));
   assert.match(two, /label-ok">Ready/);
@@ -181,7 +183,7 @@ test("done lists the usernames it made, by row and name, and the guardians still
   });
 
   assert.match(html, /2 children were admitted/);
-  assert.match(html, /<td class="num">2<\/td><td>Ada Obi<\/td><td>STM\/0100<\/td>/);
+  assert.match(html, /<td class="num" data-label="Row">2<\/td><td class="stack-head">Ada Obi<\/td><td data-label="Username">STM\/0100<\/td>/);
   assert.match(html, /1 guardian link is waiting/);
   assert.match(html, /href="\/roll\/"/);
 });
