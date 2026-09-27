@@ -35,7 +35,11 @@ a browser's storage is something the next person to pick up the phone can
 replay.
 """
 
+from django.contrib.auth import logout as end_session
+from django.http import HttpResponseRedirect
 from django.shortcuts import render
+from django.utils.http import url_has_allowed_host_and_scheme
+from django.views.decorators.http import require_POST
 
 import pages
 from schools.hosts import portal_host
@@ -183,6 +187,33 @@ def invitation_page(request, token):
     )
     response["Cache-Control"] = "no-store"
     return response
+
+
+@require_POST
+def sign_out(request):
+    """The menu's Sign out: end the session, then go to the staff door.
+
+    A form post and not the API's `/api/logout/`, so the one button in the
+    shared menu works on every page without a page's module wiring it up. It is
+    still CSRF-checked, by Django's middleware, for the reason the API route
+    gives: a sign-out any other origin could trigger would throw away a
+    teacher's session in the middle of marking. POST only, so a link or a
+    prefetch cannot sign anybody out.
+
+    It lands on the portal's staff sign-in, which is on another host, so the
+    link is the portal's full name. Where no portal is configured it goes back
+    to the page it came from, which draws its own "Please sign in"; `next` is
+    checked against this host first, so the form cannot be used to send
+    somebody anywhere else.
+    """
+    end_session(request)
+    host = portal_host()
+    if host:
+        return HttpResponseRedirect(f"//{host}/staff-sign-in/")
+    back = request.POST.get("next") or "/"
+    if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+        back = "/"
+    return HttpResponseRedirect(back)
 
 
 def refused(request, exception=None):

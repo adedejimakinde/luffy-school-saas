@@ -189,3 +189,85 @@ class EveryLinkOpensTests(ChainSetUp):
         page = self.client.get("/results/", HTTP_HOST=PORTAL).content.decode()
 
         self.assertEqual(_HREF.findall(_SIDEBAR.search(page).group(0)), [])
+
+
+class SignOutTests(ChainSetUp):
+    """Sign out, in the menu, for every signed-in login: a staff-room computer
+    is shared, and nobody could sign out once the page bodies lost the button."""
+
+    def setUp(self):
+        super().setUp()
+        self.admin = grant_membership(
+            User.objects.create_user("ade", PASSWORD, full_name="Ade Admin"), self.stmarys, Role.ADMIN
+        )
+
+    def page(self, client, path="/results/", host=HOST):
+        return client.get(path, HTTP_HOST=host).content.decode()
+
+    def test_every_role_is_offered_it_in_the_menu(self):
+        for member in (self.head, self.vp, self.teacher, self.bursar, self.admin, self.children["ada"]):
+            with self.subTest(role=member.role):
+                self.client.force_login(member.user)
+                sidebar = _SIDEBAR.search(self.page(self.client)).group(0)
+                self.assertIn('<form class="nav nav-end" method="post" action="/sign-out/">', sidebar)
+                self.assertIn('name="csrfmiddlewaretoken"', sidebar)
+                self.assertIn(">Sign out</button>", sidebar)
+
+    def test_nobody_signed_in_is_offered_it(self):
+        self.client.logout()
+
+        self.assertNotIn("/sign-out/", self.page(self.client))
+
+    def csrf_client(self, member):
+        from django.test import Client
+
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(member.user)
+        token = re.search(r'name="csrfmiddlewaretoken" value="([^"]+)"', self.page(client)).group(1)
+        return client, token
+
+    def signed_in(self, client):
+        return client.get("/api/home/", HTTP_HOST=HOST).status_code != 401
+
+    def test_it_signs_out_and_lands_on_the_staff_door(self):
+        client, token = self.csrf_client(self.head)
+        self.assertTrue(self.signed_in(client), "the control: signed in before")
+
+        response = client.post(
+            "/sign-out/", {"csrfmiddlewaretoken": token, "next": "/results/"}, HTTP_HOST=HOST
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], f"//{PORTAL}/staff-sign-in/")
+        self.assertFalse(self.signed_in(client))
+
+    def test_without_the_token_nobody_is_signed_out(self):
+        """Another origin must not be able to end a teacher's session."""
+        client, _ = self.csrf_client(self.head)
+
+        response = client.post("/sign-out/", {}, HTTP_HOST=HOST)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self.signed_in(client))
+
+    def test_a_link_or_a_prefetch_cannot_sign_anybody_out(self):
+        client, _ = self.csrf_client(self.head)
+
+        self.assertEqual(client.get("/sign-out/", HTTP_HOST=HOST).status_code, 405)
+        self.assertTrue(self.signed_in(client))
+
+    def test_with_no_portal_it_goes_back_to_the_page_and_nowhere_else(self):
+        from schools.models import Domain
+
+        Domain.objects.filter(tenant__schema_name="public").delete()
+        for asked, landed in (
+            ("/results/", "/results/"),
+            ("//evil.example/steal/", "/"),
+            ("https://evil.example/", "/"),
+        ):
+            with self.subTest(next=asked):
+                client, token = self.csrf_client(self.head)
+                response = client.post(
+                    "/sign-out/", {"csrfmiddlewaretoken": token, "next": asked}, HTTP_HOST=HOST
+                )
+                self.assertEqual(response["Location"], landed)

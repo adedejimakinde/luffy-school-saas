@@ -621,7 +621,7 @@ body.has-shell { padding: 0; }
   text-transform: uppercase;
 }
 
-.nav a {
+.nav a, .nav .nav-button {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -632,7 +632,19 @@ body.has-shell { padding: 0; }
   border-radius: var(--radius);
 }
 
-.nav a:hover { color: var(--brand); background: var(--bg); }
+/* Sign out is a form's button, drawn as one more nav item: not the page's
+   primary action, so none of a submit button's blue. */
+.nav .nav-button {
+  width: 100%;
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.nav a:hover, .nav .nav-button:hover { color: var(--brand); background: var(--bg); }
 
 .nav a[aria-current="page"] {
   color: var(--brand);
@@ -640,10 +652,10 @@ body.has-shell { padding: 0; }
   font-weight: 700;
 }
 
-.nav a .icon { color: var(--muted); }
-.nav a:hover .icon, .nav a[aria-current="page"] .icon { color: var(--brand); }
+.nav a .icon, .nav .nav-button .icon { color: var(--muted); }
+.nav a:hover .icon, .nav a[aria-current="page"] .icon, .nav .nav-button:hover .icon { color: var(--brand); }
 
-/* Settings sits at the bottom of the sidebar, whatever is above it. */
+/* Settings, and Sign out, sit at the bottom of the sidebar, whatever is above. */
 .sidebar .nav-end { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--divider); }
 
 .topbar {
