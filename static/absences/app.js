@@ -7,19 +7,17 @@
  * drawn by the rule it prints.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, fetchAbsences, saveThreshold } from "./api.js";
 import * as states from "./states.js";
 
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "list":
-      return states.list(state) + after;
+      return states.list(state);
     case "no-term":
-      return states.noTerm(state) + after;
+      return states.noTerm(state);
     case REFUSAL.NOT_YOURS:
-      return states.notYours() + after;
+      return states.notYours();
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -35,9 +33,8 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
   const portal = root.dataset.portal || "";
   const asked = new URLSearchParams(search).get("term");
   let state = { step: "loading" };
-  let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
 
   if (root.dataset.onSchool !== "yes") {
@@ -89,18 +86,6 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
       return;
     }
     state = { ...state, note: saved.body.detail || "That could not be saved." };
-    draw();
-  });
-
-  root.addEventListener("click", async (event) => {
-    const hit = event.target.closest("[data-action]");
-    if (!hit || hit.dataset.action !== "sign-out") return;
-    const ended = sessionEnded(await signOut({ fetchImpl }));
-    if (ended) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
     draw();
   });
 

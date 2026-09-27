@@ -101,7 +101,6 @@ def staff_sign_in_page(request):
 ROLL_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "roll/api.js",
     "roll/states.js",
     "roll/app.js",
@@ -130,7 +129,6 @@ def roll_page(request):
 STAFF_PAGE_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "staff/api.js",
     "staff/states.js",
     "staff/app.js",

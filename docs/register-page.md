@@ -132,11 +132,9 @@ for both is wrong for whichever reader it was not written for. The 409 and the
 422 keep their own sentence rather than becoming `broken`, because both are
 answers a teacher can act on.
 
-**The sign-out button goes on the states that prove a session**, which is the
-platform-wide rule. The 403 qualifies — `_refuse_non_markers()` is reached only
-after `session_auth` has identified the caller — and the 404 does not, because
-`_school_of()` raises before any authority question and says nothing about the
-cookie. The marking screen deliberately has no button beside its submit.
+**Sign out is the menu's, not the page's.** The sidebar every staff page
+draws ends with a Sign out form (`templates/design/shell_open.html`), for any
+signed-in login, so the register draws no button of its own.
 
 ## The way back is on another host
 

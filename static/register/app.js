@@ -23,7 +23,6 @@
  * real register rather than an empty one.
  */
 
-import { button as signOutButton, failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, fetchRegister, fetchWhere, takeRegister } from "./api.js";
 import * as states from "./states.js";
 
@@ -66,26 +65,21 @@ const A_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The markup for one state of the page. Pure, so every branch is testable.
- *
- * `signOutFailed` renders **below** whatever is on screen rather than in place
- * of it: the register is still there and still submittable, and what changed is
- * only that the session is still open.
  */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose(state) + after;
+      return states.choose(state);
     case "no-term":
-      return states.noTerm() + after;
+      return states.noTerm();
     case "marking":
-      return states.marking(state) + after;
+      return states.marking(state);
     case "done":
-      return states.done(state) + after;
+      return states.done(state);
     case "refused":
-      return states.refused(state) + after;
+      return states.refused(state);
     case REFUSAL.NOT_A_MARKER:
-      return states.notAMarker(state) + after;
+      return states.notAMarker(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -135,12 +129,11 @@ export function fromRegister(answer) {
 export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
-  let signOutFailed = false;
   let where = null;
   let on = today(now, root.dataset.timeZone || SCHOOL_TIME_ZONE);
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
 
   const load = async () => {
@@ -173,20 +166,6 @@ export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) 
     const hit = event.target.closest("[data-action]");
     if (!hit) return;
     const action = hit.dataset.action;
-
-    if (action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        // Not `expired: true`. Signing out on purpose deletes the cookie as
-        // well as the session, so nothing lapsed and nothing is recoverable by
-        // trying again.
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
 
     if (action === "back") {
       state = fromWhere({ ok: true, body: where }, { on });

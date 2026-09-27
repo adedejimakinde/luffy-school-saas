@@ -11,7 +11,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { fromRegister, fromWhere, htmlFor, mount, today } from "../../static/register/app.js";
-import { REFUSAL, refusalFor, provesASession } from "../../static/register/api.js";
+import { REFUSAL, refusalFor } from "../../static/register/api.js";
 import * as states from "../../static/register/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -66,16 +66,6 @@ test("403 and 404 are different answers with different remedies", () => {
 test("the two 401s are told apart by code, not by status", () => {
   assert.equal(refusalFor(401, { code: "session_expired" }), REFUSAL.EXPIRED);
   assert.equal(refusalFor(401, { code: "not_authenticated" }), REFUSAL.SIGNED_OUT);
-});
-
-test("only answers that prove a session carry a sign-out button", () => {
-  // A 403 qualifies: `_refuse_non_markers()` is reached only after
-  // `session_auth` has identified the caller. A 404 does not: `_school_of()`
-  // raises before any authority question, so it says nothing about the cookie.
-  assert.ok(provesASession({ ok: true }));
-  assert.ok(provesASession({ ok: false, refusal: REFUSAL.NOT_A_MARKER }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.WRONG_HOST }));
-  assert.ok(!provesASession({ ok: false, refusal: REFUSAL.BROKEN }));
 });
 
 test("the refusal a bursar reads does not offer her the staff door", () => {
@@ -412,22 +402,4 @@ test("with no portal domain there is a sentence and no link", () => {
 
   assert.doesNotMatch(html, /<a /);
   assert.match(html, /go back to the sign-in page/i);
-});
-
-test("a sign-out that did not work does not empty the register", async () => {
-  forgetToken();
-  const root = fakeRoot({ portal: "portal.example.test" });
-  await mount(root, {
-    fetchImpl: serve([
-      ["/api/attendance/where/", { status: 200, body: WHERE }],
-      ["/api/logout/", { status: 502, body: {} }],
-    ]),
-  });
-
-  await root.click({ "data-action": "sign-out" });
-
-  // The dangerous direction: telling a teacher she is signed out while the
-  // cookie is live is a handset passed on with the roll still open.
-  assert.match(root.innerHTML, /JSS 1A/);
-  assert.match(root.innerHTML, /could not sign you out/i);
 });

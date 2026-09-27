@@ -7,17 +7,15 @@
  * no longer lists.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { REFUSAL, fetchInvitations, invite, resend, revoke } from "./api.js";
 import * as states from "./states.js";
 
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "list":
-      return states.list(state) + after;
+      return states.list(state);
     case REFUSAL.NOT_THE_OFFICE:
-      return states.notTheOffice(state) + after;
+      return states.notTheOffice(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -38,10 +36,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   const slug = root.dataset.school || "";
   let state = { step: "loading" };
-  let signOutFailed = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const load = async () => {
     // No slug means this frame was served on a host that is not a school's;
@@ -70,14 +67,6 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       await after(await call({ slug, invitationId: Number(hit.dataset.invitation), fetchImpl }));
       return;
     }
-    if (action !== "sign-out") return;
-    const ended = sessionEnded(await signOut({ fetchImpl }));
-    if (ended) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
-    draw();
   });
 
   root.addEventListener("submit", async (event) => {

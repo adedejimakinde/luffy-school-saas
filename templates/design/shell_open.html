@@ -9,7 +9,7 @@ bar, built from the signed-in login's roles at this school. Closed by
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
     <a class="logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
     {% if menu.groups %}
-    <div class="nav">
+    <div class="nav nav-links">
       {% for group in menu.groups %}
       {% if group.heading %}<p class="nav-heading">{{ group.heading }}</p>{% endif %}
       {% for link in group.links %}

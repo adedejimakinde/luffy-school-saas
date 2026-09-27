@@ -22,7 +22,6 @@ from schools.hosts import portal_host
 SETUP_MODULES = (
     "web/html.js",
     "web/http.js",
-    "web/signout.js",
     "setup/api.js",
     "setup/states.js",
     "setup/app.js",

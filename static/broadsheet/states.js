@@ -16,7 +16,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 const DASH = "—";
 
@@ -100,7 +99,6 @@ export function overview({ terms = [], overview: body = {} } = {}) {
           "</tbody></table></div>",
         ].join("")
       : '<p class="blank">No class has anybody in it this term.</p>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -166,7 +164,6 @@ export function sheet({ broadsheet: body = {} } = {}) {
           "</table></div>",
         ].join("")
       : '<p class="blank">Nobody in this class has a result this term.</p>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -177,7 +174,6 @@ export function noTerms() {
     "<h1>No terms yet</h1>",
     "<p>Your school has not set up a term, so there is no broadsheet to read. ",
     "The school office sets terms up.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -193,7 +189,6 @@ export function notYours() {
     "<p>Broadsheets are read by teachers, the vice principal (academic), the ",
     "principal and the school's administrators. If that should include you, ",
     "whoever runs this system for your school can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

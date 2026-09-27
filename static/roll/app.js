@@ -10,7 +10,6 @@
  * The handle is typed, never generated — see `states.js`.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   SAVE,
@@ -26,13 +25,12 @@ import {
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "roll":
-      return states.roll(state) + after;
+      return states.roll(state);
     case REFUSAL.NOT_THE_OFFICE:
-      return states.notTheOffice(state) + after;
+      return states.notTheOffice(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -99,10 +97,9 @@ export function applyWrite(state, key, result) {
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
-  let signOutFailed = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const load = async (notes = {}) => {
     const panel = state.panel || null;
@@ -177,14 +174,6 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       draw();
       return;
     }
-    if (action !== "sign-out") return;
-    const ended = sessionEnded(await signOut({ fetchImpl }));
-    if (ended) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
-    draw();
   });
 
   root.addEventListener("submit", async (event) => {

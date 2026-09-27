@@ -11,7 +11,6 @@
  */
 
 import { esc, numberOrBlank } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
  * Which assessment, and which class.
@@ -50,7 +49,6 @@ export function choose({ term = "", assessments = [], classes = [] } = {}) {
       )
       .join(""),
     "</ul>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -68,7 +66,6 @@ export function noTerm() {
     "<h1>No term is open</h1>",
     "<p>Your school has not marked a term as the current one, so there is ",
     "nothing to enter marks against yet. The school office sets this.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -131,7 +128,6 @@ export function sheet({
       .join(""),
     "</ul>",
     '<button type="button" class="back" data-action="back">Another paper</button>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -215,7 +211,6 @@ export function notAMarker({ detail = "" } = {}) {
       "Marking is done by a teacher, a principal or an administrator of the " +
         "school that set the paper."}</p>`,
     "<p>If that should be you, the school office is who can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

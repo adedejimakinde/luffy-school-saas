@@ -23,7 +23,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 import { balanceWords, naira, signed } from "./money.js";
 
 function termOptions(terms, chosen) {
@@ -72,7 +71,6 @@ export function books({
       : "",
     reminding && reminding.scope.classId == null && !reminding.scope.children ? remindingBox(reminding) : "",
     notSentSection(notSent, mayRemind, reminding),
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -108,7 +106,6 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
         "Remind families who owe in this class</button></p>"
       : "",
     reminding ? remindingBox(reminding) : "",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -365,7 +362,6 @@ export function account({
         ].join("")
       : '<p class="blank">Nothing has been charged or paid on this account yet.</p>',
     concessionsSection({ concessions, mayWrite, granting, revoking, grantDraft }),
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -397,7 +393,6 @@ export function bills({ bills: body = {} } = {}) {
           .join("") +
         "</ul>"
       : '<p class="blank">The school has no classes yet.</p>',
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -503,7 +498,6 @@ export function bill({
           "child another class's bill has charged this term is not charged here.</p>",
         ].join("")
       : "",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -545,7 +539,6 @@ export function noTerms() {
     "<h1>No terms yet</h1>",
     "<p>Your school has not set up a term, so there are no classes to show. ",
     "The school office sets terms up.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -558,7 +551,6 @@ export function notYours() {
     "<p>The school's fees are kept by the bursar and the administrators, and read ",
     "by the principal and the vice principal (academic). If that should include ",
     "you, whoever runs this system for your school can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

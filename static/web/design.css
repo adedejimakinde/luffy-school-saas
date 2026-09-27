@@ -655,8 +655,28 @@ body.has-shell { padding: 0; }
 .nav a .icon, .nav .nav-button .icon { color: var(--muted); }
 .nav a:hover .icon, .nav a[aria-current="page"] .icon, .nav .nav-button:hover .icon { color: var(--brand); }
 
-/* Settings, and Sign out, sit at the bottom of the sidebar, whatever is above. */
-.sidebar .nav-end { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--divider); }
+/*
+ * Sign out sits at the foot of the sidebar and never scrolls out of it: the
+ * links above it take the height that is left and scroll inside themselves.
+ * A phone held in landscape is shorter than a principal's list of links, and
+ * a Sign out below the fold is one nobody finds on a shared handset. The
+ * padding and negative margin keep a focused link's ring inside the box that
+ * clips it.
+ */
+.sidebar .nav-links {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  margin: -4px;
+  padding: 4px;
+}
+.sidebar .nav-end {
+  flex: none;
+  margin: auto 0 0;
+  padding-top: 12px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--divider);
+}
 
 .topbar {
   position: sticky;
@@ -778,6 +798,8 @@ body.has-shell { padding: 0; }
     inset: 0 auto 0 0;
     width: min(300px, 85vw);
     height: 100%;
+    /* The visible height, so a phone's own toolbar does not cover the foot. */
+    height: 100dvh;
     max-height: none;
     margin: 0;
     overflow-y: auto;

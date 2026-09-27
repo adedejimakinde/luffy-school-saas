@@ -59,27 +59,6 @@ export function refusalFor(status, body) {
   return REFUSAL.BROKEN;
 }
 
-/**
- * Whether this answer proves there is a session to end.
- *
- * The sign-out button is drawn on the answers that could only have come back to
- * somebody signed in, and on no others — the platform-wide rule, and a control
- * that posts a logout for a browser holding no cookie is one that does nothing
- * while looking like it did.
- *
- * The 403 qualifies and is the one worth arguing: `_refuse_non_markers()` is
- * reached only after `session_auth` has already identified the caller, so a
- * bursar reading this refusal is signed in. `SchoolAccessMiddleware`'s own 403
- * never gets here — it refuses the *frame* on the way in, and this module is
- * never loaded.
- *
- * `wrong-host` does not qualify: a 404 from `_school_of()` says nothing about
- * the cookie, because it is raised before any authority question is asked.
- */
-export function provesASession(answer) {
-  if (answer.ok) return true;
-  return answer.refusal === REFUSAL.NOT_A_MARKER;
-}
 
 async function read(url, fetchImpl) {
   let answer;

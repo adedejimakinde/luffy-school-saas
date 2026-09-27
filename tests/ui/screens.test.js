@@ -311,3 +311,39 @@ describe("every page, at every width", () => {
     });
   }
 });
+
+describe("the phone menu", () => {
+  // The principal has the longest menu, and a phone held sideways is the
+  // shortest screen a staff room has. Sign out sits at the menu's foot on
+  // both, with nothing to scroll to reach it: the links above it scroll.
+  for (const [width, height] of [[360, 740], [360, 560], [740, 360]]) {
+    test(`sign out is on screen when the menu opens at ${width}x${height}`, async () => {
+      const context = await signedIn("sunrise.principal");
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height });
+        await page.goto(`${SUNRISE}/home/`);
+        await settle(page);
+        await page.click(".menu-button");
+        await page.waitForFunction(() => document.querySelector("#sidebar").matches(":popover-open"));
+        mkdirSync(join(OUT, String(width)), { recursive: true });
+        await page.screenshot({ path: join(OUT, String(width), `menu-${width}x${height}.png`) });
+
+        const button = page.locator("#sidebar .nav-end button");
+        const box = await button.boundingBox();
+        assert.ok(box, "no Sign out in the menu");
+        assert.ok(box.y >= 0 && box.y + box.height <= height, `Sign out is at ${box.y}px of a ${height}px screen`);
+        assert.equal(await button.textContent(), "Sign out");
+        // And it is the foot: nothing of the menu below it.
+        const foot = await page.evaluate(() => {
+          const menu = document.querySelector("#sidebar").getBoundingClientRect();
+          const end = document.querySelector("#sidebar .nav-end").getBoundingClientRect();
+          return Math.round(menu.bottom - end.bottom);
+        });
+        assert.ok(foot <= 16, `${foot}px of menu below Sign out`);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});

@@ -12,7 +12,6 @@
  */
 
 import { esc } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
  * The steps, in the order the chain takes them, with what to call them.
@@ -53,7 +52,6 @@ export function chain({
       .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus }))
       .join(""),
     "</ul>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -65,7 +63,6 @@ export function noTerm() {
     "<h1>No term is open</h1>",
     "<p>Your school has not marked a term as the current one, so there are no ",
     "results to move along yet. The school office sets this.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -320,7 +317,6 @@ export function notOnTheChain({ detail = "" } = {}) {
       "Results are moved along by the class teacher, the vice principal " +
         "(academic) and the principal of the school the class belongs to."}</p>`,
     "<p>If that should be you, the school office is who can arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

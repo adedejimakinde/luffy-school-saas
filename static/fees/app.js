@@ -17,7 +17,6 @@
  * each bill write answers with the bill as it now stands.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   fetchAccount,
@@ -42,25 +41,24 @@ import {
 } from "./api.js";
 import * as states from "./states.js";
 
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "books":
-      return states.books(state) + after;
+      return states.books(state);
     case "class":
-      return states.classBalances(state) + after;
+      return states.classBalances(state);
     case "account":
-      return states.account(state) + after;
+      return states.account(state);
     case "receipt":
       return states.receipt(state);
     case "bills":
-      return states.bills(state) + after;
+      return states.bills(state);
     case "bill":
-      return states.bill(state) + after;
+      return states.bill(state);
     case "no-terms":
-      return states.noTerms() + after;
+      return states.noTerms();
     case REFUSAL.NOT_YOURS:
-      return states.notYours() + after;
+      return states.notYours();
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -90,9 +88,8 @@ export async function mount(
   //: discount and a concession sent under one key would be refused as a
   //: reused form.
   const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
-  let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const land = (answer, next) => {
     state = answer.ok ? next(answer.body) : { step: answer.refusal };
@@ -486,14 +483,6 @@ export async function mount(
       draw();
       return;
     }
-    if (action !== "sign-out") return;
-    const ended = sessionEnded(await signOut({ fetchImpl }));
-    if (ended) {
-      root.innerHTML = states.signedOut({ portal });
-      return;
-    }
-    signOutFailed = true;
-    draw();
   });
 
   return state;

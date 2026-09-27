@@ -68,11 +68,6 @@ export function refusalFor(status, body) {
   return REFUSAL.BROKEN;
 }
 
-/** Whether this answer proves there is a session to end. */
-export function provesASession(answer) {
-  if (answer.ok) return true;
-  return answer.refusal === REFUSAL.NOT_THE_OFFICE;
-}
 
 /** The school's shape: every term and every class group. */
 export async function fetchSetup({ fetchImpl = fetch } = {}) {

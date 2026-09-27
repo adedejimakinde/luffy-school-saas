@@ -6,7 +6,6 @@
  */
 
 import { esc, numberOrBlank } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
  * The school's shape: its terms and its class groups.
@@ -175,7 +174,6 @@ export function notTheOffice({ detail = "" } = {}) {
         "administrator of the school."}</p>`,
     "<p>If that should be you, whoever runs this system for your school can ",
     "arrange it.</p>",
-    signOutButton(),
     "</section>",
   ].join("");
 }

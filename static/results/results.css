@@ -43,7 +43,6 @@
 .left-out ul { margin: 0; padding-left: 20px; }
 .left-out .reference { color: var(--muted); }
 
-button.signout { margin-top: 16px; }
 
 /* "Tell families" (docs/messaging.md D9): what was asked for so far, and what happened. */
 .row .told { grid-column: 1 / -1; color: var(--muted); font-size: var(--small); }

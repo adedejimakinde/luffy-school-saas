@@ -13,7 +13,6 @@
  * a screen used a handful of times a year.
  */
 
-import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import {
   REFUSAL,
   SAVE,
@@ -28,13 +27,12 @@ import {
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
-  const after = signOutFailed ? failureNote() : "";
+export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
     case "setup":
-      return states.shape(state) + after;
+      return states.shape(state);
     case REFUSAL.NOT_THE_OFFICE:
-      return states.notTheOffice(state) + after;
+      return states.notTheOffice(state);
     case REFUSAL.WRONG_HOST:
       return states.wrongHost();
     case REFUSAL.EXPIRED:
@@ -75,10 +73,9 @@ export function applyWrite(state, key, result) {
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
-  let signOutFailed = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, signOutFailed });
+    root.innerHTML = htmlFor(state, { portal });
   };
   const load = async (notes = {}) => {
     state = fromSetup(await fetchSetup({ fetchImpl }));
@@ -98,16 +95,6 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   root.addEventListener("click", async (event) => {
     const hit = event.target.closest("[data-action]");
     if (!hit) return;
-    if (hit.dataset.action === "sign-out") {
-      const ended = sessionEnded(await signOut({ fetchImpl }));
-      if (ended) {
-        root.innerHTML = states.signedOut({ portal });
-        return;
-      }
-      signOutFailed = true;
-      draw();
-      return;
-    }
     if (hit.dataset.action === "remove-crest") {
       await after("crest", await removeCrest({ fetchImpl }));
       return;

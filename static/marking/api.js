@@ -72,17 +72,6 @@ export function refusalFor(status, body) {
   return REFUSAL.BROKEN;
 }
 
-/**
- * Whether this answer proves there is a session to end.
- *
- * The 403 qualifies — it is reached only after `session_auth` identified the
- * caller. The 404 does not: `_school_of()` raises before any authority
- * question and says nothing about the cookie.
- */
-export function provesASession(answer) {
-  if (answer.ok) return true;
-  return answer.refusal === REFUSAL.NOT_A_MARKER;
-}
 
 async function read(url, fetchImpl) {
   let answer;
