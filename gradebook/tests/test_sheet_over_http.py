@@ -29,6 +29,7 @@ marking screen against its own release.
 
 from datetime import date
 
+from django.db import connection
 from django.test import TransactionTestCase
 
 from academics.models import ClassGroup, Term, TermName
@@ -67,6 +68,20 @@ class OpeningASheetOverHttpTests(TransactionTestCase):
             self.class_group_id = ClassGroup.objects.create(
                 name="JSS 1A", level=1
             ).pk
+
+    def tearDown(self):
+        # `results/tests/test_approval_concurrency.py` carries the reason at
+        # length: `TransactionTestCase` flushes the *public* tables between
+        # tests, but a tenant schema is not a table, so `st_marys` outlives
+        # this test unless it is dropped by hand — and the request this test
+        # makes leaves the connection's `search_path` set to it, which the next
+        # `TransactionTestCase`'s `School.save()` then finds itself on. Missing
+        # this the first time round left exactly that behind and broke a test
+        # two modules away, in the same parallel worker.
+        connection.set_schema_to_public()
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP SCHEMA IF EXISTS "{self.school.schema_name}" CASCADE')
+        super().tearDown()
 
     def test_a_teacher_can_open_a_sheet_with_no_wrapping_transaction(self):
         """CONTROL: reverting `marking_sheet()` to `locked_sheet_for()` makes
