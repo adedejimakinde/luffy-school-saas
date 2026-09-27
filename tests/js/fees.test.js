@@ -138,8 +138,8 @@ test("an entry's amount carries its direction", () => {
   assert.equal(signed(-5_000_000), "−₦50,000.00");
   assert.equal(signed(15_000_000), "+₦150,000.00");
   const html = states.account({ account: account() });
-  assert.match(html, /<td class="num">−₦50,000\.00<\/td>/);
-  assert.match(html, /<td class="num">\+₦150,000\.00<\/td>/);
+  assert.match(html, /<td class="num" data-label="Amount">−₦50,000\.00<\/td>/);
+  assert.match(html, /<td class="num" data-label="Amount">\+₦150,000\.00<\/td>/);
 });
 
 // -- the account --------------------------------------------------------------

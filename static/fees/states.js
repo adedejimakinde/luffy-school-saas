@@ -84,16 +84,16 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
     `<p class="quiet">${esc(term)}. Each balance is the whole account, every term.</p>`,
     children.length
       ? [
-          '<div class="scroll"><table class="balances"><thead><tr>',
+          '<div class="scroll"><table class="balances stack"><thead><tr>',
           "<th>Name</th><th>Admission no.</th><th>Account</th></tr></thead><tbody>",
           children
             .map(
               (c) =>
                 "<tr>" +
-                `<td><button type="button" data-action="open-account" data-student="${esc(c.student_membership_id)}">` +
+                `<td class="stack-head"><button type="button" data-action="open-account" data-student="${esc(c.student_membership_id)}">` +
                 `${esc(c.student)}</button></td>` +
-                `<td>${esc(c.reference)}</td>` +
-                `<td>${balance(c.balance_kobo)}</td>` +
+                `<td data-label="Admission no.">${esc(c.reference)}</td>` +
+                `<td data-label="Account">${balance(c.balance_kobo)}</td>` +
                 "</tr>",
             )
             .join(""),
@@ -250,14 +250,14 @@ function entryRow(entry, { mayWrite, reversing }) {
   const undone = entry.reversed_by_id ? ' <span class="tag">undone</span>' : "";
   return [
     `<tr data-entry-row="${esc(entry.entry_id)}"${entry.reversed_by_id ? ' class="undone"' : ""}>`,
-    `<td>${esc(entry.effective_on)}</td>`,
-    `<td>${esc(entry.kind_label)}${undone}</td>`,
-    `<td>${esc(entry.narration)}<br><small>${esc(entry.term)}</small></td>`,
-    `<td>${esc(entry.method_label)}${entry.reference ? `<br><small>${esc(entry.reference)}</small>` : ""}</td>`,
-    `<td class="num">${esc(signed(entry.amount_kobo))}</td>`,
-    `<td class="actions">${actions.join(" ")}</td>`,
+    `<td data-label="Date">${esc(entry.effective_on)}</td>`,
+    `<td class="stack-head">${esc(entry.kind_label)}${undone}</td>`,
+    `<td data-label="For">${esc(entry.narration)}<br><small>${esc(entry.term)}</small></td>`,
+    `<td data-label="How">${esc(entry.method_label)}${entry.reference ? `<br><small>${esc(entry.reference)}</small>` : ""}</td>`,
+    `<td class="num" data-label="Amount">${esc(signed(entry.amount_kobo))}</td>`,
+    `<td class="actions stack-full">${actions.join(" ")}</td>`,
     "</tr>",
-    reversing === entry.entry_id ? `<tr><td colspan="6">${reversalForm(entry)}</td></tr>` : "",
+    reversing === entry.entry_id ? `<tr><td colspan="6" class="stack-full">${reversalForm(entry)}</td></tr>` : "",
   ].join("");
 }
 
@@ -354,7 +354,7 @@ export function account({
     "<h2>Account</h2>",
     entries.length
       ? [
-          '<div class="scroll"><table class="entries"><thead><tr>',
+          '<div class="scroll"><table class="entries stack"><thead><tr>',
           '<th>Date</th><th>What</th><th>For</th><th>How</th><th class="num">Amount</th><th></th>',
           "</tr></thead><tbody>",
           entries.map((e) => entryRow(e, { mayWrite, reversing })).join(""),
@@ -422,12 +422,12 @@ function lineRow(line, { mayWrite, changing, draft }) {
   }
   return [
     `<tr data-line-row="${esc(line.line_id)}">`,
-    `<td>${esc(line.description)}</td>`,
-    `<td class="num">${esc(naira(line.amount_kobo))}</td>`,
-    `<td>${line.charged ? `charged ${esc(line.charged)}` : '<span class="quiet">nobody charged yet</span>'}</td>`,
-    `<td class="actions">${actions.join(" ")}</td>`,
+    `<td class="stack-head">${esc(line.description)}</td>`,
+    `<td class="num" data-label="Amount">${esc(naira(line.amount_kobo))}</td>`,
+    `<td data-label="Charged">${line.charged ? `charged ${esc(line.charged)}` : '<span class="quiet">nobody charged yet</span>'}</td>`,
+    `<td class="actions stack-full">${actions.join(" ")}</td>`,
     "</tr>",
-    changing === line.line_id ? `<tr><td colspan="4">${lineForm(line, draft)}</td></tr>` : "",
+    changing === line.line_id ? `<tr><td colspan="4" class="stack-full">${lineForm(line, draft)}</td></tr>` : "",
   ].join("");
 }
 
@@ -473,7 +473,7 @@ export function bill({
     chargedSummary(charged),
     lines.length
       ? [
-          '<div class="scroll"><table class="lines"><thead><tr>',
+          '<div class="scroll"><table class="lines stack"><thead><tr>',
           '<th>What for</th><th class="num">Amount</th><th>Charged</th><th></th></tr></thead><tbody>',
           lines.map((l) => lineRow(l, { mayWrite, changing, draft: lineDraft })).join(""),
           `</tbody><tfoot><tr><th>Total</th><th class="num">${esc(naira(total_kobo))}</th><th></th><th></th></tr></tfoot>`,

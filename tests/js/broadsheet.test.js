@@ -131,7 +131,7 @@ test("the overview is classes and their averages, released or live, and nobody's
 
   assert.match(html, /JSS 1A/);
   assert.match(html, /74\.50/);
-  assert.match(html, /<td class="num">—<\/td>/);
+  assert.match(html, /<td class="num" data-label="Class average">—<\/td>/);
   assert.match(html, /Released/);
   assert.match(html, /Live/);
   assert.doesNotMatch(html, /Ada A|rank|Pos\./);

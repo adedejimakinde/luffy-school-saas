@@ -24,7 +24,7 @@ export function list({ invitations = [], roles = [], note = null, typed = null }
     "<h1>Staff invitations</h1>",
     inviteForm(roles, note, typed),
     invitations.length
-      ? `<ul class="invitations">${invitations.map(row).join("")}</ul>`
+      ? `<ul class="invitations stack-list">${invitations.map(row).join("")}</ul>`
       : '<p class="blank">Nobody is waiting on an invitation from this school.</p>',
     "</section>",
   ].join("");
@@ -34,7 +34,7 @@ function row(inv) {
   return [
     `<li class="invitation" data-status="${esc(inv.status)}">`,
     `<span class="who">${esc(inv.sent_to) || "-"}</span>`,
-    `<span class="role">${esc(inv.role_display)}</span>`,
+    `<span class="role" data-label="Role">${esc(inv.role_display)}</span>`,
     `<span class="standing">${STANDING[inv.status] || esc(inv.status)}</span>`,
     // A revoked or expired link is exactly when somebody asks for another,
     // so resend is offered on all three; revoking is only for a live one.

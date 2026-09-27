@@ -63,7 +63,10 @@ export function grid(index, week) {
   const editing = Boolean(index.may_edit);
   const at = new Map(week.lessons.map((l) => [`${l.weekday}:${l.period_id}`, l]));
   return [
-    '<div class="scroll"><table class="week">',
+    // One of the three tables that scroll sideways on a phone: a week is
+    // five days across. The period stays put.
+    '<p class="swipe-cue">Swipe for more days</p>',
+    '<div class="scroll wide"><table class="week">',
     "<thead><tr><th>Period</th>",
     index.days.map((d) => `<th>${esc(d.day)}</th>`).join(""),
     "</tr></thead><tbody>",

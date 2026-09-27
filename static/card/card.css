@@ -121,3 +121,12 @@ table { width: 100%; }
  * for is one somebody else picks up next. `print.css` removes it.
  */
 button.signout { display: block; margin: 24px auto 0; }
+
+/* On a phone the marks are one card per subject (`design.css`'s stack): the
+   bar runs the card's width under the name, and a total reads "13/20" on
+   its line rather than over two. */
+@media (max-width: 639.98px) {
+  .grid.stack td.stack-head { display: block; }
+  .grid.stack .max { display: inline; }
+  .grid.stack tbody td:first-child { min-width: 0; }
+}

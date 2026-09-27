@@ -32,7 +32,7 @@ export function roll({
     may_admit ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>' : "",
     panel ? guardiansPanel(panel) : "",
     children.length
-      ? `<ul class="children">${children
+      ? `<ul class="children stack-list">${children
           .map((c) => childRow(c, { classes, may_place }))
           .join("")}</ul>`
       : '<p class="blank">Nobody is enrolled here yet.</p>',
@@ -55,12 +55,14 @@ function childRow(c, { classes, may_place }) {
     `<li class="child${unplaced ? " unplaced" : ""}">`,
     `<span class="name">${esc(c.student)}</span>`,
     `<span class="handle">${esc(c.username)}</span>`,
-    c.reference ? `<span class="reference">${esc(c.reference)}</span>` : "",
+    c.reference ? `<span class="reference" data-label="Admission no.">${esc(c.reference)}</span>` : "",
+    '<span class="class-line" data-label="Class">',
     may_place && classes.length
       ? classChooser(c, classes)
       : `<span class="standing">${
           unplaced ? "Not in a class yet" : esc(c.class_group)
         }</span>`,
+    "</span>",
     `<button type="button" data-action="guardians" data-child="${esc(c.student_membership_id)}">`,
     "Guardians</button>",
     "</li>",

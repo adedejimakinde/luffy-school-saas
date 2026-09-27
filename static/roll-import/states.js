@@ -22,6 +22,16 @@ export const COLUMNS = [
   ["guardian_contact", "Guardian contact"],
 ];
 
+/** What each value is called on a phone's card, in the office's words. */
+const CARD_LABEL = {
+  full_name: "Name",
+  class_group: "Class",
+  reference: "Admission no.",
+  username: "Username",
+  guardian_name: "Guardian",
+  guardian_contact: "Guardian contact",
+};
+
 const HEADING = Object.fromEntries(COLUMNS);
 
 function plural(n, one, many) {
@@ -115,7 +125,7 @@ export function preview({ term = null, fileName = "", preview: p, busy = false, 
     `<span class="label">${plural(rows.length, "row", "rows")}</span></div>`,
     p.admissible ? ready(rows.length, busy) : toFix(fixes),
     note ? `<div class="msg" role="alert"><span class="label label-stop">Not admitted</span><p>${esc(note)}</p></div>` : "",
-    '<div class="table-scroll"><table class="rows">',
+    '<div class="table-scroll"><table class="rows stack">',
     "<thead><tr>",
     '<th class="num">Row</th>',
     "<th>Check</th>",
@@ -159,21 +169,28 @@ function row(r) {
     const shown = value
       ? esc(value)
       : key === "username" && !bad.has(key)
-        ? '<small>Made on import</small>'
+        ? '<span class="quiet">Made on import</span>'
         : "";
-    return `<td${bad.has(key) ? ' class="bad"' : ""}>${shown}</td>`;
+    return `<td data-label="${CARD_LABEL[key]}"${bad.has(key) ? ' class="bad"' : ""}>${shown}</td>`;
   };
+  const verdict = problems.length
+    ? '<span class="label label-stop">Fix</span>'
+    : '<span class="label label-ok">Ready</span>';
   return [
     `<tr${problems.length ? ' class="to-fix"' : ""} data-line="${esc(r.line)}">`,
-    `<td class="num">${esc(r.line)}</td>`,
-    // Second, straight after the row number: on a phone this is what shows
-    // before any sideways scroll, and it is what the office came to read.
-    '<td class="check">',
+    // The phone's card opens with "Row 3" and its verdict; the table has
+    // them as its first two columns instead, so this cell is phone-only.
+    `<td class="stack-head card-only">Row ${esc(r.line)} ${verdict}</td>`,
+    `<td class="num stack-hide">${esc(r.line)}</td>`,
+    // Straight after the row number on a desktop. On a phone the verdict is
+    // in the card's head, and the problems close the card.
+    `<td class="check${problems.length ? " stack-full" : " stack-hide"}">`,
+    verdict,
     problems.length
-      ? '<span class="label label-stop">Fix</span><ul class="problems">' +
+      ? '<ul class="problems">' +
         problems.map((p) => `<li><strong>${HEADING[p.column] || esc(p.column)}:</strong> ${esc(p.detail)}</li>`).join("") +
         "</ul>"
-      : '<span class="label label-ok">Ready</span>',
+      : "",
     "</td>",
     COLUMNS.map(cell).join(""),
     "</tr>",
@@ -203,10 +220,15 @@ export function done({ term = null, report = {}, preview: p = { rows: [] } } = {
       ? [
           "<h2>Usernames made on import</h2>",
           "<p>Write these down for the children: nobody else has them.</p>",
-          '<div class="table-scroll"><table class="made">',
+          '<div class="table-scroll"><table class="made stack">',
           '<thead><tr><th class="num">Row</th><th>Name</th><th>Username</th></tr></thead><tbody>',
           generated
-            .map(([line, handle]) => `<tr><td class="num">${esc(line)}</td><td>${esc(names[line] || "")}</td><td>${esc(handle)}</td></tr>`)
+            .map(
+              ([line, handle]) =>
+                `<tr><td class="num" data-label="Row">${esc(line)}</td>` +
+                `<td class="stack-head">${esc(names[line] || "")}</td>` +
+                `<td data-label="Username">${esc(handle)}</td></tr>`,
+            )
             .join(""),
           "</tbody></table></div>",
         ].join("")

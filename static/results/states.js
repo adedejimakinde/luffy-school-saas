@@ -47,7 +47,7 @@ export function chain({
     '<section class="state state-chain" data-state="chain">',
     "<h1>Results</h1>",
     `<p class="term">${esc(term)}</p>`,
-    '<ul class="classes">',
+    '<ul class="classes stack-list">',
     rows
       .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus }))
       .join(""),
