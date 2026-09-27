@@ -52,6 +52,7 @@ PORTAL_PAGES = ("/sign-in/", "/staff-sign-in/", "/invitations/not-a-token/")
 
 #: A school's pages, opened by a member of staff there.
 SCHOOL_PAGES = (
+    "/home/",
     "/setup/",
     "/roll/",
     "/staff/",

@@ -1,25 +1,20 @@
 {% load static %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Broadsheets</title>
+<title>Home</title>
 
 {% comment %}
 `{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
 lines is not a comment and renders on the page.
 
-The title names no class and no school. This document is served to whoever
-opens the URL — there is no `login_required`, for the oracle reason
-`results/views.py` gives — and a tab title outlives the page in history.
-
-`data-on-school` is the only fact the server writes here besides the portal's
-name: the routes answer a flat 404 both to a refused reader and on the portal,
-on purpose, so the page is told which host it is on rather than guessing.
+The title names no school. This document is served to whoever opens the URL,
+with no `login_required`, for the oracle reason `home/views.py` gives.
 {% endcomment %}
 
 {% include "design/head.html" %}
-<link rel="stylesheet" href="{% static 'broadsheet/broadsheet.css' %}">
+<link rel="stylesheet" href="{% static 'home/home.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
-<script type="module" defer src="{% static 'broadsheet/app.js' %}"></script>
+<script type="module" defer src="{% static 'home/app.js' %}"></script>
 
 <body class="has-shell has-tabbar">
 {% include "design/icons.html" %}
@@ -27,9 +22,9 @@ on purpose, so the page is told which host it is on rather than guessing.
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
     <a class="logo" href="/home/"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
     <div class="nav">
-      <a href="/home/"><svg class="icon"><use href="#i-home"/></svg>Home</a>
+      <a href="/home/" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Home</a>
       <a href="/results/"><svg class="icon"><use href="#i-results"/></svg>Results</a>
-      <a href="/broadsheet/" aria-current="page"><svg class="icon"><use href="#i-sheet"/></svg>Broadsheets</a>
+      <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg>Broadsheets</a>
       <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg>Absences</a>
     </div>
   </nav>
@@ -42,20 +37,20 @@ on purpose, so the page is told which host it is on rather than guessing.
   </header>
 
   <div class="content">
-    <main id="broadsheet" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
+    <main id="home" data-portal="{{ portal_host }}">
       <noscript>
-        <h1>Broadsheets</h1>
-        <p>This page needs JavaScript. Please turn it on, or ask whoever set up
-        this system for you.</p>
+        <h1>Home</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
       </noscript>
       <p class="state state-loading">Loading&hellip;</p>
     </main>
   </div>
 
   <nav class="tabbar" aria-label="Main">
-    <a href="/home/"><svg class="icon"><use href="#i-home"/></svg><span class="tab-label">Home</span></a>
+    <a href="/home/" aria-current="page"><svg class="icon"><use href="#i-home"/></svg><span class="tab-label">Home</span></a>
     <a href="/results/"><svg class="icon"><use href="#i-results"/></svg><span class="tab-label">Results</span></a>
-    <a href="/broadsheet/" aria-current="page"><svg class="icon"><use href="#i-sheet"/></svg><span class="tab-label">Broadsheets</span></a>
+    <a href="/broadsheet/"><svg class="icon"><use href="#i-sheet"/></svg><span class="tab-label">Broadsheets</span></a>
     <a href="/absences/"><svg class="icon"><use href="#i-absent"/></svg><span class="tab-label">Absences</span></a>
   </nav>
 </div>

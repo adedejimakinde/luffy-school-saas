@@ -56,6 +56,7 @@ from attendance.services import MARKING_ROLES
 from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
+from home.api import router as home_router
 from results.api import router as results_router
 from results.card_api import checker_router
 from results.card_api import router as report_card_router
@@ -115,6 +116,9 @@ api.add_router("/results/", comments_router, tags=["results"])
 # and refused with a flat 404 to anybody who may not read it — see
 # `timetable.api`.
 api.add_router("/timetable/", timetable_router, tags=["timetable"])
+# The principal's home: one read over the figures the pages above own. Tenant
+# host only, like them, and refused before any read to anybody it is not for.
+api.add_router("/home/", home_router, tags=["home"])
 
 
 @api.exception_handler(CardWithheld)

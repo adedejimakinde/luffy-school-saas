@@ -152,6 +152,9 @@ TENANT_APPS = [
     # it is sent (`docs/offline.md` D3). Its own app because both `gradebook`
     # and `attendance` write through it, and neither should import the other.
     "sync",
+    # The principal's home: no tables of its own, only a read over the ones
+    # above. An app so its page template sits where every other page's does.
+    "home",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

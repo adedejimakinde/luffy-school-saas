@@ -11,9 +11,6 @@ h2 { font-size: 1.1rem; margin: 20px 0 8px; }
 .chooser { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 th, td { white-space: nowrap; }
 tfoot th, tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
-.banner { padding: 10px 14px; border-radius: var(--radius); }
-.banner.live { color: var(--warn); background: var(--warn-bg); }
-.banner.released { color: var(--ok); background: var(--ok-bg); }
 @media print {
   body { font-size: 11pt; }
   .chooser, .back, [data-action="sign-out"] { display: none; }

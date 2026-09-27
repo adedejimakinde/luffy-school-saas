@@ -1,0 +1,90 @@
+/*
+ * The principal's home. Colours, type, stat cards and the shell are
+ * `web/design.css`'s; this is the layout of the two lists under the stats.
+ */
+
+/* -- Waiting for you -------------------------------------------------------
+ *
+ * A table on a desktop and a stack below 640px. Not a `.table-scroll`: its
+ * fixed first column draws a rule down the table, and this table has nothing
+ * to pin because it never scrolls sideways at a phone's width.
+ */
+.waiting-wrap { overflow-x: auto; margin: 0 -4px; padding: 0 4px; }
+.waiting { width: 100%; }
+.waiting :is(th, td) { vertical-align: middle; }
+.waiting tbody tr:last-child td { border-bottom: 0; }
+.waiting td.class { font-weight: 700; white-space: nowrap; }
+.waiting td.act { text-align: right; white-space: nowrap; }
+.waiting .unit { display: none; }
+
+/*
+ * A row's button: 44px to a finger (`docs/design.md`'s touch rule, which the
+ * screens test holds), 36px to the eye. The link is the target and is
+ * transparent; the pill inside it is what is drawn.
+ */
+.waiting .row-btn {
+  min-height: var(--control);
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.waiting .row-btn > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.waiting .row-btn:hover > span:first-child { border-color: var(--field-border); }
+.waiting .row-btn.primary > span:first-child {
+  color: var(--card);
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 700;
+}
+.waiting .row-btn.primary:hover > span:first-child {
+  background: var(--brand-strong);
+  border-color: var(--brand-strong);
+}
+
+@media (max-width: 639.98px) {
+  .waiting-wrap { overflow: visible; margin: 0; padding: 0; }
+  .waiting thead { display: none; }
+  .waiting, .waiting tbody { display: block; }
+  /* Class and days, then what, then the button across the whole row. */
+  .waiting tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "class days" "what what" "act act";
+    gap: 4px 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--divider);
+  }
+  .waiting tbody tr:last-child { border-bottom: 0; }
+  .waiting td { display: block; padding: 0; border: 0; }
+  .waiting td.class { grid-area: class; white-space: normal; }
+  .waiting td.days { grid-area: days; color: var(--muted); }
+  .waiting td.what { grid-area: what; }
+  .waiting td.act { grid-area: act; margin-top: 6px; }
+  .waiting .unit { display: inline; }
+  .waiting .row-btn { display: flex; width: 100%; }
+  .waiting .row-btn > span:first-child { flex: 1; }
+}
+
+/* -- Today ----------------------------------------------------------------- */
+.today-list { list-style: none; margin: 0; padding: 0; }
+.today-list li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.today-list li:last-child { border-bottom: 0; }
+.today-list time { color: var(--muted); min-width: 3.5rem; flex: none; font-variant-numeric: tabular-nums; }
+
+button.signout { margin-top: 24px; }

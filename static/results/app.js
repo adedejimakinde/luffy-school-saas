@@ -62,10 +62,27 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
  * A 200 with no current term is **not** a refusal: the password was right and
  * this person has a part in the chain. What is missing is a school setting.
  */
-export function fromChain(answer) {
+export function fromChain(answer, { focus = null } = {}) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
   if (!answer.body.term_id) return { step: "no-term" };
-  return { step: "chain", ...answer.body, notes: {}, asking: null, telling: null };
+  return {
+    step: "chain",
+    ...answer.body,
+    notes: {},
+    asking: null,
+    telling: null,
+    confirming: null,
+    focus,
+  };
+}
+
+/**
+ * The class the page was opened for, from `?class=`: the home page's
+ * "Waiting for you" links here, and the row it named is the one to show.
+ */
+export function focusFrom(search = "") {
+  const id = Number(new URLSearchParams(search).get("class"));
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 /** Replace one row, keeping the rest of the list as it was. */
@@ -87,7 +104,7 @@ export function applyStep(state, classGroupId, result) {
   if (result.ok) {
     delete notes[classGroupId];
     return {
-      state: { ...state, notes, asking: null, rows: replace(state.rows, result.row) },
+      state: { ...state, notes, asking: null, confirming: null, rows: replace(state.rows, result.row) },
       reload: false,
     };
   }
@@ -95,26 +112,26 @@ export function applyStep(state, classGroupId, result) {
 
   if (result.outcome === STEP.ALREADY_SIGNED) {
     notes[classGroupId] = { kind: "already-signed", detail: result.body.detail };
-    return { state: { ...state, notes, asking: null }, reload: false };
+    return { state: { ...state, notes, asking: null, confirming: null }, reload: false };
   }
   if (result.outcome === STEP.MOVED) {
     notes[classGroupId] = { kind: "moved", detail: result.body.detail };
-    return { state: { ...state, notes, asking: null }, reload: true };
+    return { state: { ...state, notes, asking: null, confirming: null }, reload: true };
   }
   if (result.outcome === STEP.NEEDS_A_REASON) {
     // The box stays open: what is missing is the sentence, and closing the
     // form would make them find the class again to type it.
     notes[classGroupId] = { kind: "needs-a-reason", detail: result.body.detail };
-    return { state: { ...state, notes, asking: classGroupId }, reload: false };
+    return { state: { ...state, notes, asking: classGroupId, confirming: null }, reload: false };
   }
   if (result.outcome === STEP.NOT_CHECKED) {
     // No reload: the row is as it was, approved, and its Release button is
     // the recovery. The note says why the class is not released.
     notes[classGroupId] = { kind: "not-checked", detail: result.body.detail };
-    return { state: { ...state, notes, asking: null }, reload: false };
+    return { state: { ...state, notes, asking: null, confirming: null }, reload: false };
   }
   notes[classGroupId] = { kind: "not-allowed", detail: result.body.detail };
-  return { state: { ...state, notes, asking: null }, reload: false };
+  return { state: { ...state, notes, asking: null, confirming: null }, reload: false };
 }
 
 /**
@@ -146,8 +163,9 @@ export function slipsNote(result) {
   return { kind: "not-printed", detail: result.detail || "No slips were printed." };
 }
 
-export async function mount(root, { fetchImpl = fetch, download = saveFile } = {}) {
+export async function mount(root, { fetchImpl = fetch, download = saveFile, search = "" } = {}) {
   const portal = root.dataset.portal || "";
+  const focus = focusFrom(search);
   let state = { step: "loading" };
   let signOutFailed = false;
 
@@ -155,11 +173,15 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile } = {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
   };
   const load = async () => {
-    state = fromChain(await fetchChain({ fetchImpl }));
+    state = fromChain(await fetchChain({ fetchImpl }), { focus });
     draw();
   };
 
   await load();
+  if (focus && typeof root.querySelector === "function") {
+    const row = root.querySelector(`#class-${focus}`);
+    if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
+  }
 
   const step = async (classGroupId, name, reason) => {
     const result = await takeStep({ classGroupId, step: name, reason, fetchImpl });
@@ -213,7 +235,19 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile } = {
       return;
     }
     if (action === "ask-send-back") {
-      state = { ...state, asking: Number(hit.dataset.class) };
+      state = { ...state, asking: Number(hit.dataset.class), confirming: null };
+      draw();
+      return;
+    }
+    if (action === "ask-release") {
+      // Asks first: a release cannot be taken back. Nothing is sent until the
+      // question's own button, which is a `step` like any other.
+      state = { ...state, confirming: Number(hit.dataset.class), asking: null };
+      draw();
+      return;
+    }
+    if (action === "cancel-release") {
+      state = { ...state, confirming: null };
       draw();
       return;
     }
@@ -285,5 +319,5 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile } = {
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("results");
-  if (root) mount(root);
+  if (root) mount(root, { search: window.location.search });
 }

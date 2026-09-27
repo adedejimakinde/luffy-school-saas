@@ -14,12 +14,16 @@
 import { esc } from "../web/html.js";
 import { button as signOutButton } from "../web/signout.js";
 
-/** The five steps, in the order the chain takes them, with what to call them. */
+/**
+ * The steps, in the order the chain takes them, with what to call them.
+ *
+ * Release is not among them: it cannot be taken back, so its button asks
+ * first (`releaseQuestion()`), and only the answer to that question takes it.
+ */
 const STEPS = [
   ["may_submit", "submit", "Submit"],
   ["may_check", "check", "Check"],
   ["may_approve", "approve", "Approve"],
-  ["may_release", "release", "Release to parents"],
 ];
 
 /**
@@ -31,13 +35,23 @@ const STEPS = [
  * number. Hiding those rows would make an empty list ambiguous — nothing to
  * do, or nothing you may see.
  */
-export function chain({ term = "", rows = [], notes = {}, asking = null, telling = null } = {}) {
+export function chain({
+  term = "",
+  rows = [],
+  notes = {},
+  asking = null,
+  telling = null,
+  confirming = null,
+  focus = null,
+} = {}) {
   return [
     '<section class="state state-chain" data-state="chain">',
     "<h1>Results</h1>",
     `<p class="term">${esc(term)}</p>`,
     '<ul class="classes">',
-    rows.map((row) => classRow(row, notes[row.class_group_id], asking, telling)).join(""),
+    rows
+      .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus }))
+      .join(""),
     "</ul>",
     signOutButton(),
     "</section>",
@@ -63,12 +77,18 @@ export function noTerm() {
  * is final — a wrong card is corrected by reissuing it, not by moving the
  * sheet back — so an empty row would read as a page that failed to draw.
  */
-function classRow(row, note, asking, telling) {
+function classRow(row, note, { asking, telling, confirming, focus }) {
   const actions = STEPS.filter(([flag]) => row[flag]).map(
     ([, step, label]) =>
       `<button type="button" data-action="step" data-step="${step}" ` +
       `data-class="${esc(row.class_group_id)}">${label}</button>`,
   );
+  if (row.may_release) {
+    actions.push(
+      `<button type="button" data-action="ask-release" ` +
+        `data-class="${esc(row.class_group_id)}">Release to parents</button>`,
+    );
+  }
   if (row.may_send_back) {
     actions.push(
       `<button type="button" class="send-back" data-action="ask-send-back" ` +
@@ -95,17 +115,21 @@ function classRow(row, note, asking, telling) {
     );
   }
   return [
-    `<li class="row state-${esc(row.state)}${note ? ` ${esc(note.kind)}` : ""}">`,
+    `<li id="class-${esc(row.class_group_id)}" class="row state-${esc(row.state)}` +
+      `${focus === row.class_group_id ? " focus" : ""}${note ? ` ${esc(note.kind)}` : ""}">`,
     `<span class="name">${esc(row.class_group)}</span>`,
-    `<span class="standing">${esc(row.state_label)}</span>`,
+    row.state === "released"
+      ? `<span class="standing"><span class="label label-ok">${esc(row.state_label)}</span></span>`
+      : `<span class="standing">${esc(row.state_label)}</span>`,
     // The sheet itself, so whoever is about to approve or release reads the
     // numbers first. The broadsheet route decides who may, as it always did.
     `<a class="broadsheet" href="/broadsheet/?class=${encodeURIComponent(row.class_group_id)}">Broadsheet</a>`,
     actions.length
       ? `<span class="actions">${actions.join("")}</span>`
       : `<span class="actions quiet">${
-          row.state === "released" ? "Released — nothing further" : "Nothing for you here"
+          row.state === "released" ? "Released: nothing further" : "Nothing for you here"
         }</span>`,
+    confirming === row.class_group_id && row.may_release ? releaseQuestion(row) : "",
     asking === row.class_group_id ? sendBackForm(row) : "",
     telling && telling.class_group_id === row.class_group_id ? tellingQuestion(row, telling) : "",
     leftOut(row),
@@ -113,8 +137,57 @@ function classRow(row, note, asking, telling) {
       ? `<span class="told">${esc(row.families_told)} message${row.families_told === 1 ? "" : "s"} to families so far.</span>`
       : "",
     row.may_print_slips ? slips(row) : "",
-    note ? `<span class="note" role="alert">${esc(note.detail)}</span>` : "",
+    note ? noteFor(note) : "",
     "</li>",
+  ].join("");
+}
+
+/**
+ * What a press did, as a neutral message carrying its label: status colour
+ * goes on the label and nowhere else (`docs/design.md`). The sentence is the
+ * server's, or the page's own for a slip download, and is never reworded here.
+ */
+const NOTE_LABELS = {
+  "already-signed": ["label-warn", "Already signed"],
+  moved: ["label-warn", "Moved on"],
+  "needs-a-reason": ["label-stop", "Needs a reason"],
+  "not-checked": ["label-stop", "Not released"],
+  "not-allowed": ["label-stop", "Not allowed"],
+  told: ["label-ok", "Sent"],
+  "not-told": ["label-stop", "Not sent"],
+  "slips-printed": ["label-ok", "Downloading"],
+  "not-printed": ["label-stop", "Not printed"],
+};
+
+function noteFor(note) {
+  const [tone, label] = NOTE_LABELS[note.kind] || ["", "Note"];
+  return [
+    '<div class="note msg" role="alert">',
+    `<span class="label ${tone}">${label}</span>`,
+    `<p>${esc(note.detail)}</p>`,
+    "</div>",
+  ].join("");
+}
+
+/**
+ * The question "Release to parents" asks before it releases anything.
+ *
+ * A release cannot be taken back: a wrong card is corrected by reissuing it,
+ * not by moving the sheet back. So the first press only asks, and the release
+ * is the second, on a button that names the class.
+ */
+function releaseQuestion(row) {
+  const id = esc(row.class_group_id);
+  const name = esc(row.class_group);
+  return [
+    '<div class="confirm-release" role="group" aria-label="Release">',
+    `<p>Release ${name}'s results to parents? Their report cards go out as they `,
+    "stand now, and a released card can only be corrected by reissuing it.</p>",
+    '<span class="actions">',
+    `<button type="button" class="btn-primary" data-action="step" data-step="release" data-class="${id}">Release ${name}</button>`,
+    `<button type="button" data-action="cancel-release" data-class="${id}">Cancel</button>`,
+    "</span>",
+    "</div>",
   ].join("");
 }
 
@@ -184,7 +257,8 @@ function leftOut(row) {
     // Not the same as nobody: this release has no record of a check, and an
     // empty list here would read as "nobody was left out".
     return [
-      '<div class="left-out" role="status">',
+      '<div class="left-out msg" role="status">',
+      '<span class="label label-warn">Not checked</span>',
       "<p>Couldn't check who was left out of this release. ",
       "Nobody is listed here, and that does not mean nobody was left out.</p>",
       "</div>",
@@ -200,10 +274,13 @@ function leftOut(row) {
     .join("");
   const count = children.length === 1 ? "1 child has" : `${children.length} children have`;
   return [
-    '<div class="left-out" role="status">',
+    '<div class="left-out msg" role="status">',
+    '<span class="label label-warn">No card</span>',
+    '<div class="said">',
     `<p>${count} no card from this release. They were placed into `,
     `${esc(row.class_group)} while it was being released, so they were not on it.</p>`,
     `<ul>${who}</ul>`,
+    "</div>",
     "</div>",
   ].join("");
 }
@@ -254,7 +331,7 @@ export function wrongHost() {
     '<section class="state state-wrong-host" data-state="wrong-host">',
     "<h1>Results live on your school's own web address</h1>",
     "<p>This page is open on the sign-in site. Open it again from your ",
-    "school's own address — the link on the page you signed in on.</p>",
+    "school's own address: the link on the page you signed in on.</p>",
     "</section>",
   ].join("");
 }

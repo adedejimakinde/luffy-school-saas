@@ -11,7 +11,10 @@
  *   a select, a nav or tab link;
  * - **text on a phone is under 15px.** At 360 only, and not for the small
  *   labels the design sets smaller on purpose (`.label`, `.tag`, `.revised`,
- *   `.nav-heading`, `.tab-label`).
+ *   `.nav-heading`, `.tab-label`);
+ * - **a stat card's figure wraps or spills out of its card** at 1024px or
+ *   wider, where the cards run four across and are narrowest. A screen can
+ *   ask for extra widths (`widths`) to be measured at that edge exactly.
  *
  * And it saves a screenshot of every one, which CI uploads as the `screens`
  * artifact: `<width>/<screen>.png`.
@@ -91,6 +94,7 @@ export const SCREENS = [
   { name: "timetable", as: "sunrise.teacher", url: `${SUNRISE}/timetable/` },
 
   // The principal.
+  { name: "home", as: "sunrise.principal", url: `${SUNRISE}/home/`, widths: [1024] },
   { name: "results", as: "sunrise.principal", url: `${SUNRISE}/results/` },
   {
     name: "broadsheet",
@@ -149,7 +153,7 @@ export const SCREENS = [
 ];
 
 /** What a screen breaks, measured in the page. Pure, so it can run anywhere. */
-function measure({ smallOnPurpose, phone }) {
+function measure({ smallOnPurpose, phone, wide }) {
   const problems = [];
   const root = document.documentElement;
   if (root.scrollWidth > root.clientWidth) {
@@ -171,6 +175,15 @@ function measure({ smallOnPurpose, phone }) {
     if (!visible(el)) continue;
     const height = el.getBoundingClientRect().height;
     if (height < 43.5) problems.push(`target ${Math.round(height)}px tall: ${describe(el)}`);
+  }
+
+  if (wide) {
+    for (const el of document.querySelectorAll(".stat-value")) {
+      if (!visible(el)) continue;
+      const line = parseFloat(getComputedStyle(el).lineHeight);
+      if (el.getBoundingClientRect().height > line * 1.5) problems.push(`stat value wraps: ${describe(el)}`);
+      if (el.scrollWidth > el.clientWidth + 1) problems.push(`stat value spills out of its card: ${describe(el)}`);
+    }
   }
 
   if (phone) {
@@ -241,7 +254,9 @@ async function settle(page) {
 async function check(page, width, name) {
   mkdirSync(join(OUT, String(width)), { recursive: true });
   await page.screenshot({ path: join(OUT, String(width), `${name}.png`), fullPage: true });
-  return (await page.evaluate(measure, { smallOnPurpose: SMALL_ON_PURPOSE, phone: width < 640 })).map(
+  return (
+    await page.evaluate(measure, { smallOnPurpose: SMALL_ON_PURPOSE, phone: width < 640, wide: width >= 1024 })
+  ).map(
     (problem) => `${width}px ${name}: ${problem}`,
   );
 }
@@ -269,7 +284,7 @@ describe("every page, at every width", () => {
       const page = await context.newPage();
       const problems = [];
       try {
-        for (const width of WIDTHS) {
+        for (const width of [...WIDTHS, ...(screen.widths || [])]) {
           await page.setViewportSize({ width, height: 800 });
           const response = await page.goto(screen.url);
           assert.equal(response.status(), screen.status || 200, `${screen.url} at ${width}px`);
