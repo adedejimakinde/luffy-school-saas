@@ -14,12 +14,13 @@ claims to be a PNG never reaches a card. A file over 1 MB is refused before it
 is opened, and one that decodes to more pixels than a crest could need is
 refused before it is decoded.
 
-## The colour has to carry white text
+## The colour has to read on white
 
-The card's header band prints the school's name in white on the school's
-colour. A colour whose contrast with white is under 4.5 to 1 (WCAG's figure
-for body text) would print a name nobody can read off a cheap printer, so it is
-refused with a sentence saying why, rather than accepted and regretted.
+The card prints the school's name in the school's colour on white paper, and
+its initials in white on a circle of the colour. Both are the same contrast: a
+colour under 4.5 to 1 against white (WCAG's figure for body text) would print a
+name nobody can read off a cheap printer, so it is refused with a sentence
+saying why, rather than accepted and regretted.
 """
 
 import base64
@@ -46,7 +47,7 @@ CREST_SIDE = 256
 #: expands to. Checked from the header, before a pixel is decoded.
 MAX_SOURCE_PIXELS = 4096 * 4096
 
-#: White text on the band needs this much contrast. WCAG AA for body text.
+#: The colour against white paper needs this much contrast. WCAG AA for body text.
 MIN_CONTRAST = 4.5
 
 _HEX = re.compile(r"^#?([0-9a-fA-F]{6})$")
@@ -103,8 +104,7 @@ def clean_colour(value: Optional[str]) -> str:
     colour = f"#{match.group(1).upper()}"
     if contrast_with_white(colour) < MIN_CONTRAST:
         raise LookRefused(
-            f"{colour} is too light for the school's name to be read in white on it. "
-            "Choose a darker shade."
+            f"{colour} is too light to read on a white page. Choose a darker shade."
         )
     return colour
 

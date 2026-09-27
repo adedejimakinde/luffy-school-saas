@@ -35,7 +35,6 @@ export function shape({ terms = [], classes = [], card = null, notes = {} } = {}
 
     card ? cardLook(card, notes) : "",
 
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -121,29 +120,33 @@ function newClassForm(note) {
 /**
  * The report card's look: the school's crest and its one colour. Both optional.
  *
- * The preview is the card's own header band in miniature: the colour, and the
- * crest on its white plate or, with none, the initials in a circle. The
- * colour is the school's, from the API, which is why it may be written into
- * a `style`: it is data here, not a design choice.
+ * The preview is the card's own header in miniature: on white, the crest or,
+ * with none, the initials in a circle of the colour, the name in the colour,
+ * and the colour's rule under it. The colour is the school's, from the API,
+ * which is why it may be written into a `style`: it is data here, not a
+ * design choice.
  */
 function cardLook(card, notes) {
   const colour = card.colour || card.default_colour;
   const mark = card.has_crest
     ? `<img class="crest-mark" src="/api/academics/card/crest/?v=${esc(card.crest_version || "")}" alt="Your crest">`
-    : `<span class="initials" aria-hidden="true">${esc(card.initials || "")}</span>`;
+    : `<span class="initials" aria-hidden="true" style="background: ${esc(colour)}">${esc(card.initials || "")}</span>`;
   return [
     '<h2 id="report-card">Report card</h2>',
     "<p class=\"hint\">Your crest and one colour lead every report card. Both are optional.</p>",
-    `<div class="look-preview" style="background: ${esc(colour)}">`,
+    '<div class="look-preview">',
+    '<div class="look-head">',
     `<span class="mark">${mark}</span>`,
-    '<span class="band-text">Your school&#39;s name, in white</span>',
+    `<span class="look-name" style="color: ${esc(colour)}">Your school&#39;s name</span>`,
+    "</div>",
+    `<div class="look-rule" style="background: ${esc(colour)}"></div>`,
     "</div>",
 
     `<form class="colour-form${notes.colour ? ` ${esc(notes.colour.kind)}` : ""}" data-form="colour">`,
     '<label for="colour">School colour</label>',
     `<input id="colour" name="colour" type="color" value="${esc(colour)}">`,
-    '<span class="hint">Used for the header band and the rules. The school&#39;s name is ',
-    "printed in white on it, so a colour too light to read is refused.</span>",
+    '<span class="hint">Used for the school&#39;s name and the rules on the card. It has to ',
+    "read clearly on white paper, so a colour too light to read is refused.</span>",
     '<button type="submit">Save colour</button>',
     notes.colour ? `<p class="note" role="alert">${esc(notes.colour.detail)}</p>` : "",
     "</form>",

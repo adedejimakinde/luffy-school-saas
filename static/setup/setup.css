@@ -24,19 +24,36 @@ form button { justify-self: start; margin-top: 8px; }
 .note { font-size: var(--small); color: var(--stop); }
 form.rejected, form.not-allowed { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
 
-/* The report card's look: a miniature of the card's header band. Its colour is
-   the school's own, from the API; the plate behind a crest is the card's white. */
+/* The report card's look: a miniature of the card's header, on white. Its
+   colour is the school's own, from the API. */
 .hint { color: var(--muted); font-size: var(--small); font-weight: 400; }
 .look-preview {
-  display: flex; align-items: center; gap: 12px;
-  max-width: 26rem; margin: 8px 0 4px; padding: 12px 14px;
-  border-radius: var(--radius); color: var(--card); font-weight: 700;
+  max-width: 26rem; margin: 8px 0 4px; padding: 12px 14px 0;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden;
 }
+.look-head { display: flex; align-items: center; gap: 12px; padding-bottom: 10px; }
 .look-preview .mark { display: grid; place-items: center; width: 48px; height: 48px; flex: none; }
-.look-preview .crest-mark { width: 48px; height: 48px; padding: 3px; background: var(--card); border-radius: 8px; }
+.look-preview .crest-mark { width: 48px; height: 48px; }
 .look-preview .initials {
-  width: 48px; height: 48px; line-height: 44px; text-align: center;
-  border: 2px solid var(--card); border-radius: 50%;
+  width: 44px; height: 44px; line-height: 44px; text-align: center;
+  border-radius: 50%; color: var(--card); font-weight: 700;
 }
+.look-name { font-weight: 700; font-size: 1.1rem; }
+.look-rule { height: 6px; margin: 0 -14px; }
 input[type="color"] { width: 5rem; padding: 4px; }
-input[type="file"] { padding: 8px; }
+/* The crest's "Choose file" is the design's secondary button: white, a rule,
+   a finger tall. The rest of the input is the name of the chosen file. */
+input[type="file"] { padding: 0; border: 0; background: none; min-height: 0; }
+input[type="file"]::file-selector-button {
+  min-height: var(--control);
+  margin-right: 12px;
+  padding: 10px 18px;
+  font: inherit;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+input[type="file"]::file-selector-button:hover { border-color: var(--field-border); }

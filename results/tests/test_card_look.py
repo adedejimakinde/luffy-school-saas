@@ -4,7 +4,7 @@ Three kinds of claim.
 
 **What a school may set.** A crest is a PNG or a JPG of at most 1 MB, and it is
 re-drawn rather than kept: what is stored is a fresh square PNG. A colour must
-carry white text, because the school's name is printed in white on it.
+read on white, because the school's name is printed in it on white paper.
 
 **Whose crest a card can print.** Two schools, one crest. The crest lives in
 the school's own schema, and the other school's card, API and database row
@@ -18,12 +18,14 @@ class average is anywhere on it.
 
 import io
 import re
+from datetime import timedelta
 
 from django.db import connection
 from django.test import SimpleTestCase
 from django.utils.html import escape
 
 from academics.models import TermName
+from accounts.models import Membership
 from gradebook.models import Subject
 from results import cards, look, pdf
 from results.models import ReportCardSettings
@@ -239,13 +241,19 @@ class TheDoorTests(LookSetUp):
 
 
 class WhatTheCardSaysTests(LookSetUp):
-    def test_the_school_leads_in_its_own_colour(self):
+    def test_the_school_leads_on_white_in_its_own_colour(self):
+        """The name in the school's colour, a 3mm rule of it, and no solid
+        band: a band of colour uses a lot of ink and streaks on the cheap
+        printer most cards come off."""
         html = self.html()
 
-        self.assertIn('<div class="band">', html)
+        self.assertIn('<div class="head">', html)
+        self.assertIn('<div class="head-rule"></div>', html)
         self.assertIn(escape("St Mary's"), html)
-        self.assertIn("background: #143D8C", html)
+        self.assertRegex(html, r"\.head h1 \{[^}]*color: #143D8C")
+        self.assertRegex(html, r"\.head-rule \{[^}]*height: 3mm[^}]*background: #143D8C")
         self.assertIn('class="initials">SM<', html)
+        self.assertNotIn('class="band"', html)
 
     def test_classnode_is_a_small_footer_and_nowhere_else(self):
         html = self.html()
@@ -271,6 +279,85 @@ class WhatTheCardSaysTests(LookSetUp):
 
         self.assertNotIn("—", title)
         self.assertIn(":", title)
+
+    def test_the_admission_number_sits_beside_the_name(self):
+        Membership.objects.filter(pk=self.ada.pk).update(reference="STM/0042")
+
+        html = self.html()
+
+        self.assertRegex(html, r"<strong>Ada Obi</strong><span class=\"adm\">Adm\. no\. STM/0042</span>")
+
+    def test_no_admission_number_prints_nothing_rather_than_a_label(self):
+        self.assertNotIn("Adm. no.", self.html())
+
+    def test_next_term_begins_when_the_school_has_set_it(self):
+        with connected_to(self.stmarys):
+            term = self.term_of(self.stmarys, TermName.FIRST.value)
+            term.next_term_starts_on = term.ends_on + timedelta(days=24)
+            term.save(update_fields=["next_term_starts_on"])
+            expected = term.next_term_starts_on
+
+        html = self.html()
+
+        self.assertIn(
+            f"<strong>Next term begins:</strong> {expected.strftime('%A')} {expected.day} "
+            f"{expected.strftime('%B %Y')}",
+            html,
+        )
+
+    def test_and_says_nothing_when_it_has_not(self):
+        self.assertNotIn("Next term begins", self.html())
+
+    def test_the_grade_key_is_the_schools_own_scale_on_one_line(self):
+        """Migration 0015's WAEC scale, which the fixture's schools start from."""
+        html = self.html()
+        key = re.search(r'<p class="key"><strong>Grade key:</strong> (.*?)</p>', html).group(1)
+
+        self.assertTrue(key.startswith("A1 75 to 100, B2 70 to 74, B3 65 to 69"), key)
+        self.assertTrue(key.endswith("F9 0 to 39"), key)
+
+    def test_a_papers_maximum_is_on_its_own_line_and_no_word_breaks(self):
+        html = self.html()
+
+        self.assertRegex(html, r'<th class="n"><span class="col">[^<]+</span><span class="max">/\d+</span></th>')
+        self.assertIn("table.grid thead th { white-space: nowrap; }", html)
+
+    def test_the_font_is_the_designs_own_loaded_from_its_files(self):
+        html = self.html()
+
+        for weight in ("400", "700"):
+            with self.subTest(weight=weight):
+                path = pdf.FONTS / f"hanken-grotesk-{weight}.woff2"
+                self.assertTrue(path.exists())
+                self.assertIn(f'url("{pdf.FONTS.as_uri()}/hanken-grotesk-{weight}.woff2")', html)
+        self.assertIn('font: 9.5pt "Hanken Grotesk"', html)
+
+
+class TheGradeKeyTests(SimpleTestCase):
+    def band(self, letter, minimum):
+        from decimal import Decimal
+
+        from results.models import GradeBand
+
+        return GradeBand(letter=letter, minimum=Decimal(minimum))
+
+    def test_whole_minimums_give_whole_ranges(self):
+        key = pdf.grade_key([self.band("A", "70"), self.band("C", "50"), self.band("F", "0")])
+
+        self.assertEqual(key, ["A 70 to 100", "C 50 to 69", "F 0 to 49"])
+
+    def test_a_decimal_minimum_gives_ranges_to_the_hundredth(self):
+        key = pdf.grade_key([self.band("A", "80"), self.band("B", "49.5"), self.band("C", "0")])
+
+        self.assertEqual(key, ["A 80 to 100", "B 49.5 to 79.99", "C 0 to 49.49"])
+
+
+def _margin_text(page, keyword):
+    """The text WeasyPrint laid out in one of a page's margin boxes."""
+    for box in page._page_box.children:
+        if getattr(box, "at_keyword", None) == keyword:
+            return "".join(getattr(b, "text", "") for b in box.descendants())
+    return ""
 
 
 class ALongSubjectListTests(ReportCardApiSetUp):
@@ -309,6 +396,12 @@ class ALongSubjectListTests(ReportCardApiSetUp):
         # compressed streams, so counting them from the bytes counts nothing.
         pages = HTML(string=html).render().pages
         self.assertGreaterEqual(len(pages), 2)
+
+        # Page 2 onward carries whose card it is; page 1 has the full header.
+        runner = "Ada Obi · JSS 1A · First term"
+        self.assertEqual(_margin_text(pages[0], "@top-left"), "")
+        for page in pages[1:]:
+            self.assertIn(runner, _margin_text(page, "@top-left"))
         for n in (1, self.SUBJECTS // 2, self.SUBJECTS):
             self.assertIn(f"Elective subject {n}<", html)
         self.assertTrue(content.startswith(b"%PDF-"))

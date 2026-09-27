@@ -19,11 +19,12 @@ import { fakeRoot } from "./fake_dom.js";
 const CARD = { colour: "#7A1F2B", default_colour: "#143D8C", has_crest: false, crest_version: null, initials: "SD" };
 const SETUP = { terms: [], classes: [], may_set_up: true, card: CARD };
 
-test("the preview is the card's band: its colour, and the initials with no crest", () => {
+test("the preview is the card's header on white: the name and rule in its colour, initials with no crest", () => {
   const html = states.shape(SETUP);
 
-  assert.match(html, /<div class="look-preview" style="background: #7A1F2B">/);
-  assert.match(html, /<span class="initials" aria-hidden="true">SD<\/span>/);
+  assert.match(html, /<span class="look-name" style="color: #7A1F2B">/);
+  assert.match(html, /<div class="look-rule" style="background: #7A1F2B"><\/div>/);
+  assert.match(html, /<span class="initials" aria-hidden="true" style="background: #7A1F2B">SD<\/span>/);
   assert.match(html, /<input id="colour" name="colour" type="color" value="#7A1F2B">/);
   assert.doesNotMatch(html, /remove-crest/, "nothing to remove");
 });
@@ -41,16 +42,17 @@ test("the form says what a crest may be before anybody picks one", () => {
   assert.match(html, /accept="image\/png,image\/jpeg"/);
   assert.match(html, /PNG or JPG, up to 1 MB/);
   assert.match(html, /too light to read is refused/);
+  assert.doesNotMatch(html, /in white/, "the card no longer prints the name in white");
 });
 
 test("a refused colour keeps its sentence under the form", () => {
   const html = states.shape({
     ...SETUP,
-    notes: { colour: { kind: "rejected", detail: "#FFFF00 is too light for the school's name to be read in white on it." } },
+    notes: { colour: { kind: "rejected", detail: "#FFFF00 is too light to read on a white page. Choose a darker shade." } },
   });
 
   assert.match(html, /<form class="colour-form rejected"/);
-  assert.match(html, /too light for the school/);
+  assert.match(html, /too light to read on a white page/);
 });
 
 test("with no card block the section is not drawn", () => {
@@ -134,4 +136,8 @@ test("removeCrest classifies a refusal like every other write", async () => {
   const result = await removeCrest({ fetchImpl });
 
   assert.equal(result.outcome, "not-allowed");
+});
+
+test("the page body has no sign-out: it is not what this page is for", () => {
+  assert.doesNotMatch(states.shape(SETUP), /data-action="sign-out"/);
 });

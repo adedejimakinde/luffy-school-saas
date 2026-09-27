@@ -270,11 +270,21 @@ still satisfies a count of one.
 
 ## The school leads: crest, colour, and a small footer
 
-The card's header is the school's: its crest (or, with none, its initials in a
-circle) and its name, in a band of its one colour. That colour is also the
-colour of the card's rules, and of nothing else: every word stays dark ink,
-because most cards come off a cheap printer. Classnode appears once, small, at
-the foot of each page, beside "Page N of M".
+The card's header is the school's, on white: its crest (or, with none, its
+initials in a circle of its colour), its name in its one colour, the term in
+dark grey, and a 3mm rule of the colour under them. A solid band of colour was
+the first draft and was dropped: schools print hundreds of cards, and a band
+uses a lot of ink and streaks on a cheap printer. The colour is on the name
+and the card's rules and nothing else; every other word stays dark ink.
+Classnode appears once, small, at the foot of each page, beside "Page N of M".
+From page 2, a small running header gives the child's name, class and term,
+so a loose page cannot be mistaken for somebody else's.
+
+Beside the name is the admission number, and above everything else, when the
+school has set it, "Next term begins", which is what parents look for first.
+Under the marks is a one-line grade key from the school's own scale. The font
+is the design's Hanken Grotesk, loaded from the same self-hosted files the
+pages serve; WeasyPrint subsets it, so a card is about the size it was.
 
 Both are optional, and both are set on the setup page by whoever may set the
 school up (`academics.api`, `card/colour/` and `card/crest/`). They live on
@@ -286,9 +296,10 @@ every rule about them:
   claims more than 4096 × 4096 pixels. Pillow fits it inside a 256px
   transparent square and writes a fresh PNG, so nothing of the upload but its
   picture reaches a card.
-- **A colour must carry white text.** The school's name is printed in white on
-  the band, so a colour under 4.5 to 1 against white (WCAG's figure for body
-  text) is refused with a sentence. The default is the design's own `#143D8C`.
+- **A colour must read on white.** The school's name is printed in its colour
+  on white paper, so a colour under 4.5 to 1 against white (WCAG's figure for
+  body text) is refused with a sentence. The default is the design's own
+  `#143D8C`.
 - **One school's crest cannot reach another's card.** There is no file path or
   shared store: the bytes are a column in the school's schema, read on that
   school's connection. `results.tests.test_card_look` holds this with two
