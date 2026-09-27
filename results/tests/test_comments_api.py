@@ -29,6 +29,7 @@ from results.tests.fixtures import HOST, PORTAL, THEIR_HOST, ChainSetUp
 from schools.tests.tenants import connected_to
 
 LIST = "/api/results/comments/"
+CLASSES = "/api/results/comments/classes/"
 
 
 class TheCommentScreenSetUp(ChainSetUp):
@@ -69,6 +70,78 @@ class TheCommentScreenSetUp(ChainSetUp):
             data={"body": body},
             content_type="application/json",
             HTTP_HOST=host,
+        )
+
+
+class WhichClassToOpenTests(TheCommentScreenSetUp):
+    """Issue #180: what the frame had no way to ask for at all.
+
+    `classes()` is the answer, and it is deliberately unfiltered — every class
+    the school has, `marking.choose()`'s own reasoning: "who may actually
+    sign" is `class_list()`'s question, asked once a class is picked, and a
+    narrower list here would be a second, weaker copy of that check drawn
+    before the child is even known.
+    """
+
+    def classes_for(self, user, host=HOST):
+        self.as_user(user)
+        return self.client.get(CLASSES, HTTP_HOST=host)
+
+    def test_every_active_class_is_listed_for_a_class_teacher(self):
+        rows = self.classes_for(self.teacher).json()["classes"]
+
+        self.assertEqual(
+            sorted(r["class_group"] for r in rows), ["JSS 1A", "JSS 1B"]
+        )
+
+    def test_the_principal_sees_every_class_too_not_only_ones_she_teaches(self):
+        """She signs any class's remark, so the chooser does not narrow to
+        "classes she is the class teacher of" — she is not one anywhere."""
+        rows = self.classes_for(self.head).json()["classes"]
+
+        self.assertEqual(
+            sorted(r["class_group"] for r in rows), ["JSS 1A", "JSS 1B"]
+        )
+
+    def test_one_schools_list_never_contains_the_others_class(self):
+        """Both fixtures call their first class 'JSS 1A' — a name is not the
+        signal here, tenant isolation is: each schema's own table, resolved by
+        `TenantMainMiddleware` off the host, is what `ClassGroup.objects` reads
+        with no `school=` filter of its own. So this checks the ids, which do
+        not collide the way the names do."""
+        our_ids = {r["class_group_id"] for r in self.classes_for(self.teacher).json()["classes"]}
+        their_ids = {
+            r["class_group_id"]
+            for r in self.classes_for(self.grace_teacher, host=THEIR_HOST).json()["classes"]
+        }
+
+        self.assertEqual(our_ids, {self.jss1a_id, self.jss1b_id})
+        self.assertEqual(their_ids, {self.grace_group_id})
+
+    def test_a_bursar_is_refused_the_same_way_the_class_list_refuses_her(self):
+        response = self.classes_for(self.bursar)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("JSS 1A", response.content.decode())
+
+    def test_the_portal_answers_first_the_same_way_the_class_list_does(self):
+        self.as_user(self.teacher)
+
+        self.assertEqual(self.client.get(CLASSES, HTTP_HOST=PORTAL).status_code, 404)
+
+    def test_a_school_with_no_current_term_still_gets_its_classes_back(self):
+        """The next step, `class_list()`, is what says there is no term to
+        write against. Deciding that twice risks the two answers disagreeing,
+        so this route stays silent about it."""
+        with connected_to(self.stmarys):
+            Term.objects.filter(pk=self.term_id).update(is_current=False)
+
+        response = self.classes_for(self.teacher)
+
+        self.assertEqual(response.json()["term_id"], None)
+        self.assertEqual(
+            sorted(r["class_group"] for r in response.json()["classes"]),
+            ["JSS 1A", "JSS 1B"],
         )
 
 

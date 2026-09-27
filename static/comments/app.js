@@ -1,5 +1,17 @@
 /**
- * Remarks: a class list of who still needs what, then one child at a time.
+ * Remarks: which class, then a list of who still needs what, then one child
+ * at a time.
+ *
+ * ## Which class, and why it starts here now
+ *
+ * Issue #180: this page rendered no path at all to a `classGroupId` — the
+ * frame set nothing, no query parameter existed, and nothing linked to one —
+ * so every real caller silently asked for class 0 and read the wrong-host
+ * refusal for it. `mount()` now starts at the chooser (`fetchClasses()`,
+ * `states.choose()`) whenever it is not handed one directly, on the same
+ * reasoning as `marking.choose()`: every class the school has, because
+ * "who may sign" is the class list's question, asked once a class is picked,
+ * not a scope this screen narrows in advance.
  *
  * ## Save on a button, not on blur
  *
@@ -18,13 +30,15 @@
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
-import { REFUSAL, SAVE, fetchChild, fetchClass, saveRating, saveRemark } from "./api.js";
+import { REFUSAL, SAVE, fetchChild, fetchClass, fetchClasses, saveRating, saveRemark } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
   const after = signOutFailed ? failureNote() : "";
   switch (state.step) {
+    case "choose":
+      return states.choose(state) + after;
     case "class":
       return states.classList(state) + after;
     case "child":
@@ -40,6 +54,12 @@ export function htmlFor(state, { portal = "", signOutFailed = false } = {}) {
     default:
       return states.broken();
   }
+}
+
+/** Issue #180: which class to open, drawn before anything else. */
+export function fromClasses(answer) {
+  if (!answer.ok) return { step: answer.refusal, ...answer.body };
+  return { step: "choose", ...answer.body };
 }
 
 export function fromClass(answer) {
@@ -82,7 +102,11 @@ export function applySave(state, key, result) {
 
 export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {}) {
   const portal = root.dataset.portal || "";
-  const group = classGroupId !== null ? classGroupId : Number(root.dataset.class || 0);
+  // Issue #180: the frame never named a class. `classGroupId` is still here
+  // for a page that one day does (a link from the results chain, say) and for
+  // the tests that drive one class directly; a caller that gives neither
+  // starts at the chooser rather than asking for class 0.
+  let group = classGroupId !== null ? classGroupId : Number(root.dataset.class || 0) || null;
   let state = { step: "loading" };
   let signOutFailed = false;
   let openChild = null;
@@ -92,6 +116,13 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
 
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, signOutFailed });
+  };
+  const loadClasses = async () => {
+    group = null;
+    openChild = null;
+    typed = {};
+    state = fromClasses(await fetchClasses({ fetchImpl }));
+    draw();
   };
   const loadClass = async () => {
     openChild = null;
@@ -106,7 +137,8 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
     draw();
   };
 
-  await loadClass();
+  if (group) await loadClass();
+  else await loadClasses();
 
   root.addEventListener("click", async (event) => {
     const hit = event.target.closest("[data-action]");
@@ -123,12 +155,21 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
       draw();
       return;
     }
+    if (action === "pick-class") {
+      group = Number(hit.dataset.class);
+      await loadClass();
+      return;
+    }
     if (action === "open") {
       await loadChild(Number(hit.dataset.child));
       return;
     }
     if (action === "back") {
       await loadClass();
+      return;
+    }
+    if (action === "back-to-classes") {
+      await loadClasses();
       return;
     }
     if (action === "phrase") {

@@ -11,6 +11,38 @@
 import { esc } from "../web/html.js";
 import { button as signOutButton } from "../web/signout.js";
 
+/**
+ * Which class to open. Issue #180: the frame never named one, so this always
+ * had nowhere to send a caller — every class the school has, on the reasoning
+ * `marking.choose()` gives for the same shape: who may actually sign a class's
+ * remarks is a question the class list answers, once one is picked, not a
+ * scope this screen narrows in advance.
+ */
+export function choose({ term = "", classes = [] } = {}) {
+  return [
+    '<section class="state state-choose" data-state="choose">',
+    "<h1>Remarks</h1>",
+    term ? `<p class="term">${esc(term)}</p>` : "",
+    classes.length
+      ? [
+          "<p>Which class?</p>",
+          '<ul class="classes">',
+          classes
+            .map(
+              (g) =>
+                `<li><button type="button" data-action="pick-class" ` +
+                `data-class="${esc(g.class_group_id)}">${esc(g.class_group)}` +
+                `</button></li>`,
+            )
+            .join(""),
+          "</ul>",
+        ].join("")
+      : '<p class="blank">Your school has no classes set up yet.</p>',
+    signOutButton(),
+    "</section>",
+  ].join("");
+}
+
 /** Who in this class still needs which remark. */
 export function classList({ class_group = "", term = "", rows = [] } = {}) {
   return [
@@ -33,6 +65,8 @@ export function classList({ class_group = "", term = "", rows = [] } = {}) {
       )
       .join(""),
     "</ul>",
+    '<button type="button" class="back" data-action="back-to-classes">',
+    "Choose a different class</button>",
     signOutButton(),
     "</section>",
   ].join("");
