@@ -30,6 +30,10 @@ function payload(overrides = {}) {
     total_scored: 216,
     total_available: 260,
     own_average: "83.08",
+    // Blank/absent by default, so a test using the base fixture never
+    // accidentally exercises either feature below it did not ask for.
+    admission_number: "",
+    next_term_begins: null,
     days_present: null,
     days_absent: null,
     days_open: null,
@@ -150,8 +154,8 @@ test("a gap and an unmarked paper do not print the same", () => {
   // `·` is "this subject has no such paper"; `—` is "the child was not marked
   // in it". Two absences that mean different things, on a page somebody will
   // ask a teacher about.
-  const row = card(payload()).match(/<tr><td class="stack-head">Mathematics.*?<\/td>(.*?)<\/tr>/)[1];
-  const cells = [...row.matchAll(/<td class="n"[^>]*>(.*?)<\/td>/g)].map((m) => m[1]);
+  const row = card(payload()).match(/<tr>(<td class="stack-head">.*?Mathematics.*?<\/td>)(.*?)<\/tr>/)[2];
+  const cells = [...row.matchAll(/<td class="n paper"[^>]*>(.*?)<\/td>/g)].map((m) => m[1]);
   assert.match(cells[0], /^17$/, "the mark");
   assert.match(cells[1], /&middot;/, "Mathematics has no Exam out of 100: a gap");
   assert.match(cells[2], /&mdash;/, "nobody marked the Mid-term: a dash");
@@ -160,20 +164,29 @@ test("a gap and an unmarked paper do not print the same", () => {
 
 test("every row is as long as the header", () => {
   const html = card(payload());
-  const rows = [...html.matchAll(/<tr><td class="stack-head">(?:English|Mathematics).*?<\/td>(.*?)<\/tr>/g)];
+  const rows = [...html.matchAll(/<tr>(<td class="stack-head">.*?(?:English|Mathematics).*?<\/td>)(.*?)<\/tr>/g)];
   assert.equal(rows.length, 2);
-  for (const [, row] of rows) {
-    // Four column cells, plus total, percentage, grade.
-    assert.equal([...row.matchAll(/<td class="n"[ >]/g)].length, 7);
+  for (const [, , row] of rows) {
+    // Four paper cells, plus total, percentage, grade — each still a
+    // right-aligned `.n` cell, now with the second class that says which one.
+    assert.equal([...row.matchAll(/<td class="n (?:paper|total|pct|grade)"/g)].length, 7);
   }
 });
 
 test("each subject row carries a bar reading its own percentage", () => {
   const html = card(payload());
   // English: 74.17%. Mathematics: 90.71%. Neither is rounded for the bar —
-  // the same string `percentage()` prints under the same subject.
-  assert.match(html, /<td class="stack-head">English<div class="scorebar"><span style="width:74\.17%">/);
-  assert.match(html, /<td class="stack-head">Mathematics<div class="scorebar"><span style="width:90\.71%">/);
+  // the same string `percentage()` prints under the same subject. The bar
+  // sits under the name on a desktop table and a phone card alike, so it
+  // stays in the head cell rather than moving to the phone-only summary.
+  assert.match(
+    html,
+    /<td class="stack-head"><span class="subject">English<\/span><span class="grade-pct">[^<]*<\/span><div class="scorebar"><span style="width:74\.17%">/,
+  );
+  assert.match(
+    html,
+    /<td class="stack-head"><span class="subject">Mathematics<\/span><span class="grade-pct">[^<]*<\/span><div class="scorebar"><span style="width:90\.71%">/,
+  );
 });
 
 test("a subject with no percentage gets no bar, not a zero-width one", () => {
@@ -192,7 +205,8 @@ test("a subject with no percentage gets no bar, not a zero-width one", () => {
       ],
     }),
   );
-  assert.match(html, /<td class="stack-head">French<\/td>/, "no scorebar div at all");
+  assert.doesNotMatch(html, /scorebar/, "no scorebar div at all");
+  assert.match(html, /<span class="subject">French<\/span>/);
 });
 
 test("a percentage past the ends of the scale is clamped, not overflowed", () => {
@@ -412,4 +426,82 @@ test("a sign-out the server would not confirm leaves the card alone", async () =
   assert.match(root.innerHTML, /Ada Obi/, "a card cleared on an unproved sign-out");
   assert.match(root.innerHTML, /could not sign you out/i);
   assert.equal(root.dataset.state, "card");
+});
+
+// -- the admission number, next term and download button --------------------
+
+test("the admission number sits beside the name, and is absent where none is on file", () => {
+  const html = card(payload({ admission_number: "SUN/2026/0042" }));
+  assert.match(html, /Ada Obi<span class="adm">Adm\. no\. SUN\/2026\/0042<\/span>/);
+
+  assert.doesNotMatch(card(payload()), /class="adm"/, "no admission number on file: no span at all");
+});
+
+test("next term's date is a full sentence, or the line is left out", () => {
+  const html = card(payload({ next_term_begins: "2026-12-21" }));
+  assert.match(html, /<p class="resume"><strong>Next term begins:<\/strong> Monday 21 December 2026<\/p>/);
+
+  assert.doesNotMatch(card(payload()), /class="resume"/, "the school has not set one: no guessed date");
+});
+
+test("a school's typed characters in the admission number are escaped too", () => {
+  const html = card(payload({ admission_number: '"><script>alert(1)</script>' }));
+  assert.doesNotMatch(html, /<script>/);
+});
+
+test("download links to this card's own PDF, and is absent with no url to give it", () => {
+  const html = card(payload(), { pdfUrl: "/api/results/cards/5/9/pdf/" });
+  assert.match(html, /<a class="btn" href="\/api\/results\/cards\/5\/9\/pdf\/" target="_blank" rel="noopener">Download PDF<\/a>/);
+
+  assert.doesNotMatch(card(payload()), /Download PDF/, "no pdfUrl given: no button to a file this page cannot name");
+});
+
+// -- the phone card's second line --------------------------------------------
+
+test("the head line carries the grade and percentage; the marks line joins every paper and the total", () => {
+  const html = card(payload());
+  const english = html.slice(html.indexOf("English"), html.indexOf("Mathematics"));
+
+  assert.match(english, /<span class="grade-pct">B2 &middot; 74\.17%<\/span>/);
+  assert.match(
+    english,
+    /<span class="marks-summary">First CA 15 &middot; Exam 74 &middot; Total 89<span class="max">\/120<\/span><\/span>/,
+  );
+});
+
+test("a paper this subject does not have is left out of the summary line entirely", () => {
+  // Mathematics' columns are First CA, Exam/100, Mid-term, Exam/90. It has no
+  // Exam out of 100 at all (a gap, `·` — left out, not printed as a paper it
+  // does not sit) and was not marked on the Mid-term (a dash, `—` — printed,
+  // because that is a fact about the term). The same two absences `mark()`
+  // never confuses, now on the line that joins every paper into one sentence.
+  const html = card(payload());
+  const row = html.slice(html.indexOf("Mathematics"), html.indexOf("</tr>", html.indexOf("Mathematics")));
+  const summary = row.slice(row.indexOf('class="marks-summary"'));
+
+  assert.match(
+    summary,
+    /First CA 17 &middot; Mid-term <span class="blank">&mdash;<\/span> &middot; Exam 88 &middot; Total 127<span class="max">\/140<\/span>/,
+  );
+  assert.doesNotMatch(summary, /Exam &middot;|·.*Exam/, "the gap paper (no Exam\/100) does not appear at all");
+});
+
+test("no grade yet is just the percentage, not a grade beside a blank", () => {
+  const html = card(
+    payload({
+      subjects: [
+        {
+          subject_name: "French",
+          total_scored: 0,
+          total_available: 0,
+          percentage: null,
+          grade_letter: "",
+          grade_remark: "",
+          cells: [null, null, null, null],
+        },
+      ],
+    }),
+  );
+  assert.match(html, /<span class="grade-pct"><span class="blank">&mdash;<\/span><\/span>/);
+  assert.doesNotMatch(html, /&middot; <span class="blank">/, "no separator in front of nothing");
 });

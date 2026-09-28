@@ -20,6 +20,8 @@ h2 { font-size: 1rem; margin: 0 0 4px; }
 
 .masthead { text-align: center; border-bottom: 2px solid var(--text); padding-bottom: 8px; }
 .masthead .term { margin: 2px 0 0; color: var(--muted); }
+.masthead .resume { margin: 8px 0 0; font-size: var(--small); }
+.masthead .pdf-link { margin: 12px 0 0; }
 
 /* A label, design.css's red one: a revised card says so where it is seen. */
 .revised {
@@ -59,6 +61,11 @@ table { width: 100%; }
 .who th, .who td { padding: 3px 8px 3px 0; text-align: left; vertical-align: top; font-weight: 400; border: 0; color: var(--card); overflow-wrap: break-word; }
 .who th { width: 22%; opacity: .78; }
 .who td { width: 28%; font-weight: 700; }
+/* "Not recorded this term" is `.blank` everywhere else on this page — grey,
+   `design.css`'s `--muted` — which is the token this block's own blue makes
+   unreadable. This is the one place `.blank` is white instead. */
+.who .blank { color: var(--card); }
+.who .adm { display: block; margin-top: 2px; font-weight: 400; opacity: .78; }
 
 /* Four columns of a percentage each leave too little room for a phrase like
    "Not recorded this term" to read at all. Below 480px the table stacks into
@@ -89,6 +96,11 @@ table { width: 100%; }
    glance before reading the number in the `%` column. */
 .grid tbody td:first-child { min-width: 8rem; }
 .grid .scorebar { margin-top: 6px; }
+
+/* The grade and percentage repeated beside the subject name is the phone
+   card's line 1 (below); on a desktop table Grade and % already have their
+   own columns; a third copy here would be the same fact three times over. */
+.grid td.stack-head .grade-pct { display: none; }
 
 /* The parenthetical on a partial attendance line: "register kept on 40 of 62
    days". Smaller and greyer than the counts beside it, because it is the
@@ -122,11 +134,61 @@ table { width: 100%; }
  */
 button.signout { display: block; margin: 24px auto 0; }
 
-/* On a phone the marks are one card per subject (`design.css`'s stack): the
-   bar runs the card's width under the name, and a total reads "13/20" on
-   its line rather than over two. */
+/*
+ * A subject's own line, on the phone card and nowhere else: hidden here
+ * unconditionally and shown again below 640px, because the same figures
+ * already sit in the columns beside it on a desktop or in print, and a
+ * table with an extra unlabelled cell in every row is a bug, not a phone
+ * feature. See `render.js`'s `summaryLine()` for what it says.
+ */
+.grid .marks-line { display: none; }
+
+/*
+ * On a phone the marks are one card per subject (`design.css`'s stack), and
+ * six papers across five subjects is not thirty lines to scroll past: the
+ * head line is the subject and its grade and percentage, the bar and
+ * `.marks-line` are the second and last — "First CA 13 &middot; Exam 45
+ * &middot; Total 58/80" — and every other cell (each paper's own line, Total,
+ * %, Grade, Remark) is the same fact said again, so it is hidden here.
+ */
 @media (max-width: 639.98px) {
-  .grid.stack td.stack-head { display: block; }
+  /* `flex-wrap: wrap` and the bar's `flex-basis: 100%` are what put the name
+     and the grade/percentage on one line and push the bar onto its own —
+     the same trick a form uses to give one field a full-width row among
+     others that share theirs, applied to three children instead of a form's
+     fields. */
+  .grid.stack td.stack-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 10px;
+  }
+  /* `min-width: 0` and an ellipsis, not wrapping: the grade and percentage
+     stay on the name's own line at any subject name length, which is the
+     whole point of "exactly two lines". */
+  .grid.stack td.stack-head .subject {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .grid.stack td.stack-head .grade-pct {
+    display: inline;
+    flex: none;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .grid.stack td.stack-head .scorebar { flex: 1 1 100%; }
   .grid.stack .max { display: inline; }
   .grid.stack tbody td:first-child { min-width: 0; }
+  .grid.stack td.paper,
+  .grid.stack td.total,
+  .grid.stack td.pct,
+  .grid.stack td.grade,
+  .grid.stack td.remark {
+    display: none;
+  }
+  .grid.stack td.marks-line { display: block; color: var(--muted); }
+  .grid.stack .marks-summary { font-size: var(--small); }
 }

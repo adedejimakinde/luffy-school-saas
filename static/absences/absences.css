@@ -11,6 +11,22 @@ h2 { font-size: 1.1rem; margin: 20px 0 8px; }
 input[type=number] { width: 5.5em; }
 th, td { white-space: nowrap; }
 fieldset { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+/*
+ * On a phone this is a card per child: the name and class share one line
+ * (`table.stack td.stack-head` already puts them at opposite ends — see
+ * `design.css`), and "5 of 10 days absent (50%)" is the whole second line,
+ * rather than the same three figures spread over four labelled ones.
+ * `.class-name` and `.rate-line` exist only for this width; a desktop table
+ * has its own column for each already.
+ */
+.absences td.stack-head .class-name { display: none; }
+.absences .rate-line { display: none; }
+
+@media (max-width: 639.98px) {
+  .absences td.stack-head .class-name { display: inline; color: var(--muted); font-weight: 400; }
+  .absences .rate-line { display: block; }
+}
+
 @media print {
   body { font-size: 11pt; }
   .chooser, .threshold { display: none; }

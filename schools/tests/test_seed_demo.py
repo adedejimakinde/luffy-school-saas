@@ -85,8 +85,16 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                 with schema_context(school.schema_name):
                     term = Term.objects.get(is_current=True)
                     self.assertEqual(ClassPlacement.objects.filter(term=term).count(), 20)
-                    self.assertEqual(Score.objects.count(), 60)
+                    # A first CA in every subject for everybody (60), and an
+                    # exam for JSS 1B alone (10 children x 3 subjects) —
+                    # released, so a released card with every exam a dash
+                    # would be a card that lied about the term it printed.
+                    self.assertEqual(Score.objects.count(), 90)
                     self.assertEqual(Register.objects.count(), 20)
+                    # The card's "Next term begins" line has something to
+                    # read, and it does not fall after the term it follows.
+                    self.assertTrue(term.next_term_starts_on)
+                    self.assertGreater(term.next_term_starts_on, term.ends_on)
                     # "Tell families" (D9) was turned on and pressed for JSS 1B's
                     # release: one guardian, the demo parent, is reachable there.
                     [notice] = Notice.objects.all()
@@ -118,7 +126,7 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                     # JSS 1A is left open with four of ten principal's
                     # remarks written, so the principal's home has a class
                     # waiting on her, and a teacher still has a sheet to mark.
-                    from results.models import CommentAuthor, ReportCardComment, ResultSheet
+                    from results.models import CommentAuthor, ReportCardComment, ResultSheet, TraitRating
 
                     self.assertEqual(
                         ResultSheet.objects.get(term=term, class_group__name="JSS 1A").state, "draft"
@@ -130,6 +138,26 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                             student_membership_id__in=jss1a.values("student_membership_id"),
                         ).count(),
                         4,
+                    )
+
+                    # JSS 1B is released, so its card has to carry every
+                    # section the report card page and PDF can show: both
+                    # signatories' remarks and a rating on every trait,
+                    # rather than one remark and a blank conduct section.
+                    jss1b = ClassPlacement.objects.filter(term=term, class_group__name="JSS 1B")
+                    jss1b_ids = jss1b.values("student_membership_id")
+                    for author in (CommentAuthor.CLASS_TEACHER, CommentAuthor.PRINCIPAL):
+                        self.assertEqual(
+                            ReportCardComment.objects.filter(
+                                term=term, author=author, student_membership_id__in=jss1b_ids,
+                            ).count(),
+                            10,
+                            author,
+                        )
+                    self.assertEqual(
+                        TraitRating.objects.filter(term=term, student_membership_id__in=jss1b_ids).count(),
+                        10 * 11,
+                        "not every child rated on every trait",
                     )
 
                     # The week: five periods, both classes, one free period.

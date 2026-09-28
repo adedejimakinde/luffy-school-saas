@@ -225,6 +225,8 @@ class Command(BaseCommand):
         )
         term = academics.create_term(
             f"{starts.year}/{starts.year + 1}", TermName.FIRST, starts, starts + timedelta(weeks=12),
+            # What the card's "Next term begins" line reads: the second term below.
+            next_term_starts_on=starts + timedelta(weeks=14),
         )
         academics.set_current_term(term)
         # Next term, empty, so "copy last term" on the timetable has somewhere
@@ -241,18 +243,22 @@ class Command(BaseCommand):
                 academics.place_student(group, term, child)
         academics.assign_class_teacher(groups[0], term, staff["teacher"])
 
-        # Marks: a first CA in every subject, and an exam nobody has sat yet.
+        # Marks: a first CA in every subject for everybody, and an exam only
+        # JSS 1B has sat, because JSS 1B is the class released below and a
+        # released card with every exam a dash is not what a family sees.
         subjects = []
         for position, (subject_name, code) in enumerate(SUBJECTS):
             subject = Subject.objects.create(name=subject_name, code=code)
             subjects.append(subject)
             ca = Assessment.objects.create(term=term, subject=subject, name="First CA", max_score=20, position=0)
-            Assessment.objects.create(term=term, subject=subject, name="Exam", max_score=60, position=1)
+            exam = Assessment.objects.create(term=term, subject=subject, name="Exam", max_score=60, position=1)
             for child in children:
                 gradebook.set_score(ca, child, rng.randint(6, 20), by=staff["teacher"].user)
+            for child in placed[groups[1]]:
+                gradebook.set_score(exam, child, rng.randint(22, 58), by=staff["teacher"].user)
 
         self._timetable(term, groups, subjects, staff, teachers)
-        self._release(term, groups[1], placed[groups[1]], staff)
+        self._release(term, groups[1], placed[groups[1]], staff, rng)
         self._remarks_begun(term, groups[0], placed[groups[0]], staff)
 
         # Two weeks of registers. Children 3 and 14 are away often enough to be
@@ -305,7 +311,7 @@ class Command(BaseCommand):
             )
         fees.discount(children[1], term, 25_000 * KOBO_PER_NAIRA, narration="Second child in the school", recorded_by=bursar)
 
-    def _release(self, term, group, members, staff):
+    def _release(self, term, group, members, staff, rng):
         """JSS 1B's results, walked the whole chain and released, and told.
 
         The ordinary way, one step per role, so the demo holds what a real
@@ -327,17 +333,30 @@ class Command(BaseCommand):
         happens to be run at.
         """
         from notices import services as notices_service
-        from results import comments
+        from results import comments, ratings
         from results import services as chain
-        from results.models import CommentAuthor
+        from results.models import CommentAuthor, TraitGroup
 
         principal = staff["principal"].user
+        teacher = staff["teacher"].user
+        sheet = chain.open_sheet(group, term, principal)
+        # Everything a released card can carry, so the family's page and the
+        # PDF show every section: both remarks, and both halves of the
+        # conduct section, rated while the sheet is still a draft.
+        for trait_group in TraitGroup:
+            ratings.set_group_enabled(trait_group, True)
         for child in members:
+            comments.write(
+                term, child, CommentAuthor.CLASS_TEACHER,
+                "Works carefully and helps others. More care with spelling.", by=teacher,
+            )
             comments.write(
                 term, child, CommentAuthor.PRINCIPAL,
                 "A steady term. Keep reading every evening.", by=principal,
             )
-        sheet = chain.open_sheet(group, term, principal)
+            for trait_group in TraitGroup:
+                for trait in ratings.traits(trait_group):
+                    ratings.rate(term, trait, child, rng.randint(3, 5), by=teacher)
         chain.submit(sheet, staff["admin"].user)
         chain.check(sheet, staff["vp"].user)
         chain.approve(sheet, principal)

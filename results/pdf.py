@@ -47,12 +47,14 @@ of cards, and a band uses a lot of ink and streaks on a cheap printer. The
 colour is on the name and the card's rules and nowhere else, so every other
 word is dark ink. Classnode appears once, small, at the foot of each page.
 
-## Three things the payload does not carry, read here
+## One thing the payload does not carry, read here
 
-The admission number, the date the next term begins, and the grade key are not
-on `ReportCardOut`: the family page has never printed them, and none is a
-staff-only figure this module has to keep off the page. They are read here, at
-render time, beside the crest:
+The admission number and the date the next term begins are on `ReportCardOut`
+itself now (`card_payload()`), so the family's page and this file read one
+number and one date rather than each computing its own — the PDF used to
+recompute both here, and the family's page had neither. Only the grade key is
+not on the payload: it is not a fact about one card, and none is a staff-only
+figure this module has to keep off the page.
 
 - **The admission number** is `Membership.reference`, which the card row does
   not freeze. The PDF is rendered when the card is released and stored
@@ -79,8 +81,6 @@ from pathlib import Path
 
 from django.conf import settings
 from django.template.loader import render_to_string
-
-from accounts.models import Membership
 
 from . import grades, look
 from .card_api import card_columns, card_payload, card_rows
@@ -122,21 +122,16 @@ def html_for(card) -> str:
             # Read from this school's own schema, at render time. The PDF is
             # stored once made, so a card keeps the crest it was printed with.
             "look": look.for_card(payload.school_name),
-            "admission_number": _admission_number(card),
-            "next_term_begins": card.term.next_term_starts_on,
+            # Both read off `payload` rather than off `card` a second time —
+            # `card_payload()` is the one place either is worked out now, so
+            # the family's page and this file cannot print two different
+            # admission numbers or two different resumption dates for the
+            # same card.
+            "admission_number": payload.admission_number,
+            "next_term_begins": payload.next_term_begins,
             "grade_key": grade_key(grades.scale()),
             "fonts": FONTS.as_uri(),
         },
-    )
-
-
-def _admission_number(card) -> str:
-    """The child's admission number as the school holds it. Blank if none."""
-    return (
-        Membership.objects.filter(pk=card.student_membership_id)
-        .values_list("reference", flat=True)
-        .first()
-        or ""
     )
 
 

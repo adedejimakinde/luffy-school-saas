@@ -31,10 +31,18 @@
 
 import { esc, numberOrBlank } from "../web/html.js";
 
-/** The whole page body for one card payload. */
-export function card(payload) {
+/**
+ * The whole page body for one card payload.
+ *
+ * `pdfUrl` is the one thing here that is not on the payload: it is built from
+ * the ids already in the page's own URL (`app.js`), the same two the payload
+ * itself was fetched with, never derived from anything in `payload`. Absent
+ * where the caller has none to give, and then the button is not drawn — a
+ * link to a file this page cannot name would be worse than no button.
+ */
+export function card(payload, { pdfUrl = null } = {}) {
   return [
-    masthead(payload),
+    masthead(payload, pdfUrl),
     who(payload),
     marks(payload),
     sections(payload),
@@ -44,7 +52,7 @@ export function card(payload) {
   ].join("");
 }
 
-function masthead(payload) {
+function masthead(payload, pdfUrl) {
   return [
     '<header class="masthead">',
     `<h1>${esc(payload.school_name)}</h1>`,
@@ -56,8 +64,37 @@ function masthead(payload) {
     // supersedes the other. Not the reason and not who signed it — that is the
     // school's audit, not a line on a child's card.
     payload.is_revised ? '<p class="revised">Revised</p>' : "",
+    // Parents look for this first — the same line the PDF prints under its
+    // own masthead, from the same field on the payload.
+    payload.next_term_begins
+      ? `<p class="resume"><strong>Next term begins:</strong> ${date(payload.next_term_begins)}</p>`
+      : "",
+    pdfUrl
+      ? `<p class="pdf-link"><a class="btn" href="${esc(pdfUrl)}" target="_blank" rel="noopener">Download PDF</a></p>`
+      : "",
     "</header>",
   ].join("");
+}
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/**
+ * "l j F Y" the way `django.utils.dateformat` prints the same field in the
+ * PDF: "Monday 21 December 2026". Built by hand rather than with
+ * `toLocaleDateString`, whose weekday form inserts a comma Django's does not
+ * and whose available locales are a property of the machine running the
+ * browser or the test, not of this page.
+ */
+function date(isoDate) {
+  const parsed = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate));
+  if (!parsed) return esc(String(isoDate));
+  const [, year, month, day] = parsed;
+  const at = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  return `${WEEKDAYS[at.getUTCDay()]} ${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
 }
 
 /**
@@ -67,10 +104,13 @@ function masthead(payload) {
  * it — this only wraps it.
  */
 function who(payload) {
+  const adm = payload.admission_number
+    ? `<span class="adm">Adm. no. ${esc(payload.admission_number)}</span>`
+    : "";
   return [
     '<section class="summary">',
     '<table class="who">',
-    `<tr><th scope="row">Name</th><td>${esc(payload.student_name)}</td>`,
+    `<tr><th scope="row">Name</th><td>${esc(payload.student_name)}${adm}</td>`,
     `<th scope="row">Class</th><td>${esc(payload.class_group_name)}</td></tr>`,
     `<tr><th scope="row">Average</th><td>${percentage(payload.own_average)}</td>`,
     `<th scope="row">Attendance</th><td>${attendance(payload)}</td></tr>`,
@@ -133,21 +173,65 @@ function row(line, columns) {
     .map((cell, i) => {
       const column = columns[i];
       const label = column ? ` data-label="${esc(column.name)} /${esc(column.max_score)}"` : "";
-      return `<td class="n"${label}>${mark(cell)}</td>`;
+      // `.paper` is hidden below 640px (`card.css`): on a phone the same
+      // figures print again, joined, on the summary line — a subject with six
+      // papers is not six lines on a screen this narrow.
+      return `<td class="n paper"${label}>${mark(cell)}</td>`;
     })
     .join("");
   return [
     "<tr>",
-    `<td class="stack-head">${esc(line.subject_name)}${scorebar(line.percentage)}</td>`,
+    // The bar stays here, under the name, on a desktop table and a phone
+    // card alike — it was always this cell's, and moving it to the phone-only
+    // line below would have lost it from the wide table. `.grade-pct` is the
+    // phone card's line 1 addition and `card.css` hides it on a desktop,
+    // where Grade and % already have their own columns.
+    `<td class="stack-head">` +
+      `<span class="subject">${esc(line.subject_name)}</span>` +
+      `<span class="grade-pct">${gradeAndPercentage(line)}</span>` +
+      scorebar(line.percentage) +
+      "</td>",
     cells,
-    `<td class="n" data-label="Total">${esc(line.total_scored)}<span class="max">/${esc(
+    `<td class="n total" data-label="Total">${esc(line.total_scored)}<span class="max">/${esc(
       line.total_available,
     )}</span></td>`,
-    `<td class="n" data-label="%">${percentage(line.percentage)}</td>`,
-    `<td class="n" data-label="Grade">${esc(line.grade_letter)}</td>`,
-    `<td data-label="Remark">${esc(line.grade_remark)}</td>`,
+    `<td class="n pct" data-label="%">${percentage(line.percentage)}</td>`,
+    `<td class="n grade" data-label="Grade">${esc(line.grade_letter)}</td>`,
+    `<td class="remark" data-label="Remark">${esc(line.grade_remark)}</td>`,
+    // Phone only (`card.css` shows it, and hides everything above): every
+    // paper this subject has, and the total, on one small line —
+    // "First CA 13 &middot; Exam 45 &middot; Total 58/80" — rather than the
+    // same figures spread over six labelled lines. Absent papers (`·`) are
+    // left out entirely; an unmarked one still prints its dash, because that
+    // is a fact about the term rather than a column this subject does not
+    // have.
+    `<td class="stack-full marks-line"><span class="marks-summary">${summaryLine(line, columns)}</span></td>`,
     "</tr>",
   ].join("");
+}
+
+/** "B2 &middot; 74.17%", or just the percentage where there is no grade yet
+ * (`grade_letter` is blank when a subject has no total to grade). */
+function gradeAndPercentage(line) {
+  const pct = percentage(line.percentage);
+  if (!line.grade_letter) return pct;
+  return `${esc(line.grade_letter)} &middot; ${pct}`;
+}
+
+/** The phone card's second line: every paper this subject has, then the total. */
+function summaryLine(line, columns) {
+  const papers = (line.cells || [])
+    .map((cell, i) => {
+      if (cell === null || cell === undefined) return null; // no such paper here
+      const column = columns[i];
+      const name = column ? esc(column.name) : "";
+      return `${name} ${mark(cell)}`;
+    })
+    .filter((part) => part !== null);
+  papers.push(
+    `Total ${esc(line.total_scored)}<span class="max">/${esc(line.total_available)}</span>`,
+  );
+  return papers.join(" &middot; ");
 }
 
 /** One cell: a gap, a dash, or a mark. The three are not interchangeable. */
