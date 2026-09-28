@@ -39,6 +39,9 @@ class Kind(models.TextChoices):
     #: A payment, receipted. Email only — see `notices.receipts` — so it is
     #: never counted in `segments()`'s SMS terms.
     PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
+    #: A child marked absent. Email only — see `notices.absence_alerts` — for
+    #: the same reason a receipt is.
+    ABSENCE_ALERT = "absence_alert", "Absence alert"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -104,6 +107,14 @@ _TEXT[Kind.PAYMENT_RECEIPT] = (
     "{by_method} on {date}. {narration}"
 )
 
+# **No mark, grade or count of the term's other absences** — the same rule D9
+# holds a result notice to, read for the same reason: this is a lock-screen
+# text, and a running tally about a named child is not.
+_TEXT[Kind.ABSENCE_ALERT] = (
+    "{school}: {child} ({class_name}) was marked absent on {date}. If this is "
+    "wrong, please contact the school."
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -113,6 +124,7 @@ _SUBJECT = {
     Kind.RESULT_HELD: "About a report card",
     Kind.FEE_REMINDER: "About school fees",
     Kind.PAYMENT_RECEIPT: "Payment receipt",
+    Kind.ABSENCE_ALERT: "Absence alert",
 }
 
 

@@ -47,7 +47,9 @@ def send_notice(schema_name, notice_id):
     from results.withholding import is_withheld
 
     notice = (
-        Notice.objects.select_related("card", "source_entry").filter(pk=notice_id).first()
+        Notice.objects.select_related("card", "source_entry", "source_register")
+        .filter(pk=notice_id)
+        .first()
     )
     now = timezone.now()
     if notice is None or notice.send_after > now:
@@ -83,6 +85,14 @@ def send_notice(schema_name, notice_id):
         text = receipts.receipt_text_for(
             notice.source_entry, school=school, channel_type=notice.channel_type
         )
+    elif notice.kind == NoticeKind.ABSENCE_ALERT:
+        # An alert. D4 is all it asks — every live guardian gets one, not only
+        # those who receive invoices, so there is no extra gate here.
+        from . import absence_alerts
+
+        changed = False
+        message_kind = kinds.Kind.ABSENCE_ALERT
+        text = absence_alerts.alert_text_for(notice, school=school)
     else:
         # A fee reminder (D10). Its link must still receive invoices, and the
         # account is read again: a balance that has moved since the bursar

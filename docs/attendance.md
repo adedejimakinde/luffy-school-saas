@@ -362,6 +362,21 @@ diverged once already — the page keyed on `days_present` while the template
 keyed on `days_open` — and it was invisible only because the columns were always
 null.
 
+### D14. Absence alerts, written by `take_register()` itself (2026-09-28)
+
+A school with `NoticeSettings.absence_alerts` on gets an email to every live
+guardian of a child a register marks absent — no button, no preview, the same
+shape `fees.services.record_payment()` writes a payment receipt in. The design
+is `docs/messaging.md` D14; this is the trigger's own home.
+
+`take_register()` calls `notices.absence_alerts.write_alerts()` with every
+child the submission says is absent — not only the ones this call changed —
+because dedup is `write_alerts()`'s job: it reads a "told" set for this
+register before writing, so a plain resubmission, or a correction that lands
+back on absent, sends nothing twice. This is a service-layer decision, not one
+this module's own tables enforce, though `notices.Notice.source_register`
+carries a matching unique constraint as a backstop.
+
 ## What is configurable, and what is not
 
 **Not configurable, deliberately:** that the school declares `school_days` rather than

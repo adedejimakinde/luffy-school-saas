@@ -59,6 +59,9 @@ class NoticeSettings(models.Model):
     #: default like the two above, and for the same reason: a school that has
     #: never heard of this must see no trace of it until it turns it on.
     payment_receipts = models.BooleanField(default=False)
+    #: An alert by email, automatically, when a register marks a child absent.
+    #: Off by default, for the same reason as the three above.
+    absence_alerts = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -74,6 +77,9 @@ class NoticeKind(models.TextChoices):
     #: invoices. Unlike the two above, nobody presses a button for this one —
     #: `fees.services.record_payment()` writes it itself.
     PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
+    #: Sent automatically when a register marks a child absent, to every live
+    #: guardian of that child. `attendance.services.take_register()` writes it.
+    ABSENCE_ALERT = "absence_alert", "Absence alert"
 
 
 class Notice(_AppendOnly):
@@ -99,6 +105,14 @@ class Notice(_AppendOnly):
         "fees.FeeLedgerEntry", related_name="receipt_notices", on_delete=models.PROTECT,
         null=True, blank=True,
     )
+    #: The register an absence alert is about. A real key, same schema, for the
+    #: same reason `card` and `source_entry` are. One register covers a whole
+    #: class, so several children's alerts share one — the uniqueness
+    #: constraint below is a triple, not a pair, for exactly that reason.
+    source_register = models.ForeignKey(
+        "attendance.Register", related_name="absence_alerts", on_delete=models.PROTECT,
+        null=True, blank=True,
+    )
     student_membership_id = models.PositiveBigIntegerField()
     term = models.ForeignKey("academics.Term", related_name="notices", on_delete=models.PROTECT)
     guardian_user_id = models.PositiveBigIntegerField()
@@ -118,10 +132,11 @@ class Notice(_AppendOnly):
     amount_kobo = models.BigIntegerField(null=True, blank=True)
     #: When it may go: now, or 07:00 Lagos time if it was asked for in quiet hours.
     send_after = models.DateTimeField()
-    #: Whoever asked for this — a principal or a bursar pressing send, or
-    #: whoever recorded the payment a receipt is about. Nullable for the reason
-    #: `attendance.Register.taken_by_id` is: a payment from an import can have
-    #: nobody behind it, and naming a fictional actor is worse than naming none.
+    #: Whoever asked for this — a principal or a bursar pressing send, whoever
+    #: recorded the payment a receipt is about, or whoever took the register an
+    #: alert is about. Nullable for the reason `attendance.Register.taken_by_id`
+    #: is: an import can have nobody behind it, and naming a fictional actor is
+    #: worse than naming none.
     created_by_id = models.PositiveBigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -142,19 +157,28 @@ class Notice(_AppendOnly):
                 fields=["source_entry", "contact_id"],
                 name="a_payment_is_receipted_to_a_contact_once",
             ),
+            # One register holds many children, so an absence alert dedupes on
+            # the child too, not just the register and the contact.
+            models.UniqueConstraint(
+                fields=["source_register", "student_membership_id", "contact_id"],
+                name="an_absence_is_told_to_a_contact_once",
+            ),
             # A result notice is about a card and states no amount; a reminder
             # states an amount owing and is about no entry; a receipt is about
-            # an entry and states no card.
+            # an entry and states no card; an alert is about a register and
+            # states no amount.
             models.CheckConstraint(
                 condition=(
                     Q(kind="result_notice", card__isnull=False, amount_kobo__isnull=True,
-                      source_entry__isnull=True)
+                      source_entry__isnull=True, source_register__isnull=True)
                     | Q(kind="fee_reminder", card__isnull=True, amount_kobo__gt=0,
-                        source_entry__isnull=True)
+                        source_entry__isnull=True, source_register__isnull=True)
                     | Q(kind="payment_receipt", card__isnull=True, amount_kobo__gt=0,
-                        source_entry__isnull=False)
+                        source_entry__isnull=False, source_register__isnull=True)
+                    | Q(kind="absence_alert", card__isnull=True, amount_kobo__isnull=True,
+                        source_entry__isnull=True, source_register__isnull=False)
                 ),
-                name="a_notice_is_about_a_card_an_amount_or_a_payment",
+                name="a_notice_is_about_a_card_an_amount_a_payment_or_an_absence",
             ),
         ]
 
