@@ -38,6 +38,10 @@ third kind that nobody presses. See D13.
 **M8, absence alerts (2026-09-28), built.** The fourth kind, same shape as M7,
 from `attendance.services.take_register()` instead of the fee ledger. See D14.
 
+**M9, the proprietor's daily money summary (2026-09-28), built.** The fifth
+kind, and the odd one out: staff, not a guardian; a send log, not a `Notice`;
+the server's cron, not an event a service function triggers. See D15.
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.
@@ -575,16 +579,48 @@ button, the same shape D13 is.
   children, so its dedup constraint is a triple (register, child, contact),
   where a receipt's is a pair.
 
+### D15. The proprietor's daily money summary — not a `Notice` (2026-09-28)
+
+A fifth message kind, and the first that is not shaped like one. Once a day,
+`manage.py send_daily_money_summary` (the server's cron, D7's scheduler
+argument read again) emails every live administrator — "the proprietor", in
+whatever words a school uses for whoever owns it — a digest of the day that
+just closed, when `NoticeSettings.daily_money_summary` is on.
+
+- **Staff, not a guardian.** The recipient is an administrator's own login
+  email (`accounts.User.email`), not a `GuardianContact` D4 governs — there is
+  no verified-channel question to ask of someone signed in with a password.
+- **No `Notice` row.** `Notice` is a decision made against a family's channel:
+  who, on what channel, asked for at what hour, held for quiet hours, claimed
+  once before the provider is called. None of that applies to a staff digest,
+  so it is not force-fit into that shape. `MoneySummarySent` is the send log
+  instead — one row per day, so a second cron tick that day sends nothing
+  twice — and the email goes straight through the provider, synchronously,
+  from the management command: no queue, no quiet hours, no cap. A small,
+  staff-only audience reading about a day that has already closed is not
+  urgent enough to hold and not frequent enough to budget.
+- **What it says**: money collected and billed that day (the same fold
+  `home.summary.fees()` takes over `FeeLedgerEntry`, reckoned by
+  `recorded_at` for one day instead of by term), and how many payments. No
+  child is named — this is the school's own total, not a family message, so
+  D9's "no results in a result notice" reasoning does not transfer: there is
+  nobody here for a total to disclose anything to.
+- **"The proprietor" is read as the administrator role** (`Role.ADMIN`),
+  the closest existing role to a school's owner — distinct from the
+  principal, who runs the academic side. Every live administrator gets the
+  digest, not a single named owner; a school with none configured gets none.
+
 ## What is configurable
 
 **Per deploy (environment):** the provider per channel type (D1); the daily
 per-school segment cap (D7); the reminder interval (D10). Each is a setting with its
 argument written at the constant, as OPEN-3's and OPEN-4's were.
 
-**Per school:** whether result notices, fee reminders, payment receipts and
-absence alerts are offered at all, each **off by default**, for withholding's
-reason: a school that has never heard of this must see no trace of it, and must not start
-sending messages the day it ships.
+**Per school:** whether result notices, fee reminders, payment receipts,
+absence alerts and the daily money summary are offered at all, each **off by
+default**, for withholding's reason: a school that has never heard of this
+must see no trace of it, and must not start sending messages the day it
+ships.
 
 **Not configurable, deliberately:** the wording (D3), who may receive (D4), at most
 once (D5), and nothing about results in a message body (D9). Each is a rule about
