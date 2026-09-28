@@ -234,6 +234,14 @@ def take_register(
 
     register = _locked_register(class_group, term, on, by)
     _write_marks(register, present, absent, by)
+    if absent:
+        from notices.absence_alerts import write_alerts
+
+        # Every child this submission says is absent, not only those newly
+        # written so this call — `write_alerts()` dedupes on the register and
+        # the child itself, the same "told" set `notices.services.tell_families()`
+        # reads, so a resubmission asks again and is told the same nothing.
+        write_alerts(register, absent)
 
     return RegisterTaken(
         register=register,

@@ -35,6 +35,9 @@ is silenced in `settings.py` until a real phone provider is named (D2, M6).
 added once M2 and M3 (result notices, fee reminders) had shipped and asked for a
 third kind that nobody presses. See D13.
 
+**M8, absence alerts (2026-09-28), built.** The fourth kind, same shape as M7,
+from `attendance.services.take_register()` instead of the fee ledger. See D14.
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.
@@ -551,15 +554,36 @@ neither.
   and a real key into `fees.FeeLedgerEntry`" — `source_entry`, a foreign key
   rather than a bare id, for the reason `card` is one: same schema.
 
+### D14. Absence alerts: written by the register, not pressed (2026-09-28)
+
+The fourth kind, from `attendance.services.take_register()` rather than a
+button, the same shape D13 is.
+
+- **To every live guardian**, not only those who receive invoices — D10's
+  `invoices_only` gate is a fees question, and an absence is not one.
+- **Email only, no cap, quiet hours still hold it.** D13's three departures,
+  read here for a register instead of a ledger entry.
+- **At most one alert per register per child, ever — not per "newly written
+  absent".** A register can be amended, and a child corrected from absent to
+  present and back is one calendar fact, not two: re-alerting on the round
+  trip would be noise. Dedup is a "told" set read before writing (the same
+  idiom `_batch()` in `notices.services` uses for a card), not a value threaded
+  up from `attendance.services._write_marks()` — simpler, and it covers a
+  plain resubmission for free.
+- **`Notice` gained a fourth shape**: "about no card, no amount, and a real key
+  into `attendance.Register`" — `source_register`. One register holds many
+  children, so its dedup constraint is a triple (register, child, contact),
+  where a receipt's is a pair.
+
 ## What is configurable
 
 **Per deploy (environment):** the provider per channel type (D1); the daily
 per-school segment cap (D7); the reminder interval (D10). Each is a setting with its
 argument written at the constant, as OPEN-3's and OPEN-4's were.
 
-**Per school:** whether result notices, fee reminders and payment receipts are
-offered at all, each **off by default**, for withholding's reason: a school
-that has never heard of this must see no trace of it, and must not start
+**Per school:** whether result notices, fee reminders, payment receipts and
+absence alerts are offered at all, each **off by default**, for withholding's
+reason: a school that has never heard of this must see no trace of it, and must not start
 sending messages the day it ships.
 
 **Not configurable, deliberately:** the wording (D3), who may receive (D4), at most
