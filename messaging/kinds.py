@@ -36,6 +36,9 @@ class Kind(models.TextChoices):
     #: WhatsApp provider can hold a template for each.
     RESULT_HELD = "result_held", "Result notice, card held"
     FEE_REMINDER = "fee_reminder", "Fee reminder"
+    #: A payment, receipted. Email only — see `notices.receipts` — so it is
+    #: never counted in `segments()`'s SMS terms.
+    PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -91,6 +94,16 @@ _TEXT[Kind.FEE_REMINDER] = (
     "{school}: {child}'s fees account shows {amount} owing. {ask}"
 )
 
+# **What was received, when, and by what method — no balance.** A receipt is
+# frozen the moment the entry it is about was posted (`docs/fees.md`, "The
+# receipt"), so unlike a fee reminder it names no running total: restating one
+# here would be a second, unreconciled copy of a number the ledger already
+# freezes on the entry itself.
+_TEXT[Kind.PAYMENT_RECEIPT] = (
+    "{school}: receipt {receipt_number} for {child} — {amount} received"
+    "{by_method} on {date}. {narration}"
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -99,6 +112,7 @@ _SUBJECT = {
     Kind.RESULT_NOTICE: "A report card is ready",
     Kind.RESULT_HELD: "About a report card",
     Kind.FEE_REMINDER: "About school fees",
+    Kind.PAYMENT_RECEIPT: "Payment receipt",
 }
 
 

@@ -46,7 +46,9 @@ def send_notice(schema_name, notice_id):
     from results.services import school_on_this_connection
     from results.withholding import is_withheld
 
-    notice = Notice.objects.select_related("card").filter(pk=notice_id).first()
+    notice = (
+        Notice.objects.select_related("card", "source_entry").filter(pk=notice_id).first()
+    )
     now = timezone.now()
     if notice is None or notice.send_after > now:
         return None
@@ -69,6 +71,18 @@ def send_notice(schema_name, notice_id):
             result_message(notice.card, contact, held=held) if contact else ("", "")
         )
         changed = False
+    elif notice.kind == NoticeKind.PAYMENT_RECEIPT:
+        # A receipt. Its link must still receive invoices — the same gate a
+        # reminder reads — but the amount it states already happened and does
+        # not move the way a reminder's balance can, so there is no recheck.
+        from . import receipts
+
+        reachable = reachable and recipients.still_receives_invoices(notice)
+        changed = False
+        message_kind = kinds.Kind.PAYMENT_RECEIPT
+        text = receipts.receipt_text_for(
+            notice.source_entry, school=school, channel_type=notice.channel_type
+        )
     else:
         # A fee reminder (D10). Its link must still receive invoices, and the
         # account is read again: a balance that has moved since the bursar

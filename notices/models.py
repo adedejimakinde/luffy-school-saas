@@ -55,6 +55,10 @@ class NoticeSettings(models.Model):
 
     result_notices = models.BooleanField(default=False)
     fee_reminders = models.BooleanField(default=False)
+    #: A receipt by email, automatically, when a payment is recorded. Off by
+    #: default like the two above, and for the same reason: a school that has
+    #: never heard of this must see no trace of it until it turns it on.
+    payment_receipts = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -66,6 +70,10 @@ class NoticeSettings(models.Model):
 class NoticeKind(models.TextChoices):
     RESULT_NOTICE = "result_notice", "Result notice"
     FEE_REMINDER = "fee_reminder", "Fee reminder"
+    #: Sent automatically when a payment posts, to whichever guardians receive
+    #: invoices. Unlike the two above, nobody presses a button for this one —
+    #: `fees.services.record_payment()` writes it itself.
+    PAYMENT_RECEIPT = "payment_receipt", "Payment receipt"
 
 
 class Notice(_AppendOnly):
@@ -84,6 +92,13 @@ class Notice(_AppendOnly):
         "results.ReleasedCard", related_name="notices", on_delete=models.PROTECT,
         null=True, blank=True,
     )
+    #: The ledger entry a payment receipt is about. A real key, same schema, for
+    #: the same reason `card` is: `fees.FeeLedgerEntry` lives in this school's
+    #: own tables, not in `public`.
+    source_entry = models.ForeignKey(
+        "fees.FeeLedgerEntry", related_name="receipt_notices", on_delete=models.PROTECT,
+        null=True, blank=True,
+    )
     student_membership_id = models.PositiveBigIntegerField()
     term = models.ForeignKey("academics.Term", related_name="notices", on_delete=models.PROTECT)
     guardian_user_id = models.PositiveBigIntegerField()
@@ -95,13 +110,19 @@ class Notice(_AppendOnly):
     #: on what a school asked for, checked before anything goes.
     segments = models.PositiveSmallIntegerField()
     #: A fee reminder's amount: the child's whole account as the ledger folded
-    #: it when the bursar pressed send, and the number the message states.
-    #: Null for a result notice. At send time the ledger is read again, and a
-    #: balance that has moved sends nothing (`Said.BALANCE_CHANGED`).
+    #: it when the bursar pressed send, and the number the message states. A
+    #: payment receipt's amount: what that one entry moved. Null for a result
+    #: notice. At send time a reminder's ledger is read again, and a balance
+    #: that has moved sends nothing (`Said.BALANCE_CHANGED`); a receipt states a
+    #: payment already posted, which does not move.
     amount_kobo = models.BigIntegerField(null=True, blank=True)
     #: When it may go: now, or 07:00 Lagos time if it was asked for in quiet hours.
     send_after = models.DateTimeField()
-    created_by_id = models.PositiveBigIntegerField()
+    #: Whoever asked for this — a principal or a bursar pressing send, or
+    #: whoever recorded the payment a receipt is about. Nullable for the reason
+    #: `attendance.Register.taken_by_id` is: a payment from an import can have
+    #: nobody behind it, and naming a fictional actor is worse than naming none.
+    created_by_id = models.PositiveBigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -113,14 +134,27 @@ class Notice(_AppendOnly):
             models.UniqueConstraint(
                 fields=["card", "contact_id"], name="a_card_is_announced_to_a_contact_once"
             ),
+            # A payment posts once (the ledger is append-only), so this fires
+            # only if the same entry is ever receipted to a contact twice —
+            # belt and suspenders next to `record_payment()` calling this at
+            # most once per entry.
+            models.UniqueConstraint(
+                fields=["source_entry", "contact_id"],
+                name="a_payment_is_receipted_to_a_contact_once",
+            ),
             # A result notice is about a card and states no amount; a reminder
-            # states an amount owing and is about no card.
+            # states an amount owing and is about no entry; a receipt is about
+            # an entry and states no card.
             models.CheckConstraint(
                 condition=(
-                    Q(kind="result_notice", card__isnull=False, amount_kobo__isnull=True)
-                    | Q(kind="fee_reminder", card__isnull=True, amount_kobo__gt=0)
+                    Q(kind="result_notice", card__isnull=False, amount_kobo__isnull=True,
+                      source_entry__isnull=True)
+                    | Q(kind="fee_reminder", card__isnull=True, amount_kobo__gt=0,
+                        source_entry__isnull=True)
+                    | Q(kind="payment_receipt", card__isnull=True, amount_kobo__gt=0,
+                        source_entry__isnull=False)
                 ),
-                name="a_notice_is_about_a_card_or_an_amount_owing",
+                name="a_notice_is_about_a_card_an_amount_or_a_payment",
             ),
         ]
 
