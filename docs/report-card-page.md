@@ -261,10 +261,52 @@ portal's hostname from the `Domain` row for the public schema and renders it int
 `data-portal`, and where no such row exists the state says its sentence without a
 link.
 
-## What is not here
+## The admission number, next term, and a link to the file
 
-**There is no print button and no PDF link.** The browser's own print command
-uses `print.css`; the stored file has its own route and its own authority check.
+`admission_number` and `next_term_begins` are on `ReportCardOut` itself
+(`card_payload()`), not read a second time in `pdf.py` — the file used to
+compute both on its own, and the page had neither. One place works both out,
+so a parent cannot hold a page and a PDF naming two different resumption
+dates. Neither is staff-only: they are on the payload the family's own page
+already reads, the same way `is_revised` is.
+
+`render.js`'s "Download PDF" link is built by `app.js` from the two ids
+already in the page's own URL — `student_membership_id` and `term_id`, the
+same pair `fetchCard()` used — never from anything the API sends back with
+the card. A family that can read this page can already reach that URL; the
+button only saves them typing `/pdf/` on the end of it. `print.css` hides it,
+for the reason the sign-out button beside it is hidden: a link is a thing to
+tap, and paper cannot tap anything.
+
+## The marks table below 640px: two lines, not six
+
+A term with even three papers across three subjects was, before this, six
+labelled lines a phone scrolled past for every subject — a card of fifteen
+subjects was ninety lines before the remark at the bottom. `render.js` keeps
+the wide table's own column for every paper, the total, the percentage, the
+grade and the remark exactly as they were — `card.css`'s `.paper`, `.total`,
+`.pct`, `.grade` and `.remark` classes hide only the *stacked* copies below
+640px, and a desktop reader or `print.css` never sees them gone. Two lines
+replace all six there:
+
+1. **The subject, its grade and its percentage.** `.grade-pct` sits beside
+   the name in the same head cell the bar always lived in — `flex-wrap: wrap`
+   plus `flex: 1 1 100%` on the bar is what keeps the name and the grade on
+   one line while pushing the bar onto its own, the same trick that gives a
+   form field a row to itself among others that share theirs.
+2. **The bar, then every paper this subject has and the total, joined** —
+   "First CA 13 &middot; Exam 45 &middot; Total 58/80" — on `.marks-line`, a
+   cell with no equivalent in the wide table (`card.css` hides it there
+   unconditionally). A gap (`·`, no such paper) is left out of the sentence
+   entirely; an unmarked paper (`—`) still prints, because that is a fact
+   about the term and not a column this subject lacks.
+
+`.marks-summary` is deliberately smaller than the design's 15px phone
+minimum — `tests/ui/screens.test.js`'s `SMALL_ON_PURPOSE` exemption, the same
+one `.label` and `.tab-label` are already on, rather than a size the design's
+own floor would otherwise catch.
+
+## What is not here
 
 **There is no dark mode.** A report card is a document with a paper form:
 `print.css` is that form, and a second appearance would be one more thing to

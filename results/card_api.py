@@ -92,6 +92,7 @@ half of why freezing it would be wrong: the card would permanently say
 """
 
 import enum
+from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from enum import Enum
@@ -519,6 +520,19 @@ class ReportCardOut(Schema):
     #: here they did not send.
     term_id: int
     version: int
+
+    #: The admission number the school holds for this child, as it prints on
+    #: the card beside the name — parents look for it first, and a card that
+    #: only carried a name was a second document a family had to match by
+    #: hand to the one the school's own roll uses. Blank rather than absent
+    #: where none is on file, so a template needs no branch for it either way.
+    admission_number: str
+
+    #: "Next term begins: <date>", read once here rather than twice (the PDF
+    #: used to read `card.term.next_term_starts_on` itself, a second assembly
+    #: of the same fact). `None` where the school has not set one — a card
+    #: that guessed a date would be worse than a card with no line at all.
+    next_term_begins: Optional[date] = None
 
     #: Task 8. **The word "Revised" on the page, and the only source of it.**
     #: `ReleasedCard.is_revised` decides — `version > 1`, not "an audit row
@@ -1037,6 +1051,21 @@ def _sections(card) -> List[SectionOut]:
     ]
 
 
+def _admission_number(card) -> str:
+    """The child's admission number as the school holds it. Blank if none.
+
+    One lookup, shared by the family's page and the PDF `html_for()` renders
+    from this same payload — a second copy of this query is a second place for
+    the two to name a different number for the same child.
+    """
+    return (
+        Membership.objects.filter(pk=card.student_membership_id)
+        .values_list("reference", flat=True)
+        .first()
+        or ""
+    )
+
+
 def _comments(card) -> List[CommentOut]:
     """The signed remarks, in signatory order rather than write order.
 
@@ -1241,6 +1270,8 @@ def card_payload(card) -> ReportCardOut:
         term_label=TermName(card.term_name).label,
         term_id=card.term_id,
         version=card.version,
+        admission_number=_admission_number(card),
+        next_term_begins=card.term.next_term_starts_on,
         is_revised=card.is_revised,
         total_scored=card.total_scored,
         total_available=card.total_available,

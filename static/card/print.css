@@ -57,6 +57,12 @@ main { max-width: none; }
 
 /* A link is a thing to tap. On paper it is a sentence that cannot be obeyed. */
 .state a { display: none; }
+.pdf-link { display: none; }
+
+/* Defence in depth: `card.css` already gates this behind a max-width media
+   query that print does not match, but a printed card is never the phone
+   card, and this line is redundant with the columns beside it either way. */
+.grid .marks-line { display: none; }
 
 /*
  * A withheld card printing as a full page of red would be a family's toner

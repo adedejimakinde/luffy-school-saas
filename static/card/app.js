@@ -10,7 +10,7 @@
  * and changing it does not mean changing a regular expression in here.
  */
 
-import { fetchCard, provesASession, REFUSAL } from "./api.js";
+import { cardPdfUrl, fetchCard, provesASession, REFUSAL } from "./api.js";
 import { button as signOutButton, failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as states from "./states.js";
 import { card } from "./render.js";
@@ -31,11 +31,11 @@ const STATE_RENDERERS = {
  * page is the one outcome that tells a parent neither what happened nor what to
  * do about it.
  */
-export function htmlFor(answer, { portal = "", signOutFailed = false } = {}) {
+export function htmlFor(answer, { portal = "", signOutFailed = false, pdfUrl = null } = {}) {
   const after =
     (signOutFailed ? failureNote() : "") +
     (provesASession(answer) ? signOutButton() : "");
-  if (answer.ok) return card(answer.card) + after;
+  if (answer.ok) return card(answer.card, { pdfUrl }) + after;
   const render = STATE_RENDERERS[answer.refusal] || states.broken;
   // Two arguments, and only two of the five renderers read the second: the
   // card page is on a school's host and sign-in is on the portal, so the way
@@ -45,15 +45,18 @@ export function htmlFor(answer, { portal = "", signOutFailed = false } = {}) {
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
+  const studentMembershipId = root.dataset.studentMembershipId;
+  const termId = root.dataset.termId;
+  // Built from the same two ids the page was already given, not from
+  // anything the server sends back with the card: a family that can read
+  // this page can already reach this URL — it is the one it is on, with
+  // `/pdf/` on the end.
+  const pdfUrl = cardPdfUrl(studentMembershipId, termId);
   root.innerHTML = states.loading();
-  const answer = await fetchCard({
-    studentMembershipId: root.dataset.studentMembershipId,
-    termId: root.dataset.termId,
-    fetchImpl,
-  });
+  const answer = await fetchCard({ studentMembershipId, termId, fetchImpl });
   let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(answer, { portal, signOutFailed });
+    root.innerHTML = htmlFor(answer, { portal, signOutFailed, pdfUrl });
     // Said out loud for the print stylesheet and for anything watching: which
     // of the states the page settled in, on the element itself.
     root.dataset.state = answer.ok ? "card" : answer.refusal;

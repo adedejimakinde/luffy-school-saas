@@ -282,9 +282,14 @@ so a loose page cannot be mistaken for somebody else's.
 
 Beside the name is the admission number, and above everything else, when the
 school has set it, "Next term begins", which is what parents look for first.
-Under the marks is a one-line grade key from the school's own scale. The font
-is the design's Hanken Grotesk, loaded from the same self-hosted files the
-pages serve; WeasyPrint subsets it, so a card is about the size it was.
+Both are on `ReportCardOut` (`card_payload()`) now, not worked out twice —
+`admission_number` and `next_term_begins` are read once and reach the family's
+own browser page too, which shows them and a link to this file for the first
+time; see [report-card-page.md](report-card-page.md). Under the marks is a
+one-line grade key from the school's own scale, which is *not* on the
+payload — it is not a fact about one card. The font is the design's Hanken
+Grotesk, loaded from the same self-hosted files the pages serve; WeasyPrint
+subsets it, so a card is about the size it was.
 
 Both are optional, and both are set on the setup page by whoever may set the
 school up (`academics.api`, `card/colour/` and `card/crest/`). They live on

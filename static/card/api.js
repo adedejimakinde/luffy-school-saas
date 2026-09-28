@@ -30,6 +30,12 @@ export function cardUrl(studentMembershipId, termId) {
   )}/${encodeURIComponent(termId)}/`;
 }
 
+/** The same card, as the file `report_card_pdf()` serves — `inline`, so a
+ * plain navigation opens it rather than forcing a save dialog. */
+export function cardPdfUrl(studentMembershipId, termId) {
+  return `${cardUrl(studentMembershipId, termId)}pdf/`;
+}
+
 /**
  * Fetch one card. Resolves to `{ok: true, card}` or `{ok: false, refusal, body}`.
  *

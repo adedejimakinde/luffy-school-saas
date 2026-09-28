@@ -63,11 +63,17 @@ function table(children) {
       .map(
         (c) =>
           "<tr>" +
-          `<td class="stack-head">${esc(c.student)}</td>` +
-          `<td data-label="Class">${esc(c.class_group)}</td>` +
-          `<td class="num" data-label="Days absent">${esc(c.absent)}</td>` +
-          `<td class="num" data-label="Days marked">${esc(c.marked)}</td>` +
-          `<td class="num" data-label="Absent">${esc(c.rate)}%</td>` +
+          // The desktop table's five columns, unchanged. On a phone `stack-hide`
+          // drops the four data cells below — `absences.css` puts the same
+          // three figures back on one line, in a sentence rather than a
+          // table with nobody left to read the headings.
+          `<td class="stack-head"><span class="student">${esc(c.student)}</span>` +
+          `<span class="class-name">${esc(c.class_group)}</span></td>` +
+          `<td data-label="Class" class="stack-hide">${esc(c.class_group)}</td>` +
+          `<td class="num stack-hide" data-label="Days absent">${esc(c.absent)}</td>` +
+          `<td class="num stack-hide" data-label="Days marked">${esc(c.marked)}</td>` +
+          `<td class="num stack-hide" data-label="Absent">${esc(c.rate)}%</td>` +
+          `<td class="stack-full rate-line">${esc(c.absent)} of ${esc(c.marked)} days absent (${esc(c.rate)}%)</td>` +
           "</tr>",
       )
       .join(""),

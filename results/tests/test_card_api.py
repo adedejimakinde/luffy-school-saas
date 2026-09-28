@@ -53,7 +53,7 @@ from django.test import TestCase
 
 from academics.models import ClassGroup, Term, TermName
 from academics.services import assign_class_teacher, place_student
-from accounts.models import Role, User
+from accounts.models import Membership, Role, User
 from accounts.services import enroll_student, grant_membership, link_guardian
 from tests.guardians import answer_at, give_verified_channel
 from gradebook.models import Assessment, Score, Subject
@@ -273,6 +273,57 @@ class ReportCardApiSetUp(TestCase):
         # `TenantMainMiddleware` leaves the connection on the school's schema.
         connection.set_schema_to_public()
         super().tearDown()
+
+
+class TheAdmissionNumberAndNextTermTests(ReportCardApiSetUp):
+    """`admission_number` and `next_term_begins`: read once in `card_payload()`
+    and printed by the family's page and the PDF alike (`results/pdf.py`)."""
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            Membership.objects.filter(pk=self.ada.pk).update(reference="STM/2026/0001")
+        self.release()
+
+    def test_the_payload_carries_the_admission_number_on_file(self):
+        body = self.fetch(self.mama, self.stmarys, self.ada).json()
+        self.assertEqual(body["admission_number"], "STM/2026/0001")
+
+    def test_a_child_with_none_on_file_gets_a_blank_one_not_a_missing_field(self):
+        # Bola was enrolled with no `reference` at all — the ordinary case for
+        # a school still assigning numbers by hand.
+        body = self.fetch(self.bolas_father, self.stmarys, self.bola).json()
+        self.assertEqual(body["admission_number"], "")
+
+    def test_next_term_begins_is_the_terms_own_date(self):
+        with connected_to(self.stmarys):
+            Term.objects.filter(
+                pk=self.term_of(self.stmarys, TermName.FIRST.value).pk
+            ).update(next_term_starts_on=date(2026, 1, 12))
+
+        body = self.fetch(self.mama, self.stmarys, self.ada).json()
+
+        self.assertEqual(body["next_term_begins"], "2026-01-12")
+
+    def test_with_none_set_the_field_is_null_not_a_guess(self):
+        body = self.fetch(self.mama, self.stmarys, self.ada).json()
+        self.assertIsNone(body["next_term_begins"])
+
+    def test_one_admission_number_reaches_only_its_own_child(self):
+        """Two schools, and the point `docs`'s reason for writing this class out
+        keeps making: a second school's number must never answer for the first."""
+        with connected_to(self.grace):
+            Membership.objects.filter(pk=self.ngozi.pk).update(reference="GRC/2026/0009")
+        self.release(school=self.grace)
+        moms_number = User.objects.create_user("ngozis-mum", PASSWORD, full_name="Ngozi's Mum")
+        link_guardian(moms_number, self.ngozi)
+        give_verified_channel(moms_number, "08030000003")
+
+        ours = self.fetch(self.mama, self.stmarys, self.ada).json()
+        theirs = self.fetch(moms_number, self.grace, self.ngozi).json()
+
+        self.assertEqual(ours["admission_number"], "STM/2026/0001")
+        self.assertEqual(theirs["admission_number"], "GRC/2026/0009")
 
 
 class TheSnapshotReallyHoldsTheStaffOnlyNumbers(ReportCardApiSetUp):

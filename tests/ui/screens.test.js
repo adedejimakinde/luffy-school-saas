@@ -67,7 +67,8 @@ export const WIDTHS = [360, 768, 1280];
 const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet";
 
 /** Labels the design sets below body size on purpose. */
-const SMALL_ON_PURPOSE = ".label, .tag, .revised, .nav-heading, .tab-label";
+const SMALL_ON_PURPOSE =
+  ".label, .tag, .revised, .nav-heading, .tab-label, .marks-summary";
 
 /**
  * Every screen: who opens it, where, and the taps that reach its main state.

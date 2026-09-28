@@ -60,10 +60,25 @@ test("the children are drawn in the server's order, with the server's rate", () 
   const html = states.list({ absences: LIST });
 
   assert.ok(html.indexOf("Emeka E") < html.indexOf("Ada A"), "the page re-sorted the list");
-  assert.match(html, /<td class="num" data-label="Absent">30\.0%<\/td>/);
-  assert.match(html, /<td class="num" data-label="Absent">12\.5%<\/td>/);
+  assert.match(html, /<td class="num stack-hide" data-label="Absent">30\.0%<\/td>/);
+  assert.match(html, /<td class="num stack-hide" data-label="Absent">12\.5%<\/td>/);
   assert.match(html, /Absent on at least 10% of the days marked, once 10 days have been marked\./);
   assert.match(html, /A day with no register counts for nothing/);
+});
+
+test("the phone card is two lines: name and class, then the rate as a sentence", () => {
+  // `class="num stack-hide"` above stays for the desktop table's own columns
+  // (`test_the_children_are_drawn...`); `.rate-line` and `.class-name` are the
+  // phone-only second line and the name-line addition, hidden on a desktop
+  // table by `absences.css` and shown again below 640px.
+  const html = states.list({ absences: LIST });
+
+  assert.match(
+    html,
+    /<td class="stack-head"><span class="student">Emeka E<\/span><span class="class-name">JSS 1A<\/span><\/td>/,
+  );
+  assert.match(html, /<td class="stack-full rate-line">6 of 20 days absent \(30\.0%\)<\/td>/);
+  assert.match(html, /<td class="stack-full rate-line">2 of 16 days absent \(12\.5%\)<\/td>/);
 });
 
 test("nobody on the list after registers were taken is a finding", () => {
