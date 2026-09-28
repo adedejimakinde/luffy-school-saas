@@ -24,7 +24,7 @@ from messaging.models import FakeMessage
 from messaging.tests.fake import SendsThroughTheFake
 from notices import hours
 from notices.daily_summary import send_summaries, send_summary
-from notices.models import MoneySummarySent, NoticeSettings
+from notices.models import MoneySummaryRecipient, MoneySummarySent, NoticeSettings
 from schools.models import Domain, School
 from schools.tests.tenants import connected_to, make_school
 
@@ -65,7 +65,11 @@ class SummarySetUp(SendsThroughTheFake, TestCase):
 
     def staff(self, username, name, role, school, *, email):
         user = User.objects.create_user(username, PASSWORD, full_name=name, email=email)
-        grant_membership(user, school, role)
+        membership = grant_membership(user, school, role)
+        # The daily summary picks recipients by membership id, not user id
+        # (`MoneySummaryRecipient`) — stashed here so a test can say
+        # `self.admin.membership_id` without a second lookup.
+        user.membership_id = membership.pk
         return user
 
     def child(self, username, name, school, reference):
@@ -83,9 +87,12 @@ class SummarySetUp(SendsThroughTheFake, TestCase):
             ends_on=timezone.localdate() + timedelta(days=70),
         )
 
-    def offer(self, school=None):
+    def offer(self, school=None, *, recipients=()):
         with connected_to(school or self.stmarys):
             NoticeSettings.objects.create(pk=1, daily_money_summary=True)
+            MoneySummaryRecipient.objects.bulk_create(
+                [MoneySummaryRecipient(membership_id=m.membership_id) for m in recipients]
+            )
 
     def texts(self, address):
         return [m.text for m in FakeMessage.objects.filter(address=address).order_by("id")]
@@ -104,34 +111,69 @@ class OffByDefaultTests(SummarySetUp):
             self.assertEqual(MoneySummarySent.objects.count(), 0)
 
 
+class NobodyByDefaultTests(SummarySetUp):
+    """Turning the digest on picks nobody by itself — D15, extended: the school
+    chooses its recipients from its own live staff list, and the default is
+    nobody until it does."""
+
+    def setUp(self):
+        super().setUp()
+        self.offer()  # no recipients
+
+    def test_nobody_chosen_means_nobody_is_emailed(self):
+        with connected_to(self.stmarys):
+            sent = send_summary(self.stmarys, self.today)
+
+        self.assertTrue(sent)  # the day is still recorded processed
+        self.assertEqual(self.texts("ade@stmarys.example"), [])
+
+    def test_the_day_is_still_recorded_so_a_later_pick_does_not_resend_it(self):
+        with connected_to(self.stmarys):
+            send_summary(self.stmarys, self.today)
+            recorded = MoneySummarySent.objects.filter(for_day=self.today).exists()
+
+        self.assertTrue(recorded)
+
+
 class WhoGetsOneTests(SummarySetUp):
     def setUp(self):
         super().setUp()
-        self.offer()
+        self.offer(recipients=[self.admin])
 
-    def test_every_live_administrator_with_an_email_gets_one(self):
+    def test_a_chosen_staff_member_with_an_email_gets_one(self):
         with connected_to(self.stmarys):
             send_summary(self.stmarys, self.today)
 
         self.assertEqual(len(self.texts("ade@stmarys.example")), 1)
 
-    def test_an_administrator_with_no_email_is_skipped_without_failing_the_rest(self):
+    def test_a_chosen_staff_member_with_no_email_is_skipped_without_failing_the_rest(self):
         with connected_to(self.stmarys):
+            MoneySummaryRecipient.objects.create(membership_id=self.no_email_admin.membership_id)
             send_summary(self.stmarys, self.today)
 
         self.assertEqual(len(self.texts("ade@stmarys.example")), 1)
 
-    def test_a_bursar_is_not_sent_one(self):
+    def test_a_bursar_who_was_not_chosen_is_not_sent_one(self):
         with connected_to(self.stmarys):
             send_summary(self.stmarys, self.today)
 
         self.assertEqual(self.texts("bola@stmarys.example"), [])
+
+    def test_an_administrator_who_was_not_chosen_is_not_sent_one(self):
+        with connected_to(self.stmarys):
+            second_admin = self.staff(
+                "kemi", "Kemi Admin", Role.ADMIN, self.stmarys, email="kemi@stmarys.example"
+            )
+            send_summary(self.stmarys, self.today)
+
+        self.assertEqual(self.texts("kemi@stmarys.example"), [])
 
     def test_each_school_is_sent_only_if_its_own_setting_is_on(self):
         with connected_to(self.grace):
             grace_admin = self.staff(
                 "grace-ade", "Grace Admin", Role.ADMIN, self.grace, email="admin@grace.example"
             )
+            MoneySummaryRecipient.objects.create(membership_id=grace_admin.membership_id)
         with connected_to(self.grace):
             sent = send_summary(self.grace, self.today)
 
@@ -142,7 +184,7 @@ class WhoGetsOneTests(SummarySetUp):
 class TheFiguresTests(SummarySetUp):
     def setUp(self):
         super().setUp()
-        self.offer()
+        self.offer(recipients=[self.admin])
 
     def test_collected_and_billed_and_the_payment_count(self):
         with connected_to(self.stmarys):
@@ -177,7 +219,7 @@ class TheFiguresTests(SummarySetUp):
 class SentOnceTests(SummarySetUp):
     def setUp(self):
         super().setUp()
-        self.offer()
+        self.offer(recipients=[self.admin])
 
     def test_a_second_run_the_same_day_sends_nothing_twice(self):
         with connected_to(self.stmarys):
@@ -206,7 +248,7 @@ class SentOnceTests(SummarySetUp):
 class ProviderRefusalTests(SummarySetUp):
     def setUp(self):
         super().setUp()
-        self.offer()
+        self.offer(recipients=[self.admin])
 
     def test_a_refused_address_does_not_stop_the_day_being_recorded(self):
         with connected_to(self.stmarys):

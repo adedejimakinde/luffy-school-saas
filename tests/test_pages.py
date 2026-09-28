@@ -50,6 +50,7 @@ from results.views import (
     INDEX_MODULES,
 )
 from home.views import HOME_MODULES
+from notices.views import SETTINGS_MODULES
 from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -78,6 +79,7 @@ PAGES = {
     "timetable": TIMETABLE_MODULES,
     "checker": CHECKER_MODULES,
     "home": HOME_MODULES,
+    "notices-settings": SETTINGS_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

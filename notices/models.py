@@ -223,6 +223,20 @@ class NoticeOutcome(_AppendOnly):
     recorded_at = models.DateTimeField(auto_now_add=True)
 
 
+class MoneySummaryRecipient(models.Model):
+    """A staff member this school has chosen to receive the daily money summary.
+
+    Bare id into `accounts.Membership`, for the reason `Notice.student_membership_id`
+    is one too: a real foreign key from this school's schema into `public` cannot
+    `PROTECT` anything (`docs/tenancy.md`). **Nobody by default** — the settings
+    screen adds rows here one at a time, from the school's own live staff list,
+    and `notices.daily_summary.recipient_emails()` reads them back.
+    """
+
+    membership_id = models.PositiveBigIntegerField(unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class MoneySummarySent(models.Model):
     """That this school's daily money digest went out for one day. One row per day.
 

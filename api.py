@@ -57,6 +57,7 @@ from fees.api import router as fees_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from home.api import router as home_router
+from notices.api import router as notices_router
 from results.api import router as results_router
 from results.card_api import checker_router
 from results.card_api import router as report_card_router
@@ -119,6 +120,10 @@ api.add_router("/timetable/", timetable_router, tags=["timetable"])
 # The principal's home: one read over the figures the pages above own. Tenant
 # host only, like them, and refused before any read to anybody it is not for.
 api.add_router("/home/", home_router, tags=["home"])
+# The notices settings screen: the three switches and who gets the daily
+# money summary. Tenant host only and refused with a flat 404 on the portal,
+# like the routers above.
+api.add_router("/notices/", notices_router, tags=["notices"])
 
 
 @api.exception_handler(CardWithheld)
