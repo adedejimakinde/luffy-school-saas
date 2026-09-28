@@ -38,7 +38,7 @@ internet ──443──▶ caddy ──http──▶ web (gunicorn) ──▶ d
 | where | what | in the repo? |
 |---|---|---|
 | `deploy/production.env` | everything not secret: the domain, the proxy switches, service names | yes |
-| `/etc/classnode/secrets.env` (server, mode 600) | `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`, SMTP credentials **[needs email provider]**, `SENTRY_DSN` **[needs Sentry, H3]**, WAL-G/B2 keys **[needs B2, H3]** | **never** |
+| `/etc/classnode/secrets.env` (server, mode 600) | `DJANGO_SECRET_KEY`, `POSTGRES_PASSWORD`, SMTP credentials (`EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `MESSAGING_EMAIL_PROVIDER=messaging.smtp.SmtpProvider` — `docs/messaging.md` M10), `SENTRY_DSN` **[needs Sentry, H3]**, WAL-G/B2 keys **[needs B2, H3]** | **never** |
 | `/etc/classnode/caddy.env` (server, mode 600) | `CLOUDFLARE_API_TOKEN` **[needs Cloudflare]**, `ACME_EMAIL` | **never** |
 | `/etc/classnode/backup.env` (server, mode 600; optional until B2 exists) | `WALG_S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT`, `AWS_REGION` **[needs B2]**, `WALG_LIBSODIUM_KEY` (the backup encryption key — **also in your password manager**), `BACKUP_HEARTBEAT_URL` **[needs Sentry]** | **never** |
 | GitHub repository secrets | `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` **[needs the server]** | **never** |

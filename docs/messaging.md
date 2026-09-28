@@ -42,6 +42,17 @@ from `attendance.services.take_register()` instead of the fee ledger. See D14.
 kind, and the odd one out: staff, not a guardian; a send log, not a `Notice`;
 the server's cron, not an event a service function triggers. See D15.
 
+**M10, a real email provider (2026-09-28), built.** `messaging.smtp.SmtpProvider`
+— plain SMTP, behind the same interface `FakeProvider` fills, configured by
+environment variables. `messaging.E001` and `messaging.W001` are unchanged: a
+deploy still names it explicitly (`MESSAGING_EMAIL_PROVIDER`) rather than it
+becoming a new default, and `FakeProvider` stays what development and the test
+suite select. This is **half of M6**, deliberately: it answers "does a real
+provider plug in with no change to the four [features]", the engineering
+question, for the `email` channel only. **OPEN-5 — which provider, under what
+contract, and phone/SMS/WhatsApp's own provider — is still open**; this adds no
+phone provider and settles no business question.
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.
