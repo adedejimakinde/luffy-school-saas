@@ -339,6 +339,11 @@ A school with `NoticeSettings.payment_receipts` on also gets this by email,
 automatically, the moment `record_payment()` posts the entry — no button, no
 preview. `docs/messaging.md` D13 has the design; `notices.receipts` the code.
 
+A school with `NoticeSettings.daily_money_summary` on also gets a once-a-day
+digest of what the ledger says moved — collected and billed, one school day
+at a time, folded the way `home.summary.fees()` folds a term. `docs/messaging.md`
+D15 has the design; `notices.daily_summary` the code.
+
 ## B2: bills and concessions
 
 Built 2026-09-24. `fees/billing.py` is the service layer, and the routes and the

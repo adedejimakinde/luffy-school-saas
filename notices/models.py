@@ -62,6 +62,10 @@ class NoticeSettings(models.Model):
     #: An alert by email, automatically, when a register marks a child absent.
     #: Off by default, for the same reason as the three above.
     absence_alerts = models.BooleanField(default=False)
+    #: A digest by email, once a day, to every live administrator — "the
+    #: proprietor's" summary. Off by default, for the same reason as the
+    #: three above. Not a `Notice`: see `MoneySummarySent`.
+    daily_money_summary = models.BooleanField(default=False)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -217,3 +221,26 @@ class NoticeOutcome(_AppendOnly):
     said = models.CharField(max_length=24, choices=Said)
     provider_ref = models.CharField(max_length=128, blank=True)
     recorded_at = models.DateTimeField(auto_now_add=True)
+
+
+class MoneySummarySent(models.Model):
+    """That this school's daily money digest went out for one day. One row per day.
+
+    **Not shaped like `Notice`, on purpose.** The recipient here is staff, by
+    their own login email, not a guardian with a verified channel D4 governs —
+    there is no `GuardianContact` for an administrator to check reachability
+    against. This is a send log, not a decision made against a family's
+    channel, so it carries none of `Notice`'s machinery: no claim, no
+    per-guardian outcome, just the fact and the figures it stated, so a second
+    run of the day's cron finds this row and sends nothing twice.
+    `notices.daily_summary` is where it is written.
+    """
+
+    for_day = models.DateField(unique=True)
+    collected_kobo = models.BigIntegerField()
+    billed_kobo = models.BigIntegerField()
+    payments = models.PositiveIntegerField()
+    sent_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Money summary for {self.for_day}"

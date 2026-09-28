@@ -20,3 +20,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # more often than needed sends nothing twice: every send is claimed first
 # (notices/tasks.py, docs/messaging.md D5 and D7).
 */15 6-18 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py release_held_notices >> /var/log/classnode-notices.log 2>&1
+
+# The proprietor's daily money summary, 23:05 UTC = 00:05 Lagos, just after a
+# school's day closes. Safe to run more than once: a school already sent for
+# that day is skipped (docs/messaging.md D15).
+5 23 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py send_daily_money_summary >> /var/log/classnode-notices.log 2>&1

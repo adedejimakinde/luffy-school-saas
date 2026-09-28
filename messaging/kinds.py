@@ -42,6 +42,9 @@ class Kind(models.TextChoices):
     #: A child marked absent. Email only — see `notices.absence_alerts` — for
     #: the same reason a receipt is.
     ABSENCE_ALERT = "absence_alert", "Absence alert"
+    #: The school's own staff digest. Email only, and to nobody a guardian
+    #: channel could name — see `notices.daily_summary`.
+    DAILY_MONEY_SUMMARY = "daily_money_summary", "Daily money summary"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -115,6 +118,14 @@ _TEXT[Kind.ABSENCE_ALERT] = (
     "wrong, please contact the school."
 )
 
+# Staff's own digest, so it may say what a family message never does: a plain
+# total, with no child named. {word} is "payment" or "payments" — see
+# `notices.daily_summary.summary_text()`.
+_TEXT[Kind.DAILY_MONEY_SUMMARY] = (
+    "{school}: money summary for {date} — {collected} collected across "
+    "{payments} {word}, {billed} billed."
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -125,6 +136,7 @@ _SUBJECT = {
     Kind.FEE_REMINDER: "About school fees",
     Kind.PAYMENT_RECEIPT: "Payment receipt",
     Kind.ABSENCE_ALERT: "Absence alert",
+    Kind.DAILY_MONEY_SUMMARY: "Daily money summary",
 }
 
 
