@@ -22,6 +22,8 @@ page in — is tested where it lives, in `results/tests/js/` under `node --test`
 because those renderers are pure functions of a payload and need no browser.
 """
 
+import re
+
 from django.templatetags.static import static
 from django.test import TestCase
 
@@ -30,6 +32,24 @@ from results import cards
 from results.tests.test_card_api import HOST, ReportCardApiSetUp
 from schools.models import Domain
 from schools.tests.tenants import connected_to
+
+#: The only two places `card_page.html` writes an id into the shell —
+#: `data-student-membership-id="…"` and `data-term-id="…"` on `<main>` — named
+#: by the attribute they sit in rather than matched as bare digits. A global
+#: `str(id).replace()` over the whole document can, by coincidence, also match
+#: a run of digits inside an unrelated hashed static asset filename (a font's
+#: `.woff2`, under the manifest storage CI serves), corrupting one frame's hash
+#: but not the other depending on which primary keys the database happened to
+#: hand out that run — a flake with nothing to do with either child. Anchoring
+#: the pattern to the attribute name it always follows makes that collision
+#: structurally impossible: nothing outside these two attributes is ever touched.
+_STUDENT_ID_ATTR = re.compile(r'data-student-membership-id="\d+"')
+_TERM_ID_ATTR = re.compile(r'data-term-id="\d+"')
+
+
+def _with_ids_normalized(html: str) -> str:
+    html = _STUDENT_ID_ATTR.sub('data-student-membership-id="ID"', html)
+    return _TERM_ID_ATTR.sub('data-term-id="TERM"', html)
 
 
 class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
@@ -156,15 +176,11 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
         # id the caller themselves sent — which is not a disclosure, and a test
         # that called it one would be measuring its own fixture. What matters
         # is that nothing *else* differs between a real child and an invented
-        # one.
-        term_id = self.terms_of(self.stmarys)[TermName.FIRST.value]
+        # one. `_with_ids_normalized()` above says why this is not a bare
+        # `str(id).replace()` over the whole document.
         self.assertEqual(
-            nobody.content.decode()
-            .replace("999999", "ID")
-            .replace(str(term_id), "TERM"),
-            somebody.content.decode()
-            .replace(str(self.ada.pk), "ID")
-            .replace(str(term_id), "TERM"),
+            _with_ids_normalized(nobody.content.decode()),
+            _with_ids_normalized(somebody.content.decode()),
             "the frames differ by more than the ids the caller sent",
         )
 
