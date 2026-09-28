@@ -610,7 +610,45 @@ just closed, when `NoticeSettings.daily_money_summary` is on.
   principal, who runs the academic side. Every live administrator gets the
   digest, not a single named owner; a school with none configured gets none.
 
-### D16. `Reply-To` is the school's own contact email (2026-09-28)
+  Superseded by D16 below: who gets the digest is no longer every live
+  administrator, but whoever the school itself picks.
+
+### D16. The settings screen: three switches, and who picks the summary's staff (2026-09-28)
+
+`payment_receipts`, `absence_alerts` and `daily_money_summary` — off by
+default, unreachable except by hand since #199–#201 shipped them — get a
+page: `/notices/settings/`, gated the way `set_offered_as()` already gates a
+write, the principal or an administrator (`notices.services.SETTINGS_ROLES`).
+`result_notices` and `fee_reminders` are not on it: the first has its own
+step on the chain page (D9) and the second its own on the bursar's page
+(D10), and duplicating either switch here would be a second place it could be
+turned on from.
+
+**The daily money summary no longer goes to every administrator.** D15 read
+"the proprietor" as the administrator role for want of anything narrower;
+this replaces that guess with an explicit pick. The school chooses, from its
+own live staff (`schools.invitations.active_staff()` — the same list the
+staff-invitations screen already offers), exactly who gets the digest,
+recorded in a new tenant-schema row, `NoticeSettings`-adjacent rather than a
+field on it: `MoneySummaryRecipient(membership_id)`, one row per chosen
+staff member, a bare id into `accounts.Membership` for the reason
+`Notice.student_membership_id` is one (`docs/tenancy.md`).
+
+**Nobody by default**, even once the switch is on — turning
+`daily_money_summary` on and choosing nobody is a valid, quiet state, not an
+error. The settings screen's own note says so, in words, next to the empty
+list: picking nobody is not the same question as whether the school wants the
+feature at all, and conflating them would be the school's decision made for
+it by a checkbox with no memory of who used to be ticked.
+
+**Reachability is read again at send time**, the way D4 reads a guardian's
+channel again rather than trusting what was true when a notice was asked for:
+`notices.daily_summary.recipient_emails()` intersects the chosen ids with
+`active_staff()` fresh each run, so a staff member picked and later ended,
+suspended, or moved off the school's live roster is silently skipped rather
+than emailed a report about money they may no longer have any reason to see.
+
+### D17. `Reply-To` is the school's own contact email (2026-09-28)
 
 Every email this platform sends on a school's behalf — a code, a result
 notice, a fee reminder, a payment receipt, an absence alert, the daily money
@@ -652,7 +690,10 @@ argument written at the constant, as OPEN-3's and OPEN-4's were.
 absence alerts and the daily money summary are offered at all, each **off by
 default**, for withholding's reason: a school that has never heard of this
 must see no trace of it, and must not start sending messages the day it
-ships.
+ships. Payment receipts, absence alerts and the daily money summary are set
+from `/notices/settings/` (D16); the other two keep their own pages. Which
+staff receive the daily money summary is also per school, from its own live
+roster, and defaults to nobody even once the digest itself is switched on.
 
 **Not configurable, deliberately:** the wording (D3), who may receive (D4), at most
 once (D5), and nothing about results in a message body (D9). Each is a rule about

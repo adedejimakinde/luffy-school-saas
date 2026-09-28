@@ -20,10 +20,16 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from accounts.models import Role
 from messaging import kinds
 
 from . import hours, recipients
-from .models import Notice, NoticeKind, NoticeSettings
+from .models import MoneySummaryRecipient, Notice, NoticeKind, NoticeSettings
+
+#: Who decides what this school sends — the principal or an administrator.
+#: `menu.py` reads this too, so the settings link and the API's own refusal
+#: never drift apart.
+SETTINGS_ROLES = frozenset({Role.PRINCIPAL.value, Role.ADMIN.value})
 
 
 class NoticesError(Exception):
@@ -51,21 +57,70 @@ def offered() -> NoticeSettings:
     return NoticeSettings.objects.filter(pk=1).first() or NoticeSettings(pk=1)
 
 
-def set_offered_as(actor, *, result_notices=None, fee_reminders=None) -> NoticeSettings:
+def require_settings_authority(actor, school):
+    """Raise `NotAllowed` unless `actor` may read or change this school's
+    switches. Public so `notices.api`'s read route can ask the same question
+    the write route (`set_offered_as`) asks below."""
+    if not set(actor.roles_at(school)) & SETTINGS_ROLES:
+        raise NotAllowed("Only the principal or an administrator decides what the school sends.")
+
+
+def set_offered_as(
+    actor,
+    *,
+    result_notices=None,
+    fee_reminders=None,
+    payment_receipts=None,
+    absence_alerts=None,
+    daily_money_summary=None,
+) -> NoticeSettings:
     """Turn a school's notices on or off. A principal or an administrator."""
-    from accounts.models import Role
     from results.services import school_on_this_connection
 
     school = school_on_this_connection()
-    if not set(actor.roles_at(school)) & {Role.PRINCIPAL.value, Role.ADMIN.value}:
-        raise NotAllowed("Only the principal or an administrator decides what the school sends.")
+    require_settings_authority(actor, school)
     row, _ = NoticeSettings.objects.get_or_create(pk=1)
     if result_notices is not None:
         row.result_notices = bool(result_notices)
     if fee_reminders is not None:
         row.fee_reminders = bool(fee_reminders)
+    if payment_receipts is not None:
+        row.payment_receipts = bool(payment_receipts)
+    if absence_alerts is not None:
+        row.absence_alerts = bool(absence_alerts)
+    if daily_money_summary is not None:
+        row.daily_money_summary = bool(daily_money_summary)
     row.save()
     return row
+
+
+def money_summary_recipient_ids() -> list[int]:
+    """The membership ids this school has chosen for the daily money summary."""
+    return list(MoneySummaryRecipient.objects.values_list("membership_id", flat=True))
+
+
+def set_money_summary_recipients(actor, membership_ids) -> list[int]:
+    """Replace who gets the daily money summary with exactly `membership_ids`.
+
+    Every id must name a staff member who is still live at this school
+    (`schools.invitations.active_staff`) — picking somebody who has left, or
+    somebody else's school's id, is refused rather than silently dropped.
+    """
+    from schools.invitations import active_staff
+    from results.services import school_on_this_connection
+
+    school = school_on_this_connection()
+    require_settings_authority(actor, school)
+    ids = {int(pk) for pk in membership_ids}
+    live_ids = set(active_staff(school).values_list("pk", flat=True))
+    if not ids <= live_ids:
+        raise NotAllowed("Only staff currently live at this school may receive the summary.")
+    MoneySummaryRecipient.objects.exclude(membership_id__in=ids).delete()
+    existing = set(MoneySummaryRecipient.objects.values_list("membership_id", flat=True))
+    MoneySummaryRecipient.objects.bulk_create(
+        [MoneySummaryRecipient(membership_id=pk) for pk in ids - existing]
+    )
+    return money_summary_recipient_ids()
 
 
 def daily_cap() -> int:

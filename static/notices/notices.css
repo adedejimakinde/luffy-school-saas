@@ -1,0 +1,18 @@
+/*
+ * Notices settings. Three switches and a staff list to tick.
+ *
+ * Colours, type and controls are `web/design.css`'s; this is the layout.
+ */
+main { max-width: 40rem; }
+.settings { display: grid; gap: 4px; margin: 16px 0 0; }
+.switch-row { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.switch-row input { grid-row: span 2; }
+.switch-label { font-weight: 700; }
+.switch-row .hint { grid-column: 2; color: var(--muted); font-size: var(--small); }
+.recipients { border: none; margin: 16px 0 0; padding: 0; }
+.recipients legend { font-weight: 700; padding: 0 0 6px; }
+.recipient { display: flex; gap: 8px; align-items: center; padding: 6px 0; }
+.recipient .role { color: var(--muted); font-size: var(--small); }
+.settings button[type="submit"] { margin-top: 16px; justify-self: start; }
+.note { font-size: var(--small); color: var(--stop); }
+form.rejected { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }

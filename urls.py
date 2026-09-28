@@ -24,6 +24,7 @@ from attendance.views import absences_page, register_page
 from fees.views import fees_page
 from gradebook.views import marking_page
 from home.views import home_page
+from notices.views import settings_page
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -56,6 +57,7 @@ urlpatterns = [
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),
     path("staff/", staff_page, name="staff"),
+    path("notices/settings/", settings_page, name="notices-settings"),
     path("register/", register_page, name="register"),
     # Who is absent too often: the principal's, on the broadsheet's terms.
     path("absences/", absences_page, name="absences"),
