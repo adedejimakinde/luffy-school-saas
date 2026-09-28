@@ -335,6 +335,10 @@ not the live row. A receipt reprinted next year says what it said when it was
 issued. An undone payment's receipt says so across its face. **"Received by"
 is the exception**: it is read live from the recorder's login. Issue #143.
 
+A school with `NoticeSettings.payment_receipts` on also gets this by email,
+automatically, the moment `record_payment()` posts the entry — no button, no
+preview. `docs/messaging.md` D13 has the design; `notices.receipts` the code.
+
 ## B2: bills and concessions
 
 Built 2026-09-24. `fees/billing.py` is the service layer, and the routes and the

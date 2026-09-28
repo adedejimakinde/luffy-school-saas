@@ -25,8 +25,15 @@ from accounts.models import (
 )
 
 
-def channel_for(guardian_user):
-    """The one channel a school's message to this guardian may use, or None."""
+def channel_for(guardian_user, *, only=None):
+    """The one channel a school's message to this guardian may use, or None.
+
+    `only`, given, narrows to those channel types — a payment receipt or an
+    absence alert is email only (decided for both: a receipt or an alert reads
+    like paperwork, not like the short text `kinds.py` was built for), where a
+    result notice or a fee reminder still take the phone first, D4's usual
+    order.
+    """
     account = GuardianAccount.objects.filter(user=guardian_user).first()
     if account is None:
         return None
@@ -35,6 +42,7 @@ def channel_for(guardian_user):
         for contact in account.live_contacts()
         if contact.is_live
         and not (contact.channel_type == ContactChannel.PHONE and guardian_contacts.is_dormant(contact))
+        and (only is None or contact.channel_type in only)
     ]
     return usable[0] if usable else None
 
@@ -48,15 +56,17 @@ def is_live_at(guardian_user_id, school) -> bool:
     ).exists()
 
 
-def for_child(student_membership_id, school, *, invoices_only=False):
+def for_child(student_membership_id, school, *, invoices_only=False, only=None):
     """`(reachable, unreachable)` for a child: `[(guardian user, contact)]` and a count.
 
     A guardian not live at `school` is neither: they are not this school's to
     reach yet (#135), and counting them would tell the office they exist.
 
-    `invoices_only` is a fee reminder's reader (D10): only the links that say
-    `receives_invoices`. A guardian whose link does not is neither, for the same
-    reason: the bursar did not ask to reach them.
+    `invoices_only` is a fee reminder's reader, and a payment receipt's (D10):
+    only the links that say `receives_invoices`. A guardian whose link does not
+    is neither, for the same reason: the bursar did not ask to reach them.
+
+    `only` narrows the channel, as `channel_for()` takes it.
     """
     reachable, unreachable = [], 0
     links = Guardianship.objects.filter(
@@ -67,7 +77,7 @@ def for_child(student_membership_id, school, *, invoices_only=False):
     for link in links:
         if not is_live_at(link.guardian_id, school):
             continue
-        contact = channel_for(link.guardian)
+        contact = channel_for(link.guardian, only=only)
         if contact is None:
             unreachable += 1
         else:

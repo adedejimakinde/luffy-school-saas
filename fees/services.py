@@ -501,8 +501,14 @@ def record_payment(membership, term, amount_kobo, *, method, narration="Payment 
     `NoMethod`. A caller posting from a form passes its `form_key`, and wants
     `record_payment_once()`, which turns the second click into the first
     click's entry.
+
+    Writes this payment's receipt itself, in the same transaction — see
+    `notices.receipts.write_receipt()` — so the entry and its receipt are one
+    commit or neither. A school with receipts off, or a child nobody reachable
+    receives invoices for, gets a payment and no receipt, quietly: those are
+    ordinary outcomes `write_receipt()` returns `[]` for, not failures.
     """
-    return _post(
+    entry = _post(
         membership=membership,
         term=term,
         kind=FeeEntryKind.PAYMENT,
@@ -514,6 +520,10 @@ def record_payment(membership, term, amount_kobo, *, method, narration="Payment 
         form_key=form_key,
         recorded_by=recorded_by,
     )
+    from notices.receipts import write_receipt
+
+    write_receipt(entry)
+    return entry
 
 
 def _is_the_form_key_colliding(exc) -> bool:

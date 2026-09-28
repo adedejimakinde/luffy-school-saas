@@ -31,6 +31,10 @@ Where M1 departs from the text below, it says so there: the chooser offers each 
 (D8), the code is sealed with Fernet from `cryptography` (D6), and `messaging.W001`
 is silenced in `settings.py` until a real phone provider is named (D2, M6).
 
+**M7, payment receipts (2026-09-28), built.** Not part of the original plan —
+added once M2 and M3 (result notices, fee reminders) had shipped and asked for a
+third kind that nobody presses. See D13.
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.
@@ -516,15 +520,47 @@ delivery-report half (a webhook from the provider, authenticated by its signatur
 resolving the school from our reference and never from the host) needs a real
 provider to report anything, and it is slice M5.
 
+### D13. Payment receipts: written by the ledger, not pressed (2026-09-28)
+
+The third kind, and the first with no button. `fees.services.record_payment()`
+calls `notices.receipts.write_receipt()` itself, in the same transaction that
+posts the `FeeLedgerEntry`, so the entry and its receipt are one commit or
+neither.
+
+- **To the guardians whose link says `receives_invoices`**, the same gate D10
+  reads. A receipt is fees correspondence, and a guardian who does not receive
+  invoices does not receive this either.
+- **Email only, and that is a departure from D4's usual order.** A receipt
+  reads like paperwork, not like the six-word text `kinds.py` was built for
+  (D3), so it is asked for with `only={"email"}` rather than taking the phone
+  first. A guardian reachable only by phone gets no receipt, silently — there
+  is no preview to tell them on, the way there is for M2 and M3.
+- **No cap.** D7's daily segment budget bounds the cost of a bursar's SMS
+  campaign; a receipt is one email per payment, and this line has not met a
+  school whose payment volume makes that worth bounding.
+- **Quiet hours still hold it.** A payment posted at nine at night is
+  receipted at seven the next morning, exactly as a result notice or a
+  reminder would be — `notices.hours` governs every school-originated message
+  alike, and a receipt has not asked to be the exception.
+- **No "balance changed" recheck.** D10's reminder states a balance that can
+  move before it sends; a receipt states a payment that already happened,
+  which the ledger's append-only rule means cannot un-happen. `send_notice`
+  sends it exactly as posted.
+- **`Notice` gained a third shape.** Alongside "about a card, no amount" and
+  "about no card, an amount owing", a receipt is "about no card, an amount,
+  and a real key into `fees.FeeLedgerEntry`" — `source_entry`, a foreign key
+  rather than a bare id, for the reason `card` is one: same schema.
+
 ## What is configurable
 
 **Per deploy (environment):** the provider per channel type (D1); the daily
 per-school segment cap (D7); the reminder interval (D10). Each is a setting with its
 argument written at the constant, as OPEN-3's and OPEN-4's were.
 
-**Per school:** whether result notices and fee reminders are offered at all, both
-**off by default**, for withholding's reason: a school that has never heard of this
-must see no trace of it, and must not start sending messages the day it ships.
+**Per school:** whether result notices, fee reminders and payment receipts are
+offered at all, each **off by default**, for withholding's reason: a school
+that has never heard of this must see no trace of it, and must not start
+sending messages the day it ships.
 
 **Not configurable, deliberately:** the wording (D3), who may receive (D4), at most
 once (D5), and nothing about results in a message body (D9). Each is a rule about
