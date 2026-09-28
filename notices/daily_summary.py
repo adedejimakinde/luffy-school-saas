@@ -128,7 +128,7 @@ def summary_text(*, school_name, day, money: DaysMoney, channel_type) -> str:
 
 
 def send_summary(school, day) -> bool:
-    """This school's digest for `day`, to every live administrator. Returns
+    """This school's digest for `day`, to whichever staff it has chosen. Returns
     whether it was processed just now — `False` when the setting is off or
     `day` was already sent, either way with nothing sent twice.
     """
@@ -147,6 +147,7 @@ def send_summary(school, day) -> bool:
             kind=kinds.Kind.DAILY_MONEY_SUMMARY,
             text=text,
             reference=f"money-summary-{school.schema_name}-{day.isoformat()}",
+            reply_to=school.contact_email,
         )
         try:
             provider.check_configured()

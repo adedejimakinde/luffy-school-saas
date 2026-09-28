@@ -97,6 +97,9 @@ class SummarySetUp(SendsThroughTheFake, TestCase):
     def texts(self, address):
         return [m.text for m in FakeMessage.objects.filter(address=address).order_by("id")]
 
+    def reply_tos(self, address):
+        return [m.reply_to for m in FakeMessage.objects.filter(address=address).order_by("id")]
+
 
 class OffByDefaultTests(SummarySetUp):
     def test_nothing_is_sent_until_the_school_turns_it_on(self):
@@ -179,6 +182,16 @@ class WhoGetsOneTests(SummarySetUp):
 
         self.assertFalse(sent)
         self.assertEqual(self.texts("admin@grace.example"), [])
+
+    def test_the_summary_carries_the_schools_own_contact_email_as_reply_to(self):
+        """docs/messaging.md D17."""
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+
+        with connected_to(self.stmarys):
+            send_summary(self.stmarys, self.today)
+
+        self.assertEqual(self.reply_tos("ade@stmarys.example"), ["office@stmarys.example"])
 
 
 class TheFiguresTests(SummarySetUp):

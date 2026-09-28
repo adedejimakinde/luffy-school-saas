@@ -841,7 +841,7 @@ class MailFailureApiTests(TransactionTestCase):
         invitation they can resend.
         """
         with mock.patch(
-            "schools.delivery.send_mail",
+            "schools.delivery.EmailMessage.send",
             side_effect=ConnectionRefusedError("[Errno 111] Connection refused"),
         ):
             response = self.post_invite()
@@ -881,7 +881,7 @@ class MailFailureApiTests(TransactionTestCase):
         outage leaves one account and one live invitation, not one per attempt.
         """
         with mock.patch(
-            "schools.delivery.send_mail",
+            "schools.delivery.EmailMessage.send",
             side_effect=ConnectionRefusedError("[Errno 111] Connection refused"),
         ):
             for _ in range(3):

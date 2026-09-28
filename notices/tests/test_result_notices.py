@@ -159,6 +159,9 @@ class NoticesSetUp(SendsThroughTheFake, ChainSetUp):
     def texts(self, address):
         return [m.text for m in FakeMessage.objects.filter(address=address).order_by("id")]
 
+    def reply_tos(self, address):
+        return [m.reply_to for m in FakeMessage.objects.filter(address=address).order_by("id")]
+
 
 class TellingFamiliesTests(NoticesSetUp):
     def test_each_live_guardian_is_told_once_on_one_channel(self):
@@ -192,6 +195,16 @@ class TellingFamiliesTests(NoticesSetUp):
             self.texts(MAMA),
             [f"St Mary's: Ada Obi's {words} report card is ready. Sign in on Classnode to read it."],
         )
+
+    def test_an_email_notice_carries_the_schools_own_contact_email_as_reply_to(self):
+        """docs/messaging.md D17. Phone carries none — a phone provider has no use for it."""
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+        _, jobs = self.tell(self.stmarys, self.ours, self.head)
+        self.send_all(jobs)
+
+        self.assertEqual(self.reply_tos(PAPA), ["office@stmarys.example"])
+        self.assertEqual(self.reply_tos(MAMA), [""])
 
     def test_each_school_names_only_its_own_child(self):
         """Requirement 10: Nneka has a child at each school and hears from each about that child."""

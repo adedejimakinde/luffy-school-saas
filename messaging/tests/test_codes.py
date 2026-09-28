@@ -111,6 +111,50 @@ class AfterTheCommitAndSealedTests(CodeSetUp):
         self.assertNotIn(self.child_at_marys.user.full_name, message.text)
 
 
+class ReplyToTests(CodeSetUp):
+    """docs/messaging.md D17: a code emailed on a school's behalf carries its
+    own contact email as `Reply-To`, so a reply to it reaches the school."""
+
+    def test_an_email_code_carries_the_requesting_schools_contact_email(self):
+        self.grace.contact_email = "office@grace.example"
+        self.grace.save(update_fields=["contact_email"])
+        their_email_contact = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.EMAIL, "emeka@example.com"
+        )
+
+        self.deliver(
+            lambda: guardian_contacts.request_verification_as(
+                self.grace_admin, their_email_contact, school=self.grace
+            )
+        )
+
+        [message] = self.sent_to("emeka@example.com")
+        self.assertEqual(message.reply_to, "office@grace.example")
+
+    def test_a_school_with_no_contact_email_sends_no_reply_to(self):
+        their_email_contact = self.record(
+            self.grace_admin, self.other_parent, ContactChannel.EMAIL, "emeka@example.com"
+        )
+
+        self.deliver(
+            lambda: guardian_contacts.request_verification_as(
+                self.grace_admin, their_email_contact, school=self.grace
+            )
+        )
+
+        [message] = self.sent_to("emeka@example.com")
+        self.assertEqual(message.reply_to, "")
+
+    def test_a_phone_code_carries_no_reply_to(self):
+        self.grace.contact_email = "office@grace.example"
+        self.grace.save(update_fields=["contact_email"])
+
+        self.deliver(self.check_theirs)
+
+        [message] = self.sent_to(GRACE_PHONE)
+        self.assertEqual(message.reply_to, "")
+
+
 class AtMostOnceTests(CodeSetUp):
     def test_a_send_run_twice_sends_once(self):
         """`acks_late` can run a task twice; a second SMS would reach a parent twice. D5.

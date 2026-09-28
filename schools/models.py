@@ -87,6 +87,12 @@ class School(TenantMixin):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=60, unique=True)
     is_active = models.BooleanField(default=True)
+    #: This school's own address for a family or a provider to write back to.
+    #: Blank until the office sets it up (`schools.contact.set_contact_email_as()`).
+    #: Every email the platform sends on this school's behalf carries it as
+    #: `Reply-To` — `messaging.providers.Outbound.reply_to` — so a reply lands
+    #: with the school, not with this platform's own sending address.
+    contact_email = models.EmailField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Schemas are created on save in real use; tests turn this off per instance.

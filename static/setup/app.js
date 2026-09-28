@@ -22,6 +22,7 @@ import {
   makeCurrent,
   removeCrest,
   saveColour,
+  saveContactEmail,
   uploadCrest,
 } from "./api.js";
 import * as states from "./states.js";
@@ -121,6 +122,13 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const file = form.crest && form.crest.files ? form.crest.files[0] : null;
       if (!file) return;
       await after("crest", await uploadCrest({ file, fetchImpl }));
+      return;
+    }
+    if (which === "contact-email") {
+      await after(
+        "contact_email",
+        await saveContactEmail({ contact_email: form.contact_email.value, fetchImpl }),
+      );
       return;
     }
     if (form.session) {

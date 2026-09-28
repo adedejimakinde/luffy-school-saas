@@ -144,6 +144,9 @@ class AlertsSetUp(SendsThroughTheFake, TestCase):
     def texts(self, address):
         return [m.text for m in FakeMessage.objects.filter(address=address).order_by("id")]
 
+    def reply_tos(self, address):
+        return [m.reply_to for m in FakeMessage.objects.filter(address=address).order_by("id")]
+
     def alerts(self, school=None):
         with connected_to(school or self.stmarys):
             return list(Notice.objects.filter(kind=NoticeKind.ABSENCE_ALERT))
@@ -195,6 +198,15 @@ class WhoGetsOneTests(AlertsSetUp):
         self.assertIn("Ada Obi", text)
         self.assertIn("JSS 1A", text)
         self.assertIn("Wednesday 17 September 2025", text)
+
+    def test_the_alert_carries_the_schools_own_contact_email_as_reply_to(self):
+        """docs/messaging.md D17."""
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+        _, jobs = self.mark_absent(self.jss1a, self.term_now, [self.ada.pk])
+        self.send_all(jobs)
+
+        self.assertEqual(self.reply_tos(AUNTIE_EMAIL), ["office@stmarys.example"])
 
     def test_each_school_alerts_its_own_register_and_its_own_child(self):
         """Mama has a child at each school. Only St Mary's register is

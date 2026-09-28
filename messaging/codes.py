@@ -92,6 +92,11 @@ def send_code(code_id, kind, sealed):
         params=params,
         text=kinds.render(kind, channel_type=contact.channel_type, **params),
         reference=f"code-{code.pk}",
+        reply_to=(
+            school.contact_email
+            if school is not None and contact.channel_type == "email"
+            else ""
+        ),
     )
     provider = providers.provider_for(contact.channel_type)
     try:

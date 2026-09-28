@@ -188,6 +188,47 @@ test("submitting the class form sends the level the school gave it", async () =>
   assert.deepEqual(sent, [{ name: "JSS 10A", level: 10 }]);
 });
 
+// -- the school's contact email (docs/messaging.md D17) ----------------------
+
+test("the contact email box holds what the school has set, blank if it has not", () => {
+  const set = states.shape({ ...SHAPE, contact_email: "office@stmarys.example" });
+  const unset = states.shape({ ...SHAPE, contact_email: "" });
+
+  assert.match(set, /value="office@stmarys\.example"/);
+  assert.match(unset, /id="contact_email"[^>]*value=""/);
+});
+
+test("submitting the contact email form sends what was typed", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/contact-email/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { contact_email: "office@stmarys.example" } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "contact-email" }, contact_email: "office@stmarys.example" });
+
+  assert.deepEqual(sent, [{ contact_email: "office@stmarys.example" }]);
+});
+
+test("an address that does not look like one keeps the form open with the server's sentence", () => {
+  const { state: after, reload } = applyWrite(state(), "contact_email", {
+    ok: false,
+    outcome: SAVE.REJECTED,
+    body: { detail: "'not-an-email' does not look like an email address." },
+  });
+
+  assert.equal(reload, false);
+  assert.match(htmlFor(after), /does not look like an email address/);
+  assert.match(htmlFor(after), /data-form="contact-email"/);
+});
+
 // -- refusals and hosts ------------------------------------------------------
 
 test("403 and 404 are different page-level refusals", () => {

@@ -23,7 +23,7 @@ import logging
 import smtplib
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMessage
 from django.utils import timezone
 from django.utils.module_loading import import_string
 
@@ -165,13 +165,19 @@ class EmailChannel(Channel):
         self.check_configured()
         recipient = self.check_deliverable(invitation)
         try:
-            send_mail(
+            # `EmailMessage` rather than the `send_mail()` wrapper: `docs/messaging.md`
+            # D17 wants `Reply-To` set to the school's own contact email, which
+            # `send_mail()` has no argument for. Blank (not yet set up) omits the
+            # header rather than sending an empty one.
+            contact_email = invitation.school.contact_email
+            message = EmailMessage(
                 subject=self.subject_template.format(school=invitation.school.name),
-                message=self._body(invitation, accept_url),
+                body=self._body(invitation, accept_url),
                 from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-                recipient_list=[recipient],
-                fail_silently=False,
+                to=[recipient],
+                reply_to=[contact_email] if contact_email else None,
             )
+            message.send(fail_silently=False)
         except (OSError, smtplib.SMTPException) as exc:
             # Narrow on purpose. `OSError` is what a refused connection, a DNS
             # failure and a socket timeout all arrive as, and `SMTPException` is
