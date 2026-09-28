@@ -39,6 +39,7 @@ from attendance.services import MARKING_ROLES as REGISTER_ROLES
 from fees.authority import READING_ROLES as FEES_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
 from home.summary import HOME_ROLES
+from notices.services import SETTINGS_ROLES as NOTICES_ROLES
 from results.api import POSITION_VIEWING_ROLES
 from results.comments_api import VIEWING_ROLES as REMARK_ROLES
 from results.services import OPENING_ROLES as CHAIN_ROLES
@@ -73,6 +74,7 @@ LINKS = (
     # the two sets `enrolment_api._refuse_outsiders()` admits on.
     Link("roll", "/roll/", "i-people", "Roll", MEMBERSHIP_GRANTING_ROLES | PLACEMENT_ROLES, "Office"),
     Link("staff", "/staff/", "i-inbox", "Staff", MEMBERSHIP_GRANTING_ROLES, "Office"),
+    Link("notices-settings", "/notices/settings/", "i-comments", "Notices", NOTICES_ROLES, "Office"),
 )
 
 BY_KEY = {link.key: link for link in LINKS}

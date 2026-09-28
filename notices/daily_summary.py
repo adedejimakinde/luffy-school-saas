@@ -1,13 +1,14 @@
 """The proprietor's daily money summary: one email, once a day, per school.
 
 Not shaped like a result notice, a reminder, a receipt or an alert — no
-button, no `Notice` row, no guardian channel. This is a staff digest: every
-live administrator's own login email gets one email a day summarising the
-money that moved on the day just ended, when `NoticeSettings.daily_money_summary`
-is on. `manage.py send_daily_money_summary` runs it, on the server's cron —
-`docs/background.md`'s "no `beat`, no scheduler" argument, read again for a
-digest instead of a held message, the way `release_held_notices` already
-reads it for M2.
+button, no `Notice` row, no guardian channel. This is a staff digest: whichever
+staff the school has chosen (the settings screen, from its own live roster —
+`notices.models.MoneySummaryRecipient`, nobody by default) get one email a day
+summarising the money that moved on the day just ended, when
+`NoticeSettings.daily_money_summary` is on. `manage.py send_daily_money_summary`
+runs it, on the server's cron — `docs/background.md`'s "no `beat`, no
+scheduler" argument, read again for a digest instead of a held message, the
+way `release_held_notices` already reads it for M2.
 
 **Sent once per day, per school**, recorded on `MoneySummarySent` — a plain
 unique date rather than `Notice`'s claim-then-send machinery, because nobody
@@ -80,14 +81,24 @@ def money_on(day) -> DaysMoney:
     )
 
 
-def admin_emails(school) -> list[str]:
-    """Every live administrator's own login email, at most once each."""
-    from accounts.models import ACCESS_STATUSES, Membership, Role
+def recipient_emails(school) -> list[str]:
+    """The chosen staff's own login emails, at most once each.
 
+    **Nobody by default** — the settings screen adds rows to
+    `MoneySummaryRecipient` one at a time, from this school's own live staff
+    list. A membership picked and later ended, suspended or removed is skipped
+    here rather than emailed: D4's "reachability is read again at send time"
+    argument, for a staff address instead of a guardian channel.
+    """
+    from accounts.models import Membership
+
+    from .models import MoneySummaryRecipient
+
+    ids = MoneySummaryRecipient.objects.values_list("membership_id", flat=True)
     rows = (
-        Membership.objects.filter(
-            school=school, role=Role.ADMIN.value, status__in=ACCESS_STATUSES
-        )
+        Membership.objects.for_school(school)
+        .with_access()
+        .filter(pk__in=list(ids))
         .exclude(user__email="")
         .exclude(user__email__isnull=True)
         .values_list("user__email", flat=True)
@@ -128,7 +139,7 @@ def send_summary(school, day) -> bool:
 
     money = money_on(day)
     provider = providers.provider_for("email")
-    for address in admin_emails(school):
+    for address in recipient_emails(school):
         text = summary_text(school_name=school.name, day=day, money=money, channel_type="email")
         outbound = providers.Outbound(
             channel_type="email",
@@ -183,7 +194,7 @@ def send_summaries(day=None, now=None) -> int:
 
 __all__ = [
     "DaysMoney",
-    "admin_emails",
+    "recipient_emails",
     "money_on",
     "send_summaries",
     "send_summary",

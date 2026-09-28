@@ -68,6 +68,7 @@ SCHOOL_PAGES = (
     "/cards/",
     "/cards/1/1/",
     "/check/",
+    "/notices/settings/",
 )
 
 #: What each frame costs the database, signed in, at either school. Eight

@@ -1,0 +1,28 @@
+{% load static shell %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notices</title>
+
+{% comment %}
+Modelled on `fees/templates/fees/fees_page.html`: no `login_required`, for the
+same oracle reason — the API answers a flat 404 both to a refused reader and
+on the portal, and a redirect on a guessable URL would say which of those two
+this host is. `data-on-school` tells the page which host it is on rather than
+guessing.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'notices/notices.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'notices/app.js' %}"></script>
+
+{% shell_open "notices-settings" %}
+    <main id="notices-settings" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
+      <noscript>
+        <h1>Notices</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading&hellip;</p>
+    </main>
+{% shell_close "notices-settings" %}
