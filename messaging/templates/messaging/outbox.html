@@ -20,7 +20,7 @@
 <ul>
 {% for m in messages %}
   <li class="{{ m.outcome }}">
-    <div class="meta">{{ m.created_at|date:"Y-m-d H:i:s" }} · {{ m.channel_type }} to {{ m.address }} · {{ m.kind }} · {{ m.outcome }}</div>
+    <div class="meta">{{ m.created_at|date:"Y-m-d H:i:s" }} · {{ m.channel_type }} to {{ m.address }} · {{ m.kind }} · {{ m.outcome }}{% if m.reply_to %} · reply-to {{ m.reply_to }}{% endif %}</div>
     {% if m.subject %}<div><strong>{{ m.subject }}</strong></div>{% endif %}
     <div>{{ m.text }}</div>
   </li>

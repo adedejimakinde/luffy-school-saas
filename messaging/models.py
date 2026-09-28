@@ -103,6 +103,10 @@ class FakeMessage(models.Model):
     subject = models.CharField(max_length=128, blank=True)
     text = models.TextField()
     reference = models.CharField(max_length=128, blank=True)
+    #: The sending school's own contact email (`docs/messaging.md` D17), blank
+    #: for a message with no sending school (a code) or a school that has not
+    #: set one up yet.
+    reply_to = models.CharField(max_length=254, blank=True)
     outcome = models.CharField(max_length=16, choices=Outcome)
     created_at = models.DateTimeField(auto_now_add=True)
 

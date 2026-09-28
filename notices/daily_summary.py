@@ -136,6 +136,7 @@ def send_summary(school, day) -> bool:
             kind=kinds.Kind.DAILY_MONEY_SUMMARY,
             text=text,
             reference=f"money-summary-{school.schema_name}-{day.isoformat()}",
+            reply_to=school.contact_email,
         )
         try:
             provider.check_configured()

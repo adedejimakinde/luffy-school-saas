@@ -189,6 +189,9 @@ class SetUpOut(Schema):
     classes: List[ClassRowOut]
     may_set_up: bool
     card: Optional[CardLookOut] = None
+    #: Blank until the office sets it up. `docs/messaging.md` D17: every email
+    #: this platform sends on the school's behalf carries this as `Reply-To`.
+    contact_email: str = ""
 
 
 class NewTermIn(Schema):
@@ -254,6 +257,7 @@ def setup(request):
         classes=[_class_row(g) for g in ClassGroup.objects.all()],
         may_set_up=True,
         card=_card_look(school),
+        contact_email=school.contact_email,
     )
 
 
@@ -469,3 +473,38 @@ def card_crest(request):
     response["Cache-Control"] = "private, max-age=0, must-revalidate"
     response["X-Content-Type-Options"] = "nosniff"
     return response
+
+
+# ---------------------------------------------------------------------------
+# The school's contact email — where a reply to its own outgoing mail lands.
+# On `School` itself, shared rather than in this schema, for the reason
+# `schools.contact` gives; gated exactly as the look above is.
+# ---------------------------------------------------------------------------
+
+from schools import contact  # noqa: E402
+
+
+class ContactEmailIn(Schema):
+    #: Blank clears it.
+    contact_email: str = ""
+
+
+class ContactEmailOut(Schema):
+    contact_email: str
+
+
+@router.put("/contact-email/", response={200: ContactEmailOut, 403: MessageOut, 422: MessageOut})
+def set_contact_email(request, payload: ContactEmailIn):
+    """This school's own reply address. Refused, with a sentence, if it does
+    not look like an email address."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        address = contact.set_contact_email_as(request.user, school, payload.contact_email)
+    except services.NotAllowedToSetUp:
+        return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except contact.NotAnEmailAddress as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, ContactEmailOut(contact_email=address)

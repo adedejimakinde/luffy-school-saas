@@ -125,6 +125,7 @@ def send_notice(schema_name, notice_id):
         params={},
         text=text,
         reference=f"notice-{schema_name}-{notice.pk}",
+        reply_to=school.contact_email if notice.channel_type == "email" else "",
     )
     provider = providers.provider_for(notice.channel_type)
     try:

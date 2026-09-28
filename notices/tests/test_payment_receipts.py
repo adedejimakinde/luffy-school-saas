@@ -154,6 +154,9 @@ class ReceiptsSetUp(SendsThroughTheFake, TestCase):
     def texts(self, address):
         return [m.text for m in FakeMessage.objects.filter(address=address).order_by("id")]
 
+    def reply_tos(self, address):
+        return [m.reply_to for m in FakeMessage.objects.filter(address=address).order_by("id")]
+
     def receipts(self, school=None):
         with connected_to(school or self.stmarys):
             return list(Notice.objects.filter(kind=NoticeKind.PAYMENT_RECEIPT))
@@ -196,6 +199,21 @@ class WhoGetsOneTests(ReceiptsSetUp):
         self.assertIn("NGN 50,000 received", text)
         self.assertIn("by Cash", text)
         self.assertIn("Ada Obi", text)
+
+    def test_the_receipt_carries_the_schools_own_contact_email_as_reply_to(self):
+        """docs/messaging.md D17."""
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+        _, jobs = self.pay(self.ada, 50_000)
+        self.send_all(jobs)
+
+        self.assertEqual(self.reply_tos(AUNTIE_EMAIL), ["office@stmarys.example"])
+
+    def test_no_contact_email_means_no_reply_to(self):
+        _, jobs = self.pay(self.ada, 50_000)
+        self.send_all(jobs)
+
+        self.assertEqual(self.reply_tos(AUNTIE_EMAIL), [""])
 
     def test_each_school_receipts_its_own_payment_and_its_own_child(self):
         """Mama has a child at each school. Only St Mary's payment is receipted,

@@ -610,6 +610,38 @@ just closed, when `NoticeSettings.daily_money_summary` is on.
   principal, who runs the academic side. Every live administrator gets the
   digest, not a single named owner; a school with none configured gets none.
 
+### D16. `Reply-To` is the school's own contact email (2026-09-28)
+
+Every email this platform sends on a school's behalf — a code, a result
+notice, a fee reminder, a payment receipt, an absence alert, the daily money
+summary, a staff invitation — carries the school's own contact email as
+`Reply-To`, so a reply lands with the school, not with this platform's
+sending address, which nobody at the school reads.
+
+- **A new field on `School` itself** (`contact_email`, shared, blank by
+  default), not on `NoticeSettings` or any tenant-scoped row: a code can be
+  sent before a school's schema is ever entered (the mint runs in the same
+  transaction as the door, and `messaging.codes.send_code` only reaches a
+  tenant connection to read `requested_by_school` off the shared row), so the
+  address has to be reachable from a plain `School` without one.
+- **Set from the setup page** (`/api/academics/contact-email/`), gated
+  exactly as the report card's crest and colour are —
+  `academics.services.can_set_up()`, the principal or an administrator — not
+  a fourth `NoticeSettings` toggle, because it is not a switch: there is
+  nothing to turn on or off, only an address to have or not have.
+- **Blank omits the header rather than sending an empty one.** A school that
+  has not set this up yet is not broken — every message it sends still goes
+  — it just has nowhere for a reply to land, exactly the state before this
+  decision existed.
+- **The seam carries it, not each call site's own header-building.**
+  `messaging.providers.Outbound.reply_to`, threaded through the three
+  call sites that build one (`notices.tasks`, `notices.daily_summary`,
+  `messaging.codes`) and set to `""` for a phone channel, which has no use
+  for it. Staff invitations go by a separate path
+  (`schools.delivery.EmailChannel`, `django.core.mail`, never through
+  `messaging.providers`) and carry it as `EmailMessage.reply_to` instead, for
+  the same reason.
+
 ## What is configurable
 
 **Per deploy (environment):** the provider per channel type (D1); the daily

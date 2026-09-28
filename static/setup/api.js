@@ -49,6 +49,10 @@ export function crestUrl() {
   return "/api/academics/card/crest/";
 }
 
+export function contactEmailUrl() {
+  return "/api/academics/contact-email/";
+}
+
 /**
  * Which page-level state an answer produces.
  *
@@ -139,6 +143,21 @@ export async function saveColour({ colour, fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(colourUrl(), { colour }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/**
+ * This school's own contact email — where a reply to its outgoing mail
+ * lands (`docs/messaging.md` D17). A 422 is an address that does not look
+ * like one, and says so; blank clears it.
+ */
+export async function saveContactEmail({ contact_email, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(contactEmailUrl(), { contact_email }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

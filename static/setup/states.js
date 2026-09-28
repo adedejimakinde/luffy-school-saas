@@ -15,7 +15,7 @@ import { esc, numberOrBlank } from "../web/html.js";
  * old one in the same transaction — so the screen never has to ask anybody to
  * unset a term first, and never shows two as current.
  */
-export function shape({ terms = [], classes = [], card = null, notes = {} } = {}) {
+export function shape({ terms = [], classes = [], card = null, contact_email = "", notes = {} } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
     "<h1>School setup</h1>",
@@ -34,7 +34,29 @@ export function shape({ terms = [], classes = [], card = null, notes = {} } = {}
 
     card ? cardLook(card, notes) : "",
 
+    contactEmail(contact_email, notes),
+
     "</section>",
+  ].join("");
+}
+
+/**
+ * This school's own contact email (`docs/messaging.md` D17). Every email the
+ * platform sends on the school's behalf carries this as `Reply-To`, so a
+ * family or a provider who replies reaches the school, not this platform.
+ */
+function contactEmail(address, notes) {
+  return [
+    '<h2 id="contact-email">Contact email</h2>',
+    "<p class=\"hint\">Where a reply to an email from this school should land. ",
+    "Shown to nobody but used as the reply-to address on payment receipts, ",
+    "absence alerts and every other email this school sends.</p>",
+    `<form class="contact-email-form${notes.contact_email ? ` ${esc(notes.contact_email.kind)}` : ""}" data-form="contact-email">`,
+    '<label for="contact_email">Contact email</label>',
+    `<input id="contact_email" name="contact_email" type="email" value="${esc(address)}" placeholder="office@yourschool.example">`,
+    '<button type="submit">Save contact email</button>',
+    notes.contact_email ? `<p class="note" role="alert">${esc(notes.contact_email.detail)}</p>` : "",
+    "</form>",
   ].join("");
 }
 

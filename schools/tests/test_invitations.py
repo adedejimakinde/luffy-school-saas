@@ -668,6 +668,32 @@ class DeliveryTests(InvitationSetUp):
         self.assertIn("St Mary's", message.subject)
         self.assertIn(raw_token, message.body)
 
+    def test_the_reply_to_is_the_schools_own_contact_email(self):
+        """docs/messaging.md D17: a reply reaches the school, not this platform."""
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+
+        with override_settings(
+            EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+            INVITATION_CHANNEL="schools.delivery.EmailChannel",
+        ):
+            mail.outbox = []
+            with self.captureOnCommitCallbacks(execute=True):
+                self.invite()
+
+        self.assertEqual(mail.outbox[0].reply_to, ["office@stmarys.example"])
+
+    def test_a_school_with_no_contact_email_sends_no_reply_to_header(self):
+        with override_settings(
+            EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
+            INVITATION_CHANNEL="schools.delivery.EmailChannel",
+        ):
+            mail.outbox = []
+            with self.captureOnCommitCallbacks(execute=True):
+                self.invite()
+
+        self.assertEqual(mail.outbox[0].reply_to, [])
+
     def test_the_expiry_date_in_the_email_is_local_not_utc(self):
         """The deadline the reader is given has to be the deadline they keep.
 
@@ -1017,7 +1043,7 @@ class MailConfigurationTests(InvitationSetUp):
             EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend"
         ):
             with mock.patch(
-                "schools.delivery.send_mail",
+                "schools.delivery.EmailMessage.send",
                 side_effect=ConnectionRefusedError("[Errno 111] Connection refused"),
             ):
                 with self.assertRaises(DeliveryFailed):
@@ -1039,7 +1065,7 @@ class MailConfigurationTests(InvitationSetUp):
             invitation, _raw = self.invite()
 
         with mock.patch(
-            "schools.delivery.send_mail",
+            "schools.delivery.EmailMessage.send",
             side_effect=TypeError("body template took the wrong argument"),
         ):
             with self.assertRaises(TypeError):

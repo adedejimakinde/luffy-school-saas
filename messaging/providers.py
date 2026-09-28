@@ -55,6 +55,12 @@ class Outbound:
     text: str = ""
     #: Our reference for the message, which a delivery report comes back with.
     reference: str = ""
+    #: The school's own contact email (`docs/messaging.md` D17), so a reply to
+    #: an email this platform sent on a school's behalf reaches the school, not
+    #: this platform's own sending address. Blank when the sending school has
+    #: not set one up, or the channel is not email — a phone provider has no
+    #: use for it and ignores it.
+    reply_to: str = ""
 
 
 @dataclass(frozen=True)

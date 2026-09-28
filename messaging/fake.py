@@ -54,6 +54,7 @@ class FakeProvider:
             subject=subject(outbound.kind) if outbound.channel_type == "email" else "",
             text=outbound.text,
             reference=outbound.reference,
+            reply_to=outbound.reply_to,
             outcome=answer,
         )
         if answer == Outcome.REFUSED:
