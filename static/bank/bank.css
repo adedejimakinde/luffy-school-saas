@@ -9,3 +9,9 @@ main { max-width: 36rem; }
 .account-name { font-weight: 700; margin: 0 0 4px; }
 .account-number { font-variant-numeric: tabular-nums; }
 .note { font-size: var(--small); color: var(--stop); }
+.unmatched { margin: 24px 0 0; }
+.payments { list-style: none; margin: 0; padding: 0; }
+.payments li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.payments .reference { color: var(--muted); word-break: break-all; }
+.payments li.placed { color: var(--muted); }
+.place-form { display: grid; gap: 16px; margin: 16px 0 0; }

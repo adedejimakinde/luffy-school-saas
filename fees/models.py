@@ -996,3 +996,43 @@ class UnmatchedPayment(models.Model):
 
     def delete(self, *args, **kwargs):
         raise UnmatchedPaymentIsFixed(f"Unmatched payment {self.pk} cannot be deleted.")
+
+
+class PlacementIsFixed(Exception):
+    """Something tried to edit or delete a record of an unmatched payment being placed."""
+
+
+class UnmatchedPlacement(models.Model):
+    """A person putting an unmatched payment on a child: who, which child, which entry.
+
+    An `UnmatchedPayment` is never edited, so this is its answer, written once. The
+    **one-to-one to the payment** and the **one-to-one to the ledger entry** are what
+    make a placement happen at most once at the database, beside the ledger's own
+    form key (`fees.placing` posts through `record_payment_once()` with the Paystack
+    reference): a second placement of the same money has no row to be.
+
+    Never edited or deleted (model and trigger). The child and the person are frozen
+    as names as well as ids, `docs/operating-rules.md` rule 2.
+    """
+
+    payment = models.OneToOneField(UnmatchedPayment, related_name="placement", on_delete=models.PROTECT)
+    entry = models.OneToOneField(FeeLedgerEntry, related_name="placement", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    student_name = models.CharField(max_length=255)
+    placed_by_id = models.PositiveBigIntegerField(help_text="accounts.User id.")
+    placed_by_name = models.CharField(max_length=255)
+    placed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-id"]
+
+    def __str__(self):
+        return f"{self.payment.reference} placed on {self.student_name} by {self.placed_by_name}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise PlacementIsFixed(f"Placement {self.pk} cannot be changed.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PlacementIsFixed(f"Placement {self.pk} cannot be deleted.")

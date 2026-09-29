@@ -48,7 +48,7 @@ from academics.models import Term
 from schools.models import PaystackRoute, UnroutedPayment
 
 from . import paystack, services
-from .models import PaymentMethod, UnmatchedPayment, UnmatchedReason, VirtualAccount
+from .models import PaymentMethod, UnmatchedPayment, UnmatchedPlacement, UnmatchedReason, VirtualAccount
 
 logger = logging.getLogger(__name__)
 
@@ -158,8 +158,11 @@ def _unmatched(reference, amount, account_number, customer_code, reason):
 def _record(school, reference, amount, account_number, customer_code):
     """In the school's own schema: place the money on one child, or list it."""
     with transaction.atomic():
-        if UnmatchedPayment.objects.filter(reference=reference).exists():
-            return "unmatched"  # already listed: a person decides, not a replay
+        listed = UnmatchedPayment.objects.filter(reference=reference).first()
+        if listed is not None:
+            # Already listed: a person decides, not a replay. And once a person
+            # has placed it (`fees.placing`), a replay is a duplicate of that.
+            return "duplicate" if UnmatchedPlacement.objects.filter(payment=listed).exists() else "unmatched"
         account = VirtualAccount.objects.filter(account_number=account_number).first()
         if account is None:
             return _unmatched(reference, amount, account_number, customer_code, UnmatchedReason.NO_ACCOUNT)

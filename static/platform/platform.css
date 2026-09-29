@@ -14,4 +14,8 @@ input { width: 100%; }
 .schools li { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--divider); }
 .schools .count { white-space: nowrap; font-weight: 700; }
 .note { font-size: var(--small); color: var(--stop); }
+.unrouted { margin: 24px 0 0; }
+.payments { list-style: none; margin: 0; padding: 0; }
+.payments li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.payments .reference, .payments .account { color: var(--muted); word-break: break-all; }
 .handover { word-break: break-all; padding: 8px 12px; background: var(--card); border-radius: var(--radius); }

@@ -50,7 +50,37 @@ export const fetchState = ({ fetchImpl = fetch } = {}) =>
 export const fetchUnmatched = ({ fetchImpl = fetch } = {}) =>
   call(() => getJson("/api/fees/virtual/unmatched/", { fetchImpl }), { note: [] });
 
-export const fetchBanks =({ fetchImpl = fetch } = {}) =>
+/**
+ * The classes and a class's children, for picking the child a payment goes on.
+ * The fees routes the bursar already reads (`fees/api.py`): nothing new to trust.
+ */
+export const fetchClasses = ({ fetchImpl = fetch } = {}) =>
+  call(() => getJson("/api/fees/classes/", { fetchImpl }), { note: [] });
+
+export const fetchClassChildren = ({ classId, termId, fetchImpl = fetch }) =>
+  call(
+    () => getJson(`/api/fees/classes/${encodeURIComponent(classId)}/?term_id=${encodeURIComponent(termId)}`, { fetchImpl }),
+    { note: [] },
+  );
+
+/**
+ * Put an unmatched payment on a child. Sends what the person **confirmed** (the
+ * child, and the amount in whole kobo and the reference as they read them); the
+ * server checks them against its own record and posts its own amount. 200 is "it
+ * was already placed on this child", which is success too.
+ */
+export const placePayment = ({ paymentId, studentId, amountKobo, reference, fetchImpl = fetch }) =>
+  call(
+    () =>
+      postJson(
+        `/api/fees/virtual/unmatched/${encodeURIComponent(paymentId)}/placement/`,
+        { student_membership_id: studentId, amount_kobo: amountKobo, reference },
+        { fetchImpl },
+      ),
+    { note: [409, 422] },
+  );
+
+export const fetchBanks = ({ fetchImpl = fetch } = {}) =>
   call(() => getJson(`${BASE}banks/`, { fetchImpl }));
 
 export const resolveAccount = (account, { fetchImpl = fetch } = {}) =>

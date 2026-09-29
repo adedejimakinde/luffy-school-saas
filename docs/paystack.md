@@ -122,10 +122,42 @@ who is not a student here, or a school with no current term go to that school's
 `fees.UnmatchedPayment`, shown to the bursar under "Payments we could not match"
 on the bank page (`GET /api/fees/virtual/unmatched/`). An unmatched reference
 stays unmatched if it arrives again; putting the money on a child is a person's
-decision and **is not built yet** (there is no "assign" action).
+decision (next section), and a replay of a payment that has been placed answers
+`duplicate`.
 
 Only `charge.success` is acted on; an amount that is not a positive whole number
 of kobo is ignored.
+
+## Placing an unmatched payment, and the platform's unrouted list
+
+**The bursar puts an unmatched payment on a child** (`POST
+/api/fees/virtual/unmatched/{id}/placement/`; bursar and administrator, the
+principal is told they may not, everyone else gets the flat 404). On `/bank/`, under
+"Payments we could not match": "Place on a child", pick the class and the child,
+read back the amount and reference, confirm. `fees/placing.py` says the rules:
+
+- It posts through **`record_payment_once()` with the Paystack reference**, the same
+  derived form key the webhook uses, so the money is in the ledger at most once
+  whichever of the two got there first. If the ledger already holds that key, the
+  money is already in somebody's account and the placement is refused (409).
+- **The server posts its own amount.** The person *confirms* the amount (whole
+  kobo) and the reference; a confirmation that is not what the payment says is a 409
+  and writes nothing.
+- **Once, at the database:** `fees.UnmatchedPlacement` is one-to-one with the payment
+  and with the entry it made, never edited or deleted (model and trigger), and the
+  payment row is locked so two people pressing at once place it once. Placing it again
+  on the same child is the placement that is there (200); on another, a 409 saying
+  where it went.
+- **It records who:** the entry's `recorded_by` is the person (so the receipt names
+  them), and the placement freezes their name and the child's.
+- It posts to the **current term**, and with none says so (422) and posts nothing.
+- A mistaken placement is undone as any payment is, by a reversal on the child's
+  account; the payment cannot be placed again.
+
+**Platform staff** see payments no school owns (`schools.UnroutedPayment`) on the
+platform page (`GET /api/platform/unrouted/`, platform staff only, portal host only,
+read only). Nobody can place these: an account no school owns has no school's books
+to put money in.
 
 ## Still unverified (both PRs)
 

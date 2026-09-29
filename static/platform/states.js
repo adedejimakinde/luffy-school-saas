@@ -38,8 +38,41 @@ function schoolList(schools) {
   ].join("");
 }
 
+/** Whole kobo as naira, by hand: `5000000` is `NGN 50,000`. No float, no locale. */
+export function naira(kobo) {
+  const whole = Math.floor(kobo / 100);
+  const part = kobo % 100;
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `NGN ${grouped}${part ? `.${String(part).padStart(2, "0")}` : ""}`;
+}
+
+/**
+ * Payments Paystack confirmed for an account number no school owns. No school's
+ * bursar can see them, so they are listed here for platform staff to look into;
+ * nothing here places them, which would be putting money in a school's books.
+ */
+export function unroutedList(payments = []) {
+  if (!payments.length) return "";
+  return [
+    '<section class="unrouted" data-state="unrouted">',
+    `<h2>${esc(payments.length)} ${payments.length === 1 ? "payment" : "payments"} no school owns</h2>`,
+    '<p class="hint">Paystack confirmed these, and the account they were paid into belongs to no school here. Nothing has been guessed.</p>',
+    '<ul class="payments">',
+    payments
+      .map(
+        (p) =>
+          `<li><strong>${esc(naira(p.amount_kobo))}</strong> ` +
+          `<span class="reference">${esc(p.reference)}</span> ` +
+          `<span class="account">account ${esc(p.account_number || "unknown")}</span></li>`,
+      )
+      .join(""),
+    "</ul>",
+    "</section>",
+  ].join("");
+}
+
 /** The list, and the form to add another. `made` is the last add's answer, if any. */
-export function main({ schools = [], made = null, note = null, values = {} } = {}) {
+export function main({ schools = [], made = null, note = null, values = {}, unrouted = [] } = {}) {
   return [
     '<section class="state state-main" data-state="main">',
     '<div class="page-head"><div><h1>Schools</h1></div></div>',
@@ -47,6 +80,7 @@ export function main({ schools = [], made = null, note = null, values = {} } = {
     addForm(made ? {} : values, note),
     `<h2>${esc(schools.length)} ${schools.length === 1 ? "school" : "schools"}</h2>`,
     schoolList(schools),
+    unroutedList(unrouted),
     "</section>",
   ].join("");
 }

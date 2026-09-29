@@ -40,6 +40,21 @@ export async function fetchSchools({ fetchImpl = fetch } = {}) {
   return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
 }
 
+/**
+ * Money Paystack confirmed for an account number no school owns
+ * (`GET /api/platform/unrouted/`). Read only. Never throws: where it cannot be
+ * read the page shows the schools and says nothing about it.
+ */
+export async function fetchUnrouted({ fetchImpl = fetch } = {}) {
+  try {
+    const answer = await getJson("/api/platform/unrouted/", { fetchImpl });
+    if (answer.status === 200 && answer.body) return answer.body.payments || [];
+  } catch {
+    // fall through
+  }
+  return [];
+}
+
 /** `{ok: true, body}`; `{ok: false, note}` for a sentence to show; else a page-wide `refusal`. */
 export async function addSchool(fields, { fetchImpl = fetch } = {}) {
   let answer;

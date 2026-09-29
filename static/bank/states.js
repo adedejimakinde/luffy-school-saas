@@ -27,29 +27,90 @@ export function naira(kobo) {
 /**
  * Money Paystack confirmed that could not be placed on a child. It is listed and
  * never guessed onto anybody: the bursar sees what arrived, how much, and why it
- * was not placed, and nothing here moves it.
+ * was not placed. A person who may place it (`mayPlace`) is offered a button on
+ * each one still waiting; one already placed says where it went and who put it
+ * there, and offers nothing.
  */
-export function unmatchedList(payments = []) {
+export function unmatchedList(payments = [], { mayPlace = false } = {}) {
   if (!payments.length) return "";
+  const row = (p) => {
+    const money =
+      `<strong>${esc(naira(p.amount_kobo))}</strong> ` +
+      `<span class="reference">${esc(p.reference)}</span> `;
+    if (p.placed) {
+      return `<li class="placed">${money}<span class="why">Placed on ${esc(p.placed.student)} by ${esc(p.placed.placed_by)}.</span></li>`;
+    }
+    const action = mayPlace
+      ? ` <button type="button" class="btn" data-action="place" data-payment="${esc(p.payment_id)}">Place on a child</button>`
+      : "";
+    return `<li>${money}<span class="why">${esc(p.reason_label)}</span>${action}</li>`;
+  };
   return [
     '<section class="unmatched" data-state="unmatched">',
     "<h2>Payments we could not match</h2>",
     '<p class="hint">These arrived through Paystack and are not in any child\'s account. Nothing has been guessed.</p>',
-    '<ul class="payments">',
-    payments
-      .map(
-        (p) =>
-          `<li><strong>${esc(naira(p.amount_kobo))}</strong> ` +
-          `<span class="reference">${esc(p.reference)}</span> ` +
-          `<span class="why">${esc(p.reason_label)}</span></li>`,
-      )
-      .join(""),
-    "</ul>",
+    `<ul class="payments">${payments.map(row).join("")}</ul>`,
     "</section>",
   ].join("");
 }
 
-export function status({ connected = null, may_write = false, note: text = null, unmatched = [] } = {}) {
+/** Choosing the child a payment goes on: the class, then the child. Writes nothing. */
+export function place({ payment = {}, classes = [], classId = null, children = [], childId = null, note: text = null } = {}) {
+  const options = (rows, value, chosen, label) =>
+    rows
+      .map(
+        (r) =>
+          `<option value="${esc(r[value])}"${r[value] === chosen ? " selected" : ""}>${esc(r[label])}</option>`,
+      )
+      .join("");
+  return [
+    '<section class="state state-place" data-state="place">',
+    "<h1>Place this payment on a child</h1>",
+    `<p><strong>${esc(naira(payment.amount_kobo))}</strong> <span class="reference">${esc(payment.reference)}</span></p>`,
+    '<form class="place-form" data-form="pick">',
+    '<label class="field"><span class="label">Class</span>',
+    `<select name="class_group" data-field="class"><option value=""${classId ? "" : " selected"}>Choose a class…</option>`,
+    options(classes, "class_group_id", classId, "class_group"),
+    "</select></label>",
+    '<label class="field"><span class="label">Child</span>',
+    `<select name="child" data-field="child"${classId ? "" : " disabled"}><option value=""${childId ? "" : " selected"}>Choose a child…</option>`,
+    options(children, "student_membership_id", childId, "student"),
+    "</select></label>",
+    note(text),
+    '<button type="submit" class="btn primary">Review</button> ',
+    '<button type="button" class="btn" data-action="cancel-place">Cancel</button>',
+    "</form>",
+    "</section>",
+  ].join("");
+}
+
+/** The amount, the reference and the child, read back before the only write. */
+export function placeConfirm({ payment = {}, child = {}, note: text = null } = {}) {
+  return [
+    '<section class="state state-place-confirm" data-state="place-confirm">',
+    "<h1>Place this payment?</h1>",
+    '<section class="card">',
+    `<p><strong>${esc(naira(payment.amount_kobo))}</strong> <span class="reference">${esc(payment.reference)}</span></p>`,
+    `<p>on <strong>${esc(child.student)}</strong></p>`,
+    "</section>",
+    "<p>It goes into their account now, with a receipt, and your name is kept with it. ",
+    "If it is wrong, reverse the entry on the child's account; this payment cannot be placed again.</p>",
+    '<form data-form="place-confirm"><input type="hidden" name="confirm" value="yes">',
+    `<button type="submit" class="btn primary">Yes, place ${esc(naira(payment.amount_kobo))} on ${esc(child.student)}</button> `,
+    '<button type="button" class="btn" data-action="back-to-pick">No, go back</button>',
+    note(text),
+    "</form>",
+    "</section>",
+  ].join("");
+}
+
+export function status({
+  connected = null,
+  may_write = false,
+  note: text = null,
+  unmatched = [],
+  mayPlace = false,
+} = {}) {
   const head = '<div class="page-head"><div><h1>School bank account</h1></div></div>';
   if (!connected) {
     return [
@@ -61,7 +122,7 @@ export function status({ connected = null, may_write = false, note: text = null,
         ? '<button type="button" class="btn primary" data-action="start">Connect a bank account</button>'
         : "<p>The bursar or an administrator connects it.</p>",
       note(text),
-      unmatchedList(unmatched),
+      unmatchedList(unmatched, { mayPlace }),
       "</section>",
     ].join("");
   }
@@ -78,7 +139,7 @@ export function status({ connected = null, may_write = false, note: text = null,
       ? '<button type="button" class="btn" data-action="start">Change bank account</button>'
       : "",
     note(text),
-    unmatchedList(unmatched),
+    unmatchedList(unmatched, { mayPlace }),
     "</section>",
   ].join("");
 }

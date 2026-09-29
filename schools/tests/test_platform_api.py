@@ -249,3 +249,64 @@ class MakingASchoolTests(PlatformSetUp):
 
         self.assertEqual(response.status_code, 422)
         self.assertNotIn("hope", self.customers())
+
+
+UNROUTED = "/api/platform/unrouted/"
+
+
+class UnroutedPaymentsTests(PlatformSetUp):
+    """Money Paystack confirmed for an account no school owns: the platform's screen, and no one else's."""
+
+    def unrouted(self, user=None, host=PORTAL):
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.get(UNROUTED, HTTP_HOST=host)
+
+    def make(self, reference, amount, account="0000000000"):
+        from schools.models import UnroutedPayment
+
+        return UnroutedPayment.objects.create(reference=reference, amount_kobo=amount, account_number=account)
+
+    def test_platform_staff_see_every_unrouted_payment_newest_first_in_whole_kobo(self):
+        self.make("REF-1", 5_000_000, "1111111111")
+        self.make("REF-2", 15_000_050, "2222222222")
+
+        response = self.unrouted(self.operator)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = response.json()["payments"]
+        self.assertEqual([r["reference"] for r in rows], ["REF-2", "REF-1"])
+        self.assertEqual([r["amount_kobo"] for r in rows], [15_000_050, 5_000_000])
+        self.assertEqual(rows[0]["account_number"], "2222222222")
+        self.assertTrue(all(isinstance(r["amount_kobo"], int) for r in rows))
+
+    def test_with_none_it_is_an_empty_list(self):
+        self.assertEqual(self.unrouted(self.operator).json(), {"payments": []})
+
+    def test_school_staff_at_either_school_are_refused_and_told_nothing_of_what_is_there(self):
+        """CONTROL: dropping the platform-staff check makes this red."""
+        self.make("REF-1", 5_000_000)
+
+        for member in (self.head, self.admin, self.teacher, self.their_head, self.their_admin):
+            with self.subTest(member=member):
+                response = self.unrouted(member.user)
+                self.assertEqual(response.status_code, 403)
+                self.assertNotIn("REF-1", response.content.decode())
+
+    def test_a_signed_out_caller_is_refused(self):
+        self.client.logout()
+
+        self.assertIn(self.unrouted().status_code, (401, 403))
+
+    def test_a_schools_own_host_has_no_such_route(self):
+        self.make("REF-1", 5_000_000)
+
+        self.assertEqual(self.unrouted(self.operator, host=HOST).status_code, 404)
+        self.assertEqual(self.unrouted(self.operator, host=THEIR_HOST).status_code, 404)
+
+    def test_it_is_read_only(self):
+        self.client.force_login(self.operator)
+
+        for method in (self.client.post, self.client.put, self.client.delete):
+            with self.subTest(method=method):
+                self.assertEqual(method(UNROUTED, HTTP_HOST=PORTAL).status_code, 405)
