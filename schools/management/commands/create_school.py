@@ -43,6 +43,11 @@ class Command(BaseCommand):
         except invitations_errors() as exc:
             raise CommandError(f"Nothing was created: {exc}") from exc
         self.stdout.write(f"{created.school.name} answers on https://{created.host}/")
+        if created.texted:
+            self.stdout.write(
+                f"Its administrator was invited by SMS to {created.invitation.sent_to}."
+            )
+            return
         if created.link_to_hand_over is None:
             self.stdout.write(
                 f"Its administrator was invited by email at {created.invitation.sent_to}."

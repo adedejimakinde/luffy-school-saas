@@ -48,6 +48,10 @@ WITH_PROVIDER = dict(
 
 ACCEPT_PAGE = "https://app.classnode.test/invitations/"
 
+#: The phone provider: the fake, which records what it is handed.
+SMS = dict(MESSAGING_PROVIDERS={"phone": "messaging.fake.FakeProvider"})
+NO_SMS = dict(MESSAGING_PROVIDERS={})
+
 
 def schema_exists(name):
     with connection.cursor() as cursor:
@@ -113,7 +117,7 @@ class OnboardingTests(TestCase):
     def test_a_school_gets_a_real_schema_its_host_and_an_invited_administrator(self):
         """The control: every refusal below would pass against a command that
         created nothing for anybody."""
-        school, host, invitation, link = self.make()
+        school, host, invitation, link, _texted = self.make()
 
         self.assertIsNone(link, "a delivered invitation's link came back to be printed")
         self.assertEqual(host, "stmarys.classnode.test")
@@ -176,6 +180,52 @@ class OnboardingTests(TestCase):
         self.assertIn("No email provider is configured", printed)
         self.assertIn("Give this link to head@grace.example yourself", printed)
         self.assertIn(ACCEPT_PAGE, printed)
+
+    def test_an_administrator_known_only_by_phone_is_texted_the_link(self):
+        """CONTROL: dropping the SMS branch hands the link back instead, and this goes red."""
+        from messaging.models import FakeMessage
+
+        with override_settings(**WITH_PROVIDER, **SMS):
+            created = self.make(admin_email="", admin_phone="0803 555 0100")
+
+        self.assertTrue(created.texted)
+        self.assertIsNone(created.link_to_hand_over)
+        sms = FakeMessage.objects.get()
+        self.assertEqual((sms.channel_type, sms.address), ("phone", created.invitation.sent_to))
+        self.assertTrue(sms.address.startswith("+234"))
+        self.assertIn("St Mary's", sms.text)
+        link = sms.text[sms.text.index(ACCEPT_PAGE):]
+        token = link[len(ACCEPT_PAGE):].rstrip("/")
+        self.assertEqual(Invitation.validate_token(token), created.invitation)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_a_refused_text_hands_the_link_to_the_operator_instead(self):
+        with override_settings(**WITH_PROVIDER, **SMS):
+            created = self.make(admin_email="", admin_phone="0803 555 0000")  # the fake refuses ...0000
+
+        self.assertFalse(created.texted)
+        self.assertTrue(created.link_to_hand_over.startswith(ACCEPT_PAGE))
+        self.assertTrue(schema_exists("stmarys"))
+
+    def test_with_no_phone_provider_a_phone_only_administrator_is_handed_the_link(self):
+        from messaging.models import FakeMessage
+
+        with override_settings(**WITH_PROVIDER, **NO_SMS):
+            created = self.make(admin_email="", admin_phone="0803 555 0100")
+
+        self.assertFalse(created.texted)
+        self.assertTrue(created.link_to_hand_over.startswith(ACCEPT_PAGE))
+        self.assertFalse(FakeMessage.objects.exists())
+
+    def test_an_administrator_with_an_email_is_emailed_even_when_a_phone_provider_exists(self):
+        from messaging.models import FakeMessage
+
+        with override_settings(**WITH_PROVIDER, **SMS):
+            created = self.make(admin_phone="0803 555 0100")
+
+        self.assertFalse(created.texted)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertFalse(FakeMessage.objects.exists())
 
     def test_with_an_email_provider_it_is_emailed_and_the_link_not_printed(self):
         """The link is a credential. Emailed, it went where it belongs, and a

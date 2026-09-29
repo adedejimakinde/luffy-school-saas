@@ -201,6 +201,19 @@ class MakingASchoolTests(PlatformSetUp):
         invitation = Invitation.objects.get(membership__school__slug="hope")
         self.assertEqual(invitation.membership.role, Role.ADMIN)
 
+    def test_an_administrator_known_only_by_phone_is_texted_when_there_is_a_phone_provider(self):
+        from messaging.models import FakeMessage
+
+        with override_settings(MESSAGING_PROVIDERS={"phone": "messaging.fake.FakeProvider"}):
+            response = self.post(self.new_school(admin_email="", admin_phone="0803 555 0100"))
+
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertTrue(body["texted"])
+        self.assertFalse(body["emailed"])
+        self.assertIsNone(body["link_to_hand_over"])
+        self.assertIn("/invitations/", FakeMessage.objects.get().text)
+
     def test_a_reserved_or_taken_subdomain_is_refused_and_nothing_is_written(self):
         before = self.customers()
 

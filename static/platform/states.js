@@ -57,6 +57,9 @@ export function invited(made) {
   if (made.emailed) {
     return `<p class="hint" role="status"><strong>${name}</strong> is at ${esc(made.school.host)}. The invitation was sent to ${esc(made.invited)}.</p>`;
   }
+  if (made.texted) {
+    return `<p class="hint" role="status"><strong>${name}</strong> is at ${esc(made.school.host)}. The invitation was texted to ${esc(made.invited)}.</p>`;
+  }
   return [
     `<p class="hint" role="status"><strong>${name}</strong> is at ${esc(made.school.host)}. Nothing was sent: give ${esc(made.invited)} this link yourself.`,
     " Whoever opens it becomes the school's administrator, so hand it to that person only.</p>",
