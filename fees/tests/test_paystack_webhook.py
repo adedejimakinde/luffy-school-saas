@@ -199,12 +199,37 @@ class AForgedWebhook(WebhookSetUp):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.verifies(), [])
 
-    def test_no_secret_configured_refuses_everything(self):
-        with self.settings(PAYSTACK_WEBHOOK_SECRET=""):
-            response = self.deliver(self.event(), signature=signed(json.dumps(self.event()).encode(), ""))
+    def test_no_key_configured_refuses_everything(self):
+        raw = json.dumps(self.event()).encode()
+        with self.settings(PAYSTACK_SECRET_KEY=""):
+            response = self.deliver(raw, signature=signed(raw, ""))
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(self.verifies(), [])
+
+    def test_the_webhook_is_verified_with_the_secret_key_and_nothing_else(self):
+        """Paystack signs with the account's secret key: a signature made with it is
+        accepted, and there is no other setting that could stand in for it."""
+        from django.conf import settings
+
+        self.assertFalse(hasattr(settings, "PAYSTACK_WEBHOOK_SECRET"))
+        with self.settings(PAYSTACK_SECRET_KEY="sk_test_another_key_0123"):
+            raw = json.dumps(self.event("R-NOSUCH")).encode()
+            with_the_old_key = self.deliver(raw, signature=signed(raw, TEST_KEY))
+            with_the_new_key = self.deliver(raw, signature=signed(raw, "sk_test_another_key_0123"))
+
+        self.assertEqual(with_the_old_key.status_code, 401)
+        self.assertEqual(with_the_new_key.status_code, 200)  # signed by the configured key; not a known transaction
+
+    def test_a_live_key_refuses_every_webhook_even_when_correctly_signed(self):
+        live = "sk_live_0123456789abcdef"
+        raw = json.dumps(self.event()).encode()
+        with self.settings(PAYSTACK_SECRET_KEY=live):
+            response = self.deliver(raw, signature=signed(raw, live))
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(self.verifies(), [])
+        self.assertEqual(self.entries(self.stmarys), [])
 
     def test_the_signature_is_an_hmac_sha512_hex_digest_compared_as_such(self):
         raw = b'{"a": 1}'
@@ -412,6 +437,105 @@ class NeverGuessed(WebhookSetUp):
         self.paid("REF-2", account="0000000000")
 
         self.assertEqual({c.pk: self.balance(self.stmarys, c) for c in (self.ada, self.chidi)}, balances)
+
+
+class WhenTheVerifyReplyLacksTheAccountFields(WebhookSetUp):
+    """The signed event's own `authorization` and `customer` stand in, field by field,
+    for whatever Paystack's verify reply does not carry; the verify reply wins where it has one."""
+
+    def transaction(self, *, drop_account=False, drop_customer=False, reference="REF-1"):
+        self.paystack.add_transaction(reference, FIFTY_THOUSAND_NAIRA, account_number=self.ada_no,
+                                      customer_code=self.ada_customer)
+        record = self.paystack.transactions[reference]
+        if drop_account:
+            del record["authorization"]["receiver_bank_account_number"]
+        if drop_customer:
+            del record["customer"]["customer_code"]
+
+    def event_with(self, *, account=None, customer=None, reference="REF-1"):
+        extra = {}
+        if account is not None:
+            extra["authorization"] = {"receiver_bank_account_number": account}
+        if customer is not None:
+            extra["customer"] = {"customer_code": customer}
+        return self.event(reference, FIFTY_THOUSAND_NAIRA, **extra)
+
+    def test_both_fields_come_from_the_signed_event_when_the_verify_reply_has_neither(self):
+        """CONTROL: dropping the fallback makes this red."""
+        self.transaction(drop_account=True, drop_customer=True)
+
+        response = self.deliver(self.event_with(account=self.ada_no, customer=self.ada_customer))
+
+        self.assertEqual(response.json()["status"], "recorded")
+        (entry,) = self.entries(self.stmarys)
+        self.assertEqual((entry.student_membership_id, entry.amount_kobo), (self.ada.pk, -FIFTY_THOUSAND_NAIRA))
+
+    def test_a_field_is_taken_from_the_event_on_its_own_when_only_it_is_missing(self):
+        self.transaction(drop_account=True)
+        self.assertEqual(self.deliver(self.event_with(account=self.ada_no)).json()["status"], "recorded")
+
+        self.transaction(drop_customer=True, reference="REF-2")
+        self.assertEqual(self.deliver(self.event_with(customer=self.ada_customer, reference="REF-2")).json()["status"], "recorded")
+
+        self.assertEqual([e.reference for e in self.entries(self.stmarys)], ["REF-1", "REF-2"])
+
+    def test_the_verify_reply_wins_over_the_event_wherever_it_has_the_field(self):
+        """Paystack's own record is the one that counts: an event naming another child's account
+        cannot redirect a payment the verify reply places elsewhere."""
+        self.transaction()
+
+        response = self.deliver(self.event_with(account=self.zainab_no, customer=self.zainab_customer))
+
+        self.assertEqual(response.json()["status"], "recorded")
+        self.assertEqual(len(self.entries(self.stmarys)), 1)
+        self.assertEqual(self.entries(self.grace), [])
+
+    def test_a_fallback_customer_that_is_not_the_accounts_is_still_never_guessed(self):
+        self.transaction(drop_customer=True)
+
+        response = self.deliver(self.event_with(customer="CUS_somebody_else"))
+
+        self.assertEqual(response.json()["status"], "unmatched")
+        self.assertEqual([u.reason for u in self.unmatched(self.stmarys)], [UnmatchedReason.WRONG_CUSTOMER])
+        self.assertEqual(self.entries(self.stmarys), [])
+
+    def test_a_fallback_account_nobody_owns_is_unrouted(self):
+        self.transaction(drop_account=True)
+
+        response = self.deliver(self.event_with(account="0000000000"))
+
+        self.assertEqual(response.json()["status"], "unrouted")
+        self.assertEqual(UnroutedPayment.objects.get().account_number, "0000000000")
+        self.assertEqual(self.entries(self.stmarys) + self.entries(self.grace), [])
+
+    def test_with_the_fields_in_neither_place_nothing_is_placed(self):
+        self.transaction(drop_account=True, drop_customer=True)
+
+        response = self.deliver(self.event())
+
+        self.assertEqual(response.json()["status"], "unrouted")
+        self.assertEqual(UnroutedPayment.objects.get().account_number, "")
+        self.assertEqual(self.entries(self.stmarys) + self.entries(self.grace), [])
+
+    def test_the_fallback_is_still_behind_the_signature_and_the_verification(self):
+        """The event's fields are only read once the signature and Paystack's verify have passed."""
+        self.transaction(drop_account=True, drop_customer=True)
+        forged = self.deliver(self.event_with(account=self.ada_no, customer=self.ada_customer), secret="sk_test_wrong")
+        self.paystack.transactions["REF-1"]["status"] = "failed"
+        failed = self.deliver(self.event_with(account=self.ada_no, customer=self.ada_customer))
+
+        self.assertEqual(forged.status_code, 401)
+        self.assertEqual(failed.json()["status"], "ignored")
+        self.assertEqual(self.entries(self.stmarys), [])
+
+    def test_a_replay_through_the_fallback_is_still_one_payment(self):
+        self.transaction(drop_account=True, drop_customer=True)
+        body = self.event_with(account=self.ada_no, customer=self.ada_customer)
+
+        first, second = self.deliver(body), self.deliver(body)
+
+        self.assertEqual((first.json()["status"], second.json()["status"]), ("recorded", "duplicate"))
+        self.assertEqual(len(self.entries(self.stmarys)), 1)
 
 
 class TwoSchoolsAtOnce(WebhookSetUp):

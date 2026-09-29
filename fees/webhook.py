@@ -4,9 +4,12 @@ What arrives is a claim. It becomes money in a child's account only after, in
 this order:
 
 1. **The signature.** `x-paystack-signature` is the HMAC-SHA512 of the raw body
-   under `PAYSTACK_WEBHOOK_SECRET`, compared in constant time. Nothing is parsed,
-   looked up or written before it passes: a forged or unsigned request is a 401
-   and that is all it costs. No secret configured is also a refusal.
+   under **the account's secret key, `PAYSTACK_SECRET_KEY`**: Paystack signs
+   webhooks with it and there is no separate webhook secret, so there is no second
+   setting to drift out of step with it. Compared in constant time. Nothing is
+   parsed, looked up or written before it passes: a forged or unsigned request is
+   a 401 and that is all it costs. No key configured, or one that is not a test
+   key (`fees.paystack.secret_key()`), is also a refusal.
 2. **Paystack itself.** `GET /transaction/verify/:reference` must say the same
    transaction succeeded, for the same reference, the same amount in kobo and NGN.
    Everything after this reads the **verified** record, never the webhook's own
@@ -15,7 +18,11 @@ this order:
 3. **The account.** The account number Paystack says was paid into is looked up
    in `schools.PaystackRoute` (which school), then in that school's
    `VirtualAccount` (which child), and Paystack's customer code must be the one
-   that account was made for. Any step that does not match is **not guessed**:
+   that account was made for. Both come from the verified record; **a field the
+   verify reply does not carry is taken from the same field of the signed event**
+   (the signature already proves the event came from Paystack), each field on its
+   own, and the verify reply wins wherever it has one. Any step that does not
+   match is **not guessed**:
    the money is listed as an `UnmatchedPayment` for the bursar (or an
    `UnroutedPayment` for the platform, when no school owns the number).
 4. **Once per reference.** `record_payment_once()` with a form key derived from
@@ -33,7 +40,6 @@ import json
 import logging
 import uuid
 
-from django.conf import settings
 from django.db import transaction
 from django_tenants.utils import schema_context
 
@@ -56,8 +62,11 @@ def form_key_for(reference):
 
 
 def signature_ok(raw, header):
-    secret = getattr(settings, "PAYSTACK_WEBHOOK_SECRET", "") or ""
-    if not secret or not header:
+    try:
+        secret = paystack.secret_key()
+    except paystack.PaystackNotConfigured:
+        return False
+    if not header:
         return False
     digest = hmac.new(secret.encode(), raw, hashlib.sha512).hexdigest()
     return hmac.compare_digest(digest, header.strip().lower())
@@ -65,6 +74,16 @@ def signature_ok(raw, header):
 
 def _ignored(why):
     return 200, {"status": "ignored", "why": why}
+
+
+def _field(verified, event_data, group, name):
+    """`verified[group][name]`, else `event_data[group][name]`, else `""`. As text."""
+    for source in (verified, event_data):
+        block = source.get(group)
+        value = block.get(name) if isinstance(block, dict) else None
+        if value:
+            return str(value)
+    return ""
 
 
 def handle(raw, signature):
@@ -107,10 +126,10 @@ def handle(raw, signature):
         logger.warning("Paystack did not confirm %s as sent", reference)
         return _ignored("Paystack does not confirm it")
 
-    authorization = verified.get("authorization") if isinstance(verified.get("authorization"), dict) else {}
-    customer = verified.get("customer") if isinstance(verified.get("customer"), dict) else {}
-    account_number = str(authorization.get("receiver_bank_account_number") or "")
-    customer_code = str(customer.get("customer_code") or "")
+    # The verified record first; a field it does not carry comes from the signed
+    # event, one field at a time (the signature proves the event is Paystack's).
+    account_number = _field(verified, data, "authorization", "receiver_bank_account_number")
+    customer_code = _field(verified, data, "customer", "customer_code")
 
     route = PaystackRoute.objects.select_related("school").filter(account_number=account_number).first()
     if route is None:

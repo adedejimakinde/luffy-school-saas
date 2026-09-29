@@ -559,10 +559,10 @@ TERMII_TIMEOUT = int(os.environ.get("TERMII_TIMEOUT", "10"))
 #: Paystack, **test mode only** (`fees/paystack.py`). The secret key is a
 #: secret and belongs in `secrets.env`; nothing reads it until a school connects
 #: a bank. A `sk_live_` key is refused by the client, not merely discouraged.
-#: Paystack signs a webhook with the secret key, so the webhook secret defaults
-#: to it; set `PAYSTACK_WEBHOOK_SECRET` only if Paystack ever says otherwise.
+#: Paystack signs every webhook with this same secret key. There is no separate
+#: webhook secret: `fees.webhook` verifies the signature with this key, so there
+#: is no second setting that could drift out of step with it.
 PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "")
-PAYSTACK_WEBHOOK_SECRET = os.environ.get("PAYSTACK_WEBHOOK_SECRET", "") or PAYSTACK_SECRET_KEY
 PAYSTACK_BASE_URL = os.environ.get("PAYSTACK_BASE_URL", "https://api.paystack.co")
 PAYSTACK_TIMEOUT = int(os.environ.get("PAYSTACK_TIMEOUT", "15"))
 #: The bank a dedicated account is asked for at (Paystack's slug). `wema-bank` is

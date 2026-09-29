@@ -28,12 +28,18 @@ fee would be charged to the platform. `tests/test_bank` pins both payloads.
 
 | variable | |
 | --- | --- |
-| `PAYSTACK_SECRET_KEY` | `sk_test_…`. A secret: `secrets.env`, not `production.env`. |
-| `PAYSTACK_WEBHOOK_SECRET` | Optional. Paystack signs webhooks with the secret key, so this defaults to it. Used by PR 2's webhook. |
+| `PAYSTACK_SECRET_KEY` | `sk_test_…`. A secret: `secrets.env`, not `production.env`. **It is also what verifies webhooks:** Paystack signs them with the account's secret key. |
 | `PAYSTACK_BASE_URL` | Default `https://api.paystack.co`. |
 | `PAYSTACK_TIMEOUT` | Seconds, default 15. |
 
 The key is read per call and is never put in an exception, a log line or a page.
+
+**There is no separate webhook secret.** Paystack signs webhooks with the
+account's secret key, so `PAYSTACK_SECRET_KEY` is the webhook's secret too, and the
+webhook code reads that one setting. (An earlier draft had a
+`PAYSTACK_WEBHOOK_SECRET` that defaulted to it; it was dropped so the two cannot
+drift apart.) A key that is not `sk_test_` refuses every webhook as well as every
+call.
 
 ## PR 1: a school's bank connection (step 1)
 
@@ -90,15 +96,21 @@ rarely has one, so it is `<school>-<child id>@<domain>`).
 authenticated by signature alone. `fees/webhook.py` says it in order:
 
 1. **Signature.** `x-paystack-signature` is the HMAC-SHA512 of the raw body under
-   `PAYSTACK_WEBHOOK_SECRET`, compared in constant time. A bad, missing or
-   unconfigured signature is a 401 before anything is parsed or asked of Paystack.
+   **`PAYSTACK_SECRET_KEY`** (Paystack signs with the account's secret key; there is
+   no separate secret), compared in constant time. A bad, missing or unconfigured
+   signature, or a key that is not `sk_test_`, is a 401 before anything is parsed
+   or asked of Paystack.
 2. **Paystack itself.** `GET /transaction/verify/:reference` must agree: success,
    the same reference, the same amount in kobo, NGN. Everything after reads the
    **verified** record, not the webhook's words. Paystack unreachable is a 503 (it
    sends again); a transaction that does not verify is a 200 that records nothing.
-3. **Whose.** The verified account number is looked up in `schools.PaystackRoute`,
-   then in that school's `VirtualAccount`, and Paystack's customer code must be the
-   one the account was made for.
+3. **Whose.** The account number (`authorization.receiver_bank_account_number`) is
+   looked up in `schools.PaystackRoute`, then in that school's `VirtualAccount`, and
+   the customer code (`customer.customer_code`) must be the one the account was made
+   for. Both are read from the verified record; **a field the verify reply does not
+   carry is taken from the same field of the signed event** (the signature already
+   proves it came from Paystack), each field on its own, and the verify reply wins
+   wherever it has one.
 4. **Once.** `record_payment_once()` with a form key derived from the reference
    (`uuid5`), method `bank_transfer`, the reference in the entry: a replay, or two
    at once, is one entry, because the unique index is the mechanism.
@@ -117,8 +129,9 @@ of kobo is ignored.
 
 ## Still unverified (both PRs)
 
-The dedicated-account and transaction-verify calls, and where the receiving
-account number and the customer code sit in a verify reply
-(`authorization.receiver_bank_account_number`, `customer.customer_code`), are from
-memory of Paystack's API and have not been called against the real service. The
-matching depends on those two fields.
+The dedicated-account and transaction-verify calls are from memory of Paystack's
+API and have not been called against the real service. Where the receiving account
+number and the customer code sit (`authorization.receiver_bank_account_number`,
+`customer.customer_code`) is why matching falls back to the signed event's own
+fields when the verify reply lacks them; if Paystack puts them in neither place
+under those names, a payment is listed as unmatched or unrouted, never guessed.

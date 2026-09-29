@@ -187,7 +187,6 @@ class PaystackMixin:
         self.addCleanup(patcher.stop)
         override = override_settings(
             PAYSTACK_SECRET_KEY=TEST_KEY,
-            PAYSTACK_WEBHOOK_SECRET=TEST_KEY,
             PAYSTACK_BASE_URL="https://api.paystack.test",
         )
         override.enable()

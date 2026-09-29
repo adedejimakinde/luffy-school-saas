@@ -1,4 +1,4 @@
-# Where I stopped: 2026-09-29, Paystack PR 2 open, not merged
+# Where I stopped: 2026-09-29, Paystack PR 2 approved with two changes, merging on green
 
 **Paystack, test mode only.** Money goes straight to each school's own bank account;
 Classnode never holds it.
@@ -8,7 +8,18 @@ Classnode never holds it.
 | [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test, and the platform admin's invitation texted when they have only a phone number. |
 | [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | PR 1 (steps 1 and 4), merged after review. The subaccount bank field is `bank_code`. |
 | [#218](https://github.com/adedejimakinde/luffy-school-saas/pull/218) | Merged on green: `list_banks()` pages by cursor, 100 at a time. |
-| PR 2 | **Steps 2 and 3, open on branch `ccr-9628b8cb-e2dnz3`, waiting for the owner's review. Do not merge without them.** It is the newest open PR on that branch. |
+| [#219](https://github.com/adedejimakinde/luffy-school-saas/pull/219) | **PR 2 (steps 2 and 3), approved by the owner with two small changes, both made; merges when CI is green.** Nothing further is queued: there is no PR 3. |
+
+## What changed at review (#219)
+1. **The webhook reads the account number and customer code from Paystack's verify reply, and
+   falls back to the same fields of the signed event** for whichever the verify reply lacks,
+   one field at a time; the verify reply wins where it has one (`webhook._field()`). Still behind
+   the signature and the verification, and still never guessed: a fallback customer that is not the
+   account's is listed as unmatched, and a fallback account nobody owns is unrouted.
+2. **There is no separate webhook secret.** Paystack signs webhooks with the account's secret key,
+   so `PAYSTACK_WEBHOOK_SECRET` was removed and the webhook verifies with `PAYSTACK_SECRET_KEY`
+   (`docs/paystack.md`, `deploy/production.env` and `settings.py` say so). A key that is not
+   `sk_test_` refuses every webhook as well as every call.
 
 ## What PR 2 holds
 `docs/paystack.md` describes it. A dedicated virtual account per child
@@ -23,22 +34,26 @@ if no school owns the account, `schools.UnroutedPayment`.
 
 **Controls run (broken, seen red, restored):** the signature check, Paystack's status, the
 amount comparison, once-per-reference, the customer check, the route lookup, the replay of an
-unmatched reference, and the append-only trigger on the two new tenant tables.
+unmatched reference, and the append-only trigger on the two new tenant tables. At review, also:
+no fallback to the event's fields, the event's fields winning over the verify reply, and a live
+key being accepted for the signature.
 
 ## Not done in PR 2, and unverified
 - **There is no way to place an unmatched payment on a child.** It is listed for the bursar and
   stays listed; putting it in a child's account is a person's decision and there is no button yet.
   `schools.UnroutedPayment` has no screen at all: nobody can see it but a database query.
 - **No bulk "make accounts for the whole class".** The bursar makes them child by child.
-- **Not called against the real Paystack.** The dedicated-account and transaction-verify calls,
-  and where the receiving account number (`authorization.receiver_bank_account_number`) and the
-  customer code (`customer.customer_code`) sit in a verify reply, are from memory. Matching
-  depends on both. `PAYSTACK_DVA_BANK` defaults to `wema-bank`; test mode is believed to want
-  `test-bank`. The dedicated account is made with `split_code` only (not `subaccount`), so the
-  school bears the fees: confirm Paystack accepts that on a dedicated account.
+- **Not called against the real Paystack.** The dedicated-account and transaction-verify calls
+  are from memory. Where the receiving account number (`authorization.receiver_bank_account_number`)
+  and the customer code (`customer.customer_code`) sit is why the webhook falls back to the signed
+  event's own fields; if Paystack puts them in neither place under those names, a payment is listed
+  as unmatched or unrouted and never placed. `PAYSTACK_DVA_BANK` defaults to `wema-bank`; test mode
+  is believed to want `test-bank`. The dedicated account is made with `split_code` only (not
+  `subaccount`), so the school bears the fees: confirm Paystack accepts that on a dedicated account.
 - `PaystackRoute` and `UnroutedPayment` (public schema) have no append-only trigger.
 - The webhook URL still has to be set in Paystack's dashboard (test mode) to the portal's
-  `/api/paystack/webhook/`, and `PAYSTACK_SECRET_KEY` put in `secrets.env`.
+  `/api/paystack/webhook/`, and `PAYSTACK_SECRET_KEY` put in `secrets.env` (it is the only
+  Paystack secret: there is no webhook secret to set).
 
 ## What PR 1 holds
 `docs/paystack.md` is the description. In short: `/bank/` and `/api/fees/bank/`
