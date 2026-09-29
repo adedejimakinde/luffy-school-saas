@@ -17,6 +17,7 @@ from typing import List, Optional
 from django.http import Http404
 from ninja import Router, Schema
 
+from academics import services as academics
 from academics.models import Term
 from accounts.session import session_auth
 
@@ -97,6 +98,11 @@ class HomeOut(Schema):
     present: PresentOut
     waiting: List[WaitingOut]
     happened: TodayOut
+    #: True while the school has no contact email **and** this login may set
+    #: one (`academics.services.can_set_up`). Both halves are decided here so the
+    #: page never shows a nudge whose link would answer "not yours". The
+    #: vice principal, who may read the home and not set up, is never asked.
+    needs_contact_email: bool = False
 
 
 _NOT_YOURS = (
@@ -156,6 +162,9 @@ def home(request):
             for row in rows
         ],
         happened=_happened(summary.today_at_school(term, today, present)),
+        needs_contact_email=(
+            not school.contact_email and academics.can_set_up(request.user, school)
+        ),
     )
 
 
