@@ -6,6 +6,6 @@ main { max-width: 36rem; }
 .bank-form { display: grid; gap: 16px; margin: 16px 0 0; }
 .field { display: grid; gap: 4px; }
 .card.connected { margin: 16px 0; }
-.account-name { font-weight: 600; margin: 0 0 4px; }
+.account-name { font-weight: 700; margin: 0 0 4px; }
 .account-number { font-variant-numeric: tabular-nums; }
 .note { font-size: var(--small); color: var(--stop); }
