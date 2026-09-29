@@ -25,7 +25,7 @@ not starting `sk_test_`; the mocked Paystack, `fees/tests/paystack_fake.py`.
 - The append-only trigger on `SchoolBank` has a test but **no break-and-confirm-red**
   (it needs a migration edit). The name check, the 0% share, the fee bearer and the
   `sk_test_` check each did.
-- CI on #217 was not seen by the time this was written.
+- CI on #217 is green on `c2ce526` (four shards, `screens`, `image`, `test`). It first failed shard 2 on a font weight of 600 in `static/bank/bank.css`; the design allows only 400 and 700.
 
 ## For PR 2
 - The virtual account per student needs the stored `split_code` (and `subaccount_code`)
