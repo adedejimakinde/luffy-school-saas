@@ -1,3 +1,42 @@
+# Where I stopped: 2026-09-29, Paystack PR 1 open, not merged
+
+**Paystack, test mode only.** Money goes straight to each school's own bank account;
+Classnode never holds it. Two PRs were asked for; only the first exists.
+
+| PR | State |
+| --- | --- |
+| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test (360/768/1280), and the platform admin's invitation texted through the phone provider when they have only a phone number (falls back to handing the link over if there is no provider or it refuses). |
+| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | **PR 1 (steps 1 and 4), open, waiting for review. Do not merge without the owner.** |
+
+**PR 2 (steps 2 and 3) has not been started, by instruction: not until the owner says.**
+
+## What PR 1 holds
+`docs/paystack.md` is the description. In short: `/bank/` and `/api/fees/bank/`
+(resolve the account name, confirm it, resolve again and compare, then a Paystack
+subaccount with 0% for the platform **and a split with the subaccount as fee bearer**);
+`fees.SchoolBank`, append-only; `fees/paystack.py`, a stdlib client that refuses any key
+not starting `sk_test_`; the mocked Paystack, `fees/tests/paystack_fake.py`.
+
+## Before PR 1 merges
+- **Nothing was checked against Paystack.** Its docs were blocked from the sandbox; the
+  endpoints and fields (`/bank`, `/bank/resolve`, `/subaccount`, `/split`) are from memory.
+  One real test-mode call each should confirm them, especially the split's
+  `bearer_type`/`bearer_subaccount`, which is what makes the school bear the fees.
+- The append-only trigger on `SchoolBank` has a test but **no break-and-confirm-red**
+  (it needs a migration edit). The name check, the 0% share, the fee bearer and the
+  `sk_test_` check each did.
+- CI on #217 was not seen by the time this was written.
+
+## For PR 2
+- The virtual account per student needs the stored `split_code` (and `subaccount_code`)
+  so the fee bearer holds for it too. Confirm how Paystack takes them on a dedicated account.
+- The webhook's mock tests (forged signature, replay, failed verification) belong there.
+  The key is `PAYSTACK_WEBHOOK_SECRET`, defaulting to the secret key.
+- Local test setup as in "Open issues" below; add `pip install --ignore-installed
+  cryptography -r requirements.txt` and re-run `collectstatic` after adding static files.
+
+---
+
 # Handover: 2026-09-29 (second session)
 
 ## Merged
