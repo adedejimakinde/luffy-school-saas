@@ -125,6 +125,48 @@ The predicate is `LIVE_STATUSES`, not `ACCESS_STATUSES`: the question is whether
 the child is still ours, not whether they can sign in. A suspended student is
 still enrolled and still has a report card coming.
 
+## Promotion at the end of the session
+
+`academics.promotion` (`GET`/`POST /api/academics/promotion/`, the page at
+`/promotion/`). The decision `carry_forward_placements()` refuses to make, made
+by a person, once a year.
+
+**A promotion is a set of placements in the first term of the next session.** A
+child who passes gets the next class up; a child who repeats gets the same class;
+a child in a class with nothing above it **graduates**, which is
+`accounts.services.release_student()` — the membership ends and is kept as
+history, exactly as for any child who leaves. That is irreversible from the
+screen; the confirm step says so.
+
+- **Only at the end of a third term**, with the next session's first term already
+  open (`Setup`). Neither is created here: opening a term is the office's act and
+  a promotion that invented one would be guessing its dates.
+- **Every child is shown, defaulting to promote.** Each class's destination is
+  suggested (the next `level` up; among several arms, the one with the same arm
+  letter; nothing when that is ambiguous, and the plan is then refused until the
+  office chooses; graduation when there is no class above) and can be changed.
+- **Nothing moves until confirmed**: looking writes nothing, and the page's first
+  button only shows what confirming would do.
+- **All at once or not at all.** One transaction, with the current term row
+  locked, so two confirms cannot interleave. The whole plan is checked before any
+  write.
+- **The plan must name every class and every child the school has now.** One who
+  joined or left since the page was drawn makes it stale (409) and nothing moves,
+  which is also what stops a child being left out by accident.
+- **A child already placed in that first term refuses the whole promotion** (409):
+  someone has begun placing by hand or carried a roster forward, and mixing the
+  two silently is how a class ends up with two rosters.
+- Authority is `PLACEMENT_ROLES`, asked before any table is read. The
+  vice principal, a teacher and a bursar are refused.
+
+Tested with two schools (`academics/tests/test_promotion.py`): both have a
+"JSS 1A" and a third term, and promoting one leaves the other's placements and
+memberships exactly as they were.
+
+**Not built:** undoing a promotion; a per-child "left the school" choice (a child
+who is not coming back has to be released first, and is then not listed);
+promotion across a class the school has not created yet.
+
 ## Who may place
 
 `PLACEMENT_ROLES` is `{principal, admin}` — narrower than

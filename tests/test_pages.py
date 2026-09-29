@@ -37,7 +37,7 @@ from accounts.views import (
     STAFF_MODULES,
     STAFF_PAGE_MODULES,
 )
-from academics.views import SETUP_MODULES
+from academics.views import PROMOTION_MODULES, SETUP_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import FEES_MODULES
 from gradebook.views import MARKING_MODULES
@@ -69,6 +69,7 @@ PAGES = {
     "results-chain": CHAIN_MODULES,
     "comments": COMMENTS_MODULES,
     "setup": SETUP_MODULES,
+    "promotion": PROMOTION_MODULES,
     "roll": ROLL_MODULES,
     "roll-import": ROLL_IMPORT_MODULES,
     "staff": STAFF_PAGE_MODULES,

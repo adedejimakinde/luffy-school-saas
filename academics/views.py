@@ -40,4 +40,27 @@ def setup_page(request):
     )
 
 
-__all__ = ["setup_page", "SETUP_MODULES"]
+#: The end-of-session promotion page's modules, entry point last.
+PROMOTION_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "promotion/api.js",
+    "promotion/states.js",
+    "promotion/app.js",
+)
+
+
+def promotion_page(request):
+    """A shell, like setup's: the API asks who may promote, and asks it first."""
+    return render(
+        request,
+        "academics/promotion_page.html",
+        {
+            "import_map": pages.import_map(*PROMOTION_MODULES),
+            "portal_host": portal_host(),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
+__all__ = ["PROMOTION_MODULES", "SETUP_MODULES", "promotion_page", "setup_page"]

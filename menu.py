@@ -70,6 +70,7 @@ LINKS = (
     Link("absences", "/absences/", "i-absent", "Absences", ABSENCE_ROLES, "Results"),
     Link("fees", "/fees/", "i-fees", "Fees", FEES_ROLES, "Office"),
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
+    Link("promotion", "/promotion/", "i-people", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.
     Link("roll", "/roll/", "i-people", "Roll", MEMBERSHIP_GRANTING_ROLES | PLACEMENT_ROLES, "Office"),

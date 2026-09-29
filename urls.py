@@ -18,7 +18,7 @@ routing rather than by a check inside a view somebody could forget to add.
 from django.urls import path
 
 from api import api
-from academics.views import setup_page
+from academics.views import promotion_page, setup_page
 from accounts.views import roll_import_page, roll_page, sign_out, staff_page
 from attendance.views import absences_page, register_page
 from fees.views import fees_page
@@ -54,6 +54,7 @@ urlpatterns = [
     # The principal's and the vice principal's first screen.
     path("home/", home_page, name="home"),
     path("setup/", setup_page, name="school-setup"),
+    path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),
     path("staff/", staff_page, name="staff"),

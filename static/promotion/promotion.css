@@ -1,0 +1,17 @@
+/*
+ * End-of-session promotion. A card per class, a select per child.
+ *
+ * Colours, type and controls are `web/design.css`'s; this is the layout.
+ */
+main { max-width: 44rem; }
+.promotion { display: grid; gap: 16px; margin: 16px 0 0; }
+.promotion .card-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; }
+.dest { display: flex; gap: 8px; align-items: center; }
+.dest-label { color: var(--muted); font-size: var(--small); }
+.children { list-style: none; margin: 0; padding: 0; }
+.child { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--divider); }
+.child:last-child { border-bottom: 0; }
+.child small { color: var(--muted); }
+.summary { padding-left: 20px; }
+.note { font-size: var(--small); color: var(--stop); }
+form.rejected { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
