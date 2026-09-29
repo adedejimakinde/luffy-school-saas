@@ -1,14 +1,44 @@
-# Where I stopped: 2026-09-29, Paystack PR 1 merged, PR 2 not started
+# Where I stopped: 2026-09-29, Paystack PR 2 open, not merged
 
 **Paystack, test mode only.** Money goes straight to each school's own bank account;
-Classnode never holds it. Two PRs were asked for.
+Classnode never holds it.
 
 | PR | State |
 | --- | --- |
-| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test (360/768/1280), and the platform admin's invitation texted through the phone provider when they have only a phone number (falls back to handing the link over if there is no provider or it refuses). |
-| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | **PR 1 (steps 1 and 4), merged on green after review.** Review corrected the subaccount bank field to `bank_code` (create and update), pinned by a test. |
+| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test, and the platform admin's invitation texted when they have only a phone number. |
+| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | PR 1 (steps 1 and 4), merged after review. The subaccount bank field is `bank_code`. |
+| [#218](https://github.com/adedejimakinde/luffy-school-saas/pull/218) | Merged on green: `list_banks()` pages by cursor, 100 at a time. |
+| PR 2 | **Steps 2 and 3, open on branch `ccr-9628b8cb-e2dnz3`, waiting for the owner's review. Do not merge without them.** It is the newest open PR on that branch. |
 
-**PR 2 (steps 2 and 3) has not been started, by instruction: not until the owner says.**
+## What PR 2 holds
+`docs/paystack.md` describes it. A dedicated virtual account per child
+(`fees.VirtualAccount`, made against the school's split; `POST /api/fees/virtual/students/{id}/`),
+shown on the bursar's account page, the parent's page (`GET /api/fees/virtual/mine/`) and in
+fee reminders and receipts (` Pay into: Wema Bank 1234567890, Ada Bello.`). The webhook
+(`POST /api/paystack/webhook/`, portal host only, `fees/webhook.py`): HMAC-SHA512 signature, then
+Paystack's own verify, then the account number routed to a school (`schools.PaystackRoute`, public)
+and matched to a child, then `record_payment_once()` once per reference. A payment that cannot be
+placed is never guessed: it goes to `fees.UnmatchedPayment` (shown to the bursar on `/bank/`) or,
+if no school owns the account, `schools.UnroutedPayment`.
+
+**Controls run (broken, seen red, restored):** the signature check, Paystack's status, the
+amount comparison, once-per-reference, the customer check, the route lookup, the replay of an
+unmatched reference, and the append-only trigger on the two new tenant tables.
+
+## Not done in PR 2, and unverified
+- **There is no way to place an unmatched payment on a child.** It is listed for the bursar and
+  stays listed; putting it in a child's account is a person's decision and there is no button yet.
+  `schools.UnroutedPayment` has no screen at all: nobody can see it but a database query.
+- **No bulk "make accounts for the whole class".** The bursar makes them child by child.
+- **Not called against the real Paystack.** The dedicated-account and transaction-verify calls,
+  and where the receiving account number (`authorization.receiver_bank_account_number`) and the
+  customer code (`customer.customer_code`) sit in a verify reply, are from memory. Matching
+  depends on both. `PAYSTACK_DVA_BANK` defaults to `wema-bank`; test mode is believed to want
+  `test-bank`. The dedicated account is made with `split_code` only (not `subaccount`), so the
+  school bears the fees: confirm Paystack accepts that on a dedicated account.
+- `PaystackRoute` and `UnroutedPayment` (public schema) have no append-only trigger.
+- The webhook URL still has to be set in Paystack's dashboard (test mode) to the portal's
+  `/api/paystack/webhook/`, and `PAYSTACK_SECRET_KEY` put in `secrets.env`.
 
 ## What PR 1 holds
 `docs/paystack.md` is the description. In short: `/bank/` and `/api/fees/bank/`
@@ -17,23 +47,18 @@ subaccount with 0% for the platform **and a split with the subaccount as fee bea
 `fees.SchoolBank`, append-only; `fees/paystack.py`, a stdlib client that refuses any key
 not starting `sk_test_`; the mocked Paystack, `fees/tests/paystack_fake.py`.
 
-## Still unverified
-- `GET /bank` and `GET /bank/resolve` are from memory; the review checked the subaccount
-  calls, the split and `percentage_charge` 0 against Paystack's docs. One real test-mode
-  call each would close it.
-- Every control (name check, 0% share, fee bearer, `sk_test_`, `bank_code`, the append-only
-  trigger) was broken, seen red and restored. The trigger one was run by editing
-  migration 0007 locally (not committed): the SQL test failed without it.
+## Still unverified (PR 1)
+- Paystack's bank list and account resolve were checked against its docs at review; the
+  subaccount calls, the split and `percentage_charge` 0 too. None has been called for real.
+- Every PR 1 control (name check, 0% share, fee bearer, `sk_test_`, `bank_code`, paging, the
+  append-only trigger) was broken, seen red and restored.
 
-## For PR 2
-- The virtual account per student needs the stored `split_code` (and `subaccount_code`)
-  so the fee bearer holds for it too. Confirm how Paystack takes them on a dedicated account.
-- The webhook's mock tests (forged signature, replay, failed verification) belong there.
-  The key is `PAYSTACK_WEBHOOK_SECRET`, defaulting to the secret key.
-- Local test setup as in "Open issues" below; add `pip install --ignore-installed
-  cryptography -r requirements.txt` and re-run `collectstatic` after adding static files.
-  Postgres and Redis stop when the sandbox restarts: check `pg_isready` before trusting
-  a test run that printed no result line.
+## Local test setup
+Add `pip install --ignore-installed cryptography -r requirements.txt` and re-run
+`collectstatic` after adding static files. Postgres and Redis stop when the sandbox
+restarts: check `pg_isready` before trusting a test run that printed no result line. A new
+migration needs a fresh test database (no `--keepdb`). The full suite is CI's job (this
+session ran fees, notices, messaging and the page, menu, budget and design tests: 513 pass).
 
 ---
 

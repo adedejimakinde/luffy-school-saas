@@ -108,6 +108,7 @@ def send_notice(schema_name, notice_id):
             child_name=reminders.child_name(notice.student_membership_id),
             amount_kobo=notice.amount_kobo,
             channel_type=notice.channel_type,
+            student_membership_id=notice.student_membership_id,
         )
 
     claim = _claim(notice, message_kind, text if reachable and not changed else "")

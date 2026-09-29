@@ -898,3 +898,101 @@ class SchoolBank(models.Model):
 
     def delete(self, *args, **kwargs):
         raise BankRecordIsFixed(f"Bank record {self.pk} cannot be deleted.")
+
+
+class VirtualAccountIsFixed(Exception):
+    """Something tried to edit or delete a virtual account that was recorded."""
+
+
+class VirtualAccount(models.Model):
+    """The dedicated bank account one child's family pays school fees into.
+
+    Made at Paystack against the school's own split (`fees.paystack`), so what is
+    paid into it settles to the school's own bank account, 100%, and the school
+    bears Paystack's fees. Classnode holds nothing.
+
+    **One per child** (`student_membership_id` is unique) and **never edited or
+    deleted**: which account a family was told to pay into is a fact a
+    payment can arrive against months later. The child is a bare id, as the
+    ledger has it, for `FeeLedgerEntry`'s reason. `account_number` is what a
+    webhook is routed and matched by, and `customer_code` is checked against
+    Paystack's own record of who paid, so an account is never matched on its
+    number alone.
+    """
+
+    student_membership_id = models.PositiveBigIntegerField(unique=True)
+    customer_code = models.CharField(max_length=64)
+    account_number = models.CharField(max_length=10, unique=True)
+    account_name = models.CharField(max_length=255)
+    bank_name = models.CharField(max_length=120)
+    split_code = models.CharField(max_length=64)
+    created_by_id = models.PositiveBigIntegerField(help_text="accounts.User id.")
+    created_by_name = models.CharField(max_length=255)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(account_number__regex=r"^[0-9]{10}$"),
+                name="a_virtual_account_is_ten_digits",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.bank_name} {self.account_number} ({self.account_name})"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise VirtualAccountIsFixed(f"Virtual account {self.pk} cannot be changed.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise VirtualAccountIsFixed(f"Virtual account {self.pk} cannot be deleted.")
+
+
+class UnmatchedReason(models.TextChoices):
+    NO_ACCOUNT = "no_account", "No virtual account here has that number"
+    NOT_A_STUDENT = "not_a_student", "The account's child is not a student here"
+    WRONG_CUSTOMER = "wrong_customer", "Paystack says a different customer paid into it"
+    NO_CURRENT_TERM = "no_current_term", "The school has no current term to record it in"
+
+
+class UnmatchedPaymentIsFixed(Exception):
+    """Something tried to edit or delete an unmatched payment."""
+
+
+class UnmatchedPayment(models.Model):
+    """Money Paystack confirmed that this school's books could not place. Never guessed.
+
+    A payment that reaches one of the school's accounts and cannot be matched to
+    a child, or cannot be recorded, is listed for the bursar and **not** recorded
+    against the nearest child. `reference` is Paystack's, unique, so a webhook
+    that arrives twice lists it once. Never edited or deleted, like the ledger
+    it stands beside: putting the money in a child's account is a new ledger
+    entry, made by a person, and this row stays as the record that it arrived.
+    """
+
+    reference = models.CharField(max_length=64, unique=True)
+    amount_kobo = models.BigIntegerField()
+    account_number = models.CharField(max_length=32, blank=True)
+    customer_code = models.CharField(max_length=64, blank=True)
+    reason = models.CharField(max_length=20, choices=UnmatchedReason.choices)
+    received_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(amount_kobo__gt=0), name="an_unmatched_payment_is_money"),
+        ]
+
+    def __str__(self):
+        return f"{self.reference}: {self.amount_kobo} kobo, {self.reason}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise UnmatchedPaymentIsFixed(f"Unmatched payment {self.pk} cannot be changed.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise UnmatchedPaymentIsFixed(f"Unmatched payment {self.pk} cannot be deleted.")

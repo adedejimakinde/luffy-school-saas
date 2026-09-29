@@ -565,6 +565,14 @@ PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "")
 PAYSTACK_WEBHOOK_SECRET = os.environ.get("PAYSTACK_WEBHOOK_SECRET", "") or PAYSTACK_SECRET_KEY
 PAYSTACK_BASE_URL = os.environ.get("PAYSTACK_BASE_URL", "https://api.paystack.co")
 PAYSTACK_TIMEOUT = int(os.environ.get("PAYSTACK_TIMEOUT", "15"))
+#: The bank a dedicated account is asked for at (Paystack's slug). `wema-bank` is
+#: Paystack's live default; its test mode uses `test-bank` (unverified: set it
+#: for a test deploy). Never read until a child's account is made.
+PAYSTACK_DVA_BANK = os.environ.get("PAYSTACK_DVA_BANK", "wema-bank")
+#: A Paystack customer needs an email; a child rarely has one, so this domain is
+#: given to a made-up one (`<school>-<child id>@<domain>`), which Paystack never
+#: writes to for us. Set it to a domain the operator controls.
+PAYSTACK_CUSTOMER_EMAIL_DOMAIN = os.environ.get("PAYSTACK_CUSTOMER_EMAIL_DOMAIN", "classnode.example")
 
 #: Where the accept page lives, as a template containing `{token}`.
 #:

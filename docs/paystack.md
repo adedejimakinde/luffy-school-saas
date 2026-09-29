@@ -60,10 +60,65 @@ at Paystack (nothing points at it); the next attempt makes another.
 Paystack absent (no key, a live key, unreachable, a bad key, a 5xx, an unreadable
 reply) is a 503 with one sentence and none of Paystack's words.
 
-## Not built yet (PR 2)
+## PR 2: an account for each child (step 2)
 
-Steps 2 and 3: a dedicated virtual account per student created against the
-school's subaccount (it will need the stored `split_code` so the fee bearer holds
-for it too), shown on the fees, parent, reminder and receipt pages; and the
-webhook (`x-paystack-signature` HMAC-SHA512, re-verify the transaction with
-Paystack, `record_payment()` once per reference, an "unmatched payments" list).
+`POST /api/fees/virtual/students/{id}/` (bursar and administrator; a principal is
+told they may not; everybody else gets the flat 404) makes, or returns, **one
+dedicated virtual account per child**. It needs the school's bank first (a 409
+says so). It creates a Paystack customer, then a dedicated account **settling
+through the school's split** (`split_code` from PR 1, which carries the
+subaccount, its 100% share and the school as fee bearer), and saves a
+`fees.VirtualAccount` (per school, never edited or deleted, unique per child and
+per number). A public `schools.PaystackRoute` row, written in the same
+transaction, says which school an account number belongs to, because a webhook
+arrives on the portal with nothing else to go on.
+
+Where it is shown: the bursar's account page for the child (with the button to
+make it), the parent's page (`GET /api/fees/virtual/mine/`, the caller's own
+children only, through the same family scope as the card index), and the text of
+**fee reminders and receipts**: ` Pay into: Wema Bank 1234567890, Ada Bello.`
+(`virtual.pay_into_sentence()`), and nothing extra for a child with no account.
+
+Settings: `PAYSTACK_DVA_BANK` (default `wema-bank`; Paystack's test mode is
+believed to want `test-bank`, so set it for a test deploy: unverified) and
+`PAYSTACK_CUSTOMER_EMAIL_DOMAIN` (a Paystack customer needs an email and a child
+rarely has one, so it is `<school>-<child id>@<domain>`).
+
+## PR 2: the webhook (step 3)
+
+`POST /api/paystack/webhook/`, on the **portal host only**, exempt from CSRF and
+authenticated by signature alone. `fees/webhook.py` says it in order:
+
+1. **Signature.** `x-paystack-signature` is the HMAC-SHA512 of the raw body under
+   `PAYSTACK_WEBHOOK_SECRET`, compared in constant time. A bad, missing or
+   unconfigured signature is a 401 before anything is parsed or asked of Paystack.
+2. **Paystack itself.** `GET /transaction/verify/:reference` must agree: success,
+   the same reference, the same amount in kobo, NGN. Everything after reads the
+   **verified** record, not the webhook's words. Paystack unreachable is a 503 (it
+   sends again); a transaction that does not verify is a 200 that records nothing.
+3. **Whose.** The verified account number is looked up in `schools.PaystackRoute`,
+   then in that school's `VirtualAccount`, and Paystack's customer code must be the
+   one the account was made for.
+4. **Once.** `record_payment_once()` with a form key derived from the reference
+   (`uuid5`), method `bank_transfer`, the reference in the entry: a replay, or two
+   at once, is one entry, because the unique index is the mechanism.
+
+**Never guessed.** A payment that cannot be placed is listed and touches no
+child's books: an account no school owns goes to `schools.UnroutedPayment` (the
+platform's to look into); a route with no account, a different customer, a child
+who is not a student here, or a school with no current term go to that school's
+`fees.UnmatchedPayment`, shown to the bursar under "Payments we could not match"
+on the bank page (`GET /api/fees/virtual/unmatched/`). An unmatched reference
+stays unmatched if it arrives again; putting the money on a child is a person's
+decision and **is not built yet** (there is no "assign" action).
+
+Only `charge.success` is acted on; an amount that is not a positive whole number
+of kobo is ignored.
+
+## Still unverified (both PRs)
+
+The dedicated-account and transaction-verify calls, and where the receiving
+account number and the customer code sit in a verify reply
+(`authorization.receiver_bank_account_number`, `customer.customer_code`), are from
+memory of Paystack's API and have not been called against the real service. The
+matching depends on those two fields.

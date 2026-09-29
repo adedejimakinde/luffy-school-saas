@@ -32,12 +32,15 @@ from .services import offered
 
 
 def receipt_text(*, school_name, child_name, amount_kobo, receipt_number, method,
-                  narration, effective_on, channel_type) -> str:
+                  narration, effective_on, channel_type, student_membership_id=None) -> str:
     """The whole text: the school, the receipt number, what was received, how, when."""
+    from fees import virtual
+
     by_method = f" by {method}" if method else ""
     return kinds.render(
         kinds.Kind.PAYMENT_RECEIPT,
         channel_type=channel_type,
+        pay_into=virtual.pay_into_sentence(student_membership_id) if student_membership_id else "",
         school=school_name,
         child=child_name,
         amount=kinds.naira(amount_kobo),
@@ -61,6 +64,7 @@ def receipt_text_for(entry, *, school, channel_type) -> str:
         narration=entry.narration,
         effective_on=entry.effective_on,
         channel_type=channel_type,
+        student_membership_id=entry.student_membership_id,
     )
 
 

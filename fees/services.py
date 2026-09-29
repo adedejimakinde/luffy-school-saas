@@ -567,7 +567,8 @@ def _once(post, *, form_key, what, **same):
 
 
 def record_payment_once(membership, term, amount_kobo, *, method, form_key,
-                        effective_on=None, reference="", recorded_by=None):
+                        effective_on=None, reference="", recorded_by=None,
+                        narration="Payment received"):
     """`record_payment()` for a form: the same form twice is one payment.
 
     Returns `(entry, posted)`; `posted` is False when this form had already
@@ -580,6 +581,7 @@ def record_payment_once(membership, term, amount_kobo, *, method, form_key,
             term,
             amount_kobo,
             method=method,
+            narration=narration,
             effective_on=effective_on,
             reference=reference,
             recorded_by=recorded_by,

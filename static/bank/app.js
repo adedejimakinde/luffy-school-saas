@@ -7,7 +7,7 @@
  * confirmation is refused with a sentence and the page stays up.
  */
 
-import { REFUSAL, connectAccount, fetchBanks, fetchState, resolveAccount } from "./api.js";
+import { REFUSAL, connectAccount, fetchBanks, fetchState, fetchUnmatched, resolveAccount } from "./api.js";
 import * as states from "./states.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
@@ -50,7 +50,10 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   if (onSchool) {
     const answer = await fetchState({ fetchImpl });
     if (answer.ok) {
-      status = answer.body;
+      // The unmatched payments are read beside the status, and if they cannot
+      // be read the page still shows the account: nothing is said about it.
+      const unmatched = await fetchUnmatched({ fetchImpl });
+      status = { ...answer.body, unmatched: unmatched.ok ? unmatched.body.payments || [] : [] };
       back();
     } else {
       state = fromRefusal(answer);
@@ -117,7 +120,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       { fetchImpl },
     );
     if (answer.ok) {
-      status = answer.body;
+      status = { ...answer.body, unmatched: status ? status.unmatched : [] };
       back();
     } else if (answer.refusal) {
       state = fromRefusal(answer);

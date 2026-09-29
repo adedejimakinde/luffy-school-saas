@@ -134,15 +134,18 @@ def _counted_since(ids, since, *, inclusive=False):
 # -- what a reminder says ------------------------------------------------------
 
 
-def reminder_text(*, school_name, child_name, amount_kobo, channel_type) -> str:
-    """The whole text: the school, the child, the account's amount, who to call."""
+def reminder_text(*, school_name, child_name, amount_kobo, channel_type, student_membership_id=None) -> str:
+    """The whole text: the school, the child, the account's amount, where to pay, who to call."""
     from results import withholding
+
+    from fees import virtual
 
     contact = withholding.settings().withholding_contact.strip()
     ask = f"Please contact the school: {contact}" if contact else "Please contact the school."
     return kinds.render(
         kinds.Kind.FEE_REMINDER,
         channel_type=channel_type,
+        pay_into=virtual.pay_into_sentence(student_membership_id) if student_membership_id else "",
         school=school_name,
         child=child_name,
         amount=kinds.naira(amount_kobo),
@@ -193,7 +196,7 @@ def _batch(term, school, actor, now, class_group, only):
         for guardian, contact in reachable:
             text = reminder_text(
                 school_name=school.name, child_name=child["name"], amount_kobo=amount,
-                channel_type=contact.channel_type,
+                channel_type=contact.channel_type, student_membership_id=child["id"],
             )
             rows.append(
                 Notice(
