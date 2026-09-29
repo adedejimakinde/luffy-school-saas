@@ -101,6 +101,11 @@ class ClassBalancesOut(Schema):
     term: str
     children: List[ChildBalanceOut]
     may_remind: bool = False
+    #: The bursar or an administrator, at a school with a bank connected: the page
+    #: offers "Create accounts for this class" only then (`fees.virtual.ensure_for_class`).
+    may_make_accounts: bool = False
+    #: Children in this class this term with no virtual account yet.
+    accounts_missing: int = 0
 
 
 class EntryOut(Schema):
@@ -377,6 +382,9 @@ def class_balances(request, class_group_id: int, term_id: int):
         ).values("pk", "display_name", "user__full_name", "reference")
     ]
     children.sort(key=lambda c: (c.student.lower(), c.student_membership_id))
+    from . import bank, virtual
+
+    writer = may_write(request.user, school)
     return ClassBalancesOut(
         class_group_id=group.pk,
         class_group=str(group),
@@ -384,6 +392,8 @@ def class_balances(request, class_group_id: int, term_id: int):
         term=str(term),
         children=children,
         may_remind=_may_remind(request.user, school),
+        may_make_accounts=bool(writer and bank.current() is not None),
+        accounts_missing=virtual.missing_in_class(school, group, term) if writer else 0,
     )
 
 

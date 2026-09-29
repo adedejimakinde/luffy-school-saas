@@ -76,7 +76,14 @@ export function books({
 }
 
 export function classBalances({ classBalances: body = {}, reminding = null, note = "", noteTone = "" } = {}) {
-  const { class_group = "", term = "", children = [], may_remind: mayRemind = false } = body;
+  const {
+    class_group = "",
+    term = "",
+    children = [],
+    may_remind: mayRemind = false,
+    may_make_accounts: mayMake = false,
+    accounts_missing: missing = 0,
+  } = body;
   return [
     '<section class="state state-class" data-state="class">',
     '<p class="back"><button type="button" data-action="back-to-books">All classes</button></p>',
@@ -101,6 +108,13 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
         ].join("")
       : '<p class="blank">Nobody is in this class this term.</p>',
     note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
+    mayMake && missing > 0
+      ? `<p class="more"><button type="button" data-action="make-class-accounts" data-class="${esc(body.class_group_id)}">` +
+        `Create accounts for this class (${esc(missing)} ${missing === 1 ? "child has" : "children have"} none)</button></p>`
+      : "",
+    mayMake && missing === 0 && children.length
+      ? '<p class="quiet">Every child in this class has an account to pay into.</p>'
+      : "",
     mayRemind
       ? `<p class="more"><button type="button" data-action="ask-reminders" data-class="${esc(body.class_group_id)}">` +
         "Remind families who owe in this class</button></p>"

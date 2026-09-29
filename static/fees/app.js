@@ -28,6 +28,7 @@ import {
   fetchNotSent,
   fetchReceipt,
   makeAccount,
+  makeClassAccounts,
   postBillLine,
   postCharges,
   postConcession,
@@ -41,6 +42,32 @@ import {
   removeBillLine,
 } from "./api.js";
 import * as states from "./states.js";
+
+/**
+ * What one press of "Create accounts for this class" did, in words: how many were made,
+ * how many already had one, each failure by name with its sentence, and how many are
+ * left. `tone` is "done" only when nothing failed and nothing stopped it.
+ */
+export function classAccountsNote(result) {
+  const { made = 0, skipped = 0, failed = [], remaining = 0, stopped = null } = result;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const parts = [];
+  if (made) parts.push(`Made ${plural(made, "account", "accounts")}.`);
+  if (skipped) parts.push(`${plural(skipped, "child", "children")} already had one.`);
+  if (failed.length) {
+    parts.push(
+      `${plural(failed.length, "account", "accounts")} could not be made: ` +
+        failed.map((f) => `${f.student} (${f.detail})`).join("; ") +
+        ".",
+    );
+  }
+  if (stopped) parts.push(stopped);
+  if (remaining) parts.push(`${remaining} more to do: press the button again.`);
+  if (!made && !failed.length && !stopped && !remaining) {
+    parts.push("Every child in this class already has an account.");
+  }
+  return { note: parts.join(" "), tone: failed.length || stopped ? "stop" : "done" };
+}
 
 export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
@@ -367,6 +394,24 @@ export async function mount(
         state = { ...state, reminding: null, noteTone: "stop", note: answer.body.detail || "Nothing was sent." };
       } else state = { ...state, reminding: { ...answer.body, scope }, note: "", noteTone: "" };
       draw();
+      return;
+    }
+    if (action === "make-class-accounts" && state.step === "class") {
+      // One press makes a batch; the answer says what it made, skipped and could not make.
+      const answer = await makeClassAccounts({ classId: where.classId, termId: where.termId, fetchImpl });
+      if (answer.refusal) {
+        state = { step: answer.refusal };
+        draw();
+        return;
+      }
+      const shown = answer.ok
+        ? classAccountsNote(answer.body)
+        : { note: answer.body.detail || "No accounts were made.", tone: "stop" };
+      await showClass(where.classId);
+      if (state.step === "class") {
+        state = { ...state, note: shown.note, noteTone: shown.tone };
+        draw();
+      }
       return;
     }
     if (action === "cancel-reminders") {
