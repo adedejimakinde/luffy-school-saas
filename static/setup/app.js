@@ -23,6 +23,7 @@ import {
   removeCrest,
   saveColour,
   saveContactEmail,
+  savePublicPage,
   uploadCrest,
 } from "./api.js";
 import * as states from "./states.js";
@@ -122,6 +123,18 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const file = form.crest && form.crest.files ? form.crest.files[0] : null;
       if (!file) return;
       await after("crest", await uploadCrest({ file, fetchImpl }));
+      return;
+    }
+    if (which === "public-page") {
+      await after(
+        "public_page",
+        await savePublicPage({
+          about: form.about.value,
+          address: form.address.value,
+          phone: form.phone.value,
+          fetchImpl,
+        }),
+      );
       return;
     }
     if (which === "contact-email") {

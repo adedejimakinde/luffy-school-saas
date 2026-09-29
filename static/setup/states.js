@@ -15,7 +15,9 @@ import { esc, numberOrBlank } from "../web/html.js";
  * old one in the same transaction — so the screen never has to ask anybody to
  * unset a term first, and never shows two as current.
  */
-export function shape({ terms = [], classes = [], card = null, contact_email = "", notes = {} } = {}) {
+export function shape({
+  terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "", notes = {},
+} = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
     "<h1>School setup</h1>",
@@ -35,6 +37,8 @@ export function shape({ terms = [], classes = [], card = null, contact_email = "
     card ? cardLook(card, notes) : "",
 
     contactEmail(contact_email, notes),
+
+    publicPage({ about, address, phone }, notes),
 
     "</section>",
   ].join("");
@@ -56,6 +60,28 @@ function contactEmail(address, notes) {
     `<input id="contact_email" name="contact_email" type="email" value="${esc(address)}" placeholder="office@yourschool.example">`,
     '<button type="submit">Save contact email</button>',
     notes.contact_email ? `<p class="note" role="alert">${esc(notes.contact_email.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * What the school's public page says, beside the crest and colour set above.
+ * Its contact email, above, is shown there too.
+ */
+function publicPage({ about, address, phone }, notes) {
+  return [
+    '<h2 id="public-page">Your school\'s web page</h2>',
+    '<p class="hint">Families see this on your school\'s own address, with your crest, ',
+    "colour and contact email. Leave a box empty to leave it off the page.</p>",
+    `<form class="public-page-form${notes.public_page ? ` ${esc(notes.public_page.kind)}` : ""}" data-form="public-page">`,
+    '<label for="about">About the school</label>',
+    `<textarea id="about" name="about" rows="4" maxlength="600">${esc(about)}</textarea>`,
+    '<label for="address">Address</label>',
+    `<input id="address" name="address" value="${esc(address)}" maxlength="300" autocomplete="off">`,
+    '<label for="phone">Phone</label>',
+    `<input id="phone" name="phone" type="tel" value="${esc(phone)}" maxlength="30" autocomplete="off">`,
+    '<button type="submit">Save web page</button>',
+    notes.public_page ? `<p class="note" role="alert">${esc(notes.public_page.detail)}</p>` : "",
     "</form>",
   ].join("");
 }

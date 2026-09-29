@@ -25,6 +25,7 @@ from fees.views import fees_page
 from gradebook.views import marking_page
 from home.views import home_page
 from notices.views import settings_page
+from schools.views import school_site
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -36,6 +37,8 @@ from results.views import (
 from timetable.views import timetable_page
 
 urlpatterns = [
+    # A school's public page: its face to a family, on its own address.
+    path("", school_site, name="school-site"),
     path("api/", api.urls),
     # The first staff surface on a school's host, and the mirror image of the
     # two sign-in pages: they are portal-only because a door needs a host that

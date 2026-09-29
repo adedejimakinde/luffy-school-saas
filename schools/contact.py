@@ -37,4 +37,47 @@ def set_contact_email_as(actor, school, address: str) -> str:
     return school.contact_email
 
 
-__all__ = ["NotAnEmailAddress", "set_contact_email_as"]
+#: Room for a short paragraph; the public page is a card, not an essay.
+ABOUT_MAX = 600
+ADDRESS_MAX = 300
+PHONE_MAX = 30
+_PHONE_OK = frozenset("0123456789 +-()./")
+
+
+class PublicDetailsRefused(Exception):
+    """The about text, address or phone number cannot be used. The message is for the person."""
+
+
+def set_public_details_as(actor, school, *, about, address, phone):
+    """Set what `school`'s public page says. Blank clears a field.
+
+    Text only, saved as typed and escaped where it is drawn; nothing here is
+    markup. The same authority as the contact email: whoever may set the school up.
+    """
+    if not can_set_up(actor, school):
+        raise NotAllowedToSetUp(
+            f"{actor} may not set up {school}'s public page. That is done by "
+            f"a principal or an administrator of the school."
+        )
+    about = "\n".join(line.rstrip() for line in (about or "").strip().splitlines())
+    address = " ".join((address or "").split())
+    phone = (phone or "").strip()
+    if len(about) > ABOUT_MAX:
+        raise PublicDetailsRefused(
+            f"The about text is {len(about)} characters; keep it under {ABOUT_MAX}."
+        )
+    if len(address) > ADDRESS_MAX:
+        raise PublicDetailsRefused(f"Keep the address under {ADDRESS_MAX} characters.")
+    if len(phone) > PHONE_MAX or not set(phone) <= _PHONE_OK:
+        raise PublicDetailsRefused("A phone number is digits, spaces and + - ( ) only.")
+    school.about, school.address, school.phone = about, address, phone
+    school.save(update_fields=["about", "address", "phone"])
+    return school
+
+
+__all__ = [
+    "NotAnEmailAddress",
+    "PublicDetailsRefused",
+    "set_contact_email_as",
+    "set_public_details_as",
+]

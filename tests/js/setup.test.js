@@ -280,3 +280,44 @@ test("a class name typed into the admin cannot execute in the next reader's brow
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
 });
+
+// -- the school's public page ------------------------------------------------
+
+test("the public page form holds what the school has written, and escapes it", () => {
+  const html = states.shape({ ...SHAPE, about: "We <b>teach</b>.", address: "1 Ring Rd", phone: "0803 555 0100" });
+
+  assert.match(html, /data-form="public-page"/);
+  assert.match(html, /<textarea id="about"[^>]*>We &lt;b&gt;teach&lt;\/b&gt;\.<\/textarea>/);
+  assert.match(html, /id="address"[^>]*value="1 Ring Rd"/);
+  assert.match(html, /id="phone"[^>]*value="0803 555 0100"/);
+});
+
+test("submitting the public page form sends the three boxes", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/public-page/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { about: "Hi", address: "1 Ring Rd", phone: "0803" } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "public-page" }, about: "Hi", address: "1 Ring Rd", phone: "0803" });
+
+  assert.deepEqual(sent, [{ about: "Hi", address: "1 Ring Rd", phone: "0803" }]);
+});
+
+test("a refused public page keeps the form open with the server's sentence", () => {
+  const { state: after, reload } = applyWrite(state(), "public_page", {
+    ok: false,
+    outcome: SAVE.REJECTED,
+    body: { detail: "A phone number is digits, spaces and + - ( ) only." },
+  });
+
+  assert.equal(reload, false);
+  assert.match(htmlFor(after), /A phone number is digits/);
+});

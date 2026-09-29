@@ -192,6 +192,10 @@ class SetUpOut(Schema):
     #: Blank until the office sets it up. `docs/messaging.md` D17: every email
     #: this platform sends on the school's behalf carries this as `Reply-To`.
     contact_email: str = ""
+    #: What the school's public page says: its short about text, address and phone.
+    about: str = ""
+    address: str = ""
+    phone: str = ""
 
 
 class NewTermIn(Schema):
@@ -258,6 +262,9 @@ def setup(request):
         may_set_up=True,
         card=_card_look(school),
         contact_email=school.contact_email,
+        about=school.about,
+        address=school.address,
+        phone=school.phone,
     )
 
 
@@ -508,3 +515,38 @@ def set_contact_email(request, payload: ContactEmailIn):
     except contact.NotAnEmailAddress as exc:
         return 422, MessageOut(detail=str(exc))
     return 200, ContactEmailOut(contact_email=address)
+
+
+# What the school's public page says: a short about text, an address and a phone
+# number. Same authority as the contact email above.
+
+
+class PublicDetailsIn(Schema):
+    #: Blank clears a field.
+    about: str = ""
+    address: str = ""
+    phone: str = ""
+
+
+class PublicDetailsOut(Schema):
+    about: str
+    address: str
+    phone: str
+
+
+@router.put("/public-page/", response={200: PublicDetailsOut, 403: MessageOut, 422: MessageOut})
+def set_public_page(request, payload: PublicDetailsIn):
+    """The about text, address and phone on this school's public page."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        school = contact.set_public_details_as(
+            request.user, school, about=payload.about, address=payload.address, phone=payload.phone
+        )
+    except services.NotAllowedToSetUp:
+        return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except contact.PublicDetailsRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, PublicDetailsOut(about=school.about, address=school.address, phone=school.phone)
