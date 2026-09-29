@@ -53,6 +53,18 @@ question, for the `email` channel only. **OPEN-5 — which provider, under what
 contract, and phone/SMS/WhatsApp's own provider — is still open**; this adds no
 phone provider and settles no business question.
 
+**M11, a real phone provider: Termii (2026-09-29), built.** `messaging.termii.TermiiProvider`
+behind the same interface, on Termii's **DND (transactional) route** so a sign-in code or
+receipt reaches a parent on the do-not-disturb register. Selected only by
+`MESSAGING_PHONE_PROVIDER=messaging.termii.TermiiProvider`; configured by `TERMII_API_KEY`,
+`TERMII_SENDER_ID`, optionally `TERMII_BASE_URL` and `TERMII_TIMEOUT`. `FakeProvider`
+stays the development provider and the suite never reaches Termii: its tests mock
+`urlopen`. A refused sender ID, a bad key or an empty wallet is `Unavailable` (the
+operator's), never `Refused` (the number's). The error-reply mapping is a
+conservative guess, **not** captured from Termii (its docs were unreachable when this
+was written). `messaging.W001` stays silenced until a deploy names this class in
+`deploy/production.env`. Which provider to *contract* is still OPEN-5.
+
 **"PR D" is renamed "code delivery"** (M1), so it no longer shares a letter with the
 parent-access series' PR D, merged in #110. The code comments that say "PR D" for it
 are renamed in M1.

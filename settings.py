@@ -548,6 +548,14 @@ MESSAGING_PROVIDERS = {
     or (_FAKE_PROVIDER if DEBUG else ""),
 }
 
+#: The Termii SMS provider (`messaging.termii.TermiiProvider`, D2/M11), for a
+#: deploy that selects it with `MESSAGING_PHONE_PROVIDER`. Never read unless it
+#: does; the key is a secret and belongs in `secrets.env` with the SMTP ones.
+TERMII_API_KEY = os.environ.get("TERMII_API_KEY", "")
+TERMII_SENDER_ID = os.environ.get("TERMII_SENDER_ID", "")
+TERMII_BASE_URL = os.environ.get("TERMII_BASE_URL", "https://api.ng.termii.com")
+TERMII_TIMEOUT = int(os.environ.get("TERMII_TIMEOUT", "10"))
+
 #: Where the accept page lives, as a template containing `{token}`.
 #:
 #: This used to be built with `request.build_absolute_uri()` at the two API call
