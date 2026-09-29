@@ -22,10 +22,12 @@ everything else — no reply, a timeout, a bad key, a `5xx`, a reply that is not
 the shape a success has — and is nobody's fault but the operator's.
 
 **What is assumed, not read from Paystack.** Paystack's documentation was not
-reachable when this was written; the endpoints and fields below are from
-memory of its public API and are **unverified against the real service**
-(`docs/handover.md`): `GET /bank`, `GET /bank/resolve`, `POST /subaccount`,
-`PUT /subaccount/:code`, `POST /split`.
+reachable when this was written. The review of #217 checked the subaccount
+calls and the split's fields (and `percentage_charge` 0) against Paystack's
+current docs; `GET /bank` and `GET /bank/resolve` are still from memory and
+**unverified against the real service** (`docs/handover.md`). The subaccount's bank field is
+`bank_code` on both create and update (per the review of #217, against
+Paystack's current Subaccount docs); `tests/test_bank` pins it.
 """
 
 import json
@@ -133,7 +135,7 @@ def create_subaccount(*, business_name, bank_code, account_number):
         "/subaccount",
         body={
             "business_name": business_name,
-            "settlement_bank": bank_code,
+            "bank_code": bank_code,
             "account_number": account_number,
             "percentage_charge": 0,
         },
@@ -146,7 +148,7 @@ def update_subaccount(code, *, bank_code, account_number):
     data = _request(
         "PUT",
         f"/subaccount/{urllib.parse.quote(code, safe='')}",
-        body={"settlement_bank": bank_code, "account_number": account_number},
+        body={"bank_code": bank_code, "account_number": account_number},
     )
     return _code(data, "subaccount_code", default=code)
 

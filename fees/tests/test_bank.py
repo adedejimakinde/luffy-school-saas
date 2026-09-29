@@ -135,13 +135,29 @@ class ConnectTests(BankSetUp):
 
         (sub,) = self.paystack.sent("POST", "/subaccount")
         self.assertEqual(sub["body"]["percentage_charge"], 0)
-        self.assertEqual(sub["body"]["settlement_bank"], "035")
+        self.assertEqual(sub["body"]["bank_code"], "035")
         self.assertEqual(sub["body"]["account_number"], "0123456789")
         self.assertEqual(sub["body"]["business_name"], "St Mary's")
         (split,) = self.paystack.sent("POST", "/split")
         self.assertEqual(split["body"]["subaccounts"], [{"subaccount": "ACCT_test0001", "share": 100}])
         self.assertEqual(split["body"]["bearer_type"], "subaccount")
         self.assertEqual(split["body"]["bearer_subaccount"], "ACCT_test0001")
+
+    def test_the_subaccount_calls_name_the_bank_field_bank_code(self):
+        """Paystack's Subaccount API says `bank_code`, on create and on update.
+
+        CONTROL: naming it `settlement_bank` again makes this red, and the fake
+        Paystack refuses it too, so the connection itself fails.
+        """
+        self.connect()
+        self.connect(account_number="2222222222", account_name="ST MARYS COLLEGE SAVINGS")
+
+        (create,) = self.paystack.sent("POST", "/subaccount")
+        (update,) = self.paystack.sent("PUT")
+        self.assertEqual(set(create["body"]),
+                         {"business_name", "bank_code", "account_number", "percentage_charge"})
+        self.assertEqual(set(update["body"]), {"bank_code", "account_number"})
+        self.assertEqual((create["body"]["bank_code"], update["body"]["bank_code"]), ("035", "035"))
 
     def test_every_call_is_sent_with_the_test_key_as_a_bearer_token(self):
         self.connect()

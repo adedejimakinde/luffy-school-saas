@@ -2,9 +2,11 @@
 
 **Test mode only.** `fees/paystack.py` refuses any secret key that does not start
 `sk_test_`, before it makes a call. Nothing in this build has been sent to
-Paystack's real servers: every test mocks `urllib.request.urlopen`, and the
-endpoints below are **from memory of Paystack's public API, unverified** (its
-documentation was not reachable when this was written).
+Paystack's real servers: every test mocks `urllib.request.urlopen`. Paystack's
+documentation was not reachable when this was written; the review of #217 checked
+the subaccount calls (the bank field is `bank_code`, on create and update), the
+split's fields and `percentage_charge: 0` against the current docs. `GET /bank`
+and `GET /bank/resolve` are still from memory and unverified.
 
 ## The rule
 

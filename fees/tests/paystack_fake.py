@@ -100,6 +100,11 @@ class FakePaystack:
                 {"status": True, "message": "Account number resolved",
                  "data": {"account_number": r["query"]["account_number"], "account_name": name}},
             )
+        if (method, path) == ("POST", "/subaccount") or (method == "PUT" and path.startswith("/subaccount/")):
+            # Paystack's Subaccount API names the bank field `bank_code`. Refuse
+            # the old `settlement_bank`, so a drifted name fails loudly here too.
+            if "bank_code" not in (r["body"] or {}) or "settlement_bank" in (r["body"] or {}):
+                return _Response(400, {"status": False, "message": "bank_code is required"})
         if (method, path) == ("POST", "/subaccount"):
             self.subaccounts += 1
             return _Response(201, {"status": True, "message": "Subaccount created",
