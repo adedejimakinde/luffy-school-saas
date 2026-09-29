@@ -56,7 +56,8 @@ export function planFrom(form, classes = []) {
       children: Object.fromEntries(
         row.children.map((c) => {
           const field = form[`child_${c.membership_id}`];
-          return [String(c.membership_id), field && field.value === "repeat" ? "repeat" : "promote"];
+          const value = field ? field.value : "";
+          return [String(c.membership_id), value === "repeat" || value === "leave" ? value : "promote"];
         }),
       ),
     });
@@ -68,16 +69,19 @@ export function planFrom(form, classes = []) {
 export function summarise(plan, classes, targets) {
   const named = new Map(targets.map((t) => [t.class_group_id, t.name]));
   const byId = new Map(classes.map((c) => [c.class_group_id, c]));
-  const totals = { promoted: 0, repeated: 0, graduated: 0 };
+  const totals = { promoted: 0, repeated: 0, graduated: 0, left: 0 };
   const summary = plan.map((entry) => {
     const repeating = Object.values(entry.children).filter((v) => v === "repeat").length;
+    const leaving = Object.values(entry.children).filter((v) => v === "leave").length;
     const total = Object.keys(entry.children).length;
     totals.repeated += repeating;
-    totals[entry.graduate ? "graduated" : "promoted"] += total - repeating;
+    totals.left += leaving;
+    totals[entry.graduate ? "graduated" : "promoted"] += total - repeating - leaving;
     return {
       name: byId.get(entry.class_group_id).name,
       to: entry.graduate ? "Graduated" : named.get(entry.destination_id) || "?",
       repeating,
+      leaving,
     };
   });
   return { summary, totals };

@@ -66,7 +66,7 @@ class ClassPlanIn(Schema):
     #: Exactly one of these two: a class to move up into, or graduation.
     destination_id: Optional[int] = None
     graduate: bool = False
-    #: Every child of the class, by membership id: "promote" or "repeat".
+    #: Every child of the class, by membership id: "promote", "repeat" or "leave".
     children: Dict[str, str]
 
 
@@ -78,6 +78,7 @@ class OutcomeOut(Schema):
     promoted: int
     repeated: int
     graduated: int
+    left: int
 
 
 def _school_of(request):
@@ -141,4 +142,4 @@ def confirm(request, payload: PlanIn):
         return 409, MessageOut(detail=str(exc))
     except promotion.PromotionError as exc:
         return 422, MessageOut(detail=str(exc))
-    return OutcomeOut(promoted=outcome.promoted, repeated=outcome.repeated, graduated=outcome.graduated)
+    return OutcomeOut(promoted=outcome.promoted, repeated=outcome.repeated, graduated=outcome.graduated, left=outcome.left)

@@ -9,6 +9,12 @@ children **graduate**, which ends their enrolment
 one-school slot is freed, and a parent with no other child here loses their
 access), exactly as any other child who leaves.
 
+**A child who is leaving** is the third choice beside promote and repeat, open
+to a child of any class. It ends the enrolment the same way graduating does
+(`release_student()`), inside the same all-or-nothing confirmation, but it is
+counted as *left*, not *graduated*: a JSS 1 child who goes to another school is
+not a graduate, and the office's summary must not say so.
+
 **Nothing moves until confirmed, and then everything moves or nothing does.**
 `review()` writes nothing. `promote()` checks the whole plan first and writes
 inside one transaction, so a refusal at the hundredth child leaves the first
@@ -50,7 +56,10 @@ from .services import (
 
 PROMOTE = "promote"
 REPEAT = "repeat"
-ACTIONS = (PROMOTE, REPEAT)
+#: The child is not coming back, whatever class they were in: their enrolment
+#: ends as *left*, not as graduated.
+LEAVE = "leave"
+ACTIONS = (PROMOTE, REPEAT, LEAVE)
 
 
 class PromotionError(AcademicsError):
@@ -229,13 +238,14 @@ class Outcome:
     promoted: int
     repeated: int
     graduated: int
+    left: int = 0
 
 
 def promote(plan, *, by=None) -> Outcome:
     """Carry out a confirmed plan, entirely or not at all.
 
     `plan` is a list of `{"class_group_id", "graduate", "destination_id",
-    "children": {membership_id: "promote" | "repeat"}}`, one entry for every
+    "children": {membership_id: "promote" | "repeat" | "leave"}}`, one entry for every
     class that has children and, in each, one choice for every child.
     """
     with transaction.atomic():
@@ -265,7 +275,7 @@ def promote(plan, *, by=None) -> Outcome:
 
         groups = {g.pk: g for g in ClassGroup.objects.all()}
         writes, leaving = [], []
-        counts = {"promoted": 0, "repeated": 0, "graduated": 0}
+        counts = {"promoted": 0, "repeated": 0, "graduated": 0, "left": 0}
         for group_id, members in eligible.items():
             entry = chosen[group_id]
             choices = {int(k): v for k, v in entry["children"].items()}
@@ -275,7 +285,7 @@ def promote(plan, *, by=None) -> Outcome:
                     f"Look at it again; nothing was moved."
                 )
             if any(v not in ACTIONS for v in choices.values()):
-                raise PromotionError("Each child is either promoted or repeats.")
+                raise PromotionError("Each child is promoted, repeats or is leaving.")
 
             graduate, destination_id = bool(entry.get("graduate")), entry.get("destination_id")
             if graduate == (destination_id is not None):
@@ -289,7 +299,10 @@ def promote(plan, *, by=None) -> Outcome:
                         f"{groups[group_id].name} cannot be promoted into that class."
                     )
             for member in members:
-                if choices[member.pk] == REPEAT:
+                if choices[member.pk] == LEAVE:
+                    leaving.append(member)
+                    counts["left"] += 1
+                elif choices[member.pk] == REPEAT:
                     writes.append((group_id, member))
                     counts["repeated"] += 1
                 elif graduate:
@@ -336,6 +349,7 @@ __all__ = [
     "ACTIONS",
     "AlreadyPlacedNext",
     "BadDestination",
+    "LEAVE",
     "NoFirstTermNext",
     "NotEndOfSession",
     "PROMOTE",
