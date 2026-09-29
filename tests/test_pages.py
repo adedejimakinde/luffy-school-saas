@@ -40,7 +40,7 @@ from accounts.views import (
 from academics.views import PROMOTION_MODULES, SETUP_MODULES
 from schools.views import PLATFORM_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
-from fees.views import FEES_MODULES
+from fees.views import BANK_MODULES, FEES_MODULES
 from gradebook.views import MARKING_MODULES
 from results.views import (
     BROADSHEET_MODULES,
@@ -79,6 +79,7 @@ PAGES = {
     "invite": INVITE_MODULES,
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
+    "bank": BANK_MODULES,
     "timetable": TIMETABLE_MODULES,
     "checker": CHECKER_MODULES,
     "home": HOME_MODULES,

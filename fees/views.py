@@ -24,6 +24,29 @@ FEES_MODULES = (
 )
 
 
+#: The school's bank account page's modules, entry point last.
+BANK_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "bank/api.js",
+    "bank/states.js",
+    "bank/app.js",
+)
+
+
+def bank_page(request):
+    """A shell: the API says who may read the connection, and says it first."""
+    return render(
+        request,
+        "fees/bank_page.html",
+        {
+            "import_map": pages.import_map(*BANK_MODULES),
+            "portal_host": portal_host(),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
 def fees_page(request):
     return render(
         request,
@@ -36,4 +59,4 @@ def fees_page(request):
     )
 
 
-__all__ = ["FEES_MODULES", "fees_page"]
+__all__ = ["BANK_MODULES", "FEES_MODULES", "bank_page", "fees_page"]

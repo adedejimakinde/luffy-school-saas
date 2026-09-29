@@ -1,3 +1,42 @@
+# Where I stopped: 2026-09-29, Paystack PR 1 merged, PR 2 not started
+
+**Paystack, test mode only.** Money goes straight to each school's own bank account;
+Classnode never holds it. Two PRs were asked for.
+
+| PR | State |
+| --- | --- |
+| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test (360/768/1280), and the platform admin's invitation texted through the phone provider when they have only a phone number (falls back to handing the link over if there is no provider or it refuses). |
+| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | **PR 1 (steps 1 and 4), merged on green after review.** Review corrected the subaccount bank field to `bank_code` (create and update), pinned by a test. |
+
+**PR 2 (steps 2 and 3) has not been started, by instruction: not until the owner says.**
+
+## What PR 1 holds
+`docs/paystack.md` is the description. In short: `/bank/` and `/api/fees/bank/`
+(resolve the account name, confirm it, resolve again and compare, then a Paystack
+subaccount with 0% for the platform **and a split with the subaccount as fee bearer**);
+`fees.SchoolBank`, append-only; `fees/paystack.py`, a stdlib client that refuses any key
+not starting `sk_test_`; the mocked Paystack, `fees/tests/paystack_fake.py`.
+
+## Still unverified
+- `GET /bank` and `GET /bank/resolve` are from memory; the review checked the subaccount
+  calls, the split and `percentage_charge` 0 against Paystack's docs. One real test-mode
+  call each would close it.
+- Every control (name check, 0% share, fee bearer, `sk_test_`, `bank_code`, the append-only
+  trigger) was broken, seen red and restored. The trigger one was run by editing
+  migration 0007 locally (not committed): the SQL test failed without it.
+
+## For PR 2
+- The virtual account per student needs the stored `split_code` (and `subaccount_code`)
+  so the fee bearer holds for it too. Confirm how Paystack takes them on a dedicated account.
+- The webhook's mock tests (forged signature, replay, failed verification) belong there.
+  The key is `PAYSTACK_WEBHOOK_SECRET`, defaulting to the secret key.
+- Local test setup as in "Open issues" below; add `pip install --ignore-installed
+  cryptography -r requirements.txt` and re-run `collectstatic` after adding static files.
+  Postgres and Redis stop when the sandbox restarts: check `pg_isready` before trusting
+  a test run that printed no result line.
+
+---
+
 # Handover: 2026-09-29 (second session)
 
 ## Merged

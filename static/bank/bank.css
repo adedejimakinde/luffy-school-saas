@@ -1,0 +1,11 @@
+/*
+ * The school's bank account. Colours, type and controls are `web/design.css`'s;
+ * this is the layout.
+ */
+main { max-width: 36rem; }
+.bank-form { display: grid; gap: 16px; margin: 16px 0 0; }
+.field { display: grid; gap: 4px; }
+.card.connected { margin: 16px 0; }
+.account-name { font-weight: 700; margin: 0 0 4px; }
+.account-number { font-variant-numeric: tabular-nums; }
+.note { font-size: var(--small); color: var(--stop); }

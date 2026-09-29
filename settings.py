@@ -556,6 +556,16 @@ TERMII_SENDER_ID = os.environ.get("TERMII_SENDER_ID", "")
 TERMII_BASE_URL = os.environ.get("TERMII_BASE_URL", "https://api.ng.termii.com")
 TERMII_TIMEOUT = int(os.environ.get("TERMII_TIMEOUT", "10"))
 
+#: Paystack, **test mode only** (`fees/paystack.py`). The secret key is a
+#: secret and belongs in `secrets.env`; nothing reads it until a school connects
+#: a bank. A `sk_live_` key is refused by the client, not merely discouraged.
+#: Paystack signs a webhook with the secret key, so the webhook secret defaults
+#: to it; set `PAYSTACK_WEBHOOK_SECRET` only if Paystack ever says otherwise.
+PAYSTACK_SECRET_KEY = os.environ.get("PAYSTACK_SECRET_KEY", "")
+PAYSTACK_WEBHOOK_SECRET = os.environ.get("PAYSTACK_WEBHOOK_SECRET", "") or PAYSTACK_SECRET_KEY
+PAYSTACK_BASE_URL = os.environ.get("PAYSTACK_BASE_URL", "https://api.paystack.co")
+PAYSTACK_TIMEOUT = int(os.environ.get("PAYSTACK_TIMEOUT", "15"))
+
 #: Where the accept page lives, as a template containing `{token}`.
 #:
 #: This used to be built with `request.build_absolute_uri()` at the two API call

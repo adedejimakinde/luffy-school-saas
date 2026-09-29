@@ -21,7 +21,7 @@ from api import api
 from academics.views import promotion_page, setup_page
 from accounts.views import roll_import_page, roll_page, sign_out, staff_page
 from attendance.views import absences_page, register_page
-from fees.views import fees_page
+from fees.views import bank_page, fees_page
 from gradebook.views import marking_page
 from home.views import home_page
 from notices.views import settings_page
@@ -74,6 +74,7 @@ urlpatterns = [
     path("comments/", comments_page, name="comments"),
     # The bursar's, on the broadsheet's terms.
     path("fees/", fees_page, name="fees"),
+    path("bank/", bank_page, name="bank"),
     # Who teaches what, when: every teacher reads it, on the same terms.
     path("timetable/", timetable_page, name="timetable"),
     path("cards/", card_index_page, name="report-card-index"),
