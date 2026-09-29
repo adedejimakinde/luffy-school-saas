@@ -133,6 +133,36 @@ class TheDoorTests(HomeSetUp):
                 self.assertLessEqual(summary.HOME_ROLES, readers)
 
 
+class TheContactEmailNudgeTests(HomeSetUp):
+    """The banner's flag: no contact email, and a login that may set one."""
+
+    def test_a_principal_is_nudged_until_the_school_sets_one(self):
+        self.assertTrue(self.home().json()["needs_contact_email"])
+
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+
+        self.assertFalse(self.home().json()["needs_contact_email"])
+
+    def test_the_vice_principal_is_never_nudged_to_a_page_that_refuses_them(self):
+        self.assertFalse(self.home(self.vp).json()["needs_contact_email"])
+
+    def test_another_schools_address_does_not_silence_this_ones(self):
+        self.grace.contact_email = "office@grace.example"
+        self.grace.save(update_fields=["contact_email"])
+
+        self.assertTrue(self.home().json()["needs_contact_email"])
+
+    def test_this_schools_address_does_not_silence_the_others(self):
+        self.stmarys.contact_email = "office@stmarys.example"
+        self.stmarys.save(update_fields=["contact_email"])
+
+        self.client.force_login(self.their_head.user)
+        with on(self.day):
+            response = self.client.get(HOME, HTTP_HOST=THEIR_HOST)
+        self.assertTrue(response.json()["needs_contact_email"])
+
+
 class TheFiguresTests(HomeSetUp):
     def test_one_schools_figures_never_include_the_others(self):
         with connected_to(self.grace):

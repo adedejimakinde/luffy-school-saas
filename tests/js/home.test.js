@@ -244,3 +244,16 @@ test("no em dash in any sentence the home draws", () => {
   const html = states.home(HOME) + states.notYours({}) + states.wrongHost() + states.signedOut({}) + states.broken();
   assert.doesNotMatch(html.replace(/<span class="stat-value">—<\/span>/g, ""), /—/);
 });
+
+// -- the contact-email nudge -----------------------------------------------------
+
+test("the banner asks for a contact email and links to the setup field", () => {
+  const html = states.home({ ...HOME, needs_contact_email: true });
+  assert.match(html, /Add your school's contact email so parents' replies reach you/);
+  assert.match(html, /href="\/setup\/#contact-email"/);
+});
+
+test("no banner once the server says it is not needed", () => {
+  assert.doesNotMatch(states.home({ ...HOME, needs_contact_email: false }), /data-banner/);
+  assert.doesNotMatch(states.home(HOME), /data-banner/);
+});

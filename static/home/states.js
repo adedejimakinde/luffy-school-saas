@@ -52,6 +52,7 @@ export function home(body) {
   const { school = "", term = null } = body;
   return [
     '<section class="state state-home" data-state="home">',
+    contactEmailBanner(body),
     '<div class="page-head"><div>',
     "<h1>Home</h1>",
     `<p>${esc(school)}${term ? ` &middot; ${esc(term)}` : ""}</p>`,
@@ -67,6 +68,21 @@ export function home(body) {
     today(body.happened, body.today),
     "</div>",
     "</section>",
+  ].join("");
+}
+
+/**
+ * Until the school sets a contact email, every email sent for it goes out with
+ * no `Reply-To` (`docs/messaging.md` D17). The server decides whether this
+ * login should be asked (`needs_contact_email`); the page only draws it.
+ */
+function contactEmailBanner({ needs_contact_email: needed = false }) {
+  if (!needed) return "";
+  return [
+    '<p class="banner" role="note" data-banner="contact-email">',
+    "Add your school's contact email so parents' replies reach you. ",
+    '<a href="/setup/#contact-email">Add it now</a>',
+    "</p>",
   ].join("");
 }
 
