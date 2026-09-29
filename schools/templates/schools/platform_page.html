@@ -1,0 +1,29 @@
+{% load static %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Platform schools</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page.
+
+The title names no school and no person. This document is served to whoever
+opens the URL, with no `login_required`: the API answers the refusal, and a
+page that refused first would be a second place deciding who is platform staff.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'platform/platform.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'platform/app.js' %}"></script>
+
+{% include "design/icons.html" %}
+<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+<main id="platform">
+  <noscript>
+    <h1>Schools</h1>
+    <p>This page needs JavaScript. Please turn it on, or ask whoever set up
+    this system for you.</p>
+  </noscript>
+  <p class="state state-loading">Loading&hellip;</p>
+</main>

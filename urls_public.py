@@ -16,6 +16,7 @@ from django.contrib import admin
 from django.urls import path
 
 from accounts.views import invitation_page, sign_in_page, staff_sign_in_page
+from schools.views import platform_page
 from urls import handler403, urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
@@ -35,6 +36,10 @@ urlpatterns = [
     # and only here, beside the two doors: the routes it calls answer on the
     # portal, and what it ends in is a pointer to the staff door above.
     path("invitations/<str:token>/", invitation_page, name="invitation"),
+    # The platform operator's screen: every school, and a way to add one. Here
+    # and only here; its API answers 404 on a school's host and 403 to anyone
+    # who is not platform staff.
+    path("platform/", platform_page, name="platform"),
     *tenant_urlpatterns,
 ]
 

@@ -66,6 +66,7 @@ from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
 from results.withholding import CardWithheld
 from schools import invitations as invitation_service
+from schools.platform_api import router as platform_router
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.models import (
     Domain,
@@ -96,6 +97,9 @@ api.add_router("/academics/", academics_router, tags=["academics"])
 # End-of-session promotion: one read, one confirm. Tenant host only.
 api.add_router("/academics/promotion/", promotion_router, tags=["academics"])
 api.add_router("/enrolment/", enrolment_router, tags=["enrolment"])
+# The platform admin screen: every school, and a way to make one. Portal host
+# only and platform staff only; see `schools.platform_api`.
+api.add_router("/platform/", platform_router, tags=["platform"])
 # The school's books. Tenant-host only like the two above, and refused with a
 # flat 404 to anybody who may not read them — see `fees.api`.
 api.add_router("/fees/", fees_router, tags=["fees"])

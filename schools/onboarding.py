@@ -133,12 +133,15 @@ def setup_portal():
     return portal, host
 
 
-def create_school(*, slug, name, admin_email, operator, admin_name=""):
+def create_school(*, slug, name, operator, admin_email=None, admin_phone=None, admin_name=""):
     """Make a school: its schema, its host, and its first administrator's invitation.
 
     Returns a `CreatedSchool`. Everything is checked before anything is
     written, and everything is written in one transaction. Whether the
-    invitation is emailed or handed back is `email_provider_configured()`.
+    invitation is emailed or handed back is `email_provider_configured()`, and
+    whether there is an email address to send it to: an administrator known only
+    by phone number is handed the link too, because the only channel there is
+    delivers by email.
     """
     slug = (slug or "").strip().lower()
     name = (name or "").strip()
@@ -163,18 +166,25 @@ def create_school(*, slug, name, admin_email, operator, admin_name=""):
             f"platform's operators, not by any school's staff."
         )
 
-    by_hand = not email_provider_configured()
+    if not (admin_email or "").strip() and not (admin_phone or "").strip():
+        raise OnboardingError("The first administrator needs an email address or a phone number.")
+    admin_email = (admin_email or "").strip() or None
+    admin_phone = (admin_phone or "").strip() or None
+
+    by_hand = admin_email is None or not email_provider_configured()
     with transaction.atomic():
         school = School(name=name, slug=label, schema_name=schema_name)
         school.save()  # creates and migrates the schema
         Domain.objects.create(tenant=school, domain=host, is_primary=True)
         if by_hand:
             invitation, link = invitations.invite_staff_by_hand(
-                operator, school, Role.ADMIN, email=admin_email, full_name=admin_name
+                operator, school, Role.ADMIN,
+                email=admin_email, phone=admin_phone, full_name=admin_name
             )
         else:
             invitation, _ = invitations.invite_staff(
-                operator, school, Role.ADMIN, email=admin_email, full_name=admin_name
+                operator, school, Role.ADMIN,
+                email=admin_email, phone=admin_phone, full_name=admin_name
             )
             link = None
     return CreatedSchool(school, host, invitation, link)

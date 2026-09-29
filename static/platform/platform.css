@@ -1,0 +1,17 @@
+/*
+ * The platform admin screen: a form to add a school and the list of schools.
+ *
+ * Colours, type and controls are `web/design.css`'s; this is the layout.
+ */
+main { max-width: 44rem; }
+label { display: block; margin: 12px 0 6px; font-weight: 700; }
+label small { font-weight: 400; color: var(--muted); }
+input { width: 100%; }
+.add { margin: 16px 0 24px; }
+.add button { margin-top: 16px; }
+.host { color: var(--muted); font-size: var(--small); }
+.schools { list-style: none; margin: 0; padding: 0; }
+.schools li { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--divider); }
+.schools .count { white-space: nowrap; font-weight: 700; }
+.note { font-size: var(--small); color: var(--stop); }
+.handover { word-break: break-all; padding: 8px 12px; background: var(--card); border-radius: var(--radius); }
