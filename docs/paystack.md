@@ -5,8 +5,9 @@
 Paystack's real servers: every test mocks `urllib.request.urlopen`. Paystack's
 documentation was not reachable when this was written; the review of #217 checked
 the subaccount calls (the bank field is `bank_code`, on create and update), the
-split's fields and `percentage_charge: 0` against the current docs. `GET /bank`
-and `GET /bank/resolve` are still from memory and unverified.
+split's fields and `percentage_charge: 0` against the current docs, and a second
+review the bank list (`perPage` at most 100, paged by cursor) and the account resolve.
+None of it has been called against the real service.
 
 ## The rule
 
@@ -40,7 +41,7 @@ Bursar and administrator only (`fees.authority.may_write`); the principal and vi
 principal read it, with the account number as its last four digits. Screen:
 `/bank/` ("Bank" under Office). API: `/api/fees/bank/`.
 
-1. Choose the bank (Paystack's list, `GET /bank`) and type the ten-digit number.
+1. Choose the bank (Paystack's list, `GET /bank`, every page: `perPage` 100 with `use_cursor=true`, following `meta.next` until there is none) and type the ten-digit number.
 2. `POST resolve/` asks Paystack's `GET /bank/resolve` for the **name the bank
    holds**, and shows it. Nothing is written.
 3. The person confirms it. `POST /` **resolves again** and compares before it

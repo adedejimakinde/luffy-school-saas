@@ -24,8 +24,9 @@ the shape a success has — and is nobody's fault but the operator's.
 **What is assumed, not read from Paystack.** Paystack's documentation was not
 reachable when this was written. The review of #217 checked the subaccount
 calls and the split's fields (and `percentage_charge` 0) against Paystack's
-current docs; `GET /bank` and `GET /bank/resolve` are still from memory and
-**unverified against the real service** (`docs/handover.md`). The subaccount's bank field is
+current docs, and a second review checked `GET /bank` (`perPage` at most 100, cursor
+paging with `use_cursor` and `next`) and `GET /bank/resolve`. Nothing here has been
+called against the real service (`docs/handover.md`). The subaccount's bank field is
 `bank_code` on both create and update (per the review of #217, against
 Paystack's current Subaccount docs); `tests/test_bank` pins it.
 """
@@ -61,8 +62,8 @@ def secret_key():
     return key
 
 
-def _request(method, path, *, params=None, body=None):
-    """One call. Returns Paystack's `data`. Raises the two failures above."""
+def _request(method, path, *, params=None, body=None, meta=False):
+    """One call. Returns Paystack's `data` (`(data, meta)` if `meta`). Raises the two failures above."""
     key = secret_key()
     url = f"{settings.PAYSTACK_BASE_URL.rstrip('/')}{path}"
     if params:
@@ -101,20 +102,46 @@ def _request(method, path, *, params=None, body=None):
         raise PaystackRefused(message or "Paystack refused that.")
     if not (200 <= status < 300) or payload.get("status") is not True:
         raise PaystackUnavailable(f"Paystack answered {status}.")
+    if meta:
+        page = payload.get("meta")
+        return payload.get("data"), page if isinstance(page, dict) else {}
     return payload.get("data")
 
 
+#: Paystack's largest page (`perPage`), and a ceiling on how many pages one list
+#: may take, so a cursor that never ends is a failure and not a loop.
+BANKS_PER_PAGE = 100
+MAX_BANK_PAGES = 20
+
+
 def list_banks():
-    """`[{name, code}, ...]` for Nigeria, by name."""
-    data = _request("GET", "/bank", params={"country": "nigeria", "perPage": 200, "currency": "NGN"})
-    if not isinstance(data, list):
-        raise PaystackUnavailable("Paystack's bank list was not a list.")
-    banks = [
-        {"name": str(b["name"]), "code": str(b["code"])}
-        for b in data
-        if isinstance(b, dict) and b.get("name") and b.get("code")
-    ]
-    return sorted(banks, key=lambda b: b["name"].lower())
+    """`[{name, code}, ...]` for Nigeria, by name, every page.
+
+    Paged with a cursor (`use_cursor=true`, then `next` from each reply's
+    `meta`) until there is none: `perPage` tops out at 100 and Nigeria has more
+    banks than that. A cursor seen twice, or more than `MAX_BANK_PAGES` pages, is
+    Paystack misbehaving and is `PaystackUnavailable`.
+    """
+    banks, seen, cursor = [], set(), None
+    for _ in range(MAX_BANK_PAGES):
+        params = {"country": "nigeria", "currency": "NGN", "perPage": BANKS_PER_PAGE, "use_cursor": "true"}
+        if cursor:
+            params["next"] = cursor
+        data, page = _request("GET", "/bank", params=params, meta=True)
+        if not isinstance(data, list):
+            raise PaystackUnavailable("Paystack's bank list was not a list.")
+        banks += [
+            {"name": str(b["name"]), "code": str(b["code"])}
+            for b in data
+            if isinstance(b, dict) and b.get("name") and b.get("code")
+        ]
+        cursor = page.get("next")
+        if not cursor:
+            return sorted(banks, key=lambda b: b["name"].lower())
+        if cursor in seen:
+            raise PaystackUnavailable("Paystack's bank list did not end.")
+        seen.add(cursor)
+    raise PaystackUnavailable("Paystack's bank list was too long.")
 
 
 def resolve_account(*, account_number, bank_code):

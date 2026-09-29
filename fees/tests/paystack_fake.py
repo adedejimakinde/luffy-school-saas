@@ -50,6 +50,9 @@ class FakePaystack:
         self.accounts = dict(ACCOUNTS)
         self._fail = []
         self._down = False
+        self.banks = list(BANKS)
+        #: How many banks one page holds, at most (Paystack's own cap is 100).
+        self.page_size = 100
         self.subaccounts = 0
         self.splits = 0
 
@@ -87,10 +90,22 @@ class FakePaystack:
             return _Response(status, payload)
         return self._route(record)
 
+    def _bank_page(self, query):
+        """Paystack's bank list: at most 100 a page, and a cursor when asked for one."""
+        per_page = int(query.get("perPage", 50))
+        if per_page > 100:
+            return _Response(400, {"status": False, "message": "perPage cannot be more than 100"})
+        size = min(per_page, self.page_size)
+        start = int(query["next"]) if query.get("next") else 0
+        page = self.banks[start : start + size]
+        more = start + size < len(self.banks)
+        meta = {"perPage": size, "next": str(start + size) if more and query.get("use_cursor") == "true" else None}
+        return _Response(200, {"status": True, "message": "Banks retrieved", "data": page, "meta": meta})
+
     def _route(self, r):
         method, path = r["method"], r["path"]
         if (method, path) == ("GET", "/bank"):
-            return _Response(200, {"status": True, "message": "Banks retrieved", "data": BANKS})
+            return self._bank_page(r["query"])
         if (method, path) == ("GET", "/bank/resolve"):
             name = self.accounts.get(r["query"].get("account_number"))
             if name is None:
