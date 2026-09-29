@@ -46,7 +46,7 @@ class BankSetUp(PaystackMixin, FeesApiSetUp):
             User.objects.create_user("gbola", "correct-horse-battery", full_name="Gina Bursar"),
             self.grace,
             Role.BURSAR,
-        )
+        ).user
 
     def connect(self, user=None, host=HOST, **overrides):
         body = {**ADA_ACCOUNT, "account_name": "ST MARYS COLLEGE", **overrides}
