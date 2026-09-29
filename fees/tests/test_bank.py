@@ -280,7 +280,8 @@ class WhoMay(BankSetUp):
         self.assertIn(response.status_code, (401, 403))
 
     def test_another_schools_bursar_cannot_reach_this_one(self):
-        self.assertEqual(self.connect(self.their_bursar, host=HOST).status_code, 404)
+        # The school-access middleware refuses a stranger before the route is reached.
+        self.assertEqual(self.connect(self.their_bursar, host=HOST).status_code, 403)
         self.assertEqual(self.rows(self.stmarys), [])
 
 
