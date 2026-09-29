@@ -141,6 +141,12 @@ screen; the confirm step says so.
 - **Only at the end of a third term**, with the next session's first term already
   open (`Setup`). Neither is created here: opening a term is the office's act and
   a promotion that invented one would be guessing its dates.
+- **A third choice, "Leaving"**, beside promote and repeat, for a child of any class
+  who is not coming back. It ends the enrolment exactly as graduating does
+  (`release_student()`), in the same all-at-once confirmation, but is counted as
+  *left*, not *graduated* (the API's `left`), and the child gets no placement. The
+  membership row is the same either way (ended, kept as history): the difference is
+  what the office is told, not a stored reason.
 - **Every child is shown, defaulting to promote.** Each class's destination is
   suggested (the next `level` up; among several arms, the one with the same arm
   letter; nothing when that is ambiguous, and the plan is then refused until the
@@ -163,9 +169,8 @@ Tested with two schools (`academics/tests/test_promotion.py`): both have a
 "JSS 1A" and a third term, and promoting one leaves the other's placements and
 memberships exactly as they were.
 
-**Not built:** undoing a promotion; a per-child "left the school" choice (a child
-who is not coming back has to be released first, and is then not listed);
-promotion across a class the school has not created yet.
+**Not built:** undoing a promotion; a stored reason on an ended enrolment (left versus
+graduated is reported once, on the confirmation, and not recorded); promotion across a class the school has not created yet.
 
 ## Who may place
 

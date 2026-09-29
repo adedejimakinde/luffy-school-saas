@@ -118,8 +118,8 @@ test("the summary counts promoted, repeating and graduating", () => {
   const form = Object.fromEntries(Object.entries(FORM).map(([k, v]) => [k, { value: v }]));
   const { summary, totals } = summarise(planFrom(form, REVIEW.classes), REVIEW.classes, REVIEW.targets);
 
-  assert.deepEqual(totals, { promoted: 1, repeated: 1, graduated: 1 });
-  assert.deepEqual(summary[0], { name: "JSS 1A", to: "JSS 2A", repeating: 1 });
+  assert.deepEqual(totals, { promoted: 1, repeated: 1, graduated: 1, left: 0 });
+  assert.deepEqual(summary[0], { name: "JSS 1A", to: "JSS 2A", repeating: 1, leaving: 0 });
   assert.equal(summary[1].to, "Graduated");
 });
 
@@ -177,7 +177,7 @@ test("confirming posts the whole plan once and shows what happened", async () =>
     ["/api/academics/promotion/", (options) => {
       if (options.method === "POST") {
         posted = JSON.parse(options.body);
-        return { status: 200, body: { promoted: 1, repeated: 1, graduated: 1 } };
+        return { status: 200, body: { promoted: 1, repeated: 1, graduated: 1, left: 0 } };
       }
       return { status: 200, body: REVIEW };
     }],
@@ -241,4 +241,43 @@ test("fromReview and htmlFor draw every state", () => {
   assert.match(htmlFor({ step: REFUSAL.EXPIRED }, { portal: "app.example.com" }), /Your session has ended/);
   assert.match(htmlFor({ step: REFUSAL.SIGNED_OUT }, { portal: "app.example.com" }), /Please sign in/);
   assert.match(htmlFor({ step: REFUSAL.BROKEN }), /data-state="broken"/);
+});
+
+test("each child has a Leaving choice beside promote and repeat", () => {
+  const html = htmlFor({ step: "review", ...REVIEW });
+
+  assert.match(html, /<option value="leave">Leaving<\/option>/);
+  const leaving = { ...REVIEW, classes: [{ ...REVIEW.classes[0],
+    children: [{ ...REVIEW.classes[0].children[0], action: "leave" }] }] };
+  assert.match(htmlFor({ step: "review", ...leaving }), /<option value="leave" selected>Leaving/);
+});
+
+test("a leaving child is planned, counted apart from graduating, and posted as leave", async () => {
+  forgetToken();
+  const form = { ...FORM, child_11: "leave", child_31: "leave" };
+  const fields = Object.fromEntries(Object.entries(form).map(([k, v]) => [k, { value: v }]));
+  const plan = planFrom(fields, REVIEW.classes);
+  assert.deepEqual(plan[0].children, { 11: "leave", 12: "repeat" });
+
+  const { summary, totals } = summarise(plan, REVIEW.classes, REVIEW.targets);
+  assert.deepEqual(totals, { promoted: 0, repeated: 1, graduated: 0, left: 2 });
+  assert.equal(summary[0].leaving, 1);
+
+  let posted;
+  const root = fakeRoot({ onSchool: "yes" });
+  const fetchImpl = serve([
+    ["/api/academics/promotion/", (options) => {
+      if (options.method !== "POST") return { status: 200, body: REVIEW };
+      posted = JSON.parse(options.body);
+      return { status: 200, body: { promoted: 0, repeated: 1, graduated: 0, left: 2 } };
+    }],
+  ]);
+  await mount(root, { fetchImpl });
+  await root.submit(form);
+  assert.match(root.innerHTML, /0 promoted, 1 repeating, 0 graduating, 2 leaving/);
+  assert.match(root.innerHTML, /1 leaving/);
+  await root.submit({ confirm: "yes" });
+
+  assert.deepEqual(posted.classes[0].children, { 11: "leave", 12: "repeat" });
+  assert.match(root.innerHTML, /0 graduated, 2 left/);
 });

@@ -30,13 +30,14 @@ function destinationSelect(row, targets) {
 }
 
 function childRow(child) {
-  const promote = child.action !== "repeat";
+  const promote = child.action !== "repeat" && child.action !== "leave";
   return [
     '<li class="child">',
     `<span class="who">${esc(child.name)}${child.reference ? ` <small>${esc(child.reference)}</small>` : ""}</span>`,
     `<select name="child_${esc(child.membership_id)}" aria-label="${esc(child.name)}">`,
     `<option value="promote"${promote ? " selected" : ""}>Promote</option>`,
-    `<option value="repeat"${promote ? "" : " selected"}>Repeat</option>`,
+    `<option value="repeat"${child.action === "repeat" ? " selected" : ""}>Repeat</option>`,
+    `<option value="leave"${child.action === "leave" ? " selected" : ""}>Leaving</option>`,
     "</select>",
     "</li>",
   ].join("");
@@ -47,7 +48,7 @@ export function review({ term = "", to_term = "", classes = [], targets = [], pr
   return [
     '<section class="state state-review" data-state="review">',
     `<div class="page-head"><div><h1>End-of-session promotion</h1><p>${esc(term)} &rarr; ${esc(to_term)}</p></div></div>`,
-    "<p class=\"hint\">Choose where each class goes and, for each child, whether they are promoted or repeat. ",
+    "<p class=\"hint\">Choose where each class goes and, for each child, whether they are promoted, repeat or are leaving the school. ",
     "Nothing moves until you confirm on the next step.</p>",
     `<form class="promotion${note ? " rejected" : ""}" data-form="review">`,
     classes
@@ -74,14 +75,15 @@ export function confirm({ summary = [], totals = {}, note = null } = {}) {
   return [
     '<section class="state state-confirm" data-state="confirm">',
     "<h1>Confirm promotion</h1>",
-    `<p>${esc(totals.promoted)} promoted, ${esc(totals.repeated)} repeating, ${esc(totals.graduated)} graduating.`,
-    " This moves every child at once, and a graduate's enrolment ends. It cannot be undone from here.</p>",
+    `<p>${esc(totals.promoted)} promoted, ${esc(totals.repeated)} repeating, ${esc(totals.graduated)} graduating, ${esc(totals.left || 0)} leaving.`,
+    " This moves every child at once, and the enrolment of a graduate or of a child who is leaving ends. It cannot be undone from here.</p>",
     '<ul class="summary">',
     summary
       .map(
         (row) =>
           `<li><strong>${esc(row.name)}</strong> &rarr; ${esc(row.to)}` +
-          `${row.repeating ? ` <small>(${esc(row.repeating)} repeating)</small>` : ""}</li>`,
+          `${row.repeating ? ` <small>(${esc(row.repeating)} repeating)</small>` : ""}` +
+          `${row.leaving ? ` <small>(${esc(row.leaving)} leaving)</small>` : ""}</li>`,
       )
       .join(""),
     "</ul>",
@@ -94,11 +96,11 @@ export function confirm({ summary = [], totals = {}, note = null } = {}) {
   ].join("");
 }
 
-export function done({ promoted = 0, repeated = 0, graduated = 0 } = {}) {
+export function done({ promoted = 0, repeated = 0, graduated = 0, left = 0 } = {}) {
   return [
     '<section class="state state-done" data-state="done">',
     "<h1>Promotion done</h1>",
-    `<p>${esc(promoted)} promoted, ${esc(repeated)} repeating, ${esc(graduated)} graduated. `,
+    `<p>${esc(promoted)} promoted, ${esc(repeated)} repeating, ${esc(graduated)} graduated, ${esc(left)} left. `,
     "Next session's first term now has its classes.</p>",
     "</section>",
   ].join("");

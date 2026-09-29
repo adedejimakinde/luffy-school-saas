@@ -91,6 +91,11 @@ class PromotionSetUp(ChainSetUp):
     def statuses(self):
         return dict(Membership.objects.filter(role=Role.STUDENT).values_list("pk", "status"))
 
+    def statuses_at_grace(self):
+        return dict(
+            Membership.objects.filter(role=Role.STUDENT, school=self.grace).values_list("pk", "status")
+        )
+
     def assertNothingMoved(self, before):
         self.assertEqual(self.placements(self.stmarys), before[0])
         self.assertEqual(self.placements(self.grace), before[1])
@@ -171,7 +176,7 @@ class TheConfirmTests(PromotionSetUp):
         response = self.post(self.default_plan())
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"promoted": 5, "repeated": 0, "graduated": 2})
+        self.assertEqual(response.json(), {"promoted": 5, "repeated": 0, "graduated": 2, "left": 0})
         landed = {(name, m) for _, name, m in self.placements(self.stmarys, self.next_term.pk)}
         self.assertEqual(
             landed,
@@ -208,6 +213,52 @@ class TheConfirmTests(PromotionSetUp):
         landed = dict((m, name) for _, name, m in self.placements(self.stmarys, self.next_term.pk))
         self.assertEqual(landed[self.ss3_kids["chi"].pk], "SS 3")
 
+    def test_a_leaving_child_is_ended_as_left_and_is_not_counted_as_graduated(self):
+        plan = self.default_plan()
+        self.class_named(plan, "JSS 1A")["children"][str(self.children["tunde"].pk)] = "leave"
+        self.class_named(plan, "SS 3")["children"][str(self.ss3_kids["chi"].pk)] = "leave"
+
+        response = self.post(plan)
+
+        self.assertEqual(
+            response.json(), {"promoted": 4, "repeated": 0, "graduated": 1, "left": 2}
+        )
+        for kid in (self.children["tunde"], self.ss3_kids["chi"], self.ss3_kids["dayo"]):
+            self.assertEqual(Membership.objects.get(pk=kid.pk).status, MembershipStatus.ENDED)
+        landed = dict((m, name) for _, name, m in self.placements(self.stmarys, self.next_term.pk))
+        self.assertNotIn(self.children["tunde"].pk, landed)
+        self.assertNotIn(self.ss3_kids["chi"].pk, landed)
+        self.assertEqual(landed[self.children["ada"].pk], "JSS 2A")
+
+    def test_leaving_in_one_school_touches_nothing_in_the_other(self):
+        before_grace = (self.placements(self.grace), self.statuses_at_grace())
+        plan = self.default_plan()
+        children = self.class_named(plan, "JSS 1A")["children"]
+        for child in children:
+            children[child] = "leave"
+
+        self.assertEqual(self.post(plan).status_code, 200)
+
+        self.assertEqual((self.placements(self.grace), self.statuses_at_grace()), before_grace)
+
+    def test_a_leaving_child_is_refused_with_the_whole_plan_when_next_term_is_taken(self):
+        plan = self.default_plan()
+        self.class_named(plan, "JSS 1A")["children"][str(self.children["tunde"].pk)] = "leave"
+        with connected_to(self.stmarys):
+            academics.place_student(self.jss2a, self.next_term, self.children["ada"])
+        before = self.snapshot()
+
+        self.assertEqual(self.post(plan).status_code, 409)
+        self.assertNothingMoved(before)
+
+    def test_leaving_is_not_open_to_a_teacher(self):
+        plan = self.default_plan()
+        self.class_named(plan, "JSS 1A")["children"][str(self.children["tunde"].pk)] = "leave"
+        before = self.snapshot()
+
+        self.assertEqual(self.post(plan, member=self.teacher).status_code, 403)
+        self.assertNothingMoved(before)
+
     def test_the_office_may_send_a_class_somewhere_other_than_the_suggestion(self):
         plan = self.default_plan()
         row = self.class_named(plan, "JSS 1B")
@@ -238,7 +289,7 @@ class TheConfirmTests(PromotionSetUp):
 
         ok = self.post(self.default_plan(THEIR_HOST, self.their_head), member=self.their_head, host=THEIR_HOST)
         self.assertEqual(ok.status_code, 200)
-        self.assertEqual(ok.json(), {"promoted": 1, "repeated": 0, "graduated": 0})
+        self.assertEqual(ok.json(), {"promoted": 1, "repeated": 0, "graduated": 0, "left": 0})
         # Grace's one child moved up to Grace's own JSS 2A; St Mary's is exactly
         # as it was.
         self.assertEqual(self.placements(self.stmarys), before[0])
