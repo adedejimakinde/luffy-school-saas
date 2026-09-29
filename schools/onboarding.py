@@ -62,6 +62,9 @@ class CreatedSchool(NamedTuple):
     #: operator has to hand it over. None when it was emailed — and then it is
     #: nobody's to print: it is a credential, and it went where it belongs.
     link_to_hand_over: Optional[str]
+    #: True when the link went by SMS, to an administrator known only by phone.
+    #: Then `link_to_hand_over` is None too, for the same reason as an email.
+    texted: bool = False
 
 
 def email_provider_configured():
@@ -78,6 +81,35 @@ def email_provider_configured():
     try:
         check()
     except DeliveryNotConfigured:
+        return False
+    return True
+
+
+def phone_provider_configured():
+    """Whether the phone provider (`messaging.providers`) can send at all."""
+    from messaging.providers import NotConfigured, provider_for
+
+    try:
+        provider_for("phone").check_configured()
+    except NotConfigured:
+        return False
+    return True
+
+
+def _text_the_link(school, phone, link):
+    """SMS the accept link to `phone`. True if the provider took it."""
+    from messaging.kinds import Kind, render
+    from messaging.providers import Outbound, Refused, Unavailable, provider_for
+
+    text = render(Kind.STAFF_INVITATION, channel_type="phone", school=school.name, link=link)
+    outbound = Outbound(
+        channel_type="phone", address=phone, kind=Kind.STAFF_INVITATION.value, text=text
+    )
+    try:
+        provider_for("phone").send(outbound)
+    except (Refused, Unavailable):
+        # The school and its invitation exist; the operator is the delivery,
+        # exactly as with no provider at all. The link is not logged.
         return False
     return True
 
@@ -139,9 +171,10 @@ def create_school(*, slug, name, operator, admin_email=None, admin_phone=None, a
     Returns a `CreatedSchool`. Everything is checked before anything is
     written, and everything is written in one transaction. Whether the
     invitation is emailed or handed back is `email_provider_configured()`, and
-    whether there is an email address to send it to: an administrator known only
-    by phone number is handed the link too, because the only channel there is
-    delivers by email.
+    whether there is an email address to send it to. An administrator known only
+    by phone number is texted the link when a phone provider is configured
+    (`messaging.providers`); if none is, or it refuses, the operator is handed
+    the link instead.
     """
     slug = (slug or "").strip().lower()
     name = (name or "").strip()
@@ -171,7 +204,8 @@ def create_school(*, slug, name, operator, admin_email=None, admin_phone=None, a
     admin_email = (admin_email or "").strip() or None
     admin_phone = (admin_phone or "").strip() or None
 
-    by_hand = admin_email is None or not email_provider_configured()
+    by_sms = admin_email is None and phone_provider_configured()
+    by_hand = by_sms or admin_email is None or not email_provider_configured()
     with transaction.atomic():
         school = School(name=name, slug=label, schema_name=schema_name)
         school.save()  # creates and migrates the schema
@@ -187,7 +221,14 @@ def create_school(*, slug, name, operator, admin_email=None, admin_phone=None, a
                 email=admin_email, phone=admin_phone, full_name=admin_name
             )
             link = None
-    return CreatedSchool(school, host, invitation, link)
+    texted = False
+    if by_sms:
+        # After the commit, so a link is never sent for a school that rolled
+        # back. If the provider fails, the operator gets the link instead.
+        texted = _text_the_link(school, invitation.sent_to, link)
+        if texted:
+            link = None
+    return CreatedSchool(school, host, invitation, link, texted)
 
 
 __all__ = [
@@ -197,5 +238,6 @@ __all__ = [
     "check_host",
     "create_school",
     "email_provider_configured",
+    "phone_provider_configured",
     "setup_portal",
 ]

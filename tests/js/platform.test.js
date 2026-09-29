@@ -121,6 +121,22 @@ test("with no email the link is shown to be handed over", async () => {
   assert.match(root.innerHTML, /https:\/\/x\/invitations\/abc\//);
 });
 
+test("a phone-only administrator is told the invitation was texted, with no link shown", async () => {
+  forgetToken();
+  const root = fakeRoot();
+  const fetchImpl = serve([["/api/platform/schools/", (o) =>
+    o.method === "POST"
+      ? { status: 201, body: { school: { name: "Hope", host: "hope.example.org" }, invited: "+2348035550100", emailed: false, texted: true, link_to_hand_over: null } }
+      : { status: 200, body: SCHOOLS }]]);
+  await mount(root, { fetchImpl });
+
+  await root.submit({ ...FORM, admin_email: "", admin_phone: "08035550100" });
+
+  assert.match(root.innerHTML, /invitation was texted to \+2348035550100/);
+  assert.doesNotMatch(root.innerHTML, /Nothing was sent/);
+  assert.doesNotMatch(root.innerHTML, /invitations/);
+});
+
 test("a refusal keeps the form and what was typed, with the server's sentence", async () => {
   forgetToken();
   const root = fakeRoot();

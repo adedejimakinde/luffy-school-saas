@@ -45,6 +45,10 @@ class Kind(models.TextChoices):
     #: The school's own staff digest. Email only, and to nobody a guardian
     #: channel could name — see `notices.daily_summary`.
     DAILY_MONEY_SUMMARY = "daily_money_summary", "Daily money summary"
+    #: The platform's invitation to a school's first administrator, by SMS when
+    #: that person is known only by phone number. Carries a link, which is a
+    #: credential: sent to the one number it was made for and stored nowhere.
+    STAFF_INVITATION = "staff_invitation", "Staff invitation"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -126,6 +130,11 @@ _TEXT[Kind.DAILY_MONEY_SUMMARY] = (
     "{payments} {word}, {billed} billed."
 )
 
+_TEXT[Kind.STAFF_INVITATION] = (
+    "{school}: you are invited to join Classnode as its administrator. "
+    "Accept here: {link}"
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -137,6 +146,7 @@ _SUBJECT = {
     Kind.PAYMENT_RECEIPT: "Payment receipt",
     Kind.ABSENCE_ALERT: "Absence alert",
     Kind.DAILY_MONEY_SUMMARY: "Daily money summary",
+    Kind.STAFF_INVITATION: "You have been invited to Classnode",
 }
 
 

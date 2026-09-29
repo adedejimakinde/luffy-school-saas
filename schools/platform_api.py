@@ -70,6 +70,8 @@ class CreatedOut(Schema):
     invited: str
     #: True when it was emailed. False means nothing was sent.
     emailed: bool
+    #: True when it was texted, to an administrator known only by phone.
+    texted: bool = False
     #: When nothing was sent: the accept link, for the operator to hand over.
     link_to_hand_over: Optional[str] = None
     link_expires_at: Optional[str] = None
@@ -152,7 +154,8 @@ def add_school(request, payload: NewSchoolIn):
     return 201, CreatedOut(
         school=_rows([created.school])[0],
         invited=created.invitation.sent_to,
-        emailed=handed is None,
+        emailed=handed is None and not created.texted,
+        texted=created.texted,
         link_to_hand_over=handed,
         link_expires_at=created.invitation.expires_at.isoformat() if handed else None,
     )
