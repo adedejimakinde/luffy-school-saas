@@ -1,4 +1,54 @@
-# Handover: 2026-09-29
+# Handover: 2026-09-29 (second session)
+
+## Merged
+
+| PR | What |
+| --- | --- |
+| [#212](https://github.com/adedejimakinde/luffy-school-saas/pull/212) | Promotion: a third choice, **Leaving**, beside promote and repeat, for a child of any class. It ends the enrolment (`release_student()`) inside the same all-or-nothing confirm, gives them no placement, and is counted as `left`, not `graduated` (`POST /api/academics/promotion/` now answers `left`). No stored reason: the membership row is "ended" either way. `docs/classes.md`. Two-school tests. |
+| [#213](https://github.com/adedejimakinde/luffy-school-saas/pull/213) | Platform admin screen: `/platform/` on the portal address, `GET`/`POST /api/platform/schools/` (`schools/platform_api.py`). Lists every school with its live student count; adds a school through `create_school()`, which now takes `admin_phone` as well as `admin_email` (the command gains `--admin-phone`). Platform staff only: school staff get 403, signed-out 401, a school's own address 404. Two-school tests. |
+| [#214](https://github.com/adedejimakinde/luffy-school-saas/pull/214) | A public page for each school at the root of its own address (`schools/views.school_site`, template `schools/site.html`, `static/site/site.css`): crest and colour, name, about, address, phone, contact email, and "Check a result" / "Parent sign in". About, address and phone are edited on the setup page (`PUT /api/academics/public-page/`, new `School.about/address/phone`, migration 0005). No script, no outside request, under 150 KB. Two-school tests. |
+
+Each was its own PR, merged on green. #212's first run had shard 2 fail on a Docker Hub
+pull timeout before any test ran; it was re-run once and passed. This handover is a
+fourth, docs-only PR.
+
+## Things worth knowing
+
+- **Adding a school by phone only sends nothing.** The only invitation channel is
+  email, so an administrator given only a phone number (or any administrator when no
+  email provider is configured) gets no message: the API answers with the accept link
+  once (`emailed: false`, `link_to_hand_over`) and the screen shows it for the operator
+  to pass on. The link makes whoever opens it the school's administrator. Sending it by
+  SMS through the Termii provider would be the natural next step.
+- **Creating a school in a web request is slow** (a real schema and migrations, a few
+  seconds). The onboarding docs kept it at a shell for that reason; the platform screen
+  is a deliberate exception. If the proxy timeout is short, this is where it will show.
+- **"Leaving" is not recorded anywhere.** Left and graduated end the same way, so
+  nothing afterwards can tell them apart; only the confirmation screen and the API answer
+  do. A `reason` on the ended membership would fix that if anyone needs it.
+- **The public page is refused to a person signed in at another school** (the existing
+  403 page), as the result checker already is: `SchoolAccessMiddleware` refuses any
+  signed-in person with no role there. A parent who is signed in on the portal and
+  follows a link to a second school's page would see that, not the page.
+- **The school phone is new.** The public page needed one and the school had none, so
+  it was added to the setup form beside about and address. It is shown as a `tel:` link.
+- **Crest on the public page** is the stored 256px crest shrunk to 128px on each view
+  (`results.look.for_site`); nothing is cached.
+- Nothing here was seen in a real browser; the pages are tested through their HTML and
+  their JS renderers only.
+
+## What's next
+
+- Everything in the previous handover's "What's next" and "Open issues" still stands
+  (Termii against the real service, `messaging.W001`, the SMTP provider, the daily-summary
+  cron, promotion on a real school, the contact-email banner).
+- The `/platform/` page has no link from anywhere: a platform user opens it by address
+  after signing in at the staff door.
+- The platform list has no paging or search; fine for tens of schools.
+
+---
+
+# Previous handover: 2026-09-29 (first session)
 
 ## Merged
 
@@ -49,8 +99,8 @@ Nothing is queued from this session's list. Things worth doing, roughly in order
   a class with no level set (`level` defaults to 0) will get odd suggestions, and
   there is no undo. A follow-up could be a "promotion log" row so the office can see
   what was done and when.
-- **A child who is leaving rather than graduating** must be released first (they are
-  then not listed). There is no "left the school" choice on the promotion screen.
+- **A child who is leaving rather than graduating** is now a choice on the promotion
+  screen (#212); this item is done.
 
 ## Open issues
 
