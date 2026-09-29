@@ -184,7 +184,30 @@ def for_card(school_name: str) -> dict:
     }
 
 
+#: The side of the crest on the school's public page, in pixels. It is drawn
+#: about 96 CSS pixels wide, so twice that keeps it sharp on a phone, and small
+#: enough that even a crest full of noise is a fraction of the page's budget.
+SITE_CREST_SIDE = 128
+
+
+def for_site(school_name: str) -> dict:
+    """`for_card()`, with the crest shrunk for a page that has to stay small."""
+    from PIL import Image
+
+    look = for_card(school_name)
+    row = settings()
+    if not row.crest:
+        return look
+    image = Image.open(io.BytesIO(bytes(row.crest))).convert("RGBA")
+    image = image.resize((SITE_CREST_SIDE, SITE_CREST_SIDE), Image.LANCZOS)
+    out = io.BytesIO()
+    image.save(out, format="PNG", optimize=True)
+    look["crest"] = f"data:image/png;base64,{base64.b64encode(out.getvalue()).decode()}"
+    return look
+
+
 __all__ = [
+    "for_site",
     "DEFAULT_COLOUR",
     "LookRefused",
     "MAX_UPLOAD_BYTES",

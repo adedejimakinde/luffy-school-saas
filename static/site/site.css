@@ -1,0 +1,22 @@
+/*
+ * A school's public page. One column, phone first; grows to a centred card.
+ *
+ * Colours, type and controls are `web/design.css`'s. The one colour that varies
+ * is `--school`, the school's own, set inline on <body>.
+ */
+body { margin: 0; }
+.hero { background: var(--school); color: var(--card); text-align: center; padding: 32px 16px 28px; }
+.hero h1 { margin: 12px 0 0; color: var(--card); font-size: 1.6rem; line-height: 1.2; overflow-wrap: anywhere; }
+.crest { width: 96px; height: 96px; display: inline-block; border-radius: 50%; background: var(--card); object-fit: contain; }
+.crest.initials { line-height: 96px; font-size: 2rem; font-weight: 700; color: var(--school); }
+main { max-width: 32rem; margin: 0 auto; padding: 8px 16px 40px; }
+h2 { font-size: 1.05rem; margin: 24px 0 8px; color: var(--school); }
+.about { margin: 0; line-height: 1.55; overflow-wrap: anywhere; }
+.actions { display: grid; gap: 12px; margin: 28px 0 8px; }
+.button { display: block; text-align: center; padding: 14px 16px; min-height: 44px; box-sizing: border-box; border-radius: var(--radius); border: 2px solid var(--school); color: var(--school); background: var(--card); font-weight: 700; text-decoration: none; }
+.button.primary { background: var(--school); color: var(--card); }
+.button:focus-visible { outline: 3px solid var(--school); outline-offset: 2px; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+@media (min-width: 40rem) { .actions { grid-template-columns: 1fr 1fr; } .hero { padding: 48px 16px 40px; } }

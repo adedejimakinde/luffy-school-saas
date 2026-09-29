@@ -70,6 +70,7 @@ SCHOOL_PAGES = (
     "/check/",
     "/notices/settings/",
     "/promotion/",
+    "/",
 )
 
 #: What each frame costs the database, signed in, at either school. Eight
@@ -84,6 +85,9 @@ SCHOOL_PAGES = (
 #: fetch after it draws is the API's cost, and pinning those per page, at two
 #: sizes of school, is the follow-up to this file.
 QUERIES = {path: 16 for path in SCHOOL_PAGES}
+#: The school's public page also reads its crest and colour (one row) and the
+#: portal's hostname, and draws them server-side rather than in a later fetch.
+QUERIES["/"] = 20
 
 _ASSET = re.compile(r'<(?:link|script|img|iframe|source|video|audio)\b[^>]*?\b(?:src|href)="([^"]*)"', re.I)
 _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)

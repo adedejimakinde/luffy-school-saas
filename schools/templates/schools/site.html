@@ -1,0 +1,35 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ school.name }}</title>
+{% comment %}
+Drawn entirely by the server: no script, no outside request. The colour is the
+school's report-card colour, which `results.look` has already refused unless it
+reads on white, so white text on it and it on white both pass. `--school` is
+set as an inline custom property on <body>, the one thing here that varies.
+{% endcomment %}
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'site/site.css' %}">
+<body style="--school: {{ look.colour }}">
+<header class="hero">
+  {% if look.crest %}<img class="crest" src="{{ look.crest }}" alt="" width="96" height="96">
+  {% else %}<span class="crest initials" aria-hidden="true">{{ look.initials }}</span>{% endif %}
+  <h1>{{ school.name }}</h1>
+</header>
+<main>
+  {% if school.about %}<section><h2>About us</h2><p class="about">{{ school.about|linebreaksbr }}</p></section>{% endif %}
+  <p class="actions">
+    <a class="button primary" href="/check/">Check a result</a>
+    {% if portal_host %}<a class="button" href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
+  </p>
+  {% if school.address or school.phone or school.contact_email %}
+  <section class="contact"><h2>Find us</h2>
+    <dl>
+      {% if school.address %}<dt>Address</dt><dd>{{ school.address|linebreaksbr }}</dd>{% endif %}
+      {% if school.phone %}<dt>Phone</dt><dd><a href="tel:{{ school.phone }}">{{ school.phone }}</a></dd>{% endif %}
+      {% if school.contact_email %}<dt>Email</dt><dd><a href="mailto:{{ school.contact_email }}">{{ school.contact_email }}</a></dd>{% endif %}
+    </dl>
+  </section>
+  {% endif %}
+</main>

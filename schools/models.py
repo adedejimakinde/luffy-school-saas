@@ -93,6 +93,12 @@ class School(TenantMixin):
     #: `Reply-To` — `messaging.providers.Outbound.reply_to` — so a reply lands
     #: with the school, not with this platform's own sending address.
     contact_email = models.EmailField(blank=True, default="")
+    #: What the school's public page says (`schools.contact.set_public_details_as()`):
+    #: a short "about", a postal address and a phone number. All blank until the
+    #: office writes them, and a blank one is left off the page, not shown empty.
+    about = models.TextField(blank=True, default="")
+    address = models.CharField(max_length=300, blank=True, default="")
+    phone = models.CharField(max_length=30, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Schemas are created on save in real use; tests turn this off per instance.

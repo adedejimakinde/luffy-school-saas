@@ -49,6 +49,10 @@ export function crestUrl() {
   return "/api/academics/card/crest/";
 }
 
+export function publicPageUrl() {
+  return "/api/academics/public-page/";
+}
+
 export function contactEmailUrl() {
   return "/api/academics/contact-email/";
 }
@@ -158,6 +162,20 @@ export async function saveContactEmail({ contact_email, fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(contactEmailUrl(), { contact_email }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/**
+ * What the school's public page says. A 422 is text that is too long or a
+ * phone number that is not one, and says so; blank clears a field.
+ */
+export async function savePublicPage({ about, address, phone, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(publicPageUrl(), { about, address, phone }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
