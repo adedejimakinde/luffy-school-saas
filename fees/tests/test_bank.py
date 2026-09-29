@@ -25,7 +25,7 @@ import logging
 
 from django.db import IntegrityError, connection, transaction
 
-from fees import bank
+from fees import bank, paystack
 from fees.models import BankRecordIsFixed, SchoolBank
 from fees.tests.paystack_fake import TEST_KEY, PaystackMixin, _Response
 from fees.tests.test_fees_api import HOST, FeesApiSetUp
@@ -91,6 +91,50 @@ class ResolveTests(BankSetUp):
 
         self.assertEqual([b["name"] for b in response.json()["banks"]],
                          ["Access Bank", "Wema Bank", "Zenith Bank"])
+
+
+class BankListTests(BankSetUp):
+    def test_every_page_is_read_by_cursor_and_no_page_is_more_than_100(self):
+        """CONTROL: `perPage` back to 200, or stopping after one page, makes this red."""
+        self.paystack.banks = [{"name": f"Bank {n:03d}", "code": f"{n:03d}"} for n in range(5)]
+        self.paystack.page_size = 2  # 2, 2, 1: three pages
+
+        banks = paystack.list_banks()
+
+        self.assertEqual([b["code"] for b in banks], ["000", "001", "002", "003", "004"])
+        calls = self.paystack.sent("GET", "/bank")
+        self.assertEqual(len(calls), 3)
+        self.assertNotIn("next", calls[0]["query"])
+        self.assertEqual([c["query"].get("next") for c in calls[1:]], ["2", "4"])
+        for call in calls:
+            self.assertEqual(call["query"]["use_cursor"], "true")
+            self.assertLessEqual(int(call["query"]["perPage"]), 100)
+
+    def test_two_pages_reach_the_bank_picker(self):
+        self.paystack.page_size = 2  # the fake's three banks: 2, then 1
+
+        response = self.get(self.admin, "bank/banks/")
+
+        self.assertEqual([b["name"] for b in response.json()["banks"]],
+                         ["Access Bank", "Wema Bank", "Zenith Bank"])
+        self.assertEqual(len(self.paystack.sent("GET", "/bank")), 2)
+
+    def test_a_cursor_that_never_ends_is_a_failure_not_a_loop(self):
+        original = self.paystack._bank_page
+        self.paystack._bank_page = lambda query: _Response(
+            200, {"status": True, "message": "ok", "data": [{"name": "A", "code": "1"}], "meta": {"next": "same"}}
+        )
+
+        with self.assertRaises(paystack.PaystackUnavailable):
+            paystack.list_banks()
+        self.assertLessEqual(len(self.paystack.sent("GET", "/bank")), 2)
+        self.paystack._bank_page = original
+
+    def test_a_page_that_is_not_a_list_is_a_failure(self):
+        self.paystack._bank_page = lambda query: _Response(200, {"status": True, "message": "ok", "data": {}})
+
+        with self.assertRaises(paystack.PaystackUnavailable):
+            paystack.list_banks()
 
 
 class ConnectTests(BankSetUp):
