@@ -126,6 +126,14 @@ class MethodOut(Schema):
     label: str
 
 
+class PayIntoOut(Schema):
+    """Where a family pays: the child's own dedicated account, as Paystack named it."""
+
+    bank_name: str
+    account_number: str
+    account_name: str
+
+
 class AccountOut(Schema):
     student_membership_id: int
     student: str
@@ -135,6 +143,10 @@ class AccountOut(Schema):
     terms: List[TermChoiceOut]
     methods: List[MethodOut]
     entries: List[EntryOut]
+    #: The child's dedicated account, when they have one; and whether the school
+    #: has connected a bank, which is what making one needs.
+    pay_into: Optional[PayIntoOut] = None
+    bank_connected: bool = False
 
 
 class PaymentIn(Schema):
@@ -390,7 +402,12 @@ def account(request, membership_id: int):
             "reverses_id", "pk"
         )
     )
+    from . import bank, virtual
+
+    line = virtual.pay_into(child.pk)
     return AccountOut(
+        pay_into=PayIntoOut(**line) if line else None,
+        bank_connected=bank.current() is not None,
         student_membership_id=child.pk,
         student=child.name,
         reference=child.reference,

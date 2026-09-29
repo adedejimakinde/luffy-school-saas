@@ -55,6 +55,10 @@ class FakePaystack:
         self.page_size = 100
         self.subaccounts = 0
         self.splits = 0
+        self.customers = 0
+        self.dedicated_accounts = 0
+        #: reference -> the `data` a verify returns. See `add_transaction()`.
+        self.transactions = {}
 
     # -- what a test can arrange ---------------------------------------------
     def fail_next(self, status, body=b'{"status": false, "message": "boom"}'):
@@ -62,6 +66,21 @@ class FakePaystack:
 
     def down(self, value=True):
         self._down = value
+
+    def add_transaction(self, reference, amount, *, account_number, customer_code="CUS_test0001",
+                        status="success", currency="NGN", **more):
+        """A transaction Paystack knows, as `GET /transaction/verify/:reference` shows it."""
+        self.transactions[reference] = {
+            "id": 4099260516,
+            "reference": reference,
+            "status": status,
+            "amount": amount,
+            "currency": currency,
+            "channel": "dedicated_nuban",
+            "customer": {"customer_code": customer_code, "email": "student@example.com"},
+            "authorization": {"channel": "bank_transfer", "receiver_bank_account_number": account_number},
+            **more,
+        }
 
     # -- what a test can read ------------------------------------------------
     def sent(self, method=None, path=None):
@@ -131,6 +150,29 @@ class FakePaystack:
             self.splits += 1
             return _Response(200, {"status": True, "message": "Split created",
                                    "data": {"split_code": f"SPL_test{self.splits:04d}"}})
+        if (method, path) == ("POST", "/customer"):
+            body = r["body"] or {}
+            if not (body.get("email") and body.get("first_name") and body.get("last_name")):
+                return _Response(400, {"status": False, "message": "email, first_name and last_name are required"})
+            self.customers += 1
+            return _Response(200, {"status": True, "message": "Customer created",
+                                   "data": {"customer_code": f"CUS_test{self.customers:04d}", "email": body["email"]}})
+        if (method, path) == ("POST", "/dedicated_account"):
+            body = r["body"] or {}
+            if not (body.get("customer") and body.get("preferred_bank") and body.get("split_code")):
+                return _Response(400, {"status": False, "message": "customer, preferred_bank and split_code are required"})
+            self.dedicated_accounts += 1
+            number = f"900000{self.dedicated_accounts:04d}"
+            return _Response(200, {"status": True, "message": "Assign dedicated account successful",
+                                   "data": {"bank": {"name": "Wema Bank", "slug": "wema-bank"},
+                                            "account_name": f"CLASSNODE/{body['customer']}",
+                                            "account_number": number, "assigned": True, "active": True}})
+        if method == "GET" and path.startswith("/transaction/verify/"):
+            reference = urllib.parse.unquote(path.rsplit("/", 1)[1])
+            found = self.transactions.get(reference)
+            if found is None:
+                return _Response(404, {"status": False, "message": "Transaction reference not found."})
+            return _Response(200, {"status": True, "message": "Verification successful", "data": found})
         return _Response(404, {"status": False, "message": "Not found"})
 
 
@@ -145,7 +187,6 @@ class PaystackMixin:
         self.addCleanup(patcher.stop)
         override = override_settings(
             PAYSTACK_SECRET_KEY=TEST_KEY,
-            PAYSTACK_WEBHOOK_SECRET=TEST_KEY,
             PAYSTACK_BASE_URL="https://api.paystack.test",
         )
         override.enable()

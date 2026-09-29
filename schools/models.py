@@ -443,3 +443,38 @@ class Invitation(models.Model):
         self.status = InvitationStatus.REVOKED
         self.save(update_fields=["status"])
         return self
+
+
+class PaystackRoute(models.Model):
+    """Which school a Paystack virtual account belongs to.
+
+    Public schema, because a webhook arrives on the portal with nothing but an
+    account number: without this it would have to look in every school's schema
+    to find whose it is. Written in the same transaction as the school's own
+    `fees.VirtualAccount` row. One row per account number, never edited.
+    """
+
+    account_number = models.CharField(max_length=10, unique=True)
+    school = models.ForeignKey(School, on_delete=models.PROTECT, related_name="paystack_routes")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.account_number} -> {self.school_id}"
+
+
+class UnroutedPayment(models.Model):
+    """Money Paystack confirmed for an account number no school owns.
+
+    Nobody's bursar can see it, so it is the platform's to look into: a payment
+    to an account this platform never made, or one whose route is missing. Never
+    guessed onto a school. `reference` is Paystack's, unique, so a replay lists
+    it once.
+    """
+
+    reference = models.CharField(max_length=64, unique=True)
+    amount_kobo = models.BigIntegerField()
+    account_number = models.CharField(max_length=32, blank=True)
+    received_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.reference}: {self.amount_kobo} kobo"

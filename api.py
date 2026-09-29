@@ -56,6 +56,7 @@ from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
 from fees.api import router as fees_router
 from fees.bank_api import router as fees_bank_router
+from fees.virtual_api import router as fees_virtual_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
 from home.api import router as home_router
@@ -104,6 +105,7 @@ api.add_router("/platform/", platform_router, tags=["platform"])
 # The school's books. Tenant-host only like the two above, and refused with a
 # flat 404 to anybody who may not read them — see `fees.api`.
 api.add_router("/fees/bank/", fees_bank_router, tags=["fees"])
+api.add_router("/fees/virtual/", fees_virtual_router, tags=["fees"])
 api.add_router("/fees/", fees_router, tags=["fees"])
 # Tenant-scoped like the gradebook, so no `{slug}` in its paths either — the
 # schema is already chosen from the hostname before any of it runs.

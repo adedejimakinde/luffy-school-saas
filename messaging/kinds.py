@@ -101,7 +101,7 @@ _TEXT[Kind.RESULT_HELD] = (
 # named beside it would claim last term's arrears were this term's. `NGN`, not
 # `₦`, which would make every SMS UCS-2 (D3).
 _TEXT[Kind.FEE_REMINDER] = (
-    "{school}: {child}'s fees account shows {amount} owing. {ask}"
+    "{school}: {child}'s fees account shows {amount} owing.{pay_into} {ask}"
 )
 
 # **What was received, when, and by what method — no balance.** A receipt is
@@ -111,7 +111,7 @@ _TEXT[Kind.FEE_REMINDER] = (
 # freezes on the entry itself.
 _TEXT[Kind.PAYMENT_RECEIPT] = (
     "{school}: receipt {receipt_number} for {child} — {amount} received"
-    "{by_method} on {date}. {narration}"
+    "{by_method} on {date}. {narration}{pay_into}"
 )
 
 # **No mark, grade or count of the term's other absences** — the same rule D9
@@ -170,6 +170,10 @@ def naira(kobo: int) -> str:
 def render(kind, *, channel_type, **params) -> str:
     """The text of one message of `kind`. Raises `KeyError` for a parameter it lacks."""
     what = "number" if channel_type == "phone" else "address"
+    # ` Pay into: Wema Bank 1234567890, Ada Bello.` in a fee reminder and a
+    # receipt, when the child has a virtual account; nothing when they have none,
+    # and for every kind whose text has no place for it.
+    params.setdefault("pay_into", "")
     return _TEXT[Kind(kind)].format(
         what=what, where=_where(), where_to_read=_where_to_read(), **params
     )

@@ -197,6 +197,48 @@ def create_split(*, name, subaccount_code):
     return _code(data, "split_code")
 
 
+def create_customer(*, email, first_name, last_name, phone=""):
+    """A Paystack customer, which a dedicated account belongs to. Returns its code."""
+    body = {"email": email, "first_name": first_name, "last_name": last_name}
+    if phone:
+        body["phone"] = phone
+    return _code(_request("POST", "/customer", body=body), "customer_code")
+
+
+def create_dedicated_account(*, customer_code, split_code, preferred_bank):
+    """A dedicated virtual account for the customer, **settling through the school's split**.
+
+    The split (`create_split()`) carries the subaccount, its 100% share and the
+    subaccount as fee bearer, so every transfer into this account reaches the
+    school's own bank account and the school pays Paystack's fees. Returns
+    `{account_number, account_name, bank_name}` as Paystack gave them.
+    """
+    data = _request(
+        "POST",
+        "/dedicated_account",
+        body={"customer": customer_code, "preferred_bank": preferred_bank, "split_code": split_code},
+    )
+    if not isinstance(data, dict):
+        raise PaystackUnavailable("Paystack's dedicated account answer was not readable.")
+    bank = data.get("bank") if isinstance(data.get("bank"), dict) else {}
+    number, name, bank_name = data.get("account_number"), data.get("account_name"), bank.get("name")
+    if not (number and name and bank_name):
+        raise PaystackUnavailable("Paystack's dedicated account answer was missing its account.")
+    return {"account_number": str(number), "account_name": str(name), "bank_name": str(bank_name)}
+
+
+def verify_transaction(reference):
+    """Paystack's own record of a transaction: `GET /transaction/verify/:reference`.
+
+    What a webhook says is only a claim until this agrees with it. Returns the
+    `data` dict; `PaystackRefused` when Paystack has no such transaction.
+    """
+    data = _request("GET", f"/transaction/verify/{urllib.parse.quote(str(reference), safe='')}")
+    if not isinstance(data, dict):
+        raise PaystackUnavailable("Paystack's transaction answer was not readable.")
+    return data
+
+
 def _code(data, field, default=None):
     value = data.get(field) if isinstance(data, dict) else None
     if value:

@@ -27,6 +27,7 @@ import {
   fetchConcessions,
   fetchNotSent,
   fetchReceipt,
+  makeAccount,
   postBillLine,
   postCharges,
   postConcession,
@@ -470,6 +471,23 @@ export async function mount(
     }
     if (action === "cancel-reversal" && state.step === "account") {
       state = { ...state, reversing: null };
+      draw();
+      return;
+    }
+    if (action === "make-account" && state.step === "account") {
+      const answer = await makeAccount({ studentId: where.studentId, fetchImpl });
+      if (answer.ok) {
+        await showAccount(where.studentId, {
+          note: "The account is ready. Families can pay into it.",
+          noteTone: "done",
+        });
+        return;
+      }
+      if (answer.refusal) {
+        state = { step: answer.refusal };
+      } else {
+        state = { ...state, note: answer.body.detail || "That account was not made.", noteTone: "stop" };
+      }
       draw();
       return;
     }

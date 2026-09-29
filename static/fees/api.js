@@ -37,6 +37,7 @@ export const billLineUrl = (lineId) => `/api/fees/bill-lines/${q(lineId)}/`;
 export const chargesUrl = (classId) => `/api/fees/classes/${q(classId)}/bill/charges/`;
 export const concessionsUrl = (studentId) => `/api/fees/students/${q(studentId)}/concessions/`;
 export const revocationUrl = (concessionId) => `/api/fees/concessions/${q(concessionId)}/revocation/`;
+export const virtualAccountUrl = (studentId) => `/api/fees/virtual/students/${q(studentId)}/`;
 
 export function refusalFor(status, body) {
   if (status === 404) return REFUSAL.NOT_YOURS;
@@ -62,7 +63,7 @@ async function read(url, fetchImpl) {
  * success too — the payment is in the books once. 403, 409 and 422 carry a
  * sentence for the person and keep the page where it is.
  */
-async function write(url, payload, fetchImpl, send = postJson) {
+async function write(url, payload, fetchImpl, send = postJson, noted = [403, 409, 422]) {
   let answer;
   try {
     answer = await send(url, payload, { fetchImpl });
@@ -72,7 +73,7 @@ async function write(url, payload, fetchImpl, send = postJson) {
   if ((answer.status === 201 || answer.status === 200) && answer.body) {
     return { ok: true, body: answer.body };
   }
-  if ([403, 409, 422].includes(answer.status)) {
+  if (noted.includes(answer.status)) {
     return { ok: false, refusal: null, body: answer.body || {} };
   }
   return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
@@ -82,6 +83,9 @@ export const fetchBooks = ({ termId = null, fetchImpl = fetch } = {}) => read(bo
 export const fetchClass = ({ classId, termId, fetchImpl = fetch }) => read(classUrl(classId, termId), fetchImpl);
 export const fetchAccount = ({ studentId, fetchImpl = fetch }) => read(accountUrl(studentId), fetchImpl);
 export const fetchReceipt = ({ entryId, fetchImpl = fetch }) => read(receiptUrl(entryId), fetchImpl);
+/** Make the child's dedicated account. 409 (no bank yet), 422 and 503 (Paystack) carry a sentence. */
+export const makeAccount = ({ studentId, fetchImpl = fetch }) =>
+  write(virtualAccountUrl(studentId), {}, fetchImpl, postJson, [403, 409, 422, 503]);
 export const postPayment = ({ studentId, payment, fetchImpl = fetch }) =>
   write(paymentUrl(studentId), payment, fetchImpl);
 export const postDiscount = ({ studentId, discount, fetchImpl = fetch }) =>

@@ -322,6 +322,22 @@ function concessionsSection({ concessions = null, mayWrite, granting, revoking, 
   ].join("");
 }
 
+/** Where this child's family pays, or the way to make it. */
+function payInto({ pay_into: line = null, bank_connected: bankConnected = false }, mayWrite) {
+  if (line) {
+    return [
+      '<section class="pay-into" data-pay-into>',
+      "<h2>Pay into</h2>",
+      `<p class="quiet">${esc(line.bank_name)} <strong>${esc(line.account_number)}</strong>, ${esc(line.account_name)}</p>`,
+      "</section>",
+    ].join("");
+  }
+  if (!mayWrite) return "";
+  return bankConnected
+    ? '<p class="more"><button type="button" data-action="make-account">Make an account for this child to pay into</button></p>'
+    : "<p class=\"quiet\">Connect the school's bank account (Bank, in the menu) to give each child an account to pay into.</p>";
+}
+
 export function account({
   account: body = {},
   concessions = null,
@@ -346,6 +362,7 @@ export function account({
     reference ? `<p class="quiet">Admission no. ${esc(reference)}</p>` : "",
     `<p class="standing">${balance(balance_kobo)}</p>`,
     note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
+    payInto(body, mayWrite),
     mayWrite ? paymentForm(body, { termId: current, today, draft }) : "",
     mayWrite && discounting ? discountForm(body, { termId: current, draft: discountDraft }) : "",
     mayWrite && !discounting

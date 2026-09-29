@@ -16,7 +16,40 @@ function note(text) {
   return text ? `<p class="note" role="alert">${esc(text)}</p>` : "";
 }
 
-export function status({ connected = null, may_write = false, note: text = null } = {}) {
+/** Whole kobo as naira, by hand: `5000000` is `NGN 50,000`. No float, no locale. */
+export function naira(kobo) {
+  const whole = Math.floor(kobo / 100);
+  const part = kobo % 100;
+  const grouped = String(whole).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return `NGN ${grouped}${part ? `.${String(part).padStart(2, "0")}` : ""}`;
+}
+
+/**
+ * Money Paystack confirmed that could not be placed on a child. It is listed and
+ * never guessed onto anybody: the bursar sees what arrived, how much, and why it
+ * was not placed, and nothing here moves it.
+ */
+export function unmatchedList(payments = []) {
+  if (!payments.length) return "";
+  return [
+    '<section class="unmatched" data-state="unmatched">',
+    "<h2>Payments we could not match</h2>",
+    '<p class="hint">These arrived through Paystack and are not in any child\'s account. Nothing has been guessed.</p>',
+    '<ul class="payments">',
+    payments
+      .map(
+        (p) =>
+          `<li><strong>${esc(naira(p.amount_kobo))}</strong> ` +
+          `<span class="reference">${esc(p.reference)}</span> ` +
+          `<span class="why">${esc(p.reason_label)}</span></li>`,
+      )
+      .join(""),
+    "</ul>",
+    "</section>",
+  ].join("");
+}
+
+export function status({ connected = null, may_write = false, note: text = null, unmatched = [] } = {}) {
   const head = '<div class="page-head"><div><h1>School bank account</h1></div></div>';
   if (!connected) {
     return [
@@ -28,6 +61,7 @@ export function status({ connected = null, may_write = false, note: text = null 
         ? '<button type="button" class="btn primary" data-action="start">Connect a bank account</button>'
         : "<p>The bursar or an administrator connects it.</p>",
       note(text),
+      unmatchedList(unmatched),
       "</section>",
     ].join("");
   }
@@ -44,6 +78,7 @@ export function status({ connected = null, may_write = false, note: text = null 
       ? '<button type="button" class="btn" data-action="start">Change bank account</button>'
       : "",
     note(text),
+    unmatchedList(unmatched),
     "</section>",
   ].join("");
 }

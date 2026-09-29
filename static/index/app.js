@@ -27,6 +27,7 @@ import { button as signOutButton, failureNote, sessionEnded, signOut } from "../
 import * as states from "./states.js";
 
 const INDEX_URL = "/api/results/cards/";
+const PAY_URL = "/api/fees/virtual/mine/";
 
 /**
  * The markup for one answer. Pure, so every branch is testable.
@@ -49,7 +50,10 @@ const INDEX_URL = "/api/results/cards/";
  * between them with no second fetch — the whole family arrived on the one
  * answer this page reads.
  */
-export function htmlFor({ status, body }, { portal = "", signOutFailed = false, activeChild = null } = {}) {
+export function htmlFor(
+  { status, body },
+  { portal = "", signOutFailed = false, activeChild = null, payInto = {} } = {},
+) {
   if (status === 401) {
     return states.signedOut({ portal, expired: body && body.code === "session_expired" });
   }
@@ -58,7 +62,9 @@ export function htmlFor({ status, body }, { portal = "", signOutFailed = false, 
   const children = body.children || [];
   const cards = children.reduce((n, child) => n + (child.cards || []).length, 0);
   const after = (signOutFailed ? failureNote() : "") + signOutButton();
-  if (!cards) return states.nothing({ hasChildren: children.length > 0 }) + after;
+  if (!cards) {
+    return states.nothing({ hasChildren: children.length > 0 }) + payPanel(children, payInto) + after;
+  }
 
   const active = children.some((c) => c.student_membership_id === activeChild)
     ? activeChild
@@ -68,7 +74,9 @@ export function htmlFor({ status, body }, { portal = "", signOutFailed = false, 
     '<section class="index" data-state="cards">',
     "<h1>Report cards</h1>",
     children.length > 1 ? switcher(children, active) : "",
-    children.map((record) => child(record, record.student_membership_id === active)).join(""),
+    children
+      .map((record) => child(record, record.student_membership_id === active, payInto[record.student_membership_id]))
+      .join(""),
     "</section>",
     after,
   ].join("");
@@ -96,11 +104,33 @@ function switcher(children, active) {
   ].join("");
 }
 
-function child(record, active) {
+/**
+ * Where this child's fees are paid, from `GET /api/fees/virtual/mine/`: the
+ * child's own bank account, which settles to the school. Nothing when the child
+ * has none, and this page never shows a balance.
+ */
+function payLine(line) {
+  if (!line) return "";
+  return (
+    '<p class="pay-into" data-pay-into>Pay fees into: ' +
+    `${esc(line.bank_name)} <strong>${esc(line.account_number)}</strong>, ${esc(line.account_name)}</p>`
+  );
+}
+
+/** The same, for a family with no cards yet: a list, one line per child who has an account. */
+function payPanel(children, payInto) {
+  const lines = children
+    .filter((c) => payInto[c.student_membership_id])
+    .map((c) => `<li>${esc(c.student_name)}: ${payLine(payInto[c.student_membership_id])}</li>`);
+  return lines.length ? `<section class="pay" data-state="pay"><h2>Fees</h2><ul>${lines.join("")}</ul></section>` : "";
+}
+
+function child(record, active, pay) {
   const cards = record.cards || [];
   return [
     `<section class="child" data-child="${esc(record.student_membership_id)}"${active ? "" : " hidden"}>`,
     `<h2>${esc(record.student_name)}</h2>`,
+    payLine(pay),
     cards.length
       ? `<ul class="cards">${cards.map((c) => card(record, c)).join("")}</ul>`
       : '<p class="blank">No cards released yet.</p>',
@@ -140,10 +170,27 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   } catch {
     answer = { status: 0, body: null };
   }
+  // Where to pay is a courtesy on this page: if it cannot be read, the cards
+  // still show, and nothing is said about it.
+  let payInto = {};
+  if (answer.status === 200) {
+    try {
+      const paid = await getJson(PAY_URL, { fetchImpl });
+      if (paid.status === 200 && paid.body) {
+        payInto = Object.fromEntries(
+          (paid.body.children || [])
+            .filter((c) => c.pay_into)
+            .map((c) => [c.student_membership_id, c.pay_into]),
+        );
+      }
+    } catch {
+      payInto = {};
+    }
+  }
   let signOutFailed = false;
   let activeChild = null;
   const draw = () => {
-    root.innerHTML = htmlFor(answer, { portal, signOutFailed, activeChild });
+    root.innerHTML = htmlFor(answer, { portal, signOutFailed, activeChild, payInto });
   };
   draw();
 

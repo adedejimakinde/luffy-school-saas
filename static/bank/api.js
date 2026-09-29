@@ -46,7 +46,11 @@ async function call(run, { note = [409, 422, 503] } = {}) {
 export const fetchState = ({ fetchImpl = fetch } = {}) =>
   call(() => getJson(BASE, { fetchImpl }), { note: [] });
 
-export const fetchBanks = ({ fetchImpl = fetch } = {}) =>
+/** Payments Paystack confirmed that could not be matched to a child (`fees/virtual_api.py`). */
+export const fetchUnmatched = ({ fetchImpl = fetch } = {}) =>
+  call(() => getJson("/api/fees/virtual/unmatched/", { fetchImpl }), { note: [] });
+
+export const fetchBanks =({ fetchImpl = fetch } = {}) =>
   call(() => getJson(`${BASE}banks/`, { fetchImpl }));
 
 export const resolveAccount = (account, { fetchImpl = fetch } = {}) =>
