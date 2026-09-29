@@ -1,4 +1,74 @@
-# Handover: 2026-09-28
+# Handover: 2026-09-29
+
+## Merged
+
+| PR | What |
+| --- | --- |
+| [#208](https://github.com/adedejimakinde/luffy-school-saas/pull/208) | Admin home: until the school sets a contact email, a banner "Add your school's contact email so parents' replies reach you" linking to `/setup/#contact-email`. `GET /api/home/` gains `needs_contact_email` (no address **and** a login that may set one, so the vice principal is never sent to a page that refuses them). Closes the last "What's next" item of the previous handover. |
+| [#209](https://github.com/adedejimakinde/luffy-school-saas/pull/209) | `messaging.termii.TermiiProvider`: SMS on Termii's DND/transactional route, API key and sender ID from `TERMII_API_KEY` / `TERMII_SENDER_ID` (plus optional `TERMII_BASE_URL`, `TERMII_TIMEOUT`). Selected only by `MESSAGING_PHONE_PROVIDER=messaging.termii.TermiiProvider`; `FakeProvider` stays the development default. Stdlib `urllib`, no new dependency. 21 tests against a mocked `urlopen`, including failures and a refused sender ID. `docs/messaging.md` M11. |
+| [#210](https://github.com/adedejimakinde/luffy-school-saas/pull/210) | End-of-session promotion: page `/promotion/`, API `GET`/`POST /api/academics/promotion/`, rules in `academics/promotion.py`, described in `docs/classes.md`. Every child listed with promote/repeat (default promote); nothing moves until the second, confirming button; one transaction, all or nothing. Two-school tests. |
+
+All three are on `main`, each its own PR merged on green (all four test shards, `screens`,
+`image` and the aggregate `test`). This handover is a fourth, docs-only PR.
+
+## How promotion works, in short
+
+- A promotion is a set of `ClassPlacement`s in **next session's first term** (placements
+  are per term): the next class for a child who passes, the same class for one who
+  repeats. The top class (nothing above it by `level`) **graduates**, which is
+  `release_student()`: the membership ends and is kept as history. That part is
+  irreversible from the screen, and the confirm step says so.
+- It needs the current term to be a **third** term and next session's first term to
+  **already exist** (opened on Setup). Otherwise the page says what to do instead.
+- Destinations are suggested from `ClassGroup.level` (same arm letter when several
+  arms share the next level; nothing suggested when that is ambiguous, and the plan is
+  refused until the office picks). The office can change any of them.
+- The plan must name **every** class and child the school has now; a stale plan is a
+  409 and nothing moves. A child already placed in that first term refuses the whole
+  promotion. Authority is `PLACEMENT_ROLES` (principal, administrator).
+
+## What's next
+
+Nothing is queued from this session's list. Things worth doing, roughly in order:
+
+- **Check Termii against the real service.** The Termii docs site was blocked from this
+  session's sandbox, so the request shape and the success reply come from a search
+  summary of the docs, and the **error-reply mapping is my assumption**, not captured
+  from Termii: HTTP status plus keywords in `message` decide `Refused` (the number)
+  versus `Unavailable` (everything else, including a refused sender ID). It is written
+  conservatively, but one real failing call (an unwhitelisted sender ID, a bad number)
+  should confirm it. Also confirm the default base URL, `https://api.ng.termii.com`,
+  against the account's own. Termii also needs the sender ID **whitelisted for DND**.
+- **`messaging.W001` is still silenced** in `settings.py`. Remove the silencing in the
+  same change that names the phone provider in `deploy/production.env`, which this PR
+  did not do (nobody has chosen to deploy Termii yet). OPEN-5, the contract and
+  provider choice, is still the business question.
+- **The SMTP provider** (#205) and **the daily-summary cron entry** are still
+  unexercised outside tests; see the previous handover's notes, unchanged.
+- **Promotion has not been used on a real school.** In particular: a school that runs
+  a class with no level set (`level` defaults to 0) will get odd suggestions, and
+  there is no undo. A follow-up could be a "promotion log" row so the office can see
+  what was done and when.
+- **A child who is leaving rather than graduating** must be released first (they are
+  then not listed). There is no "left the school" choice on the promotion screen.
+
+## Open issues
+
+- **Local test setup, for whoever comes next.** This sandbox needed Postgres and Redis
+  started by hand, a `luffy_admin` role/`luffy_db` database, the env vars in
+  `.github/workflows/tests.yml`, and `python manage.py collectstatic --noinput` before
+  page tests pass (without it, they fail with "Missing staticfiles manifest entry").
+  Test-database creation takes about two minutes per run; the full suite was left to CI.
+- **The contact-email banner has one line of copy and no dismiss.** It disappears only
+  once an address is saved. Deliberate (the previous handover's point was that nothing
+  prompted schools), but a school that wants no `Reply-To` sees it forever.
+- **The earlier handover's open issues stand** (proprietor read as `Role.ADMIN`,
+  `MoneySummarySent` not append-only, no Redis in the sandbox, `docs/messaging.md`
+  numbering: it now runs to D17 and M11).
+
+---
+
+# Previous handover: 2026-09-28
 
 ## Merged
 
