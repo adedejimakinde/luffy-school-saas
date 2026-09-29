@@ -50,6 +50,7 @@ from accounts.models import STAFF_ROLES, Membership, Role
 from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
+from academics.promotion_api import router as promotion_router
 from attendance.api import router as attendance_router
 from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
@@ -92,6 +93,8 @@ api.add_router("/attendance/", attendance_router, tags=["attendance"])
 # The school's calendar. Tenant-host only, like the register above — and with no
 # page in front of it, deliberately: see `academics.api` and D12.
 api.add_router("/academics/", academics_router, tags=["academics"])
+# End-of-session promotion: one read, one confirm. Tenant host only.
+api.add_router("/academics/promotion/", promotion_router, tags=["academics"])
 api.add_router("/enrolment/", enrolment_router, tags=["enrolment"])
 # The school's books. Tenant-host only like the two above, and refused with a
 # flat 404 to anybody who may not read them — see `fees.api`.
