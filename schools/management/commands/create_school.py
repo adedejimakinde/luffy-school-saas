@@ -16,7 +16,8 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument("slug", help="The school's subdomain, e.g. stmarys")
         parser.add_argument("name", help="The school's name, as it prints")
-        parser.add_argument("--admin-email", required=True)
+        parser.add_argument("--admin-email", default="")
+        parser.add_argument("--admin-phone", default="")
         parser.add_argument("--admin-name", default="")
         parser.add_argument(
             "--operator",
@@ -33,6 +34,7 @@ class Command(BaseCommand):
                 slug=options["slug"],
                 name=options["name"],
                 admin_email=options["admin_email"],
+                admin_phone=options["admin_phone"],
                 admin_name=options["admin_name"],
                 operator=operator,
             )

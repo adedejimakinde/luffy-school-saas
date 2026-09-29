@@ -48,7 +48,7 @@ PORTAL = "testserver"
 SCHOOLS = (("St Mary's", "st-marys", "st_marys"), ("Grace Academy", "grace", "grace"))
 
 #: The portal's own pages, opened by somebody not yet signed in.
-PORTAL_PAGES = ("/sign-in/", "/staff-sign-in/", "/invitations/not-a-token/")
+PORTAL_PAGES = ("/sign-in/", "/staff-sign-in/", "/invitations/not-a-token/", "/platform/")
 
 #: A school's pages, opened by a member of staff there.
 SCHOOL_PAGES = (
