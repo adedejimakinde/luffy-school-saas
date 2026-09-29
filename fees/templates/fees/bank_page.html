@@ -1,0 +1,29 @@
+{% load static shell %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>School bank account</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page.
+
+The title names no school. This document is served to whoever opens the URL,
+with no `login_required`, for the oracle reason `fees/views.py` gives:
+the API answers the refusal, and `data-on-school` says which host this is.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'bank/bank.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'bank/app.js' %}"></script>
+
+{% shell_open "bank" %}
+    <main id="bank" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}">
+      <noscript>
+        <h1>School bank account</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading&hellip;</p>
+    </main>
+{% shell_close "bank" %}

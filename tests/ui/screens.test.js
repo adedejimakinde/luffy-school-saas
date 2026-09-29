@@ -130,6 +130,8 @@ export const SCREENS = [
     ],
   },
 
+  { name: "bank", as: "sunrise.bursar", url: `${SUNRISE}/bank/` },
+
   // The office.
   { name: "setup", as: "sunrise.admin", url: `${SUNRISE}/setup/` },
   {

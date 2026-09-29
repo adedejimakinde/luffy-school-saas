@@ -839,3 +839,62 @@ class FeeLedgerEntry(models.Model):
                     )
                 }
             )
+
+
+class BankRecordIsFixed(Exception):
+    """Something tried to edit or delete a bank connection that was recorded."""
+
+
+class SchoolBank(models.Model):
+    """The bank account a school's fees settle into, as the school connected it.
+
+    Tenant-scoped, so each school's row is in its own schema and no query can
+    read another's. **A row is never edited or deleted** (`save()`/`delete()`
+    refuse, and a trigger refuses `UPDATE` and `DELETE`, as for the ledger): a
+    school that changes bank gets a new row, and the latest is the current one.
+    Where a school's fees have been going is a fact the school and Paystack can
+    each be asked about, and it must say the same thing a year later.
+
+    `account_name` is **what Paystack's resolve endpoint returned**, and never
+    what anybody typed: the person confirms it, and the server compares their
+    confirmation against a fresh resolve before it writes (`fees.bank`).
+
+    `subaccount_code` and `split_code` are Paystack's. The split gives the
+    subaccount 100% and makes it bear Paystack's fees; the platform takes no
+    share and holds nothing.
+
+    The person is frozen as a name as well as an id, `docs/operating-rules.md`
+    rule 2, for `FeeConcessionRevocation`'s reason.
+    """
+
+    bank_code = models.CharField(max_length=20)
+    bank_name = models.CharField(max_length=120)
+    account_number = models.CharField(max_length=10)
+    account_name = models.CharField(max_length=255)
+    subaccount_code = models.CharField(max_length=64)
+    split_code = models.CharField(max_length=64)
+    connected_by_id = models.PositiveBigIntegerField(help_text="accounts.User id.")
+    connected_by_name = models.CharField(max_length=255)
+    connected_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(account_number__regex=r"^[0-9]{10}$"),
+                name="a_bank_account_is_ten_digits",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.bank_name} {self.account_number} ({self.account_name})"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise BankRecordIsFixed(
+                f"Bank record {self.pk} cannot be changed. Connect the new account instead."
+            )
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise BankRecordIsFixed(f"Bank record {self.pk} cannot be deleted.")

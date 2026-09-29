@@ -69,6 +69,7 @@ LINKS = (
     Link("broadsheet", "/broadsheet/", "i-sheet", "Broadsheets", POSITION_VIEWING_ROLES, "Results"),
     Link("absences", "/absences/", "i-absent", "Absences", ABSENCE_ROLES, "Results"),
     Link("fees", "/fees/", "i-fees", "Fees", FEES_ROLES, "Office"),
+    Link("bank", "/bank/", "i-fees", "Bank", FEES_ROLES, "Office"),
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
     Link("promotion", "/promotion/", "i-people", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of

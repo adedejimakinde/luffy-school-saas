@@ -34,6 +34,7 @@ FIRST_FETCH = {
     "broadsheet": "/api/results/broadsheets/",
     "absences": "/api/attendance/absences/",
     "fees": "/api/fees/classes/",
+    "bank": "/api/fees/bank/",
     "setup": "/api/academics/setup/",
     "promotion": "/api/academics/promotion/",
     "roll": "/api/enrolment/roll/",
@@ -44,7 +45,7 @@ FIRST_FETCH = {
 TEACHER = {"register", "marking", "comments", "timetable", "results", "broadsheet"}
 PRINCIPAL = {
     "home", "register", "marking", "comments", "timetable",
-    "results", "broadsheet", "absences", "fees", "setup", "promotion", "roll", "notices-settings",
+    "results", "broadsheet", "absences", "fees", "bank", "setup", "promotion", "roll", "notices-settings",
 }
 
 _SIDEBAR = re.compile(r'<nav id="sidebar".*?</nav>', re.S)
@@ -66,7 +67,7 @@ class TheRulesTests(SimpleTestCase):
     def test_two_roles_see_both_sets(self):
         both = self.keys({Role.TEACHER.value, Role.BURSAR.value})
 
-        self.assertEqual(both, TEACHER | {"fees"})
+        self.assertEqual(both, TEACHER | {"fees", "bank"})
 
     def test_signed_out_or_on_the_portal_is_no_menu_at_all(self):
         empty = menu.menu_for(frozenset(), "home")
@@ -99,7 +100,7 @@ class TheRulesTests(SimpleTestCase):
         bursar = menu.menu_for({Role.BURSAR.value}, "fees")
 
         self.assertEqual(bursar.tabs, ())
-        self.assertEqual([link.key for link in bursar.links], ["fees"])
+        self.assertEqual([link.key for link in bursar.links], ["fees", "bank"])
         self.assertEqual(bursar.home, "/fees/")
 
     def test_the_principal_leads_when_one_person_holds_both(self):
@@ -176,7 +177,7 @@ class EveryLinkOpensTests(ChainSetUp):
     def test_a_bursar_gets_no_tab_bar(self):
         sidebar, tabs = self.shown(self.bursar)
 
-        self.assertEqual((sidebar, tabs), ({"fees"}, set()))
+        self.assertEqual((sidebar, tabs), ({"fees", "bank"}, set()))
 
     def test_signed_out_there_is_no_menu(self):
         self.client.logout()

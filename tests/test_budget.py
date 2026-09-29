@@ -64,6 +64,7 @@ SCHOOL_PAGES = (
     "/broadsheet/",
     "/comments/",
     "/fees/",
+    "/bank/",
     "/timetable/",
     "/cards/",
     "/cards/1/1/",
