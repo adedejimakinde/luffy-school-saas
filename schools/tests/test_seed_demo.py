@@ -5,7 +5,9 @@ because the command's whole job is to leave a database somebody can click
 through, and a clone would test the template rather than that.
 """
 
+import os
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -14,7 +16,7 @@ from django.test import TestCase, override_settings
 from django_tenants.utils import schema_context
 
 from academics.models import ClassPlacement, Term
-from accounts.models import GuardianContact, Membership, MembershipStatus, Role
+from accounts.models import GuardianContact, Membership, MembershipStatus, Role, User
 from attendance.models import Register
 from fees.models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
 from gradebook.models import Score
@@ -188,3 +190,73 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
             self.seed()
 
         self.assertEqual(Membership.objects.count(), users)
+
+
+PASSWORD = "a-long-demo-password-1"
+
+
+class LoadDemoTests(TestCase):
+    """`manage.py load_demo`: the same schools on a server with DEBUG off."""
+
+    def tearDown(self):
+        connection.set_schema_to_public()
+
+    def load(self, env=None, **options):
+        out = StringIO()
+        base = {"DEMO_SERVER": "1", "LOAD_DEMO_PASSWORD": PASSWORD}
+        with mock.patch.dict(os.environ, {**base, **(env or {})}):
+            call_command("load_demo", "--domain-suffix=classnode.test", stdout=out, **options)
+        return out.getvalue()
+
+    def refused(self, env, message):
+        for key in ("DEMO_SERVER", "LOAD_DEMO_PASSWORD"):
+            os.environ.pop(key, None)
+        with mock.patch.dict(os.environ, env):
+            with self.assertRaisesMessage(CommandError, message):
+                call_command("load_demo", "--domain-suffix=classnode.test", stdout=StringIO())
+        self.assertFalse(School.objects.filter(slug__in=SLUGS).exists())
+
+    @override_settings(DEBUG=False)
+    def test_it_refuses_without_demo_server(self):
+        """CONTROL 1: removing the DEMO_SERVER guard makes this red."""
+        self.refused({"LOAD_DEMO_PASSWORD": PASSWORD}, "DEMO_SERVER=1")
+        self.refused({"DEMO_SERVER": "0", "LOAD_DEMO_PASSWORD": PASSWORD}, "DEMO_SERVER=1")
+
+    @override_settings(DEBUG=False)
+    def test_it_has_no_default_password(self):
+        """CONTROL 2: falling back to seed_demo's published password makes this red."""
+        self.refused({"DEMO_SERVER": "1"}, "LOAD_DEMO_PASSWORD")
+        self.refused({"DEMO_SERVER": "1", "LOAD_DEMO_PASSWORD": "short"}, "at least 12")
+
+    @override_settings(DEBUG=False)
+    def test_with_debug_off_it_loads_the_same_schools_with_the_given_password(self):
+        out = self.load()
+
+        self.assertNotIn(PASSWORD, out)
+        self.assertNotIn("demo-pass-2026", out)
+        for slug in SLUGS:
+            school = School.objects.get(slug=slug)
+            self.assertTrue(Domain.objects.filter(tenant=school, domain=f"{slug}.classnode.test").exists())
+            self.assertEqual(Membership.objects.filter(school=school, role=Role.STUDENT.value).count(), 20)
+            with schema_context(school.schema_name):
+                self.assertEqual(ClassPlacement.objects.filter(term=Term.objects.get(is_current=True)).count(), 20)
+        admin = User.objects.get(username="sunrise.admin")
+        self.assertTrue(admin.check_password(PASSWORD))
+        self.assertFalse(admin.check_password("demo-pass-2026"))
+
+    @override_settings(DEBUG=False)
+    def test_nobody_is_messaged_and_no_phone_is_stored(self):
+        """CONTROL 3: telling families, or storing the phone, makes this red."""
+        self.load()
+
+        self.assertFalse(GuardianContact.objects.exists())
+        for slug in SLUGS:
+            with schema_context(School.objects.get(slug=slug).schema_name):
+                self.assertFalse(Notice.objects.exists())
+
+    @override_settings(DEBUG=False)
+    def test_it_will_not_run_twice(self):
+        self.load()
+
+        with self.assertRaisesMessage(CommandError, "already here"):
+            self.load()
