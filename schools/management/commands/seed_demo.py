@@ -119,6 +119,14 @@ def _weekdays(start, end):
 class Command(BaseCommand):
     help = "Create two fake schools with a term's worth of data. Development only."
 
+    #: `load_demo` (the same schools on a demo server) turns both off: it has no
+    #: fake provider to send through and no business holding a real-shaped phone
+    #: number, so no family is told and the parent has no phone on file.
+    tell_families = True
+
+    def password_line(self, password):
+        return f"\nEvery password: {password}\n"
+
     def add_arguments(self, parser):
         parser.add_argument("--password", default=DEFAULT_PASSWORD)
         parser.add_argument(
@@ -128,6 +136,10 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, password, domain_suffix, **options):
+        self.check_allowed()
+        self.seed(password, domain_suffix)
+
+    def check_allowed(self):
         if not settings.DEBUG:
             raise CommandError(
                 "seed_demo only runs with DEBUG on: it writes fake children and "
@@ -141,6 +153,8 @@ class Command(BaseCommand):
                 "something else. That number could belong to somebody; the demo "
                 "must never hand it to a real provider."
             )
+
+    def seed(self, password, domain_suffix):
         taken = [slug for slug, _ in SCHOOLS if School.objects.filter(slug=slug).exists()]
         if taken:
             raise CommandError(
@@ -152,7 +166,7 @@ class Command(BaseCommand):
         for slug, name in SCHOOLS:
             logins += self._school(slug, name, password, domain_suffix)
 
-        self.stdout.write(f"\nEvery password: {password}\n")
+        self.stdout.write(self.password_line(password))
         for school, username, role in logins:
             self.stdout.write(f"  {school:<22} {role:<28} {username}")
 
@@ -197,14 +211,15 @@ class Command(BaseCommand):
             # through code delivery, so "tell families" below has somewhere
             # real to land: `GuardianContact` only refuses a channel changing
             # after it is written, not a verified one arriving with it.
-            account, _ = GuardianAccount.objects.get_or_create(user=parent)
-            GuardianContact.objects.create(
-                guardian=account,
-                channel_type=ContactChannel.PHONE,
-                value=PARENT_PHONE,
-                created_by=staff["admin"].user,
-                verified_at=timezone.now(),
-            )
+            if self.tell_families:
+                account, _ = GuardianAccount.objects.get_or_create(user=parent)
+                GuardianContact.objects.create(
+                    guardian=account,
+                    channel_type=ContactChannel.PHONE,
+                    value=PARENT_PHONE,
+                    created_by=staff["admin"].user,
+                    verified_at=timezone.now(),
+                )
 
         logins = [(name, u.user.username, label) for (key, _, label), u in zip(STAFF, staff.values())]
         logins += [(name, u.user.username, label) for (key, label), u in zip(MORE_TEACHERS, teachers.values())]
@@ -362,6 +377,8 @@ class Command(BaseCommand):
         chain.approve(sheet, principal)
         chain.release(sheet, principal)
 
+        if not self.tell_families:
+            return
         notices_service.set_offered_as(principal, result_notices=True)
         now = datetime.combine(term.starts_on, time(9, 0), tzinfo=LAGOS)
         notices_service.tell_families(sheet, actor=principal, now=now)
