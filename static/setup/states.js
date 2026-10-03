@@ -16,7 +16,8 @@ import { esc, numberOrBlank } from "../web/html.js";
  * unset a term first, and never shows two as current.
  */
 export function shape({
-  terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "", notes = {},
+  terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "",
+  lga = "", lga_choices = [], notes = {},
 } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
@@ -35,6 +36,8 @@ export function shape({
     newClassForm(notes.class),
 
     card ? cardLook(card, notes) : "",
+
+    localGovernment(lga, lga_choices, notes),
 
     contactEmail(contact_email, notes),
 
@@ -60,6 +63,25 @@ function contactEmail(address, notes) {
     `<input id="contact_email" name="contact_email" type="email" value="${esc(address)}" placeholder="office@yourschool.example">`,
     '<button type="submit">Save contact email</button>',
     notes.contact_email ? `<p class="note" role="alert">${esc(notes.contact_email.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * The local government area the school sits in, which the Ogun State report
+ * card prints beside the school's name. Ogun's twenty are offered as the
+ * person types; a school elsewhere types its own.
+ */
+function localGovernment(lga, choices, notes) {
+  return [
+    '<h2 id="lga">Local government area</h2>',
+    '<p class="hint">Printed beside your school&#39;s name on the Ogun State report card.</p>',
+    `<form class="lga-form${notes.lga ? ` ${esc(notes.lga.kind)}` : ""}" data-form="lga">`,
+    '<label for="lga_input">Local government area</label>',
+    `<input id="lga_input" name="lga" value="${esc(lga)}" maxlength="60" list="lga_choices" autocomplete="off">`,
+    `<datalist id="lga_choices">${choices.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>`,
+    '<button type="submit">Save local government area</button>',
+    notes.lga ? `<p class="note" role="alert">${esc(notes.lga.detail)}</p>` : "",
     "</form>",
   ].join("");
 }

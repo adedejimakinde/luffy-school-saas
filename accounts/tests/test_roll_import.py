@@ -11,14 +11,18 @@ an authority check and a scoped lookup, not the tenant schema.
 - the preview is `check()`'s verdict on every row and **writes nothing**;
 - the file import is all or nothing, as the CSV one is, and a duplicate
   admission number refuses the whole file by row;
-- the template lists this school's classes, and only this school's.
+- the template lists this school's classes, and only this school's;
+- a child's learner's ID, sex and date of birth come in with them, checked by
+  row, and a learner's ID is unique at a school as an admission number is.
 """
+
+import datetime
 
 import io
 
 from openpyxl import Workbook, load_workbook
 
-from academics.models import ClassGroup, ClassPlacement
+from academics.models import ClassGroup, ClassPlacement, StudentDetails
 from accounts import bulk
 from accounts.models import Membership, Role, User
 from accounts.tests.test_enrolment_api import EnrolmentSetUp
@@ -31,7 +35,17 @@ CHECK = f"{BASE}check/"
 FILE = f"{BASE}file/"
 TEMPLATE = f"{BASE}template/"
 
-HEADINGS = ["Full name", "Class group", "Reference", "Username", "Guardian name", "Guardian contact"]
+HEADINGS = [
+    "Full name",
+    "Class group",
+    "Reference",
+    "Username",
+    "Guardian name",
+    "Guardian contact",
+    "Learner ID",
+    "Sex",
+    "Date of birth",
+]
 
 
 def workbook(*rows, headings=HEADINGS, gap_rows=(), sheet_first=None):
@@ -82,7 +96,10 @@ class ReadingAWorkbookTests(RollImportSetUp):
 
         self.assertEqual(
             bulk._read(bulk.read_upload(raw)),
-            bulk._read("full_name,class_group,reference,username,guardian_name,guardian_contact\nAda Obi,JSS 1A,0100,,,\n"),
+            bulk._read(
+                "full_name,class_group,reference,username,guardian_name,guardian_contact,"
+                "learner_id,sex,date_of_birth\nAda Obi,JSS 1A,0100,,,,,,\n"
+            ),
         )
 
     def test_row_numbers_are_the_spreadsheets_and_empty_rows_are_nobody(self):
@@ -331,6 +348,8 @@ class TheTemplateTests(RollImportSetUp):
         self.assertEqual(list(rows[0]), HEADINGS)
         self.assertTrue(all(all(c is None for c in r) for r in rows[1:]))
         self.assertEqual(book["Students"]["C2"].number_format, "@", "admission numbers keep their zeros")
+        self.assertEqual(book["Students"]["G2"].number_format, "@", "learner IDs keep their zeros")
+        self.assertEqual(book["Students"]["I2"].number_format, "DD/MM/YYYY")
         self.assertEqual(book["Classes"].sheet_state, "hidden")
         self.assertIn("Classes!$A$1:$A$2", book["Students"].data_validations.dataValidation[0].formula1)
 
@@ -341,3 +360,66 @@ class TheTemplateTests(RollImportSetUp):
         book.save(out)
 
         self.assertTrue(self.post(CHECK, self.admin, out.getvalue()).json()["admissible"])
+
+
+class TheChildsDetailsTests(RollImportSetUp):
+    """Learner's ID, sex and date of birth: three optional columns."""
+
+    def test_the_control_they_are_admitted_with_the_child(self):
+        body = self.post(FILE, self.admin, workbook(
+            ["Chike Obi", "JSS 1A", "0100", "", "", "", "OG/ABS/0100", "M", datetime.datetime(2013, 5, 2)],
+            ["Ngozi Abah", "JSS 1B", "0101", "", "", "", "", "Female", "02/03/2014"],
+            ["Tobi Ade", "JSS 1B", "0102"],
+        )).json()
+
+        self.assertEqual((body["admitted"], body["problems"]), (3, []))
+        with connected_to(self.stmarys):
+            rows = {
+                Membership.objects.get(pk=row.student_membership_id).user.full_name: row
+                for row in StudentDetails.objects.all()
+            }
+        self.assertEqual(sorted(rows), ["Chike Obi", "Ngozi Abah"], "a row with none of it makes no details row")
+        chike, ngozi = rows["Chike Obi"], rows["Ngozi Abah"]
+        self.assertEqual((chike.learner_id, chike.sex, chike.date_of_birth), ("OG/ABS/0100", "male", datetime.date(2013, 5, 2)))
+        self.assertEqual((ngozi.learner_id, ngozi.sex, ngozi.date_of_birth), ("", "female", datetime.date(2014, 3, 2)))
+
+    def test_each_bad_value_is_named_by_row_and_column_and_nothing_is_written(self):
+        before = self.counts()
+        body = self.post(FILE, self.admin, workbook(
+            ["Chike Obi", "JSS 1A", "", "", "", "", "OG/1", "boy", "31/02/2013"],
+            ["Ngozi Abah", "JSS 1B", "", "", "", "", "og/1", "unknown", "2099-01-01"],
+        )).json()
+
+        self.assertEqual(body["admitted"], 0)
+        self.assertEqual(
+            [(p["line"], p["column"]) for p in body["problems"]],
+            [(2, "date_of_birth"), (3, "learner_id"), (3, "sex"), (3, "date_of_birth")],
+        )
+        self.assertEqual(self.counts(), before)
+
+    def test_a_learner_id_already_at_this_school_is_refused_and_at_the_other_is_not(self):
+        with connected_to(self.stmarys):
+            StudentDetails.objects.create(student_membership_id=self.children["ada"].pk, learner_id="OG/7")
+
+        ours = self.post(CHECK, self.admin, workbook(["Chike Obi", "JSS 1A", "", "", "", "", "og/7"])).json()
+        theirs = self.post(
+            CHECK, self.their_admin, workbook(["Chike Obi", "JSS 1A", "", "", "", "", "OG/7"]), host=THEIR_HOST
+        ).json()
+
+        self.assertEqual([p["column"] for r in ours["rows"] for p in r["problems"]], ["learner_id"])
+        self.assertIn("already a learner's ID at this school", ours["rows"][0]["problems"][0]["detail"])
+        self.assertTrue(theirs["admissible"])
+
+    def test_the_preview_shows_what_was_read(self):
+        body = self.post(CHECK, self.admin, workbook(
+            ["Chike Obi", "JSS 1A", "", "", "", "", "OG/1", "F", datetime.datetime(2013, 5, 2)],
+        )).json()
+
+        row = body["rows"][0]
+        self.assertEqual((row["learner_id"], row["sex"], row["date_of_birth"]), ("OG/1", "F", "2013-05-02"))
+
+    def test_the_template_offers_female_and_male(self):
+        self.client.force_login(self.admin.user)
+        book = load_workbook(io.BytesIO(self.client.get(TEMPLATE, HTTP_HOST=HOST).content))
+        formulas = [v.formula1 for v in book["Students"].data_validations.dataValidation]
+        self.assertIn('"Female,Male"', formulas)

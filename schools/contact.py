@@ -75,9 +75,59 @@ def set_public_details_as(actor, school, *, about, address, phone):
     return school
 
 
+#: The twenty local government areas of Ogun State, as the setup page offers
+#: them. An offer, not a rule: a school elsewhere types its own.
+OGUN_LGAS = (
+    "Abeokuta North",
+    "Abeokuta South",
+    "Ado-Odo/Ota",
+    "Ewekoro",
+    "Ifo",
+    "Ijebu East",
+    "Ijebu North",
+    "Ijebu North East",
+    "Ijebu Ode",
+    "Ikenne",
+    "Imeko Afon",
+    "Ipokia",
+    "Obafemi Owode",
+    "Odeda",
+    "Odogbolu",
+    "Ogun Waterside",
+    "Remo North",
+    "Sagamu",
+    "Yewa North",
+    "Yewa South",
+)
+
+LGA_MAX = 60
+
+
+def set_lga_as(actor, school, lga: str) -> str:
+    """Set the local government area the school sits in. Blank clears it.
+
+    Printed on the Ogun State report card beside the school's name. Free text,
+    trimmed, because a school outside Ogun has its own list.
+    """
+    if not can_set_up(actor, school):
+        raise NotAllowedToSetUp(
+            f"{actor} may not set up {school}'s local government area. That is done by "
+            f"a principal or an administrator of the school."
+        )
+    lga = " ".join((lga or "").split())
+    if len(lga) > LGA_MAX:
+        raise PublicDetailsRefused(f"Keep the local government area under {LGA_MAX} characters.")
+    school.lga = lga
+    school.save(update_fields=["lga"])
+    return school.lga
+
+
 __all__ = [
+    "LGA_MAX",
     "NotAnEmailAddress",
+    "OGUN_LGAS",
     "PublicDetailsRefused",
+    "set_lga_as",
     "set_contact_email_as",
     "set_public_details_as",
 ]

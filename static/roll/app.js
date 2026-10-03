@@ -14,8 +14,12 @@ import {
   REFUSAL,
   SAVE,
   admit,
+  fetchDetails,
   fetchGuardians,
   fetchRoll,
+  removePhoto,
+  saveDetails,
+  uploadPhoto,
   addContact,
   linkGuardian,
   removeGuardian,
@@ -63,6 +67,21 @@ export function applyPanel(state, childId, result, typed = null) {
   };
 }
 
+/**
+ * What a details-panel answer does to the screen. As `applyPanel()`: a success
+ * is the server's whole panel; a refusal is a note on it that keeps what was
+ * typed, saying which form (`details` or `photo`) it belongs to.
+ */
+export function applyDetails(state, childId, result, { form = null, typed = null } = {}) {
+  if (result.ok) {
+    return { ...state, details: { childId, body: result.body, note: null } };
+  }
+  if (result.refusal) return { step: result.refusal, ...result.body };
+  const kind = result.outcome === SAVE.NOT_ALLOWED ? "not-allowed" : "rejected";
+  const details = state.details || { childId, body: {} };
+  return { ...state, details: { ...details, note: { kind, form, detail: result.body.detail, typed } } };
+}
+
 export function fromRoll(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
   return { step: "roll", ...answer.body, notes: {} };
@@ -103,8 +122,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   };
   const load = async (notes = {}) => {
     const panel = state.panel || null;
+    const details = state.details || null;
     state = fromRoll(await fetchRoll({ fetchImpl }));
-    if (state.step === "roll") state = { ...state, notes, panel };
+    if (state.step === "roll") state = { ...state, notes, panel, details };
     draw();
   };
 
@@ -125,7 +145,34 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
     if (action === "guardians") {
       const childId = Number(hit.dataset.child);
-      state = applyPanel(state, childId, await fetchGuardians({ studentMembershipId: childId, fetchImpl }));
+      state = applyPanel(
+        { ...state, details: null },
+        childId,
+        await fetchGuardians({ studentMembershipId: childId, fetchImpl }),
+      );
+      draw();
+      return;
+    }
+    if (action === "details") {
+      const childId = Number(hit.dataset.child);
+      state = applyDetails(
+        { ...state, panel: null },
+        childId,
+        await fetchDetails({ studentMembershipId: childId, fetchImpl }),
+      );
+      draw();
+      return;
+    }
+    if (action === "close-details") {
+      state = { ...state, details: null };
+      draw();
+      return;
+    }
+    if (action === "remove-photo" && state.details) {
+      const childId = state.details.childId;
+      state = applyDetails(state, childId, await removePhoto({ studentMembershipId: childId, fetchImpl }), {
+        form: "photo",
+      });
       draw();
       return;
     }
@@ -178,6 +225,35 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
+    const which = form && form.dataset ? form.dataset.form : undefined;
+    if (which === "details" && state.details) {
+      if (event.preventDefault) event.preventDefault();
+      const values = {
+        learner_id: form.learner_id.value,
+        sex: form.sex.value,
+        date_of_birth: form.date_of_birth.value || null,
+      };
+      const childId = state.details.childId;
+      // The row's learner ID changes with this, so the roll is read again.
+      state = applyDetails(state, childId, await saveDetails({ studentMembershipId: childId, values, fetchImpl }), {
+        form: "details",
+        typed: values,
+      });
+      if (state.step === "roll" && !state.details.note) await load(state.notes);
+      else draw();
+      return;
+    }
+    if (which === "photo" && state.details) {
+      if (event.preventDefault) event.preventDefault();
+      const file = form.photo && form.photo.files ? form.photo.files[0] : null;
+      if (!file) return;
+      const childId = state.details.childId;
+      state = applyDetails(state, childId, await uploadPhoto({ studentMembershipId: childId, file, fetchImpl }), {
+        form: "photo",
+      });
+      draw();
+      return;
+    }
     if (form && form.new_contact && state.panel) {
       if (event.preventDefault) event.preventDefault();
       state = applyPanel(

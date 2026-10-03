@@ -321,3 +321,32 @@ test("a refused public page keeps the form open with the server's sentence", () 
   assert.equal(reload, false);
   assert.match(htmlFor(after), /A phone number is digits/);
 });
+
+// -- the local government area -------------------------------------------------
+
+test("the local government area box holds the school's and offers Ogun's twenty", () => {
+  const html = states.shape({ ...SHAPE, lga: "Abeokuta South", lga_choices: ["Abeokuta North", "Abeokuta South"] });
+
+  assert.match(html, /data-form="lga"/);
+  assert.match(html, /id="lga_input"[^>]*value="Abeokuta South"[^>]*list="lga_choices"/);
+  assert.match(html, /<datalist id="lga_choices"><option value="Abeokuta North"><option value="Abeokuta South"><\/datalist>/);
+});
+
+test("submitting the local government area sends it", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/lga/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { lga: "Ifo" } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "lga" }, lga: "Ifo" });
+
+  assert.deepEqual(sent, [{ lga: "Ifo" }]);
+});

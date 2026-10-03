@@ -12,7 +12,8 @@ h2 { font-size: 1.1rem; margin: 28px 0 8px; }
 .children { list-style: none; margin: 0; padding: 0; }
 .child { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider); }
 .child .name { font-weight: 700; flex: 1 1 12rem; }
-.handle, .reference { color: var(--muted); font-size: var(--small); }
+.handle, .reference, .learner-id { color: var(--muted); font-size: var(--small); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .child.unplaced { border-left: 4px solid var(--warn); background: var(--warn-bg); padding-left: 10px; }
 .child .standing { color: var(--muted); }
 form { display: grid; gap: 6px; max-width: 26rem; margin: 8px 0 0; }
@@ -38,12 +39,25 @@ form.handle-taken, form.rejected, form.not-allowed { background: var(--stop-bg);
 .guardian .add-contact { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
 form.link-guardian.rejected, form.link-guardian.not-allowed { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
 
+/* A child's details: the passport photo beside the forms that keep them. */
+.details { border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; margin: 0 0 16px; }
+.details h2 { margin-top: 0; }
+.details .photo-box { margin: 0 0 8px; }
+.details .photo { display: block; width: 140px; height: 180px; object-fit: cover; border: 1px solid var(--border); border-radius: var(--radius); }
+.details .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.details .hint { color: var(--muted); font-size: var(--small); }
+.details .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 8px 0; }
+.details .facts dt { color: var(--muted); }
+.details .facts dd { margin: 0; }
+.details > button { margin-top: 12px; }
+
 /* On a phone each child is a card (`design.css`'s `.stack-list`): the name and
    handle, then "Admission no." and "Class" as labelled lines, then Guardians. */
 .class-line { display: contents; }
 @media (max-width: 639.98px) {
   .child .class-line { display: flex; align-items: center; }
-  .child .reference { font-size: inherit; color: var(--text); }
+  .child .reference, .child .learner-id { font-size: inherit; color: var(--text); }
   .child select { flex: 1 1 10rem; max-width: 14rem; }
-  .child > button { flex: 1 1 100%; }
+  .child .row-actions { flex: 1 1 100%; }
+  .child .row-actions button { flex: 1 1 8rem; }
 }
