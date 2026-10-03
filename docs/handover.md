@@ -1,3 +1,49 @@
+# Where I stopped: 2026-10-03 (second session), demo server prep merged; nothing run on a server yet
+
+Two PRs, each merged on green, then this docs-only one.
+
+| PR | State |
+| --- | --- |
+| [#222](https://github.com/adedejimakinde/luffy-school-saas/pull/222) | **Merged:** a small "Staff sign in" link in a footer on each school's public page, to `//<portal host>/staff-sign-in/` (shown only when a portal host exists, like "Parent sign in"). |
+| [#223](https://github.com/adedejimakinde/luffy-school-saas/pull/223) | **Merged:** `manage.py load_demo` and `docs/demo-server.md`. |
+
+## Staff sign in link (#222)
+`schools/templates/schools/site.html` (`<footer>`), `static/site/site.css`. **The first push failed the `screens`
+job**: that test fails any touch target under 44px tall and any phone text under 15px, and the link was
+13.6px text with a short box. The footer link is now 16px text in a 44px-tall box. The job's log showed only
+server output, not the assertion, so that diagnosis is from the test's rules, confirmed by the re-run going green.
+
+## load_demo (#223)
+`schools/management/commands/load_demo.py`, a subclass of `seed_demo`'s command (its `_school()` and data are
+shared, not copied; `seed_demo` gained `check_allowed()`, `seed()`, `password_line()` and a `tell_families`
+switch, nothing else). Works with `DEBUG` off. Refuses unless `DEMO_SERVER=1`. The password is only
+`LOAD_DEMO_PASSWORD` (12+ characters; no default, no argument, never printed). It **messages no family and stores
+no parent phone number**: with `DEBUG` off there is no fake provider (`messaging.E001`) and a real one must never
+be handed that number. So **the demo parent cannot sign in** (parents sign in by a phone code); the doc says to
+show the parent's side from the staff logins. Refuses to run twice. **Controls run (broken, seen red, restored):**
+the `DEMO_SERVER` guard, the password guard (and the 12-character floor), and no-families/no-phone.
+
+## docs/demo-server.md
+Fresh Ubuntu 24.04 CX23 to `app.classnode.co`, `sunrise-demo.classnode.co` and `harbour-demo.classnode.co`:
+Cloudflare records (A `app` and A `*`, both **DNS only**), the token (Zone:DNS:Edit + Zone:Zone:Read on the
+`classnode.co` zone only), Docker install, `secrets.env` / `caddy.env`, and the compose commands by hand.
+
+## Not verified: nothing here has run on a real server
+- **No server, no Cloudflare, no Docker install was touched.** The token scope and the Docker apt steps are from
+  those tools' documentation. The first real run is the test; fix the doc in the same change.
+- **`PLATFORM_DOMAIN` is overridden on the server, not in the repo.** `deploy/production.env` still says
+  `classnode.africa`; the doc relies on a later `env_file` winning (`secrets.env` for web/worker/db, `caddy.env` for
+  Caddy) and has a `printenv` check. If compose does not behave that way, the fix is a server-side edit of
+  `production.env`.
+- **`deploy/deploy.sh` is not used** for the demo: it sources `production.env` and health-checks
+  `classnode.africa`. The doc has its steps by hand. If the demo is to be deployed by the workflow, the script
+  needs to take its domain from somewhere the override reaches.
+- **GHCR images may be private.** The doc has a `docker login ghcr.io` (token with `read:packages`); the SHA run
+  must include `load_demo` (#223's merge commit or later) and have a passed `publish` job.
+- No backups, email, SMS or error reports on the demo, by design.
+
+---
+
 # Where I stopped: 2026-10-03, placing unmatched payments (#220) merged; "Create accounts for this class" in review
 
 **Paystack, test mode only.** Money goes straight to each school's own bank account;
