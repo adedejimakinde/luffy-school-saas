@@ -1,0 +1,11 @@
+{% comment %}
+Bad network, as two tiles joined by a line: a phone holding marks queued while
+the network is down, then the cloud they reach with a tick once the
+connection comes back. The same tiles and line as `flow_results.html`, and it
+plays once when scrolled into view, the tick last.
+{% endcomment %}
+<div class="flow flow-network" aria-hidden="true">
+  <svg class="tile" viewBox="0 0 80 80" style="--i:0"><rect class="t-bg" x="1" y="1" width="78" height="78" rx="18"/><rect class="t-ln" x="26" y="12" width="28" height="56" rx="5"/><path class="t-ln" d="M31 27h10M31 37h10M31 47h10"/><circle class="t-ring" cx="47" cy="27" r="2.6"/><circle class="t-ring" cx="47" cy="37" r="2.6"/><circle class="t-ring" cx="47" cy="47" r="2.6"/></svg>
+  <span class="link" style="--i:0"></span>
+  <svg class="tile" viewBox="0 0 80 80" style="--i:1"><rect class="t-bg" x="1" y="1" width="78" height="78" rx="18"/><path class="t-ln" d="M26 50h28a10 10 0 0 0 1-20 14 14 0 0 0-27-2 11 11 0 0 0-2 22z"/><circle class="t-seal" cx="53" cy="56" r="12"/><path class="t-ln t-tick" d="M47.5 56l4 4 7-8" pathLength="1"/></svg>
+</div>

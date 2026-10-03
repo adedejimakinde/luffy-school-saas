@@ -65,12 +65,12 @@ COPY = [
     "Teachers can keep entering marks when the network drops.",
     "Nothing is lost, and it sends when the connection comes back.",
     "Priced per student, per term.",
-    "From ₦TODO per student per term. TODO: setup fee line.",
+    "₦2,500 per student, per term. No setup fee.",
     "See it with your own classes.",
-    "Leave your details and we will call you within TODO working day.",
+    "Leave your details and we will call you within one working day.",
     "Your name", "School name", "Phone number", "Email (optional)", "Number of students",
     "Request a call",
-    "Classnode. TODO: city.", "Privacy", "Terms", "© 2026 Classnode",
+    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode",
 ]
 
 #: The writing rules' words and phrases, never on the page.
@@ -308,9 +308,10 @@ class TheBudgetsTests(SiteSetUp):
 
     def test_the_drawings_are_inline_and_under_15_kb(self):
         drawings = re.findall(r"<svg\b.*?</svg>", self.page, flags=re.S)
-        # The logo, the pattern, three results tiles and four fees tiles, plus
+        # The logo, the pattern, three results tiles, four fees tiles and two
+        # bad-network tiles, plus
         # the menu button's three lines.
-        self.assertEqual(len(drawings), 10)
+        self.assertEqual(len(drawings), 12)
         self.assertLess(sum(len(d.encode()) for d in drawings), 15 * 1024)
         for drawing in drawings:
             self.assertNotRegex(drawing, r"<animate|#[0-9A-Fa-f]{3,6}\b(?!-)|rgb\(", drawing[:60])

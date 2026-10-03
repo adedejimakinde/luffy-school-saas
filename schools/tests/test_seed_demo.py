@@ -260,3 +260,71 @@ class LoadDemoTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "already here"):
             self.load()
+
+
+class ShowcaseTests(TestCase):
+    """`load_demo --showcase`: the school the homepage's screenshots are taken from.
+
+    A good day, held rather than hoped for: the star's card, nothing waiting on
+    the principal, nobody on the absences list, and the one open class with no
+    sheet to raise a row for.
+    """
+
+    def tearDown(self):
+        connection.set_schema_to_public()
+
+    def load(self, env=None):
+        out = StringIO()
+        base = {"DEMO_SERVER": "1", "LOAD_DEMO_PASSWORD": PASSWORD}
+        with mock.patch.dict(os.environ, {**base, **(env or {})}):
+            call_command("load_demo", "--showcase", "--domain-suffix=classnode.test", stdout=out)
+        return out.getvalue()
+
+    @override_settings(DEBUG=False)
+    def test_it_refuses_without_demo_server(self):
+        os.environ.pop("DEMO_SERVER", None)
+        with mock.patch.dict(os.environ, {"LOAD_DEMO_PASSWORD": PASSWORD}):
+            with self.assertRaisesMessage(CommandError, "DEMO_SERVER=1"):
+                call_command("load_demo", "--showcase", "--domain-suffix=classnode.test", stdout=StringIO())
+        self.assertFalse(School.objects.filter(slug="showcase-demo").exists())
+
+    @override_settings(DEBUG=False)
+    def test_a_school_having_a_good_day(self):
+        from attendance import absences
+        from home import summary
+        from results.cards import card_for
+        from results.models import ResultSheet, SheetState
+
+        out = self.load()
+        self.assertNotIn(PASSWORD, out)
+        school = School.objects.get(slug="showcase-demo")
+        self.assertFalse(School.objects.filter(slug__in=SLUGS).exists(), "only the showcase is made")
+        principal = User.objects.get(username="crestfield.principal")
+        star = Membership.objects.get(user__username="crestfield.s01")
+        self.assertTrue(star.guardianships.filter(guardian__username="crestfield.parent").exists())
+
+        with schema_context(school.schema_name):
+            term = Term.objects.get(is_current=True)
+            card = card_for(star, term)
+            self.assertAlmostEqual(float(card.own_average), 78, delta=1.5)
+            grades = list(card.subject_results.values_list("grade_letter", flat=True))
+            self.assertEqual(len(grades), 6)
+            self.assertLessEqual(set(grades), {"A1", "B2", "B3"})
+            self.assertGreater(card.days_present, 0)
+            self.assertEqual(card.comments.count(), 2, "both remarks")
+
+            states = dict(ResultSheet.objects.values_list("class_group__name", "state"))
+            self.assertEqual(states, {"JSS 2A": SheetState.RELEASED, "JSS 2B": SheetState.RELEASED})
+            self.assertEqual(absences.flagged(school, term), [])
+            roles = frozenset(principal.roles_at(school))
+            self.assertEqual(summary.waiting(principal, roles, term, summary.lagos_today()), [])
+            # Every register in today but SS 1A's, which the screenshots take on screen.
+            taken = set(Register.objects.filter(taken_on=summary.lagos_today()).values_list("class_group__name", flat=True))
+            self.assertEqual(taken, {"JSS 2A", "JSS 2B"})
+            self.assertTrue(Score.objects.filter(assessment__name="First CA").exists())
+
+    @override_settings(DEBUG=False)
+    def test_it_will_not_run_twice(self):
+        self.load()
+        with self.assertRaisesMessage(CommandError, "already here"):
+            self.load()
