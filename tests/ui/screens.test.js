@@ -24,6 +24,14 @@
  * And it saves a screenshot of every one, which CI uploads as the `screens`
  * artifact: `<width>/<screen>.png`.
  *
+ * Classnode's own public site (`website/`, on the bare platform domain) is
+ * photographed at seven widths, `SITE_WIDTHS`, under reduced motion so every
+ * section and drawing is in its finished state, with its lazy images scrolled
+ * in. It is also held to its own layout: content stops at 1200px and only the
+ * fees band runs edge to edge; on a phone a slide's words sit above its screen,
+ * its buttons are full width and the nav is a menu button. Its slides are
+ * checked moving, pausing and holding still in their own `describe` below.
+ *
  * ## What it runs against
  *
  * The demo (`manage.py seed_demo`), served by the development server, with
@@ -53,11 +61,15 @@ const PASSWORD = process.env.SCREENS_PASSWORD || "demo-pass-2026";
 const OUT = process.env.SCREENS_OUT || "screens";
 const HERE = dirname(fileURLToPath(import.meta.url));
 
+const SITE = `http://${DOMAIN}:${PORT}`;
 const PORTAL = `http://app.${DOMAIN}:${PORT}`;
 const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
+
+/** The public site's extra widths: a small Android, a large phone, a tablet held sideways, a desk monitor. */
+export const SITE_WIDTHS = [320, 414, 1024, 1920];
 
 /**
  * The only tables that may be wider than a phone: the broadsheet, the
@@ -76,6 +88,9 @@ const SMALL_ON_PURPOSE =
  * a screenshot of its own.
  */
 export const SCREENS = [
+  // Classnode's own public site, on the bare domain.
+  { name: "homepage", as: null, url: `${SITE}/`, widths: SITE_WIDTHS, site: true },
+
   // The doors, and what a family with no account uses.
   { name: "sign-in", as: null, url: `${PORTAL}/sign-in/` },
   { name: "staff-sign-in", as: null, url: `${PORTAL}/staff-sign-in/` },
@@ -241,6 +256,70 @@ function measure({ smallOnPurpose, phone, wide, wideTables }) {
   return problems;
 }
 
+/** The public site's own layout rules, measured in the page. */
+function measureSite({ width }) {
+  const problems = [];
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const band = document.querySelector(".band");
+  if (!band || Math.round(band.getBoundingClientRect().width) !== document.documentElement.clientWidth) {
+    problems.push("the fees band does not run edge to edge");
+  }
+  for (const el of document.body.querySelectorAll("*")) {
+    if (el.closest(".band") || !visible(el)) continue;
+    const style = getComputedStyle(el);
+    const drawn =
+      style.backgroundColor !== "rgba(0, 0, 0, 0)" ||
+      parseFloat(style.borderTopWidth) > 0 ||
+      parseFloat(style.borderBottomWidth) > 0 ||
+      el.matches("svg, img");
+    if (drawn && el.getBoundingClientRect().width > 1200.5) {
+      problems.push(`<${el.tagName.toLowerCase()} class="${el.className.baseVal ?? el.className}"> is ${Math.round(el.getBoundingClientRect().width)}px wide, past 1200`);
+    }
+  }
+  const head = document.querySelector(".site-head").getBoundingClientRect();
+  const room = document.documentElement.clientWidth;
+  if (width >= 1280 && Math.abs(head.left - (room - head.right)) > 1) problems.push("the content is not centred");
+  const nav = document.querySelector(".site-nav");
+  const toggle = document.querySelector(".menu-toggle");
+  if (width < 960 && (visible(nav) || !visible(toggle))) problems.push("the nav is not a menu button here");
+  if (width >= 960 && (!visible(nav) || visible(toggle))) problems.push("the nav is folded away on a wide screen");
+  if (width < 640) {
+    for (const slide of document.querySelectorAll(".slide")) {
+      const text = slide.querySelector(".slide-text").getBoundingClientRect();
+      const device = slide.querySelector(".slide-device").getBoundingClientRect();
+      if (text.bottom > device.top + 1) problems.push("a slide's screen is not below its words");
+    }
+    for (const button of document.querySelectorAll(".actions .btn, .demo-form button")) {
+      if (!visible(button)) continue;
+      const parent = button.parentElement.getBoundingClientRect();
+      if (Math.abs(button.getBoundingClientRect().width - parent.width) > 1) {
+        problems.push(`a button is not full width: "${button.textContent.trim()}"`);
+      }
+    }
+    const tiles = [...document.querySelectorAll(".flow-fees .tile")].map((t) => t.getBoundingClientRect());
+    if (tiles.some((t, n) => n && t.top <= tiles[n - 1].bottom)) problems.push("the fees drawing does not run top to bottom");
+  }
+  return problems;
+}
+
+/** Every lazy image in, by scrolling the page through once, then back to the top. */
+async function loadEverything(page) {
+  await page.evaluate(async () => {
+    for (let y = 0; y < document.body.scrollHeight; y += 400) {
+      window.scrollTo(0, y);
+      await new Promise((done) => setTimeout(done, 30));
+    }
+    window.scrollTo(0, 0);
+    await Promise.all(
+      [...document.images].map((img) => (img.complete ? null : new Promise((done) => img.addEventListener("load", done, { once: true })))),
+    );
+  });
+}
+
 let browser;
 const contexts = new Map();
 
@@ -291,8 +370,9 @@ async function settle(page) {
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 50))));
 }
 
-async function check(page, width, name) {
+async function check(page, width, name, site = false) {
   mkdirSync(join(OUT, String(width)), { recursive: true });
+  const siteProblems = site ? await page.evaluate(measureSite, { width }) : [];
   await page.screenshot({ path: join(OUT, String(width), `${name}.png`), fullPage: true });
   return (
     await page.evaluate(measure, {
@@ -301,15 +381,15 @@ async function check(page, width, name) {
       wide: width >= 1024,
       wideTables: WIDE_TABLES,
     })
-  ).map(
-    (problem) => `${width}px ${name}: ${problem}`,
-  );
+  )
+    .concat(siteProblems)
+    .map((problem) => `${width}px ${name}: ${problem}`);
 }
 
 before(async () => {
   browser = await chromium.launch({
     args: [
-      `--host-resolver-rules=MAP *.${DOMAIN} 127.0.0.1`,
+      `--host-resolver-rules=MAP *.${DOMAIN} 127.0.0.1, MAP ${DOMAIN} 127.0.0.1`,
       // The specimen is handed to the browser by this test rather than fetched,
       // so Chromium counts it as a public page asking a loopback server for its
       // stylesheet, and blocks it. Every real page comes from that server.
@@ -329,12 +409,16 @@ describe("every page, at every width", () => {
       const page = await context.newPage();
       const problems = [];
       try {
+        // The public site is photographed finished and still: its motion is
+        // the next `describe`'s.
+        if (screen.site) await page.emulateMedia({ reducedMotion: "reduce" });
         for (const width of [...WIDTHS, ...(screen.widths || [])]) {
           await page.setViewportSize({ width, height: 800 });
           const response = await page.goto(screen.url);
           assert.equal(response.status(), screen.status || 200, `${screen.url} at ${width}px`);
           await settle(page);
-          problems.push(...(await check(page, width, screen.name)));
+          if (screen.site) await loadEverything(page);
+          problems.push(...(await check(page, width, screen.name, screen.site)));
 
           for (const [name, selector] of screen.steps || []) {
             const target = page.locator(selector).first();
@@ -425,4 +509,161 @@ describe("the roll import's preview", () => {
     }
     assert.deepEqual(problems, []);
   });
+});
+
+describe("the homepage's motion", () => {
+  // The slides run on `setTimeout`, so the page's clock is Playwright's here
+  // and six seconds pass when the test says so. The fade-ups and drawings are
+  // CSS, on the browser's own clock, and are read from `getAnimations()`.
+  const current = (page) => page.locator("[data-carousel]").getAttribute("data-current");
+
+  async function open(options = {}) {
+    const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options });
+    const page = await context.newPage();
+    return { context, page };
+  }
+
+  test("the slides advance every 6 seconds, crossfading in 400ms, and pause on hover, focus and touch", async () => {
+    const { context, page } = await open({ hasTouch: true });
+    try {
+      // Paused before the page exists, so no timer of the page's runs until
+      // the test moves the clock.
+      await page.clock.install({ time: new Date("2026-10-05T08:00:00Z") });
+      await page.clock.pauseAt(new Date("2026-10-05T08:00:01Z"));
+      await page.goto(`${SITE}/`);
+      await page.waitForLoadState("networkidle");
+      assert.equal(await current(page), "0");
+      await page.clock.runFor(5900);
+      assert.equal(await current(page), "0", "advanced before 6 seconds");
+      await page.clock.runFor(200);
+      assert.equal(await current(page), "1");
+      await page.clock.runFor(6000);
+      assert.equal(await current(page), "2");
+      await page.clock.runFor(6000);
+      assert.equal(await current(page), "0", "wraps round to the first");
+
+      const fade = await page.locator(".slide").first().evaluate((el) => {
+        const style = getComputedStyle(el);
+        return [style.transitionProperty, style.transitionDuration];
+      });
+      assert.match(fade[0], /^opacity/);
+      assert.match(fade[1], /^0\.4s/);
+      assert.equal(await page.locator(".slide.is-active").count(), 1);
+      assert.equal(await page.locator(".slide[inert]").count(), 2);
+
+      // Hover holds it; leaving lets it go on.
+      await page.hover(".slides");
+      await page.clock.runFor(13000);
+      assert.equal(await current(page), "0", "advanced under the pointer");
+      await page.mouse.move(5, 5);
+      await page.clock.runFor(6100);
+      assert.equal(await current(page), "1");
+
+      // A dot jumps, and focus on it holds the slides there.
+      await page.mouse.move(5, 5);
+      await page.focus('[data-go="2"]');
+      await page.keyboard.press("Enter");
+      assert.equal(await current(page), "2");
+      assert.equal(await page.locator('[data-go="2"]').getAttribute("aria-current"), "true");
+      await page.clock.runFor(13000);
+      assert.equal(await current(page), "2", "advanced with focus inside");
+      await page.focus(".hero-actions .btn");
+      await page.clock.runFor(6100);
+      assert.equal(await current(page), "0");
+
+      // A finger on the slides holds them until it touches somewhere else.
+      await page.locator(".hero-actions .btn").first().blur();
+      const slides = await page.locator(".slides").boundingBox();
+      await page.touchscreen.tap(slides.x + 20, slides.y + 20);
+      await page.clock.runFor(13000);
+      assert.equal(await current(page), "0", "advanced under a finger");
+      const note = await page.locator(".hero-note").boundingBox();
+      await page.touchscreen.tap(note.x + 5, note.y + 5);
+      await page.clock.runFor(6100);
+      assert.equal(await current(page), "1");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("under reduced motion nothing moves: no advance, no fade, no animation", async () => {
+    const { context, page } = await open({ reducedMotion: "reduce" });
+    try {
+      await page.clock.install({ time: new Date("2026-10-05T08:00:00Z") });
+      await page.clock.pauseAt(new Date("2026-10-05T08:00:01Z"));
+      await page.goto(`${SITE}/`);
+      await page.waitForLoadState("networkidle");
+      await page.clock.runFor(30000);
+      assert.equal(await current(page), "0", "advanced under reduced motion");
+      assert.equal(await page.evaluate(() => document.documentElement.classList.contains("motion")), false);
+      assert.equal(await page.locator(".slide").first().evaluate((el) => getComputedStyle(el).transitionDuration), "0s");
+      // The dots still change the slide, at once.
+      await page.click('[data-go="1"]');
+      assert.equal(await current(page), "1");
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      assert.equal(await page.evaluate(() => document.getAnimations().length), 0);
+      // And every drawing is there, finished.
+      const hidden = await page.evaluate(() =>
+        [...document.querySelectorAll(".flow > *, .reveal, .m-n")].filter((el) => getComputedStyle(el).opacity !== "1").length,
+      );
+      assert.equal(hidden, 0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  for (const width of [1280, 360]) {
+    test(`every animation plays once and ends drawn, at ${width}px`, async () => {
+      const { context, page } = await open({ viewport: { width, height: 800 } });
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        const logo = await page.evaluate(() =>
+          document.getAnimations().filter((a) => a.effect.target.closest(".mark-draw")).map((a) => {
+            const t = a.effect.getComputedTiming();
+            return { iterations: t.iterations, end: t.endTime };
+          }),
+        );
+        assert.equal(logo.length, 4, "the logo's three nodes and its lines");
+        for (const a of logo) {
+          assert.equal(a.iterations, 1);
+          assert.ok(a.end <= 1050, `the logo draws for ${a.end}ms`);
+        }
+        // Scroll through, so every section and drawing has been seen.
+        const kinds = new Set();
+        for (let y = 0; y < (await page.evaluate(() => document.body.scrollHeight)); y += 300) {
+          await page.evaluate((top) => window.scrollTo(0, top), y);
+          await page.waitForTimeout(60);
+          for (const a of await page.evaluate(() =>
+            document.getAnimations().map((a) => ({
+              name: a.animationName || a.transitionProperty,
+              iterations: a.effect.getComputedTiming().iterations,
+              target: a.effect.target.closest(".mark-draw, .flow, .reveal, .slide") ? "ok" : a.effect.target.outerHTML.slice(0, 60),
+            })),
+          )) {
+            assert.equal(a.iterations, 1, `${a.name} repeats`);
+            assert.equal(a.target, "ok", `something else moves: ${a.target}`);
+            kinds.add(a.name);
+          }
+        }
+        assert.ok(kinds.has("fade-in") && (kinds.has("grow-x") || kinds.has("grow-y")) && kinds.has("draw"), [...kinds].join());
+        if (width < 640) assert.ok(kinds.has("grow-y"), "the fees lines draw downwards on a phone");
+        await page.waitForTimeout(3500);
+        const unfinished = await page.evaluate(() =>
+          [...document.querySelectorAll(".flow > *, .reveal")]
+            .filter((el) => getComputedStyle(el).opacity !== "1" || !el.closest(".is-in"))
+            .map((el) => `${el.className.baseVal ?? el.className} ${getComputedStyle(el).opacity}`),
+        );
+        assert.deepEqual(unfinished, [], "a section or drawing never finished");
+        // Finished, and holding their last frame (`fill: both`): nothing still running.
+        assert.deepEqual(
+          await page.evaluate(() => document.getAnimations().filter((a) => a.playState !== "finished").map((a) => a.animationName)),
+          [],
+          "something is still moving",
+        );
+      } finally {
+        await context.close();
+      }
+    });
+  }
 });

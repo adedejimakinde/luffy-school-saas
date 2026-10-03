@@ -188,13 +188,48 @@ class OneFontTwoWeightsTests(SimpleTestCase):
         self.assertIn("Hanken Grotesk", licence)
 
 
+#: `{% extends "app/layout.html" %}`: a page drawn inside a layout, which is
+#: where its head is.
+EXTENDS = re.compile(r'^\s*{%\s*extends\s+"([^"]+)"\s*%}')
+
+
+def is_a_part(name):
+    """A piece included into pages (a drawing, a fragment): not a page itself.
+
+    Kept in a `parts/` folder so that this is a fact about where the file is,
+    not a list here to keep up to date.
+    """
+    return "/parts/" in name
+
+
+def own_head(name, html):
+    """The template that carries this page's head: itself, or its layout."""
+    match = EXTENDS.match(html)
+    if not match:
+        return html
+    (layout,) = [path for path in ROOT.glob(f"*/templates/{match.group(1)}")]
+    return layout.read_text()
+
+
 class EveryPageDrawsFromTheDesignTests(SimpleTestCase):
     def test_every_page_template_includes_the_design_head(self):
         for name, html in page_templates():
-            if name in NOT_ON_THE_DESIGN:
+            if name in NOT_ON_THE_DESIGN or is_a_part(name):
                 continue
             with self.subTest(template=name):
-                self.assertIn('{% include "design/head.html" %}', html)
+                self.assertIn('{% include "design/head.html" %}', own_head(name, html))
+
+    def test_a_part_draws_no_head_and_a_layout_is_followed(self):
+        """The control for the two allowances above: each is used, and narrowly."""
+        names = dict(page_templates())
+        parts = [name for name in names if is_a_part(name)]
+        self.assertTrue(parts, "no part to allow")
+        for name in parts:
+            with self.subTest(part=name):
+                self.assertNotIn("<html", names[name])
+                self.assertNotIn("<link", names[name])
+        extending = [name for name, html in names.items() if EXTENDS.match(html)]
+        self.assertTrue(extending, "no page extends a layout")
 
     def test_the_design_comes_before_the_pages_own_stylesheet(self):
         """So the page's rules narrow the design's, and not the other way round."""

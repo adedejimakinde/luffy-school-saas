@@ -53,6 +53,7 @@ from results.views import (
 from home.views import HOME_MODULES
 from notices.views import SETTINGS_MODULES
 from timetable.views import TIMETABLE_MODULES
+from website.views import SITE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
 #: `settings.STATICFILES_DIRS` for why those two being the same is the whole
@@ -146,8 +147,17 @@ class EveryPagesMapCoversItsWholeGraphTests(SimpleTestCase):
         """
         on_disk = {str(path.relative_to(STATIC)) for path in STATIC.rglob("*.js")}
         listed = {module for modules in PAGES.values() for module in modules}
+        listed |= set(SITE_MODULES)
 
         self.assertEqual(on_disk, listed)
+
+    def test_the_public_sites_module_imports_nothing(self):
+        """Why the public site has no import map: its one module is loaded by
+        its own hashed `{% static %}` URL and reaches nothing else. An import
+        added to it needs a map, and belongs in `PAGES` above instead."""
+        for module in SITE_MODULES:
+            with self.subTest(module=module):
+                self.assertEqual(imports_of(module), set())
 
     def test_each_key_is_the_url_a_relative_import_resolves_to(self):
         """A key the browser never asks for remaps nothing."""
