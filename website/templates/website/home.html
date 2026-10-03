@@ -1,0 +1,179 @@
+{% extends "website/base.html" %}{% load static %}
+{% block main %}
+{% comment %}
+The homepage. Every sentence on it is the copy as given, word for word; a
+fact still to be decided is a visible `.todo` rather than a guess. The
+screenshots are real screens from the demo (`scripts/site_shots.mjs`), and
+their `alt` is empty because the words beside each one already say what it
+shows.
+
+The slides are in the markup in order and the first is showing, so the page
+reads with no script. `site.js` moves them every 6 seconds, crossfading, and
+not at all under reduced motion.
+{% endcomment %}
+<section class="hero wrap">
+  {% include "website/parts/pattern.html" %}
+  <h1 class="sr">Classnode</h1>
+  <div class="carousel" data-carousel aria-roledescription="carousel" aria-label="Classnode">
+    <div class="slides">
+      <article class="slide is-active" aria-roledescription="slide" aria-label="1 of 3">
+        <div class="slide-text">
+          <h2>Results out the same week exams end.</h2>
+          <p>Teachers enter marks on their phones. The principal checks them and releases. Parents see the report card that evening.</p>
+        </div>
+        <div class="slide-device">
+          <div class="phone"><img src="{% static 'website/shots/marks.webp' %}" width="540" height="1110" alt="" fetchpriority="high"></div>
+        </div>
+      </article>
+      <article class="slide" aria-roledescription="slide" aria-label="2 of 3" aria-hidden="true" inert>
+        <div class="slide-text">
+          <h2>Every child gets their own account number for fees.</h2>
+          <p>Parents pay by transfer, the way they already do. The money goes straight to the school's bank and onto the right child's record, and the receipt goes out the same minute.</p>
+        </div>
+        <div class="slide-device">
+          <div class="phone"><img src="{% static 'website/shots/fees.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+        </div>
+      </article>
+      <article class="slide" aria-roledescription="slide" aria-label="3 of 3" aria-hidden="true" inert>
+        <div class="slide-text">
+          <h2>Know who came to school today.</h2>
+          <p>Class teachers take the register in under a minute. When a child is absent, the parent gets an email.</p>
+        </div>
+        <div class="slide-device">
+          <div class="phone"><img src="{% static 'website/shots/register.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+        </div>
+      </article>
+    </div>
+    <div class="dots" role="group" aria-label="Slides" hidden>
+      <button type="button" data-go="0" aria-label="Slide 1" aria-current="true"><span></span></button>
+      <button type="button" data-go="1" aria-label="Slide 2" aria-current="false"><span></span></button>
+      <button type="button" data-go="2" aria-label="Slide 3" aria-current="false"><span></span></button>
+    </div>
+  </div>
+  <p class="actions hero-actions">
+    <a class="btn btn-primary" href="#demo">Book a demo</a>
+    <a class="btn" href="#features">See what it does</a>
+  </p>
+  <p class="hero-note">Made for Nigerian secondary schools. Works on the phones your teachers already carry.</p>
+</section>
+
+<section id="features" class="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <h2 id="features-title" class="section-title reveal">What changes in your school</h2>
+
+    <article class="feature feature-results reveal">
+      <div class="feature-text">
+        <h3>Results</h3>
+        <p class="lead">No more typing broadsheets late at night.</p>
+        <p>Marks go in once. Totals, grades and the broadsheet add up by themselves, and every report card carries your crest and your colours.</p>
+      </div>
+      {% include "website/parts/flow_results.html" %}
+      <div class="feature-wide">
+        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/broadsheet.webp' %}" width="1280" height="800" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
+      </div>
+    </article>
+  </div>
+
+  <section class="band" aria-labelledby="fees-title">
+    <div class="wrap band-inner reveal">
+      <div class="feature-text">
+        <h3 id="fees-title">Fees</h3>
+        <p class="lead">Stop matching bank alerts to names.</p>
+        <p>Each child has a bank account number. Whatever a parent pays shows on that child's record without anyone typing it in.</p>
+        <p>A payment can't be edited or deleted. If a mistake is made, it is reversed with a reason, and the reversal stays on record.</p>
+      </div>
+      {% include "website/parts/flow_fees.html" %}
+    </div>
+  </section>
+
+  <div class="wrap">
+    <article class="feature feature-device reveal">
+      <div class="feature-media">
+        <div class="phone"><img src="{% static 'website/shots/card.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+      </div>
+      <div class="feature-text">
+        <h3>Parents</h3>
+        <p class="lead">No scratch cards.</p>
+        <p>Parents sign in with a code sent to their phone. Families without a smartphone can check a result with the PIN slip you print for them.</p>
+      </div>
+    </article>
+
+    <article class="feature feature-device feature-flip reveal">
+      <div class="feature-media">
+        <div class="phone"><img src="{% static 'website/shots/register.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+      </div>
+      <div class="feature-text">
+        <h3>Register</h3>
+        <p class="lead">Mark the class in one tap per child.</p>
+        <p>Absences that keep repeating are flagged for you before they become a problem.</p>
+      </div>
+    </article>
+
+    <article class="feature feature-laptop reveal">
+      <div class="feature-text">
+        <h3>For the proprietor</h3>
+        <p class="lead">A short summary in your inbox every day: what came in, and what is still owed.</p>
+      </div>
+      <div class="feature-media">
+        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/home.webp' %}" width="1280" height="800" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
+      </div>
+    </article>
+
+    <article class="feature feature-plain reveal">
+      <h3>Bad network</h3>
+      <p class="lead">Teachers can keep entering marks when the network drops.</p>
+      <p>Nothing is lost, and it sends when the connection comes back.</p>
+    </article>
+  </div>
+</section>
+
+<section id="pricing" class="pricing wrap reveal" aria-labelledby="pricing-title">
+  <div class="panel">
+    <h2 id="pricing-title" class="eyebrow">Pricing</h2>
+    <p class="statement">Priced per student, per term.</p>
+    <p class="price">From <span class="num">&#8358;<span class="todo">TODO</span></span> per student per term. <span class="todo">TODO: setup fee line.</span></p>
+    <p class="actions"><a class="btn btn-primary" href="#demo">Book a demo</a></p>
+  </div>
+</section>
+
+<section id="demo" class="demo wrap reveal" aria-labelledby="demo-title">
+  <div class="demo-text">
+    <h2 id="demo-title" class="eyebrow">Book a demo</h2>
+    <p class="statement">See it with your own classes.</p>
+    <p>Leave your details and we will call you within <span class="todo">TODO</span> working day.</p>
+  </div>
+  {% if sent %}
+  <p class="sent" role="status">Thank you. We will be in touch soon.</p>
+  {% else %}
+  <form class="demo-form" method="post" action="/#demo">
+    {% csrf_token %}
+    {% if refused == "invalid" %}<p class="todo" role="alert">TODO: message when a field is missing or not right.</p>
+    {% elif refused == "limited" %}<p class="todo" role="alert">TODO: message when one address has sent too many requests in an hour.</p>{% endif %}
+    <div class="field">
+      <label for="demo-name">Your name</label>
+      <input id="demo-name" name="name" type="text" autocomplete="name" maxlength="120" required value="{{ form.name.value|default_if_none:'' }}"{% if form.name.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="field">
+      <label for="demo-school">School name</label>
+      <input id="demo-school" name="school" type="text" autocomplete="organization" maxlength="200" required value="{{ form.school.value|default_if_none:'' }}"{% if form.school.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="field">
+      <label for="demo-phone">Phone number</label>
+      <input id="demo-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="32" required value="{{ form.phone.value|default_if_none:'' }}"{% if form.phone.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="field">
+      <label for="demo-email">Email (optional)</label>
+      <input id="demo-email" name="email" type="email" autocomplete="email" maxlength="254" value="{{ form.email.value|default_if_none:'' }}"{% if form.email.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="field">
+      <label for="demo-students">Number of students</label>
+      <input id="demo-students" class="num" name="students" type="number" inputmode="numeric" min="1" max="100000" required value="{{ form.students.value|default_if_none:'' }}"{% if form.students.errors %} aria-invalid="true"{% endif %}>
+    </div>
+    <div class="bait" aria-hidden="true">
+      <input name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+    <button type="submit">Request a call</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

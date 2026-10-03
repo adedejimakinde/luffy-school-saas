@@ -60,6 +60,23 @@ PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
     f"app.{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else None
 )
 
+#: **Where Classnode's own public site answers**: the homepage, and nothing
+#: that signs anybody in. The bare platform domain unless a deployment says
+#: otherwise, which is the name `PORTAL_HOST` above keeps free for it.
+#:
+#: It is not a `Domain` row and not a school: no tenant answers on it.
+#: `schools.middleware.PlatformTenantMiddleware` sends it to `urls_site`, which
+#: routes the site's own pages and nothing else, so the admin and the sign-in
+#: doors stay on the portal alone. Unset in development without a
+#: `PLATFORM_DOMAIN`, where there is no such host.
+SITE_HOST = os.environ.get("SITE_HOST", "").strip().lower() or PLATFORM_DOMAIN
+SITE_URLCONF = "urls_site"
+
+#: How many demo requests one network address may leave in an hour. Counted from
+#: the saved requests themselves (`website.views`), so it holds across worker
+#: processes the way `accounts.throttling` explains a cache would not.
+DEMO_REQUESTS_PER_HOUR = int(os.environ.get("DEMO_REQUESTS_PER_HOUR", 5))
+
 # **The `Domain` table is the real allowlist**, which is why this could be `*`
 # for as long as it was. `TenantMainMiddleware` resolves every request's host
 # against `schools.Domain` and raises `Http404` for one it does not recognise,
@@ -108,6 +125,9 @@ SHARED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django.contrib.admin",
+    # Classnode's own public site on `SITE_HOST`: the homepage and the demo
+    # requests it collects. The platform's, not any school's.
+    "website",
 ]
 
 TENANT_APPS = [
@@ -190,7 +210,9 @@ MIDDLEWARE = [
     # ever asked which school this is — which also means a request for an asset
     # on a hostname that is not a school's cannot 404 as "no such tenant".
     "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django_tenants.middleware.main.TenantMainMiddleware",
+    # django-tenants' own, plus one host it answers that is nobody's: the public
+    # site on `SITE_HOST`. See `schools/middleware.py`.
+    "schools.middleware.PlatformTenantMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",

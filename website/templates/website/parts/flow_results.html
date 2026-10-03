@@ -1,0 +1,13 @@
+{% comment %}
+Results, as three tiles joined by lines: a teacher's phone with marks on it,
+the principal's tick, the parent's report card. Built from the mark's own
+shapes (rounded squares, nodes, lines). Plays once when scrolled into view
+(`.flow.is-in`, set by `site.js`); drawn complete when there is no motion.
+{% endcomment %}
+<div class="flow flow-results" aria-hidden="true">
+  <svg class="tile" viewBox="0 0 80 80" style="--i:0"><rect class="t-bg" x="1" y="1" width="78" height="78" rx="18"/><rect class="t-ln" x="26" y="12" width="28" height="56" rx="5"/><path class="t-ln" d="M31 26h11M31 36h11M31 46h11"/><circle class="t-n" cx="47" cy="26" r="2.4"/><circle class="t-n" cx="47" cy="36" r="2.4"/><circle class="t-n" cx="47" cy="46" r="2.4"/></svg>
+  <span class="link" style="--i:0"></span>
+  <svg class="tile" viewBox="0 0 80 80" style="--i:1"><rect class="t-bg" x="1" y="1" width="78" height="78" rx="18"/><circle class="t-ln" cx="40" cy="40" r="19"/><path class="t-ln t-tick" d="M31 40l6 6 12-13" pathLength="1"/></svg>
+  <span class="link" style="--i:1"></span>
+  <svg class="tile" viewBox="0 0 80 80" style="--i:2"><rect class="t-bg" x="1" y="1" width="78" height="78" rx="18"/><rect class="t-ln" x="18" y="13" width="44" height="54" rx="5"/><rect class="t-n" x="24" y="19" width="11" height="11" rx="3"/><path class="t-ln" d="M40 22h16M40 28h10M24 40h32M24 48h22M24 56h28"/></svg>
+</div>

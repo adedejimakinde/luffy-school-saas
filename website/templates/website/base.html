@@ -1,0 +1,66 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Classnode{% endblock %}</title>
+{% comment %}
+Classnode's own public site (`website/views.py`), on `SITE_HOST` only. Every
+page on it extends this file: the header, the footer, the one stylesheet and
+the one module. Drawn by the server and readable with no script at all; the
+module (`static/website/site.js`) moves the slides, fades sections up and
+closes the phone menu after a tap, and does nothing under reduced motion but
+the last of those.
+
+The logo is drawn inline rather than from `design/icons.html`'s sprite, because
+its parts are animated one by one (nodes, then the lines between them) and a
+`<use>` copy cannot be reached part by part. Same shape as `#i-brand-mark`.
+{% endcomment %}
+{% include "design/head.html" %}
+<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-700.woff2' %}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{% static 'website/website.css' %}">
+<script type="module" src="{% static 'website/site.js' %}"></script>
+<body class="site">
+<header class="site-head wrap">
+  <a class="logo" href="/" aria-label="Classnode">
+    <svg class="logo-mark mark-draw" viewBox="0 0 24 24" aria-hidden="true">
+      <rect class="m-sq" x="1" y="1" width="22" height="22" rx="6"/>
+      <path class="m-ln" d="M7 8L17 8L12 17Z" pathLength="1"/>
+      <circle class="m-n" cx="7" cy="8" r="2.1"/>
+      <circle class="m-n" cx="17" cy="8" r="2.1"/>
+      <circle class="m-n" cx="12" cy="17" r="2.1"/>
+    </svg>
+    <span>classnode</span>
+  </a>
+  <nav class="site-nav" aria-label="Main">
+    <a href="/#features">Features</a>
+    <a href="/#pricing">Pricing</a>
+    {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
+    <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
+    <a class="btn btn-primary" href="/#demo">Book a demo</a>
+  </nav>
+  <button class="menu-toggle" type="button" popovertarget="site-menu" aria-label="Menu">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
+  <div id="site-menu" class="site-menu" popover>
+    <a href="/#features">Features</a>
+    <a href="/#pricing">Pricing</a>
+    {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
+    <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
+    <a class="btn btn-primary" href="/#demo">Book a demo</a>
+  </div>
+</header>
+<main id="main">
+{% block main %}{% endblock %}
+</main>
+<footer class="site-foot wrap">
+  <p>Classnode. <span class="todo">TODO: city.</span></p>
+  <nav aria-label="Footer">
+    <a href="/privacy/">Privacy</a>
+    <a href="/terms/">Terms</a>
+    {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
+    <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
+  </nav>
+  <p class="num">&copy; 2026 Classnode</p>
+</footer>
+</body>
+</html>

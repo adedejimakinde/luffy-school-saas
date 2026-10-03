@@ -1,0 +1,475 @@
+/*
+ * Classnode's public site: the homepage, and the pages that share its layout.
+ *
+ * Layout only, as every page stylesheet here: the colours are `design.css`'s
+ * tokens (One Blue, `docs/design.md`), and the one dark band is the ink,
+ * `--text`. White page, mist (`--bg`) panels, the blue for actions.
+ *
+ * - Content stops at 1200px and sits in the middle (`.wrap`). Only the fees
+ *   band runs edge to edge.
+ * - Phones first. Below 960px the nav is a menu button; below 640px a slide
+ *   puts its words above its screen and every button is full width.
+ * - Motion is opt in twice: only under `prefers-reduced-motion:
+ *   no-preference`, and only once `site.js` has said it can run
+ *   (`html.motion`). Without either, everything is drawn finished and still.
+ *   Nothing loops, bounces, spins or pulses.
+ */
+
+body.site {
+  padding: 0;
+  background: var(--card);
+  font-variant-numeric: tabular-nums;
+}
+
+body.site > main {
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.wrap {
+  width: min(100% - 32px, 1200px);
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .wrap { width: min(100% - 48px, 1200px); }
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+/* A fact still to be decided, shown as one on the page. */
+.todo {
+  display: inline-block;
+  padding: 0 6px;
+  font-weight: 700;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: 6px;
+  outline: 1px dashed var(--warn);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Header                                                                    */
+/* ------------------------------------------------------------------------ */
+
+.site-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 72px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.site-head .logo { padding: 0; margin-right: auto; font-size: 1.375rem; }
+.site-head .logo-mark { width: 32px; height: 32px; }
+
+.m-sq { fill: var(--brand); }
+.m-ln { fill: none; stroke: var(--card); stroke-width: 1.3; stroke-linejoin: round; stroke-dasharray: 1; }
+.m-n { fill: var(--card); }
+
+.site-nav { display: none; align-items: center; gap: 4px; }
+.site-nav a:not(.btn), .site-menu a:not(.btn) {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+  padding: 0 12px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+.site-nav a:not(.btn):hover, .site-menu a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
+.site-nav .btn { margin-left: 8px; }
+
+.menu-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control);
+  padding: 0;
+}
+.menu-toggle svg { width: 24px; height: 24px; fill: none; stroke: var(--text); stroke-width: 2; stroke-linecap: round; }
+
+.site-menu {
+  position: fixed;
+  inset: 72px 16px auto auto;
+  width: min(100vw - 32px, 320px);
+  margin: 0;
+  padding: 12px;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.site-menu:popover-open { display: grid; gap: 4px; }
+.site-menu a:not(.btn) { display: flex; }
+.site-menu .btn { margin-top: 8px; }
+
+@media (min-width: 960px) {
+  .site-nav { display: flex; }
+  .menu-toggle, .site-menu { display: none; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Hero and its slides                                                       */
+/* ------------------------------------------------------------------------ */
+
+.hero { position: relative; padding: 40px 0 56px; }
+
+/* Still, and faint: see `pattern.html` for the contrast it is held to. */
+.hero-pattern {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  opacity: 0.025;
+}
+.hero-pattern path { fill: none; stroke: var(--brand); stroke-width: 2; }
+.hero-pattern circle { fill: var(--brand); }
+.hero > :not(.hero-pattern) { position: relative; }
+.hero { isolation: isolate; }
+
+.slides { display: grid; }
+.slide {
+  grid-area: 1 / 1;
+  display: grid;
+  gap: 32px;
+  align-items: center;
+}
+.slide:not(.is-active) { opacity: 0; visibility: hidden; }
+
+.slide-text h2 {
+  margin: 0 0 16px;
+  font-size: clamp(2rem, 1.2rem + 3.6vw, 4rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.slide-text p {
+  max-width: 36em;
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1.0625rem, 1rem + 0.4vw, 1.3125rem);
+  line-height: 1.55;
+}
+.slide-device { display: flex; justify-content: center; }
+/* The top of each screen: enough to read, short enough that the first
+   screen holds the words, the phone and the buttons. */
+.slide-device img { aspect-ratio: 540 / 900; object-fit: cover; object-position: top; }
+
+@media (min-width: 640px) {
+  .hero { padding: 64px 0 72px; }
+  .slide { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 48px; }
+  /* Down beside the phone's foot, so the words, the dots and the buttons
+     below read as one column. */
+  .slide-text { align-self: end; padding-bottom: 8px; }
+}
+
+.dots { display: flex; gap: 0; margin: 16px 0 0 -12px; }
+.dots[hidden] { display: none; }
+.dots button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--control);
+  min-height: var(--control);
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.dots span {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--brand);
+  border-radius: 50%;
+}
+.dots [aria-current="true"] span { background: var(--brand); }
+
+.hero-actions { margin: 24px 0 0; gap: 12px; }
+.hero-actions .btn { min-height: var(--control-lg); padding-inline: 24px; }
+.hero-note { margin: 24px 0 0; color: var(--muted); font-size: 1.0625rem; }
+
+@media (max-width: 639.98px) {
+  .actions .btn, .demo-form button { width: 100%; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Device frames, drawn here: a phone and a laptop                           */
+/* ------------------------------------------------------------------------ */
+
+.phone {
+  width: min(100%, 248px);
+  padding: 9px;
+  background: var(--text);
+  border-radius: 38px;
+}
+.phone img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 29px;
+  background: var(--bg);
+}
+@media (min-width: 640px) {
+  .phone { width: 272px; padding: 10px; border-radius: 42px; }
+  .phone img { border-radius: 32px; }
+}
+
+.laptop { width: 100%; padding-inline: 6%; }
+.laptop-screen {
+  padding: 10px 10px 12px;
+  background: var(--text);
+  border-radius: 14px 14px 0 0;
+}
+.laptop-screen img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 3px;
+  background: var(--bg);
+}
+.laptop-base {
+  position: relative;
+  height: 14px;
+  margin: 0 -6%;
+  background: var(--border);
+  border-radius: 0 0 12px 12px;
+}
+.laptop-base::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 14%;
+  height: 5px;
+  background: var(--field-border);
+  border-radius: 0 0 6px 6px;
+  transform: translateX(-50%);
+}
+
+/* ------------------------------------------------------------------------ */
+/* What changes                                                              */
+/* ------------------------------------------------------------------------ */
+
+.features { padding: 56px 0 0; }
+
+.section-title {
+  max-width: 14em;
+  margin: 0 0 40px;
+  font-size: clamp(1.875rem, 1.2rem + 2.8vw, 3.25rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.feature {
+  display: grid;
+  gap: 32px;
+  align-items: center;
+  padding: 48px 0;
+  border-top: 1px solid var(--divider);
+}
+
+.feature h3, .eyebrow {
+  margin: 0 0 12px;
+  color: var(--brand);
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+}
+.lead, .statement {
+  margin: 0 0 16px;
+  color: var(--text);
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+.feature-text p:not(.lead) {
+  max-width: 34em;
+  color: var(--muted);
+  font-size: 1.125rem;
+  line-height: 1.6;
+}
+.feature-text p:last-child { margin-bottom: 0; }
+.feature-media { display: flex; justify-content: center; }
+.feature-wide { max-width: 960px; width: 100%; margin: 8px auto 0; }
+
+@media (min-width: 840px) {
+  .feature { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 64px; padding: 72px 0; }
+  .feature-results .feature-wide { grid-column: 1 / -1; }
+  .feature-flip .feature-media { order: 2; }
+  .feature-laptop { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); }
+  .feature-plain { grid-template-columns: minmax(0, 1fr); }
+}
+.feature-plain .lead { max-width: 20em; }
+.feature-plain p:not(.lead) { color: var(--muted); font-size: 1.125rem; }
+
+/* The one band that runs edge to edge: fees, on the ink. */
+.band {
+  margin: 24px 0;
+  padding: 72px 0;
+  color: var(--card);
+  background: var(--text);
+}
+.band-inner { display: grid; gap: 48px; align-items: center; }
+.band h3 { color: var(--brand-soft); }
+.band .lead { color: var(--card); }
+.band .feature-text p:not(.lead) { color: color-mix(in srgb, var(--card) 74%, var(--text)); }
+@media (min-width: 840px) {
+  .band { padding: 104px 0; }
+  .band-inner { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 64px; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* The flow drawings: tiles joined by lines                                  */
+/* ------------------------------------------------------------------------ */
+
+.flow { display: flex; align-items: center; justify-content: center; }
+.flow .tile { flex: none; width: 72px; height: 72px; }
+.flow .link {
+  position: relative;
+  flex: 1 1 24px;
+  min-width: 20px;
+  max-width: 96px;
+  height: 2px;
+  background: var(--brand);
+  transform-origin: left center;
+}
+.flow .link::before, .flow .link::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border-radius: 50%;
+}
+.flow .link::before { left: -4px; }
+.flow .link::after { right: -4px; }
+
+.t-bg { fill: var(--brand); }
+.t-ln { fill: none; stroke: var(--card); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.t-n { fill: var(--card); }
+.t-seal { fill: var(--brand); stroke: var(--card); stroke-width: 3; }
+.t-tick { stroke-dasharray: 1; }
+
+.band .flow .link { background: var(--card); }
+.band .t-bg { stroke: var(--card); stroke-width: 2; }
+
+@media (min-width: 640px) {
+  .flow .tile { width: 96px; height: 96px; }
+}
+
+/* Fees runs top to bottom on a phone. */
+@media (max-width: 639.98px) {
+  .flow-fees { flex-direction: column; }
+  .flow-fees .link {
+    flex: none;
+    width: 2px;
+    height: 36px;
+    min-width: 0;
+    transform-origin: center top;
+  }
+  .flow-fees .link::before { top: -4px; left: -3px; }
+  .flow-fees .link::after { top: auto; bottom: -4px; left: -3px; right: auto; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Pricing and the demo form                                                 */
+/* ------------------------------------------------------------------------ */
+
+.pricing { padding: 48px 0; }
+.panel {
+  padding: 40px 24px;
+  background: var(--bg);
+  border-radius: 20px;
+}
+.price { margin: 0 0 24px; color: var(--muted); font-size: 1.25rem; }
+.price .num { color: var(--text); font-size: 1.75rem; font-weight: 700; }
+@media (min-width: 640px) {
+  .panel { padding: 64px; }
+}
+
+.demo { display: grid; gap: 32px; padding: 48px 0 72px; }
+.demo-text p:not(.statement) { color: var(--muted); font-size: 1.125rem; }
+.demo-form { display: grid; gap: 16px; }
+.demo-form .field input { font-size: 1rem; }
+.demo-form button { justify-self: start; min-width: 200px; }
+.demo-form > .todo { display: block; padding: 8px 12px; }
+.sent {
+  align-self: start;
+  margin: 0;
+  padding: 24px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  background: var(--bg);
+  border-radius: var(--radius-card);
+}
+/* The honeypot: off screen, out of the tab order, read by no screen reader. */
+.bait { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+
+@media (min-width: 840px) {
+  .demo { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 64px; padding: 72px 0 96px; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Footer                                                                    */
+/* ------------------------------------------------------------------------ */
+
+.site-foot {
+  display: grid;
+  gap: 8px;
+  padding: 32px 0 40px;
+  color: var(--muted);
+  border-top: 1px solid var(--divider);
+}
+.site-foot p { margin: 0; }
+.site-foot nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
+.site-foot a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+  color: var(--text);
+}
+@media (min-width: 960px) {
+  .site-foot { grid-template-columns: auto 1fr auto; align-items: center; gap: 32px; }
+  .site-foot nav { justify-content: center; }
+}
+
+/* ------------------------------------------------------------------------ */
+/* Motion: once, and only where asked for                                    */
+/* ------------------------------------------------------------------------ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* The logo draws itself on load: the nodes, then the lines between them. */
+  .mark-draw .m-n { animation: fade-in 0.3s ease-out both; }
+  .mark-draw .m-n:nth-of-type(2) { animation-delay: 0.1s; }
+  .mark-draw .m-n:nth-of-type(3) { animation-delay: 0.2s; }
+  .mark-draw .m-ln { animation: draw 0.6s ease-in-out 0.4s both; }
+
+  .motion .slide { transition: opacity 0.4s ease, visibility 0s linear 0.4s; }
+  .motion .slide.is-active { transition: opacity 0.4s ease, visibility 0s linear 0s; }
+
+  .motion .reveal { transition: opacity 0.7s ease, transform 0.7s ease; }
+  .motion .reveal:not(.is-in) { opacity: 0; transform: translateY(24px); }
+
+  .motion .flow:not(.is-in) > * { opacity: 0; }
+  .motion .flow.is-in .tile { animation: fade-in 0.4s ease-out both; animation-delay: calc(var(--i) * 0.6s); }
+  .motion .flow.is-in .link { animation: grow-x 0.35s ease-in-out both; animation-delay: calc(var(--i) * 0.6s + 0.35s); }
+  .motion .flow.is-in .t-tick { animation: draw 0.4s ease-in-out both; }
+  .motion .flow-results.is-in .t-tick { animation-delay: 0.9s; }
+  .motion .flow-fees.is-in .t-tick { animation-delay: 2.2s; }
+}
+
+@media (prefers-reduced-motion: no-preference) and (max-width: 639.98px) {
+  .motion .flow-fees.is-in .link { animation-name: grow-y; }
+}
+
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }

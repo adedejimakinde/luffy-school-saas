@@ -47,7 +47,7 @@ rebuilt, not repaired (last section).
 The `*` record covers `sunrise-demo` and `harbour-demo`, and any school added
 later. Leave the cloud grey: Caddy holds the wildcard certificate itself, and an
 orange cloud would put Cloudflare's certificate and proxy in front of it. The apex
-record is there because `deploy.sh` checks `https://classnode.co/healthz/` through
+record is there because the public homepage answers on it (`docs/website.md`) and `deploy.sh` checks `https://classnode.co/healthz/` through
 Caddy (the certificate covers the apex too), and `app` is listed apart from `*`
 because it is the one name the portal must answer on.
 
