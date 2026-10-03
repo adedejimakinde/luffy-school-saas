@@ -19,7 +19,7 @@ internet ──443──▶ caddy ──http──▶ web (gunicorn) ──▶ d
 ```
 
 - **One domain setting.** `PLATFORM_DOMAIN` in `deploy/production.env` is the
-  only place the domain is named (planned value: `classnode.africa`). Django
+  only place the domain is named (`classnode.co`). Django
   derives the session cookie's domain, the allowed hosts and the default From
   address from it, and Caddy derives its certificate and site addresses from
   it. Every school is `<slug>.PLATFORM_DOMAIN`: the session cookie spans the

@@ -31,6 +31,8 @@ Cloudflare records (A `app` and A `*`, both **DNS only**), the token (Zone:DNS:E
 ## Not verified: nothing here has run on a real server
 - **No server, no Cloudflare, no Docker install was touched.** The token scope and the Docker apt steps are from
   those tools' documentation. The first real run is the test; fix the doc in the same change.
+- **Superseded by the domain PR:** `deploy/production.env` now says `classnode.co`, and `docs/demo-server.md`
+  uses `deploy.sh` and has the GHCR login steps. The two caveats below on the override and `deploy.sh` no longer apply.
 - **`PLATFORM_DOMAIN` is overridden on the server, not in the repo.** `deploy/production.env` still says
   `classnode.africa`; the doc relies on a later `env_file` winning (`secrets.env` for web/worker/db, `caddy.env` for
   Caddy) and has a `printenv` check. If compose does not behave that way, the fix is a server-side edit of
