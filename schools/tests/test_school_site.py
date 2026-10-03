@@ -71,6 +71,12 @@ class ThePageTests(SiteSetUp):
         self.assertIn(f'href="//{PORTAL}/sign-in/"', html)
         self.assertIn("Parent sign in", html)
 
+    def test_it_ends_with_a_staff_sign_in_link_to_the_portals_staff_door(self):
+        html = self.page().content.decode()
+
+        self.assertIn(f'<footer><a href="//{PORTAL}/staff-sign-in/">Staff sign in</a></footer>', html)
+        self.assertLess(html.index("Check a result"), html.index("Staff sign in"))
+
     def test_it_is_open_without_signing_in(self):
         self.assertEqual(self.page().status_code, 200)
 
