@@ -28,6 +28,7 @@ raises `Http404` there because these tables do not exist in the public schema.
 The page has a state for that answer.
 """
 
+from django.conf import settings
 from django.shortcuts import render
 
 import pages
@@ -39,6 +40,8 @@ from schools.hosts import portal_host
 MARKING_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/snapshots.js",
+    "web/offline.js",
     "marking/outbox.js",
     "marking/store.js",
     "marking/api.js",
@@ -55,6 +58,7 @@ def marking_page(request):
         {
             "import_map": pages.import_map(*MARKING_MODULES),
             "portal_host": portal_host(),
+            "time_zone": settings.TIME_ZONE,
         },
     )
 

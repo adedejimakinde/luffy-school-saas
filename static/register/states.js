@@ -12,6 +12,7 @@
  */
 
 import { esc } from "../web/html.js";
+import { copyNote } from "../web/snapshots.js";
 
 /**
  * Which class, and for which day.
@@ -26,10 +27,11 @@ import { esc } from "../web/html.js";
  * paper on Friday afternoon for Wednesday is ordinary office work — the case
  * `MARKING_ROLES` admits principals and administrators for.
  */
-export function choose({ term = "", classes = [], on = "" } = {}) {
+export function choose({ term = "", classes = [], on = "", asOf = null, timeZone, now } = {}) {
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Take a register</h1>",
+    copyNote(asOf, { timeZone, now }),
     `<p class="term">${esc(term)}</p>`,
     '<label for="on">Which day</label>',
     `<input id="on" name="on" type="date" data-field="on" value="${esc(on)}">`,
@@ -86,12 +88,20 @@ export function marking({
   taken = false,
   rows = [],
   absent = [],
+  asOf = null,
+  timeZone,
+  now,
 } = {}) {
   const tapped = new Set(absent);
   return [
     '<section class="state state-marking" data-state="marking">',
     `<h1>${esc(class_group)}</h1>`,
     `<p class="when">${esc(term)} &middot; ${esc(taken_on)}</p>`,
+    copyNote(asOf, {
+      timeZone,
+      now,
+      saying: "A register can only be sent when you are connected, so this one is to look at.",
+    }),
     taken
       ? '<p class="already">This register has already been taken. Submitting ' +
         "again amends it.</p>"
@@ -105,7 +115,7 @@ export function marking({
         return [
           `<li class="${isAbsent ? "absent" : "present"}">`,
           `<button type="button" data-action="toggle" data-child="${esc(id)}" `,
-          `aria-pressed="${isAbsent ? "true" : "false"}">`,
+          `aria-pressed="${isAbsent ? "true" : "false"}"${asOf ? " disabled" : ""}>`,
           esc(row.student) || "(no name on record)",
           `</button></li>`,
         ].join("");
@@ -113,7 +123,7 @@ export function marking({
       .join(""),
     "</ul>",
     `<p class="tally">${tapped.size} marked absent of ${rows.length}</p>`,
-    '<button type="button" class="submit" data-action="submit">Submit register</button>',
+    asOf ? "" : '<button type="button" class="submit" data-action="submit">Submit register</button>',
     '<button type="button" class="back" data-action="back">Another class</button>',
     "</section>",
   ].join("");

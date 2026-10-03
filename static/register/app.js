@@ -16,6 +16,15 @@
  * screen actually drew, which is what lets the answer name a child who joined
  * the group while it was open rather than silently marking them present.
  *
+ * ## It opens with no connection, from a copy it cannot send from
+ *
+ * `docs/offline.md` S5. The page comes from the service worker (`/sw.js`); the
+ * class list and rosters from a copy kept for this person at this school
+ * (`web/snapshots.js`). A copy is to look at: a register cannot be queued until
+ * S6, so the taps and the submit are off on a copy rather than offered and lost.
+ * A day nobody opened here shows the class's newest roster, every child
+ * unmarked, as the server answers for a register not yet taken.
+ *
  * ## Absence is what is tapped
  *
  * `absent_ids` is the submission and everybody else the screen showed is
@@ -23,6 +32,8 @@
  * real register rather than an empty one.
  */
 
+import { forgetPages, guardSignOut, registerWorker } from "../web/offline.js";
+import { indexedDbSnapshots, liveOrCopy } from "../web/snapshots.js";
 import { REFUSAL, fetchRegister, fetchWhere, takeRegister } from "./api.js";
 import * as states from "./states.js";
 
@@ -66,14 +77,14 @@ const A_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * The markup for one state of the page. Pure, so every branch is testable.
  */
-export function htmlFor(state, { portal = "" } = {}) {
+export function htmlFor(state, { portal = "", timeZone, now } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose(state);
+      return states.choose({ ...state, timeZone, now });
     case "no-term":
       return states.noTerm();
     case "marking":
-      return states.marking(state);
+      return states.marking({ ...state, timeZone, now });
     case "done":
       return states.done(state);
     case "refused":
@@ -108,6 +119,7 @@ export function fromWhere(answer, { on = "" } = {}) {
     term_id: answer.body.term_id,
     classes: answer.body.classes || [],
     on,
+    asOf: answer.asOf || null,
   };
 }
 
@@ -123,27 +135,113 @@ export function fromRegister(answer) {
     absent: (answer.body.rows || [])
       .filter((row) => row.status === "absent")
       .map((row) => row.student_membership_id),
+    asOf: answer.asOf || null,
   };
 }
 
-export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) {
+/** The name a register's copy is kept under: the class, the term and the day. */
+export function registerName(classGroupId, termId, on) {
+  return `register:${classGroupId}:${termId}:${on}`;
+}
+
+/**
+ * The class's roster from the newest copy of any of its days, as the register
+ * for `on` would read if nobody had taken it: every child unmarked. `null`
+ * when the phone has no copy of this class at all.
+ *
+ * It is not a copy of `on`'s register and does not pretend to be: `asOf` is the
+ * time the roster was seen, and `taken` is false.
+ */
+export function rosterFromEarlier(copies, on) {
+  const newest = copies[0];
+  if (!newest) return null;
+  return {
+    ok: true,
+    asOf: newest.at,
+    body: {
+      ...newest.body,
+      taken_on: on,
+      taken: false,
+      rows: (newest.body.rows || []).map((row) => ({ ...row, status: null })),
+    },
+  };
+}
+
+export async function mount(
+  root,
+  {
+    fetchImpl = fetch,
+    now = new Date(),
+    host = root.dataset.host || (typeof location !== "undefined" ? location.host : ""),
+    openSnapshots = indexedDbSnapshots,
+    whenOnline = (run) => {
+      if (typeof window !== "undefined") window.addEventListener("online", run);
+    },
+    signOutTarget = typeof document !== "undefined" ? document : null,
+    confirmFn = (text) => (typeof window !== "undefined" ? window.confirm(text) : true),
+    clearPages = forgetPages,
+  } = {},
+) {
   const portal = root.dataset.portal || "";
+  const timeZone = root.dataset.timeZone || undefined;
   let state = { step: "loading" };
   let where = null;
+  let owner = null;
+  let showingCopy = false;
+  // Set at sign-out: nothing is kept after that, however late an answer comes.
+  let leaving = false;
   let on = today(now, root.dataset.timeZone || SCHOOL_TIME_ZONE);
+  const shelf = await openSnapshots();
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal });
+    root.innerHTML = htmlFor(state, { portal, timeZone, now });
+  };
+
+  /** An answer from the server, or the phone's copy of the last one. */
+  const seen = async (name, answer) => {
+    const kept = await liveOrCopy({
+      shelf,
+      host,
+      userId: name === "where" ? null : owner,
+      name,
+      answer,
+      at: now.toISOString(),
+      keeping: !leaving,
+    });
+    if (kept.asOf) showingCopy = true;
+    return kept;
   };
 
   const load = async () => {
-    const answer = await fetchWhere({ fetchImpl });
-    if (answer.ok) where = answer.body;
+    showingCopy = false;
+    const answer = await seen("where", await fetchWhere({ fetchImpl }));
+    if (answer.ok) {
+      where = answer.body;
+      owner = answer.body.user_id;
+    }
     state = fromWhere(answer, { on });
     draw();
   };
 
   await load();
+
+  // The connection is back while a copy is on screen: ask the server again.
+  // Only from the class list — a register being looked at is left where it is,
+  // and the next "Another class" is live.
+  whenOnline(async () => {
+    if (showingCopy && state.step === "choose") await load();
+  });
+
+  // Nothing is queued here (that is slice S6), so signing out asks nothing.
+  guardSignOut(signOutTarget, {
+    waiting: async () => 0,
+    clear: async () => {
+      leaving = true;
+      if (shelf) await shelf.clearAll();
+      await clearPages();
+    },
+    confirmFn,
+  });
 
   // The day box. `states.choose()` has always drawn it, and until now nothing
   // listened, so a register for Wednesday entered on Friday was filed against
@@ -174,14 +272,20 @@ export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) 
     }
 
     if (action === "open") {
-      state = fromRegister(
-        await fetchRegister({
-          classGroupId: Number(hit.dataset.class),
-          termId: where.term_id,
+      const classGroupId = Number(hit.dataset.class);
+      const live = await fetchRegister({ classGroupId, termId: where.term_id, on, fetchImpl });
+      let answer = await seen(registerName(classGroupId, where.term_id, on), live);
+      if (!answer.ok && live.offline && owner !== null && shelf) {
+        const earlier = rosterFromEarlier(
+          await shelf.copiesBeginning(host, owner, `register:${classGroupId}:${where.term_id}:`),
           on,
-          fetchImpl,
-        }),
-      );
+        );
+        if (earlier) {
+          answer = earlier;
+          showingCopy = true;
+        }
+      }
+      state = fromRegister(answer);
       draw();
       return;
     }
@@ -226,5 +330,8 @@ export async function mount(root, { fetchImpl = fetch, now = new Date() } = {}) 
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("register");
-  if (root) mount(root);
+  if (root) {
+    registerWorker();
+    mount(root);
+  }
 }

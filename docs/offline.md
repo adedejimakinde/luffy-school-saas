@@ -1,7 +1,7 @@
 # Offline mode for teachers
 
-Status: **reviewed 2026-09-24 — the plan.** S1–S4 are being built; S5–S7 wait until
-after the pilot. The decisions taken in review are recorded directly below, and they
+Status: **reviewed 2026-09-24 — the plan.** S1–S4 are built. **S5 is built** (see "S5 as
+built", after the slices); S6 and S7 wait. The decisions taken in review are recorded directly below, and they
 override anything later in the document that reads as still open. Extends
 `docs/gradebook.md` and `docs/attendance.md`; changes neither's rules.
 
@@ -321,6 +321,68 @@ S1, S2, S4, S3.
 - **S6. The register's base and per-child merge (D4),** server side, then the register
   outbox.
 - **S7. Shared handsets (D7's second paragraph).**
+
+## S5 as built
+
+The service worker and the copies (D10, D8). What was built, and the choices that
+were the builder's rather than the plan's, so the review can overturn them.
+
+**The worker** is `sync/worker.js`, served as `/sw.js` by `sync.views.service_worker()`
+with a `CONFIG` in front of it: the two page paths, the static files they load, and a
+version. The files are derived from `MARKING_MODULES` and `REGISTER_MODULES` through
+`static()`, so a module added to either is kept without anybody remembering to, and
+the hashed names a deploy produces are the names the worker keeps. The bytes are the
+same at every school, on the portal and for a caller with no session (tested).
+Pages: network first, the last good copy when the network cannot be reached or the
+server errs; a 401/403/404 is shown as it was and not kept. Hashed static files:
+from the cache. Unhashed ones (development): network first. **`/api/` is never
+touched** (tested in Python against the source, and in JS against a fake cache).
+Pages live in their own cache (`luffy-pages`) because a rendered page holds the
+signed-in person's menu; the static files hold nobody's.
+
+**The copies are the page's, not the worker's** (a choice: D10 left it open). They are
+in IndexedDB (`luffy-snapshots`, `static/web/snapshots.js`), keyed by host, person and
+name, because a worker cannot tell whose answer it is looking at. What is kept: the
+list of papers/classes, each sheet opened, and for the register the class list and each
+register opened. A copy is offered **only** when the server could not be reached (a
+failed fetch or a 5xx); never over a 401/403/404. A copy is drawn with "This is a copy
+from yesterday 16:40. You are not connected." in the school's time zone. When the
+browser reports it is online the page asks again and replaces the copy.
+
+**Decisions to confirm**
+
+1. **Offline, the page shows the copy of whoever last opened that host online.**
+   Nothing offline can say who is signed in. On a phone two people share, that can be
+   the wrong person's copy. That is S7's gap, not closed here; sign-out narrows it.
+2. **Sign-out** (D8): on the marking and register pages the menu's Sign out is held for
+   a moment. If marks are waiting on the phone the teacher is told how many and that
+   signing out deletes them, and asked (the browser's own dialog). Then the copies, the
+   cached pages and the outbox are cleared and the form goes on. **A sign-out from any
+   other page (fees, timetable) clears nothing**; the copies go the next time one of
+   these pages is opened online and the server says nobody is signed in (the "signed
+   out" 401, not the "session expired" one, so a lapsed session still keeps its
+   outbox). Until then the worker's cached page can show the last person's menu.
+3. **The register is to look at while offline.** A register cannot be queued until S6,
+   so on a copy the taps and the submit are switched off rather than offered and lost.
+4. **A register for a day nobody opened here** shows the class's roster from the newest
+   copy of any day, every child unmarked and `taken` false, dated with when the roster
+   was seen. It is what the server answers for a register not yet taken. This is the
+   only way the morning register opens offline on a new day; it is also an invention
+   of this slice, not of D10.
+5. **No copies where the browser has no IndexedDB.** A copy in memory would not
+   survive the reload that needs it. (The outbox keeps its memory fallback.)
+6. `GET /api/attendance/where/` now names the caller (`user_id`), as the marking
+   screen's already did, so the register can key its copies by person.
+
+**Known limits.** The marking page is now 153.4 KB of the 153.6 KB budget
+(`tests/test_budget.py`): S6 and S7 will have to make room, not add to it. Sign-out
+from another page leaves the copies (above). Safari gets the existing warning and no
+more. **Verified in a real Chromium** (`tests/ui/offline.test.js`, in the `screens` job):
+the worker installs and controls the page, the page opens offline from the worker and
+the copy, a mark typed offline is queued in IndexedDB and sent when the connection
+returns, and sign-out leaves no copy. Not verified: a real Android phone, and the
+production path where static names are hashed (that path is tested against a fake
+cache only).
 
 ## Correctness requirements
 

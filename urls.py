@@ -42,12 +42,17 @@ from results.views import (
     checker_page,
     comments_page,
 )
+from sync.views import service_worker
 from timetable.views import timetable_page
 
 urlpatterns = [
     # A school's public page: its face to a family, on its own address.
     path("", school_site, name="school-site"),
     path("api/", api.urls),
+    # The offline worker: the marking and register pages kept for a phone with
+    # no connection. At the root because a worker's scope is where it is served
+    # from. Identical for every school and for a caller with no session.
+    path("sw.js", service_worker, name="service-worker"),
     # Development only (`settings.DEMO_SINGLE_HOST`): the two doors on a
     # school's own host too, so one forwarded port is the whole demo. A 404
     # unless `schools.demo.single_host()`. `urls_public.py` serves the real

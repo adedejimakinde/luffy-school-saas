@@ -60,9 +60,20 @@
  * now on the phone as well as on the screen, and are drawn back onto the sheet
  * when it is opened again (`withOutbox()`), until they land or the teacher
  * dismisses them.
+ *
+ * ## It opens with no connection, from a copy
+ *
+ * `docs/offline.md` S5. The page comes from the service worker (`/sw.js`); the
+ * list of papers and each sheet opened come from a copy the phone kept for this
+ * person at this school (`web/snapshots.js`), drawn with the time it was taken.
+ * Marks typed over a copy are queued as ever, with the version the copy showed,
+ * so the server still judges them. A copy is offered only when the server could
+ * not be reached, never over a refusal.
  */
 
 import { csrfToken } from "../web/http.js";
+import { forgetPages, guardSignOut, registerWorker } from "../web/offline.js";
+import { indexedDbSnapshots, liveOrCopy } from "../web/snapshots.js";
 import { REFUSAL, SAVE, fetchSheet, fetchWhere, sendQueued, whoIsSignedIn } from "./api.js";
 import {
   HELD,
@@ -82,14 +93,14 @@ import * as states from "./states.js";
 import { indexedDbStore, memoryStore } from "./store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "" } = {}) {
+export function htmlFor(state, { portal = "", timeZone, now } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose(state);
+      return states.choose({ ...state, timeZone, now });
     case "no-term":
       return states.noTerm();
     case "sheet":
-      return states.sheet({ ...state, portal });
+      return states.sheet({ ...state, portal, timeZone, now });
     case REFUSAL.NOT_A_MARKER:
       return states.notAMarker(state);
     case REFUSAL.WRONG_HOST:
@@ -113,13 +124,13 @@ export function htmlFor(state, { portal = "" } = {}) {
 export function fromWhere(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
   if (!answer.body.term_id) return { step: "no-term" };
-  return { step: "choose", ...answer.body };
+  return { step: "choose", ...answer.body, asOf: answer.asOf || null };
 }
 
 /** Turn a `SheetOut` into the marking screen. */
 export function fromSheet(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
-  return { step: "sheet", ...answer.body, notes: {}, kept: {}, session: null };
+  return { step: "sheet", ...answer.body, notes: {}, kept: {}, session: null, asOf: answer.asOf || null };
 }
 
 /**
@@ -223,6 +234,9 @@ export function dismiss(state, id) {
   delete kept[id];
   return { ...state, notes, kept };
 }
+
+/** The name a sheet's copy is kept under. */
+export const sheetName = ({ assessmentId, classGroupId }) => `sheet:${assessmentId}:${classGroupId}`;
 
 /** What the page says when the browser will not keep the outbox. */
 const VOLATILE =
@@ -413,6 +427,10 @@ export async function mount(
     fetchImpl = fetch,
     host = root.dataset.host || (typeof location !== "undefined" ? location.host : ""),
     openStore = indexedDbStore,
+    openSnapshots = indexedDbSnapshots,
+    signOutTarget = typeof document !== "undefined" ? document : null,
+    confirmFn = (text) => (typeof window !== "undefined" ? window.confirm(text) : true),
+    clearPages = forgetPages,
     userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "",
     schedule = (run, ms) => setTimeout(run, ms),
     whenOnline = (run) => {
@@ -423,6 +441,7 @@ export async function mount(
   } = {},
 ) {
   const portal = root.dataset.portal || "";
+  const timeZone = root.dataset.timeZone || undefined;
   let state = { step: "loading" };
   let where = null;
   let picked = { assessmentId: null, classGroupId: null };
@@ -437,9 +456,28 @@ export async function mount(
   let stale = false;
   let lastRefusal = null;
   let outboxName_ = null;
+  let shelf = null;
+  let showingCopy = false;
+  // Set at sign-out: nothing is kept after that, however late an answer comes.
+  let leaving = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal });
+    root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()) });
+  };
+
+  /** An answer from the server, or the phone's copy when it was not reached. */
+  const seen = async (name, answer) => {
+    const kept = await liveOrCopy({
+      shelf,
+      host,
+      userId: name === "where" ? null : owner,
+      name,
+      answer,
+      at: new Date(now()).toISOString(),
+      keeping: !leaving,
+    });
+    if (kept.asOf) showingCopy = true;
+    return kept;
   };
 
   /**
@@ -483,7 +521,8 @@ export async function mount(
 
   const openSheet = async () => {
     if (!picked.assessmentId || !picked.classGroupId) return;
-    const answer = await fetchSheet({ ...picked, fetchImpl });
+    showingCopy = false;
+    const answer = await seen(sheetName(picked), await fetchSheet({ ...picked, fetchImpl }));
     if (!answer.ok) {
       state = fromSheet(answer);
       draw();
@@ -499,10 +538,29 @@ export async function mount(
    * again after the next drain.
    */
   const refreshSheet = async () => {
-    const answer = await fetchSheet({ ...picked, fetchImpl });
-    if (!answer.ok || state.step !== "sheet") return false;
+    const before = showingCopy;
+    const answer = await seen(sheetName(picked), await fetchSheet({ ...picked, fetchImpl }));
+    // A copy would take the teacher's typing off the sheet on screen.
+    if (answer.asOf) showingCopy = before;
+    if (!answer.ok || answer.asOf || state.step !== "sheet") return false;
+    showingCopy = false;
     await drawSheet(answer);
     return true;
+  };
+
+  /** The connection is back while a copy is shown: draw the server's answer. */
+  const comeBack = async () => {
+    if (!showingCopy) return;
+    const answer = await seen("where", await fetchWhere({ fetchImpl }));
+    if (!answer.ok || answer.asOf) return;
+    where = answer.body;
+    showingCopy = false;
+    if (picked.assessmentId && picked.classGroupId) {
+      await openSheet();
+    } else {
+      state = fromWhere(answer);
+      draw();
+    }
   };
 
   /**
@@ -617,7 +675,8 @@ export async function mount(
     });
   };
 
-  const whereAnswer = await fetchWhere({ fetchImpl });
+  shelf = await openSnapshots();
+  const whereAnswer = await seen("where", await fetchWhere({ fetchImpl }));
   if (whereAnswer.ok) {
     where = whereAnswer.body;
     owner = where.user_id;
@@ -720,7 +779,24 @@ export async function mount(
   // Whatever an earlier page load left queued goes now, if it can — after the
   // listeners, not before: a drain waits on the network, and a tap made while
   // it waited would land on a page with nothing listening for it.
-  whenOnline(() => kick());
+  // The queue goes first, then the page asks what the server says now.
+  whenOnline(async () => {
+    await kick();
+    await comeBack();
+  });
+
+  // Signing out discards marks on purpose, so it asks first (D8).
+  guardSignOut(signOutTarget, {
+    waiting: async () => (outbox ? (await readOutbox()).length : 0),
+    clear: async () => {
+      leaving = true;
+      if (shelf) await shelf.clearAll();
+      if (outbox) await change(() => []);
+      await clearPages();
+    },
+    confirmFn,
+  });
+
   await kick();
 
   return state;
@@ -728,5 +804,8 @@ export async function mount(
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("marking");
-  if (root) mount(root);
+  if (root) {
+    registerWorker();
+    mount(root);
+  }
 }

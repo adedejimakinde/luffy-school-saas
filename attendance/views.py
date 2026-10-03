@@ -52,6 +52,8 @@ from schools.hosts import portal_host
 REGISTER_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/snapshots.js",
+    "web/offline.js",
     "register/api.js",
     "register/states.js",
     "register/app.js",
