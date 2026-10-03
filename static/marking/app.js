@@ -90,7 +90,7 @@ import {
   retryDelay,
 } from "./outbox.js";
 import * as states from "./states.js";
-import { indexedDbStore, memoryStore } from "./store.js";
+import { indexedDbStore, memoryStore, othersOf } from "../web/store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "", timeZone, now } = {}) {
@@ -481,11 +481,9 @@ export async function mount(
   };
 
   /**
-   * The browser stopped keeping the outbox — its database closed under the
-   * page, the disk full. Said, and not swallowed: the page carries on with
-   * the outbox in memory, which lasts as long as the page, and the warning
-   * says exactly that. What the database already held is sent by the next
-   * page load that can open it.
+   * The browser stopped keeping the outbox (database closed, disk full). Said:
+   * the page carries on with it in memory, and the warning says so. What the
+   * database held is sent by the next page load that can open it.
    */
   const keptInMemoryFromNowOn = (error) => {
     console.error("The marks outbox could not be kept.", error);
@@ -787,11 +785,17 @@ export async function mount(
 
   // Signing out discards marks on purpose, so it asks first (D8).
   guardSignOut(signOutTarget, {
-    waiting: async () => (outbox ? (await readOutbox()).length : 0),
+    // The registers waiting here count, and go, too.
+    waiting: async () => {
+      let n = outbox ? (await readOutbox()).length : 0;
+      for (const o of await othersOf(openStore, host, owner, outboxName_)) n += (await o.read()).length;
+      return n;
+    },
     clear: async () => {
       leaving = true;
       if (shelf) await shelf.clearAll();
       if (outbox) await change(() => []);
+      for (const o of await othersOf(openStore, host, owner, outboxName_)) await o.write([]);
       await clearPages();
     },
     confirmFn,

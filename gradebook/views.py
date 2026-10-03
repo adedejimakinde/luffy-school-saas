@@ -43,7 +43,7 @@ MARKING_MODULES = (
     "web/snapshots.js",
     "web/offline.js",
     "marking/outbox.js",
-    "marking/store.js",
+    "web/store.js",
     "marking/api.js",
     "marking/states.js",
     "marking/app.js",

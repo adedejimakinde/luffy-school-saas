@@ -1,25 +1,24 @@
 /**
- * Where the outbox is kept between page loads: IndexedDB, one record per
- * outbox (`outbox.js`, `outboxName()`).
- *
- * `docs/offline.md` D8. This is the first browser storage anything in
- * `static/` uses, and A6 is the risk it accepts: a lost phone holds the marks
- * its teacher had not yet sent, protected only by the phone's own lock. What is
- * kept is what the page would have sent — ids, numbers, versions — and nothing
- * it did not already show.
- *
- * One record per outbox rather than one per entry, so a change is one `put`
- * of the whole list and there is no moment at which half of it is written.
- * An outbox is a teacher's unsent marks for one school, tens of entries, not a
- * table.
- *
- * Both stores answer the same two calls, `read()` and `write(entries)`, and
- * nothing above them knows which it has. The memory one is what the tests
- * drive, and what the page falls back to when the browser will not open a
- * database — a private window, storage turned off — and says so.
+ * Where the outboxes are kept between page loads: IndexedDB, one record per
+ * outbox, a person's marks or registers at one host (`outboxesOf()`), so a
+ * change is one `put` of the whole list. `docs/offline.md` D8: the first browser
+ * storage in `static/`, and A6 is the risk it accepts; only what the page would
+ * have sent is kept. The memory store is what the tests drive and what a page
+ * falls back to when the browser will not open a database, and says so.
  */
 
+// The name predates the registers' outbox and stays: renaming it would strand
+// whatever a phone already holds.
 const DATABASE = "luffy-marks-outbox";
+
+/** The outboxes one person keeps at one host: marks first, then registers. */
+export const outboxesOf = (host, userId) => [`${host} ${userId}`, `${host} ${userId} register`];
+
+/** This person's other outboxes here, for sign-out to count and clear (D8). */
+export async function othersOf(openStore, host, userId, mine) {
+  const names = outboxesOf(host, userId).filter((name) => name !== mine);
+  return (await Promise.all(names.map((name) => openStore(name)))).filter(Boolean);
+}
 const OUTBOXES = "outboxes";
 
 /**

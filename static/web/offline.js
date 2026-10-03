@@ -32,7 +32,7 @@ export async function forgetPages({ caches = globalThis.caches } = {}) {
 
 /** What the warning says. */
 export function leavingNote(waiting) {
-  const marks = waiting === 1 ? "1 mark" : `${waiting} marks`;
+  const marks = waiting === 1 ? "1 mark or register" : `${waiting} marks or registers`;
   return (
     `${marks} on this phone ${waiting === 1 ? "has" : "have"} not been sent yet. ` +
     "Signing out deletes them. Sign out anyway?"

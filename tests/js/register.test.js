@@ -17,6 +17,7 @@ import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 
 const WHERE = {
+  user_id: 5,
   term_id: 7,
   term: "2025/2026 First term",
   classes: [
@@ -262,6 +263,7 @@ test("submitting sends absences and the roster the screen actually drew", async 
   const root = fakeRoot({ portal: "portal.example.test" });
   await mount(root, {
     now: new Date("2025-09-17T09:00:00Z"),
+    mint: () => "k-1",
     fetchImpl: serve([
       ["/api/attendance/where/", { status: 200, body: WHERE }],
       [
@@ -291,7 +293,11 @@ test("submitting sends absences and the roster the screen actually drew", async 
   await root.click({ "data-action": "toggle", "data-child": "1" });
   await root.click({ "data-action": "submit" });
 
-  assert.deepEqual(sent, [{ absent_ids: [1], shown_ids: [1, 2, 3] }]);
+  // With the base the screen showed (S6, D4: nobody marked yet) and the key
+  // that makes a resend land once (D3).
+  assert.deepEqual(sent, [
+    { absent_ids: [1], shown_ids: [1, 2, 3], base: { absent_ids: [], present_ids: [] }, key: "k-1" },
+  ]);
   assert.match(root.innerHTML, /Register taken/);
   assert.match(root.innerHTML, /2 present, 1 absent/);
 });

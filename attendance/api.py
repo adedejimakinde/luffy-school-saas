@@ -34,7 +34,7 @@ and wrong for a phone; the field is optional in the schema and the docstring on
 `TakeRegisterIn` says which of the two you are.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 from uuid import UUID
 
@@ -89,6 +89,16 @@ class RegisterOut(Schema):
     rows: List[RegisterRowOut]
 
 
+class RegisterBaseIn(Schema):
+    """What the teacher's screen showed, child by child (`docs/offline.md` D4).
+
+    A child in `shown_ids` and in neither list was shown unmarked.
+    """
+
+    absent_ids: List[int] = []
+    present_ids: List[int] = []
+
+
 class TakeRegisterIn(Schema):
     """What one submit sends.
 
@@ -108,6 +118,10 @@ class TakeRegisterIn(Schema):
     #: Minted by the device when it queued this register, and the same on every
     #: attempt at it. See `take()` for what it changes.
     key: Optional[UUID] = None
+    #: What the screen showed when the register was opened. With it, only the
+    #: children the teacher changed are written, and a child somebody else
+    #: changed since is a conflict (`services.take_register()`).
+    base: Optional[RegisterBaseIn] = None
 
 
 class RegisterTakenOut(Schema):
@@ -121,6 +135,25 @@ class RegisterTakenOut(Schema):
     appeared: List[int]
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: List[int]
+    #: With a base: not changed by the teacher, so not written.
+    untouched: List[int] = []
+    #: With a base: changed by the teacher, and already the school's answer.
+    already: List[int] = []
+    #: With a base: changed by somebody else since the teacher was shown it.
+    conflicts: List["RegisterConflictOut"] = []
+
+
+class RegisterConflictOut(Schema):
+    """One child, two answers. Statuses are "present", "absent" or null."""
+
+    student_membership_id: int
+    yours: str
+    was: Optional[str]
+    now: Optional[str]
+    since: Optional[datetime]
+
+
+RegisterTakenOut.model_rebuild()
 
 
 class MarkableClassOut(Schema):
@@ -391,6 +424,7 @@ def _take(request, group, term, on, payload):
             absent_ids=payload.absent_ids,
             shown_ids=payload.shown_ids,
             by=request.user,
+            base=_base_of(payload),
         )
     except services.NoRoster as exc:
         return 409, MessageOut(detail=str(exc))
@@ -404,7 +438,34 @@ def _take(request, group, term, on, payload):
         absent=taken.absent,
         appeared=taken.appeared,
         not_on_the_roster=taken.not_on_the_roster,
+        untouched=taken.untouched,
+        already=taken.already,
+        conflicts=[
+            RegisterConflictOut(
+                student_membership_id=c.student_membership_id,
+                yours=c.yours,
+                was=c.was,
+                now=c.now,
+                since=c.since,
+            )
+            for c in taken.conflicts
+        ],
     )
+
+
+def _base_of(payload):
+    """`payload.base` as `services.take_register()` takes it, or None.
+
+    Every child the screen showed has an entry; one in neither list was shown
+    unmarked. Without `shown_ids` the base names only the children it lists,
+    and the rest of the roster reads as shown unmarked.
+    """
+    if payload.base is None:
+        return None
+    base = {sid: None for sid in (payload.shown_ids or [])}
+    base.update({sid: services.AttendanceStatus.PRESENT.value for sid in payload.base.present_ids})
+    base.update({sid: services.AttendanceStatus.ABSENT.value for sid in payload.base.absent_ids})
+    return base
 
 
 @router.delete(

@@ -12,7 +12,7 @@
  */
 
 import { esc } from "../web/html.js";
-import { copyNote } from "../web/snapshots.js";
+import { asOfText, copyNote } from "../web/snapshots.js";
 
 /**
  * Which class, and for which day.
@@ -100,7 +100,7 @@ export function marking({
     copyNote(asOf, {
       timeZone,
       now,
-      saying: "A register can only be sent when you are connected, so this one is to look at.",
+      saying: "A register taken here is kept on this phone and sent when you are connected.",
     }),
     taken
       ? '<p class="already">This register has already been taken. Submitting ' +
@@ -115,7 +115,7 @@ export function marking({
         return [
           `<li class="${isAbsent ? "absent" : "present"}">`,
           `<button type="button" data-action="toggle" data-child="${esc(id)}" `,
-          `aria-pressed="${isAbsent ? "true" : "false"}"${asOf ? " disabled" : ""}>`,
+          `aria-pressed="${isAbsent ? "true" : "false"}">`,
           esc(row.student) || "(no name on record)",
           `</button></li>`,
         ].join("");
@@ -123,7 +123,7 @@ export function marking({
       .join(""),
     "</ul>",
     `<p class="tally">${tapped.size} marked absent of ${rows.length}</p>`,
-    asOf ? "" : '<button type="button" class="submit" data-action="submit">Submit register</button>',
+    '<button type="button" class="submit" data-action="submit">Submit register</button>',
     '<button type="button" class="back" data-action="back">Another class</button>',
     "</section>",
   ].join("");
@@ -162,6 +162,88 @@ export function done({
     '<button type="button" class="again" data-action="back">Another class</button>',
     "</section>",
   ].join("");
+}
+
+/**
+ * Taken with no connection: kept on the phone and sent when there is one
+ * (`docs/offline.md` S6). Said plainly, because a teacher who walks away
+ * believing it was sent has been told something untrue.
+ */
+export function kept({ class_group = "", taken_on = "" } = {}) {
+  return [
+    '<section class="state state-kept" data-state="kept">',
+    "<h1>Kept on this phone</h1>",
+    `<p>${esc(class_group)}, ${esc(taken_on)}. It has not been sent yet: it will be `,
+    "sent when you are connected, and this page will say if anything needs your answer.</p>",
+    '<button type="button" class="again" data-action="back">Another class</button>',
+    "</section>",
+  ].join("");
+}
+
+const said = { absent: "absent", present: "present" };
+
+/**
+ * Every register on this phone that has not landed, or landed with something
+ * to say (D5): drawn above the class list until it is sent or answered.
+ */
+export function waiting(entries = [], { timeZone, now, notTheAuthor = false, overdue = () => false } = {}) {
+  if (!entries.length) return "";
+  return [
+    '<section class="waiting" data-state="waiting">',
+    "<h2>Registers on this phone</h2>",
+    notTheAuthor
+      ? '<p class="not-the-author" role="alert">Somebody else is signed in on this browser now. ' +
+        "These registers were taken under another account and are sent only when it signs in again.</p>"
+      : "",
+    '<ul class="queued">',
+    entries.map((entry) => item(entry, { timeZone, now, late: overdue(entry) })).join(""),
+    "</ul>",
+    "</section>",
+  ].join("");
+}
+
+function item(entry, { timeZone, now, late }) {
+  const nameOf = (id) => esc((entry.names || {})[id] || `child ${id}`);
+  const which = `${esc(entry.classGroup || "A class")}, ${esc(entry.on)}`;
+  const held = entry.held;
+  const button = (action, label, child = null) =>
+    `<button type="button" data-action="${action}" data-entry="${esc(entry.id)}"` +
+    `${child === null ? "" : ` data-child="${esc(child)}"`}>${label}</button>`;
+  const lines = [];
+  if (!held) {
+    lines.push(`<p>${which}: not sent yet.${late ? " Taken more than seven days ago." : ""}</p>`);
+  } else if (held.kind !== "report") {
+    lines.push(
+      `<p class="problem" role="alert">${which}: not sent. ${esc(held.detail) || "The school refused it."}</p>`,
+      button("retry", "Try again"),
+      button("dismiss", "Dismiss"),
+    );
+  } else {
+    lines.push(`<p>${which}: sent.</p>`);
+    for (const c of held.conflicts) {
+      const school = c.now
+        ? `the school has them ${said[c.now]}${c.since ? `, marked ${esc(asOfText(c.since, { timeZone, now }))}` : ""}`
+        : "the school has no mark for them now";
+      lines.push(
+        `<p class="conflict" role="alert">You marked ${nameOf(c.student_membership_id)} ` +
+          `${said[c.yours]}; ${school}.</p>`,
+        button("keep-theirs", "Keep the school's", c.student_membership_id),
+        button("use-mine", "Use mine", c.student_membership_id),
+      );
+    }
+    if (held.appeared.length) {
+      lines.push(
+        `<p class="warn">Not marked, because they were not on the screen: ${held.appeared.map(nameOf).join(", ")}.</p>`,
+      );
+    }
+    if (held.notOnTheRoster.length) {
+      lines.push(
+        `<p class="warn">Marked absent but no longer in this class: ${held.notOnTheRoster.map(nameOf).join(", ")}.</p>`,
+      );
+    }
+    if (!held.conflicts.length) lines.push(button("dismiss", "Dismiss"));
+  }
+  return `<li>${lines.join("")}</li>`;
 }
 
 /** The API refused the submission and said why in a sentence for a person. */

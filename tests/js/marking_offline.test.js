@@ -13,7 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { mount, sheetName } from "../../static/marking/app.js";
-import { memoryStore } from "../../static/marking/store.js";
+import { memoryStore } from "../../static/web/store.js";
 import { forgetToken } from "../../static/web/http.js";
 import { memorySnapshots } from "./memory_snapshots.js";
 import { fakeRoot } from "./fake_dom.js";
@@ -240,7 +240,7 @@ test("signing out with marks waiting says how many, and deletes them only if the
     page.doc.form.submitted = 0;
     const declined = await open(server, mine, { confirmFn: (text) => (said.push(text), false) });
     await declined.doc.signOut();
-    assert.match(said[0], /2 marks on this phone have not been sent yet\. Signing out deletes them\./, server.host);
+    assert.match(said[0], /2 marks or registers on this phone have not been sent yet\. Signing out deletes them\./, server.host);
     assert.equal(declined.doc.form.submitted, 0, `${server.host}: declined, so still signed in`);
     assert.notEqual(await mine.snapshots.copy(server.host, KEMI, "where"), null, `${server.host}: and nothing cleared`);
     const kept = [...mine.outbox.values()].flat();
@@ -313,5 +313,20 @@ test("a copy never takes a teacher's number off the sheet on screen", async () =
 
     assert.match(page.root.innerHTML, /id="mark-2"[^>]*value="17"/, `${server.host}: still the teacher's number`);
     assert.doesNotMatch(page.root.innerHTML, /This is a copy/, `${server.host}: not put back to an older sheet`);
+  }
+});
+
+test("signing out from the marking page counts and clears the registers waiting too (S6)", async () => {
+  for (const server of servers()) {
+    const mine = phone();
+    const registers = `${server.host} ${KEMI} register`;
+    mine.outbox.set(registers, [{ id: "11:7:2025-09-17" }]);
+    const said = [];
+    const page = await open(server, mine, { confirmFn: (text) => (said.push(text), true) });
+
+    await page.doc.signOut();
+
+    assert.match(said[0], /^1 mark or register on this phone/, server.host);
+    assert.deepEqual(mine.outbox.get(registers), [], `${server.host}: cleared`);
   }
 });
