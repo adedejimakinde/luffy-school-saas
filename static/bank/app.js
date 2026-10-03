@@ -7,7 +7,17 @@
  * confirmation is refused with a sentence and the page stays up.
  */
 
-import { REFUSAL, connectAccount, fetchBanks, fetchState, fetchUnmatched, resolveAccount } from "./api.js";
+import {
+  REFUSAL,
+  connectAccount,
+  fetchBanks,
+  fetchClassChildren,
+  fetchClasses,
+  fetchState,
+  fetchUnmatched,
+  placePayment,
+  resolveAccount,
+} from "./api.js";
 import * as states from "./states.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
@@ -18,6 +28,10 @@ export function htmlFor(state, { portal = "" } = {}) {
       return states.form(state);
     case "confirm":
       return states.confirm(state);
+    case "place":
+      return states.place(state);
+    case "place-confirm":
+      return states.placeConfirm(state);
     case REFUSAL.NOT_ALLOWED:
       return states.notAllowed(state);
     case REFUSAL.WRONG_HOST:
@@ -46,14 +60,21 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const back = (note = null) => {
     state = { ...status, step: "status", note };
   };
+  // The list of payments that could not be matched, and whether this login may place them.
+  const readUnmatched = async () => {
+    const answer = await fetchUnmatched({ fetchImpl });
+    return {
+      unmatched: answer.ok ? answer.body.payments || [] : [],
+      mayPlace: answer.ok ? Boolean(answer.body.may_place) : false,
+    };
+  };
 
   if (onSchool) {
     const answer = await fetchState({ fetchImpl });
     if (answer.ok) {
       // The unmatched payments are read beside the status, and if they cannot
       // be read the page still shows the account: nothing is said about it.
-      const unmatched = await fetchUnmatched({ fetchImpl });
-      status = { ...answer.body, unmatched: unmatched.ok ? unmatched.body.payments || [] : [] };
+      status = { ...answer.body, ...(await readUnmatched()) };
       back();
     } else {
       state = fromRefusal(answer);
@@ -67,7 +88,33 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     const target = event.target && event.target.closest ? event.target.closest("[data-action]") : null;
     if (!target) return;
     const action = target.dataset.action;
-    if (action === "cancel") {
+    if (action === "place") {
+      // Choosing a child writes nothing: it reads the classes the bursar already reads.
+      const payment = (status.unmatched || []).find((p) => String(p.payment_id) === target.dataset.payment);
+      const classes = await fetchClasses({ fetchImpl });
+      if (!payment) {
+        back("That payment is not on the list any more.");
+      } else if (classes.refusal && classes.refusal !== REFUSAL.BROKEN) {
+        state = fromRefusal(classes);
+      } else if (!classes.ok) {
+        back("The classes could not be read. Try again.");
+      } else {
+        state = {
+          step: "place",
+          payment,
+          termId: classes.body.term_id,
+          classes: classes.body.classes || [],
+          classId: null,
+          children: [],
+          childId: null,
+          note: null,
+        };
+      }
+    } else if (action === "cancel-place") {
+      back();
+    } else if (action === "back-to-pick") {
+      state = { ...state, step: "place", note: null };
+    } else if (action === "cancel") {
       back();
     } else if (action === "back") {
       state = { step: "form", banks, values: state.account, note: null };
@@ -87,10 +134,70 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     draw();
   });
 
+  // The class and the child, when placing a payment. Choosing a class reads its children.
+  root.addEventListener("change", async (event) => {
+    const field = event.target && event.target.closest ? event.target.closest("[data-field]") : null;
+    if (!field || state.step !== "place") return;
+    if (field.dataset.field === "class") {
+      const classId = Number(field.value) || null;
+      let children = [];
+      if (classId) {
+        const answer = await fetchClassChildren({ classId, termId: state.termId, fetchImpl });
+        if (answer.ok) children = answer.body.children || [];
+        else if (answer.refusal && answer.refusal !== REFUSAL.BROKEN) {
+          state = fromRefusal(answer);
+          draw();
+          return;
+        } else {
+          state = { ...state, classId, children: [], childId: null, note: "That class could not be read. Try again." };
+          draw();
+          return;
+        }
+      }
+      state = { ...state, classId, children, childId: null, note: null };
+    } else if (field.dataset.field === "child") {
+      state = { ...state, childId: Number(field.value) || null, note: null };
+    }
+    draw();
+  });
+
   root.addEventListener("submit", async (event) => {
     const form = event.target;
     if (!form) return;
     if (event.preventDefault) event.preventDefault();
+
+    if (state.step === "place") {
+      // Review: which child. Writes nothing.
+      const childId = Number(form.child && form.child.value) || state.childId;
+      if (!childId) {
+        state = { ...state, note: "Choose the class and then the child." };
+      } else {
+        const child = state.children.find((c) => c.student_membership_id === childId) || {};
+        state = { ...state, step: "place-confirm", childId, child, note: null };
+      }
+      draw();
+      return;
+    }
+    if (state.step === "place-confirm") {
+      // The only write: the child, and the amount and reference as they were read back.
+      const answer = await placePayment({
+        paymentId: state.payment.payment_id,
+        studentId: state.childId,
+        amountKobo: state.payment.amount_kobo,
+        reference: state.payment.reference,
+        fetchImpl,
+      });
+      if (answer.ok) {
+        status = { ...status, ...(await readUnmatched()) };
+        back(`Placed on ${answer.body.placed.student}. It is in their account now.`);
+      } else if (answer.refusal) {
+        state = fromRefusal(answer);
+      } else {
+        state = { ...state, note: answer.note };
+      }
+      draw();
+      return;
+    }
 
     if (form.confirm === undefined) {
       // Step one: ask the bank whose account this is. Writes nothing.
@@ -120,7 +227,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       { fetchImpl },
     );
     if (answer.ok) {
-      status = { ...answer.body, unmatched: status ? status.unmatched : [] };
+      status = { ...status, ...answer.body };
       back();
     } else if (answer.refusal) {
       state = fromRefusal(answer);

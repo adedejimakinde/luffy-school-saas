@@ -7,7 +7,7 @@
  * shows the answer, and a refusal keeps the form and what was typed.
  */
 
-import { REFUSAL, addSchool, fetchSchools } from "./api.js";
+import { REFUSAL, addSchool, fetchSchools, fetchUnrouted } from "./api.js";
 import * as states from "./states.js";
 
 export function htmlFor(state) {
@@ -42,6 +42,9 @@ export function fieldsFrom(form) {
 export async function mount(root, { fetchImpl = fetch } = {}) {
   // A school's host answers the list with a 404, which is the wrong-host state.
   let state = fromList(await fetchSchools({ fetchImpl }));
+  // Payments no school owns: read only, and only where the schools were readable.
+  let unrouted = state.step === "main" ? await fetchUnrouted({ fetchImpl }) : [];
+  if (state.step === "main") state = { ...state, unrouted };
   const draw = () => {
     root.innerHTML = htmlFor(state);
   };
@@ -61,7 +64,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const result = await addSchool(fields, { fetchImpl });
       if (result.ok) {
         const list = fromList(await fetchSchools({ fetchImpl }));
-        state = list.step === "main" ? { ...list, made: result.body } : list;
+        state = list.step === "main" ? { ...list, made: result.body, unrouted } : list;
       } else if (result.refusal) {
         state = { step: result.refusal };
       } else {

@@ -20,6 +20,7 @@ a link for the operator to hand over. The link is a credential and is returned
 once, to platform staff, exactly as the command prints it once to a terminal.
 """
 
+from datetime import datetime
 from typing import List, Optional
 
 from django.db.models import Count, Q
@@ -30,7 +31,7 @@ from accounts.models import LIVE_STATUSES, Membership, Role
 from accounts.session import session_auth
 
 from .delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
-from .models import Domain, InvitationError, School
+from .models import Domain, InvitationError, School, UnroutedPayment
 from .onboarding import OnboardingError, create_school
 
 router = Router(auth=session_auth)
@@ -115,6 +116,41 @@ def _rows(schools):
 def _customers():
     """Every school that is a customer: the portal's own row is not one."""
     return list(School.objects.exclude(schema_name="public"))
+
+
+class UnroutedOut(Schema):
+    reference: str
+    amount_kobo: int
+    account_number: str
+    received_at: datetime
+
+
+class UnroutedListOut(Schema):
+    payments: List[UnroutedOut]
+
+
+@router.get("/unrouted/", response={200: UnroutedListOut, 403: MessageOut})
+def list_unrouted(request):
+    """Money Paystack confirmed for an account number no school owns, newest first.
+
+    Nobody's bursar can see these (`schools.UnroutedPayment` has no school), so
+    they are the platform's to look into. Read only: it is listed and never
+    placed, and platform staff cannot put it on a child, which is a school's books.
+    """
+    _portal_only(request)
+    if not _is_platform_staff(request):
+        return 403, MessageOut(detail=_NOT_YOURS)
+    return UnroutedListOut(
+        payments=[
+            UnroutedOut(
+                reference=p.reference,
+                amount_kobo=p.amount_kobo,
+                account_number=p.account_number,
+                received_at=p.received_at,
+            )
+            for p in UnroutedPayment.objects.order_by("-id")
+        ]
+    )
 
 
 @router.get("/schools/", response={200: SchoolListOut, 403: MessageOut})
