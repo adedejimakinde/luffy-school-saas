@@ -1,66 +1,38 @@
 /**
  * The marking screen: pick a paper and a class, then type marks.
  *
- * ## Save on blur, one mark per request
+ * ## One mark per request, saved on blur
  *
- * `gradebook/api.py` settled the shape and this is the other half of it. A
- * teacher marking thirty children does not fill in a form and press Save at
- * the bottom: they tab through thirty cells, and each has to save as it loses
- * focus — because the alternative is twenty minutes of marking lost with the
- * tab. So the unit of a write is one cell, and there is no bulk submit.
+ * A teacher tabs through thirty cells over twenty minutes, so the unit of a
+ * write is one cell and there is no bulk submit (the register next door is the
+ * opposite, and `attendance/api.py` says why). Each input carries the version it
+ * was drawn with and sends it back as `expected_version`; empty means "I was
+ * shown no mark", an insert. Every answer carries the new version and total, so
+ * a cell is redrawn from the response and not from a local sum.
  *
- * The opposite of the register next door, deliberately: a register is a few
- * taps and one submit, and `attendance/api.py` says why. Thirty conditional
- * PUTs would be wrong there; one bulk PUT would be wrong here.
+ * ## What did not land is kept, and shown, until the teacher says so
  *
- * ## The version travels with the cell
- *
- * Each input carries the version it was drawn with, and sends it back as
- * `expected_version`. Empty means "I was shown no mark", which the server
- * reads as an insert — so a cell that has never been marked cannot silently
- * overwrite one that has been marked since the sheet loaded.
- *
- * **Every answer carries the new version and total**, so the cell is redrawn
- * from the response rather than from a local guess. A page that recomputed the
- * total itself would be a second implementation of a sum the server already
- * did, free to disagree.
- *
- * ## A mark that did not land is kept, and shown, until the teacher says so
- *
- * `docs/offline.md` D5 and slice S2. Every answer that is not a save keeps the
- * value the teacher typed in `kept`, and it stays on screen until they save it
- * or dismiss it. Where it stays depends on what the teacher can do about it:
- *
- * - **in the box**, when typing again is the remedy: a number the server
- *   refused (422), a connection that failed, a session that ended. The last
- *   two also get **Try again**, which sends the kept value with the version
- *   the cell was drawn with. Replaying is safe; `test_session_expiry.py`
- *   pins that.
- * - **in the note**, when the box now belongs to somebody else's answer:
- *   a conflict (the box shows their mark, so overwriting is deliberate), a
- *   locked sheet (423) or a refusal of authority (403), where no box can be
- *   typed in at all.
- *
- * None of these replaces the sheet any more. It used to, for a failed
- * connection and for a lapsed session, and the typed mark went with it.
- *
- * ## A blur queues the mark; the outbox sends it
- *
- * `docs/offline.md` S3, and `outbox.js` has the rules. A blur puts the write in
- * this teacher's outbox for this school, drained at once when it can be, with
- * backoff when not, and when the browser is back online. Every answer is drawn
- * by `applySave()` as a direct save's was; what is not sent, or was refused,
- * is on the phone too and drawn back onto the sheet (`withOutbox()`) until it
- * lands or the teacher dismisses it.
+ * `docs/offline.md` D5, S2, S3. A blur queues the write in this teacher's outbox
+ * for this school (`outbox.js`), drained at once when it can be, with backoff
+ * when not, and when the browser is back online. Every answer is drawn by
+ * `applySave()`: **in the box** when typing again is the remedy (a refused
+ * number, a failed connection, a ended session; the last two also get Try
+ * again), **in the note** when the box now belongs to somebody else's answer (a
+ * conflict, a locked sheet, a refusal of authority). What is not sent, or was
+ * refused, is on the phone too and drawn back onto the sheet (`withOutbox()`).
  *
  * ## It opens with no connection, from a copy
  *
- * `docs/offline.md` S5. The page comes from the service worker (`/sw.js`); the
- * list of papers and each sheet opened come from a copy the phone kept for this
- * person at this school (`web/snapshots.js`), drawn with the time it was taken.
- * Marks typed over a copy are queued as ever, with the version the copy showed,
- * so the server still judges them. A copy is offered only when the server could
- * not be reached, never over a refusal.
+ * S5. The page comes from the service worker (`/sw.js`); the papers and each
+ * sheet opened from a copy kept for this person at this school
+ * (`web/snapshots.js`), drawn with the time it was taken. Marks typed over a copy
+ * are queued as ever, so the server still judges them. A copy is offered only
+ * when the server could not be reached, never over a refusal.
+ *
+ * ## A phone two people share
+ *
+ * S7. This page opens only its own person's outbox. Another's unsent work is
+ * said ("Held for Kemi") and never shown or sent (D7).
  */
 
 import { csrfToken } from "../web/http.js";
@@ -82,13 +54,13 @@ import {
   retryDelay,
 } from "./outbox.js";
 import * as states from "./states.js";
-import { indexedDbStore, memoryStore, othersOf } from "../web/store.js";
+import { heldElsewhere, indexedDbStore, memoryStore, othersOf, rememberWho } from "../web/store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
-export function htmlFor(state, { portal = "", timeZone, now } = {}) {
+export function htmlFor(state, { portal = "", timeZone, now, held = [] } = {}) {
   switch (state.step) {
     case "choose":
-      return states.choose({ ...state, timeZone, now });
+      return states.choose({ ...state, timeZone, now, held });
     case "no-term":
       return states.noTerm();
     case "sheet":
@@ -450,11 +422,12 @@ export async function mount(
   let outboxName_ = null;
   let shelf = null;
   let showingCopy = false;
+  let held = [];
   // Set at sign-out: nothing is kept after that, however late an answer comes.
   let leaving = false;
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()) });
+    root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()), held });
   };
 
   /** An answer from the server, or the phone's copy when it was not reached. */
@@ -673,6 +646,9 @@ export async function mount(
     outboxName_ = outboxName(host, owner);
     const kept = await openStore(outboxName_);
     outbox = openOutbox(kept || memoryStore(outboxName_));
+    // Another person's unsent work on this phone: said, never shown (D7).
+    await rememberWho(openStore, host, owner, where.full_name);
+    held = await heldElsewhere(openStore, host, owner);
     if (!kept) {
       warnings = [VOLATILE];
     } else if (storageMayBeCleared(userAgent)) {

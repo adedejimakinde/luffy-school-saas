@@ -76,6 +76,7 @@ export function registerSchool(host, { names, signedIn = KEMI, markers = [KEMI, 
         term_id: 7,
         term: "2025/2026 First term",
         user_id: server.signedIn,
+        full_name: { 5: "Kemi Bello", 6: "Tunde Cole" }[server.signedIn],
         classes: [{ id: 11, name: "JSS 1A", level: 1 }],
       });
     }

@@ -69,6 +69,12 @@ export async function indexedDbSnapshots({ indexedDB = globalThis.indexedDB } = 
 export function snapshotsOver({ get, put, list, remove }) {
   return {
     async keep(host, userId, name, body, at) {
+      // Somebody else opening this host online: what the last person was shown
+      // is not for the next one to find offline (D7). It can be fetched again.
+      const before = await get(lastId(host));
+      if (before && before.userId !== userId) {
+        await remove((record) => record.host === host && record.userId === before.userId);
+      }
       await put({ id: snapshotId(host, userId, name), host, userId, name, at, body });
       await put({ id: lastId(host), host, userId, name: null, at, body: null });
     },

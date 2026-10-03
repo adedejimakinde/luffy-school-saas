@@ -44,7 +44,7 @@
 import { csrfToken } from "../web/http.js";
 import { forgetPages, guardSignOut, registerWorker } from "../web/offline.js";
 import { indexedDbSnapshots, liveOrCopy } from "../web/snapshots.js";
-import { indexedDbStore, memoryStore, outboxesOf, othersOf } from "../web/store.js";
+import { heldElsewhere, indexedDbStore, memoryStore, outboxesOf, othersOf, rememberWho } from "../web/store.js";
 import { isOverdue, openOutbox, retryDelay } from "../marking/outbox.js";
 import { REFUSAL, fetchRegister, fetchWhere, sendQueued, whoIsSignedIn } from "./api.js";
 import {
@@ -101,12 +101,12 @@ const A_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * The markup for one state of the page. Pure, so every branch is testable.
  */
-export function htmlFor(state, { portal = "", timeZone, now, entries = [], notTheAuthor = false } = {}) {
+export function htmlFor(state, { portal = "", timeZone, now, entries = [], notTheAuthor = false, held = [] } = {}) {
   const queued = (list) =>
     states.waiting(list, { timeZone, now, notTheAuthor, overdue: (entry) => isOverdue(entry, now.getTime()) });
   switch (state.step) {
     case "choose":
-      return queued(entries) + states.choose({ ...state, timeZone, now });
+      return queued(entries) + states.choose({ ...state, timeZone, now, held });
     case "kept":
       return states.kept(state);
     case "no-term":
@@ -229,6 +229,7 @@ export async function mount(
   let outboxName = null;
   let entries = [];
   let notTheAuthor = false;
+  let held = [];
   let draining = null;
   let again = false;
   let failures = 0;
@@ -237,7 +238,7 @@ export async function mount(
   const answers = {};
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, timeZone, now, entries, notTheAuthor });
+    root.innerHTML = htmlFor(state, { portal, timeZone, now, entries, notTheAuthor, held });
   };
 
   const change = async (update) => {
@@ -334,6 +335,9 @@ export async function mount(
       outboxName = outboxesOf(host, owner)[1];
       outbox = openOutbox((await openStore(outboxName)) || memoryStore(outboxName));
       entries = await outbox.read();
+      // Another person's unsent work on this phone: said, never shown (D7).
+      await rememberWho(openStore, host, owner, where.full_name);
+      held = await heldElsewhere(openStore, host, owner);
     }
     state = fromWhere(answer, { on });
     draw();

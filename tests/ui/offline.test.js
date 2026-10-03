@@ -8,7 +8,8 @@
  * and the copy, say that it is a copy, queue a mark, and send it when the
  * connection is back. Signing out must leave no copy behind. And the register
  * (slice S6): taken with no connection, it is kept on the phone with its base
- * and sent when the connection is back.
+ * and sent when the connection is back. And a phone two people share (S7):
+ * what the first left unsent is said to the second, not shown and not sent.
  *
  * Runs against the same demo as `screens.test.js` (see its header), as Sunrise's
  * teacher. A service worker needs a secure context and `*.classnode.test` over
@@ -59,7 +60,7 @@ const queued = (where, suffix) =>
         open.onsuccess = () => {
           const all = open.result.transaction("outboxes").objectStore("outboxes").getAll();
           all.onsuccess = () =>
-            resolve(all.result.filter((r) => r.name.endsWith(suffix)).flatMap((r) => r.entries));
+            resolve(all.result.filter((r) => r.name.endsWith(suffix) && !r.name.endsWith(" who")).flatMap((r) => r.entries));
         };
       }),
     suffix,
@@ -143,17 +144,8 @@ describe("the marking page with no connection", () => {
     await cell.blur();
     await page.waitForSelector("text=Not sent yet");
 
-    const queued = await page.evaluate(
-      () =>
-        new Promise((resolve) => {
-          const open = indexedDB.open("luffy-marks-outbox");
-          open.onsuccess = () => {
-            const all = open.result.transaction("outboxes").objectStore("outboxes").getAll();
-            all.onsuccess = () => resolve(all.result.flatMap((record) => record.entries.map((e) => [e.value, e.expectedVersion])));
-          };
-        }),
-    );
-    assert.deepEqual(queued, [[typed, shown.version === "" ? null : Number(shown.version)]]);
+    const waiting = (await queued(page, "")).map((e) => [e.value, e.expectedVersion]);
+    assert.deepEqual(waiting, [[typed, shown.version === "" ? null : Number(shown.version)]]);
   });
 
   test("back online, the mark is sent and the copy gives way to the server's sheet", async () => {
@@ -270,3 +262,83 @@ describe("the register with no connection (S6)", () => {
   });
 });
 
+describe("a phone two people sign in to (S7)", () => {
+  let phone;
+  let tab;
+  let first;
+
+  // On the portal's own page: the login is a same-origin fetch there, and the
+  // cookie it sets is the one every school's host shares.
+  const signInAs = async (identifier) => {
+    const door = await phone.newPage();
+    await door.goto(`${PORTAL}/staff-sign-in/`);
+    const status = await door.evaluate(async ({ identifier, password }) => {
+      const { csrf_token: token } = await (await fetch("/api/csrf/")).json();
+      const response = await fetch("/api/login/", {
+        method: "POST",
+        headers: { "content-type": "application/json", "X-CSRFToken": token },
+        body: JSON.stringify({ identifier, password }),
+      });
+      return response.status;
+    }, { identifier, password: PASSWORD });
+    await door.close();
+    return status;
+  };
+
+  before(async () => {
+    phone = await signedIn("sunrise.teacher");
+    tab = await phone.newPage();
+  });
+
+  test("the first person takes a register offline and leaves it unsent", async () => {
+    await tab.goto(`${SUNRISE}/register/`);
+    await tab.waitForSelector('[data-action="open"]');
+    await tab.evaluate(() => navigator.serviceWorker.ready);
+    await tab.reload();
+    await tab.waitForSelector('[data-action="open"]');
+    await tab.locator('[data-action="open"]').first().click();
+    await tab.waitForSelector('[data-action="toggle"]');
+    first = await tab.locator('[data-action="toggle"]').first().getAttribute("data-child");
+
+    await phone.setOffline(true);
+    await tab.locator(`[data-action="toggle"][data-child="${first}"]`).click();
+    await tab.locator('[data-action="submit"]').click();
+    await tab.waitForSelector('h1:text-is("Kept on this phone")');
+    // The page is closed while offline, as a teacher closes it and walks away:
+    // an open one would send the register itself when the connection returned.
+    await tab.close();
+    await phone.setOffline(false);
+    tab = await phone.newPage();
+    await tab.goto(`${SUNRISE}/check/`);
+    assert.equal((await queued(tab, " register")).length, 1);
+  });
+
+  test("the second person signs in: the line is there, the register is not shown or sent", async () => {
+    assert.equal(await signInAs("sunrise.admin"), 200);
+    await tab.goto(`${SUNRISE}/register/`);
+    await tab.waitForSelector('[data-action="open"]');
+    await tab.waitForSelector(".held-for");
+
+    const page = await tab.locator("#register").innerHTML();
+    assert.match(page, /Held for Teacher Sunrise: 1 not sent yet\. Sign in as Teacher Sunrise to send it\./);
+    assert.doesNotMatch(page, /Kept on this phone|class="conflict"|Registers on this phone/);
+    await tab.waitForTimeout(1500);
+    assert.equal((await queued(tab, " register")).length, 1, "still on the phone, still the first person's");
+  });
+
+  test("the first person signs in again and it goes", async () => {
+    assert.equal(await signInAs("sunrise.teacher"), 200);
+    await tab.goto(`${SUNRISE}/register/`);
+    let left = null;
+    for (let i = 0; i < 60; i += 1) {
+      left = await queued(tab, " register");
+      if (!left.length) break;
+      await tab.waitForTimeout(250);
+    }
+    assert.deepEqual(left, [], "sent");
+  });
+
+  after(async () => {
+    await phone?.close();
+  });
+});

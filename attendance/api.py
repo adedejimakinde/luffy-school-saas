@@ -200,6 +200,9 @@ class WhereToMarkOut(Schema):
     #: that person's name (`docs/offline.md` D8). The caller's own id and
     #: nobody else's, as the marking screen's `/where/` has it.
     user_id: int
+    #: The caller's own name, so a shared phone can say whose work it holds
+    #: (`docs/offline.md` D7). Nobody else's.
+    full_name: str = ""
 
 
 class MessageOut(Schema):
@@ -315,6 +318,7 @@ def where_to_mark(request):
             for group in ClassGroup.objects.filter(is_active=True)
         ],
         user_id=request.user.pk,
+        full_name=request.user.full_name,
     )
 
 
