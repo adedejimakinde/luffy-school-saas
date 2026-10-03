@@ -77,6 +77,24 @@ SITE_URLCONF = "urls_site"
 #: processes the way `accounts.throttling` explains a cache would not.
 DEMO_REQUESTS_PER_HOUR = int(os.environ.get("DEMO_REQUESTS_PER_HOUR", 5))
 
+#: **Development only: the whole demo through one host.** A Codespace forwards
+#: one port, which is one hostname, so the portal and a school cannot both be
+#: reached. With this on, that one host (a school's `Domain` row) also answers
+#: the two sign-in pages and the sign-in API, which are otherwise the portal's
+#: alone (`urls_public.py`, `api._portal_only()`). `schools.demo.single_host()`
+#: is the question every caller asks, and it asks `DEBUG` too.
+#:
+#: **Impossible with `DEBUG` off, twice over.** Setting it there stops the
+#: process starting, below, so a production environment that carries it by
+#: accident fails loudly instead of serving a sign-in door on every school's
+#: host; and `single_host()` re-checks `DEBUG` at each request.
+DEMO_SINGLE_HOST = os.environ.get("DEMO_SINGLE_HOST", "0") == "1"
+if DEMO_SINGLE_HOST and not DEBUG:
+    raise ImproperlyConfigured(
+        "DEMO_SINGLE_HOST=1 needs DJANGO_DEBUG=1. It puts the sign-in doors on a "
+        "school's own host, which production must never do."
+    )
+
 # **The `Domain` table is the real allowlist**, which is why this could be `*`
 # for as long as it was. `TenantMainMiddleware` resolves every request's host
 # against `schools.Domain` and raises `Http404` for one it does not recognise,
@@ -278,6 +296,16 @@ if TLS_TERMINATED_BY_PROXY:
     SECURE_SSL_REDIRECT = True
     SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", 60 * 60 * 24))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+
+#: A Codespace's forwarded port is HTTPS at its edge and plain HTTP to the
+#: server, so a browser's `https://` Origin would fail CSRF's same-origin check
+#: on every sign-in. Trusted only in the single-host demo, and only that
+#: platform's own domain.
+if DEMO_SINGLE_HOST:
+    CSRF_TRUSTED_ORIGINS = [
+        "https://*."
+        + os.environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev")
+    ]
 
 #: `security.W021` is "HSTS preload is off". Preloading ships the domain inside
 #: every browser and needs a year's max-age first; it cannot be taken back on
