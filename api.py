@@ -254,6 +254,11 @@ class SchoolOut(Schema):
     slug: str
     name: str
     host: Optional[str] = None
+    #: Development's single-host demo (`settings.DEMO_SINGLE_HOST`) only: every
+    #: link to this school is a path on the host the page is already on, never
+    #: `//host/path`. Behind a forwarded port the `Domain` row's name is not one
+    #: the browser can reach. Always false outside that mode.
+    path_only: bool = False
 
     #: May this login take a register at this school? The **same predicate the
     #: route enforces** — `attendance.services.can_mark_attendance()`, which is
@@ -459,6 +464,7 @@ def _schools_of(user, *, parent_scoped=False):
             slug=school.slug,
             name=school.name,
             host=hosts.get(school.pk),
+            path_only=single_host(),
             may_take_a_register=not parent_scoped and school.pk in markers,
             may_see_absences=not parent_scoped and school.pk in absence_readers,
             may_see_fees=not parent_scoped and school.pk in book_readers,

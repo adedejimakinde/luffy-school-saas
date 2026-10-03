@@ -89,6 +89,11 @@ DEMO_REQUESTS_PER_HOUR = int(os.environ.get("DEMO_REQUESTS_PER_HOUR", 5))
 #: accident fails loudly instead of serving a sign-in door on every school's
 #: host; and `single_host()` re-checks `DEBUG` at each request.
 DEMO_SINGLE_HOST = os.environ.get("DEMO_SINGLE_HOST", "0") == "1"
+
+#: Trusted in the single-host demo only, where a Codespace forwards the
+#: browser's name in `X-Forwarded-Host` and hands Django `Host: localhost:8000`.
+#: Anywhere else that header is whatever the client chose to send.
+USE_X_FORWARDED_HOST = DEMO_SINGLE_HOST
 if DEMO_SINGLE_HOST and not DEBUG:
     raise ImproperlyConfigured(
         "DEMO_SINGLE_HOST=1 needs DJANGO_DEBUG=1. It puts the sign-in doors on a "

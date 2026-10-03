@@ -24,4 +24,5 @@ DEMO_SINGLE_HOST=1 python manage.py runserver 0.0.0.0:8000
 
 Open `https://$HOST/staff-sign-in/` from the Ports tab. Sign in as `sunrise.teacher`, `sunrise.principal`,
 `sunrise.bursar` or `sunrise.admin`; every password is `demo-pass-2026`. The host is Sunrise Demo Academy's, so
-Harbour Demo College's logins do not open there. Run `seed_demo` once per database; reset the database to start again.
+Harbour Demo College's logins do not open there. In this mode the server trusts the forwarder's `X-Forwarded-Host` and every link after
+sign-in is a path on that host, so nothing sends you to `localhost`. Run `seed_demo` once per database; reset the database to start again.

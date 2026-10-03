@@ -134,7 +134,7 @@ export function schools({ full_name = "", schools: list = [] } = {}) {
         // `hostHref()` is the one place the `//host/path` rule lives now; the
         // sentence for a school it cannot link stays here, because the staff
         // landing's reasons for not linking a school are not this one.
-        const href = hostHref(school.host, "/cards/");
+        const href = hostHref(school.host, "/cards/", { pathOnly: Boolean(school.path_only) });
         return href
           ? `<li><a href="${href}">${esc(school.name)}</a></li>`
           : `<li>${esc(school.name)} <span class="blank">` +

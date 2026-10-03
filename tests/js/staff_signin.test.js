@@ -467,3 +467,27 @@ test("the timetable is linked iff the login may read it there", () => {
   assert.doesNotMatch(html, /st-marys\.example\.test\/timetable\//);
   assert.equal(html.match(/\/timetable\//g).length, 1);
 });
+
+// -- the development single-host demo ------------------------------------------
+
+test("in the single-host demo every link on the landing is a path on this host", async () => {
+  const { landed: landing } = await import("../../static/staff-signin/states.js");
+  for (const host of ["sunrise-8000.app.github.dev", "localhost"]) {
+    const html = landing({
+      full_name: "Ada",
+      schools: [{ name: "Sunrise", host, path_only: true, may_take_a_register: true, may_see_timetable: true }],
+    });
+    assert.match(html, /href="\/register\/"/, host);
+    assert.match(html, /href="\/timetable\/"/, host);
+    assert.doesNotMatch(html, /href="\/\//, `${host}: no //host link`);
+  }
+});
+
+test("outside the demo the landing still links by host", async () => {
+  const { landed: landing } = await import("../../static/staff-signin/states.js");
+  const html = landing({
+    full_name: "Ada",
+    schools: [{ name: "Sunrise", host: "sunrise.example.ng", may_take_a_register: true }],
+  });
+  assert.match(html, /href="\/\/sunrise\.example\.ng\/register\/"/);
+});
