@@ -3,7 +3,7 @@
 Classnode's own homepage, for a school that is not a customer yet. It lives on
 the bare platform domain (`SITE_HOST`, which is `PLATFORM_DOMAIN` unless set),
 and `www.` is the same site (django-tenants drops `www.` before it looks a host
-up). The legal pages join it in their own change.
+up). `/privacy/` and `/terms/` are on it too, and nothing else is.
 
 ## Where it answers, and where it does not
 
@@ -19,6 +19,29 @@ up). The legal pages join it in their own change.
 - **Deploying it needs nothing new.** The apex A record and the certificate
   already cover the bare domain (`docs/demo-server.md`); `migrate_schemas` adds
   the one table.
+
+## The privacy notice and the terms
+
+`website/templates/website/privacy.html` and `terms.html`, both drawn inside
+`legal.html`: the homepage's header and footer, one reading column, and a
+contents list at the top that matches the sections in order.
+
+- **Plain words for a parent**: short sentences (a test refuses one past 30
+  words), and the same writing rules as the homepage.
+- **The school is the controller and Classnode is the processor**, said in
+  those words near the top of the privacy notice. Classnode is the controller
+  only for demo bookings and its own security records.
+- **The NDPA basics, one section each**: what is collected, why, the legal
+  basis, where it is stored, who it is shared with (the school, the email
+  provider, Termii, Paystack, and the hosts), how long it is kept, children's
+  data and consent through the school, rights, complaints, contact.
+- **Every legal claim carries a visible `TODO: lawyer`**, and every fact still
+  to be filled in (RC number, registered address, server location, email provider,
+  periods, dates, invoicing) a `TODO` of its own. Nothing here is legal advice
+  until the lawyer has been through it.
+- The facts stated are the system's own: Hetzner, Backblaze B2 backups kept up
+  to 12 months, Sentry (EU) with personal data removed, Termii for SMS,
+  Paystack, payments that are reversed and never edited, one schema per school.
 
 ## The demo request form
 
@@ -87,11 +110,14 @@ A plain form post, CSRF-checked, that works with no script.
 
 ## What holds it
 
+- `website/tests/test_legal.py`: the two pages answer on the site host only,
+  contents match sections, the NDPA topics and the controller and processor
+  are there, the TODOs are there, the writing rules and sentence length hold.
 - `website/tests/test_homepage.py`: the hosts, the copy and the writing rules,
   the form, the 400 KB and 15 KB budgets, that no motion sits outside
   `no-preference` and nothing loops, and the pattern's contrast, worked out
   from the stylesheet.
-- `tests/ui/screens.test.js`: the homepage at 320, 360, 414, 768, 1024, 1280
+- `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 414, 768, 1024, 1280
   and 1920, photographed finished, and held to the layout above; and its motion
   (`the homepage's motion`) on a fake clock: the 6 seconds, the 400ms fade, the
   three holds, nothing moving under reduced motion, every animation once.

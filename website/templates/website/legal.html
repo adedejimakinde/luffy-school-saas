@@ -1,0 +1,23 @@
+{% extends "website/base.html" %}
+{% comment %}
+The privacy notice and the terms: the homepage's header and footer, one
+reading column, and a contents list at the top. Each page fills `heading`,
+`contents` (one `<li><a href="#id">` per section) and `body` (one
+`<section id>` per entry, in the same order; `website/tests/test_legal.py`
+holds the two lists to each other). Every legal claim and every fact still to
+be filled in carries a visible `.todo`.
+{% endcomment %}
+{% block main %}
+<article class="legal wrap">
+  <h1>{% block heading %}{% endblock %}</h1>
+  <nav class="legal-contents" aria-labelledby="contents-title">
+    <h2 id="contents-title">Contents</h2>
+    <ol>
+{% block contents %}{% endblock %}
+    </ol>
+  </nav>
+  <div class="legal-body">
+{% block body %}{% endblock %}
+  </div>
+</article>
+{% endblock %}

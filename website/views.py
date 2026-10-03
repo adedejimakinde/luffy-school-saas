@@ -1,4 +1,5 @@
-"""Classnode's public site: the homepage, on `settings.SITE_HOST` only.
+"""Classnode's public site, on `settings.SITE_HOST` only: the homepage, the
+privacy notice and the terms.
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
 one module it loads moves the slides and the fade-ups and is not needed to read
@@ -72,3 +73,15 @@ def homepage(request):
         },
         status=status,
     )
+
+
+@require_http_methods(["GET", "HEAD"])
+def privacy(request):
+    """The privacy notice. Plain words, every legal claim marked for the lawyer."""
+    return render(request, "website/privacy.html", {"portal_host": portal_host()})
+
+
+@require_http_methods(["GET", "HEAD"])
+def terms(request):
+    """The terms of use, on the same terms as `privacy`."""
+    return render(request, "website/terms.html", {"portal_host": portal_host()})

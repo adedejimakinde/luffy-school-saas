@@ -1,0 +1,163 @@
+{% extends "website/legal.html" %}
+{% block title %}Privacy notice: Classnode{% endblock %}
+{% block heading %}Privacy notice{% endblock %}
+{% block contents %}
+  <li><a href="#who">Who we are</a></li>
+  <li><a href="#roles">The school decides. We process.</a></li>
+  <li><a href="#collect">What we collect</a></li>
+  <li><a href="#why">Why we use it</a></li>
+  <li><a href="#basis">Our legal basis</a></li>
+  <li><a href="#stored">Where it is stored</a></li>
+  <li><a href="#shared">Who we share it with</a></li>
+  <li><a href="#kept">How long we keep it</a></li>
+  <li><a href="#children">Children's data and parents' consent</a></li>
+  <li><a href="#rights">Your rights</a></li>
+  <li><a href="#complain">How to complain</a></li>
+  <li><a href="#contact">Contact us</a></li>
+  <li><a href="#changes">Changes to this notice</a></li>
+{% endblock %}
+{% block body %}
+<section id="who">
+  <h2>Who we are</h2>
+  <p>Classnode is software that schools use to run results, fees, the register and messages to parents.</p>
+  <p>Classnode is run by Classnode, RC number <span class="todo">TODO: RC number.</span> Our address is <span class="todo">TODO: registered address.</span></p>
+  <p>This notice is for parents, students, school staff and anyone who books a demo with us. It uses the words "controller" and "processor" as the Nigeria Data Protection Act 2023 (NDPA) does. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="roles">
+  <h2>The school decides. We process.</h2>
+  <p><strong>Your child's school is the controller.</strong> The school decides what is recorded about its students, parents and staff, and what it is used for.</p>
+  <p><strong>Classnode is the processor.</strong> We store and handle that data for the school, on the school's instructions, and for nothing else.</p>
+  <p>So if you are a parent, a student or a member of staff, your first contact for anything about your data is the school. We will help the school answer you. <span class="todo">TODO: lawyer.</span></p>
+  <p>Each school signs a data processing agreement with us. <span class="todo">TODO: lawyer to draft the agreement and confirm it exists before launch.</span></p>
+  <p>Classnode is the controller only for the details you give us when you book a demo, and for the records we keep to run and secure the service. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="collect">
+  <h2>What we collect</h2>
+  <p>The school enters most of this. We do not ask children for it directly.</p>
+  <h3>About students</h3>
+  <ul>
+    <li>Name, admission number, class and the terms they were in each class.</li>
+    <li>Marks, grades, positions, teachers' remarks and released report cards.</li>
+    <li>Attendance: present, absent or late, by day.</li>
+    <li>Fees: what was billed, paid, discounted or reversed, and the child's own bank account number for fees.</li>
+  </ul>
+  <h3>About parents and guardians</h3>
+  <ul>
+    <li>Name, phone number and email address, and which children they are linked to.</li>
+    <li>The sign-in codes we send them, and when they were used.</li>
+    <li>Payments made into their child's fee account: the amount, the date and the bank's reference.</li>
+  </ul>
+  <h3>About school staff</h3>
+  <ul>
+    <li>Name, email address or phone number, role at the school, and a password stored only as a secure hash.</li>
+    <li>What they did in Classnode where it matters later: who entered a mark, who released a result, who recorded or reversed a payment.</li>
+  </ul>
+  <h3>About everyone who uses the service</h3>
+  <ul>
+    <li>The network address a request came from, and failed sign-in attempts, to stop people guessing passwords and codes.</li>
+    <li>A cookie that keeps you signed in. We use no advertising or tracking cookies.</li>
+    <li>Error reports when something breaks. We remove personal data from these before they are sent.</li>
+  </ul>
+  <h3>When you book a demo</h3>
+  <ul>
+    <li>Your name, school name, phone number, email address if you give it, number of students, and the network address the request came from.</li>
+  </ul>
+</section>
+
+<section id="why">
+  <h2>Why we use it</h2>
+  <ul>
+    <li>To produce results and report cards, and show them to the right parents.</li>
+    <li>To record fees and payments, put each payment on the right child's record, and send receipts.</li>
+    <li>To keep the register, and email a parent when their child is absent.</li>
+    <li>To send parents and staff sign-in codes, invitations and messages the school chooses to send.</li>
+    <li>To send the school's proprietor a daily summary of what came in and what is still owed.</li>
+    <li>To keep the service secure and working, and to fix errors.</li>
+    <li>To call you back when you book a demo.</li>
+  </ul>
+  <p>We do not sell personal data. We do not use it for advertising. We do not use it to train software. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="basis">
+  <h2>Our legal basis</h2>
+  <p>For school records, the school sets the legal basis, because the school is the controller. For most records this is expected to be the school's legitimate interest or its duty to educate, and for some it is consent from a parent. <span class="todo">TODO: lawyer to state the bases under section 25 of the NDPA.</span></p>
+  <p>We process school records because our contract with the school tells us to. <span class="todo">TODO: lawyer.</span></p>
+  <p>For security records, our legal basis is our legitimate interest in keeping the service and its users safe. <span class="todo">TODO: lawyer.</span></p>
+  <p>For demo bookings, our legal basis is your request that we call you. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="stored">
+  <h2>Where it is stored</h2>
+  <p>The service runs on a server rented from Hetzner, in <span class="todo">TODO: country and city of the server.</span></p>
+  <p>Encrypted backups are kept with Backblaze B2, in <span class="todo">TODO: B2 region.</span> Error reports go to Sentry, in the European Union.</p>
+  <p>This means data leaves Nigeria. <span class="todo">TODO: lawyer to state the basis for transfer under Part VIII of the NDPA, and any filing it needs.</span></p>
+  <p>Each school's records are kept in a separate part of the database. Staff at one school cannot see another school's records. Connections to the service are encrypted.</p>
+</section>
+
+<section id="shared">
+  <h2>Who we share it with</h2>
+  <ul>
+    <li><strong>The school.</strong> It is the school's data. Its staff see what their role allows.</li>
+    <li><strong>Parents.</strong> A parent sees their own children's released report cards and fee accounts, and nobody else's.</li>
+    <li><strong>Our email provider</strong>, <span class="todo">TODO: name.</span> It delivers emails: codes, receipts, absence emails and summaries.</li>
+    <li><strong>Our SMS provider</strong>, Termii. It delivers sign-in codes and messages by text.</li>
+    <li><strong>Paystack.</strong> It creates each child's fee account number and tells us when a payment arrives. Paystack is regulated by the Central Bank of Nigeria and has its own privacy notice. <span class="todo">TODO: lawyer.</span></li>
+    <li><strong>Hetzner, Backblaze and Sentry</strong>, who host the service, its backups and its error reports.</li>
+    <li><strong>The authorities</strong>, only when the law requires it. <span class="todo">TODO: lawyer.</span></li>
+  </ul>
+  <p>Each provider handles data only to do its job for us, under a written agreement. <span class="todo">TODO: lawyer to confirm each agreement.</span></p>
+</section>
+
+<section id="kept">
+  <h2>How long we keep it</h2>
+  <p>We keep school records for as long as the school uses Classnode. <span class="todo">TODO: lawyer and owner to set how long records are kept after a school leaves.</span></p>
+  <p>Released report cards and payment records are never edited. A mistake is reversed with a reason, and both stay on record. This is so a result or a payment says the same thing years later. <span class="todo">TODO: lawyer.</span></p>
+  <p>Backups are kept for up to 12 months, then deleted. <span class="todo">TODO: confirm once backups are running.</span></p>
+  <p>Demo bookings are kept for <span class="todo">TODO: period.</span></p>
+  <p>A count of failed sign-ins covers only the last few minutes.</p>
+</section>
+
+<section id="children">
+  <h2>Children's data and parents' consent</h2>
+  <p>Most of the people in Classnode's records are children. We take that seriously.</p>
+  <p>We do not collect data from children directly. The school enters it.</p>
+  <p>The school is responsible for having a parent's or guardian's consent where the law requires it. <span class="todo">TODO: lawyer to confirm what section 31 of the NDPA requires and how the school records consent.</span></p>
+  <p>A parent sees only their own children. A student who has their own sign-in sees only their own report cards. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="rights">
+  <h2>Your rights</h2>
+  <p>Under the NDPA you can: <span class="todo">TODO: lawyer to confirm this list.</span></p>
+  <ul>
+    <li>ask what data is held about you or your child, and get a copy;</li>
+    <li>ask for wrong data to be corrected;</li>
+    <li>ask for data to be deleted, or its use to be limited;</li>
+    <li>object to some uses of it;</li>
+    <li>withdraw consent you gave;</li>
+    <li>ask for your data in a form you can take elsewhere.</li>
+  </ul>
+  <p>Ask your school first. The school decides, and we will help it answer within the time the law sets. <span class="todo">TODO: lawyer to state the time.</span></p>
+  <p>Some records cannot be deleted while the school must keep them, such as payment records. <span class="todo">TODO: lawyer.</span></p>
+</section>
+
+<section id="complain">
+  <h2>How to complain</h2>
+  <p>Tell your school first. You can also write to us, using the details below.</p>
+  <p>You can complain to the Nigeria Data Protection Commission. <span class="todo">TODO: lawyer to add the Commission's current contact details.</span></p>
+</section>
+
+<section id="contact">
+  <h2>Contact us</h2>
+  <p>Email: <a href="mailto:hello@classnode.co">hello@classnode.co</a></p>
+  <p>Post: <span class="todo">TODO: registered address.</span></p>
+  <p>Our Data Protection Officer: <span class="todo">TODO: name, or whether one is required.</span></p>
+</section>
+
+<section id="changes">
+  <h2>Changes to this notice</h2>
+  <p>If we change this notice, we will change the date below. If a change matters, we will tell the schools first. <span class="todo">TODO: lawyer.</span></p>
+  <p>Last updated: <span class="todo">TODO: date.</span></p>
+</section>
+{% endblock %}

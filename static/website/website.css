@@ -475,3 +475,37 @@ body.site > main {
 @keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
+/* ------------------------------------------------------------------------ */
+/* The privacy notice and the terms: one reading column                      */
+/* ------------------------------------------------------------------------ */
+
+.legal { padding: 48px 0 72px; }
+.legal > * { max-width: 760px; }
+.legal h1 {
+  margin: 0 0 32px;
+  font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.legal-contents {
+  margin: 0 0 48px;
+  padding: 24px;
+  background: var(--bg);
+  border-radius: var(--radius-card);
+}
+.legal-contents h2 { margin: 0 0 8px; color: var(--brand); font-size: 1rem; }
+.legal-contents ol { margin: 0; padding-left: 1.5em; }
+.legal-contents li { font-variant-numeric: tabular-nums; }
+.legal-contents a { display: inline-flex; align-items: center; min-height: var(--control); }
+@media (min-width: 840px) {
+  .legal-contents ol { columns: 2; column-gap: 40px; }
+  .legal-contents li { break-inside: avoid; }
+}
+.legal-body section { padding: 8px 0 24px; scroll-margin-top: 24px; }
+.legal-body section + section { border-top: 1px solid var(--divider); padding-top: 32px; }
+.legal-body h2 { margin: 0 0 16px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); letter-spacing: -0.01em; }
+.legal-body h3 { margin: 24px 0 8px; font-size: 1.0625rem; }
+.legal-body p, .legal-body li { font-size: 1.0625rem; line-height: 1.65; }
+.legal-body ul { margin: 0 0 16px; padding-left: 1.25em; }
+.legal-body li + li { margin-top: 6px; }
