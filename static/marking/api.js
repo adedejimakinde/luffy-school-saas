@@ -78,12 +78,18 @@ async function read(url, fetchImpl) {
   try {
     answer = await getJson(url, { fetchImpl });
   } catch (error) {
-    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+    // `offline`: no answer at all, the one case a copy may stand in (snapshots.js).
+    return { ok: false, refusal: REFUSAL.BROKEN, offline: true, body: { detail: String(error) } };
   }
   if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+  const refusal = refusalFor(answer.status, answer.body);
   return {
     ok: false,
-    refusal: refusalFor(answer.status, answer.body),
+    refusal,
+    // A 5xx is no answer either (D6); a 4xx is, and no copy goes over it.
+    ...(answer.status >= 500 ? { offline: true } : {}),
+    // Nobody signed in (not a lapsed session): their copies go too.
+    ...(refusal === REFUSAL.SIGNED_OUT ? { signedOut: true } : {}),
     body: answer.body || {},
   };
 }

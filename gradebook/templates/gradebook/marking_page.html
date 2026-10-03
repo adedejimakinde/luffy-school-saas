@@ -29,8 +29,13 @@ which is on the portal while this page is on a school's host. Empty where no
 portal domain is configured, and the state then renders its sentence without a
 link — `schools.hosts.portal_host()` states the rule.
 {% endcomment %}
+{% comment %}
+`data-time-zone` is the other: the zone the school's day is counted in, from
+`settings.TIME_ZONE`, so a copy of the sheet can say "yesterday 16:40" the way
+the school means yesterday.
+{% endcomment %}
 {% shell_open "marking" %}
-    <main id="marking" data-portal="{{ portal_host }}">
+    <main id="marking" data-portal="{{ portal_host }}" data-time-zone="{{ time_zone }}">
       {% comment %}
       What a reader sees if the module never loads. It must not be a form: a
       form without the module behind it would submit to this page, and here

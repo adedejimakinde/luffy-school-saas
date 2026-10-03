@@ -11,6 +11,7 @@
  */
 
 import { esc, numberOrBlank } from "../web/html.js";
+import { copyNote } from "../web/snapshots.js";
 
 /**
  * Which assessment, and which class.
@@ -22,10 +23,11 @@ import { esc, numberOrBlank } from "../web/html.js";
  * which students take which subject, which is issue #127 and why SSS electives
  * cannot be expressed at all.
  */
-export function choose({ term = "", assessments = [], classes = [] } = {}) {
+export function choose({ term = "", assessments = [], classes = [], asOf = null, timeZone, now } = {}) {
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Enter marks</h1>",
+    copyNote(asOf, { timeZone, now }),
     `<p class="term">${esc(term)}</p>`,
     "<p>Which paper?</p>",
     '<ul class="assessments">',
@@ -98,6 +100,9 @@ export function sheet({
   portal = "",
   warnings = [],
   notTheAuthor = false,
+  asOf = null,
+  timeZone,
+  now,
 } = {}) {
   return [
     '<section class="state state-sheet" data-state="sheet">',
@@ -109,6 +114,11 @@ export function sheet({
           "This sheet has left draft, so its marks cannot be changed here."}</p>`
       : "",
     session ? sessionEndedHere({ portal, expired: session === "expired" }) : "",
+    copyNote(asOf, {
+      timeZone,
+      now,
+      saying: "Marks you type are kept on this phone and sent when you are connected.",
+    }),
     warnings.map((warning) => `<p class="warning" role="note">${esc(warning)}</p>`).join(""),
     notTheAuthor
       ? '<p class="not-the-author" role="alert">Somebody else is signed in on this browser now. ' +

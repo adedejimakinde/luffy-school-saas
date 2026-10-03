@@ -163,6 +163,10 @@ class WhereToMarkOut(Schema):
     term_id: Optional[int]
     term: Optional[str]
     classes: List[MarkableClassOut]
+    #: Who is asking, so the page can keep its copy of what it was shown under
+    #: that person's name (`docs/offline.md` D8). The caller's own id and
+    #: nobody else's, as the marking screen's `/where/` has it.
+    user_id: int
 
 
 class MessageOut(Schema):
@@ -277,6 +281,7 @@ def where_to_mark(request):
             MarkableClassOut(id=group.pk, name=group.name, level=group.level)
             for group in ClassGroup.objects.filter(is_active=True)
         ],
+        user_id=request.user.pk,
     )
 
 

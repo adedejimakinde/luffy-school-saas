@@ -34,12 +34,17 @@ from results.views import (
     checker_page,
     comments_page,
 )
+from sync.views import service_worker
 from timetable.views import timetable_page
 
 urlpatterns = [
     # A school's public page: its face to a family, on its own address.
     path("", school_site, name="school-site"),
     path("api/", api.urls),
+    # The offline worker: the marking and register pages kept for a phone with
+    # no connection. At the root because a worker's scope is where it is served
+    # from. Identical for every school and for a caller with no session.
+    path("sw.js", service_worker, name="service-worker"),
     # The first staff surface on a school's host, and the mirror image of the
     # two sign-in pages: they are portal-only because a door needs a host that
     # lets somebody with no membership through, and this needs the one host
