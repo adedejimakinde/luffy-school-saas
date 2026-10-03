@@ -236,7 +236,7 @@ class TheDoorTests(LookSetUp):
         self.assertEqual(
             card,
             {"colour": "#143D8C", "default_colour": "#143D8C", "has_crest": False,
-             "crest_version": None, "initials": "SM"},
+             "crest_version": None, "initials": "SM", "template": "standard"},
         )
 
 

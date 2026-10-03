@@ -203,6 +203,7 @@ function cardLook(card, notes) {
   return [
     '<h2 id="report-card">Report card</h2>',
     "<p class=\"hint\">Your crest and one colour lead every report card. Both are optional.</p>",
+    templateForm(card.template || "standard", notes.template),
     '<div class="look-preview">',
     '<div class="look-head">',
     `<span class="mark">${mark}</span>`,
@@ -232,6 +233,53 @@ function cardLook(card, notes) {
     notes.crest ? `<p class="note" role="alert">${esc(notes.crest.detail)}</p>` : "",
     "</form>",
   ].join("");
+}
+
+/**
+ * Which card the school prints. Choosing the Ogun State card sets up its
+ * papers, traits and scale on the server; the sentence under the choice says
+ * what it did, and what it left alone because marks or ratings were in.
+ */
+function templateForm(template, note) {
+  const option = (value, label, hint) =>
+    `<label class="choice"><input type="radio" name="template" value="${value}"` +
+    `${template === value ? " checked" : ""}> <span><strong>${label}</strong> ` +
+    `<span class="hint">${hint}</span></span></label>`;
+  return [
+    `<form class="template-form${note && note.kind !== "applied" ? ` ${esc(note.kind)}` : ""}" data-form="template">`,
+    '<fieldset><legend>Report card template</legend>',
+    option("standard", "Standard", "The Classnode card."),
+    option(
+      "ogun",
+      "Ogun State",
+      "The MOEST/OGSERA report sheet. Sets up 1st Test 10, 2nd Test 10, Assignment 10 " +
+        "and Exam 70, the sheet&#39;s affective and psychomotor traits, and its rating key. " +
+        "Nothing already marked or rated is changed.",
+    ),
+    "</fieldset>",
+    '<button type="submit">Use this template</button>',
+    note && note.kind === "applied" ? applied(note.applied) : "",
+    note && note.kind !== "applied" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+function applied(a) {
+  if (!a) return '<p class="done" role="status">Saved. Report cards use the Standard template.</p>';
+  const list = (items) => items.map(esc).join(", ");
+  const lines = ['<div class="done" role="status"><p>Saved. Report cards use the Ogun State template.</p><ul>'];
+  if (a.assessments_set.length) lines.push(`<li>Papers set for ${list(a.assessments_set)}.</li>`);
+  if (a.assessments_kept.length) {
+    lines.push(`<li>Kept as they are, because marks are in: ${list(a.assessments_kept)}.</li>`);
+  }
+  if (a.traits_added.length) lines.push(`<li>Traits added: ${list(a.traits_added)}.</li>`);
+  if (a.traits_renamed.length) lines.push(`<li>Traits renamed: ${list(a.traits_renamed)}.</li>`);
+  if (a.traits_hidden.length) lines.push(`<li>Traits taken off the sheet: ${list(a.traits_hidden)}.</li>`);
+  if (a.traits_kept.length) {
+    lines.push(`<li>Kept on the sheet, because they have been rated: ${list(a.traits_kept)}.</li>`);
+  }
+  lines.push("</ul></div>");
+  return lines.join("");
 }
 
 /** Signed in, and not somebody who shapes this school. */

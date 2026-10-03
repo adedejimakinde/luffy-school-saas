@@ -341,6 +341,19 @@ LOWEST_RATING = 1
 HIGHEST_RATING = 5
 
 
+class CardTemplate(models.TextChoices):
+    """Which report card this school prints, and what it was set up with.
+
+    `STANDARD` is the One Blue card every school has had. `OGUN` is the Ogun
+    State MOEST/OGSERA report sheet (`docs/ogun-template.md`): choosing it
+    applies that sheet's assessments, traits and scale once
+    (`results.ogun.apply_presets()`), and the card prints in its layout.
+    """
+
+    STANDARD = "standard", "Standard"
+    OGUN = "ogun", "Ogun State"
+
+
 class ReportCardSettings(models.Model):
     """Which optional sections this school prints. One row per schema.
 
@@ -431,6 +444,12 @@ class ReportCardSettings(models.Model):
     #: `results.look` refuses a colour too light to carry white text.
     colour = models.CharField(max_length=7, default="#143D8C")
 
+    #: Which card this school prints. Standard for every school that has not
+    #: chosen; `results.ogun.set_template_as()` is the one writer.
+    template = models.CharField(
+        max_length=16, choices=CardTemplate, default=CardTemplate.STANDARD
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -467,6 +486,10 @@ class ReportCardSettings(models.Model):
             models.CheckConstraint(
                 condition=Q(colour__regex=r"^#[0-9A-F]{6}$"),
                 name="a_card_colour_is_six_hex_digits",
+            ),
+            models.CheckConstraint(
+                condition=Q(template__in=["standard", "ogun"]),
+                name="a_card_template_is_one_this_prints",
             ),
         ]
 

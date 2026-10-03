@@ -24,6 +24,7 @@ import {
   saveColour,
   saveContactEmail,
   saveLga,
+  saveTemplate,
   savePublicPage,
   uploadCrest,
 } from "./api.js";
@@ -116,6 +117,17 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (event.preventDefault) event.preventDefault();
 
     const which = form.dataset ? form.dataset.form : undefined;
+    if (which === "template") {
+      const result = await saveTemplate({ template: form.template.value, fetchImpl });
+      if (result.ok) {
+        // Kept across the reload: what choosing Ogun set up is said once,
+        // under the choice, until the page is next opened.
+        await load({ template: { kind: "applied", applied: result.row.applied || null } });
+        return;
+      }
+      await after("template", result);
+      return;
+    }
     if (which === "colour") {
       await after("colour", await saveColour({ colour: form.colour.value, fetchImpl }));
       return;

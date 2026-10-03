@@ -42,3 +42,12 @@ form.rejected, form.not-allowed { background: var(--stop-bg); border-radius: var
 .look-name { font-weight: 700; font-size: 1.1rem; }
 .look-rule { height: 6px; margin: 0 -14px; }
 input[type="color"] { width: 5rem; padding: 4px; }
+
+/* The template choice: two radio cards, each with its sentence. */
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+legend { font-weight: 700; margin-bottom: 4px; }
+label.choice { display: flex; gap: 10px; align-items: flex-start; font-weight: 400; margin: 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); min-height: 44px; }
+label.choice input { width: auto; margin-top: 4px; }
+label.choice .hint { display: block; }
+.done { font-size: var(--small); }
+.done ul { margin: 4px 0 0; padding-left: 18px; }

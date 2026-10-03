@@ -100,3 +100,54 @@ The `screens` job photographs the roll's details panel.
 | --- | --- |
 | `student_here()` without `school=` | `test_the_other_schools_admin_cannot_reach_this_schools_child_from_her_own_host` |
 | the details routes' authority check removed | `test_a_teacher_and_a_bursar_are_refused_reading_and_writing` (both subtests) |
+
+## Part 2: choosing the template, and what it sets up
+
+`ReportCardSettings.template`, `"standard"` (the One Blue card, every
+school's default) or `"ogun"`, with a check constraint naming the two. Chosen
+on the setup page under "Report card template"
+(`PUT /api/academics/card/template/`), by the principal or an administrator.
+`results.ogun.set_template_as()` is the one writer; choosing Ogun runs
+`apply_presets()` in the same transaction and the answer says what it did.
+
+| preset | what it sets |
+| --- | --- |
+| assessments | 1st Test 10, 2nd Test 10, Assignment 10, Exam 70, per active subject, for the current term and every term starting after it (with no current term: every term that has not ended). A term an Ogun school opens later gets them as it is opened. |
+| traits | Affective: Punctuality, Neatness, Honesty, Self-Control, Attentiveness in Class, Leadership. Psychomotor: Handwriting, Games & Sports, Fluency, Handling of Tools, Drawing & Painting, Crafts. In that order, both sections switched on. |
+| scale | 5 Excellent, 4 Good, 3 Average, 2 Below Average, 1 Unsatisfactory. Labels only: the numbers ratings store do not move. |
+
+### Never over a mark or a rating
+
+- **A subject with a mark in a term keeps its papers** as they are and is
+  reported as kept. A subject with papers and no marks has them replaced.
+  The subject's papers are locked before the marks are counted, and entering
+  a mark takes a key-share lock on its paper, so the two cannot interleave.
+  A released term is covered by the same rule: its subject lines exist only
+  where the class was marked, and its marks cannot be deleted
+  (`gradebook/0002`).
+- **A trait that has ever been rated is never hidden**, even when the sheet
+  does not print it; it is reported as kept and stays at the end of its
+  section. Unrated lines the sheet does not print are hidden, never deleted.
+- Seeded lines that are the sheet's line under another spelling are
+  renamed (`ogun.RENAMES`: "Attentiveness in class", "Games/Sports",
+  "Handling of tools and equipment"). A rename keeps every rating, and a
+  released card keeps its frozen name.
+
+Choosing Ogun again applies the presets again (how a school picks up a subject
+added since) and changes nothing that is already right. Going back to
+Standard changes the layout only and undoes nothing.
+
+**There is no screen for subjects or assessments** in Classnode today; a school
+gets them from whoever set it up. The presets work on the subjects that
+exist.
+
+### Tests and controls
+
+`results/tests/test_ogun_template.py` (two schools; Grace is untouched by
+every choice at St Mary's), and the template tests in `tests/js/setup.test.js`.
+
+| broken | what went red |
+| --- | --- |
+| the marks check in `apply_assessments()` removed | the three tests with a mark in (errors: `Score`'s PROTECT key refuses the delete, so a mark was never at risk; the preset would have failed whole) |
+| the rated-trait check in `apply_traits()` removed | `test_a_rated_trait_the_sheet_does_not_print_stays_on_the_sheet` |
+| `set_template_as()`'s authority check removed | `test_the_service_refuses_a_teacher_without_the_route` |
