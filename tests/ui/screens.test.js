@@ -427,6 +427,12 @@ describe("every page, at every width", () => {
 
           for (const [name, selector] of screen.steps || []) {
             const target = page.locator(selector).first();
+            // The previous tap's page can still be drawing from its fetch when
+            // `settle()` returns (the fees class did, once, on CI), so give the
+            // step's target a moment to arrive before calling it missing. The
+            // specimen's menu button never arrives above 1024px, which is why
+            // it is only a wait and not the assertion.
+            await target.waitFor({ state: "attached", timeout: screen.specimen ? 1 : 5000 }).catch(() => {});
             if (!(await target.count())) {
               // A drill-down whose first step is not on screen at this width
               // (the specimen's menu button, above 1024px) has nothing to show.
