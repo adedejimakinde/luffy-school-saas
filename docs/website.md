@@ -36,8 +36,8 @@ contents list at the top that matches the sections in order.
   provider, Termii, Paystack, and the hosts), how long it is kept, children's
   data and consent through the school, rights, complaints, contact.
 - **Every legal claim carries a visible `TODO: lawyer`**, and every fact still
-  to be filled in (company name, address, server location, email provider,
-  periods, dates, price) a `TODO` of its own. Nothing here is legal advice
+  to be filled in (RC number, registered address, server location, email provider,
+  periods, dates, invoicing) a `TODO` of its own. Nothing here is legal advice
   until the lawyer has been through it.
 - The facts stated are the system's own: Hetzner, Backblaze B2 backups kept up
   to 12 months, Sentry (EU) with personal data removed, Termii for SMS,

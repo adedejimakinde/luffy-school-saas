@@ -69,6 +69,12 @@ class TheLegalPagesTests(SiteSetUp):
                 self.assertGreaterEqual(text.count("TODO"), at_least)
                 self.assertIn("TODO: lawyer", text)
                 self.assertIn("TODO: date.", text)
+                # Filled in: the name and the address to write to. Still to
+                # come: the RC number and the registered address.
+                self.assertIn("Classnode is run by Classnode", text)
+                self.assertIn("Email: hello@classnode.co", text)
+                self.assertIn("TODO: RC number.", text)
+                self.assertNotIn("TODO: company name", text)
 
     def test_the_writing_rules_hold(self):
         for path in PAGES:
