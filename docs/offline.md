@@ -1,7 +1,7 @@
 # Offline mode for teachers
 
-Status: **reviewed 2026-09-24 — the plan.** S1–S4 are built. **S5 is built** (see "S5 as
-built", after the slices); S6 and S7 wait. The decisions taken in review are recorded directly below, and they
+Status: **reviewed 2026-09-24 — the plan.** S1–S5 are built. **S6 is built and in review**
+(see "S6 as built", after S5's); S7 waits. The decisions taken in review are recorded directly below, and they
 override anything later in the document that reads as still open. Extends
 `docs/gradebook.md` and `docs/attendance.md`; changes neither's rules.
 
@@ -383,6 +383,54 @@ the copy, a mark typed offline is queued in IndexedDB and sent when the connecti
 returns, and sign-out leaves no copy. Not verified: a real Android phone, and the
 production path where static names are hashed (that path is tested against a fake
 cache only).
+
+## S6 as built
+
+The register's base and per-child merge (D4), server side, then the register
+outbox. What was built, and the choices that were the builder's.
+
+**Server.** `PUT /api/attendance/classes/{id}/terms/{id}/{day}/` takes an optional
+`base` (`absent_ids`, `present_ids`; a child in `shown_ids` and in neither was shown
+unmarked). With it, `attendance.services.take_register()` merges under the register's
+lock, child by child: a child whose answer equals the base is **untouched**; a changed
+child is written if the school still has the base, is **already** if the school has
+the teacher's answer, and is otherwise a **conflict** (nothing written; the answer
+carries `yours`, `was`, `now`, `since`). Without a base it amends as before (imports,
+shells). A merge that writes nothing for a register it had to create removes the
+row again. The key (S4) still answers a resend from its receipt.
+
+**Client.** A submit on the register page always queues the register with its base and
+drains at once (`static/register/outbox.js`), so online is the same thirty seconds and
+offline is "Kept on this phone". One entry per register per day; a retake before it is
+sent keeps the first base (D2). 409, 422 and 403 are held until dismissed; a failed
+connection, a 5xx and a lapsed session are sent again; only the person who queued it
+sends it (D7). Conflicts, and the "appeared" and "no longer in this class" reports, are
+listed above the class list until answered (D5): **Keep the school's** forgets the
+teacher's answer; **Use mine** sends that child alone again with the school's answer as
+the base, a deliberate write over it. The outbox store moved to `static/web/store.js`
+(same IndexedDB database, so nothing on a phone is stranded), and sign-out on either
+page now counts and clears both outboxes (D8).
+
+**Decisions to confirm**
+
+1. **The online page sends the base too.** One code path (D4's "the base is the
+   version"), and it means two people with one register open online also get the
+   per-child merge rather than last-submit-wins. OPEN-1 agreed with D4 on this.
+2. **"Already" is not a conflict.** A child the teacher changed to the answer the school
+   already has is reported as agreement, not asked about. D4's table did not cover it.
+3. **A retake behind a conflict keeps the conflict's original base**, so the conflict
+   comes back instead of the retake quietly writing over the school.
+4. **OPEN-5 (taken-at versus arrived-at) is still open.** Nothing records when a
+   queued register was taken; `updated_at` is when it arrived.
+5. With two statuses (present, absent), a conflict can arise only where the teacher
+   was shown a child unmarked (or the school's mark was removed): the office taking a
+   register the teacher had opened before anybody took it is that case, and D5's
+   example is exactly it.
+
+**Verified** in a real Chromium (`tests/ui/offline.test.js`): a register taken offline
+from the copy is kept in IndexedDB with its base, sent when the connection returns,
+leaves the phone, and the school's register then has the teacher's answer. Not
+verified: a real Android phone.
 
 ## Correctness requirements
 

@@ -35,7 +35,7 @@ import {
   settle,
 } from "../../static/marking/outbox.js";
 import { sendQueued, whoIsSignedIn } from "../../static/marking/api.js";
-import { memoryStore } from "../../static/marking/store.js";
+import { memoryStore } from "../../static/web/store.js";
 import { forgetToken } from "../../static/web/http.js";
 import { GRACE, KEMI, ST_MARYS, TUNDE, school } from "./fake_school.js";
 

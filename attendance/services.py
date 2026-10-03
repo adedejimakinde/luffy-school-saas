@@ -117,9 +117,31 @@ class RegisterTaken:
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: list[int] = field(default_factory=list)
 
+    #: With a base (`docs/offline.md` D4): children the teacher did not change
+    #: from what they were shown. Nothing was written for them.
+    untouched: list[int] = field(default_factory=list)
+    #: Changed by the teacher, and the school already had their answer.
+    already: list[int] = field(default_factory=list)
+    #: Changed by the teacher **and** by somebody else since they were shown.
+    #: Nothing written; the teacher chooses (D5).
+    conflicts: list["RegisterConflict"] = field(default_factory=list)
+
     @property
     def marked(self) -> int:
         return len(self.present) + len(self.absent)
+
+
+@dataclass(frozen=True)
+class RegisterConflict:
+    """One child two people answered differently. `was` is what the teacher was
+    shown, `now` what the school has, `yours` what the teacher sent; a status or
+    None for unmarked. `since` is when `now` was written."""
+
+    student_membership_id: int
+    yours: str
+    was: str | None
+    now: str | None
+    since: object = None
 
 
 def _stamp(by):
@@ -196,6 +218,7 @@ def take_register(
     absent_ids=(),
     shown_ids=None,
     by=None,
+    base=None,
 ) -> RegisterTaken:
     """Mark a whole group for one day. Returns what was written.
 
@@ -212,6 +235,15 @@ def take_register(
     submits twice because the first answer was slow has not taken two registers.
     The row is locked for the duration so that two submissions racing serialise
     rather than interleaving into a half-amended register.
+
+    **With a `base` it is merged child by child** (`docs/offline.md` D4). `base`
+    is `student_membership_id -> status or None` for what the teacher was shown.
+    A child whose answer equals the base is untouched: the teacher decided
+    nothing about them, however late the register arrives. A child the teacher
+    changed is written only if the school still has what the teacher was shown;
+    if the school has the teacher's answer already, nothing is needed; otherwise
+    it is a conflict for that child alone, and nothing is written for them.
+    Without a base (an import, a shell, an old page) it amends as it always has.
     """
     _require_the_day_is_in_the_term(term, on)
 
@@ -232,6 +264,11 @@ def take_register(
     appeared = sorted(roster_set - shown)
     not_on_the_roster = sorted(absent_set - roster_set)
 
+    if base is not None:
+        return _merge_register(
+            class_group, term, on, by, base, looked_at, absent_set, appeared, not_on_the_roster
+        )
+
     register = _locked_register(class_group, term, on, by)
     _write_marks(register, present, absent, by)
     if absent:
@@ -249,6 +286,71 @@ def take_register(
         absent=absent,
         appeared=appeared,
         not_on_the_roster=not_on_the_roster,
+    )
+
+
+def _merge_register(class_group, term, on, by, base, looked_at, absent_set, appeared, not_on_the_roster):
+    """`take_register()` with a base: D4's table, under the register's lock.
+
+    The register is locked (or created) first and the school's marks read
+    under that lock, so the comparison is with what this transaction would
+    overwrite and not with what was there a moment ago. A register left with
+    no marks at all is removed again, inside the same transaction: a
+    `Register` row with no marks says somebody took a register that nobody
+    took. Decided under the lock from the marks themselves, not from whether
+    this call created the row: a second first-take that lost the race to
+    create it must not delete the register the winner just wrote.
+    """
+    register = _locked_register(class_group, term, on, by)
+    now = {
+        mark.student_membership_id: mark
+        for mark in AttendanceMark.objects.filter(register=register)
+    }
+    absent_value = AttendanceStatus.ABSENT.value
+    present_value = AttendanceStatus.PRESENT.value
+
+    present, absent, untouched, already, conflicts = [], [], [], [], []
+    for sid in sorted(looked_at):
+        yours = absent_value if sid in absent_set else present_value
+        was = base.get(sid)
+        if yours == was:
+            untouched.append(sid)
+            continue
+        mark = now.get(sid)
+        current = mark.status if mark is not None else None
+        if current == was:
+            (absent if yours == absent_value else present).append(sid)
+        elif current == yours:
+            already.append(sid)
+        else:
+            conflicts.append(
+                RegisterConflict(
+                    student_membership_id=sid,
+                    yours=yours,
+                    was=was,
+                    now=current,
+                    since=mark.updated_at if mark is not None else None,
+                )
+            )
+
+    if present or absent:
+        _write_marks(register, present, absent, by)
+        if absent:
+            from notices.absence_alerts import write_alerts
+
+            write_alerts(register, absent)
+    elif not now:
+        register.delete()
+
+    return RegisterTaken(
+        register=register,
+        present=present,
+        absent=absent,
+        appeared=appeared,
+        not_on_the_roster=not_on_the_roster,
+        untouched=untouched,
+        already=already,
+        conflicts=conflicts,
     )
 
 
@@ -443,6 +545,7 @@ __all__ = [
     "DayOutsideTheTerm",
     "NoRoster",
     "NotAllowedToMarkAttendance",
+    "RegisterConflict",
     "RegisterTaken",
     "can_mark_attendance",
     "group_that_marked",

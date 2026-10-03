@@ -16,14 +16,23 @@
  * screen actually drew, which is what lets the answer name a child who joined
  * the group while it was open rather than silently marking them present.
  *
- * ## It opens with no connection, from a copy it cannot send from
+ * ## It opens with no connection, from a copy
  *
  * `docs/offline.md` S5. The page comes from the service worker (`/sw.js`); the
  * class list and rosters from a copy kept for this person at this school
- * (`web/snapshots.js`). A copy is to look at: a register cannot be queued until
- * S6, so the taps and the submit are off on a copy rather than offered and lost.
- * A day nobody opened here shows the class's newest roster, every child
- * unmarked, as the server answers for a register not yet taken.
+ * (`web/snapshots.js`). A day nobody opened here shows the class's newest
+ * roster, every child unmarked, as the server answers for a register not yet
+ * taken.
+ *
+ * ## A submit queues the register; the outbox sends it
+ *
+ * Slice S6, and `outbox.js` has the rules. A submit puts the register in this
+ * teacher's outbox for this school, with its **base**, what the screen showed
+ * when it was opened (D4), and the outbox is drained at once when it can be and
+ * again when the connection comes back. Online that is the same thirty seconds
+ * as ever. With a base, the server writes only the children the teacher
+ * changed, and a child somebody else changed meanwhile comes back as a conflict
+ * the teacher answers on this page (D5).
  *
  * ## Absence is what is tapped
  *
@@ -32,9 +41,24 @@
  * real register rather than an empty one.
  */
 
+import { csrfToken } from "../web/http.js";
 import { forgetPages, guardSignOut, registerWorker } from "../web/offline.js";
 import { indexedDbSnapshots, liveOrCopy } from "../web/snapshots.js";
-import { REFUSAL, fetchRegister, fetchWhere, takeRegister } from "./api.js";
+import { indexedDbStore, memoryStore, outboxesOf, othersOf } from "../web/store.js";
+import { isOverdue, openOutbox, retryDelay } from "../marking/outbox.js";
+import { REFUSAL, fetchRegister, fetchWhere, sendQueued, whoIsSignedIn } from "./api.js";
+import {
+  REPORT,
+  STOPPED,
+  baseOf,
+  dismiss,
+  drain,
+  enqueue,
+  keepTheirs,
+  registerId,
+  release,
+  useMine,
+} from "./outbox.js";
 import * as states from "./states.js";
 
 /**
@@ -77,16 +101,20 @@ const A_DAY = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * The markup for one state of the page. Pure, so every branch is testable.
  */
-export function htmlFor(state, { portal = "", timeZone, now } = {}) {
+export function htmlFor(state, { portal = "", timeZone, now, entries = [], notTheAuthor = false } = {}) {
+  const queued = (list) =>
+    states.waiting(list, { timeZone, now, notTheAuthor, overdue: (entry) => isOverdue(entry, now.getTime()) });
   switch (state.step) {
     case "choose":
-      return states.choose({ ...state, timeZone, now });
+      return queued(entries) + states.choose({ ...state, timeZone, now });
+    case "kept":
+      return states.kept(state);
     case "no-term":
       return states.noTerm();
     case "marking":
       return states.marking({ ...state, timeZone, now });
     case "done":
-      return states.done(state);
+      return states.done(state) + queued(entries.filter((entry) => entry.id === state.entryId && entry.held));
     case "refused":
       return states.refused(state);
     case REFUSAL.NOT_A_MARKER:
@@ -135,6 +163,8 @@ export function fromRegister(answer) {
     absent: (answer.body.rows || [])
       .filter((row) => row.status === "absent")
       .map((row) => row.student_membership_id),
+    // What the screen shows now, which the server compares with (D4).
+    base: baseOf(answer.body.rows),
     asOf: answer.asOf || null,
   };
 }
@@ -180,6 +210,9 @@ export async function mount(
     signOutTarget = typeof document !== "undefined" ? document : null,
     confirmFn = (text) => (typeof window !== "undefined" ? window.confirm(text) : true),
     clearPages = forgetPages,
+    openStore = indexedDbStore,
+    schedule = (run, ms) => setTimeout(run, ms),
+    mint,
   } = {},
 ) {
   const portal = root.dataset.portal || "";
@@ -192,9 +225,87 @@ export async function mount(
   let leaving = false;
   let on = today(now, root.dataset.timeZone || SCHOOL_TIME_ZONE);
   const shelf = await openSnapshots();
+  let outbox = null;
+  let outboxName = null;
+  let entries = [];
+  let notTheAuthor = false;
+  let draining = null;
+  let again = false;
+  let failures = 0;
+  let retrying = false;
+  let freshToken = false;
+  const answers = {};
 
   const draw = () => {
-    root.innerHTML = htmlFor(state, { portal, timeZone, now });
+    root.innerHTML = htmlFor(state, { portal, timeZone, now, entries, notTheAuthor });
+  };
+
+  const change = async (update) => {
+    entries = await outbox.update(update);
+    return entries;
+  };
+
+  /**
+   * Drain the outbox, one drain at a time; a kick that arrives during one is
+   * not dropped. After a failed connection it tries again with backoff, and
+   * fetches a fresh CSRF token first (D7).
+   */
+  const kick = () => {
+    if (!outbox) return Promise.resolve(null);
+    if (draining) {
+      again = true;
+      return draining;
+    }
+    draining = (async () => {
+      let stopped;
+      do {
+        again = false;
+        if (freshToken) {
+          try {
+            await csrfToken({ fetchImpl, refresh: true });
+            freshToken = false;
+          } catch {
+            // Still no connection; the drain says so.
+          }
+        }
+        stopped = await drain({
+          outbox,
+          owner,
+          whoIsSignedIn: () => whoIsSignedIn({ fetchImpl }),
+          send: (entry) => sendQueued(entry, { fetchImpl }),
+          onChange: (list, entry, answer) => {
+            entries = list;
+            answers[entry.id] = answer;
+          },
+          now: () => now.getTime(),
+          mint,
+        });
+      } while (again && stopped === STOPPED.EMPTY);
+      return stopped;
+    })().catch((error) => {
+      console.error("The registers outbox could not be kept.", error);
+      return null;
+    });
+    return draining.then(async (stopped) => {
+      draining = null;
+      entries = await outbox.read();
+      notTheAuthor = stopped === STOPPED.NOT_THE_AUTHOR;
+      if (stopped === STOPPED.OFFLINE || stopped === STOPPED.SESSION) freshToken = true;
+      if (stopped === STOPPED.OFFLINE) {
+        failures += 1;
+        if (!retrying) {
+          retrying = true;
+          schedule(() => {
+            retrying = false;
+            return kick();
+          }, retryDelay(failures));
+        }
+      } else {
+        failures = 0;
+      }
+      if (state.step === "choose") draw();
+      return stopped;
+    });
   };
 
   /** An answer from the server, or the phone's copy of the last one. */
@@ -219,6 +330,11 @@ export async function mount(
       where = answer.body;
       owner = answer.body.user_id;
     }
+    if (owner !== null && owner !== undefined && !outbox) {
+      outboxName = outboxesOf(host, owner)[1];
+      outbox = openOutbox((await openStore(outboxName)) || memoryStore(outboxName));
+      entries = await outbox.read();
+    }
     state = fromWhere(answer, { on });
     draw();
   };
@@ -229,15 +345,23 @@ export async function mount(
   // Only from the class list — a register being looked at is left where it is,
   // and the next "Another class" is live.
   whenOnline(async () => {
+    await kick();
     if (showingCopy && state.step === "choose") await load();
   });
 
-  // Nothing is queued here (that is slice S6), so signing out asks nothing.
+  // Signing out deletes what is waiting on the phone, registers and marks
+  // alike, so it asks first (D8).
   guardSignOut(signOutTarget, {
-    waiting: async () => 0,
+    waiting: async () => {
+      let count = outbox ? (await outbox.read()).length : 0;
+      for (const other of await othersOf(openStore, host, owner, outboxName)) count += (await other.read()).length;
+      return count;
+    },
     clear: async () => {
       leaving = true;
       if (shelf) await shelf.clearAll();
+      if (outbox) await change(() => []);
+      for (const other of await othersOf(openStore, host, owner, outboxName)) await other.write([]);
       await clearPages();
     },
     confirmFn,
@@ -267,6 +391,20 @@ export async function mount(
 
     if (action === "back") {
       state = fromWhere({ ok: true, body: where }, { on });
+      draw();
+      return;
+    }
+
+    // What the list of waiting registers offers (`states.waiting()`).
+    const id = hit.dataset.entry;
+    if (outbox && id) {
+      const sid = Number(hit.dataset.child);
+      if (action === "retry") await change((list) => release(list, id, { mint }));
+      if (action === "dismiss") await change((list) => dismiss(list, id));
+      if (action === "keep-theirs") await change((list) => keepTheirs(list, id, sid));
+      if (action === "use-mine") await change((list) => useMine(list, id, sid, { now: now.getTime(), mint }));
+      draw();
+      if (action === "retry" || action === "use-mine") await kick();
       draw();
       return;
     }
@@ -301,29 +439,47 @@ export async function mount(
     }
 
     if (action === "submit" && state.step === "marking") {
-      const shownIds = (state.rows || []).map((row) => row.student_membership_id);
-      const answer = await takeRegister({
+      const rows = state.rows || [];
+      // The names the screen drew, so every later sentence can say who.
+      const names = {};
+      for (const row of rows) names[row.student_membership_id] = row.student;
+      const write = {
         classGroupId: state.class_group_id,
         termId: state.term_id,
         on: state.taken_on,
         absentIds: state.absent,
-        shownIds,
-        fetchImpl,
-      });
-      if (answer.ok) {
-        // The names the screen drew, so the two warnings can say who rather
-        // than print a membership id at a teacher.
-        const names = {};
-        for (const row of state.rows || []) names[row.student_membership_id] = row.student;
-        state = { step: "done", ...answer.body, names };
-      } else if (answer.refusal === null) {
-        state = { step: "refused", ...answer.body };
+        shownIds: rows.map((row) => row.student_membership_id),
+        base: state.base,
+        classGroup: state.class_group,
+        names,
+      };
+      if (!outbox) {
+        state = { step: REFUSAL.BROKEN };
+        draw();
+        return;
+      }
+      const entryId = registerId(write.classGroupId, write.termId, write.on);
+      await change((list) => enqueue(list, write, { now: now.getTime(), mint }));
+      delete answers[entryId];
+      const stopped = await kick();
+      const left = entries.find((entry) => entry.id === entryId);
+      const answer = answers[entryId];
+      if (answer && answer.landed && (!left || (left.held && left.held.kind === REPORT))) {
+        state = { step: "done", ...answer.taken, names, entryId };
+      } else if (left && left.held) {
+        state = { step: "refused", detail: left.held.detail };
+      } else if (stopped === STOPPED.SESSION) {
+        state = { step: REFUSAL.EXPIRED };
       } else {
-        state = { step: answer.refusal, ...answer.body };
+        state = { step: "kept", class_group: write.classGroup, taken_on: write.on };
       }
       draw();
     }
   });
+
+  // Whatever an earlier page load left queued goes now, if it can.
+  await kick();
+  draw();
 
   return state;
 }

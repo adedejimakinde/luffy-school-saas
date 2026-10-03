@@ -106,22 +106,25 @@ test("a class list opened online opens again offline, as a copy", async () => {
   }
 });
 
-test("a register opened today is a copy of today's, and is to look at", async () => {
+test("a register opened today opens offline as a copy, and a register taken on it is kept and sent later", async () => {
   for (const s of schools()) {
     const shelf = memorySnapshots(new Map());
     const live = await open(s, shelf, { pickClass: true });
     assert.doesNotMatch(live.root.innerHTML, /This is a copy/, `${s.host}: live`);
-    assert.match(live.root.innerHTML, /data-action="submit"/, `${s.host}: live can submit`);
 
     s.offline = true;
     const page = await open(s, shelf, { pickClass: true });
-
     assert.match(page.root.innerHTML, /This is a copy/, s.host);
-    assert.match(page.root.innerHTML, /to look at/, s.host);
-    assert.doesNotMatch(page.root.innerHTML, /data-action="submit"/, `${s.host}: nothing to send it with`);
-    assert.match(page.root.innerHTML, /data-action="toggle"[^>]*disabled/, `${s.host}: taps are off`);
+    assert.match(page.root.innerHTML, /kept on this phone and sent when you are connected/, s.host);
+
     await page.root.click({ "data-action": "toggle", "data-child": "1" });
-    assert.equal(s.puts, 0, s.host);
+    await page.root.click({ "data-action": "submit" });
+    assert.match(page.root.innerHTML, /Kept on this phone/, s.host);
+    assert.equal(s.puts, 0, `${s.host}: nothing sent`);
+
+    s.offline = false;
+    await page.online[0]();
+    assert.equal(s.puts, 1, `${s.host}: sent when the connection came back`);
   }
 });
 

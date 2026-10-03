@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 
 import { mount, storageMayBeCleared } from "../../static/marking/app.js";
 import { FLAG_AFTER_MS, HELD, enqueue, openOutbox, outboxName } from "../../static/marking/outbox.js";
-import { memoryStore } from "../../static/marking/store.js";
+import { memoryStore } from "../../static/web/store.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 import { GRACE, KEMI, ST_MARYS, TUNDE, school } from "./fake_school.js";

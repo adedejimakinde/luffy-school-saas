@@ -46,20 +46,12 @@
  *
  * ## A blur queues the mark; the outbox sends it
  *
- * `docs/offline.md` slice S3, and `outbox.js` has the rules. A blur no longer
- * sends: it puts the write in this teacher's outbox for this school, kept in
- * the browser, and the outbox is drained — at once when the connection is
- * there, again with backoff when it is not, and whenever the browser says it
- * is back online. An outbox left by an earlier page load is drained when the
- * page opens.
- *
- * What a teacher sees is still `applySave()`'s: every answer the outbox gets
- * is handed to it in the shape a direct save used to give it, so the sentences
- * and the in-the-box-or-in-the-note rules above stay in one place. What
- * changes is that a value not yet sent, and a value the server refused, are
- * now on the phone as well as on the screen, and are drawn back onto the sheet
- * when it is opened again (`withOutbox()`), until they land or the teacher
- * dismisses them.
+ * `docs/offline.md` S3, and `outbox.js` has the rules. A blur puts the write in
+ * this teacher's outbox for this school, drained at once when it can be, with
+ * backoff when not, and when the browser is back online. Every answer is drawn
+ * by `applySave()` as a direct save's was; what is not sent, or was refused,
+ * is on the phone too and drawn back onto the sheet (`withOutbox()`) until it
+ * lands or the teacher dismisses it.
  *
  * ## It opens with no connection, from a copy
  *
@@ -90,7 +82,7 @@ import {
   retryDelay,
 } from "./outbox.js";
 import * as states from "./states.js";
-import { indexedDbStore, memoryStore } from "./store.js";
+import { indexedDbStore, memoryStore, othersOf } from "../web/store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "", timeZone, now } = {}) {
@@ -481,11 +473,9 @@ export async function mount(
   };
 
   /**
-   * The browser stopped keeping the outbox — its database closed under the
-   * page, the disk full. Said, and not swallowed: the page carries on with
-   * the outbox in memory, which lasts as long as the page, and the warning
-   * says exactly that. What the database already held is sent by the next
-   * page load that can open it.
+   * The browser stopped keeping the outbox (database closed, disk full). Said:
+   * the page carries on with it in memory, and the warning says so. What the
+   * database held is sent by the next page load that can open it.
    */
   const keptInMemoryFromNowOn = (error) => {
     console.error("The marks outbox could not be kept.", error);
@@ -787,11 +777,17 @@ export async function mount(
 
   // Signing out discards marks on purpose, so it asks first (D8).
   guardSignOut(signOutTarget, {
-    waiting: async () => (outbox ? (await readOutbox()).length : 0),
+    // The registers waiting here count, and go, too.
+    waiting: async () => {
+      let n = outbox ? (await readOutbox()).length : 0;
+      for (const o of await othersOf(openStore, host, owner, outboxName_)) n += (await o.read()).length;
+      return n;
+    },
     clear: async () => {
       leaving = true;
       if (shelf) await shelf.clearAll();
       if (outbox) await change(() => []);
+      for (const o of await othersOf(openStore, host, owner, outboxName_)) await o.write([]);
       await clearPages();
     },
     confirmFn,

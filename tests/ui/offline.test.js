@@ -6,7 +6,9 @@
  * proves the fakes are what the browser does. A teacher opens the page online,
  * the phone loses its connection, and the page must open again from the worker
  * and the copy, say that it is a copy, queue a mark, and send it when the
- * connection is back. Signing out must leave no copy behind.
+ * connection is back. Signing out must leave no copy behind. And the register
+ * (slice S6): taken with no connection, it is kept on the phone with its base
+ * and sent when the connection is back.
  *
  * Runs against the same demo as `screens.test.js` (see its header), as Sunrise's
  * teacher. A service worker needs a secure context and `*.classnode.test` over
@@ -28,6 +30,40 @@ const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 let browser;
 let context;
 let page;
+
+/** A signed-in context of its own, so one describe's sign-out ends nobody else's. */
+async function signedIn(identifier) {
+  const own = await browser.newContext({ serviceWorkers: "allow" });
+  const door = await own.newPage();
+  await door.goto(`${PORTAL}/staff-sign-in/`);
+  const status = await door.evaluate(async ({ identifier, password }) => {
+    const { csrf_token: token } = await (await fetch("/api/csrf/")).json();
+    const response = await fetch("/api/login/", {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-CSRFToken": token },
+      body: JSON.stringify({ identifier, password }),
+    });
+    return response.status;
+  }, { identifier, password: PASSWORD });
+  assert.equal(status, 200, `signing in as ${identifier}`);
+  await door.close();
+  return own;
+}
+
+/** Every entry of every outbox record whose name ends with `suffix`. */
+const queued = (where, suffix) =>
+  where.evaluate(
+    (suffix) =>
+      new Promise((resolve) => {
+        const open = indexedDB.open("luffy-marks-outbox");
+        open.onsuccess = () => {
+          const all = open.result.transaction("outboxes").objectStore("outboxes").getAll();
+          all.onsuccess = () =>
+            resolve(all.result.filter((r) => r.name.endsWith(suffix)).flatMap((r) => r.entries));
+        };
+      }),
+    suffix,
+  );
 
 const marking = () => page.locator("#marking").innerHTML();
 
@@ -163,3 +199,74 @@ describe("the marking page with no connection", () => {
     assert.equal(menu, false, "no cached page holds the signed-in menu");
   });
 });
+
+describe("the register with no connection (S6)", () => {
+  let registers;
+  let tab;
+  let first;
+  let chosen;
+
+  before(async () => {
+    registers = await signedIn("sunrise.principal");
+    tab = await registers.newPage();
+  });
+
+  test("online, the class is opened once so the phone has its roster", async () => {
+    await tab.goto(`${SUNRISE}/register/`);
+    await tab.waitForSelector('[data-action="open"]');
+    await tab.evaluate(() => navigator.serviceWorker.ready);
+    await tab.reload();
+    await tab.waitForSelector('[data-action="open"]');
+    await tab.locator('[data-action="open"]').first().click();
+    await tab.waitForSelector('[data-action="toggle"]');
+    first = await tab.locator('[data-action="toggle"]').first().getAttribute("data-child");
+  });
+
+  test("offline, a register taken from the copy is kept on the phone with its base", async () => {
+    await registers.setOffline(true);
+    await tab.reload();
+    await tab.waitForSelector('[data-action="open"]', { timeout: 15000 });
+    await tab.locator('[data-action="open"]').first().click();
+    await tab.waitForSelector('[data-action="toggle"]');
+    assert.match(await tab.locator("#register").innerHTML(), /This is a copy/);
+
+    // Whatever the first child was shown as, the teacher changes it.
+    const child = tab.locator(`[data-action="toggle"][data-child="${first}"]`);
+    await child.click();
+    chosen = (await child.getAttribute("aria-pressed")) === "true" ? "absent" : "present";
+    await tab.locator('[data-action="submit"]').click();
+    // The heading, not the copy's note, which says "kept on this phone" too.
+    await tab.waitForSelector('h1:text-is("Kept on this phone")');
+
+    const [entry] = await queued(tab, " register");
+    assert.ok(entry, "a register is queued");
+    assert.ok(entry.base && Array.isArray(entry.base.present_ids), "with the base the screen showed");
+  });
+
+  test("back online, it is sent, leaves the phone, and the school has it", async () => {
+    await registers.setOffline(false);
+    await tab.evaluate(() => window.dispatchEvent(new Event("online")));
+    // Polled by hand: each look is an evaluate the test awaits.
+    let left = null;
+    for (let i = 0; i < 60; i += 1) {
+      left = await queued(tab, " register");
+      if (!left.length) break;
+      await tab.waitForTimeout(250);
+    }
+    assert.deepEqual(left, [], "nothing left on the phone");
+
+    const status = await tab.evaluate(async (child) => {
+      const where = await (await fetch("/api/attendance/where/")).json();
+      const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" }).format(new Date());
+      const url = `/api/attendance/classes/${where.classes[0].id}/terms/${where.term_id}/${today}/`;
+      const register = await (await fetch(url)).json();
+      return register.rows.find((row) => String(row.student_membership_id) === child).status;
+    }, first);
+    assert.equal(status, chosen, "the school's register has the teacher's answer");
+  });
+
+  after(async () => {
+    await registers?.close();
+  });
+});
+

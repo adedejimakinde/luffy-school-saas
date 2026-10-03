@@ -8,6 +8,7 @@
  */
 
 import { getJson, putJson } from "../web/http.js";
+import { HELD, STOPPED } from "./outbox.js";
 
 /** The states this page can be in, other than holding a register. */
 export const REFUSAL = {
@@ -110,15 +111,18 @@ export async function takeRegister({
   on,
   absentIds,
   shownIds,
+  base = null,
+  key = null,
   fetchImpl = fetch,
 }) {
+  const body = { absent_ids: absentIds, shown_ids: shownIds };
+  // `base` is what the screen showed (D4): with it only the children the
+  // teacher changed are written. `key` makes a resend land once (D3).
+  if (base) body.base = base;
+  if (key) body.key = key;
   let answer;
   try {
-    answer = await putJson(
-      registerUrl(classGroupId, termId, on),
-      { absent_ids: absentIds, shown_ids: shownIds },
-      { fetchImpl },
-    );
+    answer = await putJson(registerUrl(classGroupId, termId, on), body, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
@@ -132,6 +136,50 @@ export async function takeRegister({
   return {
     ok: false,
     refusal: refusalFor(answer.status, answer.body),
+    status: answer.status,
     body: answer.body || {},
   };
+}
+
+/** 4xx answers that mean "try later". */
+const NOT_NOW = new Set([408, 425, 429]);
+
+/**
+ * Send one queued register, and say what its answer means to the outbox
+ * (`docs/offline.md` D6): 409 and 422 are final, as is 403; a 401 waits for
+ * the teacher to sign in; no answer, or a 5xx, is sent again.
+ */
+export async function sendQueued(entry, { fetchImpl = fetch } = {}) {
+  const answer = await takeRegister({
+    classGroupId: entry.classGroupId,
+    termId: entry.termId,
+    on: entry.on,
+    absentIds: entry.absentIds,
+    shownIds: entry.shownIds,
+    base: entry.base,
+    key: entry.key,
+    fetchImpl,
+  });
+  if (answer.ok) return { landed: true, taken: answer.body };
+  const detail = (answer.body && answer.body.detail) || "";
+  if (answer.refusal === null) return { held: HELD.INVALID, detail };
+  if (answer.refusal === REFUSAL.NOT_A_MARKER) return { held: HELD.FORBIDDEN, detail };
+  if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
+    return { stop: STOPPED.SESSION, refusal: answer.refusal };
+  }
+  if (NOT_NOW.has(answer.status)) return { stop: STOPPED.OFFLINE };
+  if (answer.status >= 400 && answer.status < 500) return { held: HELD.REFUSED, detail };
+  if (answer.status >= 500) return { stop: STOPPED.OFFLINE, toTheBack: true };
+  return { stop: STOPPED.OFFLINE };
+}
+
+/** Who is signed in on this host, asked of the server before anything is sent (D7). */
+export async function whoIsSignedIn({ fetchImpl = fetch } = {}) {
+  const answer = await fetchWhere({ fetchImpl });
+  if (answer.ok) return { userId: answer.body.user_id };
+  if (answer.refusal === REFUSAL.EXPIRED || answer.refusal === REFUSAL.SIGNED_OUT) {
+    return { stop: STOPPED.SESSION, refusal: answer.refusal };
+  }
+  if (answer.refusal === REFUSAL.NOT_A_MARKER) return { stop: STOPPED.NOT_A_MARKER };
+  return { stop: STOPPED.OFFLINE };
 }
