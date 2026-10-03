@@ -46,20 +46,12 @@
  *
  * ## A blur queues the mark; the outbox sends it
  *
- * `docs/offline.md` slice S3, and `outbox.js` has the rules. A blur no longer
- * sends: it puts the write in this teacher's outbox for this school, kept in
- * the browser, and the outbox is drained — at once when the connection is
- * there, again with backoff when it is not, and whenever the browser says it
- * is back online. An outbox left by an earlier page load is drained when the
- * page opens.
- *
- * What a teacher sees is still `applySave()`'s: every answer the outbox gets
- * is handed to it in the shape a direct save used to give it, so the sentences
- * and the in-the-box-or-in-the-note rules above stay in one place. What
- * changes is that a value not yet sent, and a value the server refused, are
- * now on the phone as well as on the screen, and are drawn back onto the sheet
- * when it is opened again (`withOutbox()`), until they land or the teacher
- * dismisses them.
+ * `docs/offline.md` S3, and `outbox.js` has the rules. A blur puts the write in
+ * this teacher's outbox for this school, drained at once when it can be, with
+ * backoff when not, and when the browser is back online. Every answer is drawn
+ * by `applySave()` as a direct save's was; what is not sent, or was refused,
+ * is on the phone too and drawn back onto the sheet (`withOutbox()`) until it
+ * lands or the teacher dismisses it.
  *
  * ## It opens with no connection, from a copy
  *

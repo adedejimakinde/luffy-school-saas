@@ -294,12 +294,13 @@ def _merge_register(class_group, term, on, by, base, looked_at, absent_set, appe
 
     The register is locked (or created) first and the school's marks read
     under that lock, so the comparison is with what this transaction would
-    overwrite and not with what was there a moment ago. A register created
-    here that ends up with nothing written is removed again, inside the same
-    transaction: nothing the teacher sent was a change, and a `Register` row
-    with no marks says somebody took a register that nobody took.
+    overwrite and not with what was there a moment ago. A register left with
+    no marks at all is removed again, inside the same transaction: a
+    `Register` row with no marks says somebody took a register that nobody
+    took. Decided under the lock from the marks themselves, not from whether
+    this call created the row: a second first-take that lost the race to
+    create it must not delete the register the winner just wrote.
     """
-    existed = Register.objects.filter(class_group=class_group, taken_on=on).exists()
     register = _locked_register(class_group, term, on, by)
     now = {
         mark.student_membership_id: mark
@@ -338,7 +339,7 @@ def _merge_register(class_group, term, on, by, base, looked_at, absent_set, appe
             from notices.absence_alerts import write_alerts
 
             write_alerts(register, absent)
-    elif not existed:
+    elif not now:
         register.delete()
 
     return RegisterTaken(
