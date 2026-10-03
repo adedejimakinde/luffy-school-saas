@@ -11,6 +11,9 @@ Cloudflare, the same compose stack as production (`deploy/compose.yml`,
 | `https://sunrise-demo.classnode.co/` | Sunrise Demo Academy's public page |
 | `https://harbour-demo.classnode.co/` | Harbour Demo College's public page |
 
+The server runs the same `deploy/deploy.sh` as production: the domain is
+`classnode.co` in `deploy/production.env`, so nothing is overridden.
+
 **Status: written, not yet run on a real server.** Every command below is from
 the repository's own files; the Cloudflare token scope and the Docker install are
 from the tools' documentation and have not been exercised here. The first run is
@@ -24,8 +27,8 @@ rebuilt, not repaired (last section).
 
 - The server's public IPv4 address (and IPv6, if you want it).
 - `classnode.co` registered, with its zone on Cloudflare.
-- A GitHub personal access token with `read:packages` (classic): the images are
-  in GHCR and a package is private until someone makes it public.
+- A GitHub token with `read:packages` only, for the server to pull our images
+  (step 2 says how to make it and where it goes).
 - A commit SHA on `main` that **includes `load_demo`** and whose CI `publish` job
   passed (Actions, the commit's checks). The images are tagged with that full
   40-character SHA and nothing else (`docs/deployment.md`, "Images").
@@ -36,15 +39,17 @@ rebuilt, not repaired (last section).
 
 | type | name | content | proxy |
 |---|---|---|---|
-| A | `app` | the server's IPv4 | **DNS only** (grey cloud) |
+| A | `classnode.co` (the apex, `@`) | the server's IPv4 | **DNS only** (grey cloud) |
+| A | `app` | the server's IPv4 | **DNS only** |
 | A | `*` | the server's IPv4 | **DNS only** |
-| AAAA | `app`, `*` | the server's IPv6 (optional) | **DNS only** |
+| AAAA | `@`, `app`, `*` | the server's IPv6 (optional) | **DNS only** |
 
 The `*` record covers `sunrise-demo` and `harbour-demo`, and any school added
 later. Leave the cloud grey: Caddy holds the wildcard certificate itself, and an
-orange cloud would put Cloudflare's certificate and proxy in front of it. Nothing
-is needed at the apex (`classnode.co`) for the demo, and `app` is only listed
-apart from `*` because it is the one name the portal must answer on.
+orange cloud would put Cloudflare's certificate and proxy in front of it. The apex
+record is there because `deploy.sh` checks `https://classnode.co/healthz/` through
+Caddy (the certificate covers the apex too), and `app` is listed apart from `*`
+because it is the one name the portal must answer on.
 
 ### The API token Caddy needs
 
@@ -79,9 +84,6 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
   > /etc/apt/sources.list.d/docker.list
 apt-get update && apt-get -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# Sign in to GHCR so the images can be pulled (the token needs read:packages).
-echo "<the GitHub token>" | docker login ghcr.io -u adedejimakinde --password-stdin
-
 # The deploy files, at the commit you are running.
 git clone https://github.com/adedejimakinde/luffy-school-saas.git /opt/classnode
 cd /opt/classnode && git checkout <the full commit SHA>
@@ -91,16 +93,42 @@ mkdir -p /srv/classnode/postgres /srv/classnode/redis /etc/classnode
 chmod 700 /etc/classnode
 ```
 
+### How the server pulls our images from GHCR
+
+CI publishes the images to `ghcr.io/adedejimakinde/luffy-school-saas` (and
+`/caddy`, `/postgres`), and a package is private until someone makes it public.
+The server signs in to GHCR **once**, with a token that can do nothing else:
+
+1. On GitHub, as an account that can read this repository (its packages inherit
+   that access): Settings, Developer settings, Personal access tokens, **Tokens
+   (classic)**, Generate new token (classic). Fine-grained tokens do not cover
+   packages.
+2. Tick **`read:packages` and nothing else** (not `repo`, not `write:packages`).
+   Give it an expiry and put the date somewhere you will see it: when it lapses
+   every pull fails with `denied` until a new one is logged in.
+3. On the server, as root, once (the token is read from the pipe, so it is not in
+   shell history or the process list):
+
+   ```bash
+   read -r -s -p "GitHub token: " GHCR_TOKEN; echo
+   echo "$GHCR_TOKEN" | docker login ghcr.io -u <that account's GitHub username> --password-stdin
+   unset GHCR_TOKEN
+   ```
+
+Docker keeps the result in `/root/.docker/config.json`, which is the token in a
+reversible form: it is root's file, so use the token for nothing else and do not
+copy it into `secrets.env`, `caddy.env` or any compose file. Nothing else is
+needed: `docker compose pull` (inside `deploy.sh`) uses it from then on. To
+revoke, delete the token on GitHub and `docker logout ghcr.io`.
+
 (Docker published ports bypass `ufw`'s rules; only 80 and 443 are published, and
 the database and Redis publish nothing, so this is fine. Do not add ports to the
 compose file.)
 
 ## 3. The env values
 
-`deploy/production.env` names `classnode.africa`. The demo overrides it **on the
-server**, without editing the committed file: in compose, a later `env_file`
-wins, and `secrets.env` (for web, worker and db) and `caddy.env` (for Caddy) both
-come after `production.env`.
+The domain, `PLATFORM_DOMAIN=classnode.co`, is already in the committed
+`deploy/production.env`; only the secrets are written on the server.
 
 Make the two secrets once and keep them in a password manager:
 
@@ -112,7 +140,6 @@ openssl rand -base64 32 | tr -d '\n'   # POSTGRES_PASSWORD (any characters but =
 `/etc/classnode/secrets.env` (mode 600):
 
 ```
-PLATFORM_DOMAIN=classnode.co
 DJANGO_SECRET_KEY=<first value>
 POSTGRES_PASSWORD=<second value>
 DEMO_SERVER=1
@@ -121,7 +148,6 @@ DEMO_SERVER=1
 `/etc/classnode/caddy.env` (mode 600):
 
 ```
-PLATFORM_DOMAIN=classnode.co
 CLOUDFLARE_API_TOKEN=<the token from step 1>
 ACME_EMAIL=<an address you read>
 ```
@@ -138,33 +164,29 @@ nothing can send an SMS, which is what a demo wants.
 `DEMO_SERVER=1` is what lets `load_demo` run. **Never set it anywhere that holds
 real data.** The demo password is *not* in either file: you type it in step 5.
 
-## 4. Start the stack and prepare the database
+## 4. Deploy
 
-Not `deploy/deploy.sh`: it reads `production.env` for the health check and would
-test `classnode.africa`. These are its steps by hand. From `/opt/classnode/deploy`:
-
-```bash
-cd /opt/classnode/deploy
-export CLASSNODE_TAG=<the full commit SHA>
-
-docker compose pull web worker caddy db
-docker compose up -d db redis
-docker compose run --rm --no-deps web python manage.py migrate_schemas --noinput
-docker compose up -d web worker caddy
-```
-
-Check that the override took, and that the first certificate arrived (Caddy asks
-Let's Encrypt for the wildcard through Cloudflare; the first time takes a minute
-or two):
+Exactly as production does it (`docs/deployment.md`, "Deploying"): `deploy.sh`
+pulls the images for the SHA, starts the database and Redis, migrates, starts web,
+worker and Caddy, and checks `/healthz/` inside the container and then through
+Caddy over HTTPS at `https://classnode.co/healthz/`.
 
 ```bash
-docker compose run --rm --no-deps web printenv PLATFORM_DOMAIN     # classnode.co
-docker compose logs caddy | grep -i -E "certificate obtained|error"
-curl -fsS https://app.classnode.co/healthz/                        # 200
+/opt/classnode/deploy/deploy.sh <the full commit SHA>
 ```
 
-`export CLASSNODE_TAG` lasts for this shell only; every later `docker compose`
-command needs it again.
+It ends with `DEPLOYED <sha>`. The first time, Caddy has to get the wildcard
+certificate from Let's Encrypt through Cloudflare, which can take longer than the
+script waits (about a minute): if it says `NOT HEALTHY` and
+`docker compose logs caddy` shows the certificate still being obtained, wait for
+`certificate obtained`, then run the same command again (it is safe to repeat). A
+real error in that log is step 1 (the token, the records).
+
+Every `docker compose` command after this needs the tag in its shell:
+
+```bash
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
+```
 
 ## 5. Make the portal and load the demo
 
@@ -212,18 +234,18 @@ from the staff logins (a released card is on JSS 1B's class page).
 
 ## Updating and starting over
 
-A new version: check out the new SHA in `/opt/classnode`, `export CLASSNODE_TAG`,
-and run the four commands of step 4. The demo data stays.
+A new version: `cd /opt/classnode && git fetch && git checkout <the new SHA>`, then
+`deploy/deploy.sh <the new SHA>`. The demo data stays.
 
 Starting over (the data is disposable):
 
 ```bash
-cd /opt/classnode/deploy && export CLASSNODE_TAG=<sha>
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
 docker compose down
 rm -rf /srv/classnode/postgres /srv/classnode/redis && mkdir -p /srv/classnode/postgres /srv/classnode/redis
 ```
 
-then step 4, then step 5. The certificate is kept in the `caddy-data` volume, so
+then `deploy.sh <sha>` again (step 4), then step 5. The certificate is kept in the `caddy-data` volume, so
 this does not ask Let's Encrypt for a new one.
 
 ## If it does not come up
@@ -232,11 +254,13 @@ this does not ask Let's Encrypt for a new one.
   "zone not found" is the token's scope or zone (step 1); "no such host" is a
   missing `*` record. Let's Encrypt rate-limits repeated failures, so fix the
   cause before restarting in a loop.
-- **`docker compose` says set CLASSNODE_TAG**: the export is per shell.
-- **`manifest unknown` or `denied` on pull**: the SHA's images are not published
-  (its `publish` job did not pass), or the GHCR login is missing or expired.
+- **`docker compose` says set CLASSNODE_TAG**: the export is per shell (step 4).
+- **`manifest unknown` or `denied` on pull**: `denied` is the GHCR login missing
+  or its token expired (step 2); `manifest unknown` is a SHA whose images are not
+  published (its `publish` job did not pass).
 - **`load_demo` says "only runs on a demo server"**: `DEMO_SERVER=1` is not in
   `secrets.env`, or the file was edited after the container was created; `run`
   reads it fresh, so check the file.
 - **A school's page says the host is not allowed**: the name is not under
-  `PLATFORM_DOMAIN`. Confirm step 4's `printenv` shows `classnode.co`.
+  `PLATFORM_DOMAIN`; `docker compose run --rm --no-deps web printenv PLATFORM_DOMAIN`
+  should say `classnode.co`.
