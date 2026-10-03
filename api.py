@@ -70,6 +70,7 @@ from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.platform_api import router as platform_router
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
+from schools.demo import single_host
 from schools.models import (
     Domain,
     Invitation,
@@ -353,6 +354,17 @@ def _portal_only(request):
         raise Http404("Sign in on the portal host.")
 
 
+def _door_host_only(request):
+    """`_portal_only()` for the three sign-in routes, and the one place the
+    development single-host demo (`settings.DEMO_SINGLE_HOST`) relaxes it.
+
+    Only the doors: the platform screen's API keeps the strict rule above, so
+    the demo mode opens nothing but signing in.
+    """
+    if not single_host():
+        _portal_only(request)
+
+
 def _schools_of(user, *, parent_scoped=False):
     """Every school this login may act at, with where to go and what is there.
 
@@ -496,7 +508,7 @@ def sign_in(request, payload: SignInIn):
     rather than locks — are in `accounts/signin.py`, where they hold for any
     caller rather than only for this view.
     """
-    _portal_only(request)
+    _door_host_only(request)
 
     # CSRF, checked here by hand because ninja exempts its views from Django's
     # middleware and does the check inside cookie auth instead — which this
@@ -644,7 +656,7 @@ def guardian_code(request, payload: GuardianCodeIn):
     Portal-only and CSRF-checked by hand, for `/api/login/`'s reasons — this is
     the other route a caller uses *before* it has a cookie.
     """
-    _portal_only(request)
+    _door_host_only(request)
     refusal = _guardian_csrf_failure(request)
     if refusal is not None:
         return refusal
@@ -684,7 +696,7 @@ def guardian_session(request, payload: GuardianSessionIn):
     is why the service raises it, and a guardian-facing one must not, which is
     why `guardian_signin` swallows it.
     """
-    _portal_only(request)
+    _door_host_only(request)
     refusal = _guardian_csrf_failure(request)
     if refusal is not None:
         return refusal
