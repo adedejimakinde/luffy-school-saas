@@ -40,43 +40,41 @@ A plain form post, CSRF-checked, that works with no script.
 
 ## The page
 
-- **The words are the copy as given, word for word**, and every fact still to
-  be decided (the price, the setup fee, the call-back time, the city) is a
-  visible `TODO`. `website/tests/test_homepage.py` holds the page to that copy
+- **The words are the copy as given, word for word**: the price (₦2,500 per
+  student, per term, no setup fee), the call-back time (one working day), the
+  footer (Classnode. Nigeria.) and the contact address (hello@classnode.co)
+  included. The two form refusals are still visible `TODO`s: no wording was
+  given for them. `website/tests/test_homepage.py` holds the page to that copy
   and to the writing rules: no en or em dash, no exclamation or question mark,
   no sentence starting "Imagine", none of the banned words.
 - **One Blue** (`docs/design.md`): the tokens from `design.css`, Hanken
   Grotesk, no gradient. The one dark band is the fees section, on the ink. It
   is the one thing that runs edge to edge; everything else stops at 1200px.
-- **Screenshots** are real screens from the demo, as WebP with their sizes set.
-  `scripts/site_shots.mjs` takes them (the screens job's demo, signed in the
-  same way) and `scripts/site_shots.py` cuts them to size into
-  `static/website/shots/`. Their `alt` is empty: the words beside each say what
-  it shows. The fees shot needs a bank and a child's account at Sunrise, which
-  `seed_demo` does not make; add them in `manage.py shell` first:
-
-  ```python
-  from django_tenants.utils import schema_context
-  from accounts.models import Membership
-  from fees.models import SchoolBank, VirtualAccount
-  from schools.models import School
-  school = School.objects.get(slug="sunrise-demo")
-  with schema_context(school.schema_name):
-      SchoolBank.objects.create(bank_code="035", bank_name="Wema Bank", account_number="0123456789",
-          account_name=school.name, subaccount_code="ACCT_demo", split_code="SPL_demo",
-          connected_by_id=1, connected_by_name="Demo")
-      ada = Membership.objects.get(school=school, role="student", user__full_name="Ada Adeyemi")
-      VirtualAccount.objects.create(student_membership_id=ada.pk, customer_code="CUS_demo",
-          account_number="8123456008", account_name=f"{school.name} / Ada Adeyemi",
-          bank_name="Wema Bank", split_code="SPL_demo", created_by_id=1, created_by_name="Demo")
-  school.contact_email = "office@sunrise-demo.example"  # hides the home page's reminder
-  school.save(update_fields=["contact_email"])
-  ```
+- **Screenshots** are real screens of a school having a good day: the
+  showcase school, `manage.py load_demo --showcase` (`schools/showcase.py`, demo
+  data only, on a demo server). A strong student's card (about 78%, A1 to B3,
+  attendance and both remarks), a healthy marks sheet, a home with every
+  register in, results released and nothing flagged, and a released
+  broadsheet. `scripts/site_shots.mjs` takes them and `scripts/site_shots.py`
+  cuts them to size into `static/website/shots/`, as WebP with their sizes set.
+  Their `alt` is empty: the words beside each say what it shows.
+  - **Load a fresh showcase before each capture.** SS 1A's register for today
+    is left untaken on purpose: the script photographs its teacher about to
+    take it, then submits it on the page, so the home it photographs next has
+    every register in. On a second run the script stops and says so.
+  - Laptop shots are taken 1000px tall and cut just under the last whole menu
+    item, so no item is cut in half and Sign out is not in the picture
+    (1280 by 919).
+  - The home says "2 of 3" released: SS 1A is the open class the marks sheet is
+    taken from, since a released class's marks sheet is locked. It raises no
+    row on the home: a class with no sheet is waiting on nobody.
 - **Drawings** are inline SVG built from the mark's shapes (rounded square,
   nodes, lines), styled from the tokens, under 15 KB together: the logo, which
-  draws itself once on load (nodes, then lines, 1 second); the results and fees
-  flows, which play once when scrolled into view (the fees one runs top to
-  bottom on a phone); and the still pattern behind the hero, at 2.5%, a contrast
+  draws itself once on load (nodes, then lines, 1 second); the results, fees
+  and bad-network flows, which play once when scrolled into view (results sits
+  under its words, as fees sits in its band; the fees one runs top to bottom on
+  a phone; bad network is a phone holding queued marks, then the cloud with a
+  tick once they are sent); and the still pattern behind the hero, at 2.5%, a contrast
   of about 1.04:1.
 - **Motion** is the slides (every 6 seconds, a 400ms crossfade, held on hover,
   focus or a touch), the fade-up of each section, and the drawings. All of it

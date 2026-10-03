@@ -61,15 +61,15 @@ not at all under reduced motion.
   <div class="wrap">
     <h2 id="features-title" class="section-title reveal">What changes in your school</h2>
 
-    <article class="feature feature-results reveal">
+    <article class="feature feature-laptop feature-results reveal">
       <div class="feature-text">
         <h3>Results</h3>
         <p class="lead">No more typing broadsheets late at night.</p>
         <p>Marks go in once. Totals, grades and the broadsheet add up by themselves, and every report card carries your crest and your colours.</p>
+        {% include "website/parts/flow_results.html" %}
       </div>
-      {% include "website/parts/flow_results.html" %}
-      <div class="feature-wide">
-        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/broadsheet.webp' %}" width="1280" height="800" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
+      <div class="feature-media">
+        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/broadsheet.webp' %}" width="1280" height="919" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
       </div>
     </article>
   </div>
@@ -115,14 +115,17 @@ not at all under reduced motion.
         <p class="lead">A short summary in your inbox every day: what came in, and what is still owed.</p>
       </div>
       <div class="feature-media">
-        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/home.webp' %}" width="1280" height="800" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
+        <div class="laptop"><div class="laptop-screen"><img src="{% static 'website/shots/home.webp' %}" width="1280" height="919" alt="" loading="lazy"></div><div class="laptop-base"></div></div>
       </div>
     </article>
 
-    <article class="feature feature-plain reveal">
-      <h3>Bad network</h3>
-      <p class="lead">Teachers can keep entering marks when the network drops.</p>
-      <p>Nothing is lost, and it sends when the connection comes back.</p>
+    <article class="feature feature-network reveal">
+      <div class="feature-text">
+        <h3>Bad network</h3>
+        <p class="lead">Teachers can keep entering marks when the network drops.</p>
+        <p>Nothing is lost, and it sends when the connection comes back.</p>
+      </div>
+      {% include "website/parts/flow_network.html" %}
     </article>
   </div>
 </section>
@@ -131,7 +134,7 @@ not at all under reduced motion.
   <div class="panel">
     <h2 id="pricing-title" class="eyebrow">Pricing</h2>
     <p class="statement">Priced per student, per term.</p>
-    <p class="price">From <span class="num">&#8358;<span class="todo">TODO</span></span> per student per term. <span class="todo">TODO: setup fee line.</span></p>
+    <p class="price"><span class="num">&#8358;2,500</span> per student, per term. No setup fee.</p>
     <p class="actions"><a class="btn btn-primary" href="#demo">Book a demo</a></p>
   </div>
 </section>
@@ -140,7 +143,7 @@ not at all under reduced motion.
   <div class="demo-text">
     <h2 id="demo-title" class="eyebrow">Book a demo</h2>
     <p class="statement">See it with your own classes.</p>
-    <p>Leave your details and we will call you within <span class="todo">TODO</span> working day.</p>
+    <p>Leave your details and we will call you within one working day.</p>
   </div>
   {% if sent %}
   <p class="sent" role="status">Thank you. We will be in touch soon.</p>

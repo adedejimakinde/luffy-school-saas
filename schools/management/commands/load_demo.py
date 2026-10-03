@@ -25,6 +25,11 @@ nobody is messaged, and the demo parent has no phone on file, so the parent
 page is shown from the staff side rather than signed into by code.
 
 **Refuses to run twice**, as `seed_demo` does.
+
+**`--showcase`** makes one more school instead, `schools.showcase`: a fictional
+school having a good day (everything released or on track, nothing flagged),
+which the public homepage's screenshots are taken from. On the same guards, and
+it too refuses to run twice. It can sit beside the other two or alone.
 """
 
 import os
@@ -46,8 +51,13 @@ class Command(SeedDemo):
             default=None,
             help="Each school answers on <slug>.<suffix>. Defaults to PLATFORM_DOMAIN.",
         )
+        parser.add_argument(
+            "--showcase",
+            action="store_true",
+            help="Make only the showcase school (schools/showcase.py), for the homepage's screenshots.",
+        )
 
-    def handle(self, *args, domain_suffix, **options):
+    def handle(self, *args, domain_suffix, showcase=False, **options):
         from django.conf import settings
 
         if os.environ.get("DEMO_SERVER") != "1":
@@ -64,7 +74,20 @@ class Command(SeedDemo):
         suffix = domain_suffix or settings.PLATFORM_DOMAIN
         if not suffix:
             raise CommandError("Set PLATFORM_DOMAIN, or pass --domain-suffix.")
-        self.seed(password, suffix)
+        if showcase:
+            self.showcase(password, suffix)
+        else:
+            self.seed(password, suffix)
+
+    def showcase(self, password, suffix):
+        from schools import showcase
+
+        if showcase.exists():
+            raise CommandError(f"The showcase is already here ({showcase.SLUG}).")
+        logins = showcase.make(password, suffix, write=self.stdout.write)
+        self.stdout.write(self.password_line(password))
+        for school, username, role in logins:
+            self.stdout.write(f"  {school:<22} {role:<28} {username}")
 
     def password_line(self, password):
         return "\nEvery login has the password you set in LOAD_DEMO_PASSWORD.\n"
