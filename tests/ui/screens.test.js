@@ -24,8 +24,8 @@
  * And it saves a screenshot of every one, which CI uploads as the `screens`
  * artifact: `<width>/<screen>.png`.
  *
- * Classnode's own public site (`website/`, on the bare platform domain) is
- * photographed at seven widths, `SITE_WIDTHS`, under reduced motion so every
+ * Classnode's own public site (`website/`, on the bare platform domain: the
+ * homepage, the privacy notice and the terms) is photographed at seven widths, `SITE_WIDTHS`, under reduced motion so every
  * section and drawing is in its finished state, with its lazy images scrolled
  * in. It is also held to its own layout: content stops at 1200px and only the
  * fees band runs edge to edge; on a phone a slide's words sit above its screen,
@@ -90,6 +90,8 @@ const SMALL_ON_PURPOSE =
 export const SCREENS = [
   // Classnode's own public site, on the bare domain.
   { name: "homepage", as: null, url: `${SITE}/`, widths: SITE_WIDTHS, site: true },
+  { name: "privacy", as: null, url: `${SITE}/privacy/`, widths: SITE_WIDTHS, site: true },
+  { name: "terms", as: null, url: `${SITE}/terms/`, widths: SITE_WIDTHS, site: true },
 
   // The doors, and what a family with no account uses.
   { name: "sign-in", as: null, url: `${PORTAL}/sign-in/` },
@@ -264,10 +266,13 @@ function measureSite({ width }) {
     const style = getComputedStyle(el);
     return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && style.display !== "none";
   };
+  // The homepage has the one band; the legal pages have none.
   const band = document.querySelector(".band");
-  if (!band || Math.round(band.getBoundingClientRect().width) !== document.documentElement.clientWidth) {
+  const home = Boolean(document.querySelector("[data-carousel]"));
+  if (home && (!band || Math.round(band.getBoundingClientRect().width) !== document.documentElement.clientWidth)) {
     problems.push("the fees band does not run edge to edge");
   }
+  if (!home && band) problems.push("a band on a page that has none");
   for (const el of document.body.querySelectorAll("*")) {
     if (el.closest(".band") || !visible(el)) continue;
     const style = getComputedStyle(el);
@@ -287,7 +292,7 @@ function measureSite({ width }) {
   const toggle = document.querySelector(".menu-toggle");
   if (width < 960 && (visible(nav) || !visible(toggle))) problems.push("the nav is not a menu button here");
   if (width >= 960 && (!visible(nav) || visible(toggle))) problems.push("the nav is folded away on a wide screen");
-  if (width < 640) {
+  if (width < 640 && home) {
     for (const slide of document.querySelectorAll(".slide")) {
       const text = slide.querySelector(".slide-text").getBoundingClientRect();
       const device = slide.querySelector(".slide-device").getBoundingClientRect();

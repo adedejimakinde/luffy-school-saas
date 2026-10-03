@@ -203,12 +203,12 @@ def is_a_part(name):
 
 
 def own_head(name, html):
-    """The template that carries this page's head: itself, or its layout."""
+    """The template that carries this page's head: itself, or its layout's."""
     match = EXTENDS.match(html)
     if not match:
         return html
     (layout,) = [path for path in ROOT.glob(f"*/templates/{match.group(1)}")]
-    return layout.read_text()
+    return own_head(match.group(1), layout.read_text())
 
 
 class EveryPageDrawsFromTheDesignTests(SimpleTestCase):
