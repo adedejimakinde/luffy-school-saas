@@ -20,8 +20,11 @@ schema boundary**, with the check that earns the bare id made in
 `academics.services` before anything is written.
 """
 
+from datetime import date
+
 from django.db import models
 from django.db.models import F, Func, IntegerField, Q
+from django.db.models.functions import Upper
 
 class DaysBetween(Func):
     """`later - earlier` for two dates, as the integer Postgres returns.
@@ -417,3 +420,80 @@ class ClassTeacher(models.Model):
             f"membership {self.teacher_membership_id} teaches "
             f"{self.class_group} ({self.term})"
         )
+
+
+class Sex(models.TextChoices):
+    """What a report card's "Sex" box says. Blank on the row until the office says."""
+
+    FEMALE = "female", "Female"
+    MALE = "male", "Male"
+
+
+class StudentDetails(models.Model):
+    """What a school records about one child beyond a name and an admission number.
+
+    The learner's ID, sex, date of birth and passport photograph: the boxes in
+    the header of an Ogun State report sheet (`docs/ogun-template.md`), and
+    things any school's office keeps.
+
+    **In this schema, not on `accounts.Membership`.** The membership is shared,
+    and a child's date of birth and face are this school's records about her,
+    not facts the platform holds about a login. The learner's ID is unique
+    *per school*, which a table in the school's own schema says by itself.
+
+    One row per child, made the first time any of it is set; a child with no
+    row has none of it, and every reader treats the two the same.
+
+    `student_membership_id` is a bare id across the schema boundary, the policy
+    `ClassPlacement` follows; `academics.details` checks it names a student of
+    this school before anything is written.
+    """
+
+    student_membership_id = models.PositiveBigIntegerField(unique=True)
+
+    #: The state's own number for the child (Ogun's "Learner's ID"). Optional;
+    #: unique at this school when present, ignoring case, by the constraint
+    #: below. Kept as typed, trimmed.
+    learner_id = models.CharField(max_length=32, blank=True, default="")
+    sex = models.CharField(max_length=8, choices=Sex, blank=True, default="")
+    date_of_birth = models.DateField(null=True, blank=True)
+
+    #: The passport photograph as the card prints it: a JPEG, cropped to a
+    #: passport frame and re-encoded by `academics.details.redraw_photo()` from
+    #: whatever was uploaded, as a crest is (`results.look`). Nothing of the
+    #: original file is kept. Null until the office sets one.
+    #:
+    #: Deferred by every reader that lists children (`details_for()`), so a
+    #: class's worth of photos is never read to print a list of names.
+    photo = models.BinaryField(null=True, blank=True)
+
+    updated_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["student_membership_id"]
+        constraints = [
+            # Case-insensitive, and only over the IDs that exist: most
+            # children at most schools have none, and blank is not a value two
+            # children can collide on.
+            models.UniqueConstraint(
+                Upper("learner_id"),
+                condition=~Q(learner_id=""),
+                name="one_child_per_learner_id_per_school",
+            ),
+            models.CheckConstraint(
+                condition=Q(sex__in=["", "female", "male"]),
+                name="a_childs_sex_is_female_male_or_unsaid",
+            ),
+            # A floor, not a ceiling: "not in the future" depends on today,
+            # which a constraint cannot read. The service refuses that.
+            models.CheckConstraint(
+                condition=Q(date_of_birth__isnull=True)
+                | Q(date_of_birth__gte=date(1950, 1, 1)),
+                name="a_date_of_birth_is_this_century_or_last",
+            ),
+        ]
+
+    def __str__(self):
+        return f"details of membership {self.student_membership_id}"

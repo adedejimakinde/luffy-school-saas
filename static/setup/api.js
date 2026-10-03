@@ -53,6 +53,10 @@ export function publicPageUrl() {
   return "/api/academics/public-page/";
 }
 
+export function lgaUrl() {
+  return "/api/academics/lga/";
+}
+
 export function contactEmailUrl() {
   return "/api/academics/contact-email/";
 }
@@ -162,6 +166,17 @@ export async function saveContactEmail({ contact_email, fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(contactEmailUrl(), { contact_email }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/** The local government area the school sits in. Blank clears it. */
+export async function saveLga({ lga, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(lgaUrl(), { lga }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

@@ -121,24 +121,48 @@ def set_colour_as(actor, school, value: Optional[str]) -> ReportCardSettings:
 # -- the crest ---------------------------------------------------------------
 
 
-def redraw_crest(raw: bytes) -> bytes:
-    """The upload, fitted into a transparent square and written as a new PNG."""
+def open_picture(raw: bytes, *, noun: str, max_bytes: int, max_pixels: int, size_hint=None):
+    """An uploaded PNG or JPG, decoded to RGBA, or `LookRefused` saying why not.
+
+    The checks every picture a school sends goes through, the crest's and a
+    child's photo's (`academics.details`) alike: the size of the file before it
+    is opened, the format, and the pixel count read from the header before a
+    pixel is decoded. `noun` is what the refusals call it ("A crest").
+
+    `size_hint`, for a JPEG, asks the decoder for a reduced-scale decode near
+    that size (`Image.draft`), so a phone's 12-megapixel photo is not inflated
+    in full only to be shrunk to a passport frame.
+    """
     from PIL import Image, ImageOps, UnidentifiedImageError
 
-    if len(raw) > MAX_UPLOAD_BYTES:
-        raise LookRefused("A crest can be at most 1 MB. Save it smaller and try again.")
+    if len(raw) > max_bytes:
+        raise LookRefused(
+            f"{noun} can be at most {max_bytes // (1024 * 1024)} MB. Save it smaller and try again."
+        )
     try:
         source = Image.open(io.BytesIO(raw))
         if source.format not in ("PNG", "JPEG"):
-            raise LookRefused("A crest is a PNG or a JPG file.")
+            raise LookRefused(f"{noun} is a PNG or a JPG file.")
         width, height = source.size
-        if width * height > MAX_SOURCE_PIXELS:
-            raise LookRefused("That image is far larger than a crest needs. Save it smaller and try again.")
+        if width * height > max_pixels:
+            raise LookRefused(
+                f"That image is far larger than {noun.lower()} needs. Save it smaller and try again."
+            )
+        if size_hint and source.format == "JPEG":
+            source.draft("RGB", size_hint)
         source = ImageOps.exif_transpose(source)
-        source = source.convert("RGBA")
+        return source.convert("RGBA")
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
-        raise LookRefused("That file is not an image this can read. A crest is a PNG or a JPG file.")
+        raise LookRefused(f"That file is not an image this can read. {noun} is a PNG or a JPG file.")
 
+
+def redraw_crest(raw: bytes) -> bytes:
+    """The upload, fitted into a transparent square and written as a new PNG."""
+    from PIL import Image
+
+    source = open_picture(
+        raw, noun="A crest", max_bytes=MAX_UPLOAD_BYTES, max_pixels=MAX_SOURCE_PIXELS
+    )
     source.thumbnail((CREST_SIDE, CREST_SIDE), Image.LANCZOS)
     square = Image.new("RGBA", (CREST_SIDE, CREST_SIDE), (0, 0, 0, 0))
     square.paste(source, ((CREST_SIDE - source.width) // 2, (CREST_SIDE - source.height) // 2), source)
@@ -217,6 +241,7 @@ __all__ = [
     "contrast_with_white",
     "for_card",
     "initials",
+    "open_picture",
     "redraw_crest",
     "set_colour_as",
     "set_crest_as",

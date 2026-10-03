@@ -44,6 +44,7 @@ from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
 
+from academics import details
 from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts import bulk, guardian_contacts
@@ -60,6 +61,7 @@ from accounts.models import (
 )
 from accounts.session import session_auth
 from messaging import codes as message_codes
+from results.look import LookRefused
 
 router = Router(auth=session_auth)
 
@@ -81,6 +83,8 @@ class EnrolledChildOut(Schema):
     reference: str
     class_group_id: Optional[int] = None
     class_group: Optional[str] = None
+    #: The state's learner's ID, blank where the office has recorded none.
+    learner_id: str = ""
 
 
 class ClassChoiceOut(Schema):
@@ -219,6 +223,7 @@ def roll(request):
             )
         )
 
+    recorded = details.details_for(m.pk for m in memberships)
     children = [
         EnrolledChildOut(
             student_membership_id=m.pk,
@@ -227,6 +232,7 @@ def roll(request):
             reference=m.reference,
             class_group_id=placements.get(m.pk),
             class_group=group_names.get(placements.get(m.pk)),
+            learner_id=recorded[m.pk].learner_id if m.pk in recorded else "",
         )
         for m in sorted(
             memberships,
@@ -475,6 +481,10 @@ def _admit(request, school, source):
         # A contact two accounts answer to, found at write time. Nothing was
         # written: `admit()` holds the whole file in one transaction.
         return 422, MessageOut(detail=str(exc))
+    except details.DetailsRefused as exc:
+        # A learner's ID claimed by another child between the check and the
+        # write. Nothing was written, for the same reason.
+        return 422, MessageOut(detail=str(exc))
     return 200, _report_out(report)
 
 
@@ -530,6 +540,9 @@ class PreviewRowOut(Schema):
     username: str
     guardian_name: str
     guardian_contact: str
+    learner_id: str = ""
+    sex: str = ""
+    date_of_birth: str = ""
     problems: List[RowProblemOut]
 
 
@@ -1075,3 +1088,161 @@ def unlink(request, student_membership_id: int, link_id: int):
         # past the check above, and mapped anyway so a refusal is never a 500.
         return 422, MessageOut(detail=str(exc))
     return 200, _guardians_of(child, school, True)
+
+
+# ---------------------------------------------------------------------------
+# A child's details: learner's ID, sex, date of birth and passport photo.
+# `academics.details` holds the rules; the office keeps them, as it keeps the
+# roll, so these routes are refused to anybody the roll is refused to.
+# ---------------------------------------------------------------------------
+
+
+class DetailsOut(Schema):
+    student_membership_id: int
+    student: str
+    learner_id: str
+    sex: str
+    date_of_birth: Optional[str] = None
+    has_photo: bool
+    #: Changes whenever the photo does, for the page to put on the image's URL.
+    photo_version: Optional[str] = None
+    may_edit: bool
+
+
+class DetailsIn(Schema):
+    #: Blank clears each.
+    learner_id: str = ""
+    sex: str = ""
+    date_of_birth: Optional[str] = None
+
+
+def _details_out(request, school, child) -> DetailsOut:
+    row = details.details_for([child.pk]).get(child.pk)
+    has_photo = bool(row and row.has_photo)
+    return DetailsOut(
+        student_membership_id=child.pk,
+        student=child.display_name or child.user.full_name or child.user.username,
+        learner_id=row.learner_id if row else "",
+        sex=row.sex if row else "",
+        date_of_birth=row.date_of_birth.isoformat() if row and row.date_of_birth else None,
+        has_photo=has_photo,
+        photo_version=str(int(row.updated_at.timestamp())) if has_photo else None,
+        may_edit=details.can_edit_details(request.user, school),
+    )
+
+
+def _details_child(request):
+    """Host, then authority, then the child: the order every route here keeps."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return school, refused
+    return school, None
+
+
+@router.get(
+    "/roll/{int:student_membership_id}/details/",
+    response={200: DetailsOut, 403: MessageOut, 404: MessageOut},
+)
+def child_details(request, student_membership_id: int):
+    school, refused = _details_child(request)
+    if refused:
+        return refused
+    child = details.student_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    return 200, _details_out(request, school, child)
+
+
+@router.put(
+    "/roll/{int:student_membership_id}/details/",
+    response={200: DetailsOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def set_child_details(request, student_membership_id: int, payload: DetailsIn):
+    school, refused = _details_child(request)
+    if refused:
+        return refused
+    child = details.student_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    try:
+        details.set_details_as(
+            request.user,
+            school,
+            child,
+            learner_id=payload.learner_id,
+            sex=payload.sex,
+            date_of_birth=payload.date_of_birth,
+        )
+    except details.NotAllowedToEditDetails as exc:
+        return 403, MessageOut(detail=str(exc))
+    except details.DetailsRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _details_out(request, school, child)
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/photo/",
+    response={200: DetailsOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def set_child_photo(request, student_membership_id: int):
+    """A passport photo, as a multipart `photo` file: PNG or JPG, at most 5 MB."""
+    school, refused = _details_child(request)
+    if refused:
+        return refused
+    child = details.student_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    if not details.can_edit_details(request.user, school):
+        return 403, MessageOut(detail=details.MAY_NOT_EDIT)
+    upload = request.FILES.get("photo")
+    if upload is None:
+        return 422, MessageOut(detail="Choose a PNG or JPG file for the photo.")
+    if upload.size > details.MAX_PHOTO_BYTES:
+        return 422, MessageOut(detail="A photo can be at most 5 MB. Save it smaller and try again.")
+    try:
+        details.set_photo_as(request.user, school, child, upload.read())
+    except details.NotAllowedToEditDetails as exc:
+        return 403, MessageOut(detail=str(exc))
+    except (details.DetailsRefused, LookRefused) as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _details_out(request, school, child)
+
+
+@router.delete(
+    "/roll/{int:student_membership_id}/photo/",
+    response={200: DetailsOut, 403: MessageOut, 404: MessageOut},
+)
+def clear_child_photo(request, student_membership_id: int):
+    school, refused = _details_child(request)
+    if refused:
+        return refused
+    child = details.student_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    try:
+        details.clear_photo_as(request.user, school, child)
+    except details.NotAllowedToEditDetails as exc:
+        return 403, MessageOut(detail=str(exc))
+    return 200, _details_out(request, school, child)
+
+
+@router.get(
+    "/roll/{int:student_membership_id}/photo/",
+    response={403: MessageOut, 404: MessageOut},
+)
+def child_photo(request, student_membership_id: int):
+    """The child's photo as stored: a JPEG, from this school's schema."""
+    school, refused = _details_child(request)
+    if refused:
+        return refused
+    child = details.student_here(school, student_membership_id)
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    photo = details.photo_of(child.pk)
+    if not photo:
+        return 404, MessageOut(detail="No photo has been added for this child.")
+    response = HttpResponse(photo, content_type="image/jpeg")
+    response["Cache-Control"] = "private, max-age=0, must-revalidate"
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

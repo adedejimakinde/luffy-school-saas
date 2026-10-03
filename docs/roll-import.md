@@ -43,6 +43,10 @@ both).
   keeps its leading zeros. A second sheet says how to fill it in.
 - Headings match with spaces read as underscores, so the template's "Full name"
   and a hand-made file's `full_name` are the same column.
+- **A child's details** (since the Ogun template, `docs/ogun-template.md`):
+  "Learner ID", "Sex" and "Date of birth" are optional columns, checked by
+  row. A learner's ID is unique at a school, ignoring case, as an admission
+  number is. Photos are added on the roll, not imported.
 
 Every route asks who is asking before it reads the file (the oracle rule), and
 answers only for the school whose host it is on.

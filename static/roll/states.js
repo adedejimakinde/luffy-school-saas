@@ -23,6 +23,7 @@ export function roll({
   may_place = false,
   notes = {},
   panel = null,
+  details = null,
 } = {}) {
   return [
     '<section class="state state-roll" data-state="roll">',
@@ -31,6 +32,7 @@ export function roll({
     // A whole class from a spreadsheet: the same authority as admitting one.
     may_admit ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>' : "",
     panel ? guardiansPanel(panel) : "",
+    details ? detailsPanel(details) : "",
     children.length
       ? `<ul class="children stack-list">${children
           .map((c) => childRow(c, { classes, may_place }))
@@ -63,8 +65,13 @@ function childRow(c, { classes, may_place }) {
           unplaced ? "Not in a class yet" : esc(c.class_group)
         }</span>`,
     "</span>",
+    c.learner_id ? `<span class="learner-id" data-label="Learner ID">${esc(c.learner_id)}</span>` : "",
+    '<span class="row-actions">',
+    `<button type="button" data-action="details" data-child="${esc(c.student_membership_id)}">`,
+    "Details</button>",
     `<button type="button" data-action="guardians" data-child="${esc(c.student_membership_id)}">`,
     "Guardians</button>",
+    "</span>",
     "</li>",
   ].join("");
 }
@@ -307,6 +314,80 @@ function linkForm(relationships, note) {
     '<button type="submit">Link guardian</button>',
     note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
     "</form>",
+  ].join("");
+}
+
+/**
+ * One child's details: learner's ID, sex, date of birth and passport photo.
+ *
+ * The office keeps them; `may_edit` is the server's answer to whether this
+ * reader may change them, and a reader who may not sees them as text. A
+ * refused save keeps what was typed, as the guardian form does.
+ */
+export function detailsPanel({ body = {}, note = null } = {}) {
+  const {
+    student = "",
+    student_membership_id: id = "",
+    learner_id = "",
+    sex = "",
+    date_of_birth = null,
+    has_photo = false,
+    photo_version = null,
+    may_edit = false,
+  } = body;
+  const typed = (note && note.typed) || {};
+  const shown = (key, value) => (typed[key] !== undefined ? typed[key] : value) || "";
+  const photo = has_photo
+    ? `<img class="photo" src="/api/enrolment/roll/${esc(id)}/photo/?v=${esc(photo_version || "")}" ` +
+      `alt="Photo of ${esc(student)}" width="140" height="180">`
+    : '<p class="blank">No photo yet.</p>';
+  const sexLabel = { female: "Female", male: "Male" };
+  return [
+    '<section class="details" data-panel="details">',
+    `<h2>Details of ${esc(student)}</h2>`,
+    `<div class="photo-box">${photo}</div>`,
+    may_edit
+      ? [
+          `<form class="child-details${note && note.form === "details" ? ` ${esc(note.kind)}` : ""}" data-form="details">`,
+          '<label for="learner_id">Learner ID (optional)</label>',
+          `<input id="learner_id" name="learner_id" value="${esc(shown("learner_id", learner_id))}" maxlength="32" autocomplete="off">`,
+          '<label for="sex">Sex</label>',
+          '<select id="sex" name="sex">',
+          ["", "female", "male"]
+            .map(
+              (v) =>
+                `<option value="${v}"${shown("sex", sex) === v ? " selected" : ""}>${
+                  v ? sexLabel[v] : "Not given"
+                }</option>`,
+            )
+            .join(""),
+          "</select>",
+          '<label for="date_of_birth">Date of birth</label>',
+          `<input id="date_of_birth" name="date_of_birth" type="date" value="${esc(shown("date_of_birth", date_of_birth))}">`,
+          '<button type="submit">Save details</button>',
+          note && note.form === "details" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+          "</form>",
+          `<form class="child-photo${note && note.form === "photo" ? ` ${esc(note.kind)}` : ""}" data-form="photo" enctype="multipart/form-data">`,
+          '<label for="photo">Passport photo</label>',
+          '<input id="photo" name="photo" type="file" accept="image/png,image/jpeg" required>',
+          '<span class="hint">PNG or JPG, up to 5 MB. It is cropped to a passport frame.</span>',
+          '<span class="actions">',
+          '<button type="submit">Upload photo</button>',
+          has_photo ? '<button type="button" data-action="remove-photo">Remove photo</button>' : "",
+          "</span>",
+          note && note.form === "photo" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+          "</form>",
+        ].join("")
+      : [
+          '<dl class="facts">',
+          `<dt>Learner ID</dt><dd>${esc(learner_id) || "—"}</dd>`,
+          `<dt>Sex</dt><dd>${esc(sexLabel[sex] || "") || "—"}</dd>`,
+          `<dt>Date of birth</dt><dd>${esc(date_of_birth) || "—"}</dd>`,
+          "</dl>",
+          note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+        ].join(""),
+    '<button type="button" data-action="close-details">Close</button>',
+    "</section>",
   ].join("");
 }
 

@@ -99,6 +99,10 @@ class School(TenantMixin):
     about = models.TextField(blank=True, default="")
     address = models.CharField(max_length=300, blank=True, default="")
     phone = models.CharField(max_length=30, blank=True, default="")
+    #: The local government area the school sits in, as the Ogun State report
+    #: sheet prints it beside the school's name ("Abeokuta South L.G.A.").
+    #: Blank until the office sets it (`schools.contact.set_lga_as()`).
+    lga = models.CharField(max_length=60, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Schemas are created on save in real use; tests turn this off per instance.

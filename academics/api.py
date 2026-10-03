@@ -196,6 +196,10 @@ class SetUpOut(Schema):
     about: str = ""
     address: str = ""
     phone: str = ""
+    #: The local government area the school sits in, printed on the Ogun
+    #: State card beside its name, and the twenty Ogun ones to offer.
+    lga: str = ""
+    lga_choices: List[str] = []
 
 
 class NewTermIn(Schema):
@@ -265,6 +269,8 @@ def setup(request):
         about=school.about,
         address=school.address,
         phone=school.phone,
+        lga=school.lga,
+        lga_choices=list(contact.OGUN_LGAS),
     )
 
 
@@ -550,3 +556,28 @@ def set_public_page(request, payload: PublicDetailsIn):
     except contact.PublicDetailsRefused as exc:
         return 422, MessageOut(detail=str(exc))
     return 200, PublicDetailsOut(about=school.about, address=school.address, phone=school.phone)
+
+
+class LgaIn(Schema):
+    #: Blank clears it.
+    lga: str = ""
+
+
+class LgaOut(Schema):
+    lga: str
+
+
+@router.put("/lga/", response={200: LgaOut, 403: MessageOut, 422: MessageOut})
+def set_lga(request, payload: LgaIn):
+    """The local government area the school sits in, as its card prints it."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        lga = contact.set_lga_as(request.user, school, payload.lga)
+    except services.NotAllowedToSetUp:
+        return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except contact.PublicDetailsRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, LgaOut(lga=lga)

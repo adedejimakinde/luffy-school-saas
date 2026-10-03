@@ -23,6 +23,7 @@ import {
   removeCrest,
   saveColour,
   saveContactEmail,
+  saveLga,
   savePublicPage,
   uploadCrest,
 } from "./api.js";
@@ -135,6 +136,10 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
           fetchImpl,
         }),
       );
+      return;
+    }
+    if (which === "lga") {
+      await after("lga", await saveLga({ lga: form.lga.value, fetchImpl }));
       return;
     }
     if (which === "contact-email") {

@@ -95,6 +95,7 @@ from dataclasses import dataclass, field
 
 from django.db import transaction
 
+from academics import details
 from academics import services as academics
 from academics.models import ClassGroup
 from accounts import guardian_contacts
@@ -105,7 +106,15 @@ from accounts.services import admit_student_as
 #: The header a file must carry. Two are required of every row; the rest may be
 #: absent from the file entirely.
 REQUIRED_COLUMNS = ("full_name", "class_group")
-OPTIONAL_COLUMNS = ("username", "reference", "guardian_name", "guardian_contact")
+OPTIONAL_COLUMNS = (
+    "username",
+    "reference",
+    "guardian_name",
+    "guardian_contact",
+    "learner_id",
+    "sex",
+    "date_of_birth",
+)
 
 #: The columns in the order the template lays them out, and the heading each
 #: carries there. A heading is matched with its spaces read as underscores, so
@@ -117,6 +126,9 @@ TEMPLATE_COLUMNS = (
     ("username", "Username"),
     ("guardian_name", "Guardian name"),
     ("guardian_contact", "Guardian contact"),
+    ("learner_id", "Learner ID"),
+    ("sex", "Sex"),
+    ("date_of_birth", "Date of birth"),
 )
 
 #: The largest file looked at, in bytes. A school's whole roll as a workbook
@@ -155,6 +167,13 @@ class PlannedChild:
     class_group: object
     guardian_name: str = ""
     guardian_contact: str = ""
+    learner_id: str = ""
+    sex: str = ""
+    date_of_birth: object = None
+
+    @property
+    def has_details(self) -> bool:
+        return bool(self.learner_id or self.sex or self.date_of_birth)
 
 
 @dataclass
@@ -324,6 +343,9 @@ _HOW_TO = (
     "Guardian name and Guardian contact: optional, but give both or neither. "
     "The contact is a phone number or an email address.",
     "Two children with the same guardian contact are siblings: one guardian is linked to both.",
+    "Learner ID: optional. The state's ID for the child; never shared by two children here.",
+    "Sex: optional. Female or Male (F or M is fine).",
+    "Date of birth: optional. Day/month/year, like 31/01/2014.",
     "",
     "Nothing is saved until every row is right. The upload page shows every row "
     "that needs fixing, by its row number here.",
@@ -356,9 +378,12 @@ def template_workbook(class_names) -> bytes:
         letter = get_column_letter(index)
         sheet[f"{letter}1"].font = Font(bold=True)
         sheet.column_dimensions[letter].width = max(16, len(heading) + 6)
-        if key in ("reference", "username", "guardian_contact"):
+        if key in ("reference", "username", "guardian_contact", "learner_id"):
             for row in range(2, _TEMPLATE_ROWS + 2):
                 sheet[f"{letter}{row}"].number_format = "@"
+        if key == "date_of_birth":
+            for row in range(2, _TEMPLATE_ROWS + 2):
+                sheet[f"{letter}{row}"].number_format = "DD/MM/YYYY"
 
     names = [name for name in class_names if name]
     if names:
@@ -377,6 +402,18 @@ def template_workbook(class_names) -> bytes:
         )
         choice.add(f"{column}2:{column}{_TEMPLATE_ROWS + 1}")
         sheet.add_data_validation(choice)
+
+    sexes = DataValidation(
+        type="list",
+        formula1='"Female,Male"',
+        allow_blank=True,
+        showErrorMessage=True,
+        errorTitle="Female or Male",
+        error="Choose Female or Male, or leave it blank.",
+    )
+    column = get_column_letter(1 + [k for k, _ in TEMPLATE_COLUMNS].index("sex"))
+    sexes.add(f"{column}2:{column}{_TEMPLATE_ROWS + 1}")
+    sheet.add_data_validation(sexes)
 
     notes = book.create_sheet("How to fill it in")
     for line in _HOW_TO:
@@ -511,6 +548,7 @@ def check(school, source) -> Report:
     }
     taken_usernames = set()
     taken_references = set()
+    taken_learner_ids = set()
 
     for line, row in _read(source):
         problems_before = len(report.problems)
@@ -595,6 +633,36 @@ def check(school, source) -> Report:
             else:
                 guardian_contact = read[1]
 
+        learner_id = sex = ""
+        date_of_birth = None
+        try:
+            learner_id = details.read_learner_id(row.get("learner_id", ""))
+        except details.DetailsRefused as exc:
+            report.problems.append(RowProblem(line, "learner_id", str(exc)))
+        if learner_id:
+            if learner_id.lower() in taken_learner_ids:
+                report.problems.append(
+                    RowProblem(line, "learner_id", f"{learner_id!r} appears twice in this file.")
+                )
+            elif details.learner_id_holder(learner_id) is not None:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "learner_id",
+                        f"{learner_id!r} is already a learner's ID at this school.",
+                    )
+                )
+            else:
+                taken_learner_ids.add(learner_id.lower())
+        try:
+            sex = details.read_sex(row.get("sex", ""))
+        except details.DetailsRefused as exc:
+            report.problems.append(RowProblem(line, "sex", str(exc)))
+        try:
+            date_of_birth = details.read_date_of_birth(row.get("date_of_birth", ""))
+        except details.DetailsRefused as exc:
+            report.problems.append(RowProblem(line, "date_of_birth", str(exc)))
+
         if len(report.problems) == problems_before:
             report.planned.append(
                 PlannedChild(
@@ -606,6 +674,9 @@ def check(school, source) -> Report:
                     class_group=group,
                     guardian_name=guardian_name,
                     guardian_contact=guardian_contact,
+                    learner_id=learner_id,
+                    sex=sex,
+                    date_of_birth=date_of_birth,
                 )
             )
 
@@ -661,6 +732,16 @@ def admit(actor, school, term, source) -> Report:
             academics.place_student_as(
                 actor, planned.class_group, term, membership, by=actor
             )
+            if planned.has_details:
+                # Checked in `check()`; a learner's ID claimed between the two
+                # passes is refused here and takes the whole file back out.
+                details.record(
+                    membership.pk,
+                    learner_id=planned.learner_id,
+                    sex=planned.sex,
+                    date_of_birth=planned.date_of_birth,
+                    by=actor,
+                )
 
             if planned.guardian_contact:
                 link = guardian_contacts.link_by_contact_as(

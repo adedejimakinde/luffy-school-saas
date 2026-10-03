@@ -155,7 +155,10 @@ export const SCREENS = [
     name: "roll",
     as: "sunrise.admin",
     url: `${SUNRISE}/roll/`,
-    steps: [["roll-guardians", '[data-action="guardians"]']],
+    steps: [
+      ["roll-guardians", '[data-action="guardians"]'],
+      ["roll-details", '[data-action="details"]'],
+    ],
   },
   { name: "staff", as: "sunrise.admin", url: `${SUNRISE}/staff/` },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },

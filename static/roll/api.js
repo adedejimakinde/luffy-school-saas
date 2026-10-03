@@ -2,7 +2,7 @@
  * The fetches the roll screen makes, and what each answer means.
  */
 
-import { getJson, postJson, putJson } from "../web/http.js";
+import { csrfToken, getJson, postJson, putJson } from "../web/http.js";
 
 /** The states the whole page can be in, other than holding the roll. */
 export const REFUSAL = {
@@ -37,6 +37,14 @@ export function classUrl(studentMembershipId) {
 
 export function guardiansUrl(studentMembershipId) {
   return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/guardians/`;
+}
+
+export function detailsUrl(studentMembershipId) {
+  return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/details/`;
+}
+
+export function photoUrl(studentMembershipId) {
+  return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/photo/`;
 }
 
 export function removeUrl(studentMembershipId, linkId) {
@@ -209,4 +217,71 @@ function panelAnswer(answer, expected) {
     refusal: refusalFor(answer.status, answer.body),
     body: answer.body || {},
   };
+}
+
+/**
+ * One child's details: learner's ID, sex, date of birth, and whether a photo
+ * is on file. A 404 is the child, as it is for the guardians panel.
+ */
+export async function fetchDetails({ studentMembershipId, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(await getJson(detailsUrl(studentMembershipId), { fetchImpl }), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** Save the three typed details. Blank clears each. Answers with the whole panel. */
+export async function saveDetails({ studentMembershipId, values, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(await putJson(detailsUrl(studentMembershipId), values, { fetchImpl }), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+async function sendPhoto(fetchImpl, url, method, file, refresh) {
+  const init = {
+    method,
+    headers: { Accept: "application/json", "X-CSRFToken": await csrfToken({ fetchImpl, refresh }) },
+    credentials: "same-origin",
+  };
+  if (file) {
+    init.body = new FormData();
+    init.body.append("photo", file);
+  }
+  const response = await fetchImpl(url, init);
+  let parsed = null;
+  try {
+    parsed = await response.json();
+  } catch {
+    parsed = null;
+  }
+  return { status: response.status, body: parsed };
+}
+
+/**
+ * A passport photo, as the file itself, multipart like the crest. Retried once
+ * on a stale CSRF token, as `postJson` does. Answers with the whole panel.
+ */
+export async function uploadPhoto({ studentMembershipId, file, fetchImpl = fetch }) {
+  try {
+    const url = photoUrl(studentMembershipId);
+    let answer = await sendPhoto(fetchImpl, url, "POST", file, false);
+    if (answer.status === 403 && answer.body && answer.body.code === "csrf_failed") {
+      answer = await sendPhoto(fetchImpl, url, "POST", file, true);
+    }
+    return panelAnswer(answer, 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** Take the photo off. Answers with the whole panel. */
+export async function removePhoto({ studentMembershipId, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(await sendPhoto(fetchImpl, photoUrl(studentMembershipId), "DELETE", null, false), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
 }

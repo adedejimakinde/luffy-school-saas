@@ -20,6 +20,9 @@ export const COLUMNS = [
   ["username", "Username"],
   ["guardian_name", "Guardian name"],
   ["guardian_contact", "Guardian contact"],
+  ["learner_id", "Learner ID"],
+  ["sex", "Sex"],
+  ["date_of_birth", "Date of birth"],
 ];
 
 /** What each value is called on a phone's card, in the office's words. */
@@ -30,6 +33,9 @@ const CARD_LABEL = {
   username: "Username",
   guardian_name: "Guardian",
   guardian_contact: "Guardian contact",
+  learner_id: "Learner ID",
+  sex: "Sex",
+  date_of_birth: "Date of birth",
 };
 
 const HEADING = Object.fromEntries(COLUMNS);
