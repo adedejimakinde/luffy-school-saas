@@ -141,6 +141,8 @@ class SigningInTests(SignInSetUp):
                     "slug": "st-marys",
                     "name": "St Mary's",
                     "host": SCHOOL_HOST,
+                    # Outside the development single-host demo, by host.
+                    "path_only": False,
                     # A teacher marks, reads no absence list and not the
                     # books, reads the timetable, and has no child here.
                     "may_take_a_register": True,

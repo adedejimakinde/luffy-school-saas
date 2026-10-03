@@ -42,6 +42,7 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 import pages
+from schools.demo import single_host
 from schools.hosts import portal_host
 
 from .refusals import SchoolAccessRefused
@@ -232,6 +233,9 @@ def sign_out(request):
     somebody anywhere else.
     """
     end_session(request)
+    # The single-host demo has no other host to send anybody to.
+    if single_host():
+        return HttpResponseRedirect("/staff-sign-in/")
     host = portal_host()
     if host:
         return HttpResponseRedirect(f"//{host}/staff-sign-in/")

@@ -121,24 +121,25 @@ export function landed({ full_name = "", schools = [] } = {}) {
  */
 function school(entry) {
   const { name = "", host = null } = entry;
+  const where = { pathOnly: Boolean(entry.path_only) };
   const links = [];
   if (entry.may_take_a_register) {
-    links.push([hostHref(host, "/register/"), "Take a register"]);
+    links.push([hostHref(host, "/register/", where), "Take a register"]);
   }
   if (entry.may_see_absences) {
-    links.push([hostHref(host, "/absences/"), "Absent too often"]);
+    links.push([hostHref(host, "/absences/", where), "Absent too often"]);
   }
   if (entry.may_see_fees) {
-    links.push([hostHref(host, "/fees/"), "Fees"]);
+    links.push([hostHref(host, "/fees/", where), "Fees"]);
   }
   if (entry.may_see_timetable) {
-    links.push([hostHref(host, "/timetable/"), "Timetable"]);
+    links.push([hostHref(host, "/timetable/", where), "Timetable"]);
   }
   if (entry.has_children_here) {
-    links.push([hostHref(host, "/cards/"), "Report cards"]);
+    links.push([hostHref(host, "/cards/", where), "Report cards"]);
   }
 
-  if (!host) {
+  if (!host && !where.pathOnly) {
     return (
       `<li>${esc(name)} <span class="blank">` +
       "(this school has no web address set up yet, ask the school office)" +
