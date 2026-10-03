@@ -1,3 +1,63 @@
+# Where I stopped: 2026-10-03 (third session), public homepage and legal pages merged
+
+Two PRs, each merged on green after review, then this docs-only one.
+
+| PR | State |
+| --- | --- |
+| [#226](https://github.com/adedejimakinde/luffy-school-saas/pull/226) | **Merged:** the public homepage on the bare domain (`classnode.co`), the demo request form, and `load_demo --showcase`. |
+| [#227](https://github.com/adedejimakinde/luffy-school-saas/pull/227) | **Merged:** `/privacy/` and `/terms/` on the same host. |
+
+`docs/website.md` is the description of both.
+
+## Where the site answers (#226)
+`SITE_HOST` (defaults to `PLATFORM_DOMAIN`; `www.` is the same site). `schools/middleware.py`
+(`PlatformTenantMiddleware`, replacing django-tenants' middleware in `settings.MIDDLEWARE`) sends that one host
+to `urls_site.py`: the homepage, `/privacy/`, `/terms/`, nothing else. **Not a `Domain` row**, on purpose: a row
+would make it the portal, with the admin and both sign-in doors on it. Every other host resolves as before.
+Deploying needs nothing new: the apex A record and the certificate already cover it; `migrate_schemas` adds
+`website.DemoRequest` (public schema).
+
+## Demo requests
+Saved, then emailed after commit to every active platform staff login with an email (`website/notify.py`); a
+failed send is logged and the row stays; the portal admin lists them read only. Honeypot field `website`
+(answered like a real request, nothing saved). `DEMO_REQUESTS_PER_HOUR` (5) per address, counted from the
+rows: a 429 past it. The two refusals still show visible TODOs for their wording (none was given).
+
+## The showcase (`load_demo --showcase`, `schools/showcase.py`)
+Crestfield College, demo data only, same guards as `load_demo` (`DEMO_SERVER=1`, `LOAD_DEMO_PASSWORD`). A good
+day: a strong student's card (77.67%, A1/B2, attendance, both remarks), JSS 2A and 2B released, SS 1A open with
+healthy first-CA marks and no sheet, every register in, nothing waiting or flagged. `ShowcaseTests` holds it.
+`scripts/site_shots.mjs` takes the homepage screenshots from it, and **needs a freshly loaded showcase each
+run**: SS 1A's register for today is left untaken so it can be photographed and then submitted on the page.
+The home therefore reads "2 of 3" released (a released class's marks sheet is locked, so the marks shot comes
+from the open class).
+
+## Copy and what is still TODO
+Homepage copy is the user's, word for word, with the price (₦2,500 per student, per term, no setup fee), "one
+working day", "Classnode. Nigeria." and hello@classnode.co. Legal pages: company Classnode, contact
+hello@classnode.co. **Still visible TODOs:** the RC number, the registered address, every "TODO: lawyer", the
+server location, B2 region, email provider, retention periods, DPO, breach notice, invoicing, dates, the
+"Our responsibility" section, and the two form refusal messages.
+
+## Tests
+`website/tests/` (homepage and legal: hosts, copy and writing rules, form, 400 KB and 15 KB budgets, motion
+rules, pattern contrast, contents, NDPA sections, sentence length). `tests/ui/screens.test.js` photographs the
+three pages at 320, 360, 414, 768, 1024, 1280 and 1920 and checks the slides on a fake clock.
+`tests/test_design.py` follows `{% extends %}` and skips `parts/`; `tests/test_pages.py` counts the site's
+one module (no imports, no import map). Controls were run for each (break, see red, restore).
+
+## Not done or not verified
+- **The branch `ccr-e8075f91-3aiv4s-screens` (review screenshots only) could not be deleted from the
+  session**: the proxy refuses branch deletion (git and API, 403). Delete it from GitHub's Branches page.
+- No email was really sent; nothing has run on a server.
+- #227 was rebuilt on main after #226 was squashed: a merge of main with the legal branch's tree kept as is
+  (same tree CI passed on). Its first run on that head then failed `screens` on the **fees** page (the class
+  drawn, its account button not yet), which neither PR touched: a race in the test's drill-down. Fixed in
+  #227: each step now waits up to five seconds for its target and still fails when it never comes (control
+  run). Merged on green.
+
+---
+
 # Where I stopped: 2026-10-03 (second session), demo server prep merged; nothing run on a server yet
 
 Two PRs, each merged on green, then this docs-only one.
