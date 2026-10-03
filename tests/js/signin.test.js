@@ -301,3 +301,25 @@ test("a guardian sign-out that was not confirmed does not claim it was", async (
   assert.match(root.innerHTML, /could not sign you out/i);
   assert.match(root.innerHTML, /St Mary/, "the chooser was thrown away on a failed sign-out");
 });
+
+// -- the development single-host demo ------------------------------------------
+
+test("in the single-host demo a guardian is sent to a path, never to another host", async () => {
+  const { destination } = await import("../../static/signin/app.js");
+  const { schools } = await import("../../static/signin/states.js");
+  const one = { step: "leaving", body: { schools: [{ name: "Sunrise", host: "localhost", path_only: true }] } };
+  assert.equal(destination(one), "/cards/");
+
+  const two = schools({ schools: [
+    { name: "Sunrise", host: "localhost", path_only: true },
+    { name: "Harbour", host: "localhost", path_only: true },
+  ] });
+  assert.doesNotMatch(two, /href="\/\//);
+  assert.match(two, /href="\/cards\/"/);
+});
+
+test("outside the demo a guardian is still sent to the school's host", async () => {
+  const { destination } = await import("../../static/signin/app.js");
+  const one = { step: "leaving", body: { schools: [{ name: "Sunrise", host: "sunrise.example.ng" }] } };
+  assert.equal(destination(one), "//sunrise.example.ng/cards/");
+});

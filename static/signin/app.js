@@ -12,6 +12,7 @@
  * document or the network.
  */
 
+import { hostHref } from "../web/html.js";
 import { postJson } from "../web/http.js";
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as steps from "./states.js";
@@ -127,7 +128,7 @@ function leaving(body) {
     "<h1>Taking you to your child's cards&hellip;</h1>",
     `<p>${school.name ? `${school.name}. ` : ""}`,
     "If nothing happens, use the link below.</p>",
-    school.host ? `<p><a href="//${school.host}/cards/">Continue</a></p>` : "",
+    destinationOf(school) ? `<p><a href="${destinationOf(school)}">Continue</a></p>` : "",
     "</section>",
   ].join("");
 }
@@ -142,7 +143,12 @@ function leaving(body) {
 export function destination(state) {
   if (state.step !== "leaving") return null;
   const school = (state.body.schools || [])[0];
-  return school && school.host ? `//${school.host}/cards/` : null;
+  return school ? destinationOf(school) : null;
+}
+
+/** A school's cards, or `null`: a path in the single-host demo (`path_only`). */
+function destinationOf(school) {
+  return hostHref(school.host, "/cards/", { pathOnly: Boolean(school.path_only) }) || null;
 }
 
 export function mount(root, { fetchImpl = fetch, navigate = null } = {}) {

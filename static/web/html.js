@@ -87,11 +87,16 @@ export function waitInWords(seconds) {
  * guardian chooser explains the missing web address, and the staff landing has
  * its own reasons a school may not be linked.
  *
+ * `pathOnly` is the school's `path_only` from the API, true only in the
+ * development single-host demo: the link is then the path alone.
+ *
  * The host is escaped here rather than by each caller. It is a value a school
  * typed into the admin, it lands inside a quoted attribute, and an escape that
  * every caller has to remember is an escape one of them will not.
  */
-export function hostHref(host, path) {
+export function hostHref(host, path, { pathOnly = false } = {}) {
+  // The single-host demo: the school is the host this page is on (`path_only`).
+  if (pathOnly) return path;
   if (!host) return "";
   return `//${esc(host)}${path}`;
 }
