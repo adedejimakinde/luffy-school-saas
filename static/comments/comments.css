@@ -27,3 +27,15 @@ h3 { font-size: 1rem; margin: 14px 0 4px; color: var(--muted); }
 .note { font-size: var(--small); color: var(--stop); }
 .rejected, .not-allowed { background: var(--stop-bg); border-left: 4px solid var(--stop); padding-left: 10px; }
 button[data-action="save"], button.back { margin: 8px 8px 0 0; }
+
+/* Physical development and health: the class teacher's form, or the record. */
+.health { margin: 24px 0 0; }
+.health .hint { color: var(--muted); font-size: var(--small); }
+.health-form { display: grid; gap: 6px; max-width: 26rem; }
+.health-form label { font-weight: 700; margin-top: 6px; }
+.health-form input { width: 100%; }
+.health-form button { justify-self: start; margin-top: 8px; }
+.health-form.rejected { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
+.health .facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
+.health .facts dt { color: var(--muted); }
+.health .facts dd { margin: 0; }

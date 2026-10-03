@@ -3086,3 +3086,80 @@ class CheckerPin(models.Model):
             f"PIN {self.pk} cannot be deleted. Print a new slip instead, which "
             f"stops this one opening anything."
         )
+
+
+class HealthLocked(Exception):
+    """A health record for a term whose card has gone home was written."""
+
+
+class HealthRecord(models.Model):
+    """One child's physical development and health for one term.
+
+    The Ogun State report sheet's section of that name (`docs/ogun-template.md`
+    part 3): height in metres and weight in kilograms at the beginning and the
+    end of term, days absent through illness, and the nature of the illness.
+    Entered by the class teacher (`results.health`).
+
+    **Sensitive children's health data, and readable by four people only:** the
+    child's class teacher for that term, the principal, a school administrator,
+    and the child's guardians (`health.may_see()`). It is in no payload anybody
+    else reads: not the card payload (`card_api.ReportCardOut`, which the
+    result checker's PIN holder and every member of staff are served), not a
+    broadsheet, a class list or an export. Those surfaces have no field for it,
+    and the tests in `results/tests/test_health.py` read their raw bytes.
+
+    Every column may be blank: a teacher fills in what was measured.
+
+    **It stops changing when the card goes home.** A trigger
+    (`0029`'s `results_health_stops_at_release`) refuses INSERT, UPDATE and
+    DELETE for a (child, term) that has a `ReleasedCard`, the artefact rule
+    `docs/operating-rules.md` rule 1 states. So the card reads this row live
+    and still says what it said when it was released.
+    """
+
+    term = models.ForeignKey(
+        "academics.Term", related_name="health_records", on_delete=models.PROTECT
+    )
+    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+
+    height_start_m = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    height_end_m = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
+    weight_start_kg = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    weight_end_kg = models.DecimalField(max_digits=4, decimal_places=1, null=True, blank=True)
+    days_absent_ill = models.PositiveSmallIntegerField(null=True, blank=True)
+    illness = models.CharField(max_length=120, blank=True, default="")
+
+    entered_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    #: The bounds the constraints below hold, for the service to say in words.
+    HEIGHT_RANGE = (Decimal("0.50"), Decimal("2.50"))
+    WEIGHT_RANGE = (Decimal("5.0"), Decimal("250.0"))
+    MAX_DAYS_ILL = 200
+
+    class Meta:
+        ordering = ["term_id", "student_membership_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["term", "student_membership_id"],
+                name="one_health_record_per_child_per_term",
+            ),
+            models.CheckConstraint(
+                condition=(Q(height_start_m__isnull=True) | Q(height_start_m__range=(Decimal("0.50"), Decimal("2.50"))))
+                & (Q(height_end_m__isnull=True) | Q(height_end_m__range=(Decimal("0.50"), Decimal("2.50")))),
+                name="a_childs_height_is_in_metres",
+            ),
+            models.CheckConstraint(
+                condition=(Q(weight_start_kg__isnull=True) | Q(weight_start_kg__range=(Decimal("5.0"), Decimal("250.0"))))
+                & (Q(weight_end_kg__isnull=True) | Q(weight_end_kg__range=(Decimal("5.0"), Decimal("250.0")))),
+                name="a_childs_weight_is_in_kilograms",
+            ),
+            models.CheckConstraint(
+                condition=Q(days_absent_ill__isnull=True) | Q(days_absent_ill__lte=200),
+                name="days_ill_fit_in_a_term",
+            ),
+        ]
+
+    def __str__(self):
+        return f"health of membership {self.student_membership_id} ({self.term_id})"

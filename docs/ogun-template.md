@@ -151,3 +151,52 @@ every choice at St Mary's), and the template tests in `tests/js/setup.test.js`.
 | the marks check in `apply_assessments()` removed | the three tests with a mark in (errors: `Score`'s PROTECT key refuses the delete, so a mark was never at risk; the preset would have failed whole) |
 | the rated-trait check in `apply_traits()` removed | `test_a_rated_trait_the_sheet_does_not_print_stays_on_the_sheet` |
 | `set_template_as()`'s authority check removed | `test_the_service_refuses_a_teacher_without_the_route` |
+
+## Part 3: physical development and health
+
+`results.HealthRecord`, one row per child per term, in the school's own schema:
+height in metres and weight in kilograms at the beginning and end of term
+(two and one decimal places; 0.50 to 2.50 m and 5 to 250 kg by constraint),
+days absent through illness (0 to 200), and the nature of the illness (120
+characters). Every box may be blank.
+
+**Sensitive children's health data, with four readers** (`results.health.may_see()`):
+
+| reader | sees it |
+| --- | --- |
+| the class teacher of the class the child sat in that term | yes, and **writes** it, until the card goes home |
+| the principal, a school administrator | yes, read only |
+| the child's guardians | yes, for a term whose card has been released to them |
+| anyone else: another teacher, the vice principal, the bursar, the child's own login, a result-checker PIN, another parent, another school | **no**, a flat 404 |
+
+It has its own routes, `GET`/`PUT /api/results/health/<child>/` (`?term_id=`
+to read another term), on its own router (`results/health_api.py`), imported
+by no other surface. The remarks page's child view is served to every
+teacher, so the record is fetched separately when a child is opened and drawn
+only where it came back (`static/comments`), and only for an Ogun template
+school.
+
+**It is in nothing else:** not the card payload (served to every card reader,
+PIN holders included), not the stored PDF, not a broadsheet, a class list or an
+export. `results/tests/test_health.py`'s `NowhereElseTests` look for a marker
+illness in the raw bytes of each.
+
+**It stops changing when the card goes home.** The service refuses (423), and a
+trigger (`results_health_stops_at_release`, migration `0029`) refuses INSERT,
+UPDATE and DELETE for a (child, term) with a `ReleasedCard`: the artefact rule.
+So the card can read the row live and still say what it said.
+
+The privacy notice (`/privacy/`) lists it under "What we collect" and has a
+"Health records" part under children's data saying who can see it.
+
+### Tests and controls
+
+`results/tests/test_health.py` (18 tests, two schools), `tests/js/comments_health.test.js`.
+Heights and weights are rounded half up to their places (`1.445` is `1.45`).
+
+| broken | what went red |
+| --- | --- |
+| guardians served before release | `test_a_guardian_sees_it_once_the_card_has_gone_home_and_not_before` |
+| the office check widened to every role at the school | the other teacher, the vice principal and the bursar subtests, the class teacher of another class, the child herself, another parent (7 failures) |
+| `_is_class_teacher()` true for any teacher | `test_another_teacher_..._get_a_404` (the other teacher), `test_the_class_teacher_of_another_class_sees_nothing_of_this_one` |
+| the release trigger never created | `test_the_database_refuses_a_change_after_release` (update, delete and insert) |
