@@ -1,3 +1,5 @@
+import { esc } from "./html.js";
+
 /**
  * What the marking and register pages do about having no connection, apart from
  * the outbox: ask for the service worker (`/sw.js`, which never answers `/api/`),
@@ -29,6 +31,18 @@ export async function forgetPages({ caches = globalThis.caches } = {}) {
     console.error("The cached pages could not be cleared.", error);
   }
 }
+
+/** "Held for Kemi": work on this phone that only its owner can send (D7). */
+export const heldNote = (people = []) =>
+  people
+    .map(({ name, count }) => {
+      const who = esc(name || "another account");
+      return (
+        `<p class="held-for" role="note">Held for ${who}: ${count} not sent yet. ` +
+        `Sign in as ${who} to send ${count === 1 ? "it" : "them"}.</p>`
+      );
+    })
+    .join("");
 
 /** What the warning says. */
 export function leavingNote(waiting) {

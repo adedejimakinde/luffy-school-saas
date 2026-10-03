@@ -11,6 +11,7 @@
  */
 
 import { esc, numberOrBlank } from "../web/html.js";
+import { heldNote } from "../web/offline.js";
 import { copyNote } from "../web/snapshots.js";
 
 /**
@@ -23,11 +24,12 @@ import { copyNote } from "../web/snapshots.js";
  * which students take which subject, which is issue #127 and why SSS electives
  * cannot be expressed at all.
  */
-export function choose({ term = "", assessments = [], classes = [], asOf = null, timeZone, now } = {}) {
+export function choose({ term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [] } = {}) {
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Enter marks</h1>",
     copyNote(asOf, { timeZone, now }),
+    heldNote(held),
     `<p class="term">${esc(term)}</p>`,
     "<p>Which paper?</p>",
     '<ul class="assessments">',

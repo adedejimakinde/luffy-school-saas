@@ -1,7 +1,6 @@
 # Offline mode for teachers
 
-Status: **reviewed 2026-09-24 — the plan.** S1–S5 are built. **S6 is built and in review**
-(see "S6 as built", after S5's); S7 waits. The decisions taken in review are recorded directly below, and they
+Status: **reviewed 2026-09-24 — the plan.** S1–S7 are built (see "S5/S6/S7 as built", after the slices). The decisions taken in review are recorded directly below, and they
 override anything later in the document that reads as still open. Extends
 `docs/gradebook.md` and `docs/attendance.md`; changes neither's rules.
 
@@ -431,6 +430,47 @@ page now counts and clears both outboxes (D8).
 from the copy is kept in IndexedDB with its base, sent when the connection returns,
 leaves the phone, and the school's register then has the teacher's answer. Not
 verified: a real Android phone.
+
+## S7 as built
+
+A phone two people sign in to (D7's second paragraph, A2). What was built, and the
+choices that were the builder's.
+
+**What a second person sees.** When Tunde signs in on a phone where Kemi left work
+unsent, his marking and register pages say, above the class list, **"Held for Kemi
+Bello: 2 not sent yet. Sign in as Kemi Bello to send them."** Only a name and a count
+are read out of her outboxes (`web/store.js`, `heldElsewhere()`); what the work is is
+never drawn, and it is not sent: each page opens only its own signed-in person's
+outbox. When Kemi signs in again it drains, as before. Both outboxes (marks and
+registers) are counted, at every school separately, because the outbox name carries
+the host. The name is the caller's own: `GET /api/gradebook/where/` and
+`/api/attendance/where/` now return `full_name`, and the page keeps it beside the
+outboxes in a `... who` record.
+
+**What a second person cannot find offline.** When a different person opens a host
+online, the previous person's copies (S5) for that host are deleted, not merely not
+offered (`snapshotsOver().keep()`). They can be fetched again. Another school's copies
+are untouched.
+
+**Decisions to confirm**
+
+1. **Tunde cannot discard Kemi's work.** There is no button for it. His sign-out clears
+   his own outboxes only, so her work waits for her (and is flagged, not deleted, after
+   seven days). The cost is that a teacher who has left the school leaves a line on the
+   phone until it is wiped; the school can say what to do about that.
+2. **The window that remains.** A phone with no connection cannot know who holds it. If
+   Kemi's copy is the last one the phone saw online and Tunde opens the page offline
+   before ever signing in, he is shown Kemi's copy (not her unsent work). Sign-out on
+   the marking and register pages closes it for a person who signs out; nothing can
+   close it for one who does not. This is the one gap of A2 this slice does not close.
+3. **A name is stored on the phone** (one `... who` record per person per host) for the
+   sentence. It is not cleared at sign-out; it is shown only while that person has
+   work waiting.
+
+**Verified** in a real Chromium (`tests/ui/offline.test.js`, same browser profile):
+Kemi leaves a register unsent and closes the page, a second login on the same phone
+sees the line and not the register, nothing is sent under the second login, and the
+register goes when Kemi signs in again. Not verified: a real Android phone.
 
 ## Correctness requirements
 

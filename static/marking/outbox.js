@@ -1,55 +1,22 @@
 /**
  * The marks outbox: every mark the teacher entered that has not landed yet.
+ * `docs/offline.md` S3 (D1, D2, D3, D6, D7) has the argument; the rules are:
  *
- * `docs/offline.md` slice S3 — D1, D2, D6 and D7. The page no longer sends a
- * mark and forgets it: a blur **queues** the write here, the queue is kept in
- * the browser (`store.js`), and `drain()` sends it — at once when the
- * connection is there, and again when it comes back when it is not.
- *
- * ## What an entry is (D1)
- *
- * Exactly the request the online page would have sent: the cell, the value,
- * and the `expected_version` the teacher was shown. Nothing here judges a mark.
- * Whether 25 fits in 20, whether the sheet is open, whether this teacher may
- * write at all — the server decides all of it when the write arrives, with the
- * code that decides it online. A queue that evaluated a rule would be a second
- * gradebook on the phone, with none of the first one's rules.
- *
- * ## One entry per cell (D2)
- *
- * A teacher who types 15 and corrects it to 17 before anything was sent has
- * made one decision, and the server sees one write: 17, claiming the version
- * the teacher was shown. Two writes would be wrong rather than wasteful — the
- * second would claim a version the first had moved, and the teacher would be
- * shown a conflict with themselves.
- *
- * Once an attempt has **left** the device its body is fixed, because its
- * answer may be lost and it must be sent again exactly (D3). A value typed
- * after that waits in `next`, and becomes a write of its own once the first
- * one's answer says which version it produced.
- *
- * ## Every write carries a key (D3, slice S4)
- *
- * Minted when the entry's body is settled and sent with every attempt at it.
- * A write whose answer was lost is sent again with the same key, and the
- * server answers it from its receipt instead of judging it again
- * (`sync/receipts.py`). A changed body gets a new key, because a key names one
- * write: the server refuses a key reused for a different one.
- *
- * ## Some answers are final (D6)
- *
- * 423, 422 and 403 cannot be fixed by sending again, so the entry is **held**:
- * it is not sent again, and the teacher's value stays on the device and on
- * screen until they dismiss it (requirement 8). A 409 is held too, as D5's
- * conflict. A failed connection, a 5xx or a lapsed session is not an answer,
- * and the entry waits, key and all, to be sent again.
- *
- * ## Whose, and where (D7, D8)
- *
- * An outbox belongs to one person at one school host — `outboxName()` — and
- * `drain()` sends it only while that person is the one signed in. A teacher at
- * two schools has two outboxes, and a write queued at St Mary's is never sent
- * from Grace's page.
+ * - **An entry is the request the page would have sent** (cell, value,
+ *   `expected_version`). Nothing here judges a mark; the server decides all of
+ *   it when the write arrives.
+ * - **One entry per cell** (D2). Typing 15 then 17 before anything is sent is one
+ *   write of 17 claiming the version first shown. Once an attempt has left, its
+ *   body is fixed (D3) and a later value waits in `next`.
+ * - **Every attempt carries a key**, minted when the body is settled; a resend
+ *   is answered from the server's receipt (`sync/receipts.py`). A changed body
+ *   gets a new key.
+ * - **Some answers are final** (D6): 423, 422 and 403 hold the entry, and so
+ *   does a 409 (D5). The teacher's value stays on the phone and on screen until
+ *   they dismiss it. A failed connection, a 5xx or a lapsed session waits.
+ * - **Whose, and where** (D7, D8): an outbox belongs to one person at one school
+ *   host (`outboxName()`) and `drain()` sends it only while that person is
+ *   signed in.
  */
 
 /** Held entries, by the answer that stopped them. */

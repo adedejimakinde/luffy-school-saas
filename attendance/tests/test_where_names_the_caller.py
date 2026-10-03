@@ -4,16 +4,18 @@ what it was shown under that person's name (`docs/offline.md` D8).
 At two schools: the id is the caller's own at each, and never anybody else's.
 """
 
+import json
+
 from django.db import connection
 
-from attendance.tests.fixtures import RegisterSetUp
+from gradebook.tests.fixtures import MarkingSetUp
 from schools.models import Domain
 
 HOST = "st-marys.testserver"
 GRACE_HOST = "grace.testserver"
 
 
-class TheCallerIsNamedTests(RegisterSetUp):
+class TheCallerIsNamedTests(MarkingSetUp):
     def setUp(self):
         super().setUp()
         Domain.objects.create(tenant=self.stmarys, domain=HOST, is_primary=True)
@@ -43,3 +45,23 @@ class TheCallerIsNamedTests(RegisterSetUp):
         self.assertEqual(here, there)
         self.assertEqual(here, self.teacher.user.pk)
         self.assertNotEqual(here, self.bursar.user.pk)
+
+    def test_it_is_their_own_name_on_both_screens_and_nobody_elses(self):
+        """`docs/offline.md` D7: a shared phone says "held for Kemi"."""
+        from accounts.models import Role
+        from accounts.services import grant_membership
+
+        grant_membership(self.teacher.user, self.grace, Role.TEACHER)
+        self.client.force_login(self.teacher.user)
+
+        for host in (HOST, GRACE_HOST):
+            for url in ("/api/attendance/where/", "/api/gradebook/where/"):
+                with self.subTest(host=host, url=url):
+                    body = self.client.get(url, HTTP_HOST=host).json()
+                    self.assertEqual(body["full_name"], self.teacher.user.full_name)
+
+        other = self.grace_teacher
+        self.client.force_login(other.user)
+        body = self.client.get("/api/attendance/where/", HTTP_HOST=GRACE_HOST).json()
+        self.assertEqual(body["full_name"], other.user.full_name)
+        self.assertNotIn(self.teacher.user.full_name, json.dumps(body))

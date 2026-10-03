@@ -243,13 +243,13 @@ test("signing out with marks waiting says how many, and deletes them only if the
     assert.match(said[0], /2 marks or registers on this phone have not been sent yet\. Signing out deletes them\./, server.host);
     assert.equal(declined.doc.form.submitted, 0, `${server.host}: declined, so still signed in`);
     assert.notEqual(await mine.snapshots.copy(server.host, KEMI, "where"), null, `${server.host}: and nothing cleared`);
-    const kept = [...mine.outbox.values()].flat();
+    const kept = [...mine.outbox].filter(([n]) => !n.endsWith(" who")).flatMap(([, v]) => v);
     assert.equal(kept.length, 2, `${server.host}: the marks are still on the phone`);
 
     const agreed = await open(server, mine, { confirmFn: () => true });
     await agreed.doc.signOut();
     assert.equal(agreed.doc.form.submitted, 1, server.host);
-    const left = [...mine.outbox.values()].flat();
+    const left = [...mine.outbox].filter(([n]) => !n.endsWith(" who")).flatMap(([, v]) => v);
     assert.equal(left.length, 0, `${server.host}: deleted, as the teacher agreed`);
     assert.equal(await mine.snapshots.copy(server.host, KEMI, "where"), null, server.host);
   }
@@ -267,7 +267,7 @@ test("signing out at one school leaves the other school's outbox alone", async (
   const out = await open(marys, mine);
   await out.doc.signOut();
 
-  const names = [...mine.outbox.keys()];
+  const names = [...mine.outbox.keys()].filter((n) => !n.endsWith(" who"));
   const stillThere = names.filter((n) => n.startsWith(GRACE)).flatMap((n) => mine.outbox.get(n));
   assert.equal(stillThere.length, 1, "Grace's mark is still on the phone");
 });

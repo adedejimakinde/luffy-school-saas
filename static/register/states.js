@@ -12,6 +12,7 @@
  */
 
 import { esc } from "../web/html.js";
+import { heldNote } from "../web/offline.js";
 import { asOfText, copyNote } from "../web/snapshots.js";
 
 /**
@@ -27,11 +28,12 @@ import { asOfText, copyNote } from "../web/snapshots.js";
  * paper on Friday afternoon for Wednesday is ordinary office work — the case
  * `MARKING_ROLES` admits principals and administrators for.
  */
-export function choose({ term = "", classes = [], on = "", asOf = null, timeZone, now } = {}) {
+export function choose({ term = "", classes = [], on = "", asOf = null, timeZone, now, held = [] } = {}) {
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Take a register</h1>",
     copyNote(asOf, { timeZone, now }),
+    heldNote(held),
     `<p class="term">${esc(term)}</p>`,
     '<label for="on">Which day</label>',
     `<input id="on" name="on" type="date" data-field="on" value="${esc(on)}">`,

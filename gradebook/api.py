@@ -196,6 +196,9 @@ class WhereToMarkOut(Schema):
     #: (`docs/offline.md` D7): the cookie can change under an open page, so the
     #: page asks rather than remembers. The caller's own id, and nobody else's.
     user_id: int
+    #: The caller's own name, so a shared phone can say whose work it holds
+    #: (`docs/offline.md` D7). Nobody else's.
+    full_name: str = ""
 
 
 class SaveIn(Schema):
@@ -429,6 +432,7 @@ def where_to_mark(request):
             for g in ClassGroup.objects.filter(is_active=True)
         ],
         user_id=request.user.pk,
+        full_name=request.user.full_name,
     )
 
 
