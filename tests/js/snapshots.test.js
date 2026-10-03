@@ -65,21 +65,32 @@ test("two schools: one host's copy is never offered at the other", async () => {
   assert.equal(await liveOrCopy({ shelf: alone, host: GRACE, name: "where", answer: GONE }), GONE, "no copy for a host never opened");
 });
 
-test("two people: one person's copy is never offered as another's", async () => {
+test("two people: one person's copy is never offered as another's, and goes when the next signs in", async () => {
   const shelf = memorySnapshots();
   await liveOrCopy({ shelf, host: ST_MARYS, name: "where", answer: live({ user_id: KEMI, who: "Kemi" }), at: "T1" });
   await liveOrCopy({ shelf, host: ST_MARYS, userId: KEMI, name: "sheet:3:11", answer: live({ rows: ["Kemi's sheet"] }), at: "T1" });
-  // Tunde signs in on the same phone, online, and opens nothing else.
+  // Tunde signs in on the same phone, online.
   await liveOrCopy({ shelf, host: ST_MARYS, name: "where", answer: live({ user_id: TUNDE, who: "Tunde" }), at: "T2" });
 
   // Offline, the page reads whoever last opened this host.
   const where = await liveOrCopy({ shelf, host: ST_MARYS, name: "where", answer: GONE });
   assert.equal(where.body.who, "Tunde");
 
-  // And a sheet only Kemi opened is not Tunde's to be shown.
+  // What Kemi was shown is gone from the phone, not merely not offered.
+  assert.equal(await shelf.copy(ST_MARYS, KEMI, "sheet:3:11"), null);
+  assert.equal(await shelf.copy(ST_MARYS, KEMI, "where"), null);
   const sheet = await liveOrCopy({ shelf, host: ST_MARYS, userId: TUNDE, name: "sheet:3:11", answer: GONE });
   assert.equal(sheet, GONE);
-  assert.deepEqual((await shelf.copy(ST_MARYS, KEMI, "sheet:3:11")).body.rows, ["Kemi's sheet"]);
+});
+
+test("another school's copies are not touched when a person changes here", async () => {
+  const shelf = memorySnapshots();
+  await liveOrCopy({ shelf, host: GRACE, name: "where", answer: live({ user_id: KEMI, who: "Kemi at Grace" }), at: "T1" });
+  await liveOrCopy({ shelf, host: ST_MARYS, name: "where", answer: live({ user_id: KEMI }), at: "T1" });
+  await liveOrCopy({ shelf, host: ST_MARYS, name: "where", answer: live({ user_id: TUNDE }), at: "T2" });
+
+  assert.notEqual(await shelf.copy(GRACE, KEMI, "where"), null);
+  assert.equal(await shelf.copy(ST_MARYS, KEMI, "where"), null);
 });
 
 test("an answer from the server is never replaced by a copy", async () => {
@@ -138,7 +149,6 @@ test("copies of one class's registers come newest first, for that person and hos
   await shelf.keep(ST_MARYS, KEMI, "register:11:7:2025-09-16", { day: 16 }, "2025-09-16T08:00:00Z");
   await shelf.keep(ST_MARYS, KEMI, "register:11:7:2025-09-17", { day: 17 }, "2025-09-17T08:00:00Z");
   await shelf.keep(ST_MARYS, KEMI, "register:12:7:2025-09-17", { other: "class" }, "2025-09-17T09:00:00Z");
-  await shelf.keep(ST_MARYS, TUNDE, "register:11:7:2025-09-18", { tunde: true }, "2025-09-18T08:00:00Z");
   await shelf.keep(GRACE, KEMI, "register:11:7:2025-09-18", { grace: true }, "2025-09-18T08:00:00Z");
 
   const found = await shelf.copiesBeginning(ST_MARYS, KEMI, "register:11:7:");

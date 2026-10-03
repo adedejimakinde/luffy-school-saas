@@ -13,6 +13,7 @@ export const ST_MARYS = "st-marys.example.ng";
 export const GRACE = "grace.example.ng";
 export const KEMI = 5;
 export const TUNDE = 6;
+export const NAMES = { [KEMI]: "Kemi Bello", [TUNDE]: "Tunde Cole" };
 
 const ROSTER = [
   { id: 1, name: "Ada Obi" },
@@ -109,7 +110,7 @@ export function school(
     if (server.offline) throw new TypeError("Failed to fetch");
     if (url === "/api/csrf/") return reply(200, { csrf_token: "t" });
     if (url === "/api/gradebook/where/") {
-      return refusal() || reply(200, { ...WHERE, user_id: server.signedIn });
+      return refusal() || reply(200, { ...WHERE, user_id: server.signedIn, full_name: NAMES[server.signedIn] });
     }
     if (url === "/api/gradebook/assessments/3/sheet/?class_group_id=11") {
       if (server.failSheet) throw new TypeError("Failed to fetch");

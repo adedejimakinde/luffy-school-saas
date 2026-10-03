@@ -19,6 +19,41 @@ export async function othersOf(openStore, host, userId, mine) {
   const names = outboxesOf(host, userId).filter((name) => name !== mine);
   return (await Promise.all(names.map((name) => openStore(name)))).filter(Boolean);
 }
+
+/**
+ * Whose work this phone holds that is not this person's, for the line a shared
+ * handset shows (`docs/offline.md` D7): `[{id, name, count}]`. Only a count and
+ * a name are read out; the entries are never shown to anybody but their owner.
+ */
+export async function heldElsewhere(openStore, host, userId) {
+  try {
+    const mine = await openStore(outboxesOf(host, userId)[0]);
+    const people = new Map();
+    for (const name of mine ? (await mine.names()).filter((n) => n.startsWith(`${host} `)) : []) {
+      const [id, kind] = name.slice(host.length + 1).split(" ");
+      if (id === String(userId)) continue;
+      const who = people.get(id) || { id, name: "", count: 0 };
+      people.set(id, who);
+      const entries = await (await openStore(name)).read();
+      if (kind === "who") who.name = entries[0] || "";
+      else who.count += entries.length;
+    }
+    return [...people.values()].filter((who) => who.count);
+  } catch {
+    return []; // A phone that cannot say is no reason to stop the page.
+  }
+}
+
+/** Remember this person's name beside their outboxes, for `heldElsewhere()`. */
+export async function rememberWho(openStore, host, userId, name) {
+  try {
+    const store = await openStore(`${host} ${userId} who`);
+    if (store && name) await store.write([name]);
+  } catch {
+    // Only a name for a sentence; the page does not depend on it.
+  }
+}
+
 const OUTBOXES = "outboxes";
 
 /**
@@ -45,6 +80,9 @@ export async function indexedDbStore(name, { indexedDB = globalThis.indexedDB } 
       tx.objectStore(OUTBOXES).put({ name, entries });
       await done(tx);
     },
+    async names() {
+      return request(db.transaction(OUTBOXES, "readonly").objectStore(OUTBOXES).getAllKeys());
+    },
   };
 }
 
@@ -56,6 +94,9 @@ export function memoryStore(name, shelf = new Map()) {
     },
     async write(entries) {
       shelf.set(name, structuredClone(entries));
+    },
+    async names() {
+      return [...shelf.keys()];
     },
   };
 }

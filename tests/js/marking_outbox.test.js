@@ -323,7 +323,9 @@ test("a drain the browser fails to keep is reported, and does not stop the next 
     let writes = 0;
     const flaky = async (name) => {
       const store = memoryStore(name, shelf);
+      if (name.endsWith(" who")) return store;
       return {
+        names: store.names,
         read: store.read,
         write: async (entries) => {
           writes += 1;
@@ -479,6 +481,7 @@ test("a browser that stops keeping the outbox mid-page says so, and the mark sti
     const failing = async (name) => {
       const store = memoryStore(name, shelf);
       return {
+        names: store.names,
         read: async () => { if (broken) throw new Error("InvalidStateError"); return store.read(); },
         write: async (entries) => { if (broken) throw new Error("InvalidStateError"); return store.write(entries); },
       };
