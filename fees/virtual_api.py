@@ -86,6 +86,29 @@ class UnmatchedListOut(Schema):
     may_place: bool = False
 
 
+class ClassAccountsIn(Schema):
+    #: The term whose placements say who is in the class. The current term when left out.
+    term_id: Optional[int] = None
+
+
+class FailedOut(Schema):
+    student_membership_id: int
+    student: str
+    detail: str
+
+
+class ClassAccountsOut(Schema):
+    """What one press did: how many were made, how many already had one, each failure by name."""
+
+    made: int
+    skipped: int
+    failed: List[FailedOut]
+    #: Still to make after this press (a batch is at most `virtual.CLASS_BATCH`).
+    remaining: int
+    #: Set when Paystack was down and the batch stopped; a sentence, never Paystack's words.
+    stopped: Optional[str] = None
+
+
 class PlaceIn(Schema):
     """What the person confirmed: the child, and the amount and reference as they read them."""
 
@@ -123,6 +146,49 @@ def make(request, membership_id: int):
         return 503, MessageOut(detail=_DOWN)
     line = virtual.pay_into(child.pk)
     return (201 if created else 200), MadeOut(pay_into=PayIntoOut(**line), created=created)
+
+
+@router.post(
+    "/classes/{int:class_group_id}/",
+    response={200: ClassAccountsOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def make_for_class(request, class_group_id: int, payload: ClassAccountsIn):
+    """Make the missing accounts for every child in the class this term.
+
+    Children who already have one are skipped and counted; each failure is reported
+    by name with its sentence; at most a batch is made a press and `remaining` says
+    how many are left, so pressing again carries on. 409 when the school has no bank
+    yet; 422 when there is no term to say who is in the class.
+    """
+    from academics.models import ClassGroup, Term
+
+    school = _school_of(request)
+    _require_reader(request.user, school)
+    refusal = _refuse_non_writer(request.user, school)
+    if refusal:
+        return refusal
+    group = ClassGroup.objects.filter(pk=class_group_id).first()
+    if group is None:
+        raise Http404("No such class.")
+    if payload.term_id is not None:
+        term = Term.objects.filter(pk=payload.term_id).first()
+        if term is None:
+            raise Http404("No such term.")
+    else:
+        term = Term.objects.filter(is_current=True).first()
+        if term is None:
+            return 422, MessageOut(detail="The school has no current term, so there is no class list to work from.")
+    try:
+        result = virtual.ensure_for_class(school, request.user, group, term)
+    except virtual.NoBank as exc:
+        return 409, MessageOut(detail=str(exc))
+    return ClassAccountsOut(
+        made=result.made,
+        skipped=result.skipped,
+        failed=[FailedOut(student_membership_id=i, student=name, detail=why) for i, name, why in result.failed],
+        remaining=result.remaining,
+        stopped=result.stopped,
+    )
 
 
 @router.get("/mine/", response=MineOut)

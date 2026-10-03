@@ -1,25 +1,50 @@
-# Where I stopped: 2026-09-29, Paystack PR 2 approved with two changes, merging on green
+# Where I stopped: 2026-10-03, placing unmatched payments (#220) merged; "Create accounts for this class" in review
 
 **Paystack, test mode only.** Money goes straight to each school's own bank account;
-Classnode never holds it.
+Classnode never holds it. Nothing further is queued after this PR.
 
 | PR | State |
 | --- | --- |
-| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged on green: the school's public page in the screens test, and the platform admin's invitation texted when they have only a phone number. |
-| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217) | PR 1 (steps 1 and 4), merged after review. The subaccount bank field is `bank_code`. |
-| [#218](https://github.com/adedejimakinde/luffy-school-saas/pull/218) | Merged on green: `list_banks()` pages by cursor, 100 at a time. |
-| [#219](https://github.com/adedejimakinde/luffy-school-saas/pull/219) | **PR 2 (steps 2 and 3), approved by the owner with two small changes, both made; merges when CI is green.** Nothing further is queued: there is no PR 3. |
+| [#216](https://github.com/adedejimakinde/luffy-school-saas/pull/216) | Merged: the school's public page in the screens test; platform admin invitation by SMS. |
+| [#217](https://github.com/adedejimakinde/luffy-school-saas/pull/217)–[#219](https://github.com/adedejimakinde/luffy-school-saas/pull/219) | Merged: bank connection, bank paging, virtual accounts and the webhook (the webhook verifies with `PAYSTACK_SECRET_KEY`; no separate secret). |
+| [#220](https://github.com/adedejimakinde/luffy-school-saas/pull/220) | **Merged on green:** the bursar places an unmatched payment on a child; platform staff see the unrouted list. |
+| This PR | **"Create accounts for this class"** on the class page. Merges on green. |
+
+## Placing an unmatched payment (#220)
+`fees/placing.py`, `POST /api/fees/virtual/unmatched/{payment_id}/placement/`. The bursar picks the
+class and child on `/bank/`, then confirms the amount and reference, which must equal the payment's
+(`NotWhatYouConfirmed` otherwise). It posts through `record_payment_once()` with the same
+`form_key` the webhook uses for that reference, so it can never post twice (not even if the webhook
+is replayed: a placed payment answers "duplicate"). `fees.UnmatchedPlacement` (append-only, trigger
+in migration 0009) records who placed it, on which child. Placing the same payment on a second child
+is refused (`AlreadyPlaced`); asking again for the same child returns the first placement. Platform
+staff: `GET /api/platform/unrouted/` and a list on the platform page (read only; platform staff only).
+
+## Create accounts for this class (this PR)
+`POST /api/fees/virtual/classes/{class_group_id}/` with `{term_id}`; `fees.virtual.ensure_for_class`.
+It calls the same idempotent `ensure()` as the child's page, one child at a time, each in its own
+transaction. Children who already have an account are skipped and counted. It answers
+`{made, skipped, failed[{student_membership_id, student, detail}], remaining, stopped}`. A refusal for
+one child is reported by name and the rest go on; if Paystack is unreachable or unset the batch stops
+(`stopped`, untried children in `remaining`). 409 with no school bank, 422 with no term, 403 for
+anyone but the bursar/administrator. The class page offers the button only to a writer at a school
+with a bank while some child has none (`may_make_accounts`, `accounts_missing`).
+**Controls run (broken, seen red, restored):** the failure isolation, the Paystack-down stop, the
+batch cap, the bank check, the writer check, who is offered the button, and `ensure()` returning the
+existing account (against `test_virtual`'s own test: in the class test the pre-skip also covers
+it, so breaking `ensure()` alone stays green there by design: two layers).
+
+## Not done
+- **At most 20 accounts per press** (`CLASS_BATCH`): each is two Paystack calls inside a web request.
+  The note says how many are left; press again. Nothing runs in the background.
+- The button works for the term the class page is on; there is no term picker beyond that page's.
+- No way to resolve an unrouted payment: platform staff can only see the list. An unmatched
+  payment with no current term cannot be placed until a term is current.
 
 ## What changed at review (#219)
-1. **The webhook reads the account number and customer code from Paystack's verify reply, and
-   falls back to the same fields of the signed event** for whichever the verify reply lacks,
-   one field at a time; the verify reply wins where it has one (`webhook._field()`). Still behind
-   the signature and the verification, and still never guessed: a fallback customer that is not the
-   account's is listed as unmatched, and a fallback account nobody owns is unrouted.
-2. **There is no separate webhook secret.** Paystack signs webhooks with the account's secret key,
-   so `PAYSTACK_WEBHOOK_SECRET` was removed and the webhook verifies with `PAYSTACK_SECRET_KEY`
-   (`docs/paystack.md`, `deploy/production.env` and `settings.py` say so). A key that is not
-   `sk_test_` refuses every webhook as well as every call.
+1. The webhook reads the account number and customer code from Paystack's verify reply, falling
+   back one field at a time to the signed event (`webhook._field()`); never guessed.
+2. No separate webhook secret: `PAYSTACK_SECRET_KEY` signs and verifies.
 
 ## What PR 2 holds
 `docs/paystack.md` describes it. A dedicated virtual account per child
@@ -38,11 +63,7 @@ unmatched reference, and the append-only trigger on the two new tenant tables. A
 no fallback to the event's fields, the event's fields winning over the verify reply, and a live
 key being accepted for the signature.
 
-## Not done in PR 2, and unverified
-- **There is no way to place an unmatched payment on a child.** It is listed for the bursar and
-  stays listed; putting it in a child's account is a person's decision and there is no button yet.
-  `schools.UnroutedPayment` has no screen at all: nobody can see it but a database query.
-- **No bulk "make accounts for the whole class".** The bursar makes them child by child.
+## Unverified (PR 2)
 - **Not called against the real Paystack.** The dedicated-account and transaction-verify calls
   are from memory. Where the receiving account number (`authorization.receiver_bank_account_number`)
   and the customer code (`customer.customer_code`) sit is why the webhook falls back to the signed

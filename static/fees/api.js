@@ -83,6 +83,20 @@ export const fetchBooks = ({ termId = null, fetchImpl = fetch } = {}) => read(bo
 export const fetchClass = ({ classId, termId, fetchImpl = fetch }) => read(classUrl(classId, termId), fetchImpl);
 export const fetchAccount = ({ studentId, fetchImpl = fetch }) => read(accountUrl(studentId), fetchImpl);
 export const fetchReceipt = ({ entryId, fetchImpl = fetch }) => read(receiptUrl(entryId), fetchImpl);
+/**
+ * Make the missing accounts for a class: a batch at a time, so the answer says how many
+ * were made, how many already had one, each failure by name, and how many are left.
+ * 409 (no bank yet) and 422 (no term) carry a sentence.
+ */
+export const makeClassAccounts = ({ classId, termId = null, fetchImpl = fetch }) =>
+  write(
+    `/api/fees/virtual/classes/${q(classId)}/`,
+    termId == null ? {} : { term_id: termId },
+    fetchImpl,
+    postJson,
+    [403, 409, 422],
+  );
+
 /** Make the child's dedicated account. 409 (no bank yet), 422 and 503 (Paystack) carry a sentence. */
 export const makeAccount = ({ studentId, fetchImpl = fetch }) =>
   write(virtualAccountUrl(studentId), {}, fetchImpl, postJson, [403, 409, 422, 503]);
