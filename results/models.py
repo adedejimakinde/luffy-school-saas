@@ -450,6 +450,15 @@ class ReportCardSettings(models.Model):
         max_length=16, choices=CardTemplate, default=CardTemplate.STANDARD
     )
 
+    #: Does the card print the child's position in class? **Off by default**,
+    #: for the reason the trait sections are: a school that has never asked
+    #: for it sees no trace of it, which is the card as it has always been.
+    #: Choosing the Ogun State card turns it on (`results.ogun`); a school may
+    #: turn it off again. Read at release and frozen onto each card as
+    #: `ReleasedCard.position_printed`, so switching it later never changes a
+    #: card that has gone home.
+    show_position = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -2379,6 +2388,12 @@ class ReleasedCard(models.Model):
     #: How many children the position was out of. Staff-only for the same
     #: reason, and stored because "4th" means nothing without it.
     roster_size = models.PositiveSmallIntegerField(default=0)
+
+    #: Whether this card prints its position, as the school's setting stood
+    #: when it was released (`ReportCardSettings.show_position`). False on
+    #: every card released before the setting existed, which is what they
+    #: printed. When it is False, `position` and `roster_size` stay staff-only.
+    position_printed = models.BooleanField(default=False, db_default=False)
 
     # -- attendance: nullable until Phase 2, and blank on the card ------------
 

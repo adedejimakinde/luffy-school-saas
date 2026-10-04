@@ -477,6 +477,21 @@ def attendance_of(card) -> AttendanceOut:
     )
 
 
+class PlaceOut(Schema):
+    """Where the child came in the class: "4th of 45".
+
+    Present **only** on a card released while the school printed it
+    (`ReleasedCard.position_printed`). Otherwise the field is null and the rank
+    stays staff-only, as it always has been. Named for what it is on the card
+    rather than for the column, so the payload of a school that never asked for
+    it carries no word of it at all.
+    """
+
+    place: int
+    out_of: int
+    label: str
+
+
 class ReportCardOut(Schema):
     """One child's card for one term, exactly as it was released.
 
@@ -552,6 +567,14 @@ class ReportCardOut(Schema):
     total_scored: int
     total_available: int
     own_average: Optional[str]
+
+    #: The summary every card prints: marks obtained (`total_scored`) over
+    #: marks obtainable (`total_available`), as a percentage to two places.
+    #: A string, for `own_average`'s reason; null where nothing was marked.
+    percentage: Optional[str] = None
+
+    #: See `PlaceOut`. Null unless the card was released printing it.
+    place_in_class: Optional[PlaceOut] = None
 
     #: **Kept, and no longer what a renderer reads.** The three raw columns
     #: stay on the payload because they are what the card was frozen with and a
@@ -1066,6 +1089,34 @@ def _admission_number(card) -> str:
     )
 
 
+def _percentage_of(card) -> Optional[str]:
+    """Marks obtained over marks obtainable, to two places. None with no marks."""
+    if not card.total_available:
+        return None
+    share = Decimal(card.total_scored) * 100 / Decimal(card.total_available)
+    return _as_text(share.quantize(Decimal("0.01")))
+
+
+def ordinal(n: int) -> str:
+    """1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st, 22nd."""
+    if 10 <= n % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _place_in_class(card) -> Optional[PlaceOut]:
+    """The rank, only where this card was released printing it."""
+    if not card.position_printed or card.position is None:
+        return None
+    return PlaceOut(
+        place=card.position,
+        out_of=card.roster_size,
+        label=f"{ordinal(card.position)} of {card.roster_size}",
+    )
+
+
 def _comments(card) -> List[CommentOut]:
     """The signed remarks, in signatory order rather than write order.
 
@@ -1276,6 +1327,8 @@ def card_payload(card) -> ReportCardOut:
         total_scored=card.total_scored,
         total_available=card.total_available,
         own_average=_as_text(card.own_average),
+        percentage=_percentage_of(card),
+        place_in_class=_place_in_class(card),
         days_present=card.days_present,
         days_absent=card.days_absent,
         days_open=card.days_open,

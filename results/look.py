@@ -188,6 +188,22 @@ def clear_crest_as(actor, school) -> ReportCardSettings:
     return row
 
 
+# -- the position in class ---------------------------------------------------
+
+
+def set_show_position_as(actor, school, on: bool) -> ReportCardSettings:
+    """Whether the card prints the child's position in class. Off by default.
+
+    Read at release and frozen onto each card, so this changes cards released
+    from now on and never one that has gone home.
+    """
+    _require_authority(actor, school)
+    row, _ = ReportCardSettings.objects.get_or_create(pk=1)
+    row.show_position = bool(on)
+    row.save(update_fields=["show_position", "updated_at"])
+    return row
+
+
 # -- what the card prints ----------------------------------------------------
 
 
@@ -245,5 +261,6 @@ __all__ = [
     "redraw_crest",
     "set_colour_as",
     "set_crest_as",
+    "set_show_position_as",
     "settings",
 ]

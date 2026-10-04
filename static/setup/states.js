@@ -204,6 +204,7 @@ function cardLook(card, notes) {
     '<h2 id="report-card">Report card</h2>',
     "<p class=\"hint\">Your crest and one colour lead every report card. Both are optional.</p>",
     templateForm(card.template || "standard", notes.template),
+    positionForm(Boolean(card.show_position), notes.position),
     '<div class="look-preview">',
     '<div class="look-head">',
     `<span class="mark">${mark}</span>`,
@@ -260,6 +261,23 @@ function templateForm(template, note) {
     '<button type="submit">Use this template</button>',
     note && note.kind === "applied" ? applied(note.applied) : "",
     note && note.kind !== "applied" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * Whether the card prints the child's position in class. Off unless the
+ * school turns it on; the Ogun State card turns it on. A card already
+ * released keeps what it printed.
+ */
+function positionForm(on, note) {
+  return [
+    `<form class="position-form${note ? ` ${esc(note.kind)}` : ""}" data-form="position">`,
+    '<label class="choice"><input type="checkbox" name="show_position"' + (on ? " checked" : "") + ">",
+    " <span><strong>Print each child&#39;s position in class</strong> ",
+    '<span class="hint">Cards released from now on show &quot;4th of 45&quot;. Cards already sent home keep what they showed.</span></span></label>',
+    '<button type="submit">Save</button>',
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
     "</form>",
   ].join("");
 }

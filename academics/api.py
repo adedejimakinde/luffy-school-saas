@@ -177,6 +177,8 @@ class CardLookOut(Schema):
     initials: str = ""
     #: Which card the school prints: "standard" or "ogun" (`results.ogun`).
     template: str = "standard"
+    #: Whether the card prints the child's position in class.
+    show_position: bool = False
 
 
 class SetUpOut(Schema):
@@ -406,6 +408,7 @@ def _card_look(school) -> CardLookOut:
         ),
         initials=look.initials(school.name),
         template=row.template,
+        show_position=row.show_position,
     )
 
 
@@ -429,6 +432,24 @@ def set_card_colour(request, payload: ColourIn):
         return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
     except look.LookRefused as exc:
         return 422, MessageOut(detail=str(exc))
+    return 200, _card_look(school)
+
+
+class ShowPositionIn(Schema):
+    show_position: bool
+
+
+@router.put("/card/position/", response={200: CardLookOut, 403: MessageOut})
+def set_card_position(request, payload: ShowPositionIn):
+    """Whether the card prints the position in class. Off unless the school says."""
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        look.set_show_position_as(request.user, school, payload.show_position)
+    except look.NotAllowedToSetTheLook:
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
     return 200, _card_look(school)
 
 

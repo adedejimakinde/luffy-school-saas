@@ -200,3 +200,36 @@ Heights and weights are rounded half up to their places (`1.445` is `1.45`).
 | the office check widened to every role at the school | the other teacher, the vice principal and the bursar subtests, the class teacher of another class, the child herself, another parent (7 failures) |
 | `_is_class_teacher()` true for any teacher | `test_another_teacher_..._get_a_404` (the other teacher), `test_the_class_teacher_of_another_class_sees_nothing_of_this_one` |
 | the release trigger never created | `test_the_database_refuses_a_change_after_release` (update, delete and insert) |
+
+## Part 4: the summary, and the class position
+
+**Every card** (Standard and Ogun) now prints marks obtained, marks obtainable
+and the percentage: `ReportCardOut.percentage` is `total_scored /
+total_available` to two places, null where nothing was marked. The Standard
+card has a "Marks" line under Average and Attendance, on the page and in the
+PDF.
+
+**The class position is a per-school setting,** `ReportCardSettings.show_position`,
+off by default. Choosing the Ogun State card turns it on; the setup page has a
+box for it under the report card template (`PUT /api/academics/card/position/`,
+principal or administrator).
+
+It is **frozen at release** onto each card as `ReleasedCard.position_printed`,
+so turning it on or off changes only cards released afterwards: a card that has
+gone home keeps what it printed. Cards released before this existed are False.
+
+The payload's `place_in_class` (`{place, out_of, label: "4th of 45"}`) is null
+unless the card was released printing it. With it off, the payload carries no
+rank and no word "position" at all, as before: the existing raw-bytes tests in
+`test_card_api.py` still hold, and `test_card_position.py` adds its own.
+
+### Tests and controls
+
+`results/tests/test_card_position.py` (13 tests, two schools), the position box in
+`tests/js/setup.test.js`; `test_card_look`'s setup answer gains `show_position`.
+
+| broken | what went red |
+| --- | --- |
+| `_place_in_class()` ignoring `position_printed` | both payload subtests of `test_the_family_and_staff_payloads_carry_no_rank`, `test_the_pdf_prints_no_position`, `test_turning_it_on_later_does_not_reach_a_card_already_home` |
+| `_place_in_class()` reading the live setting instead of the frozen flag | `test_turning_it_off_later_leaves_a_released_card_as_it_was`, `test_turning_it_on_later_does_not_reach_a_card_already_home` |
+| both authority layers removed (route and `set_show_position_as()`) | `test_a_teacher_and_the_other_schools_principal_are_refused`. Either layer alone still refuses, by design. |

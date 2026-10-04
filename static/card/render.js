@@ -114,9 +114,21 @@ function who(payload) {
     `<th scope="row">Class</th><td>${esc(payload.class_group_name)}</td></tr>`,
     `<tr><th scope="row">Average</th><td>${percentage(payload.own_average)}</td>`,
     `<th scope="row">Attendance</th><td>${attendance(payload)}</td></tr>`,
+    // The summary: marks obtained over obtainable, and the percentage of it.
+    // The position only where the card carries one, which is only where the
+    // school prints it (`place_in_class`).
+    `<tr><th scope="row">Marks</th><td>${marksSummary(payload)}</td>`,
+    payload.place_in_class
+      ? `<th scope="row">Position</th><td>${esc(payload.place_in_class.label)}</td></tr>`
+      : "<td></td><td></td></tr>",
     "</table>",
     "</section>",
   ].join("");
+}
+
+function marksSummary(payload) {
+  if (!payload.percentage) return '<span class="blank">—</span>';
+  return `${esc(payload.total_scored)} of ${esc(payload.total_available)} obtainable &middot; ${esc(payload.percentage)}%`;
 }
 
 /**

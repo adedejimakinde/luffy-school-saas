@@ -404,6 +404,11 @@ def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int
     scores = _scores_for(assessments, whose)
 
     released_by_id = getattr(by, "pk", by)
+    # Once per release, for the reason the bands are read once above: one
+    # class's cards agree about whether they print a position.
+    from .look import settings as card_settings
+
+    position_printed = card_settings().show_position
     cards = [
         _card_for(
             sheet,
@@ -415,6 +420,7 @@ def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int
             released_by_id,
             versions.get(student_id, 1),
             (attendance or {}).get(student_id),
+            position_printed=position_printed,
         )
         for student_id in whose
     ]
@@ -473,6 +479,8 @@ def _card_for(
     released_by_id,
     version=1,
     attendance=None,
+    *,
+    position_printed=False,
 ) -> ReleasedCard:
     """One child's card row. **Never conditional** — see the module docstring.
 
@@ -507,6 +515,7 @@ def _card_for(
         own_average=results.averages.get(student_id),
         position=results.positions.get(student_id),
         roster_size=len(results.student_ids),
+        position_printed=position_printed,
         days_present=attendance.present if attendance else None,
         days_absent=attendance.absent if attendance else None,
         days_open=attendance.open if attendance else None,
