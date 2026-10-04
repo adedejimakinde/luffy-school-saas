@@ -233,3 +233,57 @@ rank and no word "position" at all, as before: the existing raw-bytes tests in
 | `_place_in_class()` ignoring `position_printed` | both payload subtests of `test_the_family_and_staff_payloads_carry_no_rank`, `test_the_pdf_prints_no_position`, `test_turning_it_on_later_does_not_reach_a_card_already_home` |
 | `_place_in_class()` reading the live setting instead of the frozen flag | `test_turning_it_off_later_leaves_a_released_card_as_it_was`, `test_turning_it_on_later_does_not_reach_a_card_already_home` |
 | both authority layers removed (route and `set_show_position_as()`) | `test_a_teacher_and_the_other_schools_principal_are_refused`. Either layer alone still refuses, by design. |
+
+## Part 6: filling an OGSERA template
+
+`/ogsera/`, linked from the setup page's report card section when the school is
+on the Ogun template. Principal or administrator; any other school gets a 409
+saying the page belongs to the Ogun State template. `results.ogsera` holds the
+rules and `results/ogsera_api.py` the routes. **No pandas**: openpyxl reads and
+writes the file.
+
+The office chooses the class, the subject (when the template is a subject's),
+and the file OGSERA gave them. The file goes with every step and is never
+stored.
+
+1. **Headings** (`POST /api/results/ogsera/headings/`). The header row is found
+   below OGSERA's title block: the first row naming a mapped heading, else the
+   row with the most text in the first 30. The first time, or when the
+   template has no learner's ID column mapped, the page asks what each column
+   holds: learner's ID, name, 1st Test, 2nd Test, Assignment, CA total, Exam,
+   total, times opened, present, absent, and each visible trait. "Leave it" is
+   the default. The mapping is saved per school (`OgseraMapping`, one row in
+   the school's own schema, keyed by the heading as written, ignoring case and
+   spacing) and edited from the check screen ("Change the mapping"). Exactly one
+   column must be the learner's ID.
+2. **Check** (`POST .../check/`). Every row of the table (down to its first
+   empty row; a signature line under it is nobody) is matched to a child **of
+   the chosen class this term** by learner's ID, ignoring case. The page lists:
+   rows whose ID is no child of the class (blocks), rows with a name and no ID
+   (blocks), children of the class missing from the file, children with no
+   learner's ID in Classnode, and marks or ratings not entered yet.
+3. **Fill** (`POST .../fill/`). Only mapped cells of matched rows, so the
+   file's formatting, merged cells, frozen panes, formulas, validation and
+   other sheets stay as they were. **A cell that already has a value or a
+   formula is kept** unless "Replace existing values" is ticked. The download
+   is refused (422) while any row blocks.
+
+Marks come from the current term's Ogun papers, by name. CA total and total
+are filled only when every part is in. Nothing else of a child's record is
+filled; the health record is never a column.
+
+### Tests
+
+`results/tests/test_ogsera.py`: a made-up template shaped like OGSERA's (a merged
+title block, the header on row 5, a CA-total formula, a data validation, a
+fill colour, a frozen pane, an instructions sheet, a signature line under the
+table). Two schools: one school's mapping is never the other's, and the other
+school's children are not matched from their host. `tests/js/ogsera.test.js`
+for the page.
+
+| broken | what went red |
+| --- | --- |
+| the never-overwrite check removed | `test_a_cell_with_a_value_is_kept_unless_replace_is_ticked`, `test_the_files_formatting_formula_validation_and_sheets_are_kept` (the CA-total formula overwritten) |
+| rows matched against every child of the school, not the class | `test_a_child_of_another_class_is_unmatched_here`, `test_the_control_a_good_file_matches_every_row_case_blind` |
+| the principal-or-administrator check removed | `test_a_teacher_and_a_bursar_are_refused` (both) |
+| the download allowed while a row blocks | `test_an_unknown_id_and_a_row_with_no_id_block_the_download` |

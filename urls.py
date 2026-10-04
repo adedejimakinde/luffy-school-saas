@@ -41,6 +41,7 @@ from results.views import (
     chain_page,
     checker_page,
     comments_page,
+    ogsera_page,
 )
 from sync.views import service_worker
 from timetable.views import timetable_page
@@ -99,6 +100,7 @@ urlpatterns = [
     path("broadsheet/", broadsheet_page, name="broadsheet"),
     # The fourth staff surface, on the same terms as the three above.
     path("comments/", comments_page, name="comments"),
+    path("ogsera/", ogsera_page, name="ogsera"),
     # The bursar's, on the broadsheet's terms.
     path("fees/", fees_page, name="fees"),
     path("bank/", bank_page, name="bank"),

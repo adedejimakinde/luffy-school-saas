@@ -162,6 +162,9 @@ export const SCREENS = [
   },
   { name: "staff", as: "sunrise.admin", url: `${SUNRISE}/staff/` },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
+  // The OGSERA filler. The demo school prints the Standard card, so this is
+  // the page telling the office where the Ogun template is chosen.
+  { name: "ogsera", as: "sunrise.admin", url: `${SUNRISE}/ogsera/` },
 
   // A parent, of one child with a released card and one without —
   // `seed_demo`'s own reason for releasing one class and not the other. The
