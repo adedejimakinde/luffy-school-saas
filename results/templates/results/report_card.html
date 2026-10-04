@@ -214,6 +214,9 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
           <span class="blank">Not recorded this term</span>
         {% else %}<span class="blank">&mdash;</span>{% endif %}
       </td></tr>
+  <tr><td class="label">Marks</td>
+      <td>{% if card.percentage %}{{ card.total_scored }} of {{ card.total_available }} obtainable &middot; {{ card.percentage }}%{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      {% if card.place_in_class %}<td class="label">Position</td><td>{{ card.place_in_class.label }}</td>{% else %}<td></td><td></td>{% endif %}</tr>
 </table>
 
 <table class="grid">

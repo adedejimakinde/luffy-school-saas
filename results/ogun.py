@@ -12,6 +12,7 @@ applies the sheet's presets in the same transaction:
   order, with both sections switched on.
 - **The scale's words**: 5 Excellent, 4 Good, 3 Average, 2 Below Average,
   1 Unsatisfactory.
+- **The class position** on the card (`ReportCardSettings.show_position`).
 
 ## Never over a mark or a rating
 
@@ -266,7 +267,13 @@ def set_template_as(actor, school, template: str):
         raise TemplateRefused("Choose the Standard card or the Ogun State card.")
     row = _row()
     row.template = template
-    row.save(update_fields=["template", "updated_at"])
+    fields = ["template", "updated_at"]
+    if template == CardTemplate.OGUN:
+        # The sheet prints a class position. Turned on with it, and left as
+        # the school set it when the school goes back to Standard.
+        row.show_position = True
+        fields.append("show_position")
+    row.save(update_fields=fields)
     applied = apply_presets() if template == CardTemplate.OGUN else None
     return row, applied
 

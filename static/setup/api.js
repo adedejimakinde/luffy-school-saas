@@ -49,6 +49,10 @@ export function crestUrl() {
   return "/api/academics/card/crest/";
 }
 
+export function positionUrl() {
+  return "/api/academics/card/position/";
+}
+
 export function templateUrl() {
   return "/api/academics/card/template/";
 }
@@ -181,6 +185,17 @@ export async function saveLga({ lga, fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(lgaUrl(), { lga }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/** Whether the card prints the child's position in class. */
+export async function saveShowPosition({ show_position, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(positionUrl(), { show_position }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

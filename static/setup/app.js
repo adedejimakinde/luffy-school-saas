@@ -24,6 +24,7 @@ import {
   saveColour,
   saveContactEmail,
   saveLga,
+  saveShowPosition,
   saveTemplate,
   savePublicPage,
   uploadCrest,
@@ -117,6 +118,11 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (event.preventDefault) event.preventDefault();
 
     const which = form.dataset ? form.dataset.form : undefined;
+    if (which === "position") {
+      const box = form.show_position;
+      await after("position", await saveShowPosition({ show_position: Boolean(box && box.checked), fetchImpl }));
+      return;
+    }
     if (which === "template") {
       const result = await saveTemplate({ template: form.template.value, fetchImpl });
       if (result.ok) {

@@ -415,3 +415,29 @@ test("a refused choice keeps the form with the server's sentence", async () => {
   assert.match(root.innerHTML, /template-form not-allowed/);
   assert.match(root.innerHTML, /chosen by a principal/);
 });
+
+// -- the position in class ---------------------------------------------------------
+
+test("the position box is ticked as the school has it", () => {
+  assert.match(states.shape({ ...SHAPE, card: { ...CARD, show_position: true } }), /name="show_position" checked/);
+  assert.doesNotMatch(states.shape({ ...SHAPE, card: CARD }), /name="show_position" checked/);
+});
+
+test("saving the position box sends what is ticked", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/card/position/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { ...CARD, show_position: true } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: { ...SHAPE, card: CARD } }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "position" }, show_position: { checked: true } });
+
+  assert.deepEqual(sent, [{ show_position: true }]);
+});
