@@ -350,3 +350,68 @@ test("submitting the local government area sends it", async () => {
 
   assert.deepEqual(sent, [{ lga: "Ifo" }]);
 });
+
+// -- the report card template ---------------------------------------------------
+
+const CARD = { colour: "#143D8C", default_colour: "#143D8C", has_crest: false, initials: "SM", template: "standard" };
+
+test("the template choice says which card the school prints", () => {
+  const html = states.shape({ ...SHAPE, card: { ...CARD, template: "ogun" } });
+
+  assert.match(html, /data-form="template"/);
+  assert.match(html, /value="ogun" checked/);
+  assert.doesNotMatch(html, /value="standard" checked/);
+  assert.match(html, /Nothing already marked or rated is changed/);
+});
+
+test("choosing Ogun sends it and says what was set up and what was kept", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/card/template/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return {
+          status: 200,
+          body: {
+            template: "ogun",
+            applied: {
+              assessments_set: ["English, First term 2025/2026"],
+              assessments_kept: ["Mathematics, First term 2025/2026"],
+              traits_added: ["Self-Control"],
+              traits_renamed: [],
+              traits_hidden: ["Attendance"],
+              traits_kept: ["Politeness"],
+            },
+          },
+        };
+      }],
+      ["/api/academics/setup/", { status: 200, body: { ...SHAPE, card: { ...CARD, template: "ogun" } } }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "template" }, template: "ogun" });
+
+  assert.deepEqual(sent, [{ template: "ogun" }]);
+  assert.match(root.innerHTML, /Report cards use the Ogun State template/);
+  assert.match(root.innerHTML, /Papers set for English, First term 2025\/2026/);
+  assert.match(root.innerHTML, /because marks are in: Mathematics, First term 2025\/2026/);
+  assert.match(root.innerHTML, /because they have been rated: Politeness/);
+});
+
+test("a refused choice keeps the form with the server's sentence", async () => {
+  forgetToken();
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/card/template/", { status: 403, body: { detail: "The report card template is chosen by a principal." } }],
+      ["/api/academics/setup/", { status: 200, body: { ...SHAPE, card: CARD } }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "template" }, template: "ogun" });
+
+  assert.match(root.innerHTML, /template-form not-allowed/);
+  assert.match(root.innerHTML, /chosen by a principal/);
+});

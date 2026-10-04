@@ -15,6 +15,7 @@ shapes. Nobody should read this route's existence as implying a page.
 
 from typing import Optional
 
+from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
@@ -174,6 +175,8 @@ class CardLookOut(Schema):
     crest_version: Optional[str] = None
     #: What the card prints in the circle when there is no crest.
     initials: str = ""
+    #: Which card the school prints: "standard" or "ogun" (`results.ogun`).
+    template: str = "standard"
 
 
 class SetUpOut(Schema):
@@ -295,15 +298,18 @@ def create_term(request, payload: NewTermIn):
     from django.core.exceptions import ValidationError
 
     try:
-        term = services.create_term_as(
-            request.user,
-            payload.session,
-            payload.name,
-            payload.starts_on,
-            payload.ends_on,
-            school=school,
-            next_term_starts_on=payload.next_term_starts_on,
-        )
+        with transaction.atomic():
+            term = services.create_term_as(
+                request.user,
+                payload.session,
+                payload.name,
+                payload.starts_on,
+                payload.ends_on,
+                school=school,
+                next_term_starts_on=payload.next_term_starts_on,
+            )
+            # An Ogun school's new term opens with the sheet's papers.
+            ogun.after_term_opened(term)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
     except ValidationError as exc:
@@ -399,6 +405,7 @@ def _card_look(school) -> CardLookOut:
             str(int(row.updated_at.timestamp())) if has_crest and row.updated_at else None
         ),
         initials=look.initials(school.name),
+        template=row.template,
     )
 
 
@@ -581,3 +588,49 @@ def set_lga(request, payload: LgaIn):
     except contact.PublicDetailsRefused as exc:
         return 422, MessageOut(detail=str(exc))
     return 200, LgaOut(lga=lga)
+
+
+# ---------------------------------------------------------------------------
+# Which report card the school prints. Choosing the Ogun State card applies its
+# assessments, traits and scale (`results.ogun`), never over a mark or rating.
+# ---------------------------------------------------------------------------
+
+from results import ogun  # noqa: E402
+
+
+class TemplateIn(Schema):
+    template: str
+
+
+class AppliedOut(Schema):
+    assessments_set: List[str]
+    assessments_kept: List[str]
+    traits_added: List[str]
+    traits_renamed: List[str]
+    traits_hidden: List[str]
+    traits_kept: List[str]
+
+
+class TemplateOut(Schema):
+    template: str
+    #: What choosing Ogun set up. Absent for the Standard card.
+    applied: Optional[AppliedOut] = None
+
+
+@router.put("/card/template/", response={200: TemplateOut, 403: MessageOut, 422: MessageOut})
+def set_card_template(request, payload: TemplateIn):
+    """Choose the Standard card or the Ogun State card, which sets itself up."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        row, applied = ogun.set_template_as(request.user, school, payload.template)
+    except ogun.NotAllowedToChooseTheTemplate as exc:
+        return 403, MessageOut(detail=str(exc))
+    except ogun.TemplateRefused as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, TemplateOut(
+        template=row.template,
+        applied=AppliedOut(**applied.__dict__) if applied else None,
+    )

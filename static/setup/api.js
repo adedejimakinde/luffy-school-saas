@@ -49,6 +49,10 @@ export function crestUrl() {
   return "/api/academics/card/crest/";
 }
 
+export function templateUrl() {
+  return "/api/academics/card/template/";
+}
+
 export function publicPageUrl() {
   return "/api/academics/public-page/";
 }
@@ -177,6 +181,20 @@ export async function saveLga({ lga, fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(lgaUrl(), { lga }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/**
+ * Choose the Standard card or the Ogun State card. Choosing Ogun sets up its
+ * assessments, traits and scale on the server, and the answer says what it did.
+ */
+export async function saveTemplate({ template, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(templateUrl(), { template }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
