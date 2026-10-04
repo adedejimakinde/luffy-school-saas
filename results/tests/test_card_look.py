@@ -237,7 +237,7 @@ class TheDoorTests(LookSetUp):
             card,
             {"colour": "#143D8C", "default_colour": "#143D8C", "has_crest": False,
              "crest_version": None, "initials": "SM", "template": "standard",
-             "show_position": False},
+             "show_position": False, "show_ministry": False},
         )
 
 

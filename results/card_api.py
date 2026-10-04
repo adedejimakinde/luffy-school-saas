@@ -525,9 +525,17 @@ class OgunSheetOut(Schema):
     a child's health goes to four (`results.health`).
     """
 
+    #: The ministry's two lines, or empty when the school leaves them off
+    #: (`ReportCardSettings.show_ministry`, the default).
     ministry: List[str]
     title: str
+    #: "School (Abeokuta South LGA) [B13003]", on one line, under the ministry.
     school_line: str
+    #: The same, in two parts, for the head without the ministry.
+    school_name: str = ""
+    school_place: str = ""
+    #: The school's crest as a small PNG data URL, or null.
+    crest: Optional[str] = None
     ca_out_of: Optional[int] = None
     exam_out_of: Optional[int] = None
     learner_id: str

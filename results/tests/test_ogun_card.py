@@ -4,6 +4,7 @@
 whole session each, St Mary's on the Ogun card and Grace on the Standard one.
 """
 
+import base64
 import io
 from datetime import date
 
@@ -13,7 +14,7 @@ from academics import details
 from academics.models import ClassGroup, ClassPlacement, StudentDetails, Term, TermName
 from accounts.models import Role
 from gradebook.models import Department, Subject
-from results import ogun, ogun_card, pdf
+from results import look, ogun, ogun_card, pdf
 from results.models import HealthRecord, ReleasedCard, ReleasedCardPdf
 from results.tasks import render_card_pdf
 from results.tests.test_card_api import HOST, ReportCardApiSetUp
@@ -67,7 +68,8 @@ class TheSheetTests(OgunCardSetUp):
             (sheet["learner_id"], sheet["sex"], sheet["date_of_birth"]), ("OG/ABS/0042", "Female", "02/05/2013")
         )
         self.assertTrue(sheet["photo"].startswith("data:image/jpeg;base64,"))
-        self.assertEqual(sheet["ministry"], list(ogun_card.MINISTRY))
+        self.assertEqual(sheet["ministry"], [], "the ministry's heading is off unless the school turns it on")
+        self.assertEqual((sheet["school_name"], sheet["school_place"]), ("St Mary's", "(Abeokuta South LGA) [B13003]"))
 
     def test_a_junior_card_has_one_run_of_subjects_split_into_ca_and_exam(self):
         self.ogun_papers(SECOND, self.ada, "maths", 8, 9, 7, 61)
@@ -167,8 +169,8 @@ class ThePdfTests(OgunCardSetUp):
         with connected_to(self.stmarys):
             html = pdf.html_for(self.card())
         for words in (
-            "MINISTRY OF EDUCATION, SCIENCE AND TECHNOLOGY",
-            "St Mary&#x27;s (Abeokuta South LGA) [B13003]",
+            "St Mary&#x27;s",
+            "(Abeokuta South LGA) [B13003]",
             "Cont. Assess Scores",
             "Exam Scores",
             "Weighted Average (100)",
@@ -290,3 +292,71 @@ class SetUpTests(OgunCardSetUp):
             data={"department": "science"}, content_type="application/json", HTTP_HOST="grace.testserver",
         )
         self.assertEqual(response.status_code, 409)
+
+
+class TheMinistryHeadingTests(OgunCardSetUp):
+    """"Ogun State Government / Ministry of Education": a school's choice, off by default."""
+
+    URL = "/api/academics/card/ministry/"
+
+    def turn(self, on, user=None, school=None, host=HOST):
+        self.client.force_login(user or self.principal)
+        return self.client.put(
+            self.URL, data={"show_ministry": on}, content_type="application/json", HTTP_HOST=host
+        )
+
+    def html(self, school=None, child=None):
+        school, child = school or self.stmarys, child or self.ada
+        with connected_to(school):
+            return pdf.html_for(ReleasedCard.objects.get(student_membership_id=child.pk, term__name=TermName.FIRST))
+
+    def test_the_control_off_the_card_leads_with_the_school(self):
+        self.release()
+
+        html = self.html()
+
+        self.assertNotIn("OGUN STATE GOVERNMENT", html)
+        self.assertNotIn("MINISTRY OF EDUCATION", html)
+        self.assertLess(html.index('class="school school-lead">St Mary&#x27;s<'), html.index("(Abeokuta South LGA) [B13003]"))
+        self.assertLess(html.index("(Abeokuta South LGA) [B13003]"), html.index("JUNIOR SECONDARY SCHOOL"))
+
+    def test_on_the_card_opens_with_the_ministry_and_only_at_that_school(self):
+        with connected_to(self.grace):
+            ogun.set_template_as(self.their_principal, self.grace, "ogun")
+        self.assertEqual(self.turn(True).json()["show_ministry"], True)
+        self.release()
+        self.release(self.grace)
+
+        sheet = self.payload()["ogun"]
+        theirs = self.fetch(self.their_principal, self.grace, self.ngozi).json()["ogun"]
+        html = self.html()
+
+        self.assertEqual(sheet["ministry"], list(ogun_card.MINISTRY))
+        self.assertEqual(theirs["ministry"], [], "Grace never turned it on")
+        self.assertLess(html.index("OGUN STATE GOVERNMENT"), html.index("St Mary&#x27;s (Abeokuta South LGA) [B13003]"))
+        self.assertNotIn("OGUN STATE GOVERNMENT", self.html(self.grace, self.ngozi))
+        self.assertEqual(
+            self.client.get("/api/academics/setup/", HTTP_HOST="grace.testserver").json()["card"]["show_ministry"],
+            False,
+        )
+
+    def test_only_the_office_may_turn_it_on(self):
+        for user in (self.teacher, self.bursar, self.vp):
+            with self.subTest(user=user.username):
+                self.assertEqual(self.turn(True, user=user).status_code, 403)
+        self.assertEqual(self.turn(True, user=self.their_principal).status_code, 403, "another school's principal")
+        self.release()
+        self.assertEqual(self.payload()["ogun"]["ministry"], [])
+
+    def test_the_page_gets_the_crest_small(self):
+        crest = io.BytesIO()
+        Image.new("RGBA", (400, 400), (20, 61, 140, 255)).save(crest, format="PNG")
+        with connected_to(self.stmarys):
+            look.set_crest_as(self.principal, self.stmarys, crest.getvalue())
+        self.release()
+
+        sheet = self.payload()["ogun"]
+
+        self.assertTrue(sheet["crest"].startswith("data:image/png;base64,"))
+        with Image.open(io.BytesIO(base64.b64decode(sheet["crest"].split(",", 1)[1]))) as image:
+            self.assertEqual(image.size, (look.SITE_CREST_SIDE, look.SITE_CREST_SIDE))

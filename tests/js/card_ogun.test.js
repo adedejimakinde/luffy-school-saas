@@ -18,6 +18,7 @@ const OGUN = {
   ministry: ["OGUN STATE GOVERNMENT", "MINISTRY OF EDUCATION, SCIENCE AND TECHNOLOGY"],
   title: "JUNIOR SECONDARY SCHOOL CONTINUOUS ASSESSMENT REPORT SHEET",
   school_line: "St Mary's (Abeokuta South LGA) [B13003]",
+  school_name: "St Mary's", school_place: "(Abeokuta South LGA) [B13003]", crest: null,
   ca_out_of: 30, exam_out_of: 70,
   learner_id: "OG/ABS/0042", sex: "Female", date_of_birth: "02/05/2013", photo: null,
   senior: false, third_term: false,
@@ -44,6 +45,18 @@ test("the Ogun sheet heads the page with the ministry, the school line and the c
   assert.match(html, /OG\/ABS\/0042/);
   assert.match(html, /Female/);
   assert.match(html, /02\/05\/2013/);
+});
+
+test("without the ministry's heading the school leads: crest, name, then its LGA and code", () => {
+  const html = card({
+    ...PAYLOAD,
+    ogun: { ...OGUN, ministry: [], crest: "data:image/png;base64,AAAA" },
+  });
+
+  assert.doesNotMatch(html, /OGUN STATE GOVERNMENT|MINISTRY OF EDUCATION/);
+  assert.match(html, /<img class="ogun-crest" src="data:image\/png;base64,AAAA"/);
+  assert.match(html, /<h1>St Mary&#39;s<\/h1><p class="place">\(Abeokuta South LGA\) \[B13003\]<\/p><p class="sheet-title">JUNIOR/);
+  assert.ok(html.indexOf("ogun-crest") < html.indexOf("<h1>"), "the crest comes first");
 });
 
 test("each subject's CA, exam and weighted average, a dash where there is none", () => {

@@ -39,12 +39,12 @@ function head(payload, o, pdfUrl) {
   const photo = o.photo
     ? `<img class="ogun-photo" src="${esc(o.photo)}" alt="Photo of ${esc(payload.student_name)}" width="92" height="118">`
     : "";
+  const crest = o.crest ? `<img class="ogun-crest" src="${esc(o.crest)}" alt="" width="64" height="64">` : "";
   return [
     '<header class="masthead ogun-head">',
     photo,
-    ...o.ministry.map((line) => `<p class="ministry">${esc(line)}</p>`),
-    `<p class="sheet-title">${esc(o.title)}</p>`,
-    `<h1>${esc(o.school_line)}</h1>`,
+    crest,
+    ...words(o),
     `<p class="term">${esc(payload.term_label)} &middot; ${esc(payload.academic_session)}</p>`,
     payload.is_revised ? '<p class="revised">Revised</p>' : "",
     pdfUrl
@@ -52,6 +52,23 @@ function head(payload, o, pdfUrl) {
       : "",
     "</header>",
   ].join("");
+}
+
+/** The ministry's lines, the title, the school: the paper's order, when the
+ * school prints the ministry's heading. Otherwise the school leads. */
+function words(o) {
+  if (o.ministry.length) {
+    return [
+      ...o.ministry.map((line) => `<p class="ministry">${esc(line)}</p>`),
+      `<p class="sheet-title">${esc(o.title)}</p>`,
+      `<h1>${esc(o.school_line)}</h1>`,
+    ];
+  }
+  return [
+    `<h1>${esc(o.school_name)}</h1>`,
+    o.school_place ? `<p class="place">${esc(o.school_place)}</p>` : "",
+    `<p class="sheet-title">${esc(o.title)}</p>`,
+  ];
 }
 
 function who(payload, o) {

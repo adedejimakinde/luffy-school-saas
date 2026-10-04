@@ -1,4 +1,4 @@
-# Where I stopped: 2026-10-04 (fifth session), the Ogun State template, parts 1 to 4 and 6 merged, part 5 waiting on you
+# Where I stopped: 2026-10-04 (fifth session), the Ogun State template, all six parts merged
 
 You asked for the Ogun State template (the MOEST/OGSERA report sheet), one PR per part, merged on green, except part 5,
 which stops for your review with screenshots. Part 6 (the OGSERA filler) and the part 5 additions came mid-session.
@@ -11,7 +11,8 @@ which stops for your review with screenshots. Part 6 (the OGSERA filler) and the
 | [#237](https://github.com/adedejimakinde/luffy-school-saas/pull/237) | **Merged on green:** part 3, physical development and health (`results.HealthRecord`), seen by four people; the privacy notice's "Health records". |
 | [#238](https://github.com/adedejimakinde/luffy-school-saas/pull/238) | **Merged on green:** part 4, marks obtainable, obtained and percentage on every card; class position as a school setting, off by default, on with the Ogun template. |
 | [#239](https://github.com/adedejimakinde/luffy-school-saas/pull/239) | **Merged on green:** part 6, `/ogsera/`, filling the OGSERA Excel template from Classnode's marks. |
-| [#240](https://github.com/adedejimakinde/luffy-school-saas/pull/240) | **Waiting on your review, not merged:** the Ogun State card on the PDF and the parent's page; school code; SSS departments; third-term rows and the promotion box. This handover is a second commit on the same PR, so it lands with part 5. |
+| [#240](https://github.com/adedejimakinde/luffy-school-saas/pull/240) | **Merged after your review:** the Ogun State card on the PDF and the parent's page; school code; SSS departments; third-term rows and the promotion box. Review screenshots on the branch `ogun-card-screens` (never merged). |
+| [#241](https://github.com/adedejimakinde/luffy-school-saas/pull/241) | **Merged on green:** the ministry's heading on the Ogun card is a school setting, off by default; without it the card leads with the school's crest, name, LGA and code. |
 
 ## The rules each part keeps
 - **Presets never overwrite.** Choosing Ogun replaces a subject's papers only while none of them has a mark (row locks,
@@ -33,8 +34,8 @@ which stops for your review with screenshots. Part 6 (the OGSERA filler) and the
 0032 (part 5, the PDF's health copy), `gradebook` 0004 (a subject's department, part 5).
 
 ## Not done or not verified
-- **Part 5 is unmerged.** Its "Decisions for you" (senior means a class name starting SS/SSS; the page turns the grid
-  on its side; details and promotion are read live; the ordinary copy's note) are yours to answer.
+- **Part 5's "Decisions for you"** (#240: senior means a class name starting SS/SSS; the page turns the grid on its
+  side; details and promotion are read live; the ordinary copy's note) were merged as written.
 - **Not checked against a real OGSERA file.** The filler is tested with a made-up template of the same shape (title
   block, header on row 5, a formula, validation, a second sheet). The first real file may name its headings
   differently; the mapping screen is how a school copes, and nothing is filled until the check screen is clean.

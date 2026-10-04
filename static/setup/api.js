@@ -53,6 +53,10 @@ export function positionUrl() {
   return "/api/academics/card/position/";
 }
 
+export function ministryUrl() {
+  return "/api/academics/card/ministry/";
+}
+
 export function templateUrl() {
   return "/api/academics/card/template/";
 }
@@ -185,6 +189,17 @@ export async function saveLga({ lga, school_code = "", fetchImpl = fetch }) {
   let answer;
   try {
     answer = await putJson(lgaUrl(), { lga, school_code }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/** Whether the Ogun State card opens with the ministry's heading. */
+export async function saveShowMinistry({ show_ministry, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(ministryUrl(), { show_ministry }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

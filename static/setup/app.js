@@ -25,6 +25,7 @@ import {
   saveContactEmail,
   saveDepartment,
   saveLga,
+  saveShowMinistry,
   saveShowPosition,
   saveTemplate,
   savePublicPage,
@@ -129,6 +130,11 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (event.preventDefault) event.preventDefault();
 
     const which = form.dataset ? form.dataset.form : undefined;
+    if (which === "ministry") {
+      const box = form.show_ministry;
+      await after("ministry", await saveShowMinistry({ show_ministry: Boolean(box && box.checked), fetchImpl }));
+      return;
+    }
     if (which === "position") {
       const box = form.show_position;
       await after("position", await saveShowPosition({ show_position: Boolean(box && box.checked), fetchImpl }));

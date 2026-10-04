@@ -238,6 +238,7 @@ function cardLook(card, notes) {
     "<p class=\"hint\">Your crest and one colour lead every report card. Both are optional.</p>",
     templateForm(card.template || "standard", notes.template),
     positionForm(Boolean(card.show_position), notes.position),
+    card.template === "ogun" ? ministryForm(Boolean(card.show_ministry), notes.ministry) : "",
     '<div class="look-preview">',
     '<div class="look-head">',
     `<span class="mark">${mark}</span>`,
@@ -310,6 +311,24 @@ function positionForm(on, note) {
     '<label class="choice"><input type="checkbox" name="show_position"' + (on ? " checked" : "") + ">",
     " <span><strong>Print each child&#39;s position in class</strong> ",
     '<span class="hint">Cards released from now on show &quot;4th of 45&quot;. Cards already sent home keep what they showed.</span></span></label>',
+    '<button type="submit">Save</button>',
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * Whether the Ogun State card opens with the ministry's heading. Off unless
+ * the school turns it on; without it the card leads with the school's name,
+ * crest, LGA and code. Offered only while the school prints the Ogun card.
+ */
+function ministryForm(on, note) {
+  return [
+    `<form class="ministry-form${note ? ` ${esc(note.kind)}` : ""}" data-form="ministry">`,
+    '<label class="choice"><input type="checkbox" name="show_ministry"' + (on ? " checked" : "") + ">",
+    " <span><strong>Head the card with the Ogun State Government and its Ministry of Education</strong> ",
+    '<span class="hint">Off, the card leads with your school&#39;s name, crest, LGA and code. ',
+    "Cards already sent home keep what they showed.</span></span></label>",
     '<button type="submit">Save</button>',
     note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
     "</form>",

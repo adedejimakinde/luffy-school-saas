@@ -198,6 +198,8 @@ button.signout { display: block; margin: 24px auto 0; }
 .ogun-head .ministry { margin: 0; font-weight: 700; letter-spacing: .02em; }
 .ogun-head .sheet-title { margin: 4px 0; font-size: var(--small); font-weight: 700; }
 .ogun-head h1 { font-size: 1.25rem; margin: 6px 0 0; }
+.ogun-head .place { margin: 2px 0 0; font-weight: 700; }
+.ogun-crest { display: block; width: 64px; height: 64px; margin: 0 0 6px; }
 .ogun-photo { float: right; width: 92px; height: 118px; object-fit: cover; border: 1px solid var(--border); margin: 0 0 8px 12px; }
 .ogun-promotion { margin: 12px 0; padding: 10px 12px; border: 2px solid var(--text); font-weight: 700; text-align: center; }
 .ogun-who { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 6px 16px; margin: 0; }
