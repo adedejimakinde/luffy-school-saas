@@ -29,7 +29,17 @@
  * second button for each of a dozen traits.
  */
 
-import { REFUSAL, SAVE, fetchChild, fetchClass, fetchClasses, saveRating, saveRemark } from "./api.js";
+import {
+  REFUSAL,
+  SAVE,
+  fetchChild,
+  fetchClass,
+  fetchClasses,
+  fetchHealth,
+  saveHealth,
+  saveRating,
+  saveRemark,
+} from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -98,6 +108,20 @@ export function applySave(state, key, result) {
   return { ...state, notes };
 }
 
+/**
+ * What a health save did. Its own, because a locked health record locks only
+ * its section: the remarks beside it answer to the sheet, not to the card.
+ * A refused save keeps what was typed.
+ */
+export function applyHealth(state, result, typed = null) {
+  if (result.ok) return { ...state, health: result.body, healthNote: null };
+  if (result.refusal) return { step: result.refusal, ...result.body };
+  if (result.outcome === SAVE.LOCKED) {
+    return { ...state, health: { ...state.health, locked: true, may_edit: false }, healthNote: { kind: "rejected", detail: result.body.detail } };
+  }
+  return { ...state, healthNote: { kind: "rejected", detail: result.body.detail, typed } };
+}
+
 export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {}) {
   const portal = root.dataset.portal || "";
   // Issue #180: the frame never named a class. `classGroupId` is still here
@@ -131,6 +155,12 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
     openChild = id;
     typed = {};
     state = fromChild(await fetchChild({ studentMembershipId: id, fetchImpl }));
+    if (state.step === "child") {
+      // Its own route and its own readers. Not being one of them is no
+      // refusal of the page: the section is left out.
+      const health = await fetchHealth({ studentMembershipId: id, fetchImpl });
+      state = { ...state, health: health.ok ? health.body : null };
+    }
     draw();
   };
 
@@ -191,6 +221,21 @@ export async function mount(root, { fetchImpl = fetch, classGroupId = null } = {
       );
       draw();
     }
+  });
+
+  root.addEventListener("submit", async (event) => {
+    const form = event.target;
+    if (!form || !form.dataset || form.dataset.form !== "health" || state.step !== "child") return;
+    if (event.preventDefault) event.preventDefault();
+    const values = {};
+    for (const name of ["height_start_m", "height_end_m", "weight_start_kg", "weight_end_kg", "days_absent_ill", "illness"]) {
+      values[name] = form[name] ? String(form[name].value).trim() : "";
+    }
+    for (const name of ["height_start_m", "height_end_m", "weight_start_kg", "weight_end_kg", "days_absent_ill"]) {
+      if (values[name] === "") values[name] = null;
+    }
+    state = applyHealth(state, await saveHealth({ studentMembershipId: openChild, values, fetchImpl }), values);
+    draw();
   });
 
   root.addEventListener("change", async (event) => {

@@ -139,3 +139,31 @@ export async function saveRating({ studentMembershipId, traitId, score, fetchImp
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
 }
+
+export function healthUrl(studentMembershipId) {
+  return `/api/results/health/${encodeURIComponent(studentMembershipId)}/`;
+}
+
+/**
+ * One child's physical development and health, from its own route
+ * (`results/health_api.py`). **A 404 is "not yours to see"**, not a broken
+ * page: the section is simply not drawn, and the rest of the child stays.
+ */
+export async function fetchHealth({ studentMembershipId, fetchImpl = fetch }) {
+  try {
+    const answer = await getJson(healthUrl(studentMembershipId), { fetchImpl });
+    if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+    return { ok: false, hidden: true, body: answer.body || {} };
+  } catch (error) {
+    return { ok: false, hidden: true, body: { detail: String(error) } };
+  }
+}
+
+/** The class teacher records this term's. Answers with the record. */
+export async function saveHealth({ studentMembershipId, values, fetchImpl = fetch }) {
+  try {
+    return classify(await putJson(healthUrl(studentMembershipId), values, { fetchImpl }));
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}

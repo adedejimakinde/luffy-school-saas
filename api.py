@@ -66,6 +66,7 @@ from results.card_api import checker_router
 from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
+from results.health_api import router as health_router
 from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.platform_api import router as platform_router
@@ -125,6 +126,8 @@ api.add_router("/results/", report_card_router, tags=["results"])
 api.add_router("/results/", checker_router, tags=["results"])
 api.add_router("/results/", chain_router, tags=["results"])
 api.add_router("/results/", comments_router, tags=["results"])
+# A child's health: its own router and its own four readers (`results.health`).
+api.add_router("/results/", health_router, tags=["results"])
 # The bell schedule and who teaches what, per class per term. Tenant-host only
 # and refused with a flat 404 to anybody who may not read it — see
 # `timetable.api`.

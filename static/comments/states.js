@@ -88,6 +88,8 @@ export function child({
   sections = [],
   scale = [],
   notes = {},
+  health = null,
+  healthNote = null,
 } = {}) {
   return [
     '<section class="state state-child" data-state="child">',
@@ -99,6 +101,7 @@ export function child({
       : "",
     remarks.map((r) => remark(r, { locked, bank: phrases[r.author], note: notes[r.author] })).join(""),
     conduct({ may_rate, sections, scale, locked, note: notes.rating }),
+    health && health.printed ? healthSection(health, healthNote) : "",
     '<button type="button" class="back" data-action="back">Back to the class</button>',
     "</section>",
   ].join("");
@@ -264,6 +267,52 @@ export function broken() {
     "<h1>This page is not working</h1>",
     "<p>Something went wrong on our side. Please try again in a few minutes, ",
     "and tell your school if it keeps happening.</p>",
+    "</section>",
+  ].join("");
+}
+
+/**
+ * Physical development and health, on the Ogun State card. Served only to the
+ * class teacher, the principal and an administrator (`results/health.py`), so
+ * a teacher of another class never gets here with anything to draw. The class
+ * teacher edits it until the card goes home; anyone else reads it.
+ */
+export function healthSection(h, note = null) {
+  const typed = (note && note.typed) || {};
+  const value = (name) => (typed[name] !== undefined ? typed[name] : h[name]);
+  const box = (name, label, attrs) =>
+    `<label for="health-${name}">${label}</label>` +
+    `<input id="health-${name}" name="${name}" value="${esc(value(name) ?? "")}" ${attrs}>`;
+  const shown = (v, unit) => (v === null || v === undefined || v === "" ? "—" : `${esc(v)}${unit}`);
+  const head = '<section class="health"><h2>Physical development and health</h2>' +
+    '<p class="hint">Seen only by the class teacher, the principal, the school&#39;s administrators and this child&#39;s parents.</p>';
+  if (!h.may_edit) {
+    return [
+      head,
+      '<dl class="facts">',
+      `<dt>Height, beginning of term</dt><dd>${shown(h.height_start_m, " m")}</dd>`,
+      `<dt>Height, end of term</dt><dd>${shown(h.height_end_m, " m")}</dd>`,
+      `<dt>Weight, beginning of term</dt><dd>${shown(h.weight_start_kg, " kg")}</dd>`,
+      `<dt>Weight, end of term</dt><dd>${shown(h.weight_end_kg, " kg")}</dd>`,
+      `<dt>Days absent through illness</dt><dd>${shown(h.days_absent_ill, "")}</dd>`,
+      `<dt>Nature of illness</dt><dd>${shown(h.illness, "")}</dd>`,
+      "</dl>",
+      note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+      "</section>",
+    ].join("");
+  }
+  return [
+    head,
+    `<form class="health-form${note ? ` ${esc(note.kind)}` : ""}" data-form="health">`,
+    box("height_start_m", "Height at the beginning of term (m)", 'inputmode="decimal" placeholder="1.42"'),
+    box("height_end_m", "Height at the end of term (m)", 'inputmode="decimal" placeholder="1.44"'),
+    box("weight_start_kg", "Weight at the beginning of term (kg)", 'inputmode="decimal" placeholder="38.5"'),
+    box("weight_end_kg", "Weight at the end of term (kg)", 'inputmode="decimal" placeholder="39.0"'),
+    box("days_absent_ill", "Days absent through illness", 'inputmode="numeric"'),
+    box("illness", "Nature of illness", 'maxlength="120"'),
+    '<button type="submit">Save health record</button>',
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
     "</section>",
   ].join("");
 }
