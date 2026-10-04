@@ -3178,3 +3178,29 @@ class HealthRecord(models.Model):
 
     def __str__(self):
         return f"health of membership {self.student_membership_id} ({self.term_id})"
+
+
+class OgseraMapping(models.Model):
+    """Which column of an OGSERA spreadsheet holds which Classnode value.
+
+    `docs/ogun-template.md` part 6. One row per school, in its own schema, so
+    one school's mapping is never another's to read. `columns` maps a heading,
+    as `results.ogsera.heading_key()` normalises it, to a field key from
+    `ogsera.FIELDS` or a trait (`trait:<id>`); a heading not in it is left
+    alone. `headings` keeps each heading as the template spelt it, for the
+    page to show. Edited by the office whenever OGSERA changes a template.
+    """
+
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1)
+    columns = models.JSONField(default=dict)
+    headings = models.JSONField(default=dict)
+    updated_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=Q(id=1), name="one_ogsera_mapping_per_school"),
+        ]
+
+    def __str__(self):
+        return f"OGSERA mapping: {len(self.columns)} columns"

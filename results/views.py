@@ -147,6 +147,30 @@ COMMENTS_MODULES = (
 )
 
 
+#: The OGSERA filler's own modules.
+OGSERA_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "ogsera/api.js",
+    "ogsera/states.js",
+    "ogsera/app.js",
+)
+
+
+def ogsera_page(request):
+    """The frame for filling an OGSERA template. Holds no child and no mark.
+
+    A shell, as every staff page is: who may use it, and whether the school
+    is on the Ogun State template, are `ogsera_api`'s questions, asked by the
+    page's first fetch.
+    """
+    return render(
+        request,
+        "results/ogsera_page.html",
+        {"import_map": pages.import_map(*OGSERA_MODULES), "portal_host": portal_host()},
+    )
+
+
 def comments_page(request):
     """The frame for writing the two remarks. Reads one row, holds no remark.
 

@@ -49,6 +49,7 @@ from results.views import (
     CHECKER_MODULES,
     COMMENTS_MODULES,
     INDEX_MODULES,
+    OGSERA_MODULES,
 )
 from home.views import HOME_MODULES
 from notices.views import SETTINGS_MODULES
@@ -85,6 +86,7 @@ PAGES = {
     "checker": CHECKER_MODULES,
     "home": HOME_MODULES,
     "notices-settings": SETTINGS_MODULES,
+    "ogsera": OGSERA_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

@@ -259,6 +259,7 @@ function templateForm(template, note) {
     ),
     "</fieldset>",
     '<button type="submit">Use this template</button>',
+    template === "ogun" ? '<p><a class="btn btn-quiet" href="/ogsera/">Fill an OGSERA template</a></p>' : "",
     note && note.kind === "applied" ? applied(note.applied) : "",
     note && note.kind !== "applied" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
     "</form>",
