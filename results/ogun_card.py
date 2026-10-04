@@ -34,6 +34,14 @@ On a **third-term** card three more rows: the 1st, 2nd and 3rd term scores
 **Weighted Annual Score**, their average over the terms taken. A term with no
 score shows "-".
 
+## The head
+
+The school's crest, its name and its place, "(Abeokuta South LGA)
+[B13003]", lead the card. A school that turns on the ministry's heading
+(`ReportCardSettings.show_ministry`, off by default) gets the paper sheet's
+order instead: the ministry's two lines, the sheet's title, then the school on
+one line.
+
 ## The promotion line
 
 Third term only, from the end-of-session promotion (`academics.promotion`),
@@ -150,21 +158,32 @@ def _promotion_line(card) -> Optional[str]:
     return decision.get_status_display()
 
 
-def _school_line(school) -> str:
-    line = school.name
+def _school_place(school) -> str:
+    """"(Abeokuta South LGA) [B13003]", either part left out when unset."""
+    parts = []
     if school.lga:
         lga = school.lga if school.lga.lower().endswith("lga") else f"{school.lga} LGA"
-        line += f" ({lga})"
+        parts.append(f"({lga})")
     if school.school_code:
-        line += f" [{school.school_code}]"
-    return line
+        parts.append(f"[{school.school_code}]")
+    return " ".join(parts)
+
+
+def _school_line(school) -> str:
+    place = _school_place(school)
+    return f"{school.name} {place}" if place else school.name
+
+
+def _shows_ministry() -> bool:
+    row = ReportCardSettings.objects.filter(pk=1).only("show_ministry").first()
+    return bool(row and row.show_ministry)
 
 
 def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     """The Ogun sheet's extra content for one card, or None for a Standard school."""
     if not is_ogun():
         return None
-    from . import ratings
+    from . import look, ratings
 
     details = StudentDetails.objects.filter(student_membership_id=card.student_membership_id).first()
     photo = None
@@ -237,13 +256,21 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         #: "(30)" and "(70)" on the row labels when every subject agrees.
         "ca_out_of": ca_outs.pop() if len(ca_outs) == 1 else None,
         "exam_out_of": exam_outs.pop() if len(exam_outs) == 1 else None,
-        "ministry": list(MINISTRY),
+        #: Empty unless the school prints the ministry's heading
+        #: (`ReportCardSettings.show_ministry`, off by default); without it the
+        #: card leads with the school's name and then its place.
+        "ministry": list(MINISTRY) if _shows_ministry() else [],
         "title": (
             "SENIOR SECONDARY SCHOOL CONTINUOUS ASSESSMENT REPORT SHEET"
             if senior
             else "JUNIOR SECONDARY SCHOOL CONTINUOUS ASSESSMENT REPORT SHEET"
         ),
         "school_line": _school_line(school),
+        "school_name": school.name,
+        #: The crest the school's public page shows, small, for the page's head
+        #: (the PDF draws the full one from `look.for_card()`). Null without one.
+        "crest": look.for_site(school.name)["crest"],
+        "school_place": _school_place(school),
         "learner_id": details.learner_id if details else "",
         "sex": Sex(details.sex).label if details and details.sex else "",
         "date_of_birth": details.date_of_birth.strftime("%d/%m/%Y") if details and details.date_of_birth else "",

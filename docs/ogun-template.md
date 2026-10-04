@@ -343,3 +343,32 @@ with the school on the Ogun card, so they cover this payload too.
 | the health copy served to every reader | `test_the_bursar_the_vice_principal_and_the_child_get_the_ordinary_copy` (all three) |
 | the ordinary copy rendered with the record | `test_the_ordinary_copy_is_rendered_without_the_record` |
 | the record put into `ReportCardOut.ogun` | `test_health.NowhereElseTests.test_not_in_the_card_any_reader_is_served` |
+
+## Follow-up: the ministry's heading is a school's choice
+
+"Ogun State Government / Ministry of Education, Science and Technology" at the
+top of the Ogun card is **off by default** (`ReportCardSettings.show_ministry`),
+and choosing the Ogun template leaves it off. Without it the card leads with
+the school: its crest, its name, then "(Abeokuta South LGA) [B13003]", then the
+sheet's title. With it on, the paper sheet's order: the ministry's two lines,
+the title, the school on one line.
+
+- Set by the principal or an administrator in setup (`PUT
+  /api/academics/card/ministry/`), offered only while the school prints the
+  Ogun card. Any other role, or another school's principal, gets a 403.
+- `ReportCardOut.ogun` carries `ministry` (empty when off), `school_name`,
+  `school_place`, and `crest`: the small crest the school's public page already
+  shows (`look.for_site()`), so the parent's page can lead with it too. The PDF
+  draws the full crest, as before.
+- Read when a card is drawn, like the rest of the head. A stored PDF keeps what
+  it was released with.
+
+`TheMinistryHeadingTests` in `results/tests/test_ogun_card.py` (off by default,
+on at one school and not the other, who may set it, the small crest), and the
+page and setup tests in `tests/js/card_ogun.test.js` and
+`tests/js/setup.test.js`.
+
+| broken | what went red |
+| --- | --- |
+| the heading printed whatever the setting | `test_the_control_off_the_card_leads_with_the_school`, `test_on_the_card_opens_with_the_ministry_and_only_at_that_school` (Grace's card), `test_only_the_office_may_turn_it_on`, and `TheSheetTests.test_the_control_an_ogun_card_carries_the_sheet_and_a_standard_one_does_not` |
+| the principal-or-administrator check removed, from the route and from `look.set_show_ministry_as` | `test_only_the_office_may_turn_it_on` (the teacher, the bursar, the vice principal, and the card then carrying the heading) |

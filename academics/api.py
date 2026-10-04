@@ -179,6 +179,8 @@ class CardLookOut(Schema):
     template: str = "standard"
     #: Whether the card prints the child's position in class.
     show_position: bool = False
+    #: Whether the Ogun State card opens with the ministry's heading.
+    show_ministry: bool = False
 
 
 class SetUpOut(Schema):
@@ -420,6 +422,7 @@ def _card_look(school) -> CardLookOut:
         initials=look.initials(school.name),
         template=row.template,
         show_position=row.show_position,
+        show_ministry=row.show_ministry,
     )
 
 
@@ -459,6 +462,25 @@ def set_card_position(request, payload: ShowPositionIn):
         return refused
     try:
         look.set_show_position_as(request.user, school, payload.show_position)
+    except look.NotAllowedToSetTheLook:
+        return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
+    return 200, _card_look(school)
+
+
+class ShowMinistryIn(Schema):
+    show_ministry: bool
+
+
+@router.put("/card/ministry/", response={200: CardLookOut, 403: MessageOut})
+def set_card_ministry(request, payload: ShowMinistryIn):
+    """Whether the Ogun State card opens with "Ogun State Government / Ministry
+    of Education, Science and Technology". Off unless the school says."""
+    school = _school_of(request)
+    refused = _refuse_look_outsiders(request, school)
+    if refused is not None:
+        return refused
+    try:
+        look.set_show_ministry_as(request.user, school, payload.show_ministry)
     except look.NotAllowedToSetTheLook:
         return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
     return 200, _card_look(school)

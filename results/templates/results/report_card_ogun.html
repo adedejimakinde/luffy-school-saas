@@ -35,7 +35,7 @@ names are set sideways.
   .n { text-align: center; }
   .blank { color: #888; }
 
-  /* The head: crest, the ministry and the school, the photo. */
+  /* The head: crest, the school (or the ministry, then the school), the photo. */
   .head { display: table; width: 100%; margin-bottom: 2mm; }
   .head > div { display: table-cell; vertical-align: middle; }
   .head .crest { width: 24mm; }
@@ -45,6 +45,8 @@ names are set sideways.
   .head .ministry { font-weight: 700; font-size: 9.5pt; letter-spacing: .3px; }
   .head .title { font-weight: 700; font-size: 8.5pt; margin-top: 1mm; }
   .head .school { font-weight: 700; font-size: 12pt; color: {{ look.colour }}; margin-top: 1.4mm; }
+  .head .school-lead { font-size: 15pt; margin-top: 0; }
+  .head .place { font-weight: 700; font-size: 10pt; margin-top: .8mm; }
   .head .photo { width: 26mm; text-align: right; }
   .head .photo img, .head .photo .none { width: 23mm; height: 29.5mm; border: .8px solid #333; display: inline-block; }
   .head .photo .none { line-height: 29.5mm; text-align: center; color: #888; font-size: 7pt; }
@@ -84,9 +86,15 @@ names are set sideways.
 <div class="head">
   <div class="crest">{% if look.crest %}<img src="{{ look.crest }}" alt="">{% else %}<span class="initials">{{ look.initials }}</span>{% endif %}</div>
   <div class="words">
+    {% if card.ogun.ministry %}
     {% for line in card.ogun.ministry %}<p class="ministry">{{ line }}</p>{% endfor %}
     <p class="title">{{ card.ogun.title }}</p>
     <p class="school">{{ card.ogun.school_line }}</p>
+    {% else %}
+    <p class="school school-lead">{{ card.ogun.school_name }}</p>
+    {% if card.ogun.school_place %}<p class="place">{{ card.ogun.school_place }}</p>{% endif %}
+    <p class="title">{{ card.ogun.title }}</p>
+    {% endif %}
   </div>
   <div class="photo">{% if card.ogun.photo %}<img src="{{ card.ogun.photo }}" alt="">{% else %}<span class="none">Passport photo</span>{% endif %}</div>
 </div>

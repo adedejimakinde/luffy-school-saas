@@ -442,6 +442,35 @@ test("saving the position box sends what is ticked", async () => {
   assert.deepEqual(sent, [{ show_position: true }]);
 });
 
+// -- the ministry's heading on the Ogun card ----------------------------------------
+
+test("the ministry's heading is offered to an Ogun school only, as it has it", () => {
+  assert.doesNotMatch(states.shape({ ...SHAPE, card: CARD }), /name="show_ministry"/);
+  const ogun = states.shape({ ...SHAPE, card: { ...CARD, template: "ogun" } });
+  assert.match(ogun, /data-form="ministry"/);
+  assert.doesNotMatch(ogun, /name="show_ministry" checked/);
+  assert.match(states.shape({ ...SHAPE, card: { ...CARD, template: "ogun", show_ministry: true } }), /name="show_ministry" checked/);
+});
+
+test("saving the ministry box sends what is ticked", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/card/ministry/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { ...CARD, template: "ogun", show_ministry: true } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: { ...SHAPE, card: { ...CARD, template: "ogun" } } }],
+    ]),
+  });
+
+  await root.submit({ dataset: { form: "ministry" }, show_ministry: { checked: true } });
+
+  assert.deepEqual(sent, [{ show_ministry: true }]);
+});
+
 // -- the Ogun card's school code and subject departments -------------------------
 
 test("the school code sits with the LGA and is sent with it", async () => {

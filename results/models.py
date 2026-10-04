@@ -459,6 +459,13 @@ class ReportCardSettings(models.Model):
     #: card that has gone home.
     show_position = models.BooleanField(default=False)
 
+    #: Does the Ogun State card open with "Ogun State Government / Ministry of
+    #: Education, Science and Technology"? **Off by default**, and choosing the
+    #: Ogun template leaves it off: a private school's card is its own, and
+    #: leads with its name, crest, LGA and code. A school whose sheet goes out
+    #: under the ministry's name turns it on. The Standard card never prints it.
+    show_ministry = models.BooleanField(default=False)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

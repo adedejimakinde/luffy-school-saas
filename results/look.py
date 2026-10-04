@@ -204,6 +204,22 @@ def set_show_position_as(actor, school, on: bool) -> ReportCardSettings:
     return row
 
 
+# -- the ministry heading on the Ogun State card -----------------------------
+
+
+def set_show_ministry_as(actor, school, on: bool) -> ReportCardSettings:
+    """Whether the Ogun State card opens with the ministry's name. Off by default.
+
+    Read when a card is drawn, as the rest of the Ogun sheet's head is
+    (`results.ogun_card`): the stored PDF keeps what it was released with.
+    """
+    _require_authority(actor, school)
+    row, _ = ReportCardSettings.objects.get_or_create(pk=1)
+    row.show_ministry = bool(on)
+    row.save(update_fields=["show_ministry", "updated_at"])
+    return row
+
+
 # -- what the card prints ----------------------------------------------------
 
 
@@ -262,5 +278,6 @@ __all__ = [
     "set_colour_as",
     "set_crest_as",
     "set_show_position_as",
+    "set_show_ministry_as",
     "settings",
 ]
