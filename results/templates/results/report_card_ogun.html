@@ -1,0 +1,188 @@
+{% comment %}
+One released card on the Ogun State MOEST/OGSERA report sheet. Rendered by
+`results.pdf.render()` when the school prints the Ogun card
+(`docs/ogun-template.md` part 5).
+
+**Everything comes off `card`, a `ReportCardOut`, and `card.ogun`, its
+`OgunSheetOut`** -- the same objects the parent's page draws -- and never off
+a model row, for the reason `report_card.html` gives.
+
+`health` is a `HealthRecord` or None, and it is **not on `card`**: only the
+health variant of the file (`ReleasedCardPdf.health_content`) is rendered with
+one, and that variant is served only to the four people `results.health`
+names. Every other copy prints the section's note instead.
+
+One A4 page in the ordinary case. The subject columns are narrow, so their
+names are set sideways.
+{% endcomment %}
+<meta charset="utf-8">
+<title>{{ card.student_name }}: {{ card.term_label }} {{ card.academic_session }}</title>
+<style>
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 400; src: url("{{ fonts }}/hanken-grotesk-400.woff2") format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 700; src: url("{{ fonts }}/hanken-grotesk-700.woff2") format("woff2"); }
+
+  @page {
+    size: A4;
+    margin: 9mm 9mm 11mm 9mm;
+    @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 7pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #667; }
+    @bottom-right { content: "classnode"; font: 6.5pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #8a8f99; }
+  }
+  body { font: 8pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #111; }
+  h1, h2, h3, p { margin: 0; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: .6px solid #555; padding: 1.6px 3px; vertical-align: middle; }
+  th { font-weight: 700; background: #f0f0f2; }
+  .n { text-align: center; }
+  .blank { color: #888; }
+
+  /* The head: crest, the ministry and the school, the photo. */
+  .head { display: table; width: 100%; margin-bottom: 2mm; }
+  .head > div { display: table-cell; vertical-align: middle; }
+  .head .crest { width: 24mm; }
+  .head .crest img { width: 21mm; height: 21mm; display: block; }
+  .head .crest .initials { display: block; width: 19mm; height: 19mm; line-height: 19mm; border-radius: 50%; background: {{ look.colour }}; color: #fff; text-align: center; font-size: 14pt; font-weight: 700; }
+  .head .words { text-align: center; }
+  .head .ministry { font-weight: 700; font-size: 9.5pt; letter-spacing: .3px; }
+  .head .title { font-weight: 700; font-size: 8.5pt; margin-top: 1mm; }
+  .head .school { font-weight: 700; font-size: 12pt; color: {{ look.colour }}; margin-top: 1.4mm; }
+  .head .photo { width: 26mm; text-align: right; }
+  .head .photo img, .head .photo .none { width: 23mm; height: 29.5mm; border: .8px solid #333; display: inline-block; }
+  .head .photo .none { line-height: 29.5mm; text-align: center; color: #888; font-size: 7pt; }
+  .rule { height: 1.6mm; background: {{ look.colour }}; margin-bottom: 2mm; }
+
+  .who td { border: .6px solid #999; }
+  .who .label { color: #444; font-weight: 700; width: 13%; background: #f7f7f9; }
+  .promotion { margin: 2mm 0; padding: 2mm 3mm; border: 1.4px solid {{ look.colour }}; font-weight: 700; font-size: 10pt; text-align: center; }
+
+  /* The subject grid: subjects across, the rows down. */
+  .grid { margin-top: 2mm; table-layout: fixed; }
+  .grid th.rowhead, .grid td.rowhead { width: 30mm; text-align: left; }
+  .grid th.subject { height: 30mm; padding: 0; vertical-align: bottom; }
+  .grid th.subject div { transform: rotate(-90deg); transform-origin: left bottom; width: 29mm; position: relative; left: 50%; margin-left: 1.6mm; white-space: normal; font-size: 7pt; line-height: 1.05; text-align: left; }
+  .grid th.department { font-size: 7.5pt; border-bottom: 1.2px solid {{ look.colour }}; }
+  .grid tr.weighted td { font-weight: 700; }
+  .grid tr.annual td { font-weight: 700; background: #f7f7f9; }
+
+  .pair { display: table; width: 100%; margin-top: 2mm; }
+  .pair > div { display: table-cell; vertical-align: top; width: 50%; }
+  .pair > div:first-child { padding-right: 1.5mm; }
+  .pair > div:last-child { padding-left: 1.5mm; }
+  h3 { font-size: 8.5pt; margin: 0 0 1mm; padding-bottom: .6mm; border-bottom: 1px solid {{ look.colour }}; }
+  .traits td.tick { width: 6mm; text-align: center; font-size: 9pt; }
+  .traits tr.total td { font-weight: 700; }
+  .key { margin-top: 1mm; font-size: 7.2pt; color: #333; }
+  .health-note { color: #555; font-size: 7.5pt; padding: 2mm 0; }
+
+  .remarks { margin-top: 2mm; }
+  .remarks td { height: 11mm; vertical-align: top; }
+  .remarks .label { width: 30mm; font-weight: 700; background: #f7f7f9; }
+  .remarks .sign { width: 34mm; color: #444; font-size: 7pt; }
+  .stamp { height: 22mm; text-align: center; color: #999; vertical-align: middle !important; }
+  .resume { margin-top: 2mm; font-size: 9pt; }
+</style>
+
+<div class="head">
+  <div class="crest">{% if look.crest %}<img src="{{ look.crest }}" alt="">{% else %}<span class="initials">{{ look.initials }}</span>{% endif %}</div>
+  <div class="words">
+    {% for line in card.ogun.ministry %}<p class="ministry">{{ line }}</p>{% endfor %}
+    <p class="title">{{ card.ogun.title }}</p>
+    <p class="school">{{ card.ogun.school_line }}</p>
+  </div>
+  <div class="photo">{% if card.ogun.photo %}<img src="{{ card.ogun.photo }}" alt="">{% else %}<span class="none">Passport photo</span>{% endif %}</div>
+</div>
+<div class="rule"></div>
+
+<table class="who">
+  <tr><td class="label">Learner's ID</td><td>{{ card.ogun.learner_id|default:"" }}</td>
+      <td class="label">Admission No.</td><td>{{ card.admission_number }}</td>
+      <td class="label">Class</td><td>{{ card.class_group_name }}</td></tr>
+  <tr><td class="label">Learner's name</td><td colspan="3"><strong>{{ card.student_name }}</strong></td>
+      <td class="label">Term</td><td>{{ card.term_label }}, {{ card.academic_session }}</td></tr>
+  <tr><td class="label">Sex</td><td>{{ card.ogun.sex }}</td>
+      <td class="label">Date of birth</td><td>{{ card.ogun.date_of_birth }}</td>
+      <td class="label">No. in class</td><td>{% if card.place_in_class %}{{ card.place_in_class.out_of }}{% endif %}</td></tr>
+</table>
+
+{% if card.ogun.promotion %}<p class="promotion">{{ card.ogun.promotion }}</p>{% endif %}
+{% if card.is_revised %}<p class="promotion">Revised &middot; version {{ card.version }}</p>{% endif %}
+
+<table class="grid">
+  <thead>
+    {% if card.ogun.senior %}
+    <tr><th class="rowhead"></th>{% for group in card.ogun.groups %}<th class="department" colspan="{{ group.subjects|length }}">{{ group.label }}</th>{% endfor %}</tr>
+    {% endif %}
+    <tr><th class="rowhead">Subjects</th>{% for group in card.ogun.groups %}{% for s in group.subjects %}<th class="subject"><div>{{ s.name }}</div></th>{% endfor %}{% endfor %}</tr>
+  </thead>
+  <tbody>
+    <tr><td class="rowhead">Cont. Assess Scores{% if card.ogun.ca_out_of %} ({{ card.ogun.ca_out_of }}){% endif %}</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{% if s.ca is not None %}{{ s.ca }}{% else %}-{% endif %}</td>{% endfor %}{% endfor %}</tr>
+    <tr><td class="rowhead">Exam Scores{% if card.ogun.exam_out_of %} ({{ card.ogun.exam_out_of }}){% endif %}</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{% if s.exam is not None %}{{ s.exam }}{% else %}-{% endif %}</td>{% endfor %}{% endfor %}</tr>
+    <tr class="weighted"><td class="rowhead">Weighted Average (100)</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{{ s.weighted|default:"-" }}</td>{% endfor %}{% endfor %}</tr>
+    {% if card.ogun.third_term %}
+    <tr><td class="rowhead">1st Term Score (100)</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{{ s.first|default:"-" }}</td>{% endfor %}{% endfor %}</tr>
+    <tr><td class="rowhead">2nd Term Score (100)</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{{ s.second|default:"-" }}</td>{% endfor %}{% endfor %}</tr>
+    <tr><td class="rowhead">3rd Term Score (100)</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{{ s.third|default:"-" }}</td>{% endfor %}{% endfor %}</tr>
+    <tr class="annual"><td class="rowhead">Weighted Annual Score</td>{% for group in card.ogun.groups %}{% for s in group.subjects %}<td class="n">{{ s.annual|default:"-" }}</td>{% endfor %}{% endfor %}</tr>
+    {% endif %}
+  </tbody>
+</table>
+
+<div class="pair">
+  <div>
+    <h3>Attendance</h3>
+    <table>
+      <tr><th>Times school opened</th><th>Times present</th><th>Times absent</th></tr>
+      <tr><td class="n">{{ card.ogun.times_opened|default_if_none:"" }}</td><td class="n">{{ card.ogun.times_present|default_if_none:"" }}</td><td class="n">{{ card.ogun.times_absent|default_if_none:"" }}</td></tr>
+    </table>
+  </div>
+  <div>
+    <h3>Summary</h3>
+    <table>
+      <tr><th>Marks obtainable</th><th>Marks obtained</th><th>Percentage</th><th>Class position</th></tr>
+      <tr><td class="n">{{ card.total_available }}</td><td class="n">{{ card.total_scored }}</td><td class="n">{% if card.percentage %}{{ card.percentage }}%{% endif %}</td><td class="n">{% if card.place_in_class %}{{ card.place_in_class.label }}{% endif %}</td></tr>
+    </table>
+  </div>
+</div>
+
+<div class="pair">
+  {% for group in card.ogun.traits %}
+  <div>
+    <h3>{{ group.label }}</h3>
+    <table class="traits">
+      <tr><th>Trait</th>{% for point in card.ogun.key %}<th class="n">{{ point.value }}</th>{% endfor %}</tr>
+      {% for t in group.traits %}
+      <tr><td>{{ t.name }}</td>{% for point in card.ogun.key %}<td class="tick">{% if t.score == point.value %}&#10003;{% endif %}</td>{% endfor %}</tr>
+      {% endfor %}
+      <tr class="total"><td>Total</td><td colspan="{{ card.ogun.key|length }}" class="n">{% if group.total is not None %}{{ group.total }} of {{ group.out_of }}{% endif %}</td></tr>
+    </table>
+  </div>
+  {% endfor %}
+</div>
+<p class="key"><strong>Rating key:</strong> {% for point in card.ogun.key %}{{ point.value }} {{ point.label }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+
+<div class="pair">
+  <div>
+    <h3>Physical development and health</h3>
+    {% if health %}
+    <table>
+      <tr><th></th><th>Beginning of term</th><th>End of term</th></tr>
+      <tr><td>Height (m)</td><td class="n">{{ health.height_start_m|default_if_none:"" }}</td><td class="n">{{ health.height_end_m|default_if_none:"" }}</td></tr>
+      <tr><td>Weight (kg)</td><td class="n">{{ health.weight_start_kg|default_if_none:"" }}</td><td class="n">{{ health.weight_end_kg|default_if_none:"" }}</td></tr>
+      <tr><td>Days absent through illness</td><td class="n" colspan="2">{{ health.days_absent_ill|default_if_none:"" }}</td></tr>
+      <tr><td>Nature of illness</td><td colspan="2">{{ health.illness }}</td></tr>
+    </table>
+    {% else %}
+    <p class="health-note">Shown only on the copy for the child's parents, class teacher and the school office.</p>
+    {% endif %}
+  </div>
+  <div>
+    <h3>School stamp</h3>
+    <table><tr><td class="stamp">Stamp</td></tr></table>
+  </div>
+</div>
+
+<table class="remarks">
+  <tr><td class="label">Class teacher's comment</td><td>{{ remarks.class_teacher }}</td><td class="sign">Signature:<br><br>Date:</td></tr>
+  <tr><td class="label">Principal's remark</td><td>{{ remarks.principal }}</td><td class="sign">Signature:<br><br>Date:</td></tr>
+</table>
+
+{% if next_term_begins %}<p class="resume"><strong>Next term begins:</strong> {{ next_term_begins|date:"l j F Y" }}</p>{% endif %}

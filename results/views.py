@@ -63,6 +63,7 @@ CARD_MODULES = (
     "web/http.js",
     "web/signout.js",
     "card/api.js",
+    "card/ogun.js",
     "card/render.js",
     "card/states.js",
     "card/app.js",
@@ -250,6 +251,7 @@ def broadsheet_page(request):
 #: would be a second answer to what a card looks like.
 CHECKER_MODULES = (
     "web/html.js",
+    "card/ogun.js",
     "card/render.js",
     "card/states.js",
     "checker/api.js",

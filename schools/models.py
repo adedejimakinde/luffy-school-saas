@@ -103,6 +103,9 @@ class School(TenantMixin):
     #: sheet prints it beside the school's name ("Abeokuta South L.G.A.").
     #: Blank until the office sets it (`schools.contact.set_lga_as()`).
     lga = models.CharField(max_length=60, blank=True, default="")
+    #: The school's code with the state (OGSERA's "[B13003]"), printed in
+    #: brackets after the LGA on the Ogun State card. Optional; blank until set.
+    school_code = models.CharField(max_length=20, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Schemas are created on save in real use; tests turn this off per instance.

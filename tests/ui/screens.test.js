@@ -76,7 +76,7 @@ export const SITE_WIDTHS = [320, 414, 1024, 1920];
  * timetable and the marking sheet (which is a list today, and would join
  * here if it ever became a table).
  */
-const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet";
+const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet, table.ogun-grid";
 
 /** Labels the design sets below body size on purpose. */
 const SMALL_ON_PURPOSE =

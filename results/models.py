@@ -2950,6 +2950,12 @@ class ReleasedCardPdf(models.Model):
     #: The PDF itself. Null where the render failed — see `error`.
     content = models.BinaryField(null=True, blank=True)
 
+    #: The same card with its physical development and health section filled
+    #: in: an Ogun State card whose child has a `HealthRecord` for the term,
+    #: and nothing otherwise. Served only to the four people
+    #: `results.health.may_see()` names; `content` goes to everyone else.
+    health_content = models.BinaryField(null=True, blank=True)
+
     #: Denormalised off `content` so that "how big is a card" is answerable
     #: without reading every card's bytes out of the database to find out. The
     #: constraint below holds it to the actual length rather than to merely

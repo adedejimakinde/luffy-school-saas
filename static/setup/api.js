@@ -181,10 +181,10 @@ export async function saveContactEmail({ contact_email, fetchImpl = fetch }) {
 }
 
 /** The local government area the school sits in. Blank clears it. */
-export async function saveLga({ lga, fetchImpl = fetch }) {
+export async function saveLga({ lga, school_code = "", fetchImpl = fetch }) {
   let answer;
   try {
-    answer = await putJson(lgaUrl(), { lga }, { fetchImpl });
+    answer = await putJson(lgaUrl(), { lga, school_code }, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
@@ -281,6 +281,21 @@ export async function removeCrest({ fetchImpl = fetch }) {
       parsed = null;
     }
     answer = { status: response.status, body: parsed };
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
+
+/** Which department a subject sits under on a senior Ogun card. */
+export async function saveDepartment({ subjectId, department, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(
+      `/api/academics/subjects/${encodeURIComponent(subjectId)}/department/`,
+      { department },
+      { fetchImpl },
+    );
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

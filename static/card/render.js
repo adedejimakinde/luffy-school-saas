@@ -30,6 +30,7 @@
  */
 
 import { esc, numberOrBlank } from "../web/html.js";
+import { ogunCard } from "./ogun.js";
 
 /**
  * The whole page body for one card payload.
@@ -40,7 +41,9 @@ import { esc, numberOrBlank } from "../web/html.js";
  * where the caller has none to give, and then the button is not drawn — a
  * link to a file this page cannot name would be worse than no button.
  */
-export function card(payload, { pdfUrl = null } = {}) {
+export function card(payload, { pdfUrl = null, health = null } = {}) {
+  // The Ogun State sheet, for a school that prints it (`docs/ogun-template.md`).
+  if (payload.ogun) return ogunCard(payload, { pdfUrl, health });
   return [
     masthead(payload, pdfUrl),
     who(payload),
@@ -89,7 +92,7 @@ const MONTHS = [
  * and whose available locales are a property of the machine running the
  * browser or the test, not of this page.
  */
-function date(isoDate) {
+export function date(isoDate) {
   const parsed = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate));
   if (!parsed) return esc(String(isoDate));
   const [, year, month, day] = parsed;

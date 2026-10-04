@@ -1,3 +1,55 @@
+# Where I stopped: 2026-10-04 (fifth session), the Ogun State template, parts 1 to 4 and 6 merged, part 5 waiting on you
+
+You asked for the Ogun State template (the MOEST/OGSERA report sheet), one PR per part, merged on green, except part 5,
+which stops for your review with screenshots. Part 6 (the OGSERA filler) and the part 5 additions came mid-session.
+**`docs/ogun-template.md` is the description of all six parts**, each with its tests and controls table.
+
+| PR | State |
+| --- | --- |
+| [#235](https://github.com/adedejimakinde/luffy-school-saas/pull/235) | **Merged on green:** part 1, the child's learner's ID (unique per school when present), sex, date of birth and passport photo (`academics.StudentDetails`); the roll import's three new optional columns; the school's LGA in setup. |
+| [#236](https://github.com/adedejimakinde/luffy-school-saas/pull/236) | **Merged on green:** part 2, the template chooser in setup (`ReportCardSettings.template`) and its one-click presets: the four papers, the twelve traits, the 1 to 5 scale. |
+| [#237](https://github.com/adedejimakinde/luffy-school-saas/pull/237) | **Merged on green:** part 3, physical development and health (`results.HealthRecord`), seen by four people; the privacy notice's "Health records". |
+| [#238](https://github.com/adedejimakinde/luffy-school-saas/pull/238) | **Merged on green:** part 4, marks obtainable, obtained and percentage on every card; class position as a school setting, off by default, on with the Ogun template. |
+| [#239](https://github.com/adedejimakinde/luffy-school-saas/pull/239) | **Merged on green:** part 6, `/ogsera/`, filling the OGSERA Excel template from Classnode's marks. |
+| [#240](https://github.com/adedejimakinde/luffy-school-saas/pull/240) | **Waiting on your review, not merged:** the Ogun State card on the PDF and the parent's page; school code; SSS departments; third-term rows and the promotion box. This handover is a second commit on the same PR, so it lands with part 5. |
+
+## The rules each part keeps
+- **Presets never overwrite.** Choosing Ogun replaces a subject's papers only while none of them has a mark (row locks,
+  `Score` PROTECT behind them), and never hides a trait someone has rated. It applies to the current and future terms;
+  a term opened later on an Ogun school gets the papers at creation (`ogun.after_term_opened`).
+- **Health is four people's.** The class teacher records; the class teacher, principal, administrator and the child's
+  guardians (only once that term's card is released) read; every refusal is a 404. It is never in the card payload,
+  broadsheet, class list, export or the result checker. After release a trigger stops edits (`HealthLocked`).
+- **Position is frozen per card** (`ReleasedCard.position_printed`) so the page and the stored PDF agree. With the
+  setting off no payload carries a position, as before (the raw-bytes tests still hold).
+- **Ogun card, two PDFs.** When the child has a health record, release stores an ordinary copy (a note where the table
+  would be) and `health_content`, served only to the four. Its decisions are in the part 5 PR, for you to answer.
+- **OGSERA:** the mapping is per school (`OgseraMapping`, in the school's schema); rows are matched to the chosen
+  class by learner's ID; a cell with a value or formula is kept unless "Replace existing values" is ticked; the
+  download is refused while any row is unmatched or has no ID.
+
+## Migrations
+`academics` 0005, `schools` 0007 (LGA) and 0008 (school code, part 5), `results` 0028 to 0031 (merged) and
+0032 (part 5, the PDF's health copy), `gradebook` 0004 (a subject's department, part 5).
+
+## Not done or not verified
+- **Part 5 is unmerged.** Its "Decisions for you" (senior means a class name starting SS/SSS; the page turns the grid
+  on its side; details and promotion are read live; the ordinary copy's note) are yours to answer.
+- **Not checked against a real OGSERA file.** The filler is tested with a made-up template of the same shape (title
+  block, header on row 5, a formula, validation, a second sheet). The first real file may name its headings
+  differently; the mapping screen is how a school copes, and nothing is filled until the check screen is clean.
+- **The reference sheet was read from your description and the field list**, not overlaid on a scan. Spacing and
+  font sizes on the PDF are mine.
+- **No mark entry screen for the Ogun papers was changed:** they are ordinary papers, entered on the marking page.
+- **Health entry** sits on the comments page (class teacher), fetched separately; there is no class-wide health
+  screen, on purpose (it would be a class list of health data).
+- **`tests/ui/offline.test.js` flaked once** in the `screens` job on #239 ("no copy of a sheet is left", 2 !== 0),
+  in code none of these PRs touch; it passed 3/3 locally and on one re-run. Worth watching.
+- The OGSERA page is the newest entry in `tests/test_budget.py`; the card page grew by `card/ogun.js` and is within
+  budget.
+
+---
+
 # Where I stopped: 2026-10-03 (fourth session), single-host demo fixed, offline S5 to S7 merged
 
 Each PR merged on green or after your review, then this docs-only one (#234).

@@ -17,7 +17,7 @@ import { esc, numberOrBlank } from "../web/html.js";
  */
 export function shape({
   terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "",
-  lga = "", lga_choices = [], notes = {},
+  lga = "", lga_choices = [], school_code = "", subjects = [], departments = [], notes = {},
 } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
@@ -37,7 +37,8 @@ export function shape({
 
     card ? cardLook(card, notes) : "",
 
-    localGovernment(lga, lga_choices, notes),
+    localGovernment(lga, lga_choices, notes, school_code),
+    card && card.template === "ogun" ? subjectDepartments(subjects, departments, notes) : "",
 
     contactEmail(contact_email, notes),
 
@@ -72,17 +73,49 @@ function contactEmail(address, notes) {
  * card prints beside the school's name. Ogun's twenty are offered as the
  * person types; a school elsewhere types its own.
  */
-function localGovernment(lga, choices, notes) {
+function localGovernment(lga, choices, notes, schoolCode = "") {
   return [
-    '<h2 id="lga">Local government area</h2>',
-    '<p class="hint">Printed beside your school&#39;s name on the Ogun State report card.</p>',
+    '<h2 id="lga">Local government area and school code</h2>',
+    '<p class="hint">Printed beside your school&#39;s name on the Ogun State report card: ' +
+      '&quot;(Abeokuta South LGA) [B13003]&quot;. Both are optional.</p>',
     `<form class="lga-form${notes.lga ? ` ${esc(notes.lga.kind)}` : ""}" data-form="lga">`,
     '<label for="lga_input">Local government area</label>',
     `<input id="lga_input" name="lga" value="${esc(lga)}" maxlength="60" list="lga_choices" autocomplete="off">`,
     `<datalist id="lga_choices">${choices.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>`,
-    '<button type="submit">Save local government area</button>',
+    '<label for="school_code">School code</label>',
+    `<input id="school_code" name="school_code" value="${esc(schoolCode)}" maxlength="20" autocomplete="off" placeholder="B13003">`,
+    '<button type="submit">Save</button>',
     notes.lga ? `<p class="note" role="alert">${esc(notes.lga.detail)}</p>` : "",
     "</form>",
+  ].join("");
+}
+
+/**
+ * Which department each subject sits under on a senior (SSS) Ogun State
+ * card, whose subject columns are grouped under department headings. A junior
+ * card prints its subjects in one run and ignores this. Saved as it is chosen.
+ */
+function subjectDepartments(subjects, departments, notes) {
+  if (!subjects.length) return "";
+  return [
+    '<h2 id="departments">Subject departments</h2>',
+    '<p class="hint">On a senior (SSS) Ogun State card, subjects are grouped under these headings. ' +
+      "A subject with none is printed under Other.</p>",
+    '<ul class="subjects">',
+    subjects
+      .map(
+        (s) =>
+          `<li><label for="department_${esc(s.subject_id)}">${esc(s.name)}</label>` +
+          `<select id="department_${esc(s.subject_id)}" data-subject="${esc(s.subject_id)}">` +
+          `<option value="">None</option>` +
+          departments
+            .map((d) => `<option value="${esc(d.value)}"${d.value === s.department ? " selected" : ""}>${esc(d.label)}</option>`)
+            .join("") +
+          "</select></li>",
+      )
+      .join(""),
+    "</ul>",
+    notes.department ? `<p class="note" role="alert">${esc(notes.department.detail)}</p>` : "",
   ].join("");
 }
 

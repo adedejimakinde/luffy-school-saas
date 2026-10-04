@@ -205,6 +205,11 @@ class SetUpOut(Schema):
     #: State card beside its name, and the twenty Ogun ones to offer.
     lga: str = ""
     lga_choices: List[str] = []
+    #: The school's code with the state, printed after the LGA.
+    school_code: str = ""
+    #: Each subject and its department, for the Ogun State senior card.
+    subjects: List[dict] = []
+    departments: List[dict] = []
 
 
 class NewTermIn(Schema):
@@ -276,6 +281,12 @@ def setup(request):
         phone=school.phone,
         lga=school.lga,
         lga_choices=list(contact.OGUN_LGAS),
+        school_code=school.school_code,
+        subjects=[
+            {"subject_id": s.pk, "name": s.name, "department": s.department}
+            for s in Subject.objects.filter(is_active=True).order_by("name")
+        ],
+        departments=[{"value": d.value, "label": d.label} for d in Department],
     )
 
 
@@ -587,12 +598,14 @@ def set_public_page(request, payload: PublicDetailsIn):
 
 
 class LgaIn(Schema):
-    #: Blank clears it.
+    #: Blank clears each.
     lga: str = ""
+    school_code: str = ""
 
 
 class LgaOut(Schema):
     lga: str
+    school_code: str = ""
 
 
 @router.put("/lga/", response={200: LgaOut, 403: MessageOut, 422: MessageOut})
@@ -603,12 +616,14 @@ def set_lga(request, payload: LgaIn):
     if refused is not None:
         return refused
     try:
-        lga = contact.set_lga_as(request.user, school, payload.lga)
+        with transaction.atomic():
+            lga = contact.set_lga_as(request.user, school, payload.lga)
+            code = contact.set_school_code_as(request.user, school, payload.school_code)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
     except contact.PublicDetailsRefused as exc:
         return 422, MessageOut(detail=str(exc))
-    return 200, LgaOut(lga=lga)
+    return 200, LgaOut(lga=lga, school_code=code)
 
 
 # ---------------------------------------------------------------------------
@@ -655,3 +670,41 @@ def set_card_template(request, payload: TemplateIn):
         template=row.template,
         applied=AppliedOut(**applied.__dict__) if applied else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Which department a subject sits under on the Ogun State senior card.
+# ---------------------------------------------------------------------------
+
+from gradebook.models import Department, Subject  # noqa: E402
+
+
+class DepartmentIn(Schema):
+    #: One of `gradebook.Department`, or blank for none.
+    department: str = ""
+
+
+class DepartmentOut(Schema):
+    subject_id: int
+    name: str
+    department: str
+
+
+@router.put(
+    "/subjects/{int:subject_id}/department/",
+    response={200: DepartmentOut, 403: MessageOut, 404: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def set_subject_department(request, subject_id: int, payload: DepartmentIn):
+    """The heading a subject's column sits under on a senior Ogun card."""
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    if not ogun.is_ogun():
+        return 409, MessageOut(detail="Departments are part of the Ogun State template. Choose it first.")
+    if payload.department and payload.department not in Department.values:
+        return 422, MessageOut(detail="Choose one of the departments listed.")
+    subject = get_object_or_404(Subject, pk=subject_id)
+    subject.department = payload.department
+    subject.save(update_fields=["department"])
+    return 200, DepartmentOut(subject_id=subject.pk, name=subject.name, department=subject.department)
