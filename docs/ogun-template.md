@@ -2,7 +2,7 @@
 
 A school switches it on in setup and gets the report sheet Ogun State's
 Ministry of Education, Science and Technology (MOEST) and OGSERA ask for: the
-JSS first-term sheet is the reference. Five parts, one PR each.
+JSS first-term sheet is the reference. Six parts, one PR each.
 
 The reference sheet, in the order it prints:
 
