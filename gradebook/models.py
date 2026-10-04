@@ -36,10 +36,28 @@ from django.db import models
 from django.db.models import Q, Sum
 
 
+class Department(models.TextChoices):
+    """The headings an Ogun State senior card groups its subject columns under.
+
+    Declaration order is print order.
+    """
+
+    GENERAL = "general", "General"
+    BUSINESS = "business", "Business"
+    HUMANITIES = "humanities", "Humanities"
+    SCIENCE = "science", "Science & Mathematics"
+    TECHNOLOGY = "technology", "Technology"
+    TRADE = "trade", "Trade"
+
+
 class Subject(models.Model):
     """One thing a school teaches. Per school, because curricula differ."""
 
     name = models.CharField(max_length=100)
+    #: Which heading the subject sits under on an Ogun State senior (SSS)
+    #: card. Blank for a subject nobody placed, which prints under "Other".
+    #: Set on the setup page; only an Ogun template school is offered it.
+    department = models.CharField(max_length=16, choices=Department, blank=True, default="")
     #: What the school calls it on a timetable — "MTH", "ENG". Its own field
     #: rather than a slug of the name, because schools have their own codes and
     #: a generated one would fight them.

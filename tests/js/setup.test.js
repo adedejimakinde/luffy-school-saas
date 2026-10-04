@@ -348,7 +348,7 @@ test("submitting the local government area sends it", async () => {
 
   await root.submit({ dataset: { form: "lga" }, lga: "Ifo" });
 
-  assert.deepEqual(sent, [{ lga: "Ifo" }]);
+  assert.deepEqual(sent, [{ lga: "Ifo", school_code: "" }]);
 });
 
 // -- the report card template ---------------------------------------------------
@@ -440,4 +440,58 @@ test("saving the position box sends what is ticked", async () => {
   await root.submit({ dataset: { form: "position" }, show_position: { checked: true } });
 
   assert.deepEqual(sent, [{ show_position: true }]);
+});
+
+// -- the Ogun card's school code and subject departments -------------------------
+
+test("the school code sits with the LGA and is sent with it", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/lga/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { lga: "Ifo", school_code: "B13003" } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: { ...SHAPE, school_code: "B1" } }],
+    ]),
+  });
+  assert.match(root.innerHTML, /id="school_code"[^>]*value="B1"/);
+
+  await root.submit({ dataset: { form: "lga" }, lga: "Ifo", school_code: "B13003" });
+
+  assert.deepEqual(sent, [{ lga: "Ifo", school_code: "B13003" }]);
+});
+
+test("an Ogun school is offered a department per subject; a Standard one is not", () => {
+  const body = {
+    ...SHAPE,
+    subjects: [{ subject_id: 4, name: "Economics", department: "business" }],
+    departments: [{ value: "general", label: "General" }, { value: "business", label: "Business" }],
+  };
+  const ogun = states.shape({ ...body, card: { ...CARD, template: "ogun" } });
+  assert.match(ogun, /Subject departments/);
+  assert.match(ogun, /data-subject="4"/);
+  assert.match(ogun, /<option value="business" selected>Business<\/option>/);
+  assert.doesNotMatch(states.shape({ ...body, card: CARD }), /Subject departments/);
+});
+
+test("choosing a department saves it", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/subjects/4/department/", (o) => {
+        sent.push(JSON.parse(o.body));
+        return { status: 200, body: { subject_id: 4, name: "Economics", department: "business" } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.change({ "data-subject": "4" }, "business");
+
+  assert.deepEqual(sent, [{ department: "business" }]);
 });

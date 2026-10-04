@@ -89,7 +89,7 @@ from .card_api import card_columns, card_payload, card_rows
 FONTS = Path(settings.BASE_DIR) / "static" / "web" / "fonts"
 
 
-def render(card) -> bytes:
+def render(card, *, health=None) -> bytes:
     """One released card as PDF bytes. Takes a `ReleasedCard`.
 
     Imported lazily inside the function: WeasyPrint pulls in Pango through
@@ -101,10 +101,10 @@ def render(card) -> bytes:
     """
     from weasyprint import HTML
 
-    return HTML(string=html_for(card)).write_pdf()
+    return HTML(string=html_for(card, health=health)).write_pdf()
 
 
-def html_for(card) -> str:
+def html_for(card, *, health=None) -> str:
     """The rendered HTML, before WeasyPrint sees it.
 
     Split from `render()` so that a test can assert what is and is not on the
@@ -112,6 +112,21 @@ def html_for(card) -> str:
     are checkable as text rather than by parsing a PDF.
     """
     payload = card_payload(card)
+    if payload.ogun is not None:
+        # The Ogun State sheet (`docs/ogun-template.md` part 5). `health` is
+        # passed only when rendering the copy for the four people who may
+        # read a child's health (`results.health`); it is never on `payload`.
+        return render_to_string(
+            "results/report_card_ogun.html",
+            {
+                "card": payload,
+                "look": look.for_card(payload.school_name),
+                "next_term_begins": payload.next_term_begins,
+                "remarks": {c.author: c.body for c in payload.comments},
+                "health": health,
+                "fonts": FONTS.as_uri(),
+            },
+        )
     columns = card_columns(payload)
     return render_to_string(
         "results/report_card.html",

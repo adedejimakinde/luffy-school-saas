@@ -51,3 +51,8 @@ label.choice input { width: auto; margin-top: 4px; }
 label.choice .hint { display: block; }
 .done { font-size: var(--small); }
 .done ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* Subject departments: one select per subject. */
+.subjects { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; max-width: 26rem; }
+.subjects li { display: grid; gap: 4px; }
+.subjects label { margin: 0; }

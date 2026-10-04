@@ -89,8 +89,19 @@ def render_card_pdf(schema_name, card_id):
     from .models import PdfState, ReleasedCard, ReleasedCardPdf
     from . import pdf
 
+    from .models import HealthRecord
+    from .ogun_card import is_ogun
+
     card = ReleasedCard.objects.get(pk=card_id)
     content = pdf.render(card)
+    # The health copy (`ReleasedCardPdf.health_content`): Ogun cards only, and
+    # only where the class teacher recorded something for the term.
+    record = (
+        HealthRecord.objects.filter(student_membership_id=card.student_membership_id, term_id=card.term_id).first()
+        if is_ogun()
+        else None
+    )
+    health_content = pdf.render(card, health=record) if record is not None else None
 
     with transaction.atomic():
         # `update_or_create` rather than `create`, and the row it updates is
@@ -104,6 +115,7 @@ def render_card_pdf(schema_name, card_id):
             card=card,
             defaults={
                 "content": content,
+                "health_content": health_content,
                 "byte_size": len(content),
                 "error": "",
                 "state": PdfState.BUILT,

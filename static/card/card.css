@@ -192,3 +192,32 @@ button.signout { display: block; margin: 24px auto 0; }
   .grid.stack td.marks-line { display: block; color: var(--muted); }
   .grid.stack .marks-summary { font-size: var(--small); }
 }
+
+/* The Ogun State sheet (`card/ogun.js`). The paper's order, a phone's shape. */
+.ogun-head { position: relative; }
+.ogun-head .ministry { margin: 0; font-weight: 700; letter-spacing: .02em; }
+.ogun-head .sheet-title { margin: 4px 0; font-size: var(--small); font-weight: 700; }
+.ogun-head h1 { font-size: 1.25rem; margin: 6px 0 0; }
+.ogun-photo { float: right; width: 92px; height: 118px; object-fit: cover; border: 1px solid var(--border); margin: 0 0 8px 12px; }
+.ogun-promotion { margin: 12px 0; padding: 10px 12px; border: 2px solid var(--text); font-weight: 700; text-align: center; }
+.ogun-who { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 6px 16px; margin: 0; }
+/* On the blue summary card, as `.who` is: white, the labels a little lighter. */
+.ogun-who dt { color: var(--card); opacity: .78; }
+.ogun-who dd { margin: 0; font-weight: 700; color: var(--card); overflow-wrap: anywhere; }
+.ogun-facts dt { color: var(--muted); }
+.ogun-facts dd { margin: 0; font-weight: 700; }
+.ogun-marks, .ogun-pair, .ogun-health, .ogun-remarks { margin: 20px 0 0; }
+table.ogun-grid { border-collapse: collapse; min-width: 100%; }
+table.ogun-grid th, table.ogun-grid td { border-bottom: 1px solid var(--divider); padding: 6px 8px; text-align: left; }
+table.ogun-grid td.n, table.ogun-grid th.n { text-align: center; }
+table.ogun-grid td.strong { font-weight: 700; }
+table.ogun-grid tr.department th { background: var(--card); font-weight: 700; padding-top: 12px; }
+.ogun-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 16px; }
+.ogun-facts { margin: 0; display: grid; gap: 4px; }
+.ogun-facts > div { display: flex; justify-content: space-between; gap: 12px; }
+table.ogun-traits, table.ogun-health-table { border-collapse: collapse; width: 100%; }
+table.ogun-traits th, table.ogun-traits td, table.ogun-health-table th, table.ogun-health-table td { border-bottom: 1px solid var(--divider); padding: 4px 6px; text-align: left; }
+table.ogun-traits td.n, table.ogun-traits th.n { text-align: center; width: 2.2rem; }
+table.ogun-traits tr.total th, table.ogun-traits tr.total td { font-weight: 700; }
+.ogun-key { margin: 8px 0 0; }
+.ogun-remark p { margin: 0 0 12px; }

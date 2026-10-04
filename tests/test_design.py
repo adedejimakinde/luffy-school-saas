@@ -52,6 +52,7 @@ NOT_ON_THE_DESIGN = {
     # not pages. They are restyled last, in their own change, around the
     # school's own crest and colour.
     "results/templates/results/report_card.html",
+    "results/templates/results/report_card_ogun.html",
     "results/templates/results/checker_slips.html",
 }
 

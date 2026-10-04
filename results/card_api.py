@@ -477,6 +477,75 @@ def attendance_of(card) -> AttendanceOut:
     )
 
 
+class OgunSubjectOut(Schema):
+    """One subject's column on the Ogun sheet. See `results.ogun_card`."""
+
+    name: str
+    department: str
+    ca: Optional[int] = None
+    ca_max: int
+    exam: Optional[int] = None
+    exam_max: int
+    weighted: Optional[str] = None
+    #: Third term only: each term's score out of 100, and their average.
+    first: Optional[str] = None
+    second: Optional[str] = None
+    third: Optional[str] = None
+    annual: Optional[str] = None
+
+
+class OgunGroupOut(Schema):
+    #: The department heading on a senior card; blank on a junior one.
+    label: str
+    subjects: List[OgunSubjectOut]
+
+
+class OgunTraitOut(Schema):
+    name: str
+    score: Optional[int] = None
+
+
+class OgunTraitGroupOut(Schema):
+    label: str
+    traits: List[OgunTraitOut]
+    total: Optional[int] = None
+    out_of: int
+
+
+class OgunKeyOut(Schema):
+    value: int
+    label: str
+
+
+class OgunSheetOut(Schema):
+    """What the Ogun State report sheet prints beyond the Standard card.
+
+    Present only while the school prints the Ogun card (`results.ogun_card`).
+    **No health record**: this object goes to every reader of the card, and
+    a child's health goes to four (`results.health`).
+    """
+
+    ministry: List[str]
+    title: str
+    school_line: str
+    ca_out_of: Optional[int] = None
+    exam_out_of: Optional[int] = None
+    learner_id: str
+    sex: str
+    date_of_birth: str
+    #: The passport photo as a data URL, or null.
+    photo: Optional[str] = None
+    senior: bool
+    third_term: bool
+    groups: List[OgunGroupOut]
+    promotion: Optional[str] = None
+    times_opened: Optional[int] = None
+    times_present: Optional[int] = None
+    times_absent: Optional[int] = None
+    traits: List[OgunTraitGroupOut]
+    key: List[OgunKeyOut]
+
+
 class PlaceOut(Schema):
     """Where the child came in the class: "4th of 45".
 
@@ -575,6 +644,9 @@ class ReportCardOut(Schema):
 
     #: See `PlaceOut`. Null unless the card was released printing it.
     place_in_class: Optional[PlaceOut] = None
+
+    #: The Ogun State sheet's own content, or null for a Standard school.
+    ogun: Optional[OgunSheetOut] = None
 
     #: **Kept, and no longer what a renderer reads.** The three raw columns
     #: stay on the payload because they are what the card was frozen with and a
@@ -1312,7 +1384,7 @@ def card_payload(card) -> ReportCardOut:
     union across the subject lines and neither is knowable without the other.
     """
     subjects, columns = _subject_lines(card)
-    return ReportCardOut(
+    payload = ReportCardOut(
         school_name=card.school_name,
         student_name=card.student_name,
         class_group_name=card.class_group_name,
@@ -1340,6 +1412,13 @@ def card_payload(card) -> ReportCardOut:
         session=_session_line(card),
         promotion=_promotion(card),
     )
+    from . import ogun_card
+    from .services import school_on_this_connection
+
+    sheet = ogun_card.sheet_for(card, payload, school_on_this_connection())
+    if sheet is not None:
+        payload.ogun = OgunSheetOut(**sheet)
+    return payload
 
 
 # -- the marks grid ----------------------------------------------------------
@@ -1438,7 +1517,7 @@ _NOT_READY = {
 }
 
 
-def _the_pdf(card, marker) -> HttpResponse:
+def _the_pdf(card, marker, *, with_health=False) -> HttpResponse:
     """The stored bytes, named for the child rather than for a primary key.
 
     `inline` rather than `attachment`, because a parent following a link wants
@@ -1466,7 +1545,11 @@ def _the_pdf(card, marker) -> HttpResponse:
     if card.version > 1:
         parts.append(f"v{card.version}")
 
-    response = HttpResponse(bytes(marker.content), content_type="application/pdf")
+    content = marker.health_content if with_health and marker.health_content else marker.content
+    response = HttpResponse(bytes(content), content_type="application/pdf")
+    if with_health:
+        # A child's health is in this copy: never kept by a shared cache.
+        response["Cache-Control"] = "private, no-store"
     response["Content-Disposition"] = (
         f'inline; filename="{slugify(" ".join(parts))}.pdf"'
     )
@@ -1539,7 +1622,13 @@ def report_card_pdf(request, student_membership_id: int, term_id: int):
 
     marker = renders.marker_for(card)
     if marker.state == PdfState.BUILT:
-        return _the_pdf(card, marker)
+        # The copy with the health record exists only for an Ogun card with
+        # one, and goes only to the four people `results.health` names. Every
+        # other reader, staff included, gets the ordinary copy.
+        from . import health
+
+        with_health = bool(marker.health_content) and health.may_see(request.user, school, child, term)
+        return _the_pdf(card, marker, with_health=with_health)
 
     renders.enqueue_if_pending(marker)
     return 202, CardPdfNotReadyOut(

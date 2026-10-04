@@ -23,6 +23,7 @@ import {
   removeCrest,
   saveColour,
   saveContactEmail,
+  saveDepartment,
   saveLga,
   saveShowPosition,
   saveTemplate,
@@ -112,6 +113,16 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     }
   });
 
+  // A department is saved as it is chosen: one select per subject, no button.
+  root.addEventListener("change", async (event) => {
+    const field = event.target;
+    if (!field || !field.dataset || field.dataset.subject === undefined) return;
+    await after(
+      "department",
+      await saveDepartment({ subjectId: Number(field.dataset.subject), department: field.value, fetchImpl }),
+    );
+  });
+
   root.addEventListener("submit", async (event) => {
     const form = event.target;
     if (!form) return;
@@ -157,7 +168,10 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       return;
     }
     if (which === "lga") {
-      await after("lga", await saveLga({ lga: form.lga.value, fetchImpl }));
+      await after(
+        "lga",
+        await saveLga({ lga: form.lga.value, school_code: form.school_code ? form.school_code.value : "", fetchImpl }),
+      );
       return;
     }
     if (which === "contact-email") {

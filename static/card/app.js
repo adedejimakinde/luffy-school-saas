@@ -10,7 +10,7 @@
  * and changing it does not mean changing a regular expression in here.
  */
 
-import { cardPdfUrl, fetchCard, provesASession, REFUSAL } from "./api.js";
+import { cardPdfUrl, fetchCard, fetchHealth, provesASession, REFUSAL } from "./api.js";
 import { button as signOutButton, failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as states from "./states.js";
 import { card } from "./render.js";
@@ -31,11 +31,11 @@ const STATE_RENDERERS = {
  * page is the one outcome that tells a parent neither what happened nor what to
  * do about it.
  */
-export function htmlFor(answer, { portal = "", signOutFailed = false, pdfUrl = null } = {}) {
+export function htmlFor(answer, { portal = "", signOutFailed = false, pdfUrl = null, health = null } = {}) {
   const after =
     (signOutFailed ? failureNote() : "") +
     (provesASession(answer) ? signOutButton() : "");
-  if (answer.ok) return card(answer.card, { pdfUrl }) + after;
+  if (answer.ok) return card(answer.card, { pdfUrl, health }) + after;
   const render = STATE_RENDERERS[answer.refusal] || states.broken;
   // Two arguments, and only two of the five renderers read the second: the
   // card page is on a school's host and sign-in is on the portal, so the way
@@ -54,9 +54,15 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const pdfUrl = cardPdfUrl(studentMembershipId, termId);
   root.innerHTML = states.loading();
   const answer = await fetchCard({ studentMembershipId, termId, fetchImpl });
+  // Only the Ogun State sheet has a health section, and only four readers are
+  // served it; for anyone else this is null and the section says so.
+  const health =
+    answer.ok && answer.card && answer.card.ogun
+      ? await fetchHealth({ studentMembershipId, termId, fetchImpl })
+      : null;
   let signOutFailed = false;
   const draw = () => {
-    root.innerHTML = htmlFor(answer, { portal, signOutFailed, pdfUrl });
+    root.innerHTML = htmlFor(answer, { portal, signOutFailed, pdfUrl, health });
     // Said out loud for the print stylesheet and for anything watching: which
     // of the states the page settled in, on the element itself.
     root.dataset.state = answer.ok ? "card" : answer.refusal;

@@ -287,3 +287,59 @@ for the page.
 | rows matched against every child of the school, not the class | `test_a_child_of_another_class_is_unmatched_here`, `test_the_control_a_good_file_matches_every_row_case_blind` |
 | the principal-or-administrator check removed | `test_a_teacher_and_a_bursar_are_refused` (both) |
 | the download allowed while a row blocks | `test_an_unknown_id_and_a_row_with_no_id_block_the_download` |
+
+## Part 5: the Ogun State card
+
+When the school prints the Ogun card, `card_payload()` adds `ReportCardOut.ogun`
+(`results/ogun_card.py`), and both the PDF (`results/report_card_ogun.html`) and
+the parent's page (`static/card/ogun.js`) draw from it. Every other school keeps
+the One Blue card, unchanged.
+
+| part of the sheet | where it comes from |
+| --- | --- |
+| ministry lines, sheet title (junior or senior) | fixed, `ogun_card.MINISTRY` |
+| "St Mary's (Abeokuta South LGA) [B13003]" | `School.name`, `School.lga`, `School.school_code` (new, set beside the LGA in setup) |
+| learner's ID, sex, date of birth, passport photo | `academics.StudentDetails` (part 1) |
+| crest and colour | `results.look`, as on the Standard card |
+| subject grid | the card's frozen subject lines: Cont. Assess = every paper but the one named Exam, Exam, Weighted Average = the subject's percentage. Row labels say (30) and (70) when every subject agrees. |
+| senior grouping | a class whose name starts SS or SSS groups subject columns under `gradebook.Department` headings (General, Business, Humanities, Science & Mathematics, Technology, Trade), then "Other" for subjects with none. Departments are set per subject in setup (Ogun schools only). A junior class has one run of columns. |
+| third term | 1st, 2nd and 3rd term scores per subject (each out of 100) from this child's card for each term of the session, and the Weighted Annual Score, their average over the terms taken; "-" for a term with none |
+| promotion box (third term) | the child's placement in next session's first term (`academics.promotion`): another class is "Promoted to JSS 3A", the same class "Not promoted, to repeat JSS 2A"; failing that, a recorded `PromotionDecision`; else no box |
+| attendance | the card's frozen days open, present and absent |
+| traits | the card's frozen ratings, ticked on a 5 to 1 grid, with a total per section ("18 of 30") and the rating key |
+| summary | part 4: marks obtainable, obtained, percentage, class position |
+| health | **not in the payload.** The page fetches it from `/api/results/health/` (a 404 shows a note). The PDF has two copies, below. |
+| remarks | class teacher's comment and principal's remark, each with signature and date spaces; a school stamp box |
+
+### Two copies of an Ogun PDF
+
+The stored PDF goes to every reader of the card: staff, the child, the result
+checker's PIN holder. So `ReleasedCardPdf.content` prints a note where the
+health record would be. When a child has a `HealthRecord` for the term,
+the render task also stores `health_content`, the same card with the record,
+and the PDF route serves that copy only to a reader `health.may_see()`
+admits. Anybody else gets the ordinary copy.
+
+### What is read live, as the admission number already was
+
+The learner's ID, sex, date of birth, photo, the school line and the
+departments are read when the payload is built, like `admission_number`. The
+PDF is rendered at release and stored, so the file keeps what was on record
+then; the page shows what is on record now. The other terms' scores come from
+those terms' own frozen cards. The promotion box is read live, like the
+Standard card's promotion line; a card released before the promotion is
+decided shows no box in its PDF.
+
+### Tests and controls
+
+`results/tests/test_ogun_card.py` (20 tests: the sheet, junior and senior,
+the third term and its promotion line, the PDF, the two copies and who gets
+which, setup), `tests/js/card_ogun.test.js` (the page), the school code and
+department tests in `tests/js/setup.test.js`. Part 3's `NowhereElseTests` run
+with the school on the Ogun card, so they cover this payload too.
+
+| broken | what went red |
+| --- | --- |
+| the health copy served to every reader | `test_the_bursar_the_vice_principal_and_the_child_get_the_ordinary_copy` (all three) |
+| the ordinary copy rendered with the record | `test_the_ordinary_copy_is_rendered_without_the_record` |
+| the record put into `ReportCardOut.ogun` | `test_health.NowhereElseTests.test_not_in_the_card_any_reader_is_served` |

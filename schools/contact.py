@@ -122,8 +122,29 @@ def set_lga_as(actor, school, lga: str) -> str:
     return school.lga
 
 
+SCHOOL_CODE_MAX = 20
+
+
+def set_school_code_as(actor, school, code: str) -> str:
+    """The school's code with the state, printed "[B13003]". Blank clears it."""
+    if not can_set_up(actor, school):
+        raise NotAllowedToSetUp(
+            f"{actor} may not set up {school}'s code. That is done by a principal or an administrator of the school."
+        )
+    code = "".join((code or "").split())
+    if len(code) > SCHOOL_CODE_MAX:
+        raise PublicDetailsRefused(f"Keep the school code under {SCHOOL_CODE_MAX} characters.")
+    if code and not all(ch.isalnum() or ch in "-/" for ch in code):
+        raise PublicDetailsRefused("A school code is letters and digits, like B13003.")
+    school.school_code = code
+    school.save(update_fields=["school_code"])
+    return school.school_code
+
+
 __all__ = [
     "LGA_MAX",
+    "SCHOOL_CODE_MAX",
+    "set_school_code_as",
     "NotAnEmailAddress",
     "OGUN_LGAS",
     "PublicDetailsRefused",

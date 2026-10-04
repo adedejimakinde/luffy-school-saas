@@ -108,3 +108,22 @@ export function refusalFor(status, body) {
   }
   return REFUSAL.BROKEN;
 }
+
+/**
+ * The child's physical development and health for the card's term, for the
+ * Ogun State layout. Its own route and its own four readers
+ * (`results/health.py`): anything but a 200 is "not shown to you", never a
+ * broken page, and the card is drawn either way.
+ */
+export async function fetchHealth({ studentMembershipId, termId, fetchImpl = fetch }) {
+  try {
+    const response = await fetchImpl(
+      `/api/results/health/${encodeURIComponent(studentMembershipId)}/?term_id=${encodeURIComponent(termId)}`,
+      { headers: { Accept: "application/json" }, credentials: "same-origin" },
+    );
+    if (response.status !== 200) return null;
+    return await response.json();
+  } catch {
+    return null;
+  }
+}
