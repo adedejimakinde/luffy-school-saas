@@ -11,7 +11,7 @@ which stops for your review with screenshots. Part 6 (the OGSERA filler) and the
 | [#237](https://github.com/adedejimakinde/luffy-school-saas/pull/237) | **Merged on green:** part 3, physical development and health (`results.HealthRecord`), seen by four people; the privacy notice's "Health records". |
 | [#238](https://github.com/adedejimakinde/luffy-school-saas/pull/238) | **Merged on green:** part 4, marks obtainable, obtained and percentage on every card; class position as a school setting, off by default, on with the Ogun template. |
 | [#239](https://github.com/adedejimakinde/luffy-school-saas/pull/239) | **Merged on green:** part 6, `/ogsera/`, filling the OGSERA Excel template from Classnode's marks. |
-| Part 5 (open on `ccr-252d0e18-4v0y5d`) | **Waiting on your review, not merged:** the Ogun State card on the PDF and the parent's page; school code; SSS departments; third-term rows and the promotion box. This handover is a second commit on the same PR, so it lands with part 5. |
+| [#240](https://github.com/adedejimakinde/luffy-school-saas/pull/240) | **Waiting on your review, not merged:** the Ogun State card on the PDF and the parent's page; school code; SSS departments; third-term rows and the promotion box. This handover is a second commit on the same PR, so it lands with part 5. |
 
 ## The rules each part keeps
 - **Presets never overwrite.** Choosing Ogun replaces a subject's papers only while none of them has a mark (row locks,
