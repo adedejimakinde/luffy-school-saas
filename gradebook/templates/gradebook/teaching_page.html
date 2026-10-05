@@ -1,0 +1,26 @@
+{% load static shell %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subjects and teachers</title>
+
+{% comment %}
+Modelled on `academics/templates/academics/setup_page.html`, whose stylesheet it shares: the
+same lists, forms and notes. No `login_required`, for the oracle reason `gradebook/views.py`
+gives. The title names no school.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'setup/setup.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'teaching/app.js' %}"></script>
+
+{% shell_open "teaching" %}
+    <main id="teaching" data-portal="{{ portal_host }}">
+      <noscript>
+        <h1>Subjects and teachers</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading your school&hellip;</p>
+    </main>
+{% shell_close "teaching" %}

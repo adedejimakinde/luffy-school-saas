@@ -161,6 +161,13 @@ export const SCREENS = [
     ],
   },
   { name: "staff", as: "sunrise.admin", url: `${SUNRISE}/staff/` },
+  // Subjects, this term's papers and the class teachers: the office's, one tap into a subject.
+  {
+    name: "teaching",
+    as: "sunrise.admin",
+    url: `${SUNRISE}/teaching/`,
+    steps: [["teaching-subject", '[data-action="open-subject"]']],
+  },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
   // The OGSERA filler. The demo school prints the Standard card, so this is
   // the page telling the office where the Ogun template is chosen.

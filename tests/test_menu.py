@@ -40,12 +40,13 @@ FIRST_FETCH = {
     "roll": "/api/enrolment/roll/",
     "staff": "/api/schools/{slug}/invitations/",
     "notices-settings": "/api/notices/settings/",
+    "teaching": "/api/teaching/",
 }
 
 TEACHER = {"register", "marking", "comments", "timetable", "results", "broadsheet"}
 PRINCIPAL = {
     "home", "register", "marking", "comments", "timetable",
-    "results", "broadsheet", "absences", "fees", "bank", "setup", "promotion", "roll", "notices-settings",
+    "results", "broadsheet", "absences", "fees", "bank", "setup", "teaching", "promotion", "roll", "notices-settings",
 }
 
 _SIDEBAR = re.compile(r'<nav id="sidebar".*?</nav>', re.S)

@@ -63,4 +63,30 @@ def marking_page(request):
     )
 
 
-__all__ = ["marking_page", "MARKING_MODULES"]
+#: The teaching setup page's modules, entry point last.
+TEACHING_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "teaching/api.js",
+    "teaching/states.js",
+    "teaching/app.js",
+)
+
+
+def teaching_page(request):
+    """The frame for `/teaching/`: subjects, this term's papers, class teachers.
+
+    A shell like the others, and with no `login_required`, for the same oracle reason:
+    `gradebook.teaching_api` asks who is asking before it reads anything.
+    """
+    return render(
+        request,
+        "gradebook/teaching_page.html",
+        {
+            "import_map": pages.import_map(*TEACHING_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
+__all__ = ["marking_page", "MARKING_MODULES", "teaching_page", "TEACHING_MODULES"]
