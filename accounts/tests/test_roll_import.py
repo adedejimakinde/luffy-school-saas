@@ -448,13 +448,13 @@ class TheEmailGapTests(RollImportSetUp):
         from accounts.models import ContactChannel, GuardianContact
         from accounts.services import activate_guardian_links
 
-        admin = self.admin if school == self.stmarys else self.their_admin
+        admin = (self.admin if school == self.stmarys else self.their_admin).user
         link = guardian_contacts.link_by_contact_as(admin, child, "Mrs Live", phone)
         account = link.guardian.guardian_account
         activate_guardian_links(link.guardian, school)
         GuardianContact.objects.create(
             guardian=account, channel_type=ContactChannel.EMAIL, value=email,
-            created_by=admin.user, verified_at=timezone.now(),
+            created_by=admin, verified_at=timezone.now(),
         )
         return link.guardian
 
