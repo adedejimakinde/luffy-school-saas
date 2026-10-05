@@ -1,3 +1,43 @@
+# Where I stopped: 2026-10-05 (sixth session), the first-school pilot flow run end to end on the demo school
+
+You asked for the term-1 flow of a first school, run as a school would: Sunrise Demo Academy from `seed_demo`, in a real
+browser (Chromium) at 360px and at 1280px, a local Postgres and Redis, a Celery worker, the fake message provider. Nothing
+was run against a real host, a real SMS or email provider, Paystack, or a domain.
+
+| # | Step | Result |
+| --- | --- | --- |
+| 1 | Import 60 children from the Excel template | **Pass.** Three bad rows (no name, a class that does not exist, a duplicate admission number) refused the whole file, each named by its row and column, and nothing was written, also when the bad file was sent straight to the admit route. The clean file admitted 60 into JSS 2A and 2B, siblings sharing one guardian, leading zeros kept (`P0001`). Text dates (`04/07/2014`), `M`/`F`, an existing admission number or learner's ID, a contact with no name, a bad phone number and Yoruba names with dotted letters were all read or refused in words. |
+| 2 | Create classes and subjects, assign teachers | **Fail, not built.** Classes are created on the setup page and staff are invited and accept from the staff page (both pass). There is **no page or route to create a subject, to create an assessment (the First CA and Exam papers), or to assign a class teacher.** `seed_demo` and the shell are the only ways. Any teacher may take any register and mark any assessment, so "assigning" a subject teacher does not exist either; a class teacher only decides who may submit a class's results. I did the assignment from the shell (`academics.services.assign_class_teacher`), as an operator would. Building these is a feature, so I did not. **Your decision.** |
+| 3 | Teacher on a phone: register, then CA and exam marks, then the same offline | **Pass after two fixes (#243, #244).** Register taken (27 present, 3 absent). 30 marks per paper online. Offline: 30 marks per paper queued in IndexedDB, kept across an offline reload, sent when the connection came back (also with the page left open, no reload), one row per child, version 1, every value as typed; a mark typed twice and one changed and changed back arrived once. |
+| 4 | Release, then report cards (normal and Ogun) | **Pass.** Submit, check, approve and release by the teacher, vice principal and principal at 360px. All 30 cards of JSS 2A match totals and grades computed from the score rows independently (grade key A1 to F9). Position is absent on every card released with the setting off, and present on every card released after it was turned on (dense ranking: a tie does not use up the next place, as `docs/positions.md` says). The Ogun card renders at 360px and 1280px with the sheet's boxes and totals. The PDF carries the same totals, no position where it was off, and names with dotted letters (DejaVu behind Hanken). |
+| 5 | Parent on a phone with a code | **Pass.** An imported guardian was sent a code from the roll, signed in at 360px, and saw only their child (a parent of two siblings sees both). Every other child's card and PDF is a flat 404, every office route a 403, and the other school's host refuses the session. Attendance shows on the card. |
+| 6 | Result checker: a PIN works once, then is used up | **Differs from the brief, by design.** A slip's PIN opens that child's card **every time** until the session ends, and the slip says so ("the PIN works until next session starts"); `results/checker.py` and `docs/messaging.md` D11 argue why (a family returns to it). Wrong, another child's and replaced PINs are refused with one sentence. I did not make it single-use: that reverses a documented decision. **Your decision.** |
+| 7 | Absence alert and receipt emails | **Pass.** With both switched on in Notices: one absence alert to the guardian's verified email for the right child and date (not sent twice when the same register is submitted again), and one receipt (`SUNRISE-DEMO-000056`) when the bursar recorded ₦25,000. "Tell families" sent one text per child to live guardians only. |
+
+## Pull requests
+
+| PR | State |
+| --- | --- |
+| [#242](https://github.com/adedejimakinde/luffy-school-saas/pull/242) | **Merged on green, gated on its head SHA:** the OGSERA filler took a paper by name alone, so an Exam out of 60 went under "Exam (70)". Papers now need the sheet's maximum as well. Two school tests. |
+| [#243](https://github.com/adedejimakinde/luffy-school-saas/pull/243) | **Merged on green, gated on its head SHA:** a half mark (12.5) showed the teacher "[object Object]"; it is now a sentence. Four tests. |
+| [#244](https://github.com/adedejimakinde/luffy-school-saas/pull/244) | **Merged on green, gated on its head SHA:** typing marks down a column on a phone lost every second mark, and fast typing could save "1" for "11": the sheet was redrawn from the blur and took the box just tapped. A real-browser test types down a column. |
+
+No fix touched results release, tenant isolation or access, so no controls were run.
+
+## Not verified, or worth knowing
+
+- **Not run on a real host, with real SMS or email, or on a real handset.** "Phone" is Chromium at 360px with touch; the soft keyboard dropping was seen as lost focus, not on a device.
+- **A school that adopts the Ogun template after marking** keeps its marked papers (`Exam` out of 60), as the presets promise, so the filler now reports them as not entered. The school should choose the template at setup, before marking.
+- **Absence alerts and receipts are email only** (D13). An imported guardian has a phone and nothing else, so neither reaches them until the office adds an email to a live guardian and the guardian signs in with it once. The roll offers this only for a live guardian.
+- **A term's school days are not set** on a new school, so a card says "0 present, 1 absent" with no "of N" until the office sets the term's length.
+- **Clearing a mark on the marking page does nothing**: an emptied box is ignored by design (`DELETE` is the only way to unmark and the page does not call it). The box looks empty while the school still holds the mark, until the next redraw. Wiring it costs page weight, and `/marking/` is a few hundred bytes from the 150 KB budget. Your decision.
+- **Tapping a box that already has a mark puts the caret at the end**, so typing appends to it. Not changed.
+- The release confirmation on a phone opens below the buttons, off screen until scrolled to.
+- `dump.rdb` in the repository root is a Redis snapshot and was overwritten by a local Redis run; it was restored, not committed.
+- Local setup used: Postgres 16, Redis, `celery -A celery_app worker`, `DEMO_SINGLE_HOST=1` for the parent redirect (without it the sign-in redirect drops `:8000`, which only matters locally).
+
+---
+
 # Where I stopped: 2026-10-04 (fifth session), the Ogun State template, all six parts merged
 
 You asked for the Ogun State template (the MOEST/OGSERA report sheet), one PR per part, merged on green, except part 5,
