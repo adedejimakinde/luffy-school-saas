@@ -521,6 +521,61 @@ class ClearingAMarkTests(GradebookApiSetUp):
         self.assertIsNone(body["version"])
         self.assertEqual(body["total"], {"scored": 0, "available": 0, "marked": 0})
 
+    def test_the_pages_clear_then_retype_then_resend_leaves_one_right_mark(self):
+        """What the marking page does when a teacher empties a box, types again, and a phone resends.
+
+        The page sends the DELETE with the version it drew, then redraws the cell with no version, so
+        the next number is an insert (`expected_version` null). A DELETE resent after its answer was
+        lost names a version that is gone, and is still a 200 that changes nothing.
+        """
+        self.client.force_login(self.teacher.user)
+        self.save(self.ada.pk, 15)
+
+        cleared = self.clear(self.ada.pk, expected_version=1)
+        self.assertEqual((cleared.status_code, cleared.json()["value"]), (200, None))
+        resent = self.clear(self.ada.pk, expected_version=1)
+        self.assertEqual((resent.status_code, resent.json()["value"]), (200, None))
+        again = self.save(self.ada.pk, 12, expected_version=None)
+
+        self.assertEqual((again.status_code, again.json()["value"]), (200, 12))
+        sheet = self.sheet().json()
+        ada = next(r for r in sheet["rows"] if r["student_membership_id"] == self.ada.pk)
+        self.assertEqual((ada["value"], ada["total"]["scored"]), (12, 12), "the cleared 15 is not in the total")
+        with connected_to(self.stmarys):
+            self.assertEqual(list(Score.objects.values_list("value", flat=True)), [12])
+
+    def test_clearing_another_schools_child_is_a_flat_404_and_their_mark_stands(self):
+        """The same ids exist in both schools' tables. Clearing is by this school's own roll only."""
+        from datetime import date
+
+        from academics.models import TermName
+        from gradebook import services
+        from gradebook.models import Assessment, Subject
+
+        grace = make_school("Grace Academy", "grace", "grace")
+        theirs = enroll_student(
+            User.objects.create_user("chidi", PASSWORD, full_name="Chidi Okafor"), grace
+        )
+        with connected_to(grace):
+            term = Term.objects.create(
+                session="2025/2026", name=TermName.FIRST, starts_on=date(2025, 9, 15), ends_on=date(2025, 12, 12)
+            )
+            theirs_ca = Assessment.objects.create(
+                term=term, subject=Subject.objects.create(name="Mathematics", code="MTH"), name="First CA", max_score=20
+            )
+            services.set_score(theirs_ca, theirs, 15)
+        self.client.force_login(self.teacher.user)
+        self.save(self.ada.pk, 14)
+
+        response = self.clear(theirs.pk, expected_version=1)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("Chidi", response.content.decode())
+        with connected_to(grace):
+            self.assertEqual(Score.objects.get().value, 15, "Grace's mark is untouched")
+        with connected_to(self.stmarys):
+            self.assertEqual(Score.objects.get().value, 14, "and so is St Mary's own")
+
     def test_clearing_on_a_stale_version_is_refused(self):
         self.client.force_login(self.teacher.user)
         self.save(self.ada.pk, 15)

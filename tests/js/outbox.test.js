@@ -468,3 +468,25 @@ test("requirement 1, from the device: a write whose answer was lost is sent agai
     assert.deepEqual(await page.outbox.read(), [], `${server.host}: and it was not a conflict`);
   }
 });
+
+test("a queued clear is a DELETE with its version; a clear with no stored mark sends nothing", async () => {
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+    calls.push([options.method, url]);
+    return { status: 200, json: async () => ({ student_membership_id: 2, value: null, version: null }) };
+  };
+
+  const taken = await sendQueued(
+    { assessmentId: 3, studentMembershipId: 2, value: "", expectedVersion: 4, key: "k1" },
+    { fetchImpl },
+  );
+  const nothing = await sendQueued(
+    { assessmentId: 3, studentMembershipId: 9, value: "", expectedVersion: null, key: "k2" },
+    { fetchImpl },
+  );
+
+  assert.deepEqual(calls, [["DELETE", "/api/gradebook/assessments/3/scores/2/?expected_version=4"]]);
+  assert.equal(taken.landed, true);
+  assert.equal(nothing.landed, true, "a mark that was never stored is already clear");
+});

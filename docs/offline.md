@@ -521,10 +521,12 @@ the answer to each. They are kept here as the reasoning behind those answers.
 - **OPEN-6. Which devices are in scope?** A2 assumes Chrome on Android. Safari clears a
   site's script-written storage, IndexedDB included, after seven days of browser use
   without a visit — which is D8's whole window.
-- **OPEN-7. Does a teacher need to clear a mark offline?** The marking page cannot
-  clear a mark online today — a blank cell is not sent (`static/marking/app.js:197`) and
-  `static/marking/api.js` has no DELETE. Offline should not add a capability the online page lacks; if clearing
-  is wanted, it is wanted online first.
+- **OPEN-7. Does a teacher need to clear a mark offline?** *Settled.* Emptying a box that holds a
+  mark takes the mark back, online and offline (`static/marking/app.js`, the blur handler). The
+  outbox entry's value is `""`, and sending it is a `DELETE` naming the version the box was drawn
+  with (`static/marking/api.js`); a clear for a cell with no stored mark sends nothing, and a
+  `DELETE` resent after its answer was lost is a 200 that changes nothing. A conflict names the
+  mark that is there now, as for a number. Emptying a box that holds no mark is not a write.
 
 ## Two things found while reading, not part of this proposal
 

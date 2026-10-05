@@ -6,7 +6,7 @@
  * them.
  */
 
-import { getJson, putJson } from "../web/http.js";
+import { deleteJson, getJson, putJson } from "../web/http.js";
 import { HELD, STOPPED } from "./outbox.js";
 
 /** The states this page can be in, other than holding a sheet. */
@@ -107,23 +107,15 @@ export function fetchSheet({ assessmentId, classGroupId, fetchImpl = fetch }) {
 /**
  * Save one mark. This is what a blur calls.
  *
- * **`expectedVersion` is sent even when it is null**, and null is meaningful:
- * it says "I was shown no mark", which `set_score()` reads as an insert. A
- * client that omitted the field would get a 409 the moment a row already
- * existed, rather than an overwrite — the safe default, and the reason the
- * field is spelled out here rather than left off.
+ * `expectedVersion` is sent even when it is null: null says "I was shown no mark", which
+ * `set_score()` reads as an insert. Leaving it off would get a 409 once a row existed.
  *
- * The three non-200 answers a teacher can act on are kept apart, because their
- * remedies are not the same: a **409** carries the other person's value and is
- * fixed by looking at it; a **423** means the term left draft and no amount of
- * retrying will help; a **422** is a number to retype.
+ * The non-200 answers a teacher can act on are kept apart, because their remedies differ: a
+ * 409 carries the other person's value (null if the mark was cleared meanwhile); a 423 means
+ * the term left draft and retrying will not help; a 422 is a number to retype.
  *
- * A 409 whose `current` is null is a real outcome — the mark was *cleared*
- * while this one was being typed — and is not the same as "it now reads 17".
- *
- * `key` is the outbox entry's (`outbox.js`, D3): the same on every attempt at
- * one write, so an attempt whose answer was lost is answered from the server's
- * receipt when it is sent again, rather than judged again.
+ * `key` is the outbox entry's (D3): the same on every attempt at one write, so an attempt
+ * whose answer was lost is answered from the server's receipt when it is sent again.
  */
 export async function saveScore({
   assessmentId,
@@ -135,9 +127,17 @@ export async function saveScore({
 }) {
   const body = { value, expected_version: expectedVersion };
   if (key !== null) body.key = key;
+  const url = scoreUrl(assessmentId, studentMembershipId);
   let answer;
   try {
-    answer = await putJson(scoreUrl(assessmentId, studentMembershipId), body, { fetchImpl });
+    // An emptied box is "" and takes the mark back (DELETE, which names no key: clearing what
+    // is gone is a 200 no-op, so a resend is safe). With no version there is no mark to take.
+    answer =
+      value !== ""
+        ? await putJson(url, body, { fetchImpl })
+        : expectedVersion === null
+          ? { status: 200, body: { student_membership_id: studentMembershipId, value: null, version: null } }
+          : await deleteJson(`${url}?expected_version=${encodeURIComponent(expectedVersion)}`, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

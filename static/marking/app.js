@@ -1,38 +1,22 @@
 /**
  * The marking screen: pick a paper and a class, then type marks.
  *
- * ## One mark per request, saved on blur
+ * One mark per request, saved on blur: a teacher tabs through thirty cells over twenty minutes,
+ * so a write is one cell and there is no bulk submit. Each box carries the version it was drawn
+ * with and sends it back as `expected_version`; empty means "I was shown no mark", an insert.
+ * Every answer carries the new version and total, so a cell is redrawn from the response.
+ * Emptying a box that holds a mark takes the mark back (a DELETE, never a zero).
  *
- * A teacher tabs through thirty cells over twenty minutes, so the unit of a
- * write is one cell and there is no bulk submit (the register next door is the
- * opposite, and `attendance/api.py` says why). Each input carries the version it
- * was drawn with and sends it back as `expected_version`; empty means "I was
- * shown no mark", an insert. Every answer carries the new version and total, so
- * a cell is redrawn from the response and not from a local sum.
+ * What did not land is kept, and shown, until the teacher says so (`docs/offline.md` D5, S2,
+ * S3). A blur queues the write in this teacher's outbox for this school (`outbox.js`), sent at
+ * once when it can be and when the browser is back online. `applySave()` draws every answer:
+ * in the box when typing again is the remedy, in the note when the box now belongs to somebody
+ * else's answer. What is unsent or refused is on the phone too (`withOutbox()`).
  *
- * ## What did not land is kept, and shown, until the teacher says so
- *
- * `docs/offline.md` D5, S2, S3. A blur queues the write in this teacher's outbox
- * for this school (`outbox.js`), drained at once when it can be, with backoff
- * when not, and when the browser is back online. Every answer is drawn by
- * `applySave()`: **in the box** when typing again is the remedy (a refused
- * number, a failed connection, a ended session; the last two also get Try
- * again), **in the note** when the box now belongs to somebody else's answer (a
- * conflict, a locked sheet, a refusal of authority). What is not sent, or was
- * refused, is on the phone too and drawn back onto the sheet (`withOutbox()`).
- *
- * ## It opens with no connection, from a copy
- *
- * S5. The page comes from the service worker (`/sw.js`); the papers and each
- * sheet opened from a copy kept for this person at this school
- * (`web/snapshots.js`), drawn with the time it was taken. Marks typed over a copy
- * are queued as ever, so the server still judges them. A copy is offered only
- * when the server could not be reached, never over a refusal.
- *
- * ## A phone two people share
- *
- * S7. This page opens only its own person's outbox. Another's unsent work is
- * said ("Held for Kemi") and never shown or sent (D7).
+ * It opens with no connection (S5), from a copy of the papers and sheet kept for this person at
+ * this school (`web/snapshots.js`); marks typed over a copy are queued as ever. A phone two
+ * people share (S7) opens only its own person's outbox; another's unsent work is said ("Held
+ * for Kemi") and never shown or sent (D7).
  */
 
 import { csrfToken } from "../web/http.js";
@@ -129,9 +113,9 @@ export function applySave(state, id, result, typed = null) {
     notes[id] = {
       kind: "conflict",
       detail: current
-        ? `Saved as ${current.value} by somebody else. You entered ${typed}. ` +
+        ? `Saved as ${current.value} by somebody else. ${entered(typed)} ` +
           "Type over it to change it."
-        : `Somebody cleared this mark while you were typing it. You entered ${typed}.`,
+        : `Somebody cleared this mark while you were typing it. ${entered(typed)}`,
     };
     kept[id] = { value: typed, inBox: false, retry: false };
     return {
@@ -142,7 +126,7 @@ export function applySave(state, id, result, typed = null) {
     };
   }
   if (result.outcome === SAVE.LOCKED) {
-    notes[id] = { kind: "unsaved", detail: `Not saved. You entered ${typed}.` };
+    notes[id] = { kind: "unsaved", detail: `Not saved. ${entered(typed)}` };
     kept[id] = { value: typed, inBox: false, retry: false };
     return { ...state, notes, kept, locked: true, locked_reason: result.body.detail };
   }
@@ -154,7 +138,7 @@ export function applySave(state, id, result, typed = null) {
   if (result.refusal === REFUSAL.NOT_A_MARKER) {
     // Authority changed under an open sheet. Nothing here can be typed any
     // more, so the value goes in the note and the sheet closes.
-    notes[id] = { kind: "unsaved", detail: `Not saved. You entered ${typed}.` };
+    notes[id] = { kind: "unsaved", detail: `Not saved. ${entered(typed)}` };
     kept[id] = { value: typed, inBox: false, retry: false };
     return {
       ...state,
@@ -189,6 +173,9 @@ export function applySave(state, id, result, typed = null) {
   }
   return { step: result.refusal, ...result.body };
 }
+
+/** What the teacher did to a cell, for a note: typed a number, or emptied the box. */
+const entered = (typed) => (typed === "" ? "You cleared it." : `You entered ${typed}.`);
 
 /** The teacher is done with a kept value: forget it and the note about it. */
 export function dismiss(state, id) {
@@ -307,7 +294,7 @@ function held(state, id, answer, typed) {
           ...state.notes,
           [id]: {
             kind: "unsaved",
-            detail: `Not saved: ${answer.detail || "the school's server refused it."} You entered ${typed}.`,
+            detail: `Not saved: ${answer.detail || "the school's server refused it."} ${entered(typed)}`,
           },
         },
         kept: { ...state.kept, [id]: { value: typed, inBox: false, retry: false } },
@@ -329,7 +316,7 @@ function heldBefore(state, id, hold, typed) {
   if (state.locked) {
     return {
       ...state,
-      notes: { ...state.notes, [id]: { kind: "unsaved", detail: `Not saved. You entered ${typed}.` } },
+      notes: { ...state.notes, [id]: { kind: "unsaved", detail: `Not saved. ${entered(typed)}` } },
       kept: { ...state.kept, [id]: { value: typed, inBox: false, retry: false } },
     };
   }
@@ -337,7 +324,7 @@ function heldBefore(state, id, hold, typed) {
     ...state,
     notes: {
       ...state.notes,
-      [id]: { kind: "unsaved", detail: `Not saved when it was sent:${said} You entered ${typed}. Press Try again to send it now.` },
+      [id]: { kind: "unsaved", detail: `Not saved when it was sent:${said} ${entered(typed)} Press Try again to send it now.` },
     },
     kept: { ...state.kept, [id]: { value: typed, inBox: true, retry: true } },
   };
@@ -426,13 +413,18 @@ export async function mount(
   // Set at sign-out: nothing is kept after that, however late an answer comes.
   let leaving = false;
 
+  let drawing = false;
   const draw = () => {
     // The box the teacher is in is theirs: a redraw lands while they move from one box to the
     // next (the blur's own), and replacing it would drop the keyboard and what they have typed.
     const doc = root.ownerDocument;
     const at = doc && doc.activeElement;
     const kept = at && at.id && root.contains(at) ? { id: at.id, value: at.value } : null;
+    // Replacing a focused box makes the browser blur it, which is not the teacher leaving it:
+    // the blur handler must not save the half-typed number it carries.
+    drawing = true;
     root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()), held });
+    drawing = false;
     const back = kept && doc.getElementById(kept.id);
     if (back) {
       back.value = kept.value;
@@ -717,22 +709,19 @@ export async function mount(
   root.addEventListener("blur", async (event) => {
     const field = event.target;
     if (!field || !field.dataset || field.dataset.child === undefined) return;
-    if (state.step !== "sheet" || state.locked || !outbox) return;
+    if (drawing || state.step !== "sheet" || state.locked || !outbox) return;
 
     const id = Number(field.dataset.child);
     const raw = String(field.value).trim();
-    // An emptied cell is not a mark of nought, and clearing one is a different
-    // route. Leaving it alone here keeps `DELETE` the only way to unmark.
-    if (raw === "") return;
-
     const version = field.dataset.version;
-    const value = Number(raw);
+    // An emptied box is "" and takes the stored mark back, which is not a mark of nought.
+    const value = raw === "" ? "" : Number(raw);
     // Tabbing through a cell is not a decision about it. A box left as it was
     // drawn sends nothing: queued, an unchanged mark is a write that can come
     // back hours later as a conflict the teacher never made (D2's "cry
     // wolf"), and over a kept value it would replace that value with nobody
-    // having chosen to (requirement 8).
-    if (value === drawnValue(state, id)) return;
+    // having chosen to (requirement 8). A box with no mark that is left empty is such a box.
+    if (value === (drawnValue(state, id) ?? "")) return;
     await change((entries) =>
       enqueue(
         entries,
