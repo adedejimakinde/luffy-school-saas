@@ -59,6 +59,15 @@ describe("typing marks down a column", () => {
     await group.click();
     await page.waitForSelector("ul.roster");
 
+    // The school answers a beat late, so the redraw an answer causes lands while the next number is
+    // being typed. Every write is recorded: four marks are four writes, not four plus their halves.
+    const writes = [];
+    await page.route("**/scores/**", async (route) => {
+      if (route.request().method() === "PUT") writes.push(JSON.parse(route.request().postData()).value);
+      await new Promise((later) => setTimeout(later, 250));
+      await route.continue();
+    });
+
     const boxes = page.locator("ul.roster input");
     const free = (await boxes.evaluateAll((all) => all.map((box) => box.value))).flatMap((value, at) =>
       value === "" ? [at] : [],
@@ -98,5 +107,7 @@ describe("typing marks down a column", () => {
       typed,
       "the school holds each mark as typed, not its first digit",
     );
+    await page.unroute("**/scores/**");
+    assert.deepEqual(writes, typed, "one write per mark, none of them a half-typed number");
   });
 });

@@ -404,6 +404,64 @@ test("blurring an emptied cell saves nothing", async () => {
   assert.deepEqual(sent, [], "an empty cell was sent as a mark");
 });
 
+test("emptying a box that holds a mark takes the mark back, and does not write a zero", async () => {
+  // Ada has none and Emeka has 12 at version 4. Emptying Emeka's box is a DELETE naming the version
+  // it was drawn with, and the cell is redrawn from the answer: empty, no version, no total.
+  forgetToken();
+  const calls = [];
+  const root = fakeRoot({});
+  await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/scores/")) {
+        calls.push([options.method, url, options.body]);
+        return {
+          status: 200,
+          json: async () => ({ student_membership_id: 2, value: null, version: null, max_score: 20, total: { scored: 0, available: 0, marked: 0 } }),
+        };
+      }
+      return serve([
+        ["/api/gradebook/where/", { status: 200, body: WHERE }],
+        ["/sheet/", { status: 200, body: SHEET }],
+      ])(url, options);
+    },
+  });
+
+  await root.click({ "data-action": "pick-assessment", "data-assessment": "3" });
+  await root.click({ "data-action": "pick-class", "data-class": "11" });
+  await root.blur({ "data-child": "2", "data-version": "4" }, "");
+
+  assert.deepEqual(calls, [["DELETE", "/api/gradebook/assessments/3/scores/2/?expected_version=4", undefined]]);
+  assert.match(root.innerHTML, /id="mark-2"[^>]*value=""[^>]*data-version=""/);
+  assert.doesNotMatch(root.innerHTML, /id="mark-2"[^>]*value="0"/);
+});
+
+test("emptying a box over a mark somebody else changed is a conflict, said as a clear", async () => {
+  forgetToken();
+  const root = fakeRoot({});
+  await mount(root, {
+    mint: () => "key-1",
+    schedule: () => {},
+    fetchImpl: serve([
+      ["/api/gradebook/where/", { status: 200, body: WHERE }],
+      ["/sheet/", { status: 200, body: SHEET }],
+      ["/scores/", {
+        status: 409,
+        body: { detail: "moved", current: { student_membership_id: 2, value: 17, version: 5, max_score: 20, total: { scored: 17, available: 20, marked: 1 } } },
+      }],
+    ]),
+  });
+
+  await root.click({ "data-action": "pick-assessment", "data-assessment": "3" });
+  await root.click({ "data-action": "pick-class", "data-class": "11" });
+  await root.blur({ "data-child": "2", "data-version": "4" }, "");
+
+  assert.match(root.innerHTML, /Saved as 17 by somebody else\. You cleared it\./);
+  assert.doesNotMatch(root.innerHTML, /You entered \./);
+  assert.match(root.innerHTML, /id="mark-2"[^>]*value="17"/, "the box shows the mark that is there now");
+});
+
 test("blurring a cell on a locked sheet sends nothing", async () => {
   forgetToken();
   const sent = [];

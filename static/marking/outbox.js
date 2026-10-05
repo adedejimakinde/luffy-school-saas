@@ -2,21 +2,16 @@
  * The marks outbox: every mark the teacher entered that has not landed yet.
  * `docs/offline.md` S3 (D1, D2, D3, D6, D7) has the argument; the rules are:
  *
- * - **An entry is the request the page would have sent** (cell, value,
- *   `expected_version`). Nothing here judges a mark; the server decides all of
- *   it when the write arrives.
- * - **One entry per cell** (D2). Typing 15 then 17 before anything is sent is one
- *   write of 17 claiming the version first shown. Once an attempt has left, its
- *   body is fixed (D3) and a later value waits in `next`.
- * - **Every attempt carries a key**, minted when the body is settled; a resend
- *   is answered from the server's receipt (`sync/receipts.py`). A changed body
- *   gets a new key.
- * - **Some answers are final** (D6): 423, 422 and 403 hold the entry, and so
- *   does a 409 (D5). The teacher's value stays on the phone and on screen until
- *   they dismiss it. A failed connection, a 5xx or a lapsed session waits.
- * - **Whose, and where** (D7, D8): an outbox belongs to one person at one school
- *   host (`outboxName()`) and `drain()` sends it only while that person is
- *   signed in.
+ * - An entry is the request the page would have sent (cell, value, `expected_version`). A value
+ *   of "" is an emptied box: the mark is to be taken back. Nothing here judges a mark.
+ * - One entry per cell (D2): typing 15 then 17 before anything is sent is one write of 17
+ *   claiming the version first shown. Once an attempt has left, its body is fixed (D3) and a
+ *   later value waits in `next`. Every attempt carries a key; a changed body gets a new one.
+ * - Some answers are final (D6): 423, 422 and 403 hold the entry, and so does a 409 (D5). The
+ *   teacher's value stays on the phone and on screen until they dismiss it. A failed
+ *   connection, a 5xx or a lapsed session waits.
+ * - An outbox belongs to one person at one school host (`outboxName()`, D7, D8), and `drain()`
+ *   sends it only while that person is signed in.
  */
 
 /** Held entries, by the answer that stopped them. */
