@@ -227,7 +227,16 @@ def _roster(group, term):
 def _marks(term, subject, ids):
     if subject is None:
         return {}
-    papers = {a.name: a for a in Assessment.objects.filter(term=term, subject=subject)}
+    # A paper is the sheet's only when it has the sheet's name **and** its maximum. A
+    # school that chose the Ogun template after marking has an "Exam" out of 60 still
+    # (presets never overwrite a marked paper), and writing its 26 into a column headed
+    # "Exam (70)" would send OGSERA a mark the child did not score.
+    out_of = dict(ogun.ASSESSMENTS)
+    papers = {
+        a.name: a
+        for a in Assessment.objects.filter(term=term, subject=subject)
+        if out_of.get(a.name) == a.max_score
+    }
     scores = {}
     for score in Score.objects.filter(assessment__in=papers.values(), student_membership_id__in=ids):
         scores[(score.student_membership_id, score.assessment.name)] = score.value
