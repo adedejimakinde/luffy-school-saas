@@ -71,6 +71,7 @@ LINKS = (
     Link("fees", "/fees/", "i-fees", "Fees", FEES_ROLES, "Office"),
     Link("bank", "/bank/", "i-fees", "Bank", FEES_ROLES, "Office"),
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
+    Link("teaching", "/teaching/", "i-marks", "Subjects", SETUP_ROLES, "Office"),
     Link("promotion", "/promotion/", "i-people", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.

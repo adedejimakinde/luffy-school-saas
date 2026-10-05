@@ -41,7 +41,7 @@ from academics.views import PROMOTION_MODULES, SETUP_MODULES
 from schools.views import PLATFORM_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import BANK_MODULES, FEES_MODULES
-from gradebook.views import MARKING_MODULES
+from gradebook.views import MARKING_MODULES, TEACHING_MODULES
 from results.views import (
     BROADSHEET_MODULES,
     CARD_MODULES,
@@ -87,6 +87,7 @@ PAGES = {
     "home": HOME_MODULES,
     "notices-settings": SETTINGS_MODULES,
     "ogsera": OGSERA_MODULES,
+    "teaching": TEACHING_MODULES,
 }
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these

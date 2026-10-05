@@ -72,6 +72,7 @@ SCHOOL_PAGES = (
     "/notices/settings/",
     "/promotion/",
     "/ogsera/",
+    "/teaching/",
     "/",
 )
 
