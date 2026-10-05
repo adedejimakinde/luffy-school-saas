@@ -107,6 +107,17 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       draw();
       return;
     }
+    if (action === "download-no-email" && state.step === "done") {
+      // Built in the page from the report just shown; nothing is sent anywhere.
+      const csv = states.noEmailCsv(state.report.no_email || []);
+      const link = root.ownerDocument.createElement("a");
+      link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      link.download = "students-without-guardian-email.csv";
+      root.ownerDocument.body.append(link);
+      link.click();
+      link.remove();
+      return;
+    }
     if (action === "admit" && state.step === "preview" && state.preview.admissible && file && !state.busy) {
       state = { ...state, busy: true, note: null };
       draw();

@@ -188,6 +188,77 @@ test("done lists the usernames it made, by row and name, and the guardians still
   assert.match(html, /href="\/roll\/"/);
 });
 
+const GAPS = [
+  { line: 3, full_name: "Bola Ade", class_group: "JSS 1B", reference: "0101", guardian_name: "Mrs Ade", guardian_contact: "+2348031234567", why: "A phone number only." },
+  { line: 4, full_name: "=Dayo <b>Obi</b>", class_group: "JSS 1A", reference: "0102", guardian_name: "", guardian_contact: "", why: "No guardian was given." },
+];
+
+test("done lists who will get no email, why, and offers the list to download", () => {
+  const html = states.done({
+    ...DOOR,
+    preview: GOOD,
+    report: { admitted: 3, problems: [], generated: {}, guardian_links: [], guardians_pending: 0, no_email: GAPS },
+  });
+
+  assert.match(html, /2 children have no guardian email, so absence alerts and payment receipts will not reach them/);
+  assert.match(html, /<td class="stack-head">Bola Ade<\/td><td data-label="Class">JSS 1B<\/td><td data-label="Guardian">Mrs Ade<\/td><td data-label="Why">A phone number only\./);
+  assert.match(html, /No guardian was given\./);
+  assert.match(html, /=Dayo &lt;b&gt;Obi&lt;\/b&gt;/, "a typed name is escaped");
+  assert.match(html, /data-action="download-no-email"/);
+});
+
+test("when every guardian has an email the page says so and offers no download", () => {
+  const html = states.done({ ...DOOR, preview: GOOD, report: { admitted: 2, no_email: [], generated: {}, guardians_pending: 0 } });
+
+  assert.match(html, /Every guardian has an email address/);
+  assert.doesNotMatch(html, /download-no-email/);
+});
+
+test("the list as a CSV opens in Excel: a byte-order mark, every cell quoted, formulas made plain", () => {
+  const csv = states.noEmailCsv(GAPS);
+  const lines = csv.slice(1).split("\r\n");
+
+  assert.equal(csv[0], "\ufeff");
+  assert.equal(lines[0], '"Row","Name","Class","Admission number","Guardian","Guardian contact","Why"');
+  assert.equal(lines[1], '"3","Bola Ade","JSS 1B","0101","Mrs Ade","+2348031234567","A phone number only."');
+  assert.match(lines[2], /^"4","'=Dayo <b>Obi<\/b>","JSS 1A","0102","","","No guardian was given\."$/);
+  assert.equal(states.noEmailCsv([]).slice(1), '"Row","Name","Class","Admission number","Guardian","Guardian contact","Why"\r\n');
+});
+
+test("Download hands the browser that file, and sends nothing to the school", async () => {
+  forgetToken();
+  const seen = [];
+  const root = fakeRoot({ portal: "app.example" });
+  const made = [];
+  root.ownerDocument = {
+    createElement: () => {
+      const link = { click() { made.push(link); }, remove() {} };
+      return link;
+    },
+    body: { append() {} },
+  };
+  await mount(root, {
+    fetchImpl: serve(
+      [
+        [DOOR_URL, { status: 200, body: DOOR }],
+        [CHECK_URL, { status: 200, body: GOOD }],
+        [IMPORT_URL, { status: 200, body: { admitted: 2, problems: [], generated: {}, guardian_links: [], guardians_pending: 0, no_email: GAPS } }],
+      ],
+      seen,
+    ),
+  });
+  await root.submit({ file: { files: [FILE] } });
+  await root.click({ "data-action": "admit" });
+  const requests = seen.length;
+
+  await root.click({ "data-action": "download-no-email" });
+
+  assert.equal(made.length, 1);
+  assert.equal(made[0].download, "students-without-guardian-email.csv");
+  assert.match(made[0].href, /^blob:/);
+  assert.equal(seen.length, requests, "building the file asks the school nothing");
+});
+
 // -- the page, driven ------------------------------------------------------
 
 test("choose, check, admit: the file admitted is the file that was checked", async () => {

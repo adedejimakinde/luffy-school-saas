@@ -48,6 +48,18 @@ both).
   row. A learner's ID is unique at a school, ignoring case, as an admission
   number is. Photos are added on the roll, not imported.
 
+- **Who will get no email.** Absence alerts and payment receipts go by email only
+  (`docs/messaging.md` D13), and an imported guardian usually has a phone and nothing else.
+  `admit()` therefore reports, with the import's answer (`no_email`, `bulk.NoEmail`), every child
+  whose guardian this school has no email for, with why: **"No guardian was given."** or **"A phone
+  number only."** An email typed on the row is not a gap. A phone alone is, **unless the guardian is
+  already live at this school and holds an email**: only what this school may know is used, so a
+  guardian who has an email at another school (but has not answered this one) is still listed, and
+  the report cannot be used to learn which numbers belong to a parent with an email elsewhere. A
+  refused file lists nobody. The done screen shows the list and "Download this list (CSV)", built in
+  the page from the report just shown: UTF-8 with a byte-order mark so Excel keeps dotted letters,
+  every cell quoted, a cell that starts like a formula made plain text.
+
 Every route asks who is asking before it reads the file (the oracle rule), and
 answers only for the school whose host it is on.
 `accounts/tests/test_roll_import.py` holds all of this with two schools.

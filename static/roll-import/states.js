@@ -207,6 +207,62 @@ function row(r) {
  * What the import did. The handles it made are listed by row and name,
  * because a child cannot be handed a login nobody wrote down.
  */
+/**
+ * The children who will get no alert or receipt, for want of a guardian email: absence alerts and
+ * payment receipts go by email only. Shown after an import, and downloadable, so the office can
+ * ask those families for an address.
+ */
+function noEmail(list) {
+  if (!list.length) {
+    return '<div class="msg"><span class="label label-ok">Emails</span><p>Every guardian has an email address.</p></div>';
+  }
+  return [
+    '<div class="msg"><span class="label label-warn">No email</span>',
+    `<p>${plural(list.length, "child has", "children have")} no guardian email, so absence alerts and payment `,
+    "receipts will not reach them. Ask the family for an address, then add it on the roll (Guardians).</p></div>",
+    '<div class="table-scroll"><table class="made stack no-email">',
+    '<thead><tr><th class="num">Row</th><th>Name</th><th>Class</th><th>Guardian</th><th>Why</th></tr></thead><tbody>',
+    list
+      .map(
+        (n) =>
+          `<tr><td class="num" data-label="Row">${esc(n.line)}</td>` +
+          `<td class="stack-head">${esc(n.full_name)}</td>` +
+          `<td data-label="Class">${esc(n.class_group)}</td>` +
+          `<td data-label="Guardian">${esc(n.guardian_name || "-")}</td>` +
+          `<td data-label="Why">${esc(n.why)}</td></tr>`,
+      )
+      .join(""),
+    "</tbody></table></div>",
+    '<div class="actions"><button type="button" data-action="download-no-email">Download this list (CSV)</button></div>',
+  ].join("");
+}
+
+/**
+ * That list as a CSV file Excel opens: UTF-8 with a byte-order mark (names with dotted letters
+ * survive), every cell quoted, and a cell that starts like a formula made plain text, because a
+ * name or a guardian's name is typed by whoever filled the file in. A phone number starts with
+ * "+" and is a number, not a formula, so only `=` and `@` count in the contact column.
+ */
+export function noEmailCsv(list) {
+  const plain = (text, risky) => {
+    const cell = String(text ?? "");
+    return risky.test(cell) ? `'${cell}` : cell;
+  };
+  const quote = (cell) => `"${cell.replaceAll('"', '""')}"`;
+  const rows = [["Row", "Name", "Class", "Admission number", "Guardian", "Guardian contact", "Why"]].concat(
+    list.map((n) => [
+      n.line,
+      plain(n.full_name, /^[=+\-@\t\r]/),
+      plain(n.class_group, /^[=+\-@\t\r]/),
+      plain(n.reference, /^[=+\-@\t\r]/),
+      plain(n.guardian_name, /^[=+\-@\t\r]/),
+      plain(n.guardian_contact, /^[=@\t\r]/),
+      n.why,
+    ]),
+  );
+  return "\ufeff" + rows.map((row) => row.map((cell) => quote(String(cell))).join(",")).join("\r\n") + "\r\n";
+}
+
 export function done({ term = null, report = {}, preview: p = { rows: [] } } = {}) {
   const names = Object.fromEntries((p.rows || []).map((r) => [String(r.line), r.full_name]));
   const generated = Object.entries(report.generated || {});
@@ -222,6 +278,7 @@ export function done({ term = null, report = {}, preview: p = { rows: [] } } = {
         `<p>${plural(pending, "guardian link is", "guardian links are")} waiting for the guardian to answer ` +
         "the school. Send each a code from the child's Guardians on the roll.</p></div>"
       : "",
+    noEmail(report.no_email || []),
     generated.length
       ? [
           "<h2>Usernames made on import</h2>",

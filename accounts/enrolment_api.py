@@ -411,6 +411,21 @@ class GuardianLinkOut(Schema):
     status: str
 
 
+class NoEmailOut(Schema):
+    """A child whose guardian has no email at this school, by the line that made them.
+
+    Absence alerts and payment receipts are email only, so this is who will not get them.
+    """
+
+    line: int
+    full_name: str
+    class_group: str
+    reference: str
+    guardian_name: str
+    guardian_contact: str
+    why: str
+
+
 class BulkReportOut(Schema):
     """What a file did, or what is wrong with it.
 
@@ -434,6 +449,8 @@ class BulkReportOut(Schema):
     generated: dict
     guardian_links: List[GuardianLinkOut]
     guardians_pending: int
+    #: Children who will get no alert or receipt, for want of a guardian email (`NoEmail`).
+    no_email: List[NoEmailOut] = []
 
 
 def _may_import(request, school):
@@ -467,6 +484,14 @@ def _report_out(report) -> BulkReportOut:
         guardians_pending=sum(
             1 for link in report.guardian_links if link.status == guardian_contacts.PENDING
         ),
+        no_email=[
+            NoEmailOut(
+                line=n.line, full_name=n.full_name, class_group=n.class_group,
+                reference=n.reference, guardian_name=n.guardian_name,
+                guardian_contact=n.guardian_contact, why=n.why,
+            )
+            for n in report.no_email
+        ],
     )
 
 
