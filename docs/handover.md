@@ -1,3 +1,59 @@
+# Where I stopped: 2026-10-05 (seventh session), the pilot QA's follow-ups: clearing a mark, the office's teaching screens, the import's email gap
+
+You answered the two open decisions from the pilot run: **step 2, build the screens; step 6, keep reusable
+PINs (D11 stays).** Then three items, one PR each, merged on green CI gated on the head SHA.
+
+| PR | State |
+| --- | --- |
+| [#246](https://github.com/adedejimakinde/luffy-school-saas/pull/246) | **Merged on green:** emptying a mark box takes the stored mark back (online and queued offline); a redraw no longer saves a half-typed number. |
+| [#247](https://github.com/adedejimakinde/luffy-school-saas/pull/247) | **Merged on green:** `/teaching/`, the office's screen for subjects, this term's papers and class teachers. |
+| [#248](https://github.com/adedejimakinde/luffy-school-saas/pull/248) | **Merged on green:** after an import, the children whose guardian has no email, listed and downloadable. |
+
+## 1. Clearing a mark (#246)
+- **What was wrong:** the page ignored an emptied box (`DELETE` existed server-side and was never called), so the box
+  looked cleared while the school kept the mark. Now an emptied box that holds a mark is a `DELETE` with the version it was
+  drawn with; it is queued as an outbox entry whose value is `""`, so it also works offline and across a reload. No stored
+  mark means nothing is sent; a resent `DELETE` is a 200 that changes nothing. `docs/offline.md` OPEN-7 is settled.
+- **Found on the way, and worth knowing:** putting focus back after a redraw (#244) made the browser blur the replaced box,
+  and the blur handler saved what was typed so far ("4" of "44"). A random-timing stress run (10 sheets) had 1 bad before the
+  guard and 0 after; `tests/ui/marking_focus.test.js` now delays the school's answers and requires one write per mark.
+- **The page budget:** `/marking/` had 21 bytes spare. The code added about 770 bytes, so comments in `marking/*.js` were
+  shortened first (no behaviour). It is about 230 bytes under its old size; `/marking/` and `/register/` (which loads the
+  same outbox) are still the tightest pages. Expect the next change there to need the same trim.
+- Tests: browser (`tests/ui/marking_clear.test.js`, online and offline), JS, two school tests (clear, resend, retype; another
+  school's child is a flat 404 and nobody's mark moves).
+
+## 2. `/teaching/` (#247)
+`docs/teaching.md` has all of it. One page under Office ("Subjects"), principal and administrator only, reusing the setup
+page's look. Class teachers (one select per class, for the current term), subjects (add, edit, no longer taught, remove) and
+this term's papers (add, edit, remove). A paper's "out of" cannot change, nor the paper be removed, once anyone has a mark in
+it; a subject that has had papers is retired, never removed. Every route asks who is asking first.
+- **Control run (broken, red, restored):** `curriculum.can_shape` was made to admit a teacher; `WhoMayOpenIt` went red; passes
+  restored.
+- **Not done, on purpose:** papers belong to one term and are made for the **current term only**. When a school opens next term
+  (standard card) its papers must be added again; there is no "copy last term's papers" (the Ogun template does set them at
+  term creation). Teachers are not assigned to subjects: any teacher may mark any paper, as before. No reordering of papers
+  (they print in the order added).
+- Tests: `gradebook/tests/test_teaching.py` (25, including two schools whose first subject, paper and class share an id),
+  JS, a browser flow in which a teacher then finds the administrator's paper, and the layout screens.
+
+## 3. The import's email gap (#248)
+`docs/roll-import.md`. After an import the done screen lists children whose guardian this school has no email for ("No
+guardian was given" or "A phone number only") and offers a CSV (BOM, quoted, formula-safe) built in the page.
+- Judged only on **what this school may know**: a guardian with an email at another school who has not answered this one is
+  still listed (otherwise the report would say which numbers belong to a parent with an email elsewhere).
+- **Only the batch just imported**, and only on that screen: there is no later "who has no email" report on the roll, and the
+  list is not stored. Download it before leaving the page. A roll-wide report would be the next small step if wanted.
+
+## Not verified
+- All of it ran against the demo, a local Postgres and Redis and Chromium at 360px with touch, not a real handset, host or
+  provider. The soft keyboard dropping is inferred from focus loss.
+- `tests/ui/roll_import_gap.test.js` adds three children to JSS 1A in the demo database on each run (admission numbers from
+  the clock); the other UI files do not depend on the class's size.
+- Nothing here touched Paystack, hosting or domains.
+
+---
+
 # Where I stopped: 2026-10-05 (sixth session), the first-school pilot flow run end to end on the demo school
 
 You asked for the term-1 flow of a first school, run as a school would: Sunrise Demo Academy from `seed_demo`, in a real
