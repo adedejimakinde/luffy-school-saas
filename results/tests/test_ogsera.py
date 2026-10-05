@@ -222,6 +222,34 @@ class TheFillTests(OgseraSetUp):
         sheet = self.filled()["JSS1A Mathematics"]
         self.assertIsNone(sheet["H7"].value, "Emeka has no exam mark")
 
+    def test_a_paper_not_out_of_the_sheets_maximum_is_not_filled(self):
+        """A school that chose Ogun after marking keeps an "Exam" out of 100 (presets never
+        overwrite a marked paper). Its 61 is not 61 of 70, so it is not written under "Exam (70)"."""
+        with connected_to(self.stmarys):
+            Assessment.objects.filter(term=self.term, subject=self.maths, name="Exam").update(max_score=100)
+
+        body = self.post("check/", self.good_file(), **self.form()).json()
+        sheet = self.filled()["JSS1A Mathematics"]
+
+        self.assertIn("Ada Obi: no Exam", body["missing_values"])
+        self.assertIsNone(sheet["H6"].value, "Ada's 61 out of 100 is not an Exam out of 70")
+        self.assertIsNone(sheet["I6"].value, "and so there is no total built on it")
+        self.assertEqual([sheet.cell(row=6, column=c).value for c in (4, 5, 6)], [8, 9, 7], "the tests are the sheet's own")
+
+    def test_another_schools_exam_paper_is_judged_by_that_schools_own_maximum(self):
+        """Grace marks its Exam out of 100 and St Mary's out of 70: only St Mary's mark is filled,
+        and changing Grace's paper does not move St Mary's."""
+        with connected_to(self.grace):
+            Assessment.objects.filter(subject__name="Mathematics", name="Exam").update(max_score=100)
+
+        sheet = self.filled()["JSS1A Mathematics"]
+
+        self.assertEqual(sheet["H6"].value, 61, "St Mary's Exam is still out of 70")
+        with connected_to(self.stmarys):
+            self.assertEqual(
+                Assessment.objects.get(term=self.term, subject=self.maths, name="Exam").max_score, 70
+            )
+
 
 class WhoAndWhereTests(OgseraSetUp):
     def test_a_teacher_and_a_bursar_are_refused(self):

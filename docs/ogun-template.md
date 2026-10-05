@@ -268,8 +268,10 @@ stored.
    formula is kept** unless "Replace existing values" is ticked. The download
    is refused (422) while any row blocks.
 
-Marks come from the current term's Ogun papers, by name. CA total and total
-are filled only when every part is in. Nothing else of a child's record is
+Marks come from the current term's Ogun papers, by name **and by maximum** (10, 10, 10 and 70).
+A school that chose the Ogun template after marking keeps its marked papers (presets never overwrite
+them), and an "Exam" out of 60 is not the sheet's "Exam (70)": it is read as not entered, and the
+check says so. CA total and total are filled only when every part is in. Nothing else of a child's record is
 filled; the health record is never a column.
 
 ### Tests
