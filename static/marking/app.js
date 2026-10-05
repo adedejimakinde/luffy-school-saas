@@ -427,7 +427,17 @@ export async function mount(
   let leaving = false;
 
   const draw = () => {
+    // The box the teacher is in is theirs: a redraw lands while they move from one box to the
+    // next (the blur's own), and replacing it would drop the keyboard and what they have typed.
+    const doc = root.ownerDocument;
+    const at = doc && doc.activeElement;
+    const kept = at && at.id && root.contains(at) ? { id: at.id, value: at.value } : null;
     root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()), held });
+    const back = kept && doc.getElementById(kept.id);
+    if (back) {
+      back.value = kept.value;
+      back.focus();
+    }
   };
 
   /** An answer from the server, or the phone's copy when it was not reached. */
