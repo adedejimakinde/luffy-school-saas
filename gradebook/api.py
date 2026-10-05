@@ -51,13 +51,14 @@ schema. `services._require_student_of_this_school()` reads the connection for
 exactly this reason; the routing does the same thing by having nothing to read.
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union
 from uuid import UUID
 
 from django.db.models import Count, Sum
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ninja import Router, Schema
+from pydantic import field_validator
 
 from sync import receipts
 
@@ -212,13 +213,22 @@ class SaveIn(Schema):
     is for callers with no screen, and everything reaching this module has one.
     """
 
-    value: int
+    #: A number, **not** an `int`: a field typed `int` makes a half mark (12.5) fail in the
+    #: parser, which answers with a list of errors the page draws as "[object Object]". Taken
+    #: as a number, it reaches `set_score()`, which refuses it with a sentence (a 422 below).
+    value: Union[int, float]
     expected_version: Optional[int] = None
     #: Minted by the device when it queued this write, and the same on every
     #: attempt at it. Optional: the live page has no queue to replay from.
     #: With one, the second arrival of a write that landed is answered with the
     #: first arrival's answer rather than judged again (`sync.receipts.once()`).
     key: Optional[UUID] = None
+
+
+    @field_validator("value")
+    @classmethod
+    def _a_whole_number_typed_as_12_0_is_12(cls, value):
+        return int(value) if isinstance(value, float) and value.is_integer() else value
 
 
 class ConflictOut(Schema):

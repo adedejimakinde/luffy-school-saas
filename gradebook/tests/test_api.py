@@ -290,6 +290,47 @@ class SavingOneMarkTests(GradebookApiSetUp):
         response = self.save(self.ada.pk, 21)
         self.assertEqual(response.status_code, 422)
 
+    def test_a_half_mark_is_refused_in_a_sentence_and_writes_nothing(self):
+        """12.5 used to fail in the parser, whose answer is a list of errors the marking page drew
+        as "[object Object]". It now reaches the service, whose refusal is a sentence."""
+        self.client.force_login(self.teacher.user)
+
+        response = self.save(self.ada.pk, 12.5)
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIsInstance(response.json()["detail"], str)
+        self.assertIn("whole number", response.json()["detail"])
+        self.assertIn("12.5", response.json()["detail"])
+        with connected_to(self.stmarys):
+            self.assertFalse(Score.objects.exists(), "a refused mark leaves no row")
+
+    def test_a_whole_number_sent_as_12_0_is_the_mark_12(self):
+        self.client.force_login(self.teacher.user)
+
+        response = self.save(self.ada.pk, 12.0)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["value"], 12)
+
+    def test_a_half_mark_for_another_schools_child_is_still_a_flat_404(self):
+        """The new path must not answer a stranger's child with the mark's own sentence."""
+        grace = make_school("Grace Academy", "grace", "grace")
+        theirs = enroll_student(
+            User.objects.create_user("chidi", PASSWORD, full_name="Chidi Okafor"), grace
+        )
+        self.client.force_login(self.teacher.user)
+
+        response = self.save(theirs.pk, 12.5)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("whole number", response.content.decode())
+        with connected_to(grace):
+            self.assertFalse(Score.objects.exists())
+
+    def test_a_parent_sending_a_half_mark_is_refused_for_who_they_are_first(self):
+        self.client.force_login(self.parent.user)
+        self.assertEqual(self.save(self.ada.pk, 12.5).status_code, 403)
+
     def test_a_parent_cannot_enter_a_mark(self):
         self.client.force_login(self.parent.user)
         self.assertEqual(self.save(self.ada.pk, 15).status_code, 403)

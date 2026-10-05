@@ -311,7 +311,7 @@ def _require_the_sheet_is_open(assessment, membership):
 def _require_a_mark_this_assessment_can_hold(assessment, value):
     if not isinstance(value, int) or isinstance(value, bool):
         raise InvalidScore(
-            f"Marks are whole numbers, not {type(value).__name__}. An assessment "
+            f"A mark is a whole number, like 12; {value!r} is not one. An assessment "
             f"scored in halves is one out of twice as many marks — set "
             f"`max_score` accordingly rather than storing a fraction."
         )
