@@ -100,7 +100,7 @@ from academics import services as academics
 from academics.models import ClassGroup
 from accounts import guardian_contacts
 from accounts.identifiers import canonical_username
-from accounts.models import Membership, Role, User
+from accounts.models import ContactChannel, GuardianAccount, Membership, Role, User
 from accounts.services import admit_student_as
 
 #: The header a file must carry. Two are required of every row; the rest may be
@@ -167,6 +167,8 @@ class PlannedChild:
     class_group: object
     guardian_name: str = ""
     guardian_contact: str = ""
+    #: "phone" or "email" (what `read_contact()` made of the contact), or "" with no guardian.
+    guardian_channel: str = ""
     learner_id: str = ""
     sex: str = ""
     date_of_birth: object = None
@@ -183,6 +185,23 @@ class GuardianLink:
     line: int
     guardian_contact: str
     status: str
+
+
+@dataclass
+class NoEmail:
+    """A child whose guardian this school has no email for: one who will get no alert or receipt.
+
+    Absence alerts and payment receipts go by email only (`docs/messaging.md` D13), so this is
+    how an office learns, at the import, who they will not reach. `why` says which kind of gap.
+    """
+
+    line: int
+    full_name: str
+    class_group: str
+    reference: str
+    guardian_name: str
+    guardian_contact: str
+    why: str
 
 
 @dataclass
@@ -209,6 +228,8 @@ class Report:
     generated: dict = field(default_factory=dict)
     #: Filled by `admit()`: every guardian link made, in file order.
     guardian_links: list = field(default_factory=list)
+    #: Filled by `admit()`: the children who will get no email, in file order (`NoEmail`).
+    no_email: list = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -612,7 +633,7 @@ def check(school, source) -> Report:
 
         guardian_name = row.get("guardian_name", "")
         guardian_raw = row.get("guardian_contact", "")
-        guardian_contact = ""
+        guardian_contact = guardian_channel = ""
         if guardian_name or guardian_raw:
             if not guardian_name:
                 report.problems.append(
@@ -631,7 +652,7 @@ def check(school, source) -> Report:
                     )
                 )
             else:
-                guardian_contact = read[1]
+                guardian_channel, guardian_contact = read
 
         learner_id = sex = ""
         date_of_birth = None
@@ -674,6 +695,7 @@ def check(school, source) -> Report:
                     class_group=group,
                     guardian_name=guardian_name,
                     guardian_contact=guardian_contact,
+                    guardian_channel=guardian_channel,
                     learner_id=learner_id,
                     sex=sex,
                     date_of_birth=date_of_birth,
@@ -743,6 +765,7 @@ def admit(actor, school, term, source) -> Report:
                     by=actor,
                 )
 
+            link = None
             if planned.guardian_contact:
                 link = guardian_contacts.link_by_contact_as(
                     actor,
@@ -760,8 +783,41 @@ def admit(actor, school, term, source) -> Report:
                         status=guardian_contacts.link_status_at(link.guardian, school),
                     )
                 )
+            why = _why_no_email(planned, link, school)
+            if why:
+                report.no_email.append(
+                    NoEmail(
+                        line=planned.line,
+                        full_name=planned.full_name,
+                        class_group=planned.class_group.name,
+                        reference=planned.reference,
+                        guardian_name=planned.guardian_name,
+                        guardian_contact=planned.guardian_contact,
+                        why=why,
+                    )
+                )
 
     return report
+
+
+def _why_no_email(planned, link, school):
+    """Why this child's guardian cannot be emailed by this school, or "" if they can.
+
+    **Only what this school may know.** An email typed on the row counts. A phone alone counts
+    as no email unless the guardian is already live *here* and holds an email: what a guardian
+    holds before they have answered this school is not this school's to read, and a report that
+    used it would say which numbers belong to a parent with an email elsewhere (the rule
+    `GuardianLink` keeps for "live").
+    """
+    if not planned.guardian_contact:
+        return "No guardian was given."
+    if planned.guardian_channel == ContactChannel.EMAIL:
+        return ""
+    if guardian_contacts.link_status_at(link.guardian, school) == guardian_contacts.LIVE:
+        account = GuardianAccount.objects.filter(user=link.guardian).first()
+        if account is not None and account.live_contact(ContactChannel.EMAIL) is not None:
+            return ""
+    return "A phone number only."
 
 
 __all__ = [
@@ -773,6 +829,7 @@ __all__ = [
     "read_upload",
     "template_workbook",
     "GuardianLink",
+    "NoEmail",
     "Report",
     "RowProblem",
     "PlannedChild",

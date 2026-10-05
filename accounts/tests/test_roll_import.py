@@ -423,3 +423,116 @@ class TheChildsDetailsTests(RollImportSetUp):
         book = load_workbook(io.BytesIO(self.client.get(TEMPLATE, HTTP_HOST=HOST).content))
         formulas = [v.formula1 for v in book["Students"].data_validations.dataValidation]
         self.assertIn('"Female,Male"', formulas)
+
+
+class TheEmailGapTests(RollImportSetUp):
+    """After an import: who will get no alert or receipt, because those go by email only.
+
+    Two schools, because the gap is judged by **what this school may know**: a guardian who
+    holds an email at another school is no email here until they have answered this one.
+    """
+
+    MUM = "0803 123 0000"
+
+    def import_(self, *rows):
+        return self.post(FILE, self.admin, workbook(*rows)).json()
+
+    def gaps(self, body):
+        return [(g["line"], g["full_name"], g["why"]) for g in body["no_email"]]
+
+    def live_guardian_with_an_email(self, school, child, phone, email):
+        """A guardian whose link at `school` is live and who holds `email` there."""
+        from django.utils import timezone
+
+        from accounts import guardian_contacts
+        from accounts.models import ContactChannel, GuardianContact
+        from accounts.services import activate_guardian_links
+
+        admin = self.admin if school == self.stmarys else self.their_admin
+        link = guardian_contacts.link_by_contact_as(admin, child, "Mrs Live", phone)
+        account = link.guardian.guardian_account
+        activate_guardian_links(link.guardian, school)
+        GuardianContact.objects.create(
+            guardian=account, channel_type=ContactChannel.EMAIL, value=email,
+            created_by=admin.user, verified_at=timezone.now(),
+        )
+        return link.guardian
+
+    def test_the_control_a_phone_or_nobody_is_listed_and_an_email_is_not(self):
+        body = self.import_(
+            ["Chike Obi", "JSS 1A", "0100", "", "Mrs Obi", "mum@example.test"],
+            ["Ngozi Abah", "JSS 1B", "0101", "", "Mr Abah", self.MUM],
+            ["Tobi Ade", "JSS 1A", "0102"],
+        )
+
+        self.assertEqual(body["admitted"], 3)
+        self.assertEqual(
+            self.gaps(body),
+            [(3, "Ngozi Abah", "A phone number only."), (4, "Tobi Ade", "No guardian was given.")],
+        )
+        ngozi = body["no_email"][0]
+        self.assertEqual(
+            (ngozi["class_group"], ngozi["reference"], ngozi["guardian_name"], ngozi["guardian_contact"]),
+            ("JSS 1B", "0101", "Mr Abah", "+2348031230000"),
+        )
+
+    def test_a_file_where_everyone_has_an_email_lists_nobody(self):
+        body = self.import_(["Chike Obi", "JSS 1A", "0100", "", "Mrs Obi", "mum@example.test"])
+        self.assertEqual(body["no_email"], [])
+
+    def test_a_refused_file_lists_nobody_and_writes_nothing(self):
+        before = self.counts()
+        body = self.import_(
+            ["Chike Obi", "JSS 1A", "0100", "", "Mrs Obi", self.MUM],
+            ["Tobi Ade", "JSS 9Z", "0101"],
+        )
+        self.assertEqual((body["admitted"], body["no_email"]), (0, []))
+        self.assertEqual(self.counts(), before)
+
+    def test_a_guardian_already_live_here_with_an_email_is_not_a_gap(self):
+        first = self.import_(["Chike Obi", "JSS 1A", "0100", "", "Mrs Live", self.MUM])
+        self.assertEqual(self.gaps(first), [(2, "Chike Obi", "A phone number only.")])
+        guardian = User.objects.get(guardian_account__contacts__value="+2348031230000")
+        from django.utils import timezone
+
+        from accounts.models import ContactChannel, GuardianContact
+        from accounts.services import activate_guardian_links
+
+        activate_guardian_links(guardian, self.stmarys)
+        GuardianContact.objects.create(
+            guardian=guardian.guardian_account, channel_type=ContactChannel.EMAIL, value="live@example.test",
+            created_by=self.admin.user, verified_at=timezone.now(),
+        )
+
+        second = self.import_(["Dayo Obi", "JSS 1B", "0101", "", "Mrs Live", self.MUM])
+
+        self.assertEqual(second["no_email"], [], "their sibling's mother is reachable by email already")
+
+    def test_an_email_held_at_the_other_school_is_not_this_schools_to_know(self):
+        """Mrs Live is live at Grace with an email. At St Mary's she has answered nobody, so a
+        St Mary's import of her number still lists the child: the report would otherwise say
+        which numbers belong to a parent with an email elsewhere."""
+        self.live_guardian_with_an_email(
+            self.grace, self.grace_child, "08031230000", "elsewhere@example.test"
+        )
+
+        body = self.import_(["Chike Obi", "JSS 1A", "0100", "", "Mrs Live", "08031230000"])
+
+        self.assertEqual(self.gaps(body), [(2, "Chike Obi", "A phone number only.")])
+        self.assertNotIn("elsewhere", str(body))
+
+    def test_the_other_schools_import_is_judged_on_its_own_and_never_lists_ours(self):
+        self.import_(["Chike Obi", "JSS 1A", "0100", "", "Mrs Obi", self.MUM])
+        self.client.force_login(self.their_admin.user)
+        from academics.models import ClassGroup
+
+        with connected_to(self.grace):
+            theirs = ClassGroup.objects.get().name
+        response = self.client.post(
+            FILE,
+            {"file": upload("roll.xlsx", workbook(["Femi Eze", theirs, "G100", "", "Mrs Eze", "eze@example.test"]))},
+            HTTP_HOST=THEIR_HOST,
+        )
+
+        self.assertEqual(response.json()["admitted"], 1)
+        self.assertEqual(response.json()["no_email"], [], "and Chike Obi is not in Grace's report")
