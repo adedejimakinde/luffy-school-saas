@@ -25,7 +25,7 @@
  * artifact: `<width>/<screen>.png`.
  *
  * Classnode's own public site (`website/`, on the bare platform domain: the
- * homepage, the privacy notice and the terms) is photographed at seven widths, `SITE_WIDTHS`, under reduced motion so every
+ * homepage, the privacy notice and the terms) is photographed at eight widths, `SITE_WIDTHS`, under reduced motion so every
  * section and drawing is in its finished state, with its lazy images scrolled
  * in. It is also held to its own layout: content stops at 1200px and only the
  * fees band runs edge to edge; on a phone a slide's words sit above its screen,
@@ -68,8 +68,8 @@ const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
 
-/** The public site's extra widths: a small Android, a large phone, a tablet held sideways, a desk monitor. */
-export const SITE_WIDTHS = [320, 414, 1024, 1920];
+/** The public site's extra widths: a small Android, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
+export const SITE_WIDTHS = [320, 390, 414, 1024, 1920];
 
 /**
  * The only tables that may be wider than a phone: the broadsheet, the
@@ -305,6 +305,29 @@ function measureSite({ width }) {
   const toggle = document.querySelector(".menu-toggle");
   if (width < 960 && (visible(nav) || !visible(toggle))) problems.push("the nav is not a menu button here");
   if (width >= 960 && (!visible(nav) || visible(toggle))) problems.push("the nav is folded away on a wide screen");
+  if (width < 640) {
+    // A banking app's measure: 16px of page each side, 28px at the largest,
+    // 22px section headings, 16px body, and no hero that fills the screen.
+    const size = (el) => parseFloat(getComputedStyle(el).fontSize);
+    const gutter = document.querySelector(".wrap").getBoundingClientRect().left;
+    if (Math.round(gutter) !== 16) problems.push(`the page padding is ${Math.round(gutter)}px, not 16`);
+    const headline = document.querySelector(".legal h1, .slide-text h2");
+    if (size(headline) > 28) problems.push(`the headline is ${size(headline)}px, over 28`);
+    for (const h of document.querySelectorAll(".section-title, .legal-body h2")) {
+      if (visible(h) && (size(h) < 18 || size(h) > 22.5)) problems.push(`a section heading is ${size(h)}px, not 18 to 22`);
+    }
+    for (const p of document.querySelectorAll("main p, main li")) {
+      if (!visible(p) || p.closest(".band, .todo") || p.matches(".price, .sent, .lead, .statement")) continue;
+      if (size(p) > 16.5) problems.push(`body text is ${size(p)}px, over 16: "${p.textContent.trim().slice(0, 30)}"`);
+    }
+    const hero = document.querySelector(".hero");
+    if (hero && hero.getBoundingClientRect().height > innerHeight) problems.push("the hero is taller than the screen");
+    for (const el of document.querySelectorAll("main section, main .feature, main .band")) {
+      const top = parseFloat(getComputedStyle(el).paddingTop);
+      const bottom = parseFloat(getComputedStyle(el).paddingBottom);
+      if (el.matches(".feature, .band, .pricing, .demo") && top + bottom > 80) problems.push(`${el.className} has ${top + bottom}px of padding, over 80`);
+    }
+  }
   if (width < 640 && home) {
     for (const slide of document.querySelectorAll(".slide")) {
       const text = slide.querySelector(".slide-text").getBoundingClientRect();

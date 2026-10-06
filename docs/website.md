@@ -117,7 +117,7 @@ A plain form post, CSRF-checked, that works with no script.
   the form, the 400 KB and 15 KB budgets, that no motion sits outside
   `no-preference` and nothing loops, and the pattern's contrast, worked out
   from the stylesheet.
-- `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 414, 768, 1024, 1280
+- `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 390, 414, 768, 1024, 1280
   and 1920, photographed finished, and held to the layout above; and its motion
   (`the homepage's motion`) on a fake clock: the 6 seconds, the 400ms fade, the
   three holds, nothing moving under reduced motion, every animation once.
