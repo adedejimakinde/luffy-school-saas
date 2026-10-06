@@ -509,3 +509,49 @@ body.site > main {
 .legal-body p, .legal-body li { font-size: 1.0625rem; line-height: 1.65; }
 .legal-body ul { margin: 0 0 16px; padding-left: 1.25em; }
 .legal-body li + li { margin-top: 6px; }
+
+/* ------------------------------------------------------------------------ */
+/* Phones: a banking app's measure, not a brochure's                         */
+/* ------------------------------------------------------------------------ */
+
+/* Body 16px, the biggest headline 28px, section headings 22px, 16px of page
+   at each side, and 40–56px between sections. Last in the file so it narrows
+   every rule above; from 640px up nothing here applies. */
+@media (max-width: 639.98px) {
+  .hero { padding: 24px 0 40px; }
+  .slides { min-height: 0; }
+  .slide { gap: 24px; }
+  .slide-text h2 { margin-bottom: 12px; font-size: 1.75rem; line-height: 1.15; }
+  .slide-text p, .feature-text p:not(.lead), .demo-text p:not(.statement),
+  .hero-note, .legal-body p, .legal-body li { font-size: 1rem; line-height: 1.55; }
+  .hero-note { margin-top: 16px; }
+  .hero-actions { margin-top: 16px; }
+  /* The top of the screen, not the whole of it: the hero stays short of a page. */
+  .phone { width: min(100%, 200px); padding: 8px; border-radius: 30px; }
+  .phone img { border-radius: 22px; }
+  .slide-device img { aspect-ratio: 540 / 440; }
+  .dots { margin-top: 8px; }
+
+  .features { padding-top: 40px; }
+  .section-title, .legal-body h2 { margin-bottom: 24px; font-size: 1.375rem; line-height: 1.2; }
+  .feature { gap: 24px; padding: 28px 0; }
+  .lead, .statement { margin-bottom: 12px; font-size: 1.25rem; line-height: 1.25; }
+  .band { margin: 0; padding: 40px 0; }
+  .band-inner { gap: 32px; }
+  .feature-text .flow { margin-top: 24px; }
+
+  .pricing { padding: 28px 0; }
+  .panel { padding: 24px 20px; }
+  .price { margin-bottom: 16px; font-size: 1rem; }
+  .price .num { font-size: 1.5rem; }
+
+  .demo { gap: 24px; padding: 28px 0 40px; }
+  .sent { padding: 20px; font-size: 1.125rem; }
+
+  .legal { padding: 24px 0 40px; }
+  .legal h1 { margin-bottom: 20px; font-size: 1.75rem; line-height: 1.15; }
+  .legal-contents { margin-bottom: 28px; padding: 16px; }
+  .legal-body section { padding: 4px 0 20px; }
+  .legal-body section + section { padding-top: 24px; }
+  .legal-body h3 { font-size: 1rem; }
+}

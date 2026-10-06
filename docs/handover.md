@@ -242,7 +242,7 @@ server location, B2 region, email provider, retention periods, DPO, breach notic
 ## Tests
 `website/tests/` (homepage and legal: hosts, copy and writing rules, form, 400 KB and 15 KB budgets, motion
 rules, pattern contrast, contents, NDPA sections, sentence length). `tests/ui/screens.test.js` photographs the
-three pages at 320, 360, 414, 768, 1024, 1280 and 1920 and checks the slides on a fake clock.
+three pages at 320, 360, 390, 414, 768, 1024, 1280 and 1920 and checks the slides on a fake clock.
 `tests/test_design.py` follows `{% extends %}` and skips `parts/`; `tests/test_pages.py` counts the site's
 one module (no imports, no import map). Controls were run for each (break, see red, restore).
 
