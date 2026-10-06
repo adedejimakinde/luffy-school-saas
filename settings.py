@@ -77,6 +77,14 @@ SITE_URLCONF = "urls_site"
 #: processes the way `accounts.throttling` explains a cache would not.
 DEMO_REQUESTS_PER_HOUR = int(os.environ.get("DEMO_REQUESTS_PER_HOUR", 5))
 
+#: Whether the privacy notice and the terms draw their open TODO notes (the
+#: boxes naming what the lawyer or the owner still has to settle). Off for the
+#: public: a visitor sees the pages without them. On in development and the
+#: demo (`DJANGO_DEBUG=1`), where the pages are read to finish them, and the
+#: legal tests switch it on for themselves. `SHOW_LEGAL_TODOS=1` turns it on
+#: anywhere else; `docs/handover.md` lists every note still open.
+SHOW_LEGAL_TODOS = os.environ.get("SHOW_LEGAL_TODOS", "1" if DEBUG else "0") == "1"
+
 #: **Development only: the whole demo through one host.** A Codespace forwards
 #: one port, which is one hostname, so the portal and a school cannot both be
 #: reached. With this on, that one host (a school's `Domain` row) also answers

@@ -6,6 +6,7 @@ one module it loads moves the slides and the fade-ups and is not needed to read
 anything or to send the form.
 """
 
+import re
 from datetime import timedelta
 
 from django.conf import settings
@@ -25,6 +26,20 @@ from .notify import demo_requested
 #: `{% static %}` URL is hashed and there is nothing behind it to go stale
 #: (`tests/test_pages.py` holds it to that).
 SITE_MODULES = ("website/site.js",)
+
+#: A fact or a claim still to be settled, drawn on the legal pages as a box
+#: (`.todo`). Only `settings.SHOW_LEGAL_TODOS` shows them; a public reader gets
+#: the text without them. `docs/handover.md` lists every open one.
+_TODO_NOTE = re.compile(r'[ \t]*<span class="todo">.*?</span>', re.S)
+
+
+def legal_page(request, template):
+    """A legal page, with its TODO notes only where the setting asks for them."""
+    response = render(request, template, {"portal_host": portal_host()})
+    if not settings.SHOW_LEGAL_TODOS:
+        response.content = _TODO_NOTE.sub("", response.content.decode())
+    return response
+
 
 #: Where the form sends a reader back to once it is saved: the thank-you, in
 #: place of the form, and the browser's back and reload do not post it twice.
@@ -78,10 +93,10 @@ def homepage(request):
 @require_http_methods(["GET", "HEAD"])
 def privacy(request):
     """The privacy notice. Plain words, every legal claim marked for the lawyer."""
-    return render(request, "website/privacy.html", {"portal_host": portal_host()})
+    return legal_page(request, "website/privacy.html")
 
 
 @require_http_methods(["GET", "HEAD"])
 def terms(request):
     """The terms of use, on the same terms as `privacy`."""
-    return render(request, "website/terms.html", {"portal_host": portal_host()})
+    return legal_page(request, "website/terms.html")

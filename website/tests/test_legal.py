@@ -22,6 +22,7 @@ PRIVACY_SECTIONS = [
 ]
 
 
+@override_settings(SHOW_LEGAL_TODOS=True)
 class TheLegalPagesTests(SiteSetUp):
     def page(self, path):
         response = self.get(path)
@@ -104,3 +105,21 @@ class TheLegalPagesTests(SiteSetUp):
     def test_with_no_site_host_they_are_nobodys(self):
         for path in PAGES:
             self.assertEqual(self.client.get(path, HTTP_HOST=SITE).status_code, 404)
+
+
+class TheLegalTodosSwitchTests(SiteSetUp):
+    """`SHOW_LEGAL_TODOS`: off, a public reader sees no TODO box and no TODO word."""
+
+    def test_off_there_is_no_todo_on_either_page(self):
+        for path in PAGES:
+            with self.subTest(path=path), override_settings(SHOW_LEGAL_TODOS=False):
+                page = self.get(path).content.decode()
+                self.assertNotIn('class="todo"', page)
+                self.assertNotIn("TODO", page)
+                # Still the whole page: its contents list and its sections.
+                self.assertGreaterEqual(len(re.findall(r'<section id="', page)), 10)
+
+    def test_on_the_notes_are_there(self):
+        for path in PAGES:
+            with self.subTest(path=path), override_settings(SHOW_LEGAL_TODOS=True):
+                self.assertIn('class="todo"', self.get(path).content.decode())
