@@ -7,7 +7,7 @@ A short pass over what a phone shows. Everything here is layout or one setting; 
 - **Homepage on a phone.** Below 840px the two laptop screens (the broadsheet and the proprietor's home) are phone-sized crops of the same screens, in a phone frame: `broadsheet-phone.webp` and `home-phone.webp`, cut by `scripts/site_shots.py` (`CROPS`) from the laptop WebP files. A `<picture>` serves one or the other, so a phone downloads only its crop. Desktop is unchanged.
 - **Pricing card.** The "Pricing" label above the heading is gone (the heading is now the `h2`), and "No setup fee." is one unbreakable phrase, so it never leaves a word alone on a line.
 - **Principal home, Today.** A row with no time no longer carries an empty `<time>` that held the time column open; it starts at the left, as the timed rows' times do.
-- **Tab bar.** `--tabbar` (the links' 60px and the rule above them) is one token: the bar's links use it and so does the page's bottom padding, which is exactly the bar's height plus the phone's safe area, so the last control is never under the bar. A control that sticks to the bottom (`.sticky-actions`) clears it by the same. The layout test at 390px covers register, marks, remarks and timetable, at 844 and 640px tall: the last control ends above the bar, and the padding equals the bar.
+- **Tab bar.** `--tabbar` (61px: the links' 60px and the rule above them) is one token: the page's bottom padding is exactly it plus the phone's safe area, which is the bar's whole height, so the last control is never under the bar (it used to be the bar plus 24px, so the last button now sits right against the bar's edge). The layout test at 390px covers register, marks, remarks and timetable, at 844 and 640px tall: the last control ends above the bar, and the padding equals the bar. `.sticky-actions` (unused today) is not given a bar offset: nothing uses it, and the CSS budget has no room for rules nothing needs (see below).
 - **Legal TODO notes.** `SHOW_LEGAL_TODOS` (settings.py) draws the TODO boxes on the privacy notice and the terms. Off by default, so a public visitor sees neither the boxes nor the word. On when `DJANGO_DEBUG=1` (development and the demo, including the CI screens job), switched on by the legal tests for themselves, and `SHOW_LEGAL_TODOS=1` turns it on anywhere. Off, a sentence that ended in a note reads short ("Classnode is run by Classnode, RC number  Our address is"), so these pages are not ready for the public until the list below is done. `website/views.py` strips the notes from the rendered page.
 
 ## Every open TODO (62 on the legal pages, 2 on the homepage form)
@@ -88,6 +88,10 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 2. TODO: message when one address has sent too many requests in an hour.
 
 The homepage form's two refusals have no wording yet. Those two messages are not behind `SHOW_LEGAL_TODOS`: they show only when someone's form is refused, and they show to the public until the wording is written.
+
+## The 150 KB budget
+
+`/marking/` is the heaviest page: 153,350 bytes on `main` against a 153,600 limit, so about 250 bytes of room. This pass nets +81 bytes there (the marks and tab bar rules), so about 170 are left. Anything added to `design.css` or `marking.css` needs to take something out.
 
 ## Not verified
 

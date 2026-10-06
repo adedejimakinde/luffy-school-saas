@@ -98,11 +98,7 @@
 
   --sidebar: 256px;
   --topbar: 64px;
-  /* The phone's tab bar: its links (60px) and the rule above them. Its whole
-     height is this and the phone's safe area; the page's foot is padded by
-     the same, so the last control is never under the bar. */
-  --tabbar-link: 60px;
-  --tabbar: calc(var(--tabbar-link) + 1px);
+  --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1009,7 +1005,7 @@ body.has-shell { padding: 0; }
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-height: var(--tabbar-link);
+    min-height: calc(var(--tabbar) - 1px);
     color: var(--muted);
     text-decoration: none;
   }
@@ -1017,10 +1013,8 @@ body.has-shell { padding: 0; }
   .tabbar a[aria-current="page"] { color: var(--brand); }
   .tabbar .tab-label { font-size: 0.8125rem; font-weight: 700; }
 
-  /* Exactly the bar's height, safe area included (the bar pads itself by it).
-     A control that sticks to the bottom clears the bar by the same. */
+  /* The bar's own height, safe area included: the last control clears it. */
   body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px)); }
-  body.has-tabbar .sticky-actions { bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* A save button that stays in reach on a long list: the register on a phone. */

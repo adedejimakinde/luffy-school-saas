@@ -37,9 +37,7 @@ main { max-width: 34rem; }
 
 .roster .row {
   display: grid;
-  /* Both number columns are fixed: each row is its own grid, so an `auto`
-     total ("7/20" here, "100/100" there) would slide the box beside it. */
-  grid-template-columns: 1fr 5rem 4.75rem;
+  grid-template-columns: 1fr 5rem 4.75rem; /* fixed: an auto total slides the box */
   gap: 8px 12px;
   align-items: center;
   padding: 10px 0;
@@ -50,12 +48,9 @@ main { max-width: 34rem; }
 
 .roster input {
   grid-column: 2;
-  /* One width for every box, so the column is the same whether the mark is 1,
-     2 or 3 digits (the track is 5rem; the box fills it and no more). */
   width: 5rem;
   justify-self: end;
-  box-sizing: border-box;
-  /* 48px so a thumb can reach it; right-aligned so the digits line up. */
+  /* 48px for a thumb; one width, right-aligned, so 1, 2 and 3 digits line up. */
   min-height: var(--control-lg);
   text-align: right;
   font-variant-numeric: tabular-nums;
