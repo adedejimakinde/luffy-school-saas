@@ -48,8 +48,12 @@ main { max-width: 34rem; }
 
 .roster input {
   grid-column: 2;
-  width: 100%;
-  /* 48px so a thumb can reach it; right-aligned so two-digit marks line up. */
+  /* One width for every box, so the column is the same whether the mark is 1,
+     2 or 3 digits (the track is 5rem; the box fills it and no more). */
+  width: 5rem;
+  justify-self: end;
+  box-sizing: border-box;
+  /* 48px so a thumb can reach it; right-aligned so the digits line up. */
   min-height: var(--control-lg);
   text-align: right;
   font-variant-numeric: tabular-nums;

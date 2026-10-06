@@ -259,7 +259,8 @@ export function today(happened, on) {
     '<section class="card today-card">',
     "<h2>Today</h2>",
     '<ul class="today-list">',
-    items.map(([at, text]) => `<li><time>${at}</time><span>${text}</span></li>`).join(""),
+    // No time, no <time>: an empty one still holds its column and indents the row.
+    items.map(([at, text]) => `<li>${at ? `<time>${at}</time>` : ""}<span>${text}</span></li>`).join(""),
     "</ul>",
     "</section>",
   ].join("");
