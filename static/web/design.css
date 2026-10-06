@@ -98,6 +98,7 @@
 
   --sidebar: 256px;
   --topbar: 64px;
+  --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1004,7 +1005,7 @@ body.has-shell { padding: 0; }
     align-items: center;
     justify-content: center;
     gap: 2px;
-    min-height: 60px;
+    min-height: calc(var(--tabbar) - 1px);
     color: var(--muted);
     text-decoration: none;
   }
@@ -1012,10 +1013,8 @@ body.has-shell { padding: 0; }
   .tabbar a[aria-current="page"] { color: var(--brand); }
   .tabbar .tab-label { font-size: 0.8125rem; font-weight: 700; }
 
-  /* The bar's 60px links and its rule, the phone's own safe area under them
-     (the bar pads itself by the same amount), and 24px so the last row is
-     read above the bar rather than against it. */
-  body.has-tabbar .content { padding-bottom: calc(85px + env(safe-area-inset-bottom, 0px)); }
+  /* The bar's own height, safe area included: the last control clears it. */
+  body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* A save button that stays in reach on a long list: the register on a phone. */

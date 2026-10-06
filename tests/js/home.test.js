@@ -189,6 +189,13 @@ test("today: registers, payments, and each step with its time", () => {
   assert.match(html, /<time>10:15<\/time><span>JSS 1A approved<\/span>/);
 });
 
+test("today: a row without a time has no empty time cell to indent it", () => {
+  const html = states.today({ registers: 1, classes: 3, payments: 2, steps: [{ at: "10:15", text: "JSS 1A approved" }] }, "2026-09-23");
+  assert.doesNotMatch(html, /<time><\/time>/);
+  assert.match(html, /<li><span>Registers: 1 of 3 classes taken/);
+  assert.match(html, /<li><span>2 payments recorded<\/span><\/li>/);
+});
+
 test("a weekend with no register does not nag about registers", () => {
   const saturday = states.today({ ...HOME.happened, registers: 0 }, "2026-09-26");
   const wednesday = states.today({ ...HOME.happened, registers: 0 }, "2026-09-23");

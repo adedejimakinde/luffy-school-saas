@@ -37,7 +37,7 @@ main { max-width: 34rem; }
 
 .roster .row {
   display: grid;
-  grid-template-columns: 1fr 5rem auto;
+  grid-template-columns: 1fr 5rem 4.75rem; /* fixed: an auto total slides the box */
   gap: 8px 12px;
   align-items: center;
   padding: 10px 0;
@@ -48,14 +48,15 @@ main { max-width: 34rem; }
 
 .roster input {
   grid-column: 2;
-  width: 100%;
-  /* 48px so a thumb can reach it; right-aligned so two-digit marks line up. */
+  width: 5rem;
+  justify-self: end;
+  /* 48px for a thumb; one width, right-aligned, so 1, 2 and 3 digits line up. */
   min-height: var(--control-lg);
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
 
-.total { grid-column: 3; color: var(--muted); font-variant-numeric: tabular-nums; }
+.total { grid-column: 3; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 
 .note { grid-column: 1 / -1; font-size: var(--small); }
 

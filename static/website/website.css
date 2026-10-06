@@ -39,6 +39,7 @@ body.site > main {
 }
 
 .num { font-variant-numeric: tabular-nums; }
+.nowrap { white-space: nowrap; }
 
 /* A fact still to be decided, shown as one on the page. */
 .todo {
@@ -554,4 +555,13 @@ body.site > main {
   .legal-body section { padding: 4px 0 20px; }
   .legal-body section + section { padding-top: 24px; }
   .legal-body h3 { font-size: 1rem; }
+}
+
+/* Where a feature stacks (below 840px) the laptop is a phone: the same screen,
+   cropped to the part worth reading, in the phone's own frame. */
+@media (max-width: 839.98px) {
+  .laptop { width: min(100%, 300px); padding-inline: 0; }
+  .laptop-screen { padding: 8px; border-radius: 30px; }
+  .laptop-screen img { border-radius: 22px; }
+  .laptop-base { display: none; }
 }

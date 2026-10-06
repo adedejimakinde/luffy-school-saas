@@ -70,6 +70,8 @@ A plain form post, CSRF-checked, that works with no script.
   given for them. `website/tests/test_homepage.py` holds the page to that copy
   and to the writing rules: no en or em dash, no exclamation or question mark,
   no sentence starting "Imagine", none of the banned words.
+- **TODO notes** on the privacy notice and the terms are drawn only when `SHOW_LEGAL_TODOS` is on (off by
+  default; on with `DJANGO_DEBUG=1` and in the legal tests). Every open one is listed in `docs/handover.md`.
 - **One Blue** (`docs/design.md`): the tokens from `design.css`, Hanken
   Grotesk, no gradient. The one dark band is the fees section, on the ink. It
   is the one thing that runs edge to edge; everything else stops at 1200px.
