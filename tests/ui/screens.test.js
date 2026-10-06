@@ -524,6 +524,98 @@ describe("the phone menu", () => {
   }
 });
 
+describe("a phone's 390px", () => {
+  // The four teacher screens that carry the fixed bottom tab bar. Scrolled to
+  // the foot, the last control must sit above the bar, and the page's own
+  // bottom padding must be the bar's height: a bar over the last button is a
+  // button nobody can press.
+  const WITH_TAB_BAR = [
+    ["register", "/register/", ['[data-action="open"]']],
+    ["marking", "/marking/", ['[data-action="pick-assessment"]', '[data-action="pick-class"]']],
+    ["remarks", "/comments/", []],
+    ["timetable", "/timetable/", []],
+  ];
+  for (const [name, path, steps] of WITH_TAB_BAR) {
+    for (const height of [844, 640]) {
+      test(`${name}: the last control clears the tab bar on a ${height}px screen`, async () => {
+        const context = await signedIn("sunrise.teacher");
+        const page = await context.newPage();
+        try {
+          await page.setViewportSize({ width: 390, height });
+          await page.goto(`${SUNRISE}${path}`);
+          await settle(page);
+          for (const selector of steps) {
+            await page.locator(selector).first().click();
+            await settle(page);
+          }
+          const found = await page.evaluate(() => {
+            window.scrollTo(0, document.documentElement.scrollHeight);
+            const bar = document.querySelector(".tabbar").getBoundingClientRect();
+            const content = getComputedStyle(document.querySelector(".content"));
+            const controls = [...document.querySelectorAll(".content button, .content a, .content input, .content select")].filter((el) => {
+              const box = el.getBoundingClientRect();
+              return box.width > 0 && box.height > 0 && getComputedStyle(el).visibility !== "hidden";
+            });
+            const foot = Math.max(...controls.map((el) => el.getBoundingClientRect().bottom));
+            const all = [...document.querySelectorAll(".content *")].filter((el) => el.getBoundingClientRect().height > 0);
+            return {
+              barTop: bar.top,
+              barHeight: bar.height,
+              padding: parseFloat(content.paddingBottom),
+              foot,
+              content: Math.max(...all.map((el) => el.getBoundingClientRect().bottom)),
+              controls: controls.length,
+            };
+          });
+          assert.ok(found.controls > 0, `${name}: no control on the page`);
+          assert.ok(Math.abs(found.padding - found.barHeight) <= 1, `${name}: ${found.padding}px of bottom padding under a ${found.barHeight}px bar`);
+          assert.ok(found.foot <= found.barTop + 0.5, `${name}: the last control ends at ${found.foot}px, under the bar at ${found.barTop}px`);
+          assert.ok(found.content <= found.barTop + 0.5, `${name}: content runs to ${found.content}px, under the bar at ${found.barTop}px`);
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  }
+
+  test("marks entry: every box is one width, right-aligned, with its right edges on one line", async () => {
+    const context = await signedIn("sunrise.teacher");
+    const page = await context.newPage();
+    try {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto(`${SUNRISE}/marking/`);
+      await settle(page);
+      for (const selector of ['[data-action="pick-assessment"]', '[data-action="pick-class"]']) {
+        await page.locator(selector).first().click();
+        await settle(page);
+      }
+      await page.waitForSelector(".roster input");
+      const boxes = await page.evaluate(() =>
+        [...document.querySelectorAll(".roster input")].map((el) => {
+          const box = el.getBoundingClientRect();
+          return { width: Math.round(box.width * 10) / 10, right: Math.round(box.right * 10) / 10, align: getComputedStyle(el).textAlign };
+        }),
+      );
+      assert.ok(boxes.length > 3, "the sheet has no mark boxes");
+      assert.equal(new Set(boxes.map((b) => b.width)).size, 1, `box widths: ${[...new Set(boxes.map((b) => b.width))]}`);
+      assert.equal(new Set(boxes.map((b) => b.right)).size, 1, "the right edges do not line up");
+      assert.ok(boxes.every((b) => b.align === "right" || b.align === "end"), "a box is not right-aligned");
+      // 1, 2 and 3 digits in the same boxes, and the boxes do not move.
+      const input = page.locator(".roster input").first();
+      const before = await input.boundingBox();
+      for (const value of ["7", "70", "100"]) {
+        await input.fill(value);
+        const box = await input.boundingBox();
+        assert.equal(Math.round(box.width * 10), Math.round(before.width * 10), `the box changed width at ${value}`);
+        assert.equal(Math.round(box.x * 10), Math.round(before.x * 10), `the box moved at ${value}`);
+      }
+      await input.fill("");
+    } finally {
+      await page.close();
+    }
+  });
+});
+
 describe("the roll import's preview", () => {
   // A file is chosen, not tapped, so the drill-down above cannot reach the
   // preview. One good row and one with three problems, checked and never

@@ -1,3 +1,101 @@
+# Where I stopped: 2026-10-06, the phone polish pass
+
+A short pass over what a phone shows. Everything here is layout or one setting; no data or API changed.
+
+- **Mobile sizing (#250, merged).** The public site's phone measure: 28px headline, 16px body, 22px section headings, 16px page padding, sections 40 to 56px apart, a hero shorter than the screen. `tests/ui/screens.test.js` now runs the site pages at 390px as well and fails on any of these.
+- **Marks entry (`/marking/`).** Every mark box is 5rem wide and right-aligned, and the running total beside it is a fixed 4.75rem column, so the boxes' right edges stay on one line whether the mark is 1, 2 or 3 digits. (The total column used to be `auto`, which slid each row's box by the width of its total.)
+- **Homepage on a phone.** Below 840px the two laptop screens (the broadsheet and the proprietor's home) are phone-sized crops of the same screens, in a phone frame: `broadsheet-phone.webp` and `home-phone.webp`, cut by `scripts/site_shots.py` (`CROPS`) from the laptop WebP files. A `<picture>` serves one or the other, so a phone downloads only its crop. Desktop is unchanged.
+- **Pricing card.** The "Pricing" label above the heading is gone (the heading is now the `h2`), and "No setup fee." is one unbreakable phrase, so it never leaves a word alone on a line.
+- **Principal home, Today.** A row with no time no longer carries an empty `<time>` that held the time column open; it starts at the left, as the timed rows' times do.
+- **Tab bar.** `--tabbar` (the links' 60px and the rule above them) is one token: the bar's links use it and so does the page's bottom padding, which is exactly the bar's height plus the phone's safe area, so the last control is never under the bar. A control that sticks to the bottom (`.sticky-actions`) clears it by the same. The layout test at 390px covers register, marks, remarks and timetable, at 844 and 640px tall: the last control ends above the bar, and the padding equals the bar.
+- **Legal TODO notes.** `SHOW_LEGAL_TODOS` (settings.py) draws the TODO boxes on the privacy notice and the terms. Off by default, so a public visitor sees neither the boxes nor the word. On when `DJANGO_DEBUG=1` (development and the demo, including the CI screens job), switched on by the legal tests for themselves, and `SHOW_LEGAL_TODOS=1` turns it on anywhere. Off, a sentence that ended in a note reads short ("Classnode is run by Classnode, RC number  Our address is"), so these pages are not ready for the public until the list below is done. `website/views.py` strips the notes from the rendered page.
+
+## Every open TODO (62 on the legal pages, 2 on the homepage form)
+
+Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's to settle, "owner" is the owner's. The first line of each is the section's id and heading.
+
+**Privacy notice (`/privacy/`)**
+
+1. `#who`, Who we are: TODO: RC number.
+2. `#who`, Who we are: TODO: registered address.
+3. `#who`, Who we are: TODO: lawyer.
+4. `#roles`, The school decides. We process.: TODO: lawyer.
+5. `#roles`, The school decides. We process.: TODO: lawyer to draft the agreement and confirm it exists before launch.
+6. `#roles`, The school decides. We process.: TODO: lawyer.
+7. `#why`, Why we use it: TODO: lawyer.
+8. `#basis`, Our legal basis: TODO: lawyer to state the bases under section 25 of the NDPA.
+9. `#basis`, Our legal basis: TODO: lawyer.
+10. `#basis`, Our legal basis: TODO: lawyer.
+11. `#basis`, Our legal basis: TODO: lawyer.
+12. `#stored`, Where it is stored: TODO: country and city of the server.
+13. `#stored`, Where it is stored: TODO: B2 region.
+14. `#stored`, Where it is stored: TODO: lawyer to state the basis for transfer under Part VIII of the NDPA, and any filing it needs.
+15. `#shared`, Who we share it with: TODO: name.
+16. `#shared`, Who we share it with: TODO: lawyer.
+17. `#shared`, Who we share it with: TODO: lawyer.
+18. `#shared`, Who we share it with: TODO: lawyer to confirm each agreement.
+19. `#kept`, How long we keep it: TODO: lawyer and owner to set how long records are kept after a school leaves.
+20. `#kept`, How long we keep it: TODO: lawyer.
+21. `#kept`, How long we keep it: TODO: confirm once backups are running.
+22. `#kept`, How long we keep it: TODO: period.
+23. `#children`, Children's data and parents' consent: TODO: lawyer to confirm what section 31 of the NDPA requires and how the school records consent.
+24. `#children`, Children's data and parents' consent: TODO: lawyer.
+25. `#children`, Children's data and parents' consent: TODO: lawyer to confirm this is sensitive personal data under the NDPA and what more the school must do.
+26. `#rights`, Your rights: TODO: lawyer to confirm this list.
+27. `#rights`, Your rights: TODO: lawyer to state the time.
+28. `#rights`, Your rights: TODO: lawyer.
+29. `#complain`, How to complain: TODO: lawyer to add the Commission's current contact details.
+30. `#contact`, Contact us: TODO: registered address.
+31. `#contact`, Contact us: TODO: name, or whether one is required.
+32. `#changes`, Changes to this notice: TODO: lawyer.
+33. `#changes`, Changes to this notice: TODO: date.
+
+**Terms (`/terms/`)**
+
+1. `#about`, About these terms: TODO: RC number.
+2. `#about`, About these terms: TODO: lawyer.
+3. `#about`, About these terms: TODO: lawyer.
+4. `#service`, What Classnode does: TODO: lawyer and owner to set the notice period.
+5. `#accounts`, Signing in: TODO: lawyer.
+6. `#school`, What the school is responsible for: TODO: lawyer.
+7. `#school`, What the school is responsible for: TODO: lawyer.
+8. `#fees`, Fees and payments: TODO: lawyer.
+9. `#fees`, Fees and payments: TODO: lawyer and owner to confirm.
+10. `#fees`, Fees and payments: TODO: lawyer.
+11. `#price`, Our price: TODO: when invoices are sent and when they must be paid.
+12. `#price`, Our price: TODO: lawyer and owner to set the steps and notice.
+13. `#price`, Our price: TODO: owner to confirm.
+14. `#use`, Using the service properly: TODO: lawyer.
+15. `#data`, The school's data: TODO: lawyer.
+16. `#data`, The school's data: TODO: owner to confirm what format, and how long it takes.
+17. `#data`, The school's data: TODO: hours.
+18. `#data`, The school's data: TODO: lawyer to match the NDPA breach rules.
+19. `#availability`, When the service is not available: TODO: lawyer and owner to decide whether to promise an uptime figure.
+20. `#liability`, Our responsibility: TODO: lawyer to write what Classnode is and is not responsible for, and any limit on it, in plain words.
+21. `#ending`, Ending the service: TODO: lawyer and owner to set notice.
+22. `#ending`, Ending the service: TODO: period.
+23. `#ending`, Ending the service: TODO: lawyer.
+24. `#ending`, Ending the service: TODO: lawyer.
+25. `#law`, The law that applies: TODO: lawyer.
+26. `#law`, The law that applies: TODO: lawyer to set what happens next, and where.
+27. `#law`, The law that applies: TODO: lawyer.
+28. `#law`, The law that applies: TODO: date.
+29. `#contact`, Contact us: TODO: registered address.
+
+**Homepage form (`/`)**
+
+1. TODO: message when a field is missing or not right.
+2. TODO: message when one address has sent too many requests in an hour.
+
+The homepage form's two refusals have no wording yet. Those two messages are not behind `SHOW_LEGAL_TODOS`: they show only when someone's form is refused, and they show to the public until the wording is written.
+
+## Not verified
+
+- The Django suite's other jobs and the whole screens run are CI's to say; I ran the website tests, the JS tests and the new 390px tests locally.
+- The crops are cut from the existing laptop shots, not retaken, so the home crop shows the demo school's numbers.
+
+---
+
 # Where I stopped: 2026-10-05 (seventh session), the pilot QA's follow-ups: clearing a mark, the office's teaching screens, the import's email gap
 
 You answered the two open decisions from the pilot run: **step 2, build the screens; step 6, keep reusable

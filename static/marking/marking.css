@@ -37,7 +37,9 @@ main { max-width: 34rem; }
 
 .roster .row {
   display: grid;
-  grid-template-columns: 1fr 5rem auto;
+  /* Both number columns are fixed: each row is its own grid, so an `auto`
+     total ("7/20" here, "100/100" there) would slide the box beside it. */
+  grid-template-columns: 1fr 5rem 4.75rem;
   gap: 8px 12px;
   align-items: center;
   padding: 10px 0;
@@ -59,7 +61,7 @@ main { max-width: 34rem; }
   font-variant-numeric: tabular-nums;
 }
 
-.total { grid-column: 3; color: var(--muted); font-variant-numeric: tabular-nums; }
+.total { grid-column: 3; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 
 .note { grid-column: 1 / -1; font-size: var(--small); }
 
