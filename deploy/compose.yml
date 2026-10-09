@@ -1,4 +1,4 @@
-# The production stack, on one Hetzner server.
+# The production stack, on one VPS.
 #
 #   CLASSNODE_TAG=<full commit sha> docker compose -f deploy/compose.yml up -d
 #
@@ -81,7 +81,7 @@ services:
       - path: ${CLASSNODE_ETC:-/etc/classnode}/backup.env
         required: false
     volumes:
-      # On the Hetzner Volume, not the server's own disk, so the data outlives
+      # On the VPS volume, not the server's own disk, so the data outlives
       # a rebuilt server. Backups are separate and off-server (H3).
       - ${CLASSNODE_DATA:-/srv/classnode}/postgres:/var/lib/postgresql/data
     shm_size: 256mb

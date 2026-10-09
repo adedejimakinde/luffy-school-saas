@@ -19,8 +19,8 @@ Eleven things checked before the first real deploy. Nothing was added that is no
 **One more thing found:** the cron file, `deploy.yml` and `docs/deployment.md` used `/opt/classnode/deploy.sh`, `/opt/classnode/restore-check.sh` and `cd /opt/classnode`; the clone in `docs/demo-server.md` puts them in `/opt/classnode/deploy/`. The nightly backup, the weekly restore test and the deploy button would each have failed. All use `/opt/classnode/deploy` now, with a test ([#252](https://github.com/adedejimakinde/luffy-school-saas/pull/252)).
 
 ## Decisions (from this check)
-- **`load_demo` refuses when a real school exists.** Any school whose slug is not `sunrise-demo`, `harbour-demo` or `showcase-demo` stops it, with those slugs named in the error, in both the normal and `--showcase` modes. `DEMO_SERVER=1` is no longer the only thing between a production database and fake children. The showcase slug is allowed because it is a demo school the same command makes and the docs say it sits beside the other two. Two tests in `schools/tests/test_seed_demo.py` (`LoadDemoTests`).
-- **Hosting is "any Ubuntu 24.04 VPS (Contabo or similar)"**, not Hetzner, in `docs/`. Not changed: the public privacy page (`website/templates/website/privacy.html`) still says Hetzner, and a comment in `deploy/compose.yml` mentions a "Hetzner Volume"; both need the real host once chosen.
+- **`load_demo` refuses when a real school exists.** Any school whose slug is not `sunrise-demo`, `harbour-demo` or `showcase-demo` stops it, with those slugs named in the error, in both the normal and `--showcase` modes. `DEMO_SERVER=1` is no longer the only thing between a production database and fake children. The showcase slug is allowed because it is a demo school the same command makes and the docs say it sits beside the other two. Two tests in `schools/tests/test_seed_demo.py` (`LoadDemoTests`). **Controls run (broken, seen red, restored):** with the guard never called, the refusal test fails (`CommandError not raised`); with the showcase slug dropped from the allowed set, the allow test fails. The allow test covers the three slugs (showcase first, then the two); only the showcase slug was broken in the control.
+- **Hosting is "any Ubuntu 24.04 VPS (Contabo or similar)"**, not Hetzner, in `docs/`, and now in `deploy/compose.yml` (comments) and the privacy notice, which names no provider and no country. In its place `#stored` carries a legal TODO (shown only with `SHOW_LEGAL_TODOS`): state the hosting provider and where the server is once it is chosen, with the basis for the transfer. The "Who we share it with" list now names only Backblaze and Sentry; add the host there too when it is chosen.
 - **`dump.rdb` is untracked** (removed in #252; `*.rdb` is in `.gitignore`). Nothing to do.
 - **History is not rewritten.** The hook that re-authors commits stays declined; `main` is untouched.
 
@@ -63,8 +63,8 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 9. `#basis`, Our legal basis: TODO: lawyer.
 10. `#basis`, Our legal basis: TODO: lawyer.
 11. `#basis`, Our legal basis: TODO: lawyer.
-12. `#stored`, Where it is stored: TODO: country and city of the server.
-13. `#stored`, Where it is stored: TODO: B2 region.
+12. `#stored`, Where it is stored: TODO: B2 region.
+13. `#stored`, Where it is stored: TODO: lawyer. State the hosting provider and where the server is once it is chosen, and the basis for the transfer (the notice names no provider until then).
 14. `#stored`, Where it is stored: TODO: lawyer to state the basis for transfer under Part VIII of the NDPA, and any filing it needs.
 15. `#shared`, Who we share it with: TODO: name.
 16. `#shared`, Who we share it with: TODO: lawyer.
