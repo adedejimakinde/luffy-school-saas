@@ -63,8 +63,8 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 9. `#basis`, Our legal basis: TODO: lawyer.
 10. `#basis`, Our legal basis: TODO: lawyer.
 11. `#basis`, Our legal basis: TODO: lawyer.
-12. `#stored`, Where it is stored: TODO: hosting provider and server location once chosen, with the basis for the transfer (the notice names no provider until then); TODO: B2 region; TODO: lawyer, transfer basis.
-13. `#stored`, Where it is stored: TODO: B2 region.
+12. `#stored`, Where it is stored: TODO: B2 region.
+13. `#stored`, Where it is stored: TODO: lawyer. State the hosting provider and where the server is once it is chosen, and the basis for the transfer (the notice names no provider until then).
 14. `#stored`, Where it is stored: TODO: lawyer to state the basis for transfer under Part VIII of the NDPA, and any filing it needs.
 15. `#shared`, Who we share it with: TODO: name.
 16. `#shared`, Who we share it with: TODO: lawyer.
