@@ -2,15 +2,22 @@
 # The weekly restore test (decided 2026-09-23). Run on the server from the
 # directory holding compose.yml; deploy/cron/classnode schedules it.
 #
+# 0. Ask the LIVE database for one school's row counts (`verify_restore
+#    --print-counts`), before anything is restored. A school is named by
+#    RESTORE_CHECK_SCHOOL (a slug), else the first by slug.
 # 1. Start `restore-db`: the latest base backup from B2, WAL replayed to the
 #    end, in a throwaway volume.
 # 2. Wait until recovery has finished and it is a normal server.
 # 3. Ask the application whether it is whole: `manage.py verify_restore`,
-#    pointed at it. That reports to Sentry's `restore-check` monitor either way.
+#    pointed at it, with step 0's counts: every table of that school must hold
+#    the rows the live database held (schools/restore_check.py says how many may
+#    be missing). That reports to Sentry's `restore-check` monitor either way.
 # 4. Tear the throwaway database and its volume down, whatever happened.
 #
 # A restore that never becomes ready never reaches step 3, so nothing checks
-# in — and the monitor alerts on the missed check-in. Silence is a failure.
+# in — and the monitor alerts on the missed check-in. Silence is a failure. So
+# is step 0 failing: with the live database unreachable there is no baseline,
+# and the script stops before it checks in.
 set -euo pipefail
 cd "$(dirname "$0")"
 set -a
@@ -19,6 +26,11 @@ set -a
 set +a
 export CLASSNODE_TAG
 CLASSNODE_TAG="$(cat deployed-sha)"
+
+# The baseline, from the live database. `tail -n 1`: the count line is the last
+# thing the command prints, whatever a container logs before it.
+LIVE_COUNTS="$(docker compose run --rm --no-deps web python manage.py verify_restore \
+  --print-counts ${RESTORE_CHECK_SCHOOL:+--school "$RESTORE_CHECK_SCHOOL"} | tail -n 1)"
 
 # Only the throwaway service and its own volume. Never `down -v`: that would
 # take the certificate's volume (caddy-data) with it. The project is named
@@ -44,4 +56,5 @@ if [ "$ready" != 1 ]; then
   exit 1
 fi
 
-docker compose run --rm --no-deps -e POSTGRES_HOST=restore-db web python manage.py verify_restore
+docker compose run --rm --no-deps -e POSTGRES_HOST=restore-db web python manage.py verify_restore \
+  --expect-counts "$LIVE_COUNTS"

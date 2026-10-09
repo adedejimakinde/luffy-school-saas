@@ -98,6 +98,35 @@ against — dropping or renaming something it reads — ships in two deploys: th
 first stops using the thing, the second removes it. A deploy that breaks that
 rule is recovered by restoring the database (H3), not by rolling back images.
 
+## Migration order
+
+The order of everything that changes the schema, so it is never reasoned out at a
+shell on a deploy night.
+
+1. **A deploy** runs `migrate_schemas --noinput` (`deploy/deploy.sh`, step 2),
+   with the **new** image, **before** `web`, `worker` and `caddy` are swapped:
+   the old code keeps serving while it runs. `migrate_schemas` does `public`
+   first (the shared apps), then every school's schema, one after another.
+   Public first, because every request reads it before it knows which school it
+   is for. A migration can only be additive for this to be safe (see
+   "Deploying" above).
+2. **A migration that fails** stops the deploy there (`set -e`): nothing has been
+   swapped, the old code is still serving, and the schemas already done stay
+   done. Fix the cause and run `deploy.sh` again for the same SHA; every
+   migration is recorded per schema, so what ran is not run twice. `/healthz/`
+   answers 200 throughout, so it will not tell you a school is behind:
+   `docker compose run --rm --no-deps web python manage.py verify_restore` does
+   (it lists every school and migration that is missing).
+3. **The first deploy ever** has no tables at all: `deploy.sh` migrates
+   `public` (there are no schools to do), and only then does onboarding start,
+   in the order above: `setup_portal`, `createsuperuser`, `create_school`.
+   `create_school` builds and migrates its own schema, so nothing is run by
+   hand for a new school, and it never runs before the first deploy.
+4. **A restore** brings back the migrations that were recorded when the backup
+   was taken. Deploy the commit that was running then, or a later one: its
+   `migrate_schemas` brings every schema forward. `verify_restore` is the
+   question to ask first.
+
 ## Onboarding: the portal, then each school
 
 Both are commands run in a shell on the server
@@ -153,8 +182,12 @@ Postgres 15 (Debian) with WAL-G pinned by version and checksum.
 `deploy/restore-check.sh` (Sunday 02:00 UTC): recovers the latest backup into
 a throwaway `restore-db`, waits for recovery to finish, then runs
 `manage.py verify_restore` against it — every school has its schema, `public`
-has every shared migration, every school's schema has every tenant migration
-(`schools/restore_check.py`). It tears the throwaway database and its volume
+has every shared migration, every school's schema has every tenant migration,
+and one school's tables hold the rows the live database held just before the
+restore began, give or take the last minute's writes (`schools/restore_check.py`;
+`RESTORE_CHECK_SCHOOL=<slug>` picks the school, else the first by slug). The
+commands to run it, and to restore for real, are in `docs/demo-server.md`,
+section 7. It tears the throwaway database and its volume
 down whatever happened. The verdict checks in to Sentry's `restore-check`
 monitor; a restore that never becomes ready never checks in, and the monitor
 alerts on the silence. **[needs B2 and Sentry]**

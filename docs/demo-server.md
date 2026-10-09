@@ -19,7 +19,8 @@ the repository's own files; the Cloudflare token scope and the Docker install ar
 from the tools' documentation and have not been exercised here. The first run is
 the test: if a step is wrong, fix this file in the same change.
 
-**What a demo server is not.** No backups (no B2, so WAL archiving stays off), no
+**What a demo server is not.** No backups (no B2, so WAL archiving stays off; section 7
+is how to turn them on, and how to restore, for a server that has B2), no
 error reports, no email, no SMS. Do not put a real child's name on it. It is
 rebuilt, not repaired (last section).
 
@@ -231,6 +232,88 @@ platform operator, who can open `/platform/` on the portal.
 **The demo parent cannot sign in.** Parents sign in with a code sent to their
 phone, and the demo has no provider and no phone on file. Show the parent's side
 from the staff logins (a released card is on JSS 1B's class page).
+
+## 7. Backups and restore (only once there is a B2 bucket)
+
+The demo needs none of this. A server that will hold real data does, and these are
+its commands, all run from `/opt/classnode/deploy` with the tag in the shell
+(step 4). What was run: the pinned WAL-G (the `Dockerfile`'s version and checksum)
+took a base backup, archived WAL, and restored to the last archived write, against
+a throwaway Postgres with file storage in place of B2. **Not run:** anything in
+Docker, or against B2.
+
+**Turn it on.** `/etc/classnode/backup.env` (mode 600), from a B2 bucket and an
+application key limited to it:
+
+```
+WALG_S3_PREFIX=s3://<bucket>/classnode
+AWS_ACCESS_KEY_ID=<B2 key id>
+AWS_SECRET_ACCESS_KEY=<B2 application key>
+AWS_ENDPOINT=https://s3.<region>.backblazeb2.com
+AWS_REGION=<region>
+WALG_LIBSODIUM_KEY=<openssl rand -hex 32>
+WALG_LIBSODIUM_KEY_TRANSFORM=hex
+BACKUP_HEARTBEAT_URL=<Sentry cron check-in URL for nightly-backup, optional>
+```
+
+Keep `WALG_LIBSODIUM_KEY` in a password manager too: without it the backups are
+noise. Then recreate the database container, which is when archiving starts
+(a few seconds of downtime: do it after school hours), and check it:
+
+```bash
+docker compose up -d --force-recreate db
+docker compose logs db | grep classnode-postgres     # "archiving WAL to s3://..."
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT archived_count, failed_count, last_failed_time FROM pg_stat_archiver"'
+```
+
+**Back up** (the cron job does this nightly; run it by hand once to see it work),
+and look at what is there:
+
+```bash
+docker compose exec -T db classnode-backup           # ends "classnode-backup: done"
+docker compose exec -T db wal-g backup-list
+cp /opt/classnode/deploy/cron/classnode /etc/cron.d/classnode   # the schedule, once
+```
+
+`classnode-backup` refuses to run when the WAL archiver has been failing, pushes a
+base backup, and prunes to 7 nightly, 4 weekly and 12 monthly.
+
+**Restore drill** (weekly by cron; run it by hand once before relying on it). It
+counts one school's rows on the live database, recovers the latest backup into a
+throwaway database, and requires that school's tables to hold those rows and every
+school to have its schema and migrations. `RESTORE_CHECK_SCHOOL=<slug>` picks the
+school (else the first by slug). The live database is not touched.
+
+```bash
+/opt/classnode/deploy/restore-check.sh               # prints "The restore is whole: ..." and the school's counts
+```
+
+**Restore for real** (the database is lost or wrong). On the server, stack stopped,
+the old data kept aside. `LATEST` can be a backup name from `wal-g backup-list`;
+without a recovery target the WAL is replayed to the end of what was archived.
+
+```bash
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
+docker compose stop web worker caddy db
+mv /srv/classnode/postgres /srv/classnode/postgres.old
+install -d -m 700 -o 999 -g 999 /srv/classnode/postgres
+docker compose run --rm --no-deps --entrypoint sh db -c "
+  gosu postgres wal-g backup-fetch \"\$PGDATA\" LATEST &&
+  gosu postgres touch \"\$PGDATA/recovery.signal\" &&
+  echo \"restore_command = 'wal-g wal-fetch %f %p'\" >> \"\$PGDATA/postgresql.auto.conf\" &&
+  echo \"recovery_target_action = 'promote'\" >> \"\$PGDATA/postgresql.auto.conf\""
+docker compose up -d db
+docker compose exec -T db sh -c 'until [ "$(psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT NOT pg_is_in_recovery()")" = t ]; do sleep 5; done'
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "ALTER SYSTEM RESET restore_command" -c "ALTER SYSTEM RESET recovery_target_action"'
+docker compose run --rm --no-deps web python manage.py verify_restore
+docker compose up -d web worker caddy
+```
+
+On a fresh server, do steps 2 and 3 first (the clone, Docker, the env files, the
+GHCR login) and `docker compose pull`, then these. `verify_restore` ends the
+restore: it must say `The restore is whole`. The time from the first command to
+there is the recovery time (`docs/deployment.md`: time it once, by hand, before
+launch).
 
 ## Updating and starting over
 
