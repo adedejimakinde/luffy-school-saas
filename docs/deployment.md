@@ -2,7 +2,7 @@
 
 How Classnode runs in production, and how a release gets there. The files are
 in `deploy/`; the images are built by CI. Decided 2026-09-23 (the hosting
-proposal): one Hetzner server, Docker Compose, a wildcard certificate validated
+proposal): one server (any Ubuntu 24.04 VPS, Contabo or similar), Docker Compose, a wildcard certificate validated
 through Cloudflare DNS, no connection pooler, WAL-G backups to Backblaze B2 with
 a weekly automatic restore test, Sentry (EU) for errors, and deploys by a manual
 button.
@@ -216,7 +216,7 @@ parameters are children's names), and tags every report with the school.
 |---|---|
 | H1, H2, H3 as code, tests and CI | nothing — no account and no domain |
 | First CI push of images to GHCR | nothing new (GitHub's own token) |
-| Provisioning the server | Hetzner project, your SSH public key, your admin IPs |
+| Provisioning the server | the VPS account (any Ubuntu 24.04 VPS, Contabo or similar), your SSH public key, your admin IPs |
 | DNS records and the first certificate | the domain registered, the zone on Cloudflare, a DNS-edit token for that zone |
 | Emailing invitations (until then `create_school` prints the link to hand over) | a transactional email provider, and SPF/DKIM/DMARC on the domain |
 | The first backup and restore drill | B2 bucket and key, a backup encryption key held offline |

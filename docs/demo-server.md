@@ -1,7 +1,7 @@
 # The demo server: classnode.co
 
 A throwaway server that holds the two fictional demo schools and nothing real,
-so people can click through Classnode. One Hetzner CX23 (Ubuntu 24.04), DNS on
+so people can click through Classnode. One server, any Ubuntu 24.04 VPS (Contabo or similar), DNS on
 Cloudflare, the same compose stack as production (`deploy/compose.yml`,
 `docs/deployment.md`). When it is up:
 

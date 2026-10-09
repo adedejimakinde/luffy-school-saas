@@ -5,7 +5,7 @@ Eleven things checked before the first real deploy. Nothing was added that is no
 | # | Check | Result | Notes |
 |---|---|---|---|
 | 1 | `DEBUG` off in production settings | **Pass** | Defaults off; `production.env` does not set it; `check --deploy --fail-level WARNING` is clean under it (CI runs it in the suite and again inside the built image). Not verifiable: the server's `secrets.env`; a `DJANGO_DEBUG=1` there would only be caught by the next CI run, not on the server. |
-| 2 | Every DEMO mode refuses to start with `DEBUG` off | **Fail, by design: yours to decide** | `DEMO_SINGLE_HOST=1` with `DEBUG` off raises `ImproperlyConfigured` at import (tested in a subprocess); `seed_demo` refuses without `DEBUG`. `DEMO_SERVER=1` does not: it is what the demo server runs with, with `DEBUG` off, and it only unlocks `load_demo` (which also needs `LOAD_DEMO_PASSWORD` and refuses a second run). A start-up refusal would stop the demo server. See "Only you" below. |
+| 2 | Every DEMO mode refuses to start with `DEBUG` off | **Fail, by design; `load_demo` now has a second lock** | `DEMO_SINGLE_HOST=1` with `DEBUG` off raises `ImproperlyConfigured` at import (tested in a subprocess); `seed_demo` refuses without `DEBUG`. `DEMO_SERVER=1` does not: it is what the demo server runs with, with `DEBUG` off, and it only unlocks `load_demo` (which also needs `LOAD_DEMO_PASSWORD` and refuses a second run). A start-up refusal would stop the demo server. See "Only you" below. |
 | 3 | No secrets in the repo or images | **Was fail, now pass** | No key, token, DSN or private key in the tree or in all 561 commits (only test fixtures and a build-time placeholder). Fail: `dump.rdb`, a Redis snapshot of queued task arguments, was tracked and `COPY . .` put it in the image; `.dockerignore` also did not exclude `.env`. Fixed in [#252](https://github.com/adedejimakinde/luffy-school-saas/pull/252), with tests. The file is still in git history (task arguments for the demo school, no keys). The image itself was not inspected (no Docker here). |
 | 4 | `ALLOWED_HOSTS` and CSRF trusted origins from the environment | **Was fail, now pass** | `ALLOWED_HOSTS` read `DJANGO_ALLOWED_HOSTS`. CSRF origins were set only for the demo; now `DJANGO_CSRF_TRUSTED_ORIGINS`, empty by default ([#252](https://github.com/adedejimakinde/luffy-school-saas/pull/252)). |
 | 5 | Secure cookies and HTTPS redirect on | **Pass** | Under `production.env`: session and CSRF cookies `Secure`, `SECURE_SSL_REDIRECT` on, HSTS 86400 s with subdomains (a day on purpose; move to a year after a renewal has been seen). A plain-HTTP request gets a 301 and a forwarded HTTPS one is served (tested). Not verifiable: behaviour through the real Caddy. |
@@ -18,10 +18,16 @@ Eleven things checked before the first real deploy. Nothing was added that is no
 
 **One more thing found:** the cron file, `deploy.yml` and `docs/deployment.md` used `/opt/classnode/deploy.sh`, `/opt/classnode/restore-check.sh` and `cd /opt/classnode`; the clone in `docs/demo-server.md` puts them in `/opt/classnode/deploy/`. The nightly backup, the weekly restore test and the deploy button would each have failed. All use `/opt/classnode/deploy` now, with a test ([#252](https://github.com/adedejimakinde/luffy-school-saas/pull/252)).
 
+## Decisions (from this check)
+- **`load_demo` refuses when a real school exists.** Any school whose slug is not `sunrise-demo`, `harbour-demo` or `showcase-demo` stops it, with those slugs named in the error, in both the normal and `--showcase` modes. `DEMO_SERVER=1` is no longer the only thing between a production database and fake children. The showcase slug is allowed because it is a demo school the same command makes and the docs say it sits beside the other two. Two tests in `schools/tests/test_seed_demo.py` (`LoadDemoTests`).
+- **Hosting is "any Ubuntu 24.04 VPS (Contabo or similar)"**, not Hetzner, in `docs/`. Not changed: the public privacy page (`website/templates/website/privacy.html`) still says Hetzner, and a comment in `deploy/compose.yml` mentions a "Hetzner Volume"; both need the real host once chosen.
+- **`dump.rdb` is untracked** (removed in #252; `*.rdb` is in `.gitignore`). Nothing to do.
+- **History is not rewritten.** The hook that re-authors commits stays declined; `main` is untouched.
+
 ## Only you
 
-- **Decide `DEMO_SERVER`** (row 2). Either accept that it is the demo server's switch and never put it in production's `secrets.env`, or have me make `load_demo` refuse when any school that is not one of the two demo slugs exists.
-- **Accounts and keys:** Hetzner server; the domain and its Cloudflare zone; the Cloudflare DNS token; a Backblaze B2 bucket and an application key limited to it; `WALG_LIBSODIUM_KEY` (kept offline too); a Sentry (EU) project, its DSN and two cron monitors (`nightly-backup`, `restore-check`); a transactional email provider with SPF/DKIM/DMARC; a GHCR `read:packages` token for the server.
+- **Never put `DEMO_SERVER` in production's `secrets.env`.** It is the demo server's switch (row 2). As a second lock, `load_demo` now refuses when the database holds any school that is not a demo school (decided; see "Decisions" below).
+- **Accounts and keys:** any Ubuntu 24.04 VPS (Contabo or similar); the domain and its Cloudflare zone; the Cloudflare DNS token; a Backblaze B2 bucket and an application key limited to it; `WALG_LIBSODIUM_KEY` (kept offline too); a Sentry (EU) project, its DSN and two cron monitors (`nightly-backup`, `restore-check`); a transactional email provider with SPF/DKIM/DMARC; a GHCR `read:packages` token for the server.
 - **GitHub:** the `production` environment and the three secrets `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS`. `deploy.yml` logs in as `deploy@` on the server; nothing creates that user or says what it may run (it needs Docker and `/opt/classnode`).
 - **On the server:** `secrets.env`, `caddy.env`, `backup.env`; `cp deploy/cron/classnode /etc/cron.d/classnode`; the uptime monitor on `/healthz/`.
 - **Before real children's data:** the timed full restore onto a fresh server (`docs/demo-server.md` section 7), your confirmation on data residency (NDPA, OPEN-9), the lawyer's TODOs below, and raising HSTS from a day to a year after a renewal.
@@ -416,7 +422,7 @@ show the parent's side from the staff logins. Refuses to run twice. **Controls r
 the `DEMO_SERVER` guard, the password guard (and the 12-character floor), and no-families/no-phone.
 
 ## docs/demo-server.md
-Fresh Ubuntu 24.04 CX23 to `app.classnode.co`, `sunrise-demo.classnode.co` and `harbour-demo.classnode.co`:
+Fresh Ubuntu 24.04 VPS to `app.classnode.co`, `sunrise-demo.classnode.co` and `harbour-demo.classnode.co`:
 Cloudflare records (A `app` and A `*`, both **DNS only**), the token (Zone:DNS:Edit + Zone:Zone:Read on the
 `classnode.co` zone only), Docker install, `secrets.env` / `caddy.env`, and the compose commands by hand.
 
