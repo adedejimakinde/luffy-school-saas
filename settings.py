@@ -310,15 +310,28 @@ if TLS_TERMINATED_BY_PROXY:
     SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", 60 * 60 * 24))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 
+#: **Origins trusted beyond the request's own host, from the environment.**
+#: `DJANGO_CSRF_TRUSTED_ORIGINS` is a comma-separated list of full origins
+#: (`https://app.example.org`; Django's own check refuses one without a scheme).
+#: Empty by default, and that is the design rather than an omission: the
+#: platform never posts across hosts (`docs/sign-in-page.md`), so the
+#: same-origin check alone is right and a deployment names an extra origin only
+#: when it has a reason to.
+CSRF_TRUSTED_ORIGINS = [
+    origin.strip()
+    for origin in os.environ.get("DJANGO_CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 #: A Codespace's forwarded port is HTTPS at its edge and plain HTTP to the
 #: server, so a browser's `https://` Origin would fail CSRF's same-origin check
 #: on every sign-in. Trusted only in the single-host demo, and only that
 #: platform's own domain.
 if DEMO_SINGLE_HOST:
-    CSRF_TRUSTED_ORIGINS = [
+    CSRF_TRUSTED_ORIGINS.append(
         "https://*."
         + os.environ.get("GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", "app.github.dev")
-    ]
+    )
 
 #: `security.W021` is "HSTS preload is off". Preloading ships the domain inside
 #: every browser and needs a year's max-age first; it cannot be taken back on

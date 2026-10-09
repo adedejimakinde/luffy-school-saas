@@ -9,3 +9,11 @@ staticfiles
 node_modules
 docs/claude-memory
 deploy
+# Anything a developer's checkout can hold that an image must not: a local
+# environment file (secrets), a Redis snapshot (queued task arguments), a
+# SQLite file, and the screenshots the layout tests write.
+.env
+.env.*
+*.rdb
+*.sqlite3
+screens

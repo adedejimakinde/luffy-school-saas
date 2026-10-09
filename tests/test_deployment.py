@@ -23,6 +23,7 @@ Four claims, each the reason for a setting that would otherwise be easy to
 
 import json
 import os
+import re
 import secrets
 import subprocess
 import sys
@@ -73,8 +74,9 @@ def production_environment():
     return env
 
 
-def production_settings(*names):
-    """The named settings as `settings.py` computes them under `production.env`."""
+def production_settings(*names, extra_env=None):
+    """The named settings as `settings.py` computes them under `production.env`
+    (plus `extra_env`: what a server's `secrets.env` could add)."""
     code = (
         "import json, settings; "
         f"print(json.dumps({{n: getattr(settings, n, None) for n in {list(names)!r}}}))"
@@ -82,7 +84,7 @@ def production_settings(*names):
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=BASE_DIR,
-        env=production_environment(),
+        env={**production_environment(), **(extra_env or {})},
         capture_output=True,
         text=True,
     )
@@ -284,3 +286,134 @@ class TheDeploymentChecklistTests(SimpleTestCase):
         )
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+
+class HostsAndOriginsComeFromTheEnvironmentTests(SimpleTestCase):
+    def test_allowed_hosts_can_be_set_from_the_environment(self):
+        """`DJANGO_ALLOWED_HOSTS` replaces the default derived from the domain,
+        and blanks around the commas are not part of a host.
+
+        CONTROL 9: settings.py ignoring `DJANGO_ALLOWED_HOSTS` makes this red.
+        """
+        derived = production_settings(
+            "ALLOWED_HOSTS", extra_env={"DJANGO_ALLOWED_HOSTS": "app.example.org, .schools.example.org ,"}
+        )
+
+        self.assertEqual(derived["ALLOWED_HOSTS"], ["app.example.org", ".schools.example.org"])
+
+    def test_csrf_trusted_origins_can_be_set_from_the_environment(self):
+        """`DJANGO_CSRF_TRUSTED_ORIGINS` names extra origins, full ones.
+
+        CONTROL 10: settings.py ignoring `DJANGO_CSRF_TRUSTED_ORIGINS` makes
+        this red.
+        """
+        derived = production_settings(
+            "CSRF_TRUSTED_ORIGINS",
+            extra_env={"DJANGO_CSRF_TRUSTED_ORIGINS": "https://app.example.org, https://*.example.org"},
+        )
+
+        self.assertEqual(
+            derived["CSRF_TRUSTED_ORIGINS"], ["https://app.example.org", "https://*.example.org"]
+        )
+
+    def test_with_nothing_set_production_trusts_no_extra_origin(self):
+        """The platform never posts across hosts (`docs/sign-in-page.md`), so
+        an unset variable means none, not a wildcard under the domain."""
+        self.assertEqual(production_settings("CSRF_TRUSTED_ORIGINS")["CSRF_TRUSTED_ORIGINS"], [])
+
+
+class NoSecretsInTheRepoOrTheImageTests(SimpleTestCase):
+    """What a checkout can hold that a deploy must never carry."""
+
+    SECRET_KEY_NAME = re.compile(r"SECRET|PASSWORD|TOKEN|DSN|API_KEY|PRIVATE|CREDENTIAL", re.I)
+    FORBIDDEN_TRACKED = re.compile(r"(^|/)(\.env(\..+)?|.*\.(rdb|pem|key|sqlite3?))$")
+
+    def tracked_files(self):
+        try:
+            listed = subprocess.run(
+                ["git", "ls-files"], cwd=BASE_DIR, capture_output=True, text=True, check=True
+            ).stdout.splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("not a git checkout")
+        return listed
+
+    def test_production_env_names_no_secret(self):
+        """`deploy/production.env` is committed so a deployment is reviewable;
+        a key whose name says secret, password, token or DSN belongs in
+        `secrets.env` on the server (docs/deployment.md).
+
+        CONTROL 11: adding `SENTRY_DSN=...` to production.env makes this red.
+        """
+        named = [k for k in read_env_file(PRODUCTION_ENV) if self.SECRET_KEY_NAME.search(k)]
+
+        self.assertEqual(named, [])
+
+    def test_no_environment_file_snapshot_or_key_is_tracked(self):
+        """A `.env`, a Redis snapshot (`dump.rdb` held queued task arguments and
+        was tracked, and so copied into the image), a key or a SQLite file.
+
+        CONTROL 12: `git add -f dump.rdb` makes this red.
+        """
+        tracked = [f for f in self.tracked_files() if self.FORBIDDEN_TRACKED.search(f)]
+
+        self.assertEqual(tracked, [])
+
+    def test_the_image_leaves_those_out(self):
+        """The Dockerfile says `COPY . .`, so `.dockerignore` is the only thing
+        between a developer's local `.env` and the image's layers.
+
+        CONTROL 13: deleting the `.env` or `*.rdb` line makes this red.
+        """
+        ignored = {
+            line.strip()
+            for line in (BASE_DIR / ".dockerignore").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        }
+
+        for pattern in (".env", ".env.*", "*.rdb", "*.sqlite3", "deploy", ".git"):
+            with self.subTest(pattern=pattern):
+                self.assertIn(pattern, ignored)
+
+    def test_the_settings_key_is_not_a_default_outside_development(self):
+        """The one literal key in the repo is development's, and only `DEBUG`
+        selects it: with it off and no `DJANGO_SECRET_KEY`, settings refuse."""
+        env = {k: v for k, v in production_environment().items() if k != "DJANGO_SECRET_KEY"}
+        result = subprocess.run(
+            [sys.executable, "-c", "import settings"],
+            cwd=BASE_DIR, env=env, capture_output=True, text=True,
+        )
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("DJANGO_SECRET_KEY is not set", result.stderr)
+
+
+class TheServerHasOneLayoutTests(SimpleTestCase):
+    """The repository is cloned to `/opt/classnode` (docs/demo-server.md, step 2)
+    so the deploy files sit in `/opt/classnode/deploy/`. Everything that names
+    a path on the server has to agree, or a cron job `cd`s into a directory
+    with no compose file in it and fails every night, silently."""
+
+    ROOT = "/opt/classnode"
+    FILES = ("deploy/cron/classnode", ".github/workflows/deploy.yml", "docs/deployment.md")
+
+    def paths(self):
+        found = []
+        for name in self.FILES:
+            for match in re.finditer(r"/opt/classnode((?:/[\w.-]+)*)", (BASE_DIR / name).read_text()):
+                found.append((name, match.group(0), BASE_DIR / match.group(1).lstrip("/")))
+        return found
+
+    def test_every_path_on_the_server_exists_in_the_clone(self):
+        """CONTROL 14: a cron line back at `cd /opt/classnode` makes this red
+        (there is no compose.yml at the clone's root)."""
+        for name, written, local in self.paths():
+            with self.subTest(file=name, path=written):
+                self.assertTrue(local.exists(), f"{written} (in {name}) is not in the repository")
+
+    def test_cron_runs_compose_from_the_directory_that_has_the_compose_file(self):
+        for line in (BASE_DIR / "deploy/cron/classnode").read_text().splitlines():
+            match = re.search(r"cd (/opt/classnode\S*) &&", line)
+            if match:
+                with self.subTest(line=line[:60]):
+                    directory = BASE_DIR / match.group(1)[len(self.ROOT):].lstrip("/")
+                    self.assertTrue((directory / "compose.yml").is_file(), match.group(1))

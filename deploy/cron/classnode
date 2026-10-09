@@ -6,22 +6,22 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Nightly base backup, 00:30 UTC. Needs B2 (backup.env); until then it fails
 # loudly by design and the heartbeat says so.
-30 0 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose exec -T db classnode-backup >> /var/log/classnode-backup.log 2>&1
+30 0 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose exec -T db classnode-backup >> /var/log/classnode-backup.log 2>&1
 
 # Nightly housekeeping, 01:15 UTC: expired sessions (SESSION_SAVE_EVERY_REQUEST
 # writes a row per active session; nothing else removes the dead ones).
-15 1 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py clearsessions >> /var/log/classnode-housekeeping.log 2>&1
+15 1 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py clearsessions >> /var/log/classnode-housekeeping.log 2>&1
 
 # Weekly restore test, Sunday 02:00 UTC.
-0 2 * * 0 root /opt/classnode/restore-check.sh >> /var/log/classnode-restore-check.log 2>&1
+0 2 * * 0 root /opt/classnode/deploy/restore-check.sh >> /var/log/classnode-restore-check.log 2>&1
 
 # Held notices, 06:00 UTC = 07:00 Lagos, when a school's messages may go again,
 # then every quarter hour until 19:45 Lagos in case a run was missed. Running it
 # more often than needed sends nothing twice: every send is claimed first
 # (notices/tasks.py, docs/messaging.md D5 and D7).
-*/15 6-18 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py release_held_notices >> /var/log/classnode-notices.log 2>&1
+*/15 6-18 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py release_held_notices >> /var/log/classnode-notices.log 2>&1
 
 # The proprietor's daily money summary, 23:05 UTC = 00:05 Lagos, just after a
 # school's day closes. Safe to run more than once: a school already sent for
 # that day is skipped (docs/messaging.md D15).
-5 23 * * * root cd /opt/classnode && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py send_daily_money_summary >> /var/log/classnode-notices.log 2>&1
+5 23 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py send_daily_money_summary >> /var/log/classnode-notices.log 2>&1

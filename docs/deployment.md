@@ -43,6 +43,21 @@ internet ──443──▶ caddy ──http──▶ web (gunicorn) ──▶ d
 | `/etc/classnode/backup.env` (server, mode 600; optional until B2 exists) | `WALG_S3_PREFIX`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT`, `AWS_REGION` **[needs B2]**, `WALG_LIBSODIUM_KEY` (the backup encryption key — **also in your password manager**), `BACKUP_HEARTBEAT_URL` **[needs Sentry]** | **never** |
 | GitHub repository secrets | `DEPLOY_HOST`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` **[needs the server]** | **never** |
 
+**Hosts and origins are read from the environment, and default to the domain.**
+`DJANGO_ALLOWED_HOSTS` (comma-separated; default `.PLATFORM_DOMAIN`, the domain
+and every subdomain) and `DJANGO_CSRF_TRUSTED_ORIGINS` (comma-separated full
+origins, `https://…`; default **none**). Neither is secret, so either goes in
+`deploy/production.env` if a deployment needs it. The CSRF list is empty on
+purpose: the platform never posts across hosts (`docs/sign-in-page.md`), so the
+same-origin check is the whole rule and an extra origin needs a reason.
+
+**One layout on the server.** The repository is cloned to `/opt/classnode`, so the
+deploy files are in `/opt/classnode/deploy/`, and that is the directory every
+command runs from: `deploy.sh`, `restore-check.sh`, the cron jobs
+(`deploy/cron/classnode`) and the deploy workflow's SSH command all use it.
+`deployed-sha` is written there too. `tests/test_deployment.py` fails when a path
+on the server stops matching the repository.
+
 Keep a copy of every secret in a password manager. A secret that exists only on
 the server is lost with it — for the backup encryption key (H3), that means the
 backups are lost too.
@@ -70,7 +85,7 @@ validates the compose file. It pushes from `main` only, and nothing deploys a
 2. Run the **deploy** workflow (Actions → deploy → Run workflow) with that SHA.
    **[needs the server and the three deploy secrets]** It refuses a SHA that is
    not on main, or on which `test`, `image` and `publish` did not all pass, and then
-   runs `/opt/classnode/deploy.sh <sha>` on the server over SSH.
+   runs `/opt/classnode/deploy/deploy.sh <sha>` on the server over SSH.
 3. `deploy.sh` pulls the two images, migrates with the new image while the old
    one serves, swaps `web`, `worker` and `caddy`, and asks `/healthz/` inside
    the container and then through Caddy over HTTPS. Unhealthy: it puts the
