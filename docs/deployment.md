@@ -208,7 +208,9 @@ parameters are children's names), and tags every report with the school.
 
 - **The launch session** — provisioning the server, DNS, secrets, the first
   deploy, a timed full restore drill, and onboarding the first school. Every
-  step there needs an account; see "What each step needs" below.
+  step there needs an account; see "What each step needs" below. The
+  walkthrough, for a non-technical owner on Windows, is `docs/first-day.md`;
+  `deploy/bootstrap.sh` (safe to re-run) and `deploy/init-env.sh` are its scripts.
 
 ## What each step needs
 

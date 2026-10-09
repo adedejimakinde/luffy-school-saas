@@ -1,3 +1,32 @@
+# Where I stopped: 2026-10-09 (second session), the first-day runbook
+
+`docs/first-day.md` is the founder's walkthrough from a fresh Contabo Ubuntu 24.04 VPS (169.58.181.9) to a school that can sign in: 29 numbered steps in PowerShell and `nano`, each with what it does, how to confirm it, and an **Undo**, in the order asked for: first root login; `deploy/bootstrap.sh`; the key check in a second window; the SSH lock; `secrets.env`, `caddy.env` and `backup.env`; the first deploy; `create_school`; the uptime monitor; the timed restore drill. It ends with a lock-out section that uses Contabo's VNC console, and a table of where things live. This closes the "nothing creates the `deploy` user" item under "Only you" below.
+
+**New files.** `deploy/bootstrap.sh`, `deploy/init-env.sh`, `deploy/env/{secrets,caddy,backup}.env.example`, `tests/test_first_day.py` (29 tests). No application code changed.
+
+**Verified (run here).** Both scripts pass `bash -n` and `shellcheck`. `bootstrap.sh` ran twice against a stand-in server (a real sshd and real files, `apt-get`, `ufw`, `systemctl`, `curl` and `git` stubbed): the second run changed no file and added no key. `--lock-ssh` was run with "no" (nothing changed), with "yes" (sshd reported `passwordauthentication no` even with a `50-cloud-init.conf` that says yes), with no key in root's `authorized_keys` (refused), and against an earlier-sorting file that overrides it (took itself back off); `--unlock-ssh` restored it; a private key in the public-key slot is refused. `init-env.sh` created the files at 640 root:deploy with a 96-character and a 64-character hex value, never printed one, and a second run left them alone; `--check` named a leftover placeholder. The tests were run, and five controls were seen red and restored: an extra `ufw allow`, the no-overwrite guard removed, a secret assigned in a code block, the SSH lock moved into the ordinary run, a literal password in a template.
+
+**Not verified.** Anything on Contabo, in Docker, or against Cloudflare, GHCR or Backblaze. The Docker install, the `restore-for-real` commands (copied from `docs/demo-server.md` section 7, which has the same status), `docker login ghcr.io` as `deploy`, `docker compose` reading `/etc/classnode` as `deploy`, and the deploy button's SSH hop have never run. The Contabo VNC steps come from Contabo's help pages (linked in the doc), not from a panel.
+
+## Decisions (from this session)
+- **The deploy key's private half goes into a GitHub secret.** The instruction was to paste secrets only into files on the server; `DEPLOY_SSH_KEY` has to be in GitHub because that is where the workflow reads it. The runbook says so up front and puts it on the clipboard from a file, never on screen. Everything else is a file on the server. The one other secret typed at a prompt is the platform operator's password (`createsuperuser`).
+- **Root keeps key login** (`PermitRootLogin prohibit-password`); passwords are off for everyone. There is no separate sudo user. The `deploy` key is `restrict`ed (no terminal, forwarding or agent).
+- **Automatic reboot at 03:30 UTC (04:30 Lagos)** after a security update that needs one; Docker's own packages are not auto-upgraded. Turn off with `Automatic-Reboot "false"` in `/etc/apt/apt.conf.d/52classnode-unattended`.
+- **443/udp is allowed** beside 22, 80 and 443/tcp (HTTP/3, as the compose file publishes it). The test pins the exact set.
+- **Secrets are hex from `openssl rand`**, so no character needs quoting in a compose `env_file`.
+- **`backup.env` is created only at the backup step**, not with the others: while `WALG_S3_PREFIX` is set the database archives, and a placeholder prefix would make it fail.
+
+## Found, not fixed
+- **The deploy button does not move the checkout.** `deploy.yml` runs `/opt/classnode/deploy/deploy.sh <sha>`, which pulls that SHA's images but uses the `compose.yml` already checked out. A release that changes `compose.yml` or `deploy.sh` runs with the old ones. The runbook (step 16) tells the founder to `git checkout` the new SHA first; the fix is a `git fetch && git checkout` in the workflow's SSH command, and a test.
+- **No command removes a school.** A wrong slug on day one is undone by wiping the empty database (step 15); later it needs a developer.
+- **GHCR login may be unnecessary** if the packages are public. The runbook has it, as `docs/demo-server.md` does; check on the first pull.
+- **Drill B is in place, on the same server.** `docs/deployment.md` asks for a timed restore onto a **fresh** server before real children's data; step 28 says what it does not prove and how to do the fresh version (Contabo reinstall, then the runbook again). The times it produces are for the founder to send back here.
+
+## Only you (from this session)
+- Everything in `docs/first-day.md`: it is the list. The accounts it needs are the same as under "Only you" below, plus a VNC viewer on your PC and an uptime-monitoring account.
+- Send the two drill times back so they go in this file.
+
+
 # Where I stopped: 2026-10-09, the pre-deployment readiness check
 
 Eleven things checked before the first real deploy. Nothing was added that is not a fix for a failure; the fixes are two PRs. **Verified** means run here (settings under `deploy/production.env`, the tests, and WAL-G against a throwaway Postgres 16 with file storage in place of B2); the CI `image` job covers the built image, the Caddyfile and WAL-G in the database image. There is no Docker daemon in the session, so nothing was run in a container.
