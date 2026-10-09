@@ -261,6 +261,31 @@ class LoadDemoTests(TestCase):
         with self.assertRaisesMessage(CommandError, "already here"):
             self.load()
 
+    def a_real_school(self):
+        return School.objects.create(name="Real School", slug="real-school", schema_name="real_school")
+
+    @override_settings(DEBUG=False)
+    def test_it_refuses_when_a_school_that_is_not_a_demo_school_exists(self):
+        """CONTROL 4: removing the real-school guard makes this red."""
+        self.a_real_school()
+
+        with self.assertRaisesMessage(CommandError, "real-school"):
+            self.load()
+        with self.assertRaisesMessage(CommandError, "real-school"):
+            self.load(showcase=True)
+
+        self.assertFalse(School.objects.filter(slug__in=SLUGS + ("showcase-demo",)).exists())
+
+    @override_settings(DEBUG=False)
+    def test_the_demo_schools_do_not_trip_it(self):
+        self.load(showcase=True)
+
+        self.assertTrue(School.objects.filter(slug="showcase-demo").exists())
+        with self.assertRaisesMessage(CommandError, "already here"):
+            self.load(showcase=True)
+        self.load()
+        self.assertEqual(School.objects.filter(slug__in=SLUGS).count(), 2)
+
 
 class ShowcaseTests(TestCase):
     """`load_demo --showcase`: the school the homepage's screenshots are taken from.

@@ -39,7 +39,7 @@ contents list at the top that matches the sections in order.
   to be filled in (RC number, registered address, server location, email provider,
   periods, dates, invoicing) a `TODO` of its own. Nothing here is legal advice
   until the lawyer has been through it.
-- The facts stated are the system's own: Hetzner, Backblaze B2 backups kept up
+- The facts stated are the system's own: the VPS host (any Ubuntu 24.04 VPS, Contabo or similar), Backblaze B2 backups kept up
   to 12 months, Sentry (EU) with personal data removed, Termii for SMS,
   Paystack, payments that are reversed and never edited, one schema per school.
 

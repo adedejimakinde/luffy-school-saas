@@ -24,6 +24,11 @@ and a real one must never be handed that number. Here the release is made and
 nobody is messaged, and the demo parent has no phone on file, so the parent
 page is shown from the staff side rather than signed into by code.
 
+**Refuses when any school other than the demo ones exists.** `DEMO_SERVER=1` is
+an environment flag and could end up on a real server; a real school in the
+database is the stronger evidence. The demo ones are the two `seed_demo` makes
+and the showcase.
+
 **Refuses to run twice**, as `seed_demo` does.
 
 **`--showcase`** makes one more school instead, `schools.showcase`: a fictional
@@ -36,6 +41,7 @@ import os
 
 from django.core.management.base import CommandError
 
+from .seed_demo import SCHOOLS
 from .seed_demo import Command as SeedDemo
 
 MIN_PASSWORD = 12
@@ -71,6 +77,7 @@ class Command(SeedDemo):
                 f"Set LOAD_DEMO_PASSWORD to a password of at least {MIN_PASSWORD} "
                 "characters. There is no default: a published one is no password."
             )
+        self.refuse_real_schools()
         suffix = domain_suffix or settings.PLATFORM_DOMAIN
         if not suffix:
             raise CommandError("Set PLATFORM_DOMAIN, or pass --domain-suffix.")
@@ -78,6 +85,18 @@ class Command(SeedDemo):
             self.showcase(password, suffix)
         else:
             self.seed(password, suffix)
+
+    def refuse_real_schools(self):
+        from schools import showcase
+        from schools.models import School
+
+        demo = {slug for slug, _ in SCHOOLS} | {showcase.SLUG}
+        others = sorted(School.objects.exclude(slug__in=demo).values_list("slug", flat=True))
+        if others:
+            raise CommandError(
+                "load_demo will not run: this database holds a school that is not a demo "
+                f"school ({', '.join(others)}). It is for a server that holds nothing real."
+            )
 
     def showcase(self, password, suffix):
         from schools import showcase
