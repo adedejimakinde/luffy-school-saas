@@ -787,7 +787,7 @@ class TheRosterMovedIsNamedTests(SimpleTestCase):
         said = str(refused.exception)
         self.assertIn("roster changed", said)
         self.assertIn("Nothing has been saved", said)
-        self.assertIn("release the term again", said)
+        self.assertIn("Release the term again", said)
 
     def test_it_finds_the_card_when_the_child_is_on_the_roster(self):
         """The control. A function that always raised would pass both above."""
