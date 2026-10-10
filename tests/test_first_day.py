@@ -15,8 +15,10 @@ reader that a wrong edit would break without anyone noticing until the day:
    the paths, so the button that was tested on day one is the one that is pressed.
 """
 
+import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 from django.conf import settings
@@ -292,3 +294,162 @@ class TheWorkflowAndTheServerAgreeTests(SimpleTestCase):
         """`docker compose` reads an env_file as whoever runs it, and the deploy
         user runs it: root-only files would fail the very first button press."""
         self.assertIn("install -d -m 750 -o root -g deploy /etc/classnode", BOOTSTRAP.read_text())
+
+
+CHECKS_START = "# -------------------------------------------------------------------- 1. checks"
+KEYS_START = "# ------------------------------------------------------------------- 2. the keys"
+
+# A reader that can stop before the writer has finished: under `pipefail` the
+# writer is killed by SIGPIPE (141) and the whole pipeline, then the script,
+# fails with nothing said. `grep` without -q/-m, `tail`, `cut`, `tr` and an awk
+# with no `exit` read to the end and are safe.
+EARLY_EXIT_READER = re.compile(
+    r"\|\s*(?:head\b|read\b|sed\b[^|]*(?:\bq\b|\dq\b)|grep\s+-\w*[qm]|awk\b[^|]*\bexit\b)"
+)
+
+
+def shell_lines(path):
+    """`(line number, text)` of each non-comment line of a script."""
+    for number, line in enumerate(path.read_text().splitlines(), 1):
+        if not line.lstrip().startswith("#"):
+            yield number, line
+
+
+class NoPipeIntoAReaderThatQuitsEarlyTests(SimpleTestCase):
+    """Found on the first real run of the runbook on the Contabo server: step
+    "Checking this is the server we expect" read the SSH port with
+    `sshd -T | awk '$1 == "port" {print $2; exit}'`. awk left at the first
+    match, sshd was killed by SIGPIPE while it still had output to write, and
+    `set -o pipefail` turned that into a failure that stopped the script at
+    that line with no reason shown. `ssh_port=22` was already correct.
+    """
+
+    def test_the_pattern_is_recognised(self):
+        """CONTROL 7: the line that stopped the first real run."""
+        old = """ssh_port="$(sshd -T | awk '$1 == "port" {print $2; exit}')\""""
+        self.assertRegex(old, EARLY_EXIT_READER)
+        for line in ("x | head -n 1", "x | grep -q y", "x | grep -m1 y", "x | sed -n 1q", "x | read -r a"):
+            with self.subTest(line=line):
+                self.assertRegex(line, EARLY_EXIT_READER)
+        for line in ("x | grep -i y", "x | tail -n 1", "x | awk '$1 == \"a\" {print $2}'", "x || exit 1"):
+            with self.subTest(line=line):
+                self.assertNotRegex(line, EARLY_EXIT_READER)
+
+    def test_no_script_under_deploy_has_one(self):
+        """CONTROL 8: putting the old port line back makes this red."""
+        for path in sorted((BASE_DIR / "deploy").rglob("*.sh")) + [BASE_DIR / "deploy/cron/classnode"]:
+            for number, line in shell_lines(path):
+                with self.subTest(file=path.name, line=number):
+                    self.assertNotRegex(line, EARLY_EXIT_READER, line)
+
+
+class TheChecksStepWithAChattySshdTests(SimpleTestCase):
+    """Step 1 of `bootstrap.sh`, run for real against a stand-in `sshd`.
+
+    What is run is the script itself, cut off where step 2 begins (so nothing
+    after the checks can touch the machine), with only two edits: the
+    `/etc/os-release` it sources is a fixture, and `id` says it is root. Both
+    keep the test independent of the machine it runs on.
+    """
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.dir = Path(tmp.name)
+        (self.dir / "bin").mkdir()
+        (self.dir / "os-release").write_text('ID=ubuntu\nVERSION_ID="24.04"\nPRETTY_NAME="Ubuntu 24.04 (test)"\n')
+        self.stub("id", 'case "$1" in -u) echo 0 ;; -un) echo root ;; esac')
+
+        text = BOOTSTRAP.read_text()
+        self.assertIn(". /etc/os-release", text)
+        body = text[: text.index(KEYS_START)].replace(". /etc/os-release", f". {self.dir}/os-release")
+        self.script = self.dir / "bootstrap-checks.sh"
+        self.script.write_text(body + "echo PAST-THE-CHECKS\n")
+
+    def stub(self, name, body):
+        path = self.dir / "bin" / name
+        path.write_text(f"#!/bin/bash\n{body}\n")
+        path.chmod(0o755)
+
+    def run_checks(self):
+        env = {**os.environ, "PATH": f"{self.dir}/bin:{os.environ['PATH']}"}
+        return subprocess.run(["bash", str(self.script)], capture_output=True, text=True, env=env, timeout=60)
+
+    def chatty_sshd(self, port_line="port 22", other_lines=4000):
+        """Prints the port first, then well over 64 KB (the size of a pipe's
+        buffer) so the writer is still writing when a reader has gone."""
+        self.stub(
+            "sshd",
+            f'[ "$1" = -T ] || exit 0\n'
+            f'echo "{port_line}"\n'
+            f'for i in $(seq {other_lines}); do echo "authorizedkeysfile line $i {"x" * 40}"; done',
+        )
+
+    def test_the_stand_in_writes_more_than_a_pipe_holds(self):
+        self.chatty_sshd()
+        out = subprocess.run([str(self.dir / "bin/sshd"), "-T"], capture_output=True, text=True).stdout
+
+        self.assertGreater(len(out), 64 * 1024)
+        self.assertEqual(out.splitlines()[0], "port 22")
+
+    def test_port_22_first_then_a_lot_more_gets_past_the_checks(self):
+        """CONTROL 9: the old `| awk '...; exit'` line makes this red, stopping
+        at the port line with exit status 1 and no reason."""
+        self.chatty_sshd()
+
+        result = self.run_checks()
+
+        self.assertIn("PAST-THE-CHECKS", result.stdout, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("STOPPED", result.stderr)
+
+    def test_a_port_that_is_not_22_still_stops_and_says_which(self):
+        self.chatty_sshd(port_line="port 2222")
+
+        result = self.run_checks()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("sshd listens on port 2222", result.stderr)
+
+    def test_an_sshd_that_cannot_report_stops_and_says_so(self):
+        self.stub("sshd", 'echo "sshd: no hostkeys available" >&2; exit 255')
+
+        result = self.run_checks()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("PAST-THE-CHECKS", result.stdout)
+        self.assertIn("sshd -T", result.stderr)
+        self.assertIn("sshd: no hostkeys available", result.stderr)
+
+    def test_an_sshd_that_names_no_port_stops_and_says_so(self):
+        self.stub("sshd", 'echo "passwordauthentication yes"')
+
+        result = self.run_checks()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no port", result.stderr)
+
+
+class AFailureNamesTheCommandThatFailedTests(SimpleTestCase):
+    def run_script(self, body):
+        """The script's own `trap ... ERR` line, then `body`."""
+        text = BOOTSTRAP.read_text()
+        trap = next(line for line in text.splitlines() if line.startswith("trap ") and " ERR" in line)
+        handler = [line for line in text.splitlines() if line.startswith("on_error()")]
+        script = "set -euo pipefail\n" + "\n".join(handler) + "\n" + trap + "\n" + body + "\n"
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=60)
+
+    def test_stopped_prints_the_command_and_its_exit_code(self):
+        """CONTROL 10: the old trap, which printed only the line number, makes
+        this red."""
+        result = self.run_script("true\nfalse_command() { return 7; }\nfalse_command")
+
+        self.assertEqual(result.returncode, 7)
+        self.assertIn("STOPPED at line", result.stderr)
+        self.assertIn("false_command", result.stderr)
+        self.assertIn("exit code 7", result.stderr)
+
+    def test_stopped_still_says_a_rerun_finishes_the_job(self):
+        result = self.run_script("exit_with() { return 3; }\nexit_with")
+
+        self.assertIn("run the same command again", result.stderr)
