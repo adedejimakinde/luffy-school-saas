@@ -394,7 +394,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
         rows.append(
             PlacingOut(
                 student_membership_id=student_id,
-                student=names.get(student_id, "—"),
+                student=names.get(student_id, "-"),
                 average=_as_text(results.averages.get(student_id)),
                 current_rank=results.positions.get(student_id),
                 subjects=[

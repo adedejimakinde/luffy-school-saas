@@ -15,7 +15,7 @@ import * as steps from "../../static/signin/states.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 
-const CODE_SENT = { status: 200, body: { detail: "If that number is on a guardian record, a code is on its way." } };
+const CODE_SENT = { status: 200, body: { detail: "If those details are on file for a parent, a code has been sent. It lasts a few minutes." } };
 const ONE_SCHOOL = {
   status: 200,
   body: {
@@ -65,7 +65,7 @@ test("asking for a code moves to the code step and never promises delivery", () 
   // cannot learn whose number is on a guardian record. A page that said "we
   // have sent you a code" would put that oracle back.
   assert.doesNotMatch(html, /we have sent|we've sent|check your (phone|messages)/i);
-  assert.match(html, /if that number is on a guardian record/i);
+  assert.match(html, /if those details are on file for a parent/i);
 });
 
 test("one school goes straight to that school's host", () => {

@@ -274,7 +274,7 @@ class WhatTheCardSaysTests(LookSetUp):
         self.assertIn(">Average<", html)
 
     def test_no_em_dash_in_the_cards_sentences(self):
-        """Only the "nothing to show" placeholders, which are data."""
+        """A blank cell is a plain hyphen, and no sentence has a dash."""
         html = self.html()
         title = re.search(r"<title>(.*?)</title>", html).group(1)
 

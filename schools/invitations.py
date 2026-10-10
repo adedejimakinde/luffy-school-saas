@@ -195,8 +195,8 @@ def _issue_for(actor, school, role, *, email=None, phone=None, full_name="", ttl
     """
     if role not in STAFF_ROLES:
         raise NotStaffRole(
-            f"{role!r} is not a staff role. This pass invites staff only "
-            f"({', '.join(sorted(STAFF_ROLES))}); parents and students come later."
+            f"{role!r} is not a staff role. Only staff are invited this way "
+            f"({', '.join(sorted(STAFF_ROLES))})."
         )
     _require_grant_authority(actor, school)
 

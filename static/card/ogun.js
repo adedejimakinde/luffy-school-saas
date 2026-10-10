@@ -72,7 +72,7 @@ function words(o) {
 }
 
 function who(payload, o) {
-  const line = (label, value) => `<div><dt>${label}</dt><dd>${esc(value) || "—"}</dd></div>`;
+  const line = (label, value) => `<div><dt>${label}</dt><dd>${esc(value) || "-"}</dd></div>`;
   return [
     '<section class="summary"><dl class="ogun-who">',
     line("Learner&#39;s name", payload.student_name),

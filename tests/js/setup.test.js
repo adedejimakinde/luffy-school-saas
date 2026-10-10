@@ -65,7 +65,7 @@ test("a term with no declared length is blank, not nought", () => {
   });
 
   assert.match(html, /0 school days/);
-  assert.match(html, /&mdash; school days/);
+  assert.match(html, />- school days/);
 });
 
 test("a class no longer taught is listed and says so", () => {

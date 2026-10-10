@@ -201,7 +201,7 @@ def _require_this_card_has_not_gone_home(assessment, membership):
             f"{membership.name}'s report card for {assessment.term} has been "
             f"released to a parent. Its marks are part of what that card says, "
             f"so this one cannot be changed here. A released card is corrected "
-            f"by reissuing it, and reissuing cannot yet reach a mark — so a "
+            f"by reissuing it, and reissuing cannot yet reach a mark, so a "
             f"wrong one has to be raised with the principal.",
             state=SheetState.RELEASED,
         )
@@ -292,15 +292,15 @@ def _require_the_sheet_is_open(assessment, membership):
         # does not exist. Issue #54 holds the decision that would make it
         # true; until then the honest thing is to name who can act.
         raise MarksLocked(
-            f"{placement.class_group} — {assessment.term} has been released to "
+            f"{placement.class_group} for {assessment.term} has been released to "
             f"parents. Its marks are part of a card somebody is holding, so this "
             f"one cannot be changed here. A released card is corrected by "
-            f"reissuing it, and reissuing cannot yet reach a mark — so a wrong "
+            f"reissuing it, and reissuing cannot yet reach a mark, so a wrong "
             f"one has to be raised with the principal.",
             state=sheet.state,
         )
     raise MarksLocked(
-        f"{placement.class_group} — {assessment.term} is "
+        f"{placement.class_group} for {assessment.term} is "
         f"{sheet.get_state_display().lower()}, so its marks are part of what is "
         f"being reviewed and cannot be changed. Ask for the sheet to be sent "
         f"back if one is wrong.",

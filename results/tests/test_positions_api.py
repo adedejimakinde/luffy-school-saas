@@ -337,7 +337,7 @@ class ARosterRowNamingAnotherSchoolsChildTests(BroadsheetApiSetUp):
         rows = {r["student_membership_id"]: r for r in response.json()["rows"]}
 
         self.assertIn(self.their_child.pk, rows)
-        self.assertEqual(rows[self.their_child.pk]["student"], "—")
+        self.assertEqual(rows[self.their_child.pk]["student"], "-")
         self.assertIsNone(rows[self.their_child.pk]["average"])
         self.assertIsNone(rows[self.their_child.pk]["current_rank"])
 

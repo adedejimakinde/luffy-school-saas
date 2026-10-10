@@ -111,7 +111,7 @@ def _require_answering_authority(actor, request):
     if actor.pk == request.requested_by_id:
         raise SameSignatory(
             "The same person cannot both request a transfer and answer it. "
-            "Somebody at the other school has to agree — or, if you genuinely "
+            "Somebody at the other school has to agree. If you genuinely "
             "hold authority at both, use transfer_student_as()."
         )
 

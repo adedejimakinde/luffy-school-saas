@@ -185,8 +185,8 @@ function guardianRow(g, { may_link, confirming, student }) {
   const channels = g.channels || [];
   return [
     `<li class="guardian" data-status="${esc(g.status)}">`,
-    `<span class="name">${esc(g.name) || "—"}</span>`,
-    channels.length ? "" : `<span class="contact">${esc(g.contact) || "—"}</span>`,
+    `<span class="name">${esc(g.name) || "-"}</span>`,
+    channels.length ? "" : `<span class="contact">${esc(g.contact) || "-"}</span>`,
     `<span class="relationship">${esc(g.relationship)}</span>`,
     channels.length
       ? `<ul class="channels">${channels.map((c) => channelLine(g, c, may_link)).join("")}</ul>`
@@ -380,9 +380,9 @@ export function detailsPanel({ body = {}, note = null } = {}) {
         ].join("")
       : [
           '<dl class="facts">',
-          `<dt>Learner ID</dt><dd>${esc(learner_id) || "—"}</dd>`,
-          `<dt>Sex</dt><dd>${esc(sexLabel[sex] || "") || "—"}</dd>`,
-          `<dt>Date of birth</dt><dd>${esc(date_of_birth) || "—"}</dd>`,
+          `<dt>Learner ID</dt><dd>${esc(learner_id) || "-"}</dd>`,
+          `<dt>Sex</dt><dd>${esc(sexLabel[sex] || "") || "-"}</dd>`,
+          `<dt>Date of birth</dt><dd>${esc(date_of_birth) || "-"}</dd>`,
           "</dl>",
           note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
         ].join(""),

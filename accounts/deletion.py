@@ -315,7 +315,7 @@ def _deletion_schema(tenant_local_relations):
         raise NoTenantSchema(
             f"{len(tenant_local_relations)} tenant-scoped relation(s) point at "
             "accounts.User, so this delete has to run inside a school schema for "
-            "their tables to resolve — and no school schema exists. Either the "
+            "their tables to resolve, and no school schema exists. Either the "
             "School rows were saved with auto_create_schema=False, or their "
             "schemas were never created."
         )

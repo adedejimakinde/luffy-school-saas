@@ -32,7 +32,7 @@ def session_cookie_spans_every_host(app_configs, **kwargs):
             "portal host will not be sent to any school's host.",
             hint=(
                 "Set it to the parent domain of every host this platform "
-                "answers on, with a leading dot — for example '.luffy.school'. "
+                "answers on, with a leading dot, for example '.luffy.school'. "
                 "A deployment that genuinely serves one host only may set it to "
                 "that host."
             ),
@@ -75,7 +75,7 @@ def a_guardian_session_cannot_outlive_the_dormancy_window(app_configs, **kwargs)
             hint=(
                 "Lower GUARDIAN_SESSION_AGE, or raise GUARDIAN_DORMANCY_DAYS. "
                 "Dormancy is read when a code is requested, so it cannot reach "
-                "a session that is already open — the session has to expire "
+                "a session that is already open. The session has to expire "
                 "first, and that only happens if it is the shorter of the two."
             ),
             id="accounts.E002",

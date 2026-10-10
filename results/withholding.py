@@ -338,8 +338,8 @@ def withhold(student_membership_id: int, term, *, actor, reason: str) -> Withhol
     _require_withholding_authority(actor, "withhold")
     if not reason or not reason.strip():
         raise WithholdingError(
-            "A withholding has to say why. The reason is staff-only — it is "
-            "never shown to the family — and it is what the next person to "
+            "A withholding has to say why. The reason is staff-only and is "
+            "never shown to the family. It is what the next person to "
             "look at this child reads."
         )
     return _record(

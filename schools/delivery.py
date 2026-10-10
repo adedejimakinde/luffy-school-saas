@@ -144,7 +144,7 @@ class EmailChannel(Channel):
         if not getattr(settings, "EMAIL_HOST", ""):
             raise DeliveryNotConfigured(
                 "Invitations are sent by email, and no EMAIL_HOST is configured "
-                "for this deploy — so there is nowhere to send them. Set "
+                "for this deploy, so there is nowhere to send them. Set "
                 "EMAIL_HOST (and its credentials), or select a different "
                 "EMAIL_BACKEND."
             )
@@ -154,8 +154,8 @@ class EmailChannel(Channel):
         recipient = invitation.user.email
         if not recipient:
             raise NoDeliveryAddress(
-                f"{invitation.user} has no email address, and email is the only "
-                "channel enabled for staff invitations in this pass."
+                f"{invitation.user} has no email address, and staff invitations "
+                "are sent by email only."
             )
         return recipient
 

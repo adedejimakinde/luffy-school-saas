@@ -51,7 +51,7 @@ def kobo_from_naira(typed) -> int:
     decimals = match.group(1) or ""
     if len(decimals) > 2:
         raise NotAnAmount(
-            "Naira have two decimal places (kobo) at most. Check the amount — "
+            "Naira have two decimal places (kobo) at most. Check the amount: "
             "a third decimal place is usually a comma typed as a point."
         )
     naira = Decimal(text.replace(",", ""))

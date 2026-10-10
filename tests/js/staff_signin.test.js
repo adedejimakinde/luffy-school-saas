@@ -52,7 +52,7 @@ const NO_SCHOOL = {
 const REFUSED = {
   status: 401,
   body: {
-    detail: "That identifier and password do not match an account.",
+    detail: "That email, phone number or staff ID and password do not match an account.",
     code: "bad_credentials",
     retryable: false,
   },

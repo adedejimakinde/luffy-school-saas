@@ -74,7 +74,7 @@ test("no marks is a dash, never a zero", () => {
   const dayo = html.slice(html.indexOf("Dayo D"));
   const row = dayo.slice(0, dayo.indexOf("</tr>"));
 
-  assert.match(row, /<td class="num">—<\/td>$/, "the average cell is not a dash");
+  assert.match(row, /<td class="num">-<\/td>$/, "the average cell is not a dash");
   assert.doesNotMatch(html, /<td class="num">0<\/td>/);
   assert.doesNotMatch(html, /<td class="num">0\.00/);
 });
@@ -87,7 +87,7 @@ test("rows follow the server's rank and a shared rank is marked, not split", () 
 
   assert.deepEqual([...order].sort((a, b) => a - b), order, "rows are not in rank order");
   const ranks = [...html.matchAll(/<td class="num rank">([^<]*)<\/td>/g)].map((m) => m[1]);
-  assert.deepEqual(ranks, ["1=", "1=", "2", "—"]);
+  assert.deepEqual(ranks, ["1=", "1=", "2", "-"]);
 });
 
 test("a subject rank is the server's too, with its tie marked", () => {
@@ -101,7 +101,7 @@ test("the class average is at the foot, and a dash when nobody has one", () => {
   assert.match(states.sheet({ broadsheet: SHEET }), /Class average<\/th><td class="num">74\.50<\/td>/);
   assert.match(
     states.sheet({ broadsheet: { ...SHEET, class_average: null } }),
-    /Class average<\/th><td class="num">—<\/td>/,
+    /Class average<\/th><td class="num">-<\/td>/,
   );
 });
 
@@ -131,7 +131,7 @@ test("the overview is classes and their averages, released or live, and nobody's
 
   assert.match(html, /JSS 1A/);
   assert.match(html, /74\.50/);
-  assert.match(html, /<td class="num" data-label="Class average">—<\/td>/);
+  assert.match(html, /<td class="num" data-label="Class average">-<\/td>/);
   assert.match(html, /Released/);
   assert.match(html, /Live/);
   assert.doesNotMatch(html, /Ada A|rank|Pos\./);

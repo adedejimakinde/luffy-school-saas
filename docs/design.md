@@ -34,12 +34,12 @@ nothing else: no page declares a colour.
   (`.logo-mark`, not `.icon`) — a rounded blue square, three white dots joined
   by a triangle — beside the lowercase wordmark `classnode`. Every other icon
   stays plain stroke.
-- **No em dashes in rendered UI copy.** A colon, a comma or a full stop
+- **No em dashes or en dashes in rendered UI copy.** A colon, a comma or a full stop
   instead. Code comments and docstrings are prose and keep writing however
-  they already do — this is about what a reader sees on the page. The one
-  exception is an em dash used as a placeholder for "nothing to show" (the
-  broadsheet's `DASH`, a session table's default) — that is data, not a
-  sentence, and stays.
+  they already do — this is about what a reader sees on the page. No
+  exceptions, and that includes an en dash in a range and a dash standing for
+  "nothing to show": the placeholder is a plain hyphen (the broadsheet's
+  `DASH`, a session table's default), and a time range is written `08:00-08:40`.
 
 ## Widths
 

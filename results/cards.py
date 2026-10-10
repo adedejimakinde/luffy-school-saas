@@ -116,7 +116,7 @@ def the_card_for(card_by_student, student_id):
         raise TheRosterMovedDuringRelease(
             f"The class roster changed while this term was being released, so "
             f"student {student_id} has a frozen section with no card behind it. "
-            f"Nothing has been saved — release the term again.",
+            f"Nothing has been saved. Release the term again.",
             student_membership_id=student_id,
         ) from None
 

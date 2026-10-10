@@ -27,7 +27,7 @@ export function settings({
     switchRow(
       "payment_receipts",
       "Payment receipts",
-      "Email a receipt to whoever receives invoices when a payment is recorded.",
+      "Email a receipt to whoever gets the fee bill when a payment is recorded.",
       payment_receipts,
     ),
     switchRow(
@@ -65,7 +65,7 @@ function recipients(staff, chosen) {
     '<fieldset class="recipients">',
     "<legend>Who gets the daily money summary</legend>",
     chosen.size === 0
-      ? '<p class="note">Nobody is chosen yet — tick whoever on the staff below ' +
+      ? '<p class="note">Nobody is chosen yet. Tick whoever on the staff below ' +
         "should see the day's money figures. Nobody will be emailed until " +
         "somebody is ticked.</p>"
       : "",
