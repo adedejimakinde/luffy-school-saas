@@ -1,0 +1,28 @@
+<section class="panel" aria-labelledby="attention-title">
+  <div class="panel-head">
+    <h2 id="attention-title">Needs your attention</h2>
+    {% if dash.attention %}<span class="chip">{{ dash.attention|length }}</span>{% endif %}
+  </div>
+  {% if dash.attention %}
+  <ul class="todo-list">
+    {% for item in dash.attention %}
+    <li data-item="{{ item.key }}">
+      <a href="{{ item.href }}">
+        <span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#{{ item.icon }}"/></svg></span>
+        <span class="todo-text">
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.detail }}</span>
+          {% include "home/parts/chip.html" with chip=item.chip %}
+        </span>
+        <span class="todo-end">
+          {% include "home/parts/chip.html" with chip=item.chip %}
+          <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="all-clear"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Nothing needs you right now.</p>
+  {% endif %}
+</section>

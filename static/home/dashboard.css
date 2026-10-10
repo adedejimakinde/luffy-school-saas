@@ -1,0 +1,437 @@
+/*
+ * The school dashboard (`/home/`). Colours, the font and the shell are
+ * `web/design.css`'s; this file holds the dashboard's own scale and layout.
+ *
+ * Drawn on the server: every figure and both drawings arrive in the HTML, so
+ * there is no loading state to show and no script to wait for.
+ */
+
+/* -- Tokens -----------------------------------------------------------------
+ *
+ * Six type sizes, an 8px spacing scale (4px is its half step, for the gap
+ * between a label and its value), 12px on cards and 8px on controls, and
+ * design.css's two shadows. Nothing below uses a size, a gap or a radius that
+ * is not one of these.
+ */
+.dash {
+  --t-1: 0.75rem;    /* 12px: the uppercase labels */
+  --t-2: 0.8125rem;  /* 13px: chips */
+  --t-3: 0.9375rem;  /* 15px: secondary lines */
+  --t-4: 1rem;       /* 16px: body and card titles */
+  --t-5: 1.25rem;    /* 20px: the greeting on a phone */
+  --t-6: 1.75rem;    /* 28px: KPI figures, the greeting on a desk */
+
+  --s-half: 4px;
+  --s-1: 8px;
+  --s-2: 16px;
+  --s-3: 24px;
+  --s-4: 32px;
+
+  --r-card: 12px;
+  --r-control: 8px;
+
+  --ease: 150ms ease;
+
+  display: grid;
+  gap: var(--s-2);
+}
+
+@media (min-width: 1024px) {
+  .dash { gap: var(--s-3); }
+}
+
+.dash h1, .dash h2, .dash p { margin: 0; }
+
+/* Every figure lines up with the one above it. */
+.dash .fig { font-variant-numeric: tabular-nums; }
+
+/* -- Cards ------------------------------------------------------------------ */
+.dash .panel {
+  min-width: 0;
+  padding: var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+}
+
+@media (min-width: 640px) {
+  .dash .panel { padding: var(--s-3); }
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-2);
+  margin: 0 0 var(--s-2);
+}
+
+.panel-head h2 { font-size: var(--t-4); }
+
+.panel-head a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+  margin: calc(-1 * var(--s-1)) 0;
+  padding: 0 var(--s-1);
+  font-size: var(--t-3);
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: var(--r-control);
+  transition: background-color var(--ease);
+}
+
+.panel-head a:hover { background: var(--brand-tint); }
+
+/* -- Labels, chips, change notes -------------------------------------------- */
+.eyebrow {
+  color: var(--muted);
+  font-size: var(--t-1);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+/* A status chip always carries an icon and a word, never a colour alone. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-half);
+  padding: 2px var(--s-1);
+  color: var(--muted);
+  background: var(--divider);
+  border-radius: 999px;
+  font-size: var(--t-2);
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.chip .icon { width: 14px; height: 14px; stroke-width: 2.25; }
+.chip-ok { color: var(--ok); background: var(--ok-bg); }
+.chip-warn { color: var(--warn); background: var(--warn-bg); }
+.chip-stop { color: var(--stop); background: var(--stop-bg); }
+.chip-brand { color: var(--brand); background: var(--brand-tint); }
+
+.change {
+  display: flex;
+  align-items: center;
+  gap: var(--s-half);
+  color: var(--muted);
+  font-size: var(--t-3);
+  line-height: 1.4;
+}
+
+.change .icon { width: 16px; height: 16px; stroke-width: 2; }
+
+/* -- Header ----------------------------------------------------------------- */
+.dash-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+}
+
+.dash-id { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+
+.dash-id .crest {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-card);
+  font-size: var(--t-4);
+}
+
+.dash-id h1 { font-size: var(--t-5); line-height: 1.2; }
+
+.dash-term { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+
+@media (min-width: 1024px) {
+  .dash-id h1 { font-size: var(--t-6); }
+  .dash-id .crest { width: 56px; height: 56px; }
+}
+
+/* -- KPI tiles --------------------------------------------------------------
+ *
+ * Two by two on a phone, four across from 1024px. Each tile is the link to
+ * the page that holds its figure in full.
+ */
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-1);
+}
+
+@media (min-width: 640px) { .kpis { gap: var(--s-2); } }
+@media (min-width: 1024px) {
+  .kpis { grid-template-columns: repeat(var(--kpi-count, 4), minmax(0, 1fr)); }
+}
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  min-width: 0;
+  padding: var(--s-2);
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-1);
+  text-decoration: none;
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+
+a.kpi:hover {
+  color: var(--text);
+  border-color: var(--brand-soft);
+  box-shadow: var(--shadow-2);
+}
+
+@media (min-width: 640px) { .kpi { padding: var(--s-3); } }
+
+.kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-1); }
+
+.kpi-icon {
+  display: none;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: var(--r-control);
+}
+
+.kpi-icon .icon { width: 18px; height: 18px; }
+
+@media (min-width: 640px) { .kpi-icon { display: grid; } }
+
+.kpi-value {
+  font-size: var(--t-6);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.kpi-value small { color: var(--muted); font-size: var(--t-3); font-weight: 400; letter-spacing: 0; }
+
+.kpi-meta { color: var(--muted); font-size: var(--t-3); line-height: 1.4; }
+
+.kpi .change { margin-top: auto; padding-top: var(--s-1); border-top: 1px solid var(--divider); }
+
+/* The collection meter: a track and the share collected, drawn in the SVG. */
+.meter { display: block; width: 100%; height: 8px; }
+.meter .track { fill: var(--divider); }
+.meter .done { fill: var(--brand); }
+
+/* -- Two columns under the tiles ------------------------------------------- */
+.dash-cols { display: grid; gap: var(--s-2); grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dash-col { display: grid; gap: var(--s-2); min-width: 0; }
+
+/* Below 1024px the two columns are one list, and recent activity goes last:
+   what needs doing and the money come before what has already happened. */
+@media (max-width: 1023.98px) {
+  .dash-col { display: contents; }
+  .panel-activity { order: 1; }
+}
+
+@media (min-width: 1024px) {
+  .dash-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--s-3); }
+  .dash-col { gap: var(--s-3); }
+}
+
+/* -- Needs your attention --------------------------------------------------- */
+.todo-list { list-style: none; margin: 0 calc(-1 * var(--s-1)); padding: 0; }
+
+.todo-list a {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-height: 64px;
+  padding: var(--s-1);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--r-control);
+  transition: background-color var(--ease);
+}
+
+.todo-list li + li { border-top: 1px solid var(--divider); }
+.todo-list a:hover { color: var(--text); background: var(--bg); }
+
+.todo-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: var(--r-control);
+}
+
+.todo-text { display: grid; gap: 2px; min-width: 0; }
+.todo-text strong { line-height: 1.35; }
+.todo-text span { color: var(--muted); font-size: var(--t-3); line-height: 1.4; }
+
+.todo-end { display: flex; align-items: center; gap: var(--s-1); color: var(--muted); }
+.todo-end > .icon { transition: transform var(--ease); }
+.todo-list a:hover .todo-end > .icon { color: var(--brand); transform: translateX(2px); }
+
+/* On a phone the chip moves under the text, so the title gets the width. */
+@media (max-width: 639.98px) {
+  .todo-list a { grid-template-columns: 40px minmax(0, 1fr) 20px; align-items: start; }
+  .todo-end .chip { display: none; }
+  .todo-text .chip { justify-self: start; margin-top: var(--s-half); }
+  .todo-end { align-self: center; }
+}
+
+@media (min-width: 640px) {
+  .todo-text .chip { display: none; }
+}
+
+.all-clear {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: var(--r-control);
+}
+
+.all-clear .icon { color: var(--ok); }
+
+/* -- Fee collection --------------------------------------------------------- */
+.fee-total { display: grid; gap: var(--s-half); margin: 0 0 var(--s-2); }
+.fee-total .fig { font-size: var(--t-6); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
+.fee-total span { color: var(--muted); font-size: var(--t-3); }
+
+.spark { display: block; width: 100%; height: auto; overflow: visible; }
+.spark .area { fill: var(--brand-tint); }
+.spark .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.spark .rest { fill: none; stroke: var(--border); stroke-width: 2; stroke-dasharray: 2 4; stroke-linecap: round; }
+.spark .now { fill: var(--card); stroke: var(--brand); stroke-width: 2; }
+
+.spark-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: var(--s-1) 0 var(--s-2);
+  color: var(--muted);
+  font-size: var(--t-1);
+}
+
+.meter-row { display: flex; align-items: center; gap: var(--s-2); }
+.meter-row .meter { flex: 1; }
+.meter-row .fig { font-weight: 700; }
+
+.fee-split {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s-1);
+  margin: var(--s-2) 0 0;
+  padding: var(--s-2) 0 0;
+  border-top: 1px solid var(--divider);
+}
+
+.fee-split div { display: grid; gap: var(--s-half); min-width: 0; }
+.fee-split dt { color: var(--muted); font-size: var(--t-1); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.fee-split dd { margin: 0; font-weight: 700; white-space: nowrap; }
+
+/* -- Attendance this week --------------------------------------------------- */
+.week { display: block; width: 100%; height: auto; }
+.week .bar { fill: var(--brand-soft); }
+.week .bar.today { fill: var(--brand); }
+.week .base { stroke: var(--border); stroke-width: 1; }
+
+.week-labels {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: var(--s-1) 0 0;
+  text-align: center;
+  font-size: var(--t-1);
+  color: var(--muted);
+}
+
+.week-labels b { display: block; color: var(--text); font-size: var(--t-3); }
+.week-labels .today b { color: var(--brand); }
+
+.week-foot { margin: var(--s-2) 0 0; padding: var(--s-2) 0 0; border-top: 1px solid var(--divider); color: var(--muted); font-size: var(--t-3); }
+
+/* -- Recent activity -------------------------------------------------------- */
+.feed { list-style: none; margin: 0; padding: 0; }
+
+.feed li {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--s-2);
+  padding: var(--s-1) 0;
+}
+
+.feed-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: 50%;
+}
+
+.feed-icon .icon { width: 16px; height: 16px; }
+.feed p { padding-top: var(--s-half); line-height: 1.45; }
+.feed time { padding-top: var(--s-half); color: var(--muted); font-size: var(--t-3); white-space: nowrap; }
+
+/* -- Set up your school ----------------------------------------------------- */
+.setup-head { display: grid; gap: var(--s-1); margin: 0 0 var(--s-2); }
+.setup-head h2 { font-size: var(--t-5); }
+.setup-head p { color: var(--muted); }
+
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
+
+.steps a {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 64px;
+  padding: var(--s-2);
+  color: var(--text);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-control);
+  transition: border-color var(--ease), background-color var(--ease);
+}
+
+.steps a:hover { color: var(--text); border-color: var(--brand-soft); background: var(--brand-tint); }
+.steps .done .icon:first-child { color: var(--ok); }
+.steps .todo .icon:first-child { color: var(--field-border); }
+.steps .step-text { display: grid; gap: 2px; }
+.steps .step-text span { color: var(--muted); font-size: var(--t-3); }
+.steps .done strong { color: var(--muted); }
+
+.steps .go {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--s-2);
+  color: var(--card);
+  background: var(--brand);
+  border-radius: var(--r-control);
+  font-weight: 700;
+  font-size: var(--t-3);
+  transition: background-color var(--ease);
+}
+
+.steps a:hover .go { background: var(--brand-strong); }
+
+@media (max-width: 639.98px) {
+  .steps .go { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dash * { transition: none !important; }
+}

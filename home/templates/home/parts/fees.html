@@ -1,0 +1,25 @@
+<section class="panel" aria-labelledby="fees-title">
+  <div class="panel-head">
+    <h2 id="fees-title">Fee collection</h2>
+    <a href="/fees/">Fee book</a>
+  </div>
+  <p class="fee-total"><span class="fig">{{ dash.fees.collected }}</span><span>collected of {{ dash.fees.expected }} expected this term</span></p>
+  {% if dash.fees.spark %}
+  <svg class="spark" viewBox="0 0 {{ dash.fees.spark.width }} {{ dash.fees.spark.height }}" role="img" aria-label="Fees collected each week this term, rising to {{ dash.fees.collected }} by week {{ dash.fees.weeks_so_far }}">
+    <path class="area" d="{{ dash.fees.spark.area }}"/>
+    {% if dash.fees.spark.end_x < dash.fees.spark.width %}<path class="rest" d="M{{ dash.fees.spark.end_x }} {{ dash.fees.spark.end_y }} H{{ dash.fees.spark.width }}"/>{% endif %}
+    <path class="line" d="{{ dash.fees.spark.line }}"/>
+    <circle class="now" cx="{{ dash.fees.spark.end_x }}" cy="{{ dash.fees.spark.end_y }}" r="4"/>
+  </svg>
+  <p class="spark-axis" aria-hidden="true"><span>Week 1</span><span>Week {{ dash.fees.weeks }}</span></p>
+  {% endif %}
+  <div class="meter-row">
+    <svg class="meter" role="img" aria-label="{{ dash.fees.percent }}% collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ dash.fees.percent }}%" height="8" rx="4"/></svg>
+    <span class="fig">{{ dash.fees.percent }}%</span>
+  </div>
+  <dl class="fee-split">
+    <div><dt>This week</dt><dd class="fig">{{ dash.fees.this_week }}</dd></div>
+    <div><dt>Outstanding</dt><dd class="fig">{{ dash.fees.outstanding }}</dd></div>
+    <div><dt>Owing</dt><dd class="fig">{{ dash.fees.owing }} students</dd></div>
+  </dl>
+</section>

@@ -1,0 +1,35 @@
+{% load static shell %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+
+{% comment %}
+The school dashboard, drawn whole on the server: every figure, both drawings
+and every link are in this response, so nothing loads after it and no script
+runs. `home/views.py` decides what this login may see; the parts below draw
+only what they are handed.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'home/dashboard.css' %}">
+
+{% shell_open "home" %}
+    <main id="home" class="dash">
+      {% include "home/parts/head.html" %}
+      {% if dash.setup %}
+        {% include "home/parts/setup.html" %}
+      {% else %}
+        {% if dash.tiles %}{% include "home/parts/tiles.html" %}{% endif %}
+        <div class="dash-cols">
+          <div class="dash-col">
+            {% include "home/parts/attention.html" %}
+            {% if dash.activity %}{% include "home/parts/activity.html" %}{% endif %}
+          </div>
+          <div class="dash-col">
+            {% if dash.fees %}{% include "home/parts/fees.html" %}{% endif %}
+            {% if dash.week %}{% include "home/parts/week.html" %}{% endif %}
+          </div>
+        </div>
+      {% endif %}
+    </main>
+{% shell_close "home" %}

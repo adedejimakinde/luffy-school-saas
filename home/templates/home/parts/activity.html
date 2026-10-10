@@ -1,0 +1,12 @@
+<section class="panel panel-activity" aria-labelledby="activity-title">
+  <div class="panel-head"><h2 id="activity-title">Recent activity</h2></div>
+  <ul class="feed">
+    {% for event in dash.activity %}
+    <li>
+      <span class="feed-icon" aria-hidden="true"><svg class="icon"><use href="#{{ event.icon }}"/></svg></span>
+      <p>{{ event.text }}</p>
+      <time datetime="{{ event.at|date:'c' }}">{{ event.when }}</time>
+    </li>
+    {% endfor %}
+  </ul>
+</section>

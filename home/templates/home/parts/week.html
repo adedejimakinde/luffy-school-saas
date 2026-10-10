@@ -1,0 +1,12 @@
+<section class="panel" aria-labelledby="week-title">
+  <div class="panel-head">
+    <h2 id="week-title">Attendance this week</h2>
+    <a href="/absences/">Absences</a>
+  </div>
+  <svg class="week" viewBox="0 0 280 49" role="img" aria-label="{% for day in dash.week.bars %}{{ day.label }} {% if day.percent is None %}no register{% else %}{{ day.percent }}%{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}">
+    {% for day in dash.week.bars %}<rect class="bar{% if day.is_today %} today{% endif %}" x="{{ day.x }}" y="{{ day.y }}" width="40" height="{{ day.h }}" rx="4"/>{% endfor %}
+    <line class="base" x1="0" x2="280" y1="48.5" y2="48.5"/>
+  </svg>
+  <p class="week-labels">{% for day in dash.week.bars %}<span{% if day.is_today %} class="today"{% endif %}><b class="fig">{% if day.percent is None %}-{% else %}{{ day.percent }}%{% endif %}</b>{{ day.label }}</span>{% endfor %}</p>
+  <p class="week-foot">{{ dash.week.foot }}</p>
+</section>

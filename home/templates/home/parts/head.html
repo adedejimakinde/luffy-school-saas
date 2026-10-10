@@ -1,0 +1,18 @@
+<header class="dash-head">
+  <div class="dash-id">
+    <span class="crest" aria-hidden="true">{% if dash.school.crest_url %}<img src="{{ dash.school.crest_url }}" alt="">{% else %}{{ dash.school.initials }}{% endif %}</span>
+    <div>
+      <p class="eyebrow">{{ dash.school.name }}</p>
+      <h1>{{ dash.greeting }}{% if dash.name %}, {{ dash.name }}{% endif %}</h1>
+    </div>
+  </div>
+  <div class="dash-term">
+    {% if dash.term %}
+    <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>{{ dash.term.session }} session</span>
+    <span class="chip chip-brand">{{ dash.term.name }}{% if dash.term.week %} &middot; Week {{ dash.term.week }} of {{ dash.term.weeks }}{% endif %}</span>
+    {% else %}
+    <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>No term is open</span>
+    {% endif %}
+    <time class="chip" datetime="{{ dash.today|date:'Y-m-d' }}">{{ dash.today|date:"l j F" }}</time>
+  </div>
+</header>

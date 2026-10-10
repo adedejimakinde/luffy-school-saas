@@ -99,6 +99,12 @@
   --sidebar: 256px;
   --topbar: 64px;
   --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
+
+  /* Two shadows and no more: resting, and lifted (a card under the pointer).
+     The text colour, thinned, so a shadow is never a colour of its own. */
+  --shadow-1: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
+  --shadow-2: 0 2px 4px color-mix(in srgb, var(--text) 5%, transparent),
+    0 8px 24px color-mix(in srgb, var(--text) 7%, transparent);
 }
 
 /* ------------------------------------------------------------------------ */

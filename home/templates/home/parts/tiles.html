@@ -1,0 +1,18 @@
+<section class="kpis" aria-label="This term at a glance" style="--kpi-count: {{ dash.tiles|length }}">
+  {% for tile in dash.tiles %}
+  <a class="kpi" href="{{ tile.href }}" data-tile="{{ tile.key }}">
+    <span class="kpi-top">
+      <span class="eyebrow">{{ tile.label }}</span>
+      <span class="kpi-icon" aria-hidden="true"><svg class="icon"><use href="#{{ tile.icon }}"/></svg></span>
+    </span>
+    <span class="kpi-value fig"{% if tile.exact %} title="{{ tile.exact }}"{% endif %}>{{ tile.value }}{% if tile.unit %} <small>{{ tile.unit }}</small>{% endif %}</span>
+    {% if tile.meter is not None %}
+    <svg class="meter" role="img" aria-label="{{ tile.meter }}% collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ tile.meter }}%" height="8" rx="4"/></svg>
+    {% endif %}
+    <span class="kpi-meta">{{ tile.meta }}</span>
+    {% if tile.change %}
+    <span class="change"><svg class="icon" aria-hidden="true"><use href="#i-{{ tile.change.direction }}"/></svg><span>{{ tile.change.text }}</span></span>
+    {% endif %}
+  </a>
+  {% endfor %}
+</section>
