@@ -401,7 +401,7 @@ body.site > main {
 .demo-form { display: grid; gap: 16px; }
 .demo-form .field input { font-size: 1rem; }
 .demo-form button { justify-self: start; min-width: 200px; }
-.demo-form > .todo { display: block; padding: 8px 12px; }
+.demo-form > .refused { margin: 0; padding: 8px 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 6px; }
 .sent {
   align-self: start;
   margin: 0;
