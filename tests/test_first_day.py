@@ -442,14 +442,14 @@ class AFailureNamesTheCommandThatFailedTests(SimpleTestCase):
     def test_stopped_prints_the_command_and_its_exit_code(self):
         """CONTROL 10: the old trap, which printed only the line number, makes
         this red."""
-        result = self.run_script("true\nfalse_command() { return 7; }\nfalse_command")
+        result = self.run_script("true\nsh -c 'exit 7'")
 
         self.assertEqual(result.returncode, 7)
         self.assertIn("STOPPED at line", result.stderr)
-        self.assertIn("false_command", result.stderr)
+        self.assertIn("sh -c 'exit 7'", result.stderr)
         self.assertIn("exit code 7", result.stderr)
 
     def test_stopped_still_says_a_rerun_finishes_the_job(self):
-        result = self.run_script("exit_with() { return 3; }\nexit_with")
+        result = self.run_script("sh -c 'exit 3'")
 
         self.assertIn("run the same command again", result.stderr)

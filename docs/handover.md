@@ -1,3 +1,15 @@
+# Where I stopped: 2026-10-10 (later), the first real run of the bootstrap found a silent stop
+
+The first real run of `docs/first-day.md` on the Contabo server stopped at `deploy/bootstrap.sh` line 164 with no reason, after `ssh_port=22` had been set correctly. The line was `sshd -T | awk '$1 == "port" {print $2; exit}'`: awk leaves at the first match, `sshd -T` is killed by SIGPIPE if it still has more than a pipe's buffer (64 KB) to write, and `set -o pipefail` makes that a failed pipeline, so `set -e` stopped the script.
+
+**What changed.** (1) The port is read from a variable (`sshd_settings="$(sshd -T)"`, then an awk with no `exit` over a here-string); a failing `sshd -T` and an sshd that names no port each now stop with a sentence. (2) Every other pipe in `deploy/` was read: none else pipes into a reader that can leave early. `grep -i`, `tail`, `cut`, `tr` and awk without `exit` read to the end; `grep -q` is only ever used on a file, not a pipe; the awk in `init-env.sh` reads one line of `openssl rand -hex` (under 100 bytes, which fits in a pipe, so it cannot be cut off). (3) The `STOPPED` line now carries the line number, the command that failed (`BASH_COMMAND`) and its exit code. `docs/first-day.md` step 6 says so.
+
+**Tests.** `tests/test_first_day.py` (38 tests, 9 new). One runs the script's own step 1 against a stand-in `sshd` that prints `port 22` first and then 4,000 more lines (about 200 KB): red on the old script (`STOPPED at line 164`, no reason), green on the new. Others cover a port that is not 22, an `sshd` that fails, one that names no port, the `STOPPED` text, and a scan that fails if any script under `deploy/` pipes into `head`, `read`, `grep -q/-m`, `sed ...q` or an awk with `exit`.
+
+**Not verified.** Not re-run on Contabo. The stand-in is a script, not the real `sshd`.
+
+**Rule for the next script.** Capture a command's output in a variable before filtering it with anything that can stop early.
+
 # Where I stopped: 2026-10-10, the deploy button moves the server's checkout
 
 The gap found at the end of the first-day runbook is closed. `deploy.sh` pulls the images for its SHA argument but reads `compose.yml` (and its own text) from the server's checkout at `/opt/classnode`; the workflow never moved that checkout, so a release that changed either ran with the old ones and still went green.
