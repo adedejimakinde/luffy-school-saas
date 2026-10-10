@@ -84,8 +84,13 @@ validates the compose file. It pushes from `main` only, and nothing deploys a
 1. Pick the commit: a full SHA on `main` whose CI passed.
 2. Run the **deploy** workflow (Actions → deploy → Run workflow) with that SHA.
    **[needs the server and the three deploy secrets]** It refuses a SHA that is
-   not on main, or on which `test`, `image` and `publish` did not all pass, and then
-   runs `/opt/classnode/deploy/deploy.sh <sha>` on the server over SSH.
+   not on main, or on which `test`, `image` and `publish` did not all pass. It
+   then moves the server's checkout at `/opt/classnode` to exactly that SHA
+   (`git fetch origin main`, `git checkout --detach <sha>`, then asks git that
+   `HEAD` is the SHA; it refuses a checkout with local edits), so that
+   `compose.yml` and `deploy.sh` are the release's own, and runs
+   `/opt/classnode/deploy/deploy.sh <sha>` on the server over SSH. If the deploy
+   fails it puts the checkout back on `deployed-sha`, the commit still running.
 3. `deploy.sh` pulls the two images, migrates with the new image while the old
    one serves, swaps `web`, `worker` and `caddy`, and asks `/healthz/` inside
    the container and then through Caddy over HTTPS. Unhealthy: it puts the

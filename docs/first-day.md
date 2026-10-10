@@ -470,7 +470,9 @@ On the server, as root, become `deploy` (the prompt changes to `deploy@...$`):
 su - deploy
 ```
 
-Then, with your SHA in place of `YOUR-40-CHARACTER-SHA` (twice):
+Then, with your SHA in place of `YOUR-40-CHARACTER-SHA` (twice). This is the one
+time you move the server's copy to the release by hand; from step 16 on, the
+deploy button does it:
 
 ```bash
 cd /opt/classnode && git fetch origin && git checkout YOUR-40-CHARACTER-SHA
@@ -512,20 +514,25 @@ Never do that once a real school exists.
 
 GitHub, **Actions**, **deploy** (left list), **Run workflow**, paste the **same**
 SHA, Run. If you set reviewers on `production`, approve. It checks the SHA is on
-`main` and passed CI, logs in with the deploy key, and runs `deploy.sh`. Redeploying
-the same commit changes nothing.
+`main` and passed CI, logs in with the deploy key, moves the server's copy of the
+project to that exact SHA (`git fetch`, then `git checkout`, so the deploy files
+are the release's own and not an older commit's), and runs `deploy.sh` from it.
+Redeploying the same commit changes nothing. This is how every later release goes;
+the by-hand `git checkout` in step 15 was needed only because the button did not
+exist yet.
 
-**Confirm.** The run goes green and its last step prints `DEPLOYED <sha>`. Now you
+**Confirm.** The run goes green. Its step "Check out the SHA on the server" prints
+`Server checkout is at <your sha>`, and its last step prints `DEPLOYED <sha>`. Now you
 may delete the key file from your PC (GitHub has its copy):
 `Remove-Item "$env:USERPROFILE\.ssh\classnode_deploy"` (keep the `.pub` if you wish).
 
-**Undo.** Nothing changed. If it fails at "Deploy over SSH", the cause is one of the
-three secrets or step 7's test; fix and run again.
+**Undo.** Nothing changed. If it fails at "Check out the SHA on the server", the log
+says why: usually someone edited a file in `/opt/classnode` by hand, and the button
+refuses to deploy over it (look with `su - deploy -c 'git -C /opt/classnode status'`).
+If it fails at "Deploy over SSH", the cause is one of the three secrets or step 7's
+test; fix and run again. A deploy that fails puts the server's copy back on the
+commit that is still running, so the files always match what is serving.
 
-**Know this for every later release:** the button runs `deploy.sh` and the
-`compose.yml` of whatever commit `/opt/classnode` has checked out; it does not move
-the checkout itself. Before pressing it for a new commit, on the server:
-`su - deploy -c 'cd /opt/classnode && git fetch origin && git checkout NEW-SHA'`.
 Deploy outside school hours: the website restarts for a few seconds.
 
 ## 17. Switch on the nightly jobs
