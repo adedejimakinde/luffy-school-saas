@@ -238,7 +238,7 @@ class TheRequestDoorSaysOneThingTests(GuardianSignInSetUp):
         body = self.ask_for_a_code().json()["detail"]
 
         self.assertEqual(body, guardian_signin.CODE_REQUESTED)
-        self.assertIn("If that number", body)
+        self.assertIn("If those details", body)
 
     def test_a_known_value_really_does_mint_one(self):
         """The control for the two above: identical bodies prove nothing if

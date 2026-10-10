@@ -136,7 +136,7 @@ class TheSiteHostTests(SiteSetUp):
     def test_the_site_host_serves_the_homepage(self):
         response = self.get()
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Results out the same week exams end.")
+        self.assertContains(response, "Teachers enter marks on their phones.")
 
     def test_www_is_the_same_site(self):
         self.assertEqual(self.get(host=f"www.{SITE}").status_code, 200)
