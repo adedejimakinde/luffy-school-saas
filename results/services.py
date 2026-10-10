@@ -511,7 +511,7 @@ def _refuse_for_somebody_elses_class(assignment, actor, school, sheet, step):
         who = "somebody who is no longer here" if holder is None else holder.name
         raise NotAllowedToActOnResults(
             f"{sheet.class_group}'s class teacher for {sheet.term} is {who}, "
-            f"who cannot currently act at {school} — so nobody may {step} its "
+            f"who cannot currently act at {school}, so nobody may {step} its "
             f"results. A principal or an administrator assigns another."
         )
 
@@ -557,7 +557,7 @@ def _move(
 
         if locked.state == SheetState.RELEASED:
             raise ReleaseIsFinal(
-                f"{locked.class_group} — {locked.term} has been released to "
+                f"{locked.class_group} for {locked.term} has been released to "
                 f"parents. A released result is corrected by issuing a revision, "
                 f"which keeps this one standing, not by moving it back."
             )

@@ -17,7 +17,7 @@
 
 import { esc } from "../web/html.js";
 
-const DASH = "—";
+const DASH = "-";
 
 /** `value`, or a dash for null — and never a zero for nothing. */
 export function figure(value) {

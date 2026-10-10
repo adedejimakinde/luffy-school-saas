@@ -42,7 +42,7 @@ function chooser(index, classId) {
 }
 
 function periodName(p) {
-  const times = `${p.starts_at}–${p.ends_at}`;
+  const times = `${p.starts_at}-${p.ends_at}`;
   return p.label ? `${esc(p.label)} <span class="times">${esc(times)}</span>` : esc(times);
 }
 
@@ -97,7 +97,7 @@ export function grid(index, week) {
 function lessonForm(index) {
   if (!index.may_edit || !index.periods.length) return "";
   const days = index.days.map((d) => [d.weekday, d.day]);
-  const periods = index.periods.map((p) => [p.period_id, p.label || `${p.starts_at}–${p.ends_at}`]);
+  const periods = index.periods.map((p) => [p.period_id, p.label || `${p.starts_at}-${p.ends_at}`]);
   const subjects = index.subjects.map((s) => [s.subject_id, s.subject]);
   const teachers = index.teachers.map((t) => [t.teacher_membership_id, t.teacher]);
   return [

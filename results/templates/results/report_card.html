@@ -178,7 +178,7 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
   <tr><td class="label">Name</td><td><strong>{{ card.student_name }}</strong>{% if admission_number %}<span class="adm">Adm. no. {{ admission_number }}</span>{% endif %}</td>
       <td class="label">Class</td><td>{{ card.class_group_name }}</td></tr>
   <tr><td class="label">Average</td>
-      <td>{% if card.own_average %}{{ card.own_average }}%{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      <td>{% if card.own_average %}{{ card.own_average }}%{% else %}<span class="blank">-</span>{% endif %}</td>
       <td class="label">Attendance</td>
       <td>
         {% comment %}
@@ -212,10 +212,10 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
           {% endif %}
         {% elif card.attendance.state == "not_recorded" %}
           <span class="blank">Not recorded this term</span>
-        {% else %}<span class="blank">&mdash;</span>{% endif %}
+        {% else %}<span class="blank">-</span>{% endif %}
       </td></tr>
   <tr><td class="label">Marks</td>
-      <td>{% if card.percentage %}{{ card.total_scored }} of {{ card.total_available }} obtainable &middot; {{ card.percentage }}%{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      <td>{% if card.percentage %}{{ card.total_scored }} of {{ card.total_available }} obtainable &middot; {{ card.percentage }}%{% else %}<span class="blank">-</span>{% endif %}</td>
       {% if card.place_in_class %}<td class="label">Position</td><td>{{ card.place_in_class.label }}</td>{% else %}<td></td><td></td>{% endif %}</tr>
 </table>
 
@@ -232,10 +232,10 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
     <tr>
       <td>{{ row.line.subject_name }}</td>
       {% for cell in row.cells %}
-        <td class="n">{% if cell is None %}<span class="blank">&middot;</span>{% elif cell.score is None %}<span class="blank">&mdash;</span>{% else %}{{ cell.score }}{% endif %}</td>
+        <td class="n">{% if cell is None %}<span class="blank">&middot;</span>{% elif cell.score is None %}<span class="blank">-</span>{% else %}{{ cell.score }}{% endif %}</td>
       {% endfor %}
       <td class="n">{{ row.line.total_scored }}<span class="max">/{{ row.line.total_available }}</span></td>
-      <td class="n">{% if row.line.percentage %}{{ row.line.percentage }}{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+      <td class="n">{% if row.line.percentage %}{{ row.line.percentage }}{% else %}<span class="blank">-</span>{% endif %}</td>
       <td class="n">{{ row.line.grade_letter }}</td>
       <td>{{ row.line.grade_remark }}</td>
     </tr>
@@ -252,10 +252,10 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
   <tbody>
     <tr>
       <td>{{ card.session.session }}</td>
-      <td class="n">{{ card.session.first_average|default:"—" }}</td>
-      <td class="n">{{ card.session.second_average|default:"—" }}</td>
-      <td class="n">{{ card.session.third_average|default:"—" }}</td>
-      <td class="n"><strong>{{ card.session.session_average|default:"—" }}</strong></td>
+      <td class="n">{{ card.session.first_average|default:"-" }}</td>
+      <td class="n">{{ card.session.second_average|default:"-" }}</td>
+      <td class="n">{{ card.session.third_average|default:"-" }}</td>
+      <td class="n"><strong>{{ card.session.session_average|default:"-" }}</strong></td>
     </tr>
   </tbody>
 </table>
@@ -268,7 +268,7 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
     <tbody>
       {% for trait in section.traits %}
       <tr><td>{{ trait.trait_name }}</td>
-          <td class="n">{% if trait.score is not None %}{{ trait.score }}{% else %}<span class="blank">&mdash;</span>{% endif %}</td>
+          <td class="n">{% if trait.score is not None %}{{ trait.score }}{% else %}<span class="blank">-</span>{% endif %}</td>
           <td>{{ trait.score_label }}</td></tr>
       {% endfor %}
     </tbody>

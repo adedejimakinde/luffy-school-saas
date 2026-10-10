@@ -109,7 +109,7 @@ REFUSED = (
 #: no claim that anything was sent, so it is equally true for a number on a
 #: guardian record and one that is not.
 CODE_REQUESTED = (
-    "If that number is on a guardian record, a code has been sent to it. It "
+    "If those details are on file for a parent, a code has been sent. It "
     "lasts a few minutes."
 )
 

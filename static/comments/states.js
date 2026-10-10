@@ -196,13 +196,13 @@ function trait(t, { may_rate, scale }) {
   if (!may_rate) {
     return (
       `<li class="trait"><span class="name">${esc(t.name)}</span>` +
-      `<span class="score">${current || "&mdash;"}</span></li>`
+      `<span class="score">${current || "-"}</span></li>`
     );
   }
   return [
     `<li class="trait"><label for="trait-${esc(t.trait_id)}">${esc(t.name)}</label>`,
     `<select id="trait-${esc(t.trait_id)}" data-trait="${esc(t.trait_id)}">`,
-    `<option value=""${current === "" ? " selected" : ""}>&mdash;</option>`,
+    `<option value=""${current === "" ? " selected" : ""}>-</option>`,
     scale
       .map(
         (p) =>
@@ -283,7 +283,7 @@ export function healthSection(h, note = null) {
   const box = (name, label, attrs) =>
     `<label for="health-${name}">${label}</label>` +
     `<input id="health-${name}" name="${name}" value="${esc(value(name) ?? "")}" ${attrs}>`;
-  const shown = (v, unit) => (v === null || v === undefined || v === "" ? "—" : `${esc(v)}${unit}`);
+  const shown = (v, unit) => (v === null || v === undefined || v === "" ? "-" : `${esc(v)}${unit}`);
   const head = '<section class="health"><h2>Physical development and health</h2>' +
     '<p class="hint">Seen only by the class teacher, the principal, the school&#39;s administrators and this child&#39;s parents.</p>';
   if (!h.may_edit) {

@@ -1236,7 +1236,7 @@ def _reminder_sentence(answer, *, asking):
     if not children:
         return f"Everybody here who owes was reminded in the last {days} days."
     if n == 0:
-        sentence = "No guardian who receives invoices can be reached for these children."
+        sentence = "No guardian who gets the fee bill can be reached for these children."
     else:
         about = _plural(len([c for c in children if c["guardians"]]), "child", "children")
         if asking:
@@ -1257,7 +1257,7 @@ def _reminder_sentence(answer, *, asking):
     if u:
         were = "will not be" if asking else ("was not" if u == 1 else "were not")
         sentence += (
-            f" {_plural(u, 'guardian')} who receive{'s' if u == 1 else ''} invoices "
+            f" {_plural(u, 'guardian')} who get{'s' if u == 1 else ''} the fee bill "
             f"{'has' if u == 1 else 'have'} no verified phone or email, and {were} sent anything."
         )
     if skipped:

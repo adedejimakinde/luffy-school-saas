@@ -63,7 +63,7 @@ export function code({ error = "", detail = "" } = {}) {
   return [
     '<form class="step step-code" data-step="code">',
     "<h1>Enter your code</h1>",
-    `<p>${esc(detail) || "If that number is on a guardian record, a code is on its way to it."}</p>`,
+    `<p>${esc(detail) || "If those details are on file for a parent, a code is on its way."}</p>`,
     problem(error),
     '<label for="code">Your code</label>',
     '<input id="code" name="code" type="text" inputmode="numeric" ',

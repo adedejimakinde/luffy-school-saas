@@ -146,7 +146,7 @@ function remindingBox(reminding) {
               `<li>${esc(c.student)}: ${esc(naira(c.amount_kobo))} owing. ` +
               (c.guardians.length
                 ? `To ${esc(c.guardians.join(", "))}.`
-                : "Nobody who receives invoices can be reached.") +
+                : "Nobody who gets the fee bill can be reached.") +
               "</li>",
           )
           .join("") +
@@ -475,7 +475,7 @@ function chargedSummary(done) {
         `${esc(done.discounts_skipped)} already given this term.</p>`
       : "",
     done.students_skipped
-      ? `<p>${esc(done.students_skipped)} on the roster no longer enrolled, and not charged.</p>`
+      ? `<p>${esc(done.students_skipped)} no longer in the class, and not charged.</p>`
       : "",
     elsewhere.length
       ? `<p>Not charged, because another class's bill already charged them this term: ` +

@@ -158,7 +158,7 @@ test("a gap and an unmarked paper do not print the same", () => {
   const cells = [...row.matchAll(/<td class="n paper"[^>]*>(.*?)<\/td>/g)].map((m) => m[1]);
   assert.match(cells[0], /^17$/, "the mark");
   assert.match(cells[1], /&middot;/, "Mathematics has no Exam out of 100: a gap");
-  assert.match(cells[2], /&mdash;/, "nobody marked the Mid-term: a dash");
+  assert.match(cells[2], /<span class="blank">-<\/span>/, "nobody marked the Mid-term: a dash");
   assert.match(cells[3], /^88$/);
 });
 
@@ -313,7 +313,7 @@ test("an unknown state is blank rather than a guess", () => {
   const cell = attendanceCell(
     card(attending("something_new", { present: 5, school_days: 62, marked: 5 })),
   );
-  assert.match(cell, /&mdash;/, "blank, like a card with no attendance at all");
+  assert.match(cell, /<span class="blank">-<\/span>/, "blank, like a card with no attendance at all");
   assert.doesNotMatch(cell, /5|62/, "a client that does not understand the state invents nothing");
 });
 
@@ -481,7 +481,7 @@ test("a paper this subject does not have is left out of the summary line entirel
 
   assert.match(
     summary,
-    /First CA 17 &middot; Mid-term <span class="blank">&mdash;<\/span> &middot; Exam 88 &middot; Total 127<span class="max">\/140<\/span>/,
+    /First CA 17 &middot; Mid-term <span class="blank">-<\/span> &middot; Exam 88 &middot; Total 127<span class="max">\/140<\/span>/,
   );
   assert.doesNotMatch(summary, /Exam &middot;|·.*Exam/, "the gap paper (no Exam\/100) does not appear at all");
 });
@@ -502,6 +502,6 @@ test("no grade yet is just the percentage, not a grade beside a blank", () => {
       ],
     }),
   );
-  assert.match(html, /<span class="grade-pct"><span class="blank">&mdash;<\/span><\/span>/);
+  assert.match(html, /<span class="grade-pct"><span class="blank">-<\/span><\/span>/);
   assert.doesNotMatch(html, /&middot; <span class="blank">/, "no separator in front of nothing");
 });

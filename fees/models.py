@@ -371,7 +371,7 @@ class FeeConcession(models.Model):
     def delete(self, *args, **kwargs):
         raise ConcessionIsFixed(
             f"Concession {self.pk} cannot be deleted. Revoke it, with the "
-            f"reason — the school has to be able to say why it stopped."
+            f"reason. The school has to be able to say why it stopped."
         )
 
 
@@ -817,7 +817,7 @@ class FeeLedgerEntry(models.Model):
     def delete(self, *args, **kwargs):
         raise LedgerIsAppendOnly(
             f"Ledger entry {self.pk} cannot be deleted. Post a reversal naming "
-            f"it instead — the books have to keep saying what they said."
+            f"it instead. The books have to keep saying what they said."
         )
 
     def clean(self):

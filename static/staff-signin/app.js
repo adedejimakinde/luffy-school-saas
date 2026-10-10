@@ -65,7 +65,7 @@ export function advance(state, { status, body }) {
     return {
       ...it,
       step: "ask",
-      error: it.body.detail || "That identifier and password do not match an account.",
+      error: it.body.detail || "That email, phone number or staff ID and password do not match an account.",
     };
   }
   return { ...it, step: "broken" };

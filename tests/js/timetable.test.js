@@ -130,8 +130,8 @@ test("a double period is two cells saying the same thing, not one merged cell", 
 test("a period with no label is named by its times", () => {
   const html = states.grid(INDEX, WEEK);
 
-  assert.match(html, /Period 1 <span class="times">08:00–08:40<\/span>/);
-  assert.match(html, /<th scope="row">08:40–09:20<\/th>/);
+  assert.match(html, /Period 1 <span class="times">08:00-08:40<\/span>/);
+  assert.match(html, /<th scope="row">08:40-09:20<\/th>/);
 });
 
 test("what a school typed is escaped", () => {

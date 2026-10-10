@@ -94,7 +94,7 @@ def open_bill(class_group, term):
 def _require_description(description):
     text = (description or "").strip()
     if not text:
-        raise NoDescription("Say what the line is for: \"Tuition\", \"PTA levy\".")
+        raise NoDescription("Say what the line is for: \"Tuition\", \"ICT fee\", \"PTA levy\".")
     if len(text) > _DESCRIPTION_MAX:
         raise NoDescription(f"Keep the description under {_DESCRIPTION_MAX} characters.")
     return text

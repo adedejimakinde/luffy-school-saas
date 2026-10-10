@@ -98,7 +98,7 @@ test("no register yet today is a dash, not a zero", () => {
     present: { ...HOME.present, today: { on: "2026-09-23", present: 0, marked: 0 }, week: [] },
   });
 
-  assert.match(html, /Present today<\/span><span class="stat-value">—<\/span>/);
+  assert.match(html, /Present today<\/span><span class="stat-value">-<\/span>/);
   assert.match(html, /No register taken yet today/);
   assert.doesNotMatch(html, /0%<\/span>/);
 });
@@ -110,7 +110,7 @@ test("with no current term the term's figures are dashes that say why", () => {
 });
 
 test("absent too often carries its label and its rule", () => {
-  assert.match(states.home(HOME), /7 <small>pupils<\/small>.*label-stop">Needs a look/);
+  assert.match(states.home(HOME), /7 <small>students<\/small>.*label-stop">Needs a look/);
   assert.match(states.home(HOME), /Absent on 20% or more of marked days/);
   assert.match(
     states.home({ ...HOME, absent: { ...HOME.absent, children: 0 } }),
@@ -134,7 +134,7 @@ test("every row's action is a link, and nothing on the page releases", () => {
 test("remarks missing opens the remarks page for that class, and says how many", () => {
   const html = states.waiting(HOME.waiting);
 
-  assert.match(html, /Remarks missing <span class="label label-warn">4 pupils<\/span>/);
+  assert.match(html, /Remarks missing <span class="label label-warn">4 students<\/span>/);
   assert.match(html, /<a class="btn row-btn" href="\/comments\/\?class=12"><span>Open<\/span>/);
 });
 
@@ -246,10 +246,10 @@ test("on the portal the page says where it lives, and offers no sign-out", async
   assert.doesNotMatch(root.innerHTML, /sign-out/);
 });
 
-test("no em dash in any sentence the home draws", () => {
-  // `docs/design.md`: a dash is allowed only as "nothing to show".
+test("no em dash or en dash in anything the home draws", () => {
+  // `docs/design.md`: no exceptions. "Nothing to show" is a plain hyphen.
   const html = states.home(HOME) + states.notYours({}) + states.wrongHost() + states.signedOut({}) + states.broken();
-  assert.doesNotMatch(html.replace(/<span class="stat-value">—<\/span>/g, ""), /—/);
+  assert.doesNotMatch(html, /[\u2013\u2014]|&[mn]dash;/);
 });
 
 // -- the contact-email nudge -----------------------------------------------------

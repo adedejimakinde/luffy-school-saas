@@ -130,7 +130,7 @@ function who(payload) {
 }
 
 function marksSummary(payload) {
-  if (!payload.percentage) return '<span class="blank">—</span>';
+  if (!payload.percentage) return '<span class="blank">-</span>';
   return `${esc(payload.total_scored)} of ${esc(payload.total_available)} obtainable &middot; ${esc(payload.percentage)}%`;
 }
 
@@ -253,7 +253,7 @@ function summaryLine(line, columns) {
 function mark(cell) {
   if (cell === null || cell === undefined) return '<span class="blank">&middot;</span>';
   if (cell.score === null || cell.score === undefined)
-    return '<span class="blank">&mdash;</span>';
+    return '<span class="blank">-</span>';
   return esc(cell.score);
 }
 
@@ -268,7 +268,7 @@ function mark(cell) {
  */
 function percentage(value) {
   if (value === null || value === undefined || value === "")
-    return '<span class="blank">&mdash;</span>';
+    return '<span class="blank">-</span>';
   return `${esc(value)}%`;
 }
 
@@ -313,7 +313,7 @@ function attendance(payload) {
   const a = payload.attendance || {};
   switch (a.state) {
     case "absent":
-      return '<span class="blank">&mdash;</span>';
+      return '<span class="blank">-</span>';
     case "not_recorded":
       return '<span class="blank">Not recorded this term</span>';
     case "partial": {
@@ -337,7 +337,7 @@ function attendance(payload) {
     default:
       // An unknown state is a server this client does not understand, and a
       // guess here would be a number nobody computed. Blank, like `absent`.
-      return '<span class="blank">&mdash;</span>';
+      return '<span class="blank">-</span>';
   }
 }
 

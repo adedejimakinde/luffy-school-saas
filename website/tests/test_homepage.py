@@ -30,14 +30,13 @@ PORTAL = "app.classnode.testserver"
 #: Every sentence the page was given, word for word.
 COPY = [
     "Features", "Pricing", "Staff sign in", "Parent sign in", "Book a demo",
-    "Results out the same week exams end.",
-    "Teachers enter marks on their phones. The principal checks them and releases. "
-    "Parents see the report card that evening.",
+    "Teachers enter marks on their phones.",
+    "The principal checks the marks and releases them. Parents then read the report card online.",
     "Every child gets their own account number for fees.",
-    "Parents pay by transfer, the way they already do. The money goes straight to the "
-    "school's bank and onto the right child's record, and the receipt goes out the same minute.",
+    "Parents pay by transfer, the way they already do. The payment is matched to the right "
+    "child's record, and the parent can be emailed a receipt.",
     "Know who came to school today.",
-    "Class teachers take the register in under a minute. When a child is absent, the "
+    "Class teachers take the register on their phones. When a child is absent, the "
     "parent gets an email.",
     "See what it does",
     "Made for Nigerian secondary schools. Works on the phones your teachers already carry.",
@@ -63,7 +62,7 @@ COPY = [
     "A short summary in your inbox every day: what came in, and what is still owed.",
     "Bad network",
     "Teachers can keep entering marks when the network drops.",
-    "Nothing is lost, and it sends when the connection comes back.",
+    "Marks stay on the phone and send when the connection comes back.",
     "Priced per student, per term.",
     "₦2,500 per student, per term. No setup fee.",
     "See it with your own classes.",
@@ -137,7 +136,7 @@ class TheSiteHostTests(SiteSetUp):
     def test_the_site_host_serves_the_homepage(self):
         response = self.get()
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Results out the same week exams end.")
+        self.assertContains(response, "Teachers enter marks on their phones.")
 
     def test_www_is_the_same_site(self):
         self.assertEqual(self.get(host=f"www.{SITE}").status_code, 200)
@@ -230,14 +229,14 @@ class TheDemoRequestTests(SiteSetUp):
         self.assertEqual(DemoRequest.objects.count(), 0)
         self.assertEqual(mail.outbox, [])
 
-    def test_a_missing_or_wrong_field_is_refused_with_its_todo(self):
+    def test_a_missing_or_wrong_field_is_refused_in_a_sentence(self):
         for field, value in (("name", ""), ("school", ""), ("phone", "call me"),
                              ("students", "0"), ("students", "lots"), ("email", "not-an-email")):
             with self.subTest(field=field, value=value):
                 response = self.post({**FORM, field: value})
                 self.assertEqual(response.status_code, 400)
                 page = response.content.decode()
-                self.assertIn("TODO: message when a field is missing or not right.", page)
+                self.assertIn("Something is missing or not right. Check the marked fields and send it again.", page)
                 self.assertRegex(page, rf'name="{field}"[^>]*aria-invalid="true"')
         self.assertEqual(DemoRequest.objects.count(), 0)
 
@@ -246,7 +245,7 @@ class TheDemoRequestTests(SiteSetUp):
             self.assertEqual(self.post().status_code, 302)
         response = self.post()
         self.assertEqual(response.status_code, 429)
-        self.assertContains(response, "TODO: message when one address has sent too many", status_code=429)
+        self.assertContains(response, "Too many requests from this connection. Try again in an hour.", status_code=429)
         self.assertEqual(DemoRequest.objects.count(), 3)
         # Another address is not held by it.
         self.assertEqual(self.post(address="10.0.0.2").status_code, 302)

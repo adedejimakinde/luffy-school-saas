@@ -304,7 +304,7 @@ class ResultSheetTransition(models.Model):
         if self.pk is not None and not self._state.adding:
             raise TransitionsAreAppendOnly(
                 f"Transition {self.pk} has already been recorded and cannot be "
-                f"changed. Record the next step instead — an approval history "
+                f"changed. Record the next step instead. An approval history "
                 f"that can be edited is not an approval history."
             )
         return super().save(*args, **kwargs)
@@ -899,7 +899,7 @@ class ReleasedTraitRating(models.Model):
         if self.pk is not None and not self._state.adding:
             raise RatingsAreFrozenAtRelease(
                 f"Frozen rating {self.pk} is part of a card that has been "
-                f"released. It cannot be changed — correcting a released result "
+                f"released. It cannot be changed. Correcting a released result "
                 f"is a revision, which makes a new version and leaves this one "
                 f"standing."
             )
@@ -1192,7 +1192,7 @@ class ReleasedComment(models.Model):
         if self.pk is not None and not self._state.adding:
             raise CommentsAreFrozenAtRelease(
                 f"Frozen comment {self.pk} is part of a card that has been "
-                f"released. It cannot be changed — correcting a released result "
+                f"released. It cannot be changed. Correcting a released result "
                 f"is a revision, which makes a new version and leaves this one "
                 f"standing."
             )
@@ -1652,7 +1652,7 @@ class ReleasedSessionResult(models.Model):
         if self.pk is not None and not self._state.adding:
             raise SessionResultsAreFrozenAtRelease(
                 f"Frozen session line {self.pk} is part of a card that has been "
-                f"released. It cannot be changed — correcting a released result "
+                f"released. It cannot be changed. Correcting a released result "
                 f"is a revision, which makes a new version and leaves this one "
                 f"standing."
             )
@@ -1809,7 +1809,7 @@ class PromotionDecision(models.Model):
         if self.pk is not None and not self._state.adding:
             raise PromotionDecisionsAreAppendOnly(
                 f"Promotion decision {self.pk} has been recorded and cannot be "
-                f"changed. Record a new decision instead — both stand, and the "
+                f"changed. Record a new decision instead. Both stand, and the "
                 f"later one is what holds."
             )
         return super().save(*args, **kwargs)
@@ -1973,7 +1973,7 @@ class WithholdingDecision(models.Model):
         if self.pk is not None and not self._state.adding:
             raise WithholdingDecisionsAreAppendOnly(
                 f"Withholding decision {self.pk} has been recorded and cannot "
-                f"be changed. Record a new decision instead — both stand, and "
+                f"be changed. Record a new decision instead. Both stand, and "
                 f"the later one is what holds."
             )
         return super().save(*args, **kwargs)
@@ -2483,8 +2483,8 @@ class ReleasedCard(models.Model):
     def save(self, *args, **kwargs):
         if self.pk is not None and not self._state.adding:
             raise CardsAreFrozenAtRelease(
-                f"Card {self.pk} has been released. It cannot be changed — "
-                f"correcting a released result is a revision, which makes a new "
+                f"Card {self.pk} has been released. It cannot be changed. "
+                f"Correcting a released result is a revision, which makes a new "
                 f"version and leaves this one standing."
             )
         return super().save(*args, **kwargs)
@@ -2614,7 +2614,7 @@ class ReleasedSubjectResult(models.Model):
         if self.pk is not None and not self._state.adding:
             raise CardsAreFrozenAtRelease(
                 f"Frozen subject line {self.pk} is part of a card that has been released. It "
-                f"cannot be changed — correcting a released result is a revision, "
+                f"cannot be changed. Correcting a released result is a revision, "
                 f"which makes a new version and leaves this one standing."
             )
         return super().save(*args, **kwargs)
@@ -2729,7 +2729,7 @@ class ReleasedAssessmentScore(models.Model):
         if self.pk is not None and not self._state.adding:
             raise CardsAreFrozenAtRelease(
                 f"Frozen score cell {self.pk} is part of a card that has been released. It "
-                f"cannot be changed — correcting a released result is a revision, "
+                f"cannot be changed. Correcting a released result is a revision, "
                 f"which makes a new version and leaves this one standing."
             )
         return super().save(*args, **kwargs)

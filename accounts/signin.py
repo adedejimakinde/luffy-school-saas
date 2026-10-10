@@ -35,13 +35,13 @@ from . import throttling
 from .models import SignInScope
 
 #: What every failed sign-in says, regardless of which failure it was.
-REFUSED = "That identifier and password do not match an account."
+REFUSED = "That email, phone number or staff ID and password do not match an account."
 
 #: What a throttled sign-in says. Names no account and no identifier: it is a
 #: statement about this caller's recent traffic, not about who exists.
 THROTTLED = (
-    "Too many failed sign-in attempts. Wait a moment and try again — "
-    "nothing has been locked."
+    "Too many failed sign-in attempts. Wait a moment and try again. "
+    "Nothing has been locked."
 )
 
 BAD_CREDENTIALS = "bad_credentials"

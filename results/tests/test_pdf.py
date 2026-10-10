@@ -814,7 +814,7 @@ class AttendanceOfNoughtTests(ReportCardApiSetUp):
         """The control. Without it the tests above pass against a page that
         prints the raw value for everything, dash included."""
         cell = self.attendance_cell(self.attendance_line("absent"))
-        self.assertIn("&mdash;", cell)
+        self.assertIn(">-<", cell)
         self.assertNotIn("present", cell.lower())
         self.assertNotIn("recorded", cell.lower())
 

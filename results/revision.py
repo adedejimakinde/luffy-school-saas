@@ -150,7 +150,7 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
         locked = _locked(sheet)
         if locked.state != SheetState.RELEASED:
             raise NothingToRevise(
-                f"{locked.class_group} — {locked.term} is "
+                f"{locked.class_group} for {locked.term} is "
                 f"{locked.get_state_display().lower()}, not released. A revision "
                 f"reissues a card that has gone home; there is nothing here that "
                 f"has."
@@ -257,7 +257,7 @@ def _require_still_on_this_roster(sheet, results, student_id):
         f"This child's card was released with {sheet.class_group} for "
         f"{sheet.term}, and they are not on that class's roster for the term "
         f"any more. A revision re-freezes the card from that class's marks, and "
-        f"there are none for them there now — it would issue a blank card over "
+        f"there are none for them there now. It would issue a blank card over "
         f"the one that went home. Whatever the office did to the placement has "
         f"to be undone, or looked at, first."
     )
@@ -288,9 +288,9 @@ def _the_released_sheet(student_id, term):
     if placement is None:
         raise NothingToRevise(
             f"No card has gone home for this child for {term}, and they are in "
-            f"no class group for it either — so there is no release to reissue "
-            f"from. A child placed into a released term can be given a card "
-            f"(issue #31); a child placed nowhere cannot."
+            f"no class group for it either, so there is no release to reissue "
+            f"from. A child placed into a released term can be given a card, "
+            f"but a child placed nowhere cannot."
         )
 
     sheet = ResultSheet.objects.filter(
@@ -298,7 +298,7 @@ def _the_released_sheet(student_id, term):
     ).first()
     if sheet is None:
         raise NothingToRevise(
-            f"{placement.class_group} — {term} has never been opened, so nothing "
+            f"{placement.class_group} for {term} has never been opened, so nothing "
             f"has been released for it and there is no card to reissue."
         )
     return sheet

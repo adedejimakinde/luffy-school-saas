@@ -464,7 +464,7 @@ def _require_this_card_has_not_gone_home(term, membership):
             f"{membership.name or membership.user}'s report card for {term} has "
             f"been released to a parent. It has to keep saying what it said, so "
             f"this cannot be changed here. A released card is corrected by "
-            f"reissuing it, and reissuing cannot yet reach a remark — so a wrong "
+            f"reissuing it, and reissuing cannot yet reach a remark, so a wrong "
             f"one has to be raised with the principal.",
             state=SheetState.RELEASED,
         )
@@ -511,15 +511,15 @@ def _require_the_sheet_is_open(class_group, term):
         # does not exist. Issue #54 holds the decision that would make it
         # true; until then the honest thing is to name who can act.
         raise CommentsLocked(
-            f"{class_group} — {term} has been released to parents. Its remarks "
+            f"{class_group} for {term} has been released to parents. Its remarks "
             f"are part of a card somebody is holding, so this one cannot be "
             f"changed here. A released card is corrected by reissuing it, and "
-            f"reissuing cannot yet reach a remark — so a wrong one has to be "
+            f"reissuing cannot yet reach a remark, so a wrong one has to be "
             f"raised with the principal.",
             state=sheet.state,
         )
     raise CommentsLocked(
-        f"{class_group} — {term} is {sheet.get_state_display().lower()}, so its "
+        f"{class_group} for {term} is {sheet.get_state_display().lower()}, so its "
         f"remarks are part of what is being reviewed and cannot be changed. Ask "
         f"for the sheet to be sent back if one is wrong.",
         state=sheet.state,
@@ -571,7 +571,7 @@ def write(
         # "Clear it instead" is advice about `clear()`, which exists for a
         # remark and has no counterpart in the phrase bank.
         blank_message=(
-            "A remark cannot be blank. Clear it instead — an empty remark and "
+            "A remark cannot be blank. Clear it instead. An empty remark and "
             "no remark are the same thing, and the card prints neither."
         ),
     )

@@ -419,7 +419,7 @@ def _locked_reason(group, term):
     if results_services.is_open_for_writing(sheet):
         return None
     return (
-        f"{group.name} — {term} is {sheet.get_state_display().lower()}, so its "
+        f"{group.name} for {term} is {sheet.get_state_display().lower()}, so its "
         f"remarks cannot be changed here."
     )
 

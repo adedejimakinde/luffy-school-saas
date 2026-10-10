@@ -221,7 +221,7 @@ def unauthenticated(request, exc):
         request,
         {
             "detail": (
-                "Your session has ended. Sign in again — anything you were "
+                "Your session has ended. Sign in again, and anything you were "
                 "part-way through can be sent again once you have."
                 if expired
                 else "Sign in to use this endpoint."

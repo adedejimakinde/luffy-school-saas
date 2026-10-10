@@ -43,7 +43,7 @@ export function esc(value) {
  * when in fact their child was never there. The PDF template makes the same
  * distinction with `default_if_none`.
  */
-export function numberOrBlank(value, blank = "&mdash;") {
+export function numberOrBlank(value, blank = "-") {
   return value === null || value === undefined ? blank : esc(value);
 }
 

@@ -58,16 +58,18 @@ A plain form post, CSRF-checked, that works with no script.
 - **Rate limit**: `DEMO_REQUESTS_PER_HOUR` (5) per network address, counted
   from the saved rows, so it holds across worker processes. The address is
   `accounts.throttling.client_address()`'s. Over the limit is a 429.
-- The two refusals (a field missing or wrong, too many requests) show a visible
-  **TODO** for their wording: no copy was given for them, so none was written.
+- The two refusals (a field missing or wrong, too many requests) each show one
+  plain sentence above the form (`.refused`). Neither makes a claim.
 
 ## The page
 
-- **The words are the copy as given, word for word**: the price (₦2,500 per
-  student, per term, no setup fee), the call-back time (one working day), the
-  footer (Classnode. Nigeria.) and the contact address (hello@classnode.co)
-  included. The two form refusals are still visible `TODO`s: no wording was
-  given for them. `website/tests/test_homepage.py` holds the page to that copy
+- **The words say what the product does and promise no outcome we cannot
+  show** (no speed, no "same week", no "nothing is lost"; a receipt waits for
+  morning when a payment lands at night). Kept as the owner gave them: the
+  price (₦2,500 per student, per term, no setup fee), the call-back time (one
+  working day), the footer (Classnode. Nigeria.) and the contact address
+  (hello@classnode.co). The two form refusals are one plain sentence each.
+  `website/tests/test_homepage.py` holds the page to that copy
   and to the writing rules: no en or em dash, no exclamation or question mark,
   no sentence starting "Imagine", none of the banned words.
 - **TODO notes** on the privacy notice and the terms are drawn only when `SHOW_LEGAL_TODOS` is on (off by

@@ -58,7 +58,7 @@ test("the office reads it as text", () => {
 
   assert.doesNotMatch(html, /data-form="health"/);
   assert.match(html, /<dd>1.42 m<\/dd>/);
-  assert.match(html, /<dd>—<\/dd>/);
+  assert.match(html, /<dd>-<\/dd>/);
 });
 
 test("a school not on the Ogun card shows no section", () => {

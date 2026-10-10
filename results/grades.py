@@ -182,7 +182,7 @@ def _require_a_scale(bands):
         if len(letter) > MAX_LETTER:
             raise InvalidGradeScale(
                 f"A grade letter fits {MAX_LETTER} characters and {letter!r} is "
-                f"{len(letter)}. A band is labelled, not described — the words go "
+                f"{len(letter)}. A band is labelled, not described. The words go "
                 f"in the remark."
             )
 
@@ -210,7 +210,7 @@ def _require_a_scale(bands):
         lowest = min(seen_minima)
         raise InvalidGradeScale(
             f"A grading scale has to start at 0. This one starts at {lowest}, so "
-            f"a mark below {lowest} would earn no grade at all and print blank — "
+            f"a mark below {lowest} would earn no grade at all and print blank, "
             f"which on a card is indistinguishable from a subject nobody marked."
         )
 

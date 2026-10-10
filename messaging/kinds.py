@@ -110,7 +110,7 @@ _TEXT[Kind.FEE_REMINDER] = (
 # here would be a second, unreconciled copy of a number the ledger already
 # freezes on the entry itself.
 _TEXT[Kind.PAYMENT_RECEIPT] = (
-    "{school}: receipt {receipt_number} for {child} — {amount} received"
+    "{school}: receipt {receipt_number} for {child}, {amount} received"
     "{by_method} on {date}. {narration}{pay_into}"
 )
 
@@ -126,7 +126,7 @@ _TEXT[Kind.ABSENCE_ALERT] = (
 # total, with no child named. {word} is "payment" or "payments" — see
 # `notices.daily_summary.summary_text()`.
 _TEXT[Kind.DAILY_MONEY_SUMMARY] = (
-    "{school}: money summary for {date} — {collected} collected across "
+    "{school}: money summary for {date}. {collected} collected across "
     "{payments} {word}, {billed} billed."
 )
 

@@ -278,7 +278,7 @@ def _refuse_a_name_already_in_the_group(group, name, *, except_pk=None):
         raise RatingsError(
             f"“{name}” is already a trait of the "
             f"{TraitGroup(group).label.lower()} section, hidden rather than "
-            f"deleted — every rating ever made against it still names it. Show "
+            f"deleted, and every rating ever made against it still names it. Show "
             f"it again instead of adding a second one."
         )
     raise RatingsError(
@@ -586,7 +586,7 @@ def _require_this_card_has_not_gone_home(term, membership):
             f"been released to a parent. Its conduct section has to keep saying "
             f"what it said, so this cannot be changed here. A released card is "
             f"corrected by reissuing it, and reissuing cannot yet reach a "
-            f"rating — so a wrong one has to be raised with the principal.",
+            f"rating, so a wrong one has to be raised with the principal.",
             state=SheetState.RELEASED,
         )
 
@@ -652,15 +652,15 @@ def _require_the_sheet_is_open(class_group, term):
         # does not exist. Issue #54 holds the decision that would make it
         # true; until then the honest thing is to name who can act.
         raise RatingsLocked(
-            f"{class_group} — {term} has been released to parents. Its ratings "
+            f"{class_group} for {term} has been released to parents. Its ratings "
             f"are part of a card somebody is holding, so this one cannot be "
             f"changed here. A released card is corrected by reissuing it, and "
-            f"reissuing cannot yet reach a rating — so a wrong one has to be "
+            f"reissuing cannot yet reach a rating, so a wrong one has to be "
             f"raised with the principal.",
             state=sheet.state,
         )
     raise RatingsLocked(
-        f"{class_group} — {term} is {sheet.get_state_display().lower()}, so its "
+        f"{class_group} for {term} is {sheet.get_state_display().lower()}, so its "
         f"ratings are part of what is being reviewed and cannot be changed. Ask "
         f"for the sheet to be sent back if one is wrong.",
         state=sheet.state,

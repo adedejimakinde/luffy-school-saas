@@ -868,7 +868,7 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
     if locked.kind == FeeEntryKind.REVERSAL:
         raise CannotReverse(
             "That entry is itself a reversal. Reverse the original entry, or "
-            "post a fresh one — undoing an undo is a way to lose track of what "
+            "post a fresh one. Undoing an undo is a way to lose track of what "
             "actually happened."
         )
     if FeeLedgerEntry.objects.filter(reverses=locked).exists():

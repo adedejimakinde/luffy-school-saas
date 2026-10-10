@@ -1520,7 +1520,7 @@ _NOT_READY = {
     ),
     PdfState.FAILED: (
         "This card's file could not be made. The school has a record of what "
-        "went wrong — ask the school office."
+        "went wrong. Ask the school office."
     ),
 }
 

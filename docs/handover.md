@@ -89,9 +89,9 @@ A short pass over what a phone shows. Everything here is layout or one setting; 
 - **Pricing card.** The "Pricing" label above the heading is gone (the heading is now the `h2`), and "No setup fee." is one unbreakable phrase, so it never leaves a word alone on a line.
 - **Principal home, Today.** A row with no time no longer carries an empty `<time>` that held the time column open; it starts at the left, as the timed rows' times do.
 - **Tab bar.** `--tabbar` (61px: the links' 60px and the rule above them) is one token: the page's bottom padding is exactly it plus the phone's safe area, which is the bar's whole height, so the last control is never under the bar (it used to be the bar plus 24px, so the last button now sits right against the bar's edge). The layout test at 390px covers register, marks, remarks and timetable, at 844 and 640px tall: the last control ends above the bar, and the padding equals the bar. `.sticky-actions` (unused today) is not given a bar offset: nothing uses it, and the CSS budget has no room for rules nothing needs (see below).
-- **Legal TODO notes.** `SHOW_LEGAL_TODOS` (settings.py) draws the TODO boxes on the privacy notice and the terms. Off by default, so a public visitor sees neither the boxes nor the word. On when `DJANGO_DEBUG=1` (development and the demo, including the CI screens job), switched on by the legal tests for themselves, and `SHOW_LEGAL_TODOS=1` turns it on anywhere. Off, a sentence that ended in a note reads short ("Classnode is run by Classnode, RC number  Our address is"), so these pages are not ready for the public until the list below is done. `website/views.py` strips the notes from the rendered page.
+- **Legal TODO notes.** `SHOW_LEGAL_TODOS` (settings.py) draws the TODO boxes on the privacy notice and the terms. Off by default, so a public visitor sees neither the boxes nor the word. On when `DJANGO_DEBUG=1` (development and the demo, including the CI screens job), switched on by the legal tests for themselves, and `SHOW_LEGAL_TODOS=1` turns it on anywhere. Off, a note that stood in the middle of a sentence would leave the sentence short, so each note now sits in a sentence of its own and the public page simply leaves the fact out. These pages are still not ready for the public until the list below is done: "we will change the date below" points at a date that is not there yet. `website/views.py` strips the notes from the rendered page.
 
-## Every open TODO (62 on the legal pages, 2 on the homepage form)
+## Every open TODO (62 on the legal pages)
 
 Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's to settle, "owner" is the owner's. The first line of each is the section's id and heading.
 
@@ -118,7 +118,7 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 19. `#kept`, How long we keep it: TODO: lawyer and owner to set how long records are kept after a school leaves.
 20. `#kept`, How long we keep it: TODO: lawyer.
 21. `#kept`, How long we keep it: TODO: confirm once backups are running.
-22. `#kept`, How long we keep it: TODO: period.
+22. `#kept`, How long we keep it: TODO: how long demo bookings are kept.
 23. `#children`, Children's data and parents' consent: TODO: lawyer to confirm what section 31 of the NDPA requires and how the school records consent.
 24. `#children`, Children's data and parents' consent: TODO: lawyer.
 25. `#children`, Children's data and parents' consent: TODO: lawyer to confirm this is sensitive personal data under the NDPA and what more the school must do.
@@ -126,10 +126,10 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 27. `#rights`, Your rights: TODO: lawyer to state the time.
 28. `#rights`, Your rights: TODO: lawyer.
 29. `#complain`, How to complain: TODO: lawyer to add the Commission's current contact details.
-30. `#contact`, Contact us: TODO: registered address.
-31. `#contact`, Contact us: TODO: name, or whether one is required.
+30. `#contact`, Contact us: TODO: registered address, for post.
+31. `#contact`, Contact us: TODO: Data Protection Officer, by name, or whether one is required.
 32. `#changes`, Changes to this notice: TODO: lawyer.
-33. `#changes`, Changes to this notice: TODO: date.
+33. `#changes`, Changes to this notice: TODO: date. Write "Last updated" in front of it.
 
 **Terms (`/terms/`)**
 
@@ -149,26 +149,19 @@ Turn `SHOW_LEGAL_TODOS=1` on to see each one in place. "lawyer" is the lawyer's 
 14. `#use`, Using the service properly: TODO: lawyer.
 15. `#data`, The school's data: TODO: lawyer.
 16. `#data`, The school's data: TODO: owner to confirm what format, and how long it takes.
-17. `#data`, The school's data: TODO: hours.
+17. `#data`, The school's data: TODO: hours, within which we will tell it.
 18. `#data`, The school's data: TODO: lawyer to match the NDPA breach rules.
 19. `#availability`, When the service is not available: TODO: lawyer and owner to decide whether to promise an uptime figure.
 20. `#liability`, Our responsibility: TODO: lawyer to write what Classnode is and is not responsible for, and any limit on it, in plain words.
 21. `#ending`, Ending the service: TODO: lawyer and owner to set notice.
-22. `#ending`, Ending the service: TODO: period.
+22. `#ending`, Ending the service: TODO: period within which we delete them.
 23. `#ending`, Ending the service: TODO: lawyer.
 24. `#ending`, Ending the service: TODO: lawyer.
 25. `#law`, The law that applies: TODO: lawyer.
 26. `#law`, The law that applies: TODO: lawyer to set what happens next, and where.
 27. `#law`, The law that applies: TODO: lawyer.
-28. `#law`, The law that applies: TODO: date.
-29. `#contact`, Contact us: TODO: registered address.
-
-**Homepage form (`/`)**
-
-1. TODO: message when a field is missing or not right.
-2. TODO: message when one address has sent too many requests in an hour.
-
-The homepage form's two refusals have no wording yet. Those two messages are not behind `SHOW_LEGAL_TODOS`: they show only when someone's form is refused, and they show to the public until the wording is written.
+28. `#law`, The law that applies: TODO: date. Write "Last updated" in front of it.
+29. `#contact`, Contact us: TODO: registered address, for post.
 
 ## The 150 KB budget
 
@@ -419,8 +412,8 @@ from the open class).
 Homepage copy is the user's, word for word, with the price (₦2,500 per student, per term, no setup fee), "one
 working day", "Classnode. Nigeria." and hello@classnode.co. Legal pages: company Classnode, contact
 hello@classnode.co. **Still visible TODOs:** the RC number, the registered address, every "TODO: lawyer", the
-server location, B2 region, email provider, retention periods, DPO, breach notice, invoicing, dates, the
-"Our responsibility" section, and the two form refusal messages.
+server location, B2 region, email provider, retention periods, DPO, breach notice, invoicing, dates, and the
+"Our responsibility" section.
 
 ## Tests
 `website/tests/` (homepage and legal: hosts, copy and writing rules, form, 400 KB and 15 KB budgets, motion

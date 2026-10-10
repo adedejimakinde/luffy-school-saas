@@ -563,7 +563,7 @@ def marking_sheet(
         locked_reason=None
         if open_for_writing
         else (
-            f"{group.name} — {assessment.term} is "
+            f"{group.name} for {assessment.term} is "
             f"{sheet.get_state_display().lower()}, so its marks cannot be "
             f"changed here."
         ),

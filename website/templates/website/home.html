@@ -1,8 +1,10 @@
 {% extends "website/base.html" %}{% load static %}
 {% block main %}
 {% comment %}
-The homepage. Every sentence on it is the copy as given, word for word; a
-fact still to be decided is a visible `.todo` rather than a guess. The
+The homepage. Every sentence on it says what the product does and promises no
+outcome we cannot show: no speed, no "same week", no "nothing is lost". The
+price and the call-back time are the owner's own terms. A fact still to be
+decided is left out of the page rather than guessed. The
 screenshots are real screens from the demo (`scripts/site_shots.mjs`), and
 their `alt` is empty because the words beside each one already say what it
 shows.
@@ -18,8 +20,8 @@ not at all under reduced motion.
     <div class="slides">
       <article class="slide is-active" aria-roledescription="slide" aria-label="1 of 3">
         <div class="slide-text">
-          <h2>Results out the same week exams end.</h2>
-          <p>Teachers enter marks on their phones. The principal checks them and releases. Parents see the report card that evening.</p>
+          <h2>Teachers enter marks on their phones.</h2>
+          <p>The principal checks the marks and releases them. Parents then read the report card online.</p>
         </div>
         <div class="slide-device">
           <div class="phone"><img src="{% static 'website/shots/marks.webp' %}" width="540" height="1110" alt="" fetchpriority="high"></div>
@@ -28,7 +30,7 @@ not at all under reduced motion.
       <article class="slide" aria-roledescription="slide" aria-label="2 of 3" aria-hidden="true" inert>
         <div class="slide-text">
           <h2>Every child gets their own account number for fees.</h2>
-          <p>Parents pay by transfer, the way they already do. The money goes straight to the school's bank and onto the right child's record, and the receipt goes out the same minute.</p>
+          <p>Parents pay by transfer, the way they already do. The payment is matched to the right child's record, and the parent can be emailed a receipt.</p>
         </div>
         <div class="slide-device">
           <div class="phone"><img src="{% static 'website/shots/fees.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
@@ -37,7 +39,7 @@ not at all under reduced motion.
       <article class="slide" aria-roledescription="slide" aria-label="3 of 3" aria-hidden="true" inert>
         <div class="slide-text">
           <h2>Know who came to school today.</h2>
-          <p>Class teachers take the register in under a minute. When a child is absent, the parent gets an email.</p>
+          <p>Class teachers take the register on their phones. When a child is absent, the parent gets an email.</p>
         </div>
         <div class="slide-device">
           <div class="phone"><img src="{% static 'website/shots/register.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
@@ -123,7 +125,7 @@ not at all under reduced motion.
       <div class="feature-text">
         <h3>Bad network</h3>
         <p class="lead">Teachers can keep entering marks when the network drops.</p>
-        <p>Nothing is lost, and it sends when the connection comes back.</p>
+        <p>Marks stay on the phone and send when the connection comes back.</p>
       </div>
       {% include "website/parts/flow_network.html" %}
     </article>
@@ -149,8 +151,8 @@ not at all under reduced motion.
   {% else %}
   <form class="demo-form" method="post" action="/#demo">
     {% csrf_token %}
-    {% if refused == "invalid" %}<p class="todo" role="alert">TODO: message when a field is missing or not right.</p>
-    {% elif refused == "limited" %}<p class="todo" role="alert">TODO: message when one address has sent too many requests in an hour.</p>{% endif %}
+    {% if refused == "invalid" %}<p class="refused" role="alert">Something is missing or not right. Check the marked fields and send it again.</p>
+    {% elif refused == "limited" %}<p class="refused" role="alert">Too many requests from this connection. Try again in an hour.</p>{% endif %}
     <div class="field">
       <label for="demo-name">Your name</label>
       <input id="demo-name" name="name" type="text" autocomplete="name" maxlength="120" required value="{{ form.name.value|default_if_none:'' }}"{% if form.name.errors %} aria-invalid="true"{% endif %}>

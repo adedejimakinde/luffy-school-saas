@@ -98,8 +98,8 @@ test("a guardian with nothing typed shows a dash, not a blank that reads as unfi
     body: { ...PANEL, guardians: [{ ...PENDING, name: "", contact: "" }] },
   });
 
-  assert.match(html, /<span class="name">—<\/span>/);
-  assert.match(html, /<span class="contact">—<\/span>/);
+  assert.match(html, /<span class="name">-<\/span>/);
+  assert.match(html, /<span class="contact">-<\/span>/);
 });
 
 test("no guardian yet says so", () => {

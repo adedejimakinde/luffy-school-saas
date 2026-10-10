@@ -13,7 +13,7 @@ import { naira } from "../fees/money.js";
 import { esc } from "../web/html.js";
 
 /** Nothing to show: data, not a sentence (`docs/design.md`). */
-const DASH = "—";
+const DASH = "-";
 
 const UNITS = [
   [100_000_000_000n, "bn"],
@@ -152,7 +152,7 @@ function absentCard(absent) {
   const { children: n, threshold_percent: threshold } = absent;
   return stat(
     "Absent too often",
-    `${n} <small>${n === 1 ? "pupil" : "pupils"}</small>`,
+    `${n} <small>${n === 1 ? "student" : "students"}</small>`,
     n
       ? '<span><span class="label label-stop">Needs a look</span></span>'
       : '<span><span class="label label-ok">None</span></span>',
@@ -176,7 +176,7 @@ function whatFor(row) {
   const kind = KINDS[row.kind] || { what: "", button: "Open" };
   let label = "";
   if (row.kind === "remarks" && row.missing) {
-    label = ` <span class="label label-warn">${row.missing} ${row.missing === 1 ? "pupil" : "pupils"}</span>`;
+    label = ` <span class="label label-warn">${row.missing} ${row.missing === 1 ? "student" : "students"}</span>`;
   } else if (kind.label) {
     label = ` <span class="label ${kind.label[0]}">${kind.label[1]}</span>`;
   }
