@@ -8,6 +8,13 @@ name: deploy
 #
 # Needs, before it can run for real: the server, and three repository secrets —
 # DEPLOY_HOST, DEPLOY_SSH_KEY and DEPLOY_KNOWN_HOSTS. docs/deployment.md.
+#
+# The server's copy of the repository (/opt/classnode) is moved to the exact SHA
+# being released **before** deploy.sh runs. deploy.sh pulls that SHA's images, but
+# it reads compose.yml and its own text from the checkout, so a checkout left on
+# an older commit would deploy new images with old orchestration.
+# tests/test_deploy_workflow.py pins this, and runs the step against a real
+# repository.
 
 on:
   workflow_dispatch:
@@ -69,9 +76,8 @@ jobs:
             exit 1
           fi
 
-      - name: Deploy over SSH
+      - name: Set up SSH
         env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
@@ -79,4 +85,56 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      # Fetch, then check out the SHA itself — never a branch, never a pull, so
+      # what is checked out is the commit CI passed and not whatever main has
+      # moved to since. It refuses a checkout with local edits (a hand-edited
+      # compose.yml would otherwise survive the checkout and be deployed), and
+      # it asks git afterwards rather than trusting the command that just ran.
+      - name: Check out the SHA on the server
+        id: checkout
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" bash -s -- "$SHA" <<'REMOTE'
+          set -euo pipefail
+          sha=$1
+          cd /opt/classnode
+          if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+            echo "The server's checkout has local changes; refusing to deploy over them:" >&2
+            git status --short --untracked-files=no >&2
+            exit 1
+          fi
+          git fetch --quiet origin main
+          git checkout --quiet --detach "$sha"
+          if [ "$(git rev-parse HEAD)" != "$sha" ]; then
+            echo "The server's checkout is not at $sha." >&2
+            exit 1
+          fi
+          echo "Server checkout is at $sha"
+          REMOTE
+
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
           ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" "/opt/classnode/deploy/deploy.sh $SHA"
+
+      # A deploy that fails leaves the old images running (deploy.sh puts them
+      # back, or never swapped them), and `deployed-sha` still names them. Put the
+      # checkout back on that commit so the server's files match what is running.
+      # It never turns a red run green or hides why it was red.
+      - name: Put the checkout back on what is running
+        if: failure() && (steps.checkout.outcome == 'success' || steps.checkout.outcome == 'failure')
+        continue-on-error: true
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" bash -s <<'REMOTE'
+          set -euo pipefail
+          cd /opt/classnode
+          if [ -s deploy/deployed-sha ]; then
+            git checkout --quiet --detach "$(cat deploy/deployed-sha)"
+            echo "Server checkout put back on $(cat deploy/deployed-sha)"
+          fi
+          REMOTE
