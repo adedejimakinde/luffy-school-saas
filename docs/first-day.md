@@ -199,8 +199,11 @@ bash /root/bootstrap.sh
 
 It takes five to ten minutes and prints a `==>` heading for each stage.
 
-**Confirm.** It ends with `==> Done`. If it says **STOPPED**, it says why, and
-nothing it did before that is harmed by running the same command again. Then:
+**Confirm.** It ends with `==> Done`. If it says **STOPPED**, it says why: either
+a sentence, or the line number, the command that failed and its exit code
+(`STOPPED at line 164: the command  ...  failed with exit code 1.`). Send that
+line to whoever is helping you. Nothing it did before that is harmed by running
+the same command again. Then:
 
 ```bash
 ufw status verbose        # Status: active; only 22/tcp, 80/tcp, 443/tcp, 443/udp allowed

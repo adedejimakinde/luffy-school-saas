@@ -61,7 +61,11 @@ done
 
 say() { printf '\n==> %s\n' "$*"; }
 die() { printf '\nSTOPPED: %s\n' "$*" >&2; exit 1; }
-trap 'printf "\nSTOPPED at line %s. Nothing is half-done that a re-run will not finish: run the same command again.\n" "$LINENO" >&2' ERR
+# on_error LINE COMMAND EXIT-CODE — what the ERR trap prints. The trap string
+# below passes BASH_COMMAND and $? in, because inside a function BASH_COMMAND is
+# the function's own command, not the one that failed.
+on_error() { printf '\nSTOPPED at line %s: the command  %s  failed with exit code %s.\nNothing is half-done that a re-run will not finish: run the same command again.\n' "$1" "$2" "$3" >&2; }
+trap 'on_error "$LINENO" "$BASH_COMMAND" "$?"' ERR
 
 [ "$(id -u)" = 0 ] || die "run this as root (you are $(id -un))."
 
@@ -161,7 +165,14 @@ say "Checking this is the server we expect"
 # shellcheck disable=SC1091
 . /etc/os-release
 [ "${ID:-}" = ubuntu ] && [ "${VERSION_ID:-}" = 24.04 ] || die "this is ${PRETTY_NAME:-unknown}, not Ubuntu 24.04."
-ssh_port="$(sshd -T | awk '$1 == "port" {print $2; exit}')"
+# sshd's answer is read into a variable first, and the port is picked out of the
+# variable. Not `sshd -T | awk '...; exit'`: that awk leaves at the first match,
+# sshd is killed by SIGPIPE if it still has output to write, and pipefail turns
+# that into a silent stop (the first real run, on Contabo). No awk below
+# leaves early, so nothing is ever cut off while it is still being fed.
+sshd_settings="$(sshd -T)" || die "sshd -T failed, so sshd's settings cannot be read (its own message is above). Check with: sshd -t"
+ssh_port="$(awk '$1 == "port" && !seen { print $2; seen = 1 }' <<<"$sshd_settings")"
+[ -n "$ssh_port" ] || die "sshd -T names no port at all, so it cannot be checked. Look at it with: sshd -T | grep -i port"
 [ "$ssh_port" = 22 ] || die "sshd listens on port $ssh_port, and the firewall below only opens 22. Put sshd back on 22 or change this script on purpose."
 
 # ------------------------------------------------------------------- 2. the keys
