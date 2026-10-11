@@ -125,6 +125,7 @@ def visible_text(page, *, questions=True):
     ALLOWED_HOSTS=[".classnode.testserver", "testserver"],
     EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
     DEMO_REQUESTS_PER_HOUR=3,
+    DEMO_REQUEST_INBOX="hello@classnode.co",
 )
 class SiteSetUp(TestCase):
     @classmethod

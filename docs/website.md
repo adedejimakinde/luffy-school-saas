@@ -49,7 +49,7 @@ contents list at the top that matches the sections in order.
 A plain form post, CSRF-checked, that works with no script.
 
 - **Saved first, then emailed** to the demo inbox, `DEMO_REQUEST_INBOX`
-  (hello@classnode.co unless set), and to every active platform staff login
+  (`hello@` the platform's domain unless set: hello@classnode.co in production), and to every active platform staff login
   with an email address (`website/notify.py`), after the row commits. A send that fails
   is logged and the row stays: the admin (on the portal) lists every request,
   read only.
