@@ -70,6 +70,7 @@ COPY = [
     "Your name", "School name", "Phone number", "Email (optional)", "Number of students",
     "Request a call",
     "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode",
+    "Classnode Edtech Limited · RC 9926572",
 ]
 
 #: The writing rules' words and phrases, never on the page.

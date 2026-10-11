@@ -68,7 +68,9 @@ A plain form post, CSRF-checked, that works with no script.
   morning when a payment lands at night). Kept as the owner gave them: the
   price (₦2,500 per student, per term, no setup fee), the call-back time (one
   working day), the footer (Classnode. Nigeria.) and the contact address
-  (hello@classnode.co). The two form refusals are one plain sentence each.
+  (hello@classnode.co). Under the footer, on every page of the site (homepage,
+  privacy notice, terms), its own row: Classnode Edtech Limited · RC 9926572.
+  No address there; the registered address waits for the lawyer. The two form refusals are one plain sentence each.
   `website/tests/test_homepage.py` holds the page to that copy
   and to the writing rules: no en or em dash, no exclamation or question mark,
   no sentence starting "Imagine", none of the banned words.
