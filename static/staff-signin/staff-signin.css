@@ -1,37 +1,210 @@
 /*
- * The staff sign-in page. One column, one form, nothing decorative.
+ * The staff sign-in page: one card on the dashboard's grey, the logo above it
+ * and the name below. The form, the schools and the empty state are all drawn
+ * into the same card (`states.js`), so signing in and choosing a school read
+ * as one flow.
  *
- * The reader here is not the reader `signin.css` is drawn for. A parent is on a
- * handset reading a code off the same screen they are typing into; a member of
- * staff is signing in with a password from a manager, a note, or memory, on
- * whatever they have to hand. So the code field's outsized type is absent and
- * the password field is an ordinary one.
- *
- * Colours, type and controls are `web/design.css`'s; this is the layout.
+ * Colours, type and controls are `web/design.css`'s; this is the layout. Four
+ * type sizes and no more: 24px (the heading), 20px (the wordmark), 16px (body,
+ * labels, fields, buttons, school names) and 15px (secondary lines and the
+ * footer, the smallest text a phone is given anywhere). The one gradient is the background's, One Blue fading into the
+ * grey from the top (`tests/test_design.py` names it).
  */
 
-main { max-width: 26rem; }
+body.door {
+  min-height: 100vh;
+  margin: 0;
+  padding: 40px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, var(--bg)) 0, var(--bg) 360px) no-repeat, var(--bg);
+  font-variant-numeric: tabular-nums;
+}
+@media (min-width: 640px) { body.door { padding-top: 72px; } }
 
-label { display: block; margin: 16px 0 6px; font-weight: 700; }
+.door-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  margin-bottom: 32px;
+  color: var(--brand);
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.door-logo .logo-mark { width: 32px; height: 32px; }
 
-input { width: 100%; }
+body.door > main {
+  width: 100%;
+  max-width: 440px;
+  margin: 0;
+  padding: 24px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
+    0 8px 32px color-mix(in srgb, var(--text) 5%, transparent);
+}
+@media (min-width: 640px) { body.door > main { padding: 32px; } }
 
-button { width: 100%; margin-top: 16px; }
+.door h1 { margin: 0 0 8px; font-size: 1.5rem; line-height: 1.3; letter-spacing: -0.01em; text-wrap: balance; }
+.door .lede { margin: 0 0 24px; color: var(--muted); }
 
-/*
- * The two secondary controls are quiet, and sign-out most of all. It is on a
- * page whose whole content is "you are signed in", so a filled button competing
- * with that sentence would be the loudest thing on a page that has nothing to
- * shout about. `button.again` and `button.signout` are quiet in design.css.
- */
-button.again, button.signout { margin-top: 8px; }
+/* ---------------------------------------------------------------- the form */
 
-/* Above the field it is about, and announced: `role="alert"` is what makes a
-   screen reader say it, and somebody who cannot see the red text is exactly
-   the reader who needs telling. */
-.problem { margin: 12px 0 0; }
+.step-ask { display: grid; gap: 20px; }
+.step-ask h1, .step-ask .lede { margin-bottom: 0; }
+.step-ask .lede { margin-top: -12px; }
+.door .field label { display: block; margin: 0 0 8px; font-weight: 700; }
+.door .field input { width: 100%; min-height: 48px; padding: 12px 14px; border-radius: 8px; }
+.door .field input:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 25%, transparent);
+}
+.door .field input[aria-invalid="true"] { border-color: var(--stop); }
 
-/* Names, not links — `states.js` `landed()` has the reason. There is nothing
-   to give a tap target to, so the list is set as prose rather than as rows. */
-.schools { list-style: none; margin: 16px 0; padding: 0; }
-.schools li { padding: 10px 0; border-bottom: 1px solid var(--divider); font-size: 1.05rem; }
+/* The refusal: red words and an icon, never the colour alone. */
+.door .problem {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 8px 0 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 0;
+  font-weight: 400;
+  color: var(--stop);
+  font-size: 0.9375rem;
+}
+.door .problem .icon { width: 18px; height: 18px; margin-top: 1px; }
+
+.door .primary { width: 100%; min-height: 48px; border-radius: 8px; }
+.door a.primary { display: flex; color: var(--card); background: var(--brand); border-color: var(--brand); font-weight: 700; }
+.door a.primary:hover { color: var(--card); background: var(--brand-strong); }
+.door .primary:active { background: color-mix(in srgb, var(--brand) 70%, var(--text)); }
+
+.door .door-note { margin: 4px 0 0; padding-top: 16px; color: var(--muted); font-size: 0.9375rem; text-align: center; border-top: 1px solid var(--divider); }
+.door .door-note a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
+
+/* ---------------------------------------------------------------- who is signed in */
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 24px;
+  padding: 12px 16px;
+  text-align: left;
+  background: var(--bg);
+  border-radius: 12px;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  color: var(--card);
+  font-size: 0.9375rem;
+  font-weight: 700;
+  background: var(--brand);
+  border-radius: 50%;
+}
+.avatar .icon { width: 20px; height: 20px; }
+.account-text { min-width: 0; flex: 1; font-size: 0.9375rem; line-height: 1.4; }
+.account-name { display: block; font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.door button.link-button {
+  position: relative;
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  color: var(--brand);
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  background: none;
+  border: 0;
+}
+.door button.link-button:hover { color: var(--brand-strong); }
+/* Small to the eye, a whole finger to the hand. */
+.door button.link-button::after { content: ""; position: absolute; inset: -12px -8px; }
+
+/* ---------------------------------------------------------------- the schools */
+
+.door .schools { list-style: none; display: grid; gap: 12px; margin: 0; padding: 0; }
+.door .school { padding: 16px; border: 1px solid var(--border); border-radius: 12px; }
+.school-head { display: flex; align-items: center; gap: 16px; }
+.badge {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  color: var(--brand);
+  font-weight: 700;
+  background: var(--brand-tint);
+  border-radius: 12px;
+}
+.school-name { font-weight: 700; line-height: 1.35; }
+.door .school .blank { margin: 12px 0 0; color: var(--muted); font-size: 0.9375rem; }
+
+/* Each link a whole row, a finger and more tall. */
+.door .what { list-style: none; display: grid; gap: 8px; margin: 16px 0 0; padding: 0; }
+.door .what a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 0 12px 0 16px;
+  color: var(--text);
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.door .what a:hover, .door .what a:focus-visible {
+  border-color: var(--brand);
+  background: color-mix(in srgb, var(--brand) 4%, var(--card));
+}
+.door .what a:active { background: color-mix(in srgb, var(--brand) 9%, var(--card)); }
+.door .what .chev { width: 20px; height: 20px; color: var(--muted); }
+.door .what a:hover .chev, .door .what a:focus-visible .chev { color: var(--brand); }
+
+/* ---------------------------------------------------------------- the empty state, and the other stops */
+
+.empty-state { text-align: center; }
+.empty-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 8px auto 20px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: 50%;
+}
+.empty-icon .icon { width: 26px; height: 26px; }
+.door button.quiet-button {
+  width: 100%;
+  min-height: 48px;
+  color: var(--text);
+  font-weight: 700;
+  background: var(--card);
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+}
+.door button.quiet-button:hover { color: var(--brand); background: var(--brand-tint); border-color: var(--brand); }
+.door button.quiet-button:active { background: color-mix(in srgb, var(--brand) 12%, var(--card)); }
+/* A sign-out that did not work, under the card's content. */
+.door main > .problem { margin-top: 16px; }
+
+.door-foot { margin: 32px 0 0; color: var(--muted); font-size: 0.9375rem; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .door .what a, .door .field input, .door button { transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+}

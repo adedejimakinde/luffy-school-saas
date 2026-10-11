@@ -65,6 +65,33 @@ Nothing is remembered anywhere but the page's own memory for the life of the
 page. Deliberately not `sessionStorage`: a code left in a browser's storage on
 a shared handset is a code the next person to pick up the phone can replay.
 
+## How the staff door looks
+
+One card on the dashboard's grey, 440px at most, with the logo above it and
+"Classnode" below; the background is One Blue fading into the grey from the
+top. The form, the schools and the empty state are all drawn into that card
+by `static/staff-signin/states.js`, so signing in and choosing a school read as
+one flow. Four type sizes (24, 20, 16 and 15px), Hanken Grotesk only, inputs
+and the button 48px tall, the refusal in red with an icon under the fields it
+is about (both fields point at it with `aria-describedby`).
+
+- **The landing greets by first name** ("Welcome back, Folake"; plain "Welcome
+  back" with no name), worked out from `full_name` alone by skipping a title
+  (Mr, Mrs, Dr and the like). Under it, the account (initials and "Signed in
+  as" the full name, which is the receipt this file describes) with "Not you?
+  Sign out".
+- **Each school is a card**: its initials in a badge, its name, and its links
+  as rows of their own, each 52px tall with a chevron, a One Blue border and a
+  faint blue on hover and keyboard focus. The links are exactly the ones the
+  landing has always drawn, from the same booleans; restyling them changed no
+  destination. Each card opening the school's home in one tap is a change of
+  where sign-in sends people, and waits for its own change with tests.
+- **No role on the card yet**: `SchoolOut` does not carry one, and adding it is
+  an API change, not a restyle.
+- **The empty state** is the same card with the staff icon, "No school on this
+  account yet", one sentence naming the invitation, the account, and a quiet
+  Sign out button.
+
 ## The staff door: one step, and a landing that links where it can
 
 `POST /api/login/` takes an identifier and a password and answers one of four

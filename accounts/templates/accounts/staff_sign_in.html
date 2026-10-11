@@ -26,8 +26,15 @@ imports is not.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'staff-signin/app.js' %}"></script>
 
+{% comment %}
+One card on the dashboard's grey, the logo above it and the name below: the
+form, the schools and the empty state are all drawn into the same card
+(`states.js`), so signing in and choosing a school read as one flow.
+{% endcomment %}
+<body class="door">
 {% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+{% include "accounts/parts/door_icons.html" %}
+<div class="door-logo"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg>classnode</div>
 <main id="staff-signin">
   {% comment %}
   What a reader sees if the module never loads. It has to be true on its own,
@@ -36,7 +43,8 @@ imports is not.
   {% endcomment %}
   <noscript>
     <h1>Staff sign in</h1>
-    <p>This page needs JavaScript to sign you in. Please turn it on, or ask
+    <p class="lede">This page needs JavaScript to sign you in. Please turn it on, or ask
     your school office for help reaching your school's pages.</p>
   </noscript>
 </main>
+<p class="door-foot">Classnode</p>

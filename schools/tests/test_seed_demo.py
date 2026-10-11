@@ -290,9 +290,11 @@ class LoadDemoTests(TestCase):
 class ShowcaseTests(TestCase):
     """`load_demo --showcase`: the school the homepage's screenshots are taken from.
 
-    A good day, held rather than hoped for: the star's card, nothing waiting on
-    the principal, nobody on the absences list, and the one open class with no
-    sheet to raise a row for.
+    A full, ordinary day at the size of a real school, held rather than hoped
+    for, because the homepage prints these figures beside the screens: 612
+    students, ₦48.6m of ₦71.2m paid, seven classes waiting on the principal and
+    nothing else asked of her, about 94% in each day and nobody on the absences
+    list, and the star's card on the Ogun State sheet.
     """
 
     def tearDown(self):
@@ -314,22 +316,28 @@ class ShowcaseTests(TestCase):
         self.assertFalse(School.objects.filter(slug="showcase-demo").exists())
 
     @override_settings(DEBUG=False)
-    def test_a_school_having_a_good_day(self):
+    def test_a_school_having_a_full_ordinary_day(self):
         from attendance import absences
         from home import summary
         from results.cards import card_for
-        from results.models import ResultSheet, SheetState
+        from results.models import ReportCardSettings, ResultSheet, SheetState
+        from schools import showcase
 
         out = self.load()
         self.assertNotIn(PASSWORD, out)
         school = School.objects.get(slug="showcase-demo")
+        self.assertIn("Demo", school.name, "the name says it is a demo")
         self.assertFalse(School.objects.filter(slug__in=SLUGS).exists(), "only the showcase is made")
         principal = User.objects.get(username="crestfield.principal")
-        star = Membership.objects.get(user__username="crestfield.s01")
+        star = Membership.objects.get(user__username="crestfield.s001")
         self.assertTrue(star.guardianships.filter(guardian__username="crestfield.parent").exists())
+        students = Membership.objects.filter(school=school, role=Role.STUDENT)
+        self.assertEqual(students.count(), 612)
+        self.assertFalse(any(u.has_usable_password() for u in User.objects.filter(memberships__in=students)))
 
         with schema_context(school.schema_name):
             term = Term.objects.get(is_current=True)
+            self.assertEqual(ReportCardSettings.objects.get().template, "ogun")
             card = card_for(star, term)
             self.assertAlmostEqual(float(card.own_average), 78, delta=1.5)
             grades = list(card.subject_results.values_list("grade_letter", flat=True))
@@ -339,17 +347,29 @@ class ShowcaseTests(TestCase):
             self.assertEqual(card.comments.count(), 2, "both remarks")
 
             states = dict(ResultSheet.objects.values_list("class_group__name", "state"))
-            self.assertEqual(states, {"JSS 2A": SheetState.RELEASED, "JSS 2B": SheetState.RELEASED})
+            self.assertEqual(states, {**{name: SheetState.RELEASED for name in showcase.RELEASED},
+                                      **{name: SheetState.CHECKED for name in showcase.WAITING}})
             self.assertEqual(absences.flagged(school, term), [])
             roles = frozenset(principal.roles_at(school))
-            self.assertEqual(summary.waiting(principal, roles, term, summary.lagos_today()), [])
-            # Every register in today but SS 1A's, which the screenshots take on screen.
-            taken = set(Register.objects.filter(taken_on=summary.lagos_today()).values_list("class_group__name", flat=True))
-            self.assertEqual(taken, {"JSS 2A", "JSS 2B"})
-            self.assertTrue(Score.objects.filter(assessment__name="First CA").exists())
+            waiting = summary.waiting(principal, roles, term, summary.lagos_today())
+            self.assertEqual({row.kind for row in waiting}, {summary.APPROVE})
+            self.assertEqual(len(waiting), 7)
 
-    @override_settings(DEBUG=False)
-    def test_it_will_not_run_twice(self):
-        self.load()
+            # Every register in today but SS 1A's, which the screenshots take on screen,
+            # and about 94% in on each day.
+            today = summary.lagos_today()
+            taken = set(Register.objects.filter(taken_on=today).values_list("class_group__name", flat=True))
+            self.assertEqual(taken, {name for name, _ in showcase.CLASSES} - {"SS 1A"})
+            from attendance.models import AttendanceMark, AttendanceStatus
+            marks = AttendanceMark.objects.filter(register__taken_on=today)
+            present = marks.exclude(status=AttendanceStatus.ABSENT).count() / marks.count()
+            self.assertAlmostEqual(present, 0.94, delta=0.015)
+            self.assertTrue(Score.objects.filter(assessment__name="1st Test").exists())
+
+            billed = sum(FeeLedgerEntry.objects.filter(kind=FeeEntryKind.CHARGE).values_list("amount_kobo", flat=True))
+            paid = sum(FeeLedgerEntry.objects.filter(kind=FeeEntryKind.PAYMENT).values_list("amount_kobo", flat=True))
+            self.assertEqual(billed, 71_206_200 * 100)
+            self.assertEqual(abs(paid), 48_600_000 * 100)
+
         with self.assertRaisesMessage(CommandError, "already here"):
             self.load()

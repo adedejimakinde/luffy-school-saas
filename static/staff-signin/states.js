@@ -25,10 +25,9 @@
  */
 
 import { esc, hostHref, waitInWords } from "../web/html.js";
-import { button as signOutButton } from "../web/signout.js";
 
 /**
- * Step one, and the only one. Identifier and password, refusals above the form.
+ * Step one, and the only one. Identifier and password, the refusal under them.
  *
  * **One identifier field, not three**, which is `SignInIn`'s decision rather
  * than this page's: staff reach for their email, and asking somebody to first
@@ -40,19 +39,19 @@ import { button as signOutButton } from "../web/signout.js";
  * password was wrong is the page punishing the wrong field.
  */
 export function ask({ error = "", identifier = "" } = {}) {
+  const invalid = error ? ' aria-invalid="true" aria-describedby="signin-error"' : "";
   return [
     '<form class="step step-ask" data-step="ask">',
     "<h1>Staff sign in</h1>",
-    "<p>Use the email address, phone number or staff ID your school has for ",
-    "you.</p>",
-    problem(error),
-    '<label for="identifier">Email, phone number or staff ID</label>',
+    '<p class="lede">Use the email address, phone number or staff ID your school has for you.</p>',
+    '<div class="field"><label for="identifier">Email, phone number or staff ID</label>',
     `<input id="identifier" name="identifier" type="text" autocomplete="username" `,
-    `required value="${esc(identifier)}">`,
-    '<label for="password">Password</label>',
-    '<input id="password" name="password" type="password" ',
-    'autocomplete="current-password" required>',
-    '<button type="submit">Sign in</button>',
+    `autocapitalize="none" spellcheck="false" required value="${esc(identifier)}"${invalid}></div>`,
+    '<div class="field"><label for="password">Password</label>',
+    `<input id="password" name="password" type="password" autocomplete="current-password" required${invalid}>`,
+    problem(error),
+    "</div>",
+    '<button type="submit" class="primary">Sign in</button>',
     parentLink(),
     "</form>",
   ].join("");
@@ -63,9 +62,55 @@ export function ask({ error = "", identifier = "" } = {}) {
  * and there is no code and no password field that gets a parent anywhere
  * from here. */
 function parentLink() {
-  return '<p class="switch-door">See your child\'s report card? ' +
+  return '<p class="switch-door door-note">See your child\'s report card? ' +
     '<a href="/sign-in/">I\'m a parent</a></p>';
 }
+
+/** Words that come before a name rather than being one. */
+const HONORIFIC = /^(mr|mrs|ms|miss|dr|prof|chief|alhaji|alhaja|pastor|rev|engr|barr|sir)\.?$/i;
+
+/** The name a person goes by, for "Welcome back": the first word that is not a title. */
+export function firstName(fullName) {
+  return String(fullName || "").trim().split(/\s+/).find((word) => word && !HONORIFIC.test(word)) || "";
+}
+
+/** Two letters for the avatar: the first and last words that are not a title. */
+export function initials(fullName) {
+  const words = String(fullName || "").trim().split(/\s+/).filter((word) => word && !HONORIFIC.test(word));
+  if (!words.length) return "";
+  const last = words.length > 1 ? words[words.length - 1] : "";
+  return (words[0][0] + (last ? last[0] : "")).toUpperCase();
+}
+
+/**
+ * Who is signed in, with the way out beside it. The name is the receipt: a
+ * staff-parent may hold two accounts on this platform, and "signed in as" is
+ * how she knows which one answered. `quiet` is the empty state, whose Sign out
+ * is its own button below.
+ */
+function account(fullName, { withSignOut = true } = {}) {
+  const letters = initials(fullName);
+  const avatar = letters
+    ? `<span class="avatar" aria-hidden="true">${esc(letters)}</span>`
+    : '<span class="avatar" aria-hidden="true"><svg class="icon"><use href="#i-staff"/></svg></span>';
+  return [
+    '<div class="account">',
+    avatar,
+    '<div class="account-text">',
+    `<span class="account-name">Signed in${fullName ? ` as ${esc(fullName)}` : ""}</span>`,
+    withSignOut
+      ? ' <span class="quiet">Not you?</span> <button type="button" class="signout link-button" data-action="sign-out">Sign out</button>'
+      : "",
+    "</div></div>",
+  ].join("");
+}
+
+function badge(name) {
+  const letters = String(name || "").split(/\s+/).filter((w) => /^[A-Za-z]/.test(w)).slice(0, 2).map((w) => w[0]).join("");
+  return `<span class="badge" aria-hidden="true">${esc(letters.toUpperCase())}</span>`;
+}
+
+const CHEVRON = '<svg class="icon chev" aria-hidden="true"><use href="#i-chevron"/></svg>';
 
 /**
  * Signed in, and these are the schools — each with what it actually offers.
@@ -100,14 +145,15 @@ function parentLink() {
  * platform, and "signed in as" is how she knows which one answered.
  */
 export function landed({ full_name = "", schools = [] } = {}) {
+  const first = firstName(full_name);
   return [
     '<section class="step step-landed" data-step="landed">',
-    `<h1>Signed in${full_name ? ` as ${esc(full_name)}` : ""}</h1>`,
-    `<p>You can act at ${schools.length === 1 ? "this school" : "these schools"}:</p>`,
+    `<h1>Welcome back${first ? `, ${esc(first)}` : ""}</h1>`,
+    `<p class="lede">${schools.length === 1 ? "Choose where to go at this school:" : "Choose a school to continue"}</p>`,
+    account(full_name),
     '<ul class="schools">',
     schools.map(school).join(""),
     "</ul>",
-    signOutButton(),
     "</section>",
   ].join("");
 }
@@ -139,26 +185,24 @@ function school(entry) {
     links.push([hostHref(host, "/cards/", where), "Report cards"]);
   }
 
+  const head = `<div class="school-head">${badge(name)}<span class="school-name">${esc(name)}</span></div>`;
   if (!host && !where.pathOnly) {
     return (
-      `<li>${esc(name)} <span class="blank">` +
-      "(this school has no web address set up yet, ask the school office)" +
-      "</span></li>"
+      `<li class="school">${head}<p class="blank">` +
+      "This school has no web address set up yet, ask the school office." +
+      "</p></li>"
     );
   }
   if (!links.length) {
     // Signed in, at a school, with nothing on this platform to do there yet.
     // Said rather than left blank: whoever lands here has done nothing
     // wrong; there is simply nothing on this platform for them here yet.
-    return (
-      `<li>${esc(name)} <span class="blank">` +
-      "(nothing for you to open here yet)</span></li>"
-    );
+    return `<li class="school">${head}<p class="blank">There is nothing for you to open here yet.</p></li>`;
   }
   return [
-    `<li>${esc(name)}`,
+    `<li class="school">${head}`,
     '<ul class="what">',
-    links.map(([href, label]) => `<li><a href="${href}">${label}</a></li>`).join(""),
+    links.map(([href, label]) => `<li><a href="${href}"><span>${label}</span>${CHEVRON}</a></li>`).join(""),
     "</ul></li>",
   ].join("");
 }
@@ -174,14 +218,13 @@ function school(entry) {
  */
 export function nowhere({ full_name = "" } = {}) {
   return [
-    '<section class="step step-nowhere" data-step="nowhere">',
-    `<h1>Signed in${full_name ? ` as ${esc(full_name)}` : ""}</h1>`,
-    "<p>This account is not an active member of staff at any school right ",
-    "now.</p>",
-    "<p>If a school has just invited you, open the link in the invitation they ",
-    "sent. Accepting it is what creates the membership. Otherwise the school ",
-    "office can tell you where this stands.</p>",
-    signOutButton(),
+    '<section class="step step-nowhere empty-state" data-step="nowhere">',
+    '<span class="empty-icon" aria-hidden="true"><svg class="icon"><use href="#i-staff"/></svg></span>',
+    "<h1>No school on this account yet</h1>",
+    '<p class="lede">If a school has invited you, open the link in their invitation, or ask the ',
+    "school office to add you.</p>",
+    account(full_name, { withSignOut: false }),
+    '<button type="button" class="signout quiet-button" data-action="sign-out">Sign out</button>',
     "</section>",
   ].join("");
 }
@@ -200,10 +243,10 @@ export function throttled({ detail = "", retry_after = null } = {}) {
   return [
     '<section class="step step-throttled" data-step="throttled">',
     "<h1>Too many tries</h1>",
-    `<p>${esc(detail) || "That is too many attempts for now."}`,
+    `<p class="lede">${esc(detail) || "That is too many attempts for now."}`,
     wait ? ` Try again in ${wait}.` : "",
     "</p>",
-    '<button type="button" class="again" data-action="restart">Start again</button>',
+    '<button type="button" class="again quiet-button" data-action="restart">Start again</button>',
     "</section>",
   ].join("");
 }
@@ -213,8 +256,8 @@ export function signedOut() {
   return [
     '<section class="step step-signed-out" data-step="signed-out">',
     "<h1>Signed out</h1>",
-    "<p>Your session has ended on this browser and on your school's pages.</p>",
-    '<p><a href="/staff-sign-in/">Sign in again</a></p>',
+    '<p class="lede">Your session has ended on this browser and on your school\'s pages.</p>',
+    '<a class="btn primary" href="/staff-sign-in/">Sign in again</a>',
     "</section>",
   ].join("");
 }
@@ -230,15 +273,16 @@ export function broken() {
   return [
     '<section class="step step-broken" data-step="broken">',
     "<h1>Sign-in is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
+    '<p class="lede">Something went wrong on our side. Please try again in a few minutes, ',
     "and tell your school if it keeps happening.</p>",
-    '<button type="button" class="again" data-action="restart">Start again</button>',
+    '<button type="button" class="again quiet-button" data-action="restart">Start again</button>',
     "</section>",
   ].join("");
 }
 
 /**
- * One refusal sentence, above the field it is about.
+ * One refusal sentence, under the fields it is about, with an icon so it is
+ * not told by its red alone; both fields point at it (`aria-describedby`).
  *
  * `detail` is the API's own string — `signin.REFUSED`, which is the same
  * sentence for no account, a wrong password, a deactivated account and two
@@ -249,5 +293,8 @@ export function broken() {
  */
 function problem(message) {
   if (!message) return "";
-  return `<p class="problem" role="alert">${esc(message)}</p>`;
+  return (
+    '<p class="problem field-error" id="signin-error" role="alert">' +
+    `<svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span>${esc(message)}</span></p>`
+  );
 }
