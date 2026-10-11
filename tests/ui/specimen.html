@@ -7,8 +7,9 @@
   photographed with the rest, at every width. It is where the app shell and the
   parts no page uses yet are checked before a page does.
 
-  The numbers are made up, and the principal's home here is a sketch of its
-  layout, not the page: that is built with the principal's restyle.
+  The numbers are made up, and the "Waiting for you" and "Today" cards are
+  sketches. The school dashboard itself is `home/templates/home/dashboard.html`,
+  photographed by `screens.test.js` as each role sees it.
 -->
 <html lang="en">
 <head>
@@ -78,17 +79,13 @@
   <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
   <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/></symbol>
+  <symbol id="i-signout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></symbol>
 </svg>
 
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
     <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
 
-    <button type="button" class="school-switcher">
-      <span class="crest">SD</span>
-      <span class="school-name">Sunrise Demo Academy<small>Principal</small></span>
-      <svg class="icon"><use href="#i-down"/></svg>
-    </button>
 
     <div class="nav">
       <a href="#" aria-current="page"><svg class="icon"><use href="#i-home"/></svg>Home</a>
@@ -114,21 +111,16 @@
     <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
       <svg class="icon"><use href="#i-menu"/></svg>
     </button>
-    <label class="search">
-      <span class="sr">Search</span>
-      <svg class="icon"><use href="#i-search"/></svg>
-      <input type="search" placeholder="Search pupils, classes, staff">
-    </label>
+    <a class="logo topbar-logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <span class="topbar-school">Sunrise Demo Academy</span>
     <span class="spacer"></span>
-    <button type="button" class="term-switcher">
-      <svg class="icon"><use href="#i-calendar"/></svg>
-      <span class="term-name">First term 2026/2027</span>
-      <svg class="icon"><use href="#i-down"/></svg>
-    </button>
-    <button type="button" class="icon-button" aria-label="Notifications">
-      <svg class="icon"><use href="#i-bell"/></svg><span class="dot"></span>
-    </button>
-    <button type="button" class="icon-button" aria-label="Your account"><span class="avatar">PS</span></button>
+    <details class="account">
+      <summary class="icon-button" aria-label="Your account"><span class="avatar">PS</span></summary>
+      <div class="account-menu">
+        <p class="account-who"><strong>Peace Sunday</strong><span>Principal</span></p>
+        <button type="button" class="signout"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
+      </div>
+    </details>
   </header>
 
   <div class="content">
@@ -140,34 +132,6 @@
         </div>
       </div>
 
-      <section class="stats" aria-label="This term">
-        <div class="card stat">
-          <span class="stat-name">Results released</span>
-          <span class="stat-value">3 <small>of 8 classes</small></span>
-          <div class="progress"><span style="width: 38%"></span></div>
-          <span class="stat-foot">5 classes waiting</span>
-        </div>
-        <div class="card stat">
-          <span class="stat-name">Present today</span>
-          <span class="stat-value">94%</span>
-          <div class="minibars" aria-label="This week">
-            <span style="height: 88%"></span><span style="height: 92%"></span><span style="height: 90%"></span><span style="height: 95%"></span><span class="today" style="height: 94%"></span>
-          </div>
-          <span class="stat-foot">412 of 438 pupils</span>
-        </div>
-        <div class="card stat">
-          <span class="stat-name">Fees collected</span>
-          <span class="stat-value">&#8358;18.4m</span>
-          <div class="progress"><span style="width: 70%"></span></div>
-          <span class="stat-foot">of &#8358;26.1m billed</span>
-        </div>
-        <div class="card stat">
-          <span class="stat-name">Absent too often</span>
-          <span class="stat-value">7 <small>pupils</small></span>
-          <span><span class="label label-stop">Needs a look</span></span>
-          <span class="stat-foot">3 or more days in two weeks</span>
-        </div>
-      </section>
 
       <div class="split">
         <section class="card">
