@@ -187,22 +187,30 @@ def shell_open(context, current):
     the school and carries the account menu; both are read off the request
     the middleware already built, so the bar costs no query.
     """
+    from sync.views import PAGES as OFFLINE_PAGES
+
     request = context.get("request")
     user = getattr(request, "user", None)
     signed_in = bool(user is not None and user.is_authenticated)
     school = getattr(request, "school", None)
-    name = (user.get_full_name() or user.get_username()) if signed_in else ""
+    path = request.path if request is not None else "/"
+    # The pages the offline worker keeps (`sync.views.PAGES`) are served from
+    # the phone's cache to whoever opens them next, and a staff-room phone is
+    # shared (`docs/offline.md`, S7). Their frame names nobody: the account
+    # menu there is a person icon and Sign out.
+    personal = signed_in and path not in OFFLINE_PAGES
+    name = (user.get_full_name() or user.get_username()) if personal else ""
     return {
         "menu": _menu(context, current),
         "signed_in": signed_in,
         "csrf_token": context.get("csrf_token"),
-        "path": request.path if request is not None else "/",
+        "path": path,
         # Named only to a member here: a frame is served to whoever opens the
         # URL, and names no school to a stranger (`results/views.py`).
         "school_name": school.name if school is not None and getattr(request, "school_roles", None) else "",
         "user_name": name,
-        "user_initials": initials(name),
-        "role_names": _role_names(getattr(request, "school_roles", ())),
+        "user_initials": initials(name) if name else "",
+        "role_names": _role_names(getattr(request, "school_roles", ())) if personal else "",
     }
 
 

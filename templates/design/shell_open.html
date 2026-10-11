@@ -45,9 +45,9 @@ bar, built from the signed-in login's roles at this school. Closed by
     Its Sign out submits the sidebar's form (`form="sign-out"`), so the token
     is written once; a form submits whether or not the sidebar is showing.
     {% endcomment %}<details class="account">
-      <summary class="icon-button" aria-label="Your account"><span class="avatar">{{ user_initials }}</span></summary>
+      <summary class="icon-button" aria-label="Your account">{% if user_initials %}<span class="avatar">{{ user_initials }}</span>{% else %}<svg class="icon"><use href="#i-people"/></svg>{% endif %}</summary>
       <div class="account-menu">
-        <p class="account-who"><strong>{{ user_name }}</strong>{% if role_names %}<span>{{ role_names }}</span>{% endif %}</p>
+        {% if user_name %}<p class="account-who"><strong>{{ user_name }}</strong>{% if role_names %}<span>{{ role_names }}</span>{% endif %}</p>{% endif %}
         <button type="submit" form="sign-out" class="signout"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
       </div>
     </details>{% endif %}

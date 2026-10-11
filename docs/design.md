@@ -58,7 +58,9 @@ Mobile first, checked at 360, 768 and 1280.
   real routes, both ways.
 - **The top bar** names the school on a desk and shows the logo where the
   sidebar is folded away, with the account menu (name, roles, Sign out) at its
-  right. The school is named only to a member of it.
+  right. The school is named only to a member of it, and the pages the
+  offline worker keeps on a shared phone (`/marking/`, `/register/`) name
+  nobody: their account menu is a person icon and Sign out.
 - **The tab bar is the role's main screens**: Home first for every staff role;
   Fees for the principal and the bursar (the bursar has three tabs), Broadsheets
   for the vice principal.

@@ -607,9 +607,12 @@ class TheFrameTests(TimetableSetUp):
 
         self.assertIn('id="timetable"', page)
         self.assertIn('data-on-school="yes"', page)
+        # The page's own content. The shell around it names the signed-in
+        # member's own school and name (`tests/test_menu.py` holds where).
+        main = page[page.index("<main"):page.index("</main>")]
         for absent in ("Mathematics", "JSS 1A", "Kemi", "St Mary"):
             with self.subTest(absent=absent):
-                self.assertNotIn(absent, page)
+                self.assertNotIn(absent, main)
         # Not `}}`: the import map is JSON and ends in two braces.
         for delimiter in ("{#", "#}", "{%"):
             with self.subTest(delimiter=delimiter):

@@ -290,3 +290,40 @@ class SignOutTests(ChainSetUp):
                     "/sign-out/", {"csrfmiddlewaretoken": token, "next": asked}, HTTP_HOST=HOST
                 )
                 self.assertEqual(response["Location"], landed)
+
+
+class TheTopBarTests(ChainSetUp):
+    """The top bar names the school and the person signed in, to that person,
+    and nobody on the pages a shared phone keeps offline."""
+
+    def page(self, path, member=None):
+        if member is None:
+            self.client.logout()
+        else:
+            self.client.force_login(member.user)
+        html = self.client.get(path, HTTP_HOST=HOST).content.decode()
+        return re.search(r'<header class="topbar">.*?</header>', html, re.S).group(0)
+
+    def test_a_member_sees_their_school_and_their_own_name(self):
+        bar = self.page("/results/", self.teacher)
+
+        self.assertIn("St Mary", bar)
+        self.assertIn(self.teacher.user.full_name, bar)
+        self.assertIn('<span class="avatar">', bar)
+
+    def test_the_pages_kept_offline_name_nobody(self):
+        from sync.views import PAGES
+
+        self.assertEqual(set(PAGES), {"/marking/", "/register/"}, "the control: the worker keeps these")
+        for path in PAGES:
+            with self.subTest(path=path):
+                bar = self.page(path, self.teacher)
+                self.assertNotIn(self.teacher.user.full_name, bar)
+                self.assertNotIn('<span class="avatar">', bar)
+                self.assertNotIn("account-who", bar)
+                # Sign out is still there.
+                self.assertIn('form="sign-out"', bar)
+
+    def test_signed_out_the_bar_names_no_school(self):
+        self.assertNotIn("St Mary", self.page("/results/"))
+
