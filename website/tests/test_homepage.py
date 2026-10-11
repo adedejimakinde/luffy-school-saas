@@ -69,7 +69,7 @@ COPY = [
     "Leave your details and we will call you within one working day.",
     "Your name", "School name", "Phone number", "Email (optional)", "Number of students",
     "Request a call",
-    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode",
+    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode Edtech Limited",
     "Classnode Edtech Limited · RC 9926572",
 ]
 
