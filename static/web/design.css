@@ -100,8 +100,7 @@
   --topbar: 64px;
   --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
 
-  /* Two shadows and no more: resting, and lifted (a card under the pointer).
-     The text colour, thinned, so a shadow is never a colour of its own. */
+  /* Resting and lifted: the text colour, thinned. */
   --shadow-1: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
   --shadow-2: 0 2px 4px color-mix(in srgb, var(--text) 5%, transparent),
     0 8px 24px color-mix(in srgb, var(--text) 7%, transparent);
@@ -575,60 +574,6 @@ td small { color: var(--muted); }
 .empty h2 { margin: 0 0 6px; }
 .empty p { margin: 0 auto 16px; max-width: 28rem; }
 
-/* ------------------------------------------------------------------------ */
-/* Stat cards                                                                */
-/* ------------------------------------------------------------------------ */
-
-.stats {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  margin: 0 0 24px;
-}
-
-@media (min-width: 640px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1024px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-
-.stat { display: grid; gap: 8px; align-content: start; }
-.stat-name { color: var(--muted); font-size: var(--small); }
-/* A figure is one line: a card's value never wraps, so it is kept short
-   (`home/states.js`'s `shortNaira()`), and what qualifies it goes in the
-   foot. The screens test measures this at 1024px and wider. */
-.stat-value { font-size: 2rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.stat-value small { color: var(--muted); font-size: 1rem; font-weight: 400; }
-.stat-foot { color: var(--muted); font-size: var(--small); }
-
-.progress {
-  height: 8px;
-  overflow: hidden;
-  background: var(--divider);
-  border-radius: 999px;
-}
-
-.progress > span {
-  display: block;
-  height: 100%;
-  background: var(--brand);
-  border-radius: inherit;
-}
-
-/* A week in five bars; today is the full blue, the days before it lighter. */
-.minibars {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-  height: 36px;
-}
-
-.minibars > span {
-  flex: 1;
-  min-height: 3px;
-  background: var(--brand-soft);
-  border-radius: 3px 3px 0 0;
-}
-
-.minibars > span.today { background: var(--brand); }
-
 /* A score out of 100 on a subject row. */
 .scorebar {
   height: 6px;
@@ -706,21 +651,6 @@ body.has-shell { padding: 0; }
    square-and-`.logo`'s own colour plus white, not stroked in `currentColor`
    alone — see `templates/design/icons.html`. */
 .logo-mark { width: 28px; height: 28px; flex: none; }
-
-.school-switcher {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 56px;
-  padding: 8px 10px;
-  text-align: left;
-  background: var(--card);
-  border: 1px solid var(--border);
-}
-
-.school-switcher .school-name { flex: 1; min-width: 0; font-weight: 700; line-height: 1.25; }
-.school-switcher .school-name small { display: block; color: var(--muted); font-weight: 400; }
 
 /* The school's crest; its initials on the school's own ground until one is uploaded. */
 .crest {
@@ -836,107 +766,32 @@ body.has-shell { padding: 0; }
 
 .icon-button:hover { color: var(--brand); border-color: transparent; background: var(--bg); }
 
-/* Something waiting: a dot in the blue, not a red one — this is not an error. */
-.icon-button .dot {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  width: 8px;
-  height: 8px;
-  background: var(--brand);
-  border: 2px solid var(--card);
-  border-radius: 50%;
-}
-
-.search {
-  position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  max-width: 420px;
-}
-
-.search .icon {
-  position: absolute;
-  top: 50%;
-  left: 12px;
-  color: var(--muted);
-  transform: translateY(-50%);
-  pointer-events: none;
-}
-
-.search input {
-  width: 100%;
-  padding-left: 40px;
-  background: var(--bg);
-  border-color: var(--border);
-}
-
-.term-switcher {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
 .topbar .spacer { flex: 1; }
 
-/* The bar's middle: the logo on a phone or a tablet, where the sidebar is
-   folded away, and the school's name on a desk, where the sidebar shows the
-   logo already. */
 .topbar-logo { min-height: var(--control); padding: 0 4px; font-size: 1.125rem; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
 
 @media (min-width: 1024px) {
   .topbar-logo { display: none; }
-  .topbar-school {
-    display: block;
-    min-width: 0;
-    overflow: hidden;
-    font-weight: 700;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
+  .topbar-school { display: block; min-width: 0; overflow: hidden; font-weight: 700; white-space: nowrap; text-overflow: ellipsis; }
 }
 
-/* The account menu: a `<details>`, so it needs no script. The avatar is the
-   whole target; the panel opens under it, against the right edge. */
 .account { position: relative; flex: none; }
-.account > summary { list-style: none; cursor: pointer; transition: background-color 150ms ease; }
+.account > summary { list-style: none; cursor: pointer; }
 .account > summary::-webkit-details-marker { display: none; }
-.account > summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
 .account[open] > summary { background: var(--bg); }
 
 .account-menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 20;
-  width: max-content;
-  min-width: 240px;
-  max-width: calc(100vw - 32px);
-  padding: 8px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--shadow-2);
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
+  min-width: 240px; max-width: calc(100vw - 32px); padding: 8px;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-2);
 }
-
-.account-who { display: grid; gap: 2px; margin: 0; padding: 8px 8px 12px; border-bottom: 1px solid var(--divider); }
+.account-who { display: grid; margin: 0 0 8px; padding: 8px; border-bottom: 1px solid var(--divider); }
 .account-who span { color: var(--muted); font-size: var(--small); }
-.account-menu form { margin: 8px 0 0; }
-.account-menu button.signout {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: var(--control);
-  padding: 0 8px;
-  font-weight: 400;
-  text-align: left;
-  border-radius: 8px;
-}
-.account-menu button.signout:hover { background: var(--bg); }
+.account-menu .signout { display: flex; align-items: center; gap: 12px; width: 100%; padding: 0 8px; font-weight: 400; border-radius: 8px; }
+.account-menu .signout:hover { background: var(--bg); }
 
 .avatar {
   display: grid;
@@ -996,7 +851,6 @@ body.has-shell { padding: 0; }
 
   .sidebar[popover]:not(:popover-open) { display: none; }
 
-  .topbar .search { display: none; }
 }
 
 @media (min-width: 640px) {
@@ -1049,8 +903,6 @@ body.has-shell { padding: 0; }
 .tabbar { display: none; }
 
 @media (max-width: 639.98px) {
-  .topbar .term-switcher .term-name { display: none; }
-
   .tabbar {
     position: fixed;
     right: 0;
@@ -1058,7 +910,6 @@ body.has-shell { padding: 0; }
     left: 0;
     z-index: 10;
     display: grid;
-    /* One column per tab: four for most roles, three for a bursar. */
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
     padding: 0 4px env(safe-area-inset-bottom);

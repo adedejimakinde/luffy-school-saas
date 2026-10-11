@@ -39,7 +39,7 @@ from attendance.absences import VIEWING_ROLES as ABSENCE_ROLES
 from attendance.services import MARKING_ROLES as REGISTER_ROLES
 from fees.authority import READING_ROLES as FEES_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
-from home.summary import HOME_ROLES
+from home.dashboard import HOME_ROLES
 from notices.services import SETTINGS_ROLES as NOTICES_ROLES
 from results.api import POSITION_VIEWING_ROLES
 from results.comments_api import VIEWING_ROLES as REMARK_ROLES
@@ -197,7 +197,9 @@ def shell_open(context, current):
         "signed_in": signed_in,
         "csrf_token": context.get("csrf_token"),
         "path": request.path if request is not None else "/",
-        "school_name": school.name if school is not None else "",
+        # Named only to a member here: a frame is served to whoever opens the
+        # URL, and names no school to a stranger (`results/views.py`).
+        "school_name": school.name if school is not None and getattr(request, "school_roles", None) else "",
         "user_name": name,
         "user_initials": initials(name),
         "role_names": _role_names(getattr(request, "school_roles", ())),

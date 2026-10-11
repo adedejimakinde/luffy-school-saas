@@ -41,6 +41,7 @@
 }
 
 .dash h1, .dash h2, .dash p { margin: 0; }
+.dash .panel > h1, .dash .panel > h2 { margin: 0 0 var(--s-1); }
 
 /* Every figure lines up with the one above it. */
 .dash .fig { font-variant-numeric: tabular-nums; }
@@ -176,6 +177,8 @@
 }
 
 @media (min-width: 640px) { .kpis { gap: var(--s-2); } }
+/* A login with one tile (a bursar) gets it the width of the row. */
+.kpis > .kpi:only-child { grid-column: 1 / -1; }
 @media (min-width: 1024px) {
   .kpis { grid-template-columns: repeat(var(--kpi-count, 4), minmax(0, 1fr)); }
 }
@@ -405,7 +408,7 @@ a.kpi:hover {
 
 .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
 
-.steps a {
+.steps a, .steps .step-static {
   display: grid;
   grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;

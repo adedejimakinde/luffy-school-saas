@@ -25,7 +25,7 @@ bar, built from the signed-in login's roles at this school. Closed by
     to wire up, so it works on every page whatever that page loads, and the
     CSRF token is Django's own. `accounts.views.sign_out` says where it lands.
     {% endcomment %}
-    <form class="nav nav-end" method="post" action="/sign-out/">
+    <form id="sign-out" class="nav nav-end" method="post" action="/sign-out/">
       {% csrf_token %}
       <input type="hidden" name="next" value="{{ path }}">
       <button type="submit" class="nav-button"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
@@ -39,24 +39,18 @@ bar, built from the signed-in login's roles at this school. Closed by
     </button>
     <a class="logo topbar-logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
     {% if school_name %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
-    <span class="spacer"></span>
-    {% if signed_in %}
-    {% comment %}
+    <span class="spacer"></span>{% if signed_in %}{% comment %}
     The account menu: who is signed in, as what, and Sign out. A `<details>`,
     so it opens and closes with no script, from a keyboard as from a finger.
-    {% endcomment %}
-    <details class="account">
+    Its Sign out submits the sidebar's form (`form="sign-out"`), so the token
+    is written once; a form submits whether or not the sidebar is showing.
+    {% endcomment %}<details class="account">
       <summary class="icon-button" aria-label="Your account"><span class="avatar">{{ user_initials }}</span></summary>
       <div class="account-menu">
         <p class="account-who"><strong>{{ user_name }}</strong>{% if role_names %}<span>{{ role_names }}</span>{% endif %}</p>
-        <form method="post" action="/sign-out/">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ path }}">
-          <button type="submit" class="signout"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
-        </form>
+        <button type="submit" form="sign-out" class="signout"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
       </div>
-    </details>
-    {% endif %}
+    </details>{% endif %}
   </header>
 
   <div class="content">

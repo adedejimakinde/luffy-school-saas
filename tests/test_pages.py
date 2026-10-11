@@ -51,7 +51,6 @@ from results.views import (
     INDEX_MODULES,
     OGSERA_MODULES,
 )
-from home.views import HOME_MODULES
 from notices.views import SETTINGS_MODULES
 from timetable.views import TIMETABLE_MODULES
 from website.views import SITE_MODULES
@@ -84,7 +83,6 @@ PAGES = {
     "bank": BANK_MODULES,
     "timetable": TIMETABLE_MODULES,
     "checker": CHECKER_MODULES,
-    "home": HOME_MODULES,
     "notices-settings": SETTINGS_MODULES,
     "ogsera": OGSERA_MODULES,
     "teaching": TEACHING_MODULES,
