@@ -1,4 +1,4 @@
-<section class="panel" aria-labelledby="attention-title">
+{% load typography %}<section class="panel" aria-labelledby="attention-title">
   <div class="panel-head">
     <h2 id="attention-title">Needs your attention</h2>
     {% if dash.attention %}<span class="chip">{{ dash.attention|length }}</span>{% endif %}
@@ -10,8 +10,8 @@
       <a href="{{ item.href }}">
         <span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#{{ item.icon }}"/></svg></span>
         <span class="todo-text">
-          <strong>{{ item.title }}</strong>
-          <span>{{ item.detail }}</span>
+          <strong>{{ item.title|nobreak }}</strong>
+          <span>{{ item.detail|nobreak }}</span>
           {% include "home/parts/chip.html" with chip=item.chip %}
         </span>
         <span class="todo-end">

@@ -37,7 +37,26 @@ bar, built from the signed-in login's roles at this school. Closed by
     <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
       <svg class="icon"><use href="#i-menu"/></svg>
     </button>
+    <a class="logo topbar-logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    {% if school_name %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
     <span class="spacer"></span>
+    {% if signed_in %}
+    {% comment %}
+    The account menu: who is signed in, as what, and Sign out. A `<details>`,
+    so it opens and closes with no script, from a keyboard as from a finger.
+    {% endcomment %}
+    <details class="account">
+      <summary class="icon-button" aria-label="Your account"><span class="avatar">{{ user_initials }}</span></summary>
+      <div class="account-menu">
+        <p class="account-who"><strong>{{ user_name }}</strong>{% if role_names %}<span>{{ role_names }}</span>{% endif %}</p>
+        <form method="post" action="/sign-out/">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ path }}">
+          <button type="submit" class="signout"><svg class="icon"><use href="#i-signout"/></svg>Sign out</button>
+        </form>
+      </div>
+    </details>
+    {% endif %}
   </header>
 
   <div class="content">

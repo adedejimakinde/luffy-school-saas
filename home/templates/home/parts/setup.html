@@ -9,7 +9,7 @@
     {% for step in dash.setup.steps %}
     <li class="{% if step.done %}done{% else %}todo{% endif %}">
       <a href="{{ step.href }}">
-        <svg class="icon" aria-hidden="true"><use href="#{% if step.done %}i-check{% else %}i-todo{% endif %}"/></svg>
+        <svg class="icon" aria-hidden="true"><use href="#{% if step.done %}i-check{% else %}i-todo{% endif %}"/></svg><span class="sr">{% if step.done %}Done: {% else %}To do: {% endif %}</span>
         <span class="step-text"><strong>{{ step.title }}</strong><span>{{ step.detail }}</span></span>
         {% if not step.done %}<span class="go">{{ step.action }}</span>{% else %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Done</span>{% endif %}
       </a>

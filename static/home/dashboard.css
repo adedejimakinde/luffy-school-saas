@@ -115,16 +115,18 @@
 .chip-stop { color: var(--stop); background: var(--stop-bg); }
 .chip-brand { color: var(--brand); background: var(--brand-tint); }
 
+/* What moved since last week or last term. Neutral on purpose: down is not
+   always bad (fewer results waiting is good), so the sign says which way and
+   no colour says whether to worry. One line, kept short enough for a phone. */
 .change {
-  display: flex;
-  align-items: center;
-  gap: var(--s-half);
+  display: block;
+  overflow: hidden;
   color: var(--muted);
   font-size: var(--t-3);
   line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-
-.change .icon { width: 16px; height: 16px; stroke-width: 2; }
 
 /* -- Header ----------------------------------------------------------------- */
 .dash-head {
@@ -145,10 +147,19 @@
 }
 
 .dash-id h1 { font-size: var(--t-5); line-height: 1.2; }
+.dash-date { display: none; }
 
 .dash-term { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+.dash-term-phone { display: none; }
+
+@media (max-width: 639.98px) {
+  .dash-term-wide { display: none; }
+  .dash-term-phone { display: flex; }
+}
 
 @media (min-width: 1024px) {
+  .dash-school { display: none; }
+  .dash-date { display: inline; }
   .dash-id h1 { font-size: var(--t-6); }
   .dash-id .crest { width: 56px; height: 56px; }
 }
@@ -344,6 +355,7 @@ a.kpi:hover {
 .week { display: block; width: 100%; height: auto; }
 .week .bar { fill: var(--brand-soft); }
 .week .bar.today { fill: var(--brand); }
+.week .bar.empty { fill: none; stroke: var(--field-border); stroke-width: 1.5; stroke-dasharray: 4 4; }
 .week .base { stroke: var(--border); stroke-width: 1; }
 
 .week-labels {
@@ -357,6 +369,7 @@ a.kpi:hover {
 
 .week-labels b { display: block; color: var(--text); font-size: var(--t-3); }
 .week-labels .today b { color: var(--brand); }
+.week-labels b:not(.fig) { color: var(--muted); font-weight: 400; }
 
 .week-foot { margin: var(--s-2) 0 0; padding: var(--s-2) 0 0; border-top: 1px solid var(--divider); color: var(--muted); font-size: var(--t-3); }
 
@@ -428,8 +441,9 @@ a.kpi:hover {
 
 .steps a:hover .go { background: var(--brand-strong); }
 
+/* On a phone the step's own icon says done or not, and the text gets the width. */
 @media (max-width: 639.98px) {
-  .steps .go { display: none; }
+  .steps .go, .steps .chip { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

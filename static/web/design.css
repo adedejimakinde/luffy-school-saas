@@ -96,7 +96,7 @@
   /* 15px: the smallest body text on a phone. */
   --small: 0.9375rem;
 
-  --sidebar: 256px;
+  --sidebar: 240px;
   --topbar: 64px;
   --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
 
@@ -756,6 +756,7 @@ body.has-shell { padding: 0; }
   gap: 12px;
   min-height: var(--control);
   padding: 0 12px;
+  font-size: var(--small);
   color: var(--text);
   text-decoration: none;
   border-radius: var(--radius);
@@ -879,6 +880,64 @@ body.has-shell { padding: 0; }
 
 .topbar .spacer { flex: 1; }
 
+/* The bar's middle: the logo on a phone or a tablet, where the sidebar is
+   folded away, and the school's name on a desk, where the sidebar shows the
+   logo already. */
+.topbar-logo { min-height: var(--control); padding: 0 4px; font-size: 1.125rem; }
+.topbar-logo .logo-mark { width: 24px; height: 24px; }
+.topbar-school { display: none; }
+
+@media (min-width: 1024px) {
+  .topbar-logo { display: none; }
+  .topbar-school {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-weight: 700;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
+
+/* The account menu: a `<details>`, so it needs no script. The avatar is the
+   whole target; the panel opens under it, against the right edge. */
+.account { position: relative; flex: none; }
+.account > summary { list-style: none; cursor: pointer; transition: background-color 150ms ease; }
+.account > summary::-webkit-details-marker { display: none; }
+.account > summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.account[open] > summary { background: var(--bg); }
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  width: max-content;
+  min-width: 240px;
+  max-width: calc(100vw - 32px);
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2);
+}
+
+.account-who { display: grid; gap: 2px; margin: 0; padding: 8px 8px 12px; border-bottom: 1px solid var(--divider); }
+.account-who span { color: var(--muted); font-size: var(--small); }
+.account-menu form { margin: 8px 0 0; }
+.account-menu button.signout {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: var(--control);
+  padding: 0 8px;
+  font-weight: 400;
+  text-align: left;
+  border-radius: 8px;
+}
+.account-menu button.signout:hover { background: var(--bg); }
+
 .avatar {
   display: grid;
   place-items: center;
@@ -999,7 +1058,9 @@ body.has-shell { padding: 0; }
     left: 0;
     z-index: 10;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    /* One column per tab: four for most roles, three for a bursar. */
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
     padding: 0 4px env(safe-area-inset-bottom);
     background: var(--card);
     border-top: 1px solid var(--border);

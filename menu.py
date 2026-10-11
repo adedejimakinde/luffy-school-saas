@@ -17,14 +17,15 @@ read with `User.roles_at()` for this request: the same answer every gate reads,
 and no extra query. On the portal, or signed out, it is empty, and so is the
 menu.
 
-## The tab bar is one role's four screens
+## The tab bar is one role's main screens
 
-`design.css` draws it as four equal columns, for "the role's four main screens"
-(`docs/design.md`). A login holding more than one role gets the four of the
-role that leads (`_LEADING`), with the page being looked at swapped in for the
-fourth when it is not among them: the tab bar never loses the page you are on.
-A login whose roles have no four (a bursar) gets no tab bar, and the sidebar,
-behind the menu button, still lists everything.
+`design.css` draws one equal column per tab, for "the role's main screens"
+(`docs/design.md`): four for most roles. A login holding more than one role
+gets the tabs of the role that leads (`_LEADING`), with the page being looked
+at swapped in for the last when it is not among them: the tab bar never loses
+the page you are on.
+A bursar has three main screens and gets three tabs. The sidebar, behind the
+menu button, still lists everything.
 """
 
 from dataclasses import dataclass
@@ -69,25 +70,28 @@ LINKS = (
     Link("broadsheet", "/broadsheet/", "i-sheet", "Broadsheets", POSITION_VIEWING_ROLES, "Results"),
     Link("absences", "/absences/", "i-absent", "Absences", ABSENCE_ROLES, "Results"),
     Link("fees", "/fees/", "i-fees", "Fees", FEES_ROLES, "Office"),
-    Link("bank", "/bank/", "i-fees", "Bank", FEES_ROLES, "Office"),
+    Link("bank", "/bank/", "i-bank", "Bank", FEES_ROLES, "Office"),
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
-    Link("teaching", "/teaching/", "i-marks", "Subjects", SETUP_ROLES, "Office"),
-    Link("promotion", "/promotion/", "i-people", "Promotion", PLACEMENT_ROLES, "Office"),
+    Link("teaching", "/teaching/", "i-book", "Subjects", SETUP_ROLES, "Office"),
+    Link("promotion", "/promotion/", "i-promote", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.
     Link("roll", "/roll/", "i-people", "Roll", MEMBERSHIP_GRANTING_ROLES | PLACEMENT_ROLES, "Office"),
-    Link("staff", "/staff/", "i-inbox", "Staff", MEMBERSHIP_GRANTING_ROLES, "Office"),
-    Link("notices-settings", "/notices/settings/", "i-comments", "Notices", NOTICES_ROLES, "Office"),
+    Link("staff", "/staff/", "i-staff", "Staff", MEMBERSHIP_GRANTING_ROLES, "Office"),
+    Link("notices-settings", "/notices/settings/", "i-megaphone", "Notices", NOTICES_ROLES, "Office"),
 )
 
 BY_KEY = {link.key: link for link in LINKS}
 
-#: Each role's four main screens, for the tab bar.
+#: Each role's main screens, for the tab bar: four, or as many as the role
+#: has. The principal and the bursar keep Fees on it; the vice principal, who
+#: may read the fee book but does not keep it, keeps Broadsheets.
 TABS = {
-    Role.PRINCIPAL.value: ("home", "results", "broadsheet", "absences"),
+    Role.PRINCIPAL.value: ("home", "results", "fees", "absences"),
     Role.VICE_PRINCIPAL_ACADEMIC.value: ("home", "results", "broadsheet", "absences"),
-    Role.ADMIN.value: ("setup", "roll", "staff", "fees"),
-    Role.TEACHER.value: ("register", "marking", "comments", "timetable"),
+    Role.ADMIN.value: ("home", "roll", "staff", "fees"),
+    Role.TEACHER.value: ("home", "register", "marking", "timetable"),
+    Role.BURSAR.value: ("home", "fees", "bank"),
 }
 
 #: Whose four a login with several roles gets. The one that sees the most of
@@ -99,6 +103,7 @@ _LEADING = (
     Role.VICE_PRINCIPAL_ACADEMIC.value,
     Role.ADMIN.value,
     Role.TEACHER.value,
+    Role.BURSAR.value,
 )
 
 
@@ -161,20 +166,41 @@ def _menu(context, current):
     return menu_for(getattr(request, "school_roles", frozenset()), current)
 
 
+def initials(name: str) -> str:
+    """Two letters for an avatar or a crest: "Sunrise Demo Academy" is "SD"."""
+    words = [w for w in (name or "").split() if w[:1].isalnum()]
+    return "".join(w[0] for w in words[:2]).upper() or "?"
+
+
+def _role_names(roles) -> str:
+    """"Principal, Teacher": the login's roles here, leading role first."""
+    order = {role: i for i, role in enumerate(_LEADING)}
+    return ", ".join(Role(r).label for r in sorted(roles, key=lambda r: order.get(r, 99)))
+
+
 @register.inclusion_tag("design/shell_open.html", takes_context=True)
 def shell_open(context, current):
     """`<body>` through the start of `.content`: the sidebar and the top bar.
 
     Sign out is offered to anybody signed in, whatever their roles here: a
-    parent or a refused teacher still has a session to end.
+    parent or a refused teacher still has a session to end. The top bar names
+    the school and carries the account menu; both are read off the request
+    the middleware already built, so the bar costs no query.
     """
     request = context.get("request")
     user = getattr(request, "user", None)
+    signed_in = bool(user is not None and user.is_authenticated)
+    school = getattr(request, "school", None)
+    name = (user.get_full_name() or user.get_username()) if signed_in else ""
     return {
         "menu": _menu(context, current),
-        "signed_in": bool(user is not None and user.is_authenticated),
+        "signed_in": signed_in,
         "csrf_token": context.get("csrf_token"),
         "path": request.path if request is not None else "/",
+        "school_name": school.name if school is not None else "",
+        "user_name": name,
+        "user_initials": initials(name),
+        "role_names": _role_names(getattr(request, "school_roles", ())),
     }
 
 
@@ -184,4 +210,4 @@ def shell_close(context, current):
     return {"menu": _menu(context, current)}
 
 
-__all__ = ["LINKS", "Link", "Menu", "TABS", "menu_for", "register"]
+__all__ = ["LINKS", "Link", "Menu", "TABS", "initials", "menu_for", "register"]

@@ -62,23 +62,32 @@ class Bar:
     label: str
     percent: Optional[int]
     is_today: bool
-    #: Left edge, top edge and height inside the drawing, in pixels.
+    #: True for today or a day still to come with no register yet: "Not yet".
+    #: A day already gone with no register is "None".
+    pending: bool
+    #: Left edge, top edge, width and height inside the drawing, in pixels.
     x: float
     y: float
+    w: float
     h: float
 
 
-def bars(days: Sequence[tuple], *, width: int = 280, height: int = 48, floor: int = 2, bar: int = 40) -> list:
-    """One bar per (label, percent or None, is_today). None draws a stub.
+def bars(days: Sequence[tuple], *, width: int = 280, height: int = 48, bar: int = 40) -> list:
+    """One bar per (label, percent or None, is_today, pending).
 
-    A day with no register is drawn as a 2px stub rather than a zero-height
-    gap, so the week keeps its shape; its label still says which day it was.
+    A day with no register is drawn as a dashed outline the full height of
+    the chart, empty: a slot waiting for a figure, never a bar that reads as
+    nobody in school. The stroke is inset by a pixel so it is not clipped.
     """
     out = []
     slot = width / max(len(days), 1)
-    for i, (label, percent, is_today) in enumerate(days):
-        h = floor if percent is None else max(floor, _r(height * percent / 100))
-        out.append(Bar(label, percent, is_today, _r(i * slot + (slot - bar) / 2), _r(height - h), h))
+    for i, (label, percent, is_today, pending) in enumerate(days):
+        x = i * slot + (slot - bar) / 2
+        if percent is None:
+            out.append(Bar(label, None, is_today, pending, _r(x + 1), 1, bar - 2, height - 2))
+            continue
+        h = max(2, _r(height * percent / 100))
+        out.append(Bar(label, percent, is_today, pending, _r(x), _r(height - h), bar, h))
     return out
 
 
