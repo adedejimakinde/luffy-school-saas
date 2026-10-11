@@ -20,13 +20,16 @@
   --section: 72px;
   /* One Blue deeper toward the ink, for the far end of the top band and the
      footer; a wash of it for the alternate sections; and the words that sit on
-     the blue (6.8:1 on One Blue) and on the deepest blue (8.7:1). Mixes of
+     the blue (6.8:1 on One Blue) and on the deepest blue (links 9.3:1, the
+     footer's headings 5.6:1 and its legal line 6.5:1). Mixes of
      `design.css`'s colours, never new ones. */
   --brand-deep: color-mix(in srgb, var(--brand) 55%, var(--text));
   --brand-deeper: color-mix(in srgb, var(--brand) 30%, var(--text));
   --brand-wash: color-mix(in srgb, var(--brand) 5%, var(--card));
   --on-brand: color-mix(in srgb, var(--card) 78%, var(--brand));
-  --on-deep: color-mix(in srgb, var(--card) 72%, var(--brand-deeper));
+  --on-deep: color-mix(in srgb, var(--card) 75%, var(--brand-deeper));
+  --on-deep-muted: color-mix(in srgb, var(--card) 55%, var(--brand-deeper));
+  --on-deep-legal: color-mix(in srgb, var(--card) 60%, var(--brand-deeper));
 
 
   --shadow-soft: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
@@ -547,19 +550,53 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 
 /* ---------------------------------------------------------------- footer */
 
-.site-foot { padding: 56px 0 40px; color: var(--on-deep); background: var(--brand-deeper); }
-.foot-inner { display: grid; gap: 24px; }
+/*
+ * The footer: the logo and one line on the left, three columns of links on
+ * the right, a thin rule, and one legal line naming the company once. On a
+ * phone it stacks, everything left-aligned: the logo, the links two columns
+ * across (Company the full width), the rule, the legal line.
+ */
+.site-foot { padding: 32px 0; color: var(--on-deep); background: var(--brand-deeper); }
+.foot-top { display: grid; gap: 32px; }
 .foot-brand .logo { padding: 0; color: var(--card); }
-.foot-brand p { margin: 4px 0 0; }
-.foot-nav { display: flex; flex-wrap: wrap; gap: 0 8px; margin-left: -12px; }
-.foot-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--on-deep); text-decoration: none; border-radius: 8px; }
-.foot-nav a:hover { color: var(--card); text-decoration: underline; }
-.foot-copy { margin: 0; font-size: 0.9375rem; }
-/* The company's legal name and RC number: its own row under the rest, on every width. */
-.foot-legal { grid-column: 1 / -1; margin: 0; font-size: 0.9375rem; }
+.foot-tagline { margin: 8px 0 0; max-width: 28ch; font-size: 0.9375rem; }
+.foot-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+.foot-col-company { grid-column: 1 / -1; }
+.foot-heading {
+  margin: 0 0 8px;
+  color: var(--on-deep-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.foot-col ul { list-style: none; margin: 0; padding: 0; }
+.foot-col a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--on-deep);
+  font-size: 0.875rem;
+  text-decoration: none;
+  border-radius: 4px;
+}
+.foot-col a:hover, .foot-col a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
+.foot-legal {
+  margin: 32px 0 0;
+  padding-top: 24px;
+  color: var(--on-deep-legal);
+  font-size: 0.875rem;
+  text-align: left;
+  border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent);
+}
 @media (min-width: 900px) {
-  .foot-inner { grid-template-columns: auto 1fr auto; align-items: center; }
-  .foot-nav { justify-content: center; margin-left: 0; }
+  .site-foot { padding: 48px 0 32px; }
+  .foot-top { grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: start; }
+  .foot-links { grid-template-columns: repeat(3, auto); gap: 48px; }
+  .foot-col-company { grid-column: auto; }
+  .foot-col a { min-height: 32px; }
+  .foot-legal { margin-top: 40px; }
 }
 
 /* ---------------------------------------------------------------- form states */

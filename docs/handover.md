@@ -422,8 +422,8 @@ from the open class).
 
 ## Copy and what is still TODO
 Homepage copy is the user's, word for word, with the price (₦2,500 per student, per term, no setup fee), "one
-working day", "Classnode. Nigeria." and hello@classnode.co. Footer of every public page: "Classnode Edtech Limited ·
-RC 9926572" (no address). Legal pages: company Classnode, contact
+working day" and hello@classnode.co. Footer of every public page ends on one legal line, "© 2026 Classnode Edtech
+Limited · RC 9926572" (no address; see docs/website.md). Legal pages: company Classnode, contact
 hello@classnode.co. **Still visible TODOs:** the RC number, the registered address, every "TODO: lawyer", the
 server location, B2 region, email provider, retention periods, DPO, breach notice, invoicing, dates, and the
 "Our responsibility" section.

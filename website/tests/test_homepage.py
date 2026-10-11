@@ -79,8 +79,10 @@ COPY = [
     "Who can see our school's records?",
     "See it with your own classes.",
     "Book a demo and we will call you within two working days.",
-    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode Edtech Limited",
-    "Classnode Edtech Limited · RC 9926572",
+    "School management for Nigerian secondary schools.",
+    "Product", "Features", "Pricing", "Sign in", "Staff sign in", "Parent sign in",
+    "Company", "Privacy", "Terms", "hello@classnode.co",
+    "© 2026 Classnode Edtech Limited · RC 9926572",
 ]
 
 #: The floating cards' figures, each the figure in the showcase's screens
@@ -119,6 +121,11 @@ def visible_text(page, *, questions=True):
     text = re.sub(r"</?(?:span|a|strong|b|em)\b[^>]*>", "", body)
     text = re.sub(r"<[^>]+>", " ", text)
     return re.sub(r"\s+", " ", html.unescape(f"{text} {labels}")).strip()
+
+
+def words(fragment):
+    """`visible_text` of a piece of a page rather than the whole of one."""
+    return visible_text(f"<body>{fragment}").removeprefix(">").strip()
 
 
 @override_settings(
@@ -239,6 +246,47 @@ class TheWordsTests(SiteSetUp):
         self.assertNotIn("?", visible_text("<body><summary>Fine?</summary>", questions=False))
         self.assertIn("!", broken)
         self.assertRegex(broken.lower(), r"(?<![a-z])journey(?![a-z])")
+
+
+class TheFooterTests(SiteSetUp):
+    """The owner's footer: the logo and one line, three columns of links, one legal line."""
+
+    def footer(self, path="/"):
+        return self.get(path).content.decode().split('<footer class="site-foot', 1)[1].split("</footer>", 1)[0]
+
+    def test_three_columns_hold_the_given_links_in_order(self):
+        columns = re.findall(r'<div class="foot-col[^"]*">(.*?)</div>', self.footer(), flags=re.S)
+        found = [
+            (words(re.search(r"<h2[^>]*>(.*?)</h2>", column, flags=re.S).group(1)),
+             [(href, words(label)) for href, label in
+              re.findall(r'<a href="([^"]+)">(.*?)</a>', column, flags=re.S)])
+            for column in columns
+        ]
+        self.assertEqual(found, [
+            ("Product", [("/#features", "Features"), ("/#pricing", "Pricing"), ("/#demo", "Book a demo")]),
+            ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
+                         (f"//{PORTAL}/sign-in/", "Parent sign in")]),
+            ("Company", [("/privacy/", "Privacy"), ("/terms/", "Terms"),
+                         ("mailto:hello@classnode.co", "hello@classnode.co")]),
+        ])
+
+    def test_the_logo_and_tagline_come_first(self):
+        footer = self.footer()
+        self.assertLess(footer.index('class="logo"'), footer.index("foot-tagline"))
+        self.assertLess(footer.index("foot-tagline"), footer.index('class="foot-links"'))
+
+    def test_the_company_is_named_once_on_one_legal_line(self):
+        for path in ("/", "/privacy/", "/terms/"):
+            footer = self.footer(path)
+            text = visible_text("<body>" + footer)
+            legal = re.search(r'<p class="foot-legal[^"]*">(.*?)</p>\s*</div>\s*$', footer, flags=re.S)
+            with self.subTest(path=path):
+                self.assertEqual(text.count("Classnode Edtech Limited"), 1)
+                self.assertIsNotNone(legal, "the legal line closes the footer")
+                self.assertEqual(words(legal.group(1)),
+                                 "© 2026 Classnode Edtech Limited · RC 9926572")
+                self.assertNotIn("Classnode. Nigeria.", text)
+                self.assertEqual(text.count("RC 9926572"), 1)
 
 
 class TheDemoRequestTests(SiteSetUp):
@@ -524,6 +572,7 @@ class TheContrastTests(TestCase):
         token = _tokens()
         for text, ground in (("card", "brand"), ("on-brand", "brand"), ("on-brand", "brand-deep"),
                              ("card", "brand-deeper"), ("on-deep", "brand-deeper"),
+                             ("on-deep-muted", "brand-deeper"), ("on-deep-legal", "brand-deeper"),
                              ("muted", "brand-wash"), ("text", "brand-wash"), ("brand", "card")):
             with self.subTest(text=text, ground=ground):
                 self.assertGreaterEqual(contrast(token(text), token(ground)), 4.5)

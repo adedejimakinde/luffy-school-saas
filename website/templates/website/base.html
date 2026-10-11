@@ -56,20 +56,39 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
 {% block main %}{% endblock %}
 </main>
 <footer class="site-foot">
-  <div class="wrap foot-inner">
-    <div class="foot-brand">
-      <a class="logo" href="/" aria-label="Classnode home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
-      <p>Classnode. Nigeria.</p>
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a class="logo" href="/" aria-label="Classnode home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+        <p class="foot-tagline">School management for Nigerian secondary schools.</p>
+      </div>
+      <nav class="foot-links" aria-label="Footer">
+        <div class="foot-col">
+          <h2 class="foot-heading">Product</h2>
+          <ul>
+            <li><a href="/#features">Features</a></li>
+            <li><a href="/#pricing">Pricing</a></li>
+            <li><a href="/#demo">Book a demo</a></li>
+          </ul>
+        </div>
+        {% if portal_host %}<div class="foot-col">
+          <h2 class="foot-heading">Sign in</h2>
+          <ul>
+            <li><a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a></li>
+            <li><a href="//{{ portal_host }}/sign-in/">Parent sign in</a></li>
+          </ul>
+        </div>{% endif %}
+        <div class="foot-col foot-col-company">
+          <h2 class="foot-heading">Company</h2>
+          <ul>
+            <li><a href="/privacy/">Privacy</a></li>
+            <li><a href="/terms/">Terms</a></li>
+            <li><a href="mailto:hello@classnode.co">hello@classnode.co</a></li>
+          </ul>
+        </div>
+      </nav>
     </div>
-    <nav class="foot-nav" aria-label="Footer">
-      <a href="/privacy/">Privacy</a>
-      <a href="/terms/">Terms</a>
-      <a href="mailto:hello@classnode.co">hello@classnode.co</a>
-      {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
-      <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
-    </nav>
-    <p class="num foot-copy">&copy; 2026 Classnode Edtech Limited</p>
-    <p class="foot-legal">Classnode Edtech Limited &middot; RC 9926572</p>
+    <p class="foot-legal num">&copy; 2026 Classnode Edtech Limited &middot; RC 9926572</p>
   </div>
 </footer>
 <script type="module">
