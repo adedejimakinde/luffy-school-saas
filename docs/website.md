@@ -69,12 +69,16 @@ beside the demo form, six questions, a final call to action, and the footer.
 
 - **The words say what the product does and promise no outcome we cannot
   show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
-  no setup fee), the call-back time (**two working days**), the footer
-  (Classnode. Nigeria.) and the contact address (hello@classnode.co). Under
-  the footer, on every page of the site (homepage, privacy notice, terms), its
-  own row: Classnode Edtech Limited · RC 9926572, and the copyright line names
-  the same company (© 2026 Classnode Edtech Limited). No address there; the
-  registered address waits for the lawyer.
+  no setup fee), the call-back time (**two working days**) and the contact
+  address (hello@classnode.co). The footer, the same on every page of the site
+  (homepage, privacy notice, terms): the logo with one line under it (School
+  management for Nigerian secondary schools.), three columns of links (Product:
+  Features, Pricing, Book a demo; Sign in: Staff sign in, Parent sign in;
+  Company: Privacy, Terms, hello@classnode.co), a thin rule, and one legal
+  line, the only place the company is named: © 2026 Classnode Edtech Limited ·
+  RC 9926572. No address there; the registered address waits for the lawyer.
+  On phones it is all left-aligned, the columns two across with Company on a
+  row of its own.
   `website/tests/test_homepage.py` holds the page to that copy and to the
   writing rules: no en or em dash, no exclamation mark, no sentence starting
   "Imagine", none of the banned words, and **no question mark outside the six

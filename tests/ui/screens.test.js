@@ -90,7 +90,10 @@ const SMALL_ON_PURPOSE =
   // The homepage's drawings of the product: pictures, each read by its
   // description (`role="img"` and `aria-label`, or `aria-hidden` beside a
   // screen that has one), like the screenshots beside them.
-  ".mini, .float-card, .browser-bar";
+  ".mini, .float-card, .browser-bar, " +
+  // The public footer: the owner's spec sets its links at 14px and its
+  // column headings at 12px, white on navy at 9.3:1 and 5.6:1.
+  ".site-foot";
 
 /**
  * Every screen: who opens it, where, and the taps that reach its main state.
@@ -319,6 +322,20 @@ function measureSite({ width }) {
     for (const p of document.querySelectorAll("main p, main li, main summary")) {
       if (!visible(p) || p.closest(".mini, .float-card, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
+    }
+    // The footer on a phone: all of it on the left, its links a thumb tall.
+    const foot = document.querySelector(".site-foot");
+    for (const el of foot.querySelectorAll("*")) {
+      if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
+        problems.push(`the footer's ${el.className || el.tagName} is not left-aligned`);
+      }
+    }
+    const legal = foot.querySelector(".foot-legal");
+    if (Math.round(box(legal).left) !== 16) problems.push("the footer's legal line is off the left edge");
+    // It may wrap: text kept on one line runs past its box on a small phone.
+    if (legal.scrollWidth > legal.clientWidth) problems.push(`the footer's legal line is ${legal.scrollWidth}px in ${legal.clientWidth}px`);
+    for (const a of foot.querySelectorAll(".foot-col a")) {
+      if (box(a).height < 44) problems.push(`a footer link is ${Math.round(box(a).height)}px tall, under 44: "${a.textContent.trim()}"`);
     }
   }
   if (width < 640 && home) {
