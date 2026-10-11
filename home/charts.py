@@ -60,11 +60,13 @@ def sparkline(
 @dataclass(frozen=True)
 class Bar:
     label: str
-    percent: Optional[int]
+    percent: Optional[float]
     is_today: bool
     #: True for today or a day still to come with no register yet: "Not yet".
     #: A day already gone with no register is "None".
     pending: bool
+    #: The figure under the bar, already formatted by the caller.
+    text: str
     #: Left edge, top edge, width and height inside the drawing, in pixels.
     x: float
     y: float
@@ -73,7 +75,7 @@ class Bar:
 
 
 def bars(days: Sequence[tuple], *, width: int = 280, height: int = 48, bar: int = 40) -> list:
-    """One bar per (label, percent or None, is_today, pending).
+    """One bar per (label, percent or None, is_today, pending, text).
 
     A day with no register is drawn as a dashed outline the full height of
     the chart, empty: a slot waiting for a figure, never a bar that reads as
@@ -81,13 +83,13 @@ def bars(days: Sequence[tuple], *, width: int = 280, height: int = 48, bar: int 
     """
     out = []
     slot = width / max(len(days), 1)
-    for i, (label, percent, is_today, pending) in enumerate(days):
+    for i, (label, percent, is_today, pending, text) in enumerate(days):
         x = i * slot + (slot - bar) / 2
         if percent is None:
-            out.append(Bar(label, None, is_today, pending, _r(x + 1), 1, bar - 2, height - 2))
+            out.append(Bar(label, None, is_today, pending, text, _r(x + 1), 1, bar - 2, height - 2))
             continue
         h = max(2, _r(height * percent / 100))
-        out.append(Bar(label, percent, is_today, pending, _r(x), _r(height - h), bar, h))
+        out.append(Bar(label, percent, is_today, pending, text, _r(x), _r(height - h), bar, h))
     return out
 
 

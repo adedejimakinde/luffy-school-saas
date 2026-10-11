@@ -17,16 +17,41 @@ nothing to fetch after it and no script to run.
 | Tiles | Students enrolled, fees collected (naira and percent of what was billed, with a meter), attendance today, results waiting. A teacher gets attendance and scores entered for their own class instead. Each carries one change note against last week or last term where that exists. |
 | Needs your attention | Up to five items, each a link to the page that fixes it: a register not taken, fees owed, results waiting on this login, papers half marked, remarks missing, staff invitations not accepted, no contact email. |
 | Fee collection | Collected against billed, a sparkline of the term's weeks so far, the meter, and this week, outstanding and owing. |
-| Attendance this week | Monday to Friday as bars. A day with no register yet is a dashed empty slot labelled "Not yet" (or "None" once it has passed), never a low bar. |
+| Attendance this week | Monday to Friday as bars, plus a Saturday or Sunday only if a register was taken on it. A day with no register yet is a dashed empty slot labelled "Not yet" (or "None" once it has passed), never a low bar. |
 | Recent activity | The latest five lines from the logs the school already keeps (below). |
 | Set up your school | Instead of all the above while the school has no students: add classes, invite teachers, import students, each ticked off as it is done. |
+
+## Attendance: one day, told three ways
+
+The tile, the chart and the activity line describe the same day, so they
+never disagree:
+
+- If any register was taken **today**, whatever day of the week, the tile is
+  "Attendance today", the chart has today's bar, and the feed says how many
+  classes have taken it.
+- If none was, the tile is "Attendance" and shows the **last day a register
+  was taken**, labelled "Last school day: Fri 9 Oct". It never calls a day
+  with no register "today". The chart says "No registers on a weekend" only
+  when it is one and nobody has taken a register.
+- The change note compares the day shown with the seven days before it.
+
+`AttendanceTellsOneStoryTests` holds this for a Sunday with a register, a
+Sunday without one, a school day before its register, and a teacher's class.
+
+## Numbers and names
+
+Every figure goes through `home.dashboard.figure()`: at most one decimal and
+never a trailing ".0" (100%, 94.2%, +14 pts, ₦48.6m). The greeting uses the
+login's short name or the first word of the full name, keeps an honorific with
+the surname ("Mrs Adeyemi"), and drops any role word: a login called
+"Administrator Sunrise" is greeted "Good morning".
 
 ## Three statements, cached per school
 
 `home.facts.read()` runs three statements on one cursor, each a single
 `json_build_object` row of aggregates: **people** (term, classes and
-placements, the previous term's roll, staff counts, class teachers, two weeks
-of registers, staff invitations, the crest), **money** (this term's ledger by
+placements, the previous term's roll, staff counts, class teachers, three
+weeks of registers, staff invitations, the crest), **money** (this term's ledger by
 kind, by week and by family, and the last five payments) and **work** (results
 sheets and their latest steps, papers with marks started, remarks written). The
 count does not grow with the school; `ThreeStatementsAndThenNoneTests` holds
@@ -55,7 +80,7 @@ imported from the modules that gate those pages, never written out again.
 | Students enrolled | yes | | yes | | |
 | Fees collected, fee collection | yes | yes | yes | yes | never |
 | Attendance today | school | school | school | | own class |
-| Results tile | to approve | to check | awaiting approval | | |
+| Results tile | "Approvals" (waiting on you) | "Checks" (waiting on you) | "Approvals" (with the principal) | | |
 | Scores entered | | | | | own class |
 | Fees owed | | | yes | yes | |
 | Results waiting | approve, release | check | | | |

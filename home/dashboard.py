@@ -63,7 +63,6 @@ IMPORT_ROLES = MEMBERSHIP_GRANTING_ROLES & PLACEMENT_ROLES
 MINUS = "−"
 MAX_ATTENTION = 5
 MAX_ACTIVITY = 5
-WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri")
 
 
 # -- money and numbers ---------------------------------------------------------
@@ -74,22 +73,37 @@ def naira(kobo: int) -> str:
     return f"₦{round(kobo / 100):,}"
 
 
+def figure(value) -> str:
+    """Every number the dashboard prints: at most one decimal, and never a
+    trailing ".0". "100", "94.2", "1,234". The one formatter, so no two
+    tiles disagree about how a number looks."""
+    rounded = round(float(value), 1)
+    if rounded == int(rounded):
+        return f"{int(rounded):,}"
+    return f"{rounded:,.1f}"
+
+
+def pct(part, whole) -> Optional[str]:
+    """"94.2%", "100%"; None when there is nothing to divide by."""
+    return f"{figure(part * 100 / whole)}%" if whole else None
+
+
 def short_naira(kobo: int) -> str:
     """"₦48.6m": a tile's figure, short enough never to wrap. Whole numbers
-    from 100 of a unit up, one decimal below that (`home/states.js` did this
-    in the browser before the dashboard moved to the server)."""
+    from 100 of a unit up, `figure()`'s one decimal below that."""
     value = abs(kobo) / 100
     for unit, suffix in ((1e9, "bn"), (1e6, "m"), (1e3, "k")):
         if value >= unit:
             scaled = value / unit
-            text = f"{scaled:.0f}" if scaled >= 100 else f"{scaled:.1f}".rstrip("0").rstrip(".")
-            return f"₦{text}{suffix}"
-    return f"₦{value:,.0f}"
+            return f"₦{figure(round(scaled) if scaled >= 100 else scaled)}{suffix}"
+    return f"₦{figure(round(value))}"
 
 
 def signed(n, unit: str = "") -> str:
-    """"+14", "−2", with the true minus sign."""
-    return f"{'+' if n > 0 else MINUS}{unit}{abs(n)}" if n else f"{unit}0"
+    """"+14", "−2", "+1.3", with the true minus sign and `figure()`'s digits."""
+    if not round(float(n), 1):
+        return f"{unit}0"
+    return f"{'+' if n > 0 else MINUS}{unit}{figure(abs(n))}"
 
 
 def plural(n: int, one: str, many: str = "") -> str:
@@ -171,6 +185,35 @@ def scope_for(facts: dict, roles, user_id: int) -> Scope:
 # -- the page -----------------------------------------------------------------
 
 
+#: Words that are a role or a title, not a name: a demo login called
+#: "Administrator Sunrise" is greeted "Good morning", not "Good morning,
+#: Administrator".
+_NOT_A_NAME = {
+    "admin", "administrator", "principal", "vice", "vp", "teacher", "bursar",
+    "parent", "guardian", "student", "staff", "head", "headteacher", "proprietor",
+    "school", "office", "user", "demo",
+}
+#: Honorifics a Nigerian staff room is addressed by. Kept with the surname
+#: after them: "Mrs Adeyemi", never "Mrs".
+_TITLES = {"mr", "mrs", "ms", "miss", "dr", "prof", "chief", "alhaji", "alhaja", "pastor", "rev", "engr"}
+
+
+def first_name(user) -> str:
+    """The name to greet: `short_name` if set, else the first word of the full
+    name, else nothing. Never a username, a role or a bare title."""
+    if user.short_name:
+        words = user.short_name.split()
+    elif user.full_name:
+        words = user.full_name.split()
+    else:
+        return ""
+    if not words or words[0].lower().strip(".") in _NOT_A_NAME:
+        return ""
+    if words[0].lower().strip(".") in _TITLES:
+        return f"{words[0]} {words[-1]}" if len(words) > 1 and words[-1].lower() not in _NOT_A_NAME else ""
+    return words[0]
+
+
 def greeting(now: datetime) -> str:
     if now.hour < 12:
         return "Good morning"
@@ -207,7 +250,7 @@ def build(facts: dict, *, school, user, roles, now: Optional[datetime] = None) -
     dash = {
         "school": {"name": school.name, "initials": initials(school.name), "crest_url": facts["crest"]},
         "greeting": greeting(now),
-        "name": user.get_short_name(),
+        "name": first_name(user),
         "term": term,
         "today": today,
         "setup": None,
@@ -283,7 +326,16 @@ def setup_steps(facts: dict, scope: Scope) -> dict:
 
 
 def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
-    """Today, this week and last week, over the classes this login sees.
+    """Attendance over the classes this login sees, as one story told three
+    ways (the tile, the week's chart, the activity line), so they agree.
+
+    - **The day shown** is today if any register was taken today, whatever
+      day of the week it is. Otherwise it is the last day a register was
+      taken, and the tile says so ("Last school day: Fri 9 Oct"); it never
+      calls a day with no register "today".
+    - **The chart** is Monday to Friday of this week, plus a Saturday or a
+      Sunday only if a register was taken on it.
+    - **The change** is the day shown against the seven days before it.
 
     Out of the children marked, never out of the roll (`summary.present()`'s
     reason): a class nobody has taken a register for has had nobody absent.
@@ -292,28 +344,36 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
     if not school_wide and not (scope.may(REGISTER_ROLES) and scope.classes):
         return None
     monday = monday_of(today)
-    by_day, last_week, taken_today, latest = {}, [0, 0], set(), None
+    by_day, taken_today = {}, set()
     for cid, on, marked, present, created, taken_by, taken_name in facts["people"]["registers"]:
         if cid not in scope.classes:
             continue
         on = date.fromisoformat(on)
-        if on >= monday:
-            day = by_day.setdefault(on, [0, 0])
-            day[0] += present
-            day[1] += marked
-        else:
-            last_week[0] += present
-            last_week[1] += marked
+        day = by_day.setdefault(on, [0, 0])
+        day[0] += present
+        day[1] += marked
         if on == today:
             taken_today.add(cid)
-            latest = created
     placed = {cid for cid, _, n in facts["people"]["classes"] if n and cid in scope.classes}
+
+    shown = today if today in by_day else max((d for d in by_day if d < today), default=None)
+    before = [0, 0]
+    if shown is not None:
+        for day, (present, marked) in by_day.items():
+            if shown - timedelta(days=7) <= day < shown:
+                before[0] += present
+                before[1] += marked
+
+    days = [monday + timedelta(days=i) for i in range(5)]
+    days += [d for d in (monday + timedelta(days=5), monday + timedelta(days=6)) if d in by_day and d <= today]
     bars = []
-    for i, label in enumerate(WEEKDAYS):
-        day = monday + timedelta(days=i)
+    for day in days:
         present, marked = by_day.get(day, (0, 0))
-        bars.append((label, percent(present, marked), day == today, day >= today))
-    today_present, today_marked = by_day.get(today, (0, 0))
+        exact = present * 100 / marked if marked else None
+        pending = day >= today
+        text = f"{figure(exact)}%" if exact is not None else ("Not yet" if pending else "None")
+        bars.append((day.strftime("%a"), exact, day == today, pending, text))
+
     # A weekend is named as one only while nobody has taken a register on it.
     weekend = today.weekday() >= 5 and not taken_today
     if school_wide:
@@ -326,23 +386,22 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
         href, link = "/absences/", "Absences"
     else:
         label = scope.label()
-        missing = placed - taken_today
         if weekend:
             foot = "No registers on a weekend"
-        elif not missing:
+        elif not placed - taken_today:
             foot = f"Today's register for {label} is taken"
         else:
             foot = f"Today's register for {label} is not taken yet"
         href, link = "/register/", "Register"
     return {
         "school_wide": school_wide,
-        "present": today_present,
-        "marked": today_marked,
-        "last_week": percent(*last_week) if last_week[1] else None,
-        "last_week_exact": (last_week[0] * 100 / last_week[1]) if last_week[1] else None,
+        "shown": shown,
+        "present": by_day[shown][0] if shown else 0,
+        "marked": by_day[shown][1] if shown else 0,
+        "before": before,
+        "weekend": weekend,
         "placed": placed,
         "taken_today": taken_today,
-        "latest": latest,
         "card": {"bars": charts.bars(bars), "foot": foot, "href": href, "link": link},
     }
 
@@ -369,7 +428,7 @@ def tiles(facts, scope: Scope, today, term, week) -> list:
     money = facts["money"]
     if scope.may(FEE_READING_ROLES) and money is not None:
         collected, billed = _collected(money), _billed(money)
-        pct = percent(collected, billed)
+        share = percent(collected, billed)
         this_week = _collected_in_week(money, term, today)
         out.append({
             "key": "fees",
@@ -378,8 +437,8 @@ def tiles(facts, scope: Scope, today, term, week) -> list:
             "href": "/fees/",
             "value": short_naira(collected),
             "exact": f"{naira(collected)} of {naira(billed)}",
-            "meter": min(pct, 100) if pct is not None else None,
-            "meta": f"{pct}% of {short_naira(billed)}" if billed else "Nothing billed this term yet",
+            "meter": min(share, 100) if share is not None else None,
+            "meta": f"{pct(collected, billed)} of {short_naira(billed)}" if billed else "Nothing billed this term yet",
             "change": f"{_signed_naira(this_week)} this week",
         })
     if week is not None and (week["school_wide"] or scope.classes):
@@ -398,35 +457,46 @@ def _signed_naira(kobo: int) -> str:
 
 
 def _attendance_tile(week, scope: Scope, today: date) -> dict:
-    present, marked = week["present"], week["marked"]
     where = "" if week["school_wide"] else f" in {scope.label()}"
+    shown = week["shown"]
     tile = {
         "key": "attendance",
-        "label": "Attendance today",
+        "label": "Attendance today" if shown == today else "Attendance",
         "icon": "i-register",
         "href": "/absences/" if week["school_wide"] else "/register/",
     }
-    if not marked:
-        meta = "No registers on a weekend" if today.weekday() >= 5 else f"No register taken yet{where}"
+    if shown is None:
+        meta = "No registers on a weekend" if week["weekend"] else f"No register taken yet{where}"
         return {**tile, "value": "-", "meta": meta, "change": None}
+    present, marked = week["present"], week["marked"]
     exact = present * 100 / marked
-    value = f"{exact:.1f}%" if week["school_wide"] else f"{round(exact)}%"
     change = None
-    if week["last_week_exact"] is not None:
-        points = round(exact - week["last_week_exact"], 1)
-        # Against last week's average; short enough for a phone's tile.
-        change = f"{signed(points if week['school_wide'] else round(points))} pts"
-    return {**tile, "value": value, "meta": f"{present:,} of {marked:,} present{where}", "change": change}
+    if week["before"][1]:
+        # The day shown against the seven days before it.
+        points = exact - week["before"][0] * 100 / week["before"][1]
+        change = f"{signed(points)} pts"
+    meta = (
+        f"{present:,} of {marked:,} present{where}"
+        if shown == today
+        else f"Last school day: {short_day(shown)}"
+    )
+    return {
+        **tile,
+        "value": f"{figure(exact)}%",
+        "exact": f"{present:,} of {marked:,} present{where}",
+        "meta": meta,
+        "change": change,
+    }
 
 
 #: Which sheets wait on whom, and how the tile names them.
 def _results_tile(facts, scope: Scope) -> dict:
     if scope.may(chain.APPROVING_ROLES):
-        state, label, meta = "checked", "Results to approve", "Checked and waiting on you"
+        state, label, meta = "checked", "Approvals", "Results checked and waiting on you"
     elif scope.may(chain.CHECKING_ROLES):
-        state, label, meta = "submitted", "Results to check", "Submitted and waiting on you"
+        state, label, meta = "submitted", "Checks", "Results submitted and waiting on you"
     else:
-        state, label, meta = "checked", "Awaiting approval", "Checked, with the principal"
+        state, label, meta = "checked", "Approvals", "Results checked, with the principal"
     sheets = [s for s in facts["work"]["sheets"] if s[0] in scope.classes]
     now = sum(1 for s in sheets if s[1] == state)
     before = sum(1 for s in sheets if s[5] == state)
@@ -456,7 +526,7 @@ def _scores_tile(facts, scope: Scope, today: date) -> dict:
         return {**tile, "value": "-", "meta": f"No marks entered yet in {scope.label()}", "change": None}
     return {
         **tile,
-        "value": f"{percent(len(complete), len(papers))}%",
+        "value": pct(len(complete), len(papers)),
         "meta": f"{len(complete)} of {plural(len(papers), 'paper')} complete in {scope.label()}",
         "change": f"{signed(this_week)} this week",
     }
@@ -485,11 +555,12 @@ def _collected_in_week(money, term, today) -> int:
 def fee_card(facts, term, today) -> dict:
     money = facts["money"]
     collected, billed = _collected(money), _billed(money)
-    pct = percent(collected, billed)
+    share = percent(collected, billed)
     card = {
         "collected": naira(collected),
         "expected": naira(billed),
-        "percent": min(pct or 0, 100),
+        "percent": min(share or 0, 100),
+        "percent_text": pct(collected, billed) or "0%",
         "this_week": short_naira(_collected_in_week(money, term, today)),
         "outstanding": short_naira(money["owing"]["kobo"]),
         "owing": money["owing"]["n"],

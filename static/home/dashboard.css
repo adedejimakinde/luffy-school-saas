@@ -363,7 +363,9 @@ a.kpi:hover {
 
 .week-labels {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  /* Five school days, or six or seven when a weekend had a register. */
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   margin: var(--s-1) 0 0;
   text-align: center;
   font-size: var(--t-1);

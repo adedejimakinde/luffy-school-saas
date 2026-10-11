@@ -157,14 +157,16 @@ class EachRoleSeesItsOwnTests(DashboardSetUp):
         self.assertEqual(items, {"scores"})
         self.assertEqual(events, {"results", "register"})
 
-    def test_the_results_tile_names_whose_step_it_is(self):
-        for member, label in (
-            (self.head, "Results to approve"),
-            (self.vp, "Results to check"),
-            (self.admin, "Awaiting approval"),
+    def test_the_results_tile_is_one_short_word_and_says_whose_step_it_is(self):
+        for member, label, meta in (
+            (self.head, "Approvals", "Results checked and waiting on you"),
+            (self.vp, "Checks", "Results submitted and waiting on you"),
+            (self.admin, "Approvals", "Results checked, with the principal"),
         ):
             with self.subTest(role=member.role):
-                self.assertIn(label, self.shown(member)[3])
+                html = self.shown(member)[3]
+                self.assertRegex(html, rf'data-tile="results">\s*<span class="kpi-top">\s*<span class="eyebrow">{label}</span>')
+                self.assertIn(meta, html)
 
     def test_a_parent_is_refused_in_one_sentence(self):
         parent = grant_membership(
@@ -235,6 +237,114 @@ class ATeacherSeesTheirOwnClassTests(DashboardSetUp):
 
         self.assertEqual(tiles, set())
         self.assertIn("Nothing needs you right now", html)
+
+
+class AttendanceTellsOneStoryTests(DashboardSetUp):
+    """The tile, the week's chart and the activity line agree about which
+    day they describe, on a weekend as on a school day."""
+
+    FRIDAY = A_SCHOOL_DAY + timedelta(days=2)
+    SUNDAY = A_SCHOOL_DAY + timedelta(days=4)
+
+    def register(self, on, absent=()):
+        with connected_to(self.stmarys), mock.patch(
+            "django.utils.timezone.now", return_value=lagos(on, 8)
+        ):
+            registers.take_register(
+                ClassGroup.objects.get(pk=self.jss1a_id), self.this_term(), on=on,
+                absent_ids=[self.children[h].pk for h in absent], by=self.teacher.user,
+            )
+
+    def week(self, html):
+        return re.search(r'<section class="panel" aria-labelledby="week-title">.*?</section>', html, re.S).group(0)
+
+    def tile(self, html):
+        return re.search(r'data-tile="attendance">.*?</a>', html, re.S).group(0)
+
+    def test_a_sunday_with_a_register_is_today_on_the_tile_the_chart_and_the_feed(self):
+        self.register(self.FRIDAY)
+        self.register(self.SUNDAY, absent=["emeka"])
+        self.day = self.SUNDAY
+
+        tiles, items, events, html = self.shown(self.head)
+
+        self.assertIn("Attendance today", self.tile(html))
+        self.assertIn("3 of 4 present", self.tile(html))
+        self.assertIn("<b class=\"fig\">75%</b>Sun", self.week(html))
+        self.assertNotIn("No registers on a weekend", html)
+        self.assertIn("Registers taken for 1 of", html)
+        self.assertIn("today", html.split('data-event="registers"')[1].split("</li>")[0])
+
+    def test_a_sunday_without_one_shows_the_last_school_day_and_never_today(self):
+        self.register(self.FRIDAY, absent=["emeka"])
+        self.day = self.SUNDAY
+
+        html = self.shown(self.head)[3]
+
+        self.assertNotIn("Attendance today", html)
+        self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
+        self.assertIn(">75%<", self.tile(html))
+        self.assertNotIn("Sun</span>", self.week(html))
+        self.assertIn("No registers on a weekend", self.week(html))
+        self.assertNotIn('data-event="registers"', html)
+
+    def test_a_school_day_before_its_register_shows_yesterday_labelled(self):
+        self.register(A_SCHOOL_DAY - timedelta(days=1))
+
+        html = self.shown(self.head)[3]
+
+        self.assertIn(f"Last school day: Tue{NBSP}16{NBSP}Sep", self.tile(html))
+        self.assertNotIn("Attendance today", html)
+        self.assertIn("Not yet</b>Wed", self.week(html))
+
+    def test_a_teacher_gets_the_same_rule_for_their_own_class(self):
+        self.register(self.FRIDAY)
+        self.day = self.SUNDAY
+
+        html = self.shown(self.teacher)[3]
+
+        self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
+        self.assertNotIn("Attendance today", html)
+
+
+class NumbersAndNamesTests(DashboardSetUp):
+    def test_at_most_one_decimal_and_never_a_trailing_zero(self):
+        from home.dashboard import figure, short_naira, signed
+
+        self.assertEqual([figure(100.0), figure(94.24), figure(94.25001), figure(1234)], ["100", "94.2", "94.3", "1,234"])
+        self.assertEqual([signed(14.0), signed(1.26), signed(-2), signed(0.04)], ["+14", "+1.3", "\u22122", "0"])
+        self.assertEqual(
+            [short_naira(4_860_000_000), short_naira(150_000_000), short_naira(100_000_000_000), short_naira(50_000)],
+            ["\u20a648.6m", "\u20a61.5m", "\u20a61bn", "\u20a6500"],
+        )
+
+    def test_no_figure_on_the_page_ends_in_point_zero(self):
+        with connected_to(self.stmarys):
+            registers.take_register(
+                ClassGroup.objects.get(pk=self.jss1a_id), self.this_term(), on=self.day, by=self.teacher.user,
+            )
+
+        html = self.shown(self.head)[3]
+
+        self.assertIn(">100%<", html)
+        self.assertNotRegex(html, r"\d\.0(%| pts|m\b|k\b)")
+
+    def greeting_for(self, full_name, short_name=""):
+        user = User.objects.create_user(
+            f"u{abs(hash(full_name)) % 10**8}", PASSWORD, full_name=full_name, short_name=short_name
+        )
+        member = grant_membership(user, self.stmarys, Role.TEACHER)
+        return re.search(r"<h1>(.*?)</h1>", self.shown(member)[3]).group(1)
+
+    def test_a_role_word_is_never_greeted_as_a_name(self):
+        self.assertEqual(self.greeting_for("Administrator Sunrise"), "Good morning")
+        self.assertEqual(self.greeting_for("Principal Sunrise"), "Good morning")
+
+    def test_a_first_name_a_title_and_no_name_at_all(self):
+        self.assertEqual(self.greeting_for("Ngozi Eze"), "Good morning, Ngozi")
+        self.assertEqual(self.greeting_for("Mrs Folake Adeyemi"), "Good morning, Mrs Adeyemi")
+        self.assertEqual(self.greeting_for("Tunde Bakare", short_name="Uncle T"), "Good morning, Uncle")
+        self.assertEqual(self.greeting_for(""), "Good morning")
 
 
 # -- one school's numbers, never another's ------------------------------------------
@@ -388,7 +498,7 @@ class ThePartsTests(DashboardSetUp):
         self.assertEqual(keep_together("SS 2 Science"), f"SS{NBSP}2 Science")
 
     def test_a_day_with_no_register_is_an_empty_slot_not_a_low_bar(self):
-        mon, tue = charts.bars([("Mon", 90, False, False), ("Tue", None, True, True)])
+        mon, tue = charts.bars([("Mon", 90, False, False, "90%"), ("Tue", None, True, True, "Not yet")])
 
         self.assertEqual((mon.percent, tue.percent, tue.pending), (90, None, True))
         self.assertGreater(tue.h, mon.h, "the slot is the chart's full height")

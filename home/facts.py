@@ -8,7 +8,7 @@ and hands back one row of JSON:
 
 1. **people**: the current term, the classes and who is placed in them, the
    previous term's roll, staff and student counts, class teachers, this week's
-   and last week's registers, staff invitations and the crest.
+   and the two weeks before's registers, staff invitations and the crest.
 2. **money**: this term's ledger, by kind, by week, and by family.
 3. **work**: the results sheets and their steps, papers with marks started,
    and remarks written.
@@ -101,7 +101,9 @@ def read(school, today: date) -> dict:
         people = _one(cursor, _PEOPLE, {
             "school": school.pk,
             "staff": sorted(STAFF_ROLES),
-            "from": monday_of(today) - timedelta(days=7),
+            # Two weeks back: the day shown can be last Friday, and its
+            # change is against the seven days before that.
+            "from": monday_of(today) - timedelta(days=14),
             "today": today,
         })
         term = people["term"]

@@ -14,8 +14,8 @@
   <p class="spark-axis" aria-hidden="true"><span>Week 1</span><span>Week {{ dash.fees.weeks }}</span></p>
   {% endif %}
   <div class="meter-row">
-    <svg class="meter" role="img" aria-label="{{ dash.fees.percent }}% collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ dash.fees.percent }}%" height="8" rx="4"/></svg>
-    <span class="fig">{{ dash.fees.percent }}%</span>
+    <svg class="meter" role="img" aria-label="{{ dash.fees.percent_text }} collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ dash.fees.percent }}%" height="8" rx="4"/></svg>
+    <span class="fig">{{ dash.fees.percent_text }}</span>
   </div>
   <dl class="fee-split">
     <div><dt>This week</dt><dd class="fig">{{ dash.fees.this_week }}</dd></div>

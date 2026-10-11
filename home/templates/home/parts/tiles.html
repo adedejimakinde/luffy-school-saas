@@ -7,7 +7,7 @@
     </span>
     <span class="kpi-value fig"{% if tile.exact %} title="{{ tile.exact }}"{% endif %}>{{ tile.value }}{% if tile.unit %} <small>{{ tile.unit }}</small>{% endif %}</span>
     {% if tile.meter is not None %}
-    <svg class="meter" role="img" aria-label="{{ tile.meter }}% collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ tile.meter }}%" height="8" rx="4"/></svg>
+    <svg class="meter" role="img" aria-label="{{ tile.meta }}"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ tile.meter }}%" height="8" rx="4"/></svg>
     {% endif %}
     <span class="kpi-meta">{{ tile.meta|nobreak }}</span>
     {% if tile.change %}<span class="change fig">{{ tile.change }}</span>{% endif %}
