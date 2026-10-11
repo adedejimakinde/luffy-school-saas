@@ -17,8 +17,8 @@
  *   are the point may scroll sideways, `WIDE_TABLES`, and each of those needs
  *   a `.wide` scroller and a visible "swipe for more" cue before it;
  * - **"Waiting for you" says a bare number** where it means days;
- * - **a stat card's figure wraps or spills out of its card** at 1024px or
- *   wider, where the cards run four across and are narrowest. A screen can
+ * - **a dashboard tile's figure wraps or spills out of its tile** at 1024px or
+ *   wider, where the tiles run four across and are narrowest. A screen can
  *   ask for extra widths (`widths`) to be measured at that edge exactly.
  *
  * And it saves a screenshot of every one, which CI uploads as the `screens`
@@ -78,9 +78,14 @@ export const SITE_WIDTHS = [320, 390, 414, 1024, 1920];
  */
 const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet, table.ogun-grid";
 
-/** Labels the design sets below body size on purpose. */
+/**
+ * Labels the design sets below body size on purpose. The dashboard's are its
+ * small uppercase labels, its status chips and the captions under its two
+ * drawings (`home/dashboard.css`).
+ */
 const SMALL_ON_PURPOSE =
-  ".label, .tag, .revised, .nav-heading, .tab-label, .marks-summary";
+  ".label, .tag, .revised, .nav-heading, .tab-label, .marks-summary, " +
+  ".eyebrow, .chip, .spark-axis, .week-labels, .fee-split dt";
 
 /**
  * Every screen: who opens it, where, and the taps that reach its main state.
@@ -125,8 +130,14 @@ export const SCREENS = [
   { name: "comments", as: "sunrise.teacher", url: `${SUNRISE}/comments/` },
   { name: "timetable", as: "sunrise.teacher", url: `${SUNRISE}/timetable/` },
 
-  // The principal.
+  // The dashboard, as each role sees it. 1024 too: the tiles run four
+  // across from there and are narrowest at that edge.
   { name: "home", as: "sunrise.principal", url: `${SUNRISE}/home/`, widths: [1024] },
+  { name: "home-admin", as: "sunrise.admin", url: `${SUNRISE}/home/` },
+  { name: "home-teacher", as: "sunrise.teacher", url: `${SUNRISE}/home/` },
+  { name: "home-bursar", as: "sunrise.bursar", url: `${SUNRISE}/home/` },
+
+  // The principal.
   { name: "results", as: "sunrise.principal", url: `${SUNRISE}/results/` },
   {
     name: "broadsheet",
@@ -226,11 +237,11 @@ function measure({ smallOnPurpose, phone, wide, wideTables }) {
   }
 
   if (wide) {
-    for (const el of document.querySelectorAll(".stat-value")) {
+    for (const el of document.querySelectorAll(".kpi-value")) {
       if (!visible(el)) continue;
       const line = parseFloat(getComputedStyle(el).lineHeight);
-      if (el.getBoundingClientRect().height > line * 1.5) problems.push(`stat value wraps: ${describe(el)}`);
-      if (el.scrollWidth > el.clientWidth + 1) problems.push(`stat value spills out of its card: ${describe(el)}`);
+      if (el.getBoundingClientRect().height > line * 1.5) problems.push(`tile figure wraps: ${describe(el)}`);
+      if (el.scrollWidth > el.clientWidth + 1) problems.push(`tile figure spills out of its tile: ${describe(el)}`);
     }
   }
 

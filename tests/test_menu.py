@@ -25,7 +25,8 @@ from results.tests.fixtures import HOST, PASSWORD, PORTAL, THEIR_HOST, ChainSetU
 #: The first thing each page asks the API, which is where its refusal comes
 #: from. A page is "open to you" exactly when this answers 200.
 FIRST_FETCH = {
-    "home": "/api/home/",
+    # Drawn on the server: the page is its own first fetch.
+    "home": "/home/",
     "register": "/api/attendance/where/",
     "marking": "/api/gradebook/where/",
     "comments": "/api/results/comments/classes/",
@@ -43,7 +44,7 @@ FIRST_FETCH = {
     "teaching": "/api/teaching/",
 }
 
-TEACHER = {"register", "marking", "comments", "timetable", "results", "broadsheet"}
+TEACHER = {"home", "register", "marking", "comments", "timetable", "results", "broadsheet"}
 PRINCIPAL = {
     "home", "register", "marking", "comments", "timetable",
     "results", "broadsheet", "absences", "fees", "bank", "setup", "teaching", "promotion", "roll", "notices-settings",
@@ -80,29 +81,41 @@ class TheRulesTests(SimpleTestCase):
             with self.subTest(role=role):
                 self.assertEqual(self.keys({role.value}), set())
 
-    def test_each_roles_four_tabs_are_among_its_own_links(self):
+    def test_each_roles_tabs_are_among_its_own_links(self):
         for role, tabs in menu.TABS.items():
             with self.subTest(role=role):
-                self.assertEqual(len(tabs), 4)
+                self.assertIn(len(tabs), (3, 4))
                 self.assertLessEqual(set(tabs), self.keys({role}))
 
     def test_the_page_you_are_on_is_always_a_tab(self):
         """A principal on the register (hers too) keeps it on the tab bar."""
         tabs = [link.key for link in menu.menu_for({Role.PRINCIPAL.value}, "register").tabs]
 
-        self.assertEqual(tabs, ["home", "results", "broadsheet", "register"])
+        self.assertEqual(tabs, ["home", "results", "fees", "register"])
 
     def test_a_page_you_cannot_open_is_never_swapped_in(self):
-        tabs = [link.key for link in menu.menu_for({Role.TEACHER.value}, "home").tabs]
+        tabs = [link.key for link in menu.menu_for({Role.TEACHER.value}, "fees").tabs]
 
-        self.assertNotIn("home", tabs)
+        self.assertNotIn("fees", tabs)
 
-    def test_a_bursar_has_no_tab_bar_but_the_sidebar_still_lists_fees(self):
+    def test_a_bursar_has_three_tabs_and_they_are_the_whole_sidebar(self):
         bursar = menu.menu_for({Role.BURSAR.value}, "fees")
 
-        self.assertEqual(bursar.tabs, ())
-        self.assertEqual([link.key for link in bursar.links], ["fees", "bank"])
-        self.assertEqual(bursar.home, "/fees/")
+        self.assertEqual([link.key for link in bursar.tabs], ["home", "fees", "bank"])
+        self.assertEqual([link.key for link in bursar.links], ["home", "fees", "bank"])
+        self.assertEqual(bursar.home, "/home/")
+
+    def test_the_principal_and_the_bursar_have_fees_on_the_tab_bar(self):
+        for role in (Role.PRINCIPAL, Role.BURSAR):
+            with self.subTest(role=role):
+                tabs = [link.key for link in menu.menu_for({role.value}, "home").tabs]
+                self.assertIn("fees", tabs)
+                self.assertNotIn("broadsheet", tabs)
+
+    def test_every_staff_role_lands_on_home(self):
+        for role in (Role.ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL_ACADEMIC, Role.TEACHER, Role.BURSAR):
+            with self.subTest(role=role):
+                self.assertEqual(menu.menu_for({role.value}, "home").home, "/home/")
 
     def test_the_principal_leads_when_one_person_holds_both(self):
         tabs = [link.key for link in menu.menu_for({Role.TEACHER.value, Role.PRINCIPAL.value}, "home").tabs]
@@ -163,7 +176,6 @@ class EveryLinkOpensTests(ChainSetUp):
 
         self.assertEqual(here, TEACHER, "St Mary's showed her more than a teacher's pages")
         self.assertEqual(there, PRINCIPAL, "Grace showed her less than a principal's pages")
-        self.assertNotIn("home", here)
 
     def test_two_roles_at_one_school_see_both_sets(self):
         both = self.assert_menu_is_exactly_what_opens(self.both_here)
@@ -175,10 +187,10 @@ class EveryLinkOpensTests(ChainSetUp):
         for member in (self.teacher, self.vp, self.bursar, self.admin):
             self.assert_menu_is_exactly_what_opens(member)
 
-    def test_a_bursar_gets_no_tab_bar(self):
+    def test_a_bursar_gets_three_tabs(self):
         sidebar, tabs = self.shown(self.bursar)
 
-        self.assertEqual((sidebar, tabs), ({"fees", "bank"}, set()))
+        self.assertEqual((sidebar, tabs), ({"home", "fees", "bank"}, {"home", "fees", "bank"}))
 
     def test_signed_out_there_is_no_menu(self):
         self.client.logout()
@@ -212,8 +224,11 @@ class SignOutTests(ChainSetUp):
         for member in (self.head, self.vp, self.teacher, self.bursar, self.admin, self.children["ada"]):
             with self.subTest(role=member.role):
                 self.client.force_login(member.user)
-                sidebar = _SIDEBAR.search(self.page(self.client)).group(0)
-                self.assertIn('<form class="nav nav-end" method="post" action="/sign-out/">', sidebar)
+                page = self.page(self.client)
+                sidebar = _SIDEBAR.search(page).group(0)
+                self.assertIn('<form id="sign-out" class="nav nav-end" method="post" action="/sign-out/">', sidebar)
+                # The account menu's Sign out submits that same form.
+                self.assertIn('<button type="submit" form="sign-out" class="signout">', page)
                 self.assertIn('name="csrfmiddlewaretoken"', sidebar)
                 self.assertIn(">Sign out</button>", sidebar)
 
@@ -275,3 +290,40 @@ class SignOutTests(ChainSetUp):
                     "/sign-out/", {"csrfmiddlewaretoken": token, "next": asked}, HTTP_HOST=HOST
                 )
                 self.assertEqual(response["Location"], landed)
+
+
+class TheTopBarTests(ChainSetUp):
+    """The top bar names the school and the person signed in, to that person,
+    and nobody on the pages a shared phone keeps offline."""
+
+    def page(self, path, member=None):
+        if member is None:
+            self.client.logout()
+        else:
+            self.client.force_login(member.user)
+        html = self.client.get(path, HTTP_HOST=HOST).content.decode()
+        return re.search(r'<header class="topbar">.*?</header>', html, re.S).group(0)
+
+    def test_a_member_sees_their_school_and_their_own_name(self):
+        bar = self.page("/results/", self.teacher)
+
+        self.assertIn("St Mary", bar)
+        self.assertIn(self.teacher.user.full_name, bar)
+        self.assertIn('<span class="avatar">', bar)
+
+    def test_the_pages_kept_offline_name_nobody(self):
+        from sync.views import PAGES
+
+        self.assertEqual(set(PAGES), {"/marking/", "/register/"}, "the control: the worker keeps these")
+        for path in PAGES:
+            with self.subTest(path=path):
+                bar = self.page(path, self.teacher)
+                self.assertNotIn(self.teacher.user.full_name, bar)
+                self.assertNotIn('<span class="avatar">', bar)
+                self.assertNotIn("account-who", bar)
+                # Sign out is still there.
+                self.assertIn('form="sign-out"', bar)
+
+    def test_signed_out_the_bar_names_no_school(self):
+        self.assertNotIn("St Mary", self.page("/results/"))
+

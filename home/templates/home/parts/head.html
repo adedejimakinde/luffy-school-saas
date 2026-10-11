@@ -1,0 +1,23 @@
+{% load typography %}<header class="dash-head">
+  <div class="dash-id">
+    <span class="crest" aria-hidden="true">{% if dash.school.crest_url %}<img src="{{ dash.school.crest_url }}" alt="">{% else %}{{ dash.school.initials }}{% endif %}</span>
+    <div>
+      {% comment %}On a desk the top bar names the school, so the eyebrow is the date.{% endcomment %}
+      <p class="eyebrow"><span class="dash-school">{{ dash.school.name }}</span><time class="dash-date" datetime="{{ dash.today|date:'Y-m-d' }}">{{ dash.today|date:"l j F" }}</time></p>
+      <h1>{{ dash.greeting }}{% if dash.name %}, {{ dash.name }}{% endif %}</h1>
+    </div>
+  </div>
+  {% comment %}
+  Two drawings of the same facts: three chips on a tablet or a desk, and one
+  line on a phone, where the session is left off.
+  {% endcomment %}
+  <div class="dash-term dash-term-wide">
+    {% if dash.term %}
+    <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>{{ dash.term.session }} session</span>
+    <span class="chip chip-brand">{{ dash.term.name }}{% if dash.term.week %} &middot; Week {{ dash.term.week }} of {{ dash.term.weeks }}{% endif %}</span>
+    {% else %}
+    <span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>No term is open</span>
+    {% endif %}
+  </div>
+  <p class="dash-term dash-term-phone"><span class="chip chip-brand">{% if dash.term %}{{ dash.term.name }}{% if dash.term.week %} &middot; Week {{ dash.term.week }} of {{ dash.term.weeks }}{% endif %}{% else %}No term is open{% endif %} &middot; <time datetime="{{ dash.today|date:'Y-m-d' }}">{{ dash.today|date:"D j M" }}</time></span></p>
+</header>

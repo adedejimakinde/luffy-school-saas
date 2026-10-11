@@ -694,9 +694,12 @@ class TheFrameTests(FeesApiSetUp):
 
         self.assertIn('id="fees"', page)
         self.assertIn('data-on-school="yes"', page)
+        # The page's own content. The shell around it names the signed-in
+        # member's own school and name (`tests/test_menu.py` holds where).
+        main = page[page.index("<main"):page.index("</main>")]
         for absent in ("Ada", "JSS 1A", "150", "St Mary"):
             with self.subTest(absent=absent):
-                self.assertNotIn(absent, page)
+                self.assertNotIn(absent, main)
 
     def test_the_portal_frame_says_it_is_not_a_school(self):
         page = self.client.get("/fees/", HTTP_HOST="testserver").content.decode()

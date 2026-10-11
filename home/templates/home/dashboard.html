@@ -1,0 +1,64 @@
+{% load static shell %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+
+{% comment %}
+The school dashboard, drawn whole on the server: every figure, both drawings
+and every link are in this response, so nothing loads after it and no script
+runs. `home/views.py` decides who may open it and `home/dashboard.py` what each
+login sees; the parts below draw only what they are handed.
+
+The title names no school: this document is also what a signed-out caller is
+served, for the oracle reason `home/views.py` gives.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'home/dashboard.css' %}">
+
+{% shell_open "home" %}
+    <main id="home" class="dash" data-state="{{ state }}">
+      {% if state == "home" %}
+      {% include "home/parts/icons.html" %}
+      {% include "home/parts/head.html" %}
+      {% if dash.setup %}
+        {% include "home/parts/setup.html" %}
+      {% elif dash.waiting %}
+        <section class="panel">
+          <h2>Your school is being set up</h2>
+          <p class="quiet">This page fills in once the office has added classes and students.</p>
+        </section>
+      {% else %}
+        {% if dash.tiles %}{% include "home/parts/tiles.html" %}{% endif %}
+        <div class="dash-cols">
+          <div class="dash-col">
+            {% include "home/parts/attention.html" %}
+            {% if dash.activity %}{% include "home/parts/activity.html" %}{% endif %}
+          </div>
+          {% if dash.fees or dash.week %}
+          <div class="dash-col">
+            {% if dash.fees %}{% include "home/parts/fees.html" %}{% endif %}
+            {% if dash.week %}{% include "home/parts/week.html" %}{% endif %}
+          </div>
+          {% endif %}
+        </div>
+      {% endif %}
+      {% elif state == "not-yours" %}
+      <section class="panel">
+        <h1>This page is not yours</h1>
+        <p>This page is for the school's staff. Your school office can tell you which pages are yours.</p>
+      </section>
+      {% elif state == "signed-out" %}
+      <section class="panel">
+        <h1>Please sign in</h1>
+        <p>Sign in with your password to see your school's home page.</p>
+        {% if portal_host %}<p><a href="//{{ portal_host }}/staff-sign-in/">Sign in</a></p>{% endif %}
+      </section>
+      {% else %}
+      <section class="panel">
+        <h1>Your home page lives on your school's own web address</h1>
+        <p>This page is open on the sign-in site. Open it again from your school's own address, the link on the page you signed in on.</p>
+      </section>
+      {% endif %}
+    </main>
+{% shell_close "home" %}

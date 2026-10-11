@@ -22,7 +22,10 @@ nothing else: no page declares a colour.
   beside them). Its digits are already equal-width, so numbers line up without
   a feature switch; tables still say `tabular-nums` and right-align them
   (`.num`).
-- **Radii** 10px on buttons and fields, 12px on cards. **Buttons** are 44px
+- **Two shadows**, `--shadow-1` (resting) and `--shadow-2` (lifted: a card
+  under the pointer, the account menu), the text colour thinned. No others.
+- **Radii** 10px on buttons and fields, 12px on cards. The dashboard draws its
+  controls at 8px (below). **Buttons** are 44px
   tall, and the primary action is 48px.
 - **Icons** are inline stroke SVG (`<svg class="icon">`), drawn here: no icon
   pack, no emoji. The defs live once in `templates/design/icons.html`
@@ -53,7 +56,19 @@ Mobile first, checked at 360, 768 and 1280.
   written per page. Each link carries the role set its own page's API gates on,
   so no link leads to a refusal; `tests/test_menu.py` checks that against the
   real routes, both ways.
-- Stat cards run four across on a desktop, two on a tablet, one on a phone.
+- **The top bar** names the school on a desk and shows the logo where the
+  sidebar is folded away, with the account menu (name, roles, Sign out) at its
+  right. The school is named only to a member of it, and the pages the
+  offline worker keeps on a shared phone (`/marking/`, `/register/`) name
+  nobody: their account menu is a person icon and Sign out.
+- **The tab bar is the role's main screens**: Home first for every staff role;
+  Fees for the principal and the bursar (the bursar has three tabs), Broadsheets
+  for the vice principal.
+- **Class and level names never break across a line**: `JSS 1`, `SS 3`,
+  `JSS 1C`. Templates use `{% load typography %}` and `|nobreak`; Python that
+  builds a sentence uses `typography.keep_together()`.
+- **The sidebar** is 240px, its labels 15px, and every link has an icon of its
+  own.
 - **Below 640px every list table is a stack of cards, one per row**
   (`table.stack`): the row's name or number heads the card, each other cell is
   a "label  value" line from its `data-label`, and a row's problems or buttons
@@ -95,3 +110,31 @@ under `PLATFORM_DOMAIN=classnode.test` with `DJANGO_DEBUG=1`, serve it on port
 3. The report card PDF last. It leads with the school's crest and colour,
    with Classnode only as a small footer, and shows no class position or class
    average.
+
+## The dashboard
+
+`/home/`, every staff role's first screen (`docs/dashboard.md` says what is on
+it and who sees what). Its stylesheet, `static/home/dashboard.css`, opens with
+its own tokens, and nothing in it uses a size, a gap or a radius that is not
+one of them:
+
+- **Type:** six sizes and no more: 12px (small uppercase labels), 13px
+  (chips), 15px (secondary lines), 16px (body and card titles), 20px (the
+  greeting on a phone) and 28px (KPI figures; the greeting on a desk). Every
+  figure is tabular.
+- **Space:** an 8px scale (8, 16, 24, 32), with 4px as its half step.
+- **Radii:** 12px on cards, 8px on controls.
+- **Cards:** a 1px border in `--border`, `--shadow-1` resting, `--shadow-2`
+  when a tile is under the pointer. 150ms ease on every change of state, and
+  none under `prefers-reduced-motion`.
+- **Colour:** white and greys, One Blue for figures that lead and for actions;
+  green, amber and red only on status chips, and a chip always carries an
+  icon and a word. A change note ("+14 this term", "−2 this week") is
+  neutral grey: down is not always bad.
+- **Drawings** are inline SVG written by the server (`home/charts.py`): a
+  sparkline, a meter and five bars. No chart library, no gradient.
+- **On a phone:** tiles two by two, everything else full width, one chip line
+  in the header, nothing scrolls sideways, every target 44px.
+- **Icons** only the dashboard draws live in `home/templates/home/parts/icons.html`,
+  so other pages do not carry them.
+

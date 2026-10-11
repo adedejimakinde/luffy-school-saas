@@ -91,6 +91,13 @@ QUERIES = {path: 16 for path in SCHOOL_PAGES}
 #: The school's public page also reads its crest and colour (one row) and the
 #: portal's hostname, and draws them server-side rather than in a later fetch.
 QUERIES["/"] = 20
+#: The dashboard draws its figures server-side too (`docs/dashboard.md`), and
+#: does not ask for the portal's hostname, which only its signed-out state
+#: needs. These schools have no students, so it is the set-up checklist: one
+#: aggregate statement and its search path, never cached. A school with
+#: students costs three statements on a cold cache and none on a warm one
+#: (`home.tests.test_dashboard.ThreeStatementsAndThenNoneTests`).
+QUERIES["/home/"] = 16
 
 _ASSET = re.compile(r'<(?:link|script|img|iframe|source|video|audio)\b[^>]*?\b(?:src|href)="([^"]*)"', re.I)
 _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)

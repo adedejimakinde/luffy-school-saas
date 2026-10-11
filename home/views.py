@@ -1,37 +1,38 @@
-"""The frame for the principal's home. Holds no figure and no child.
+"""The school dashboard, drawn whole on the server.
 
-A shell like every other staff page: who may read the home is
-`home.api.home()`'s question, asked before any read. **No `login_required`**,
-for the reason `results/views.py` gives: a redirect on a guessable URL is an
-oracle, and the fetch inside the page meets the question instead.
+Every figure, both drawings and every link arrive in this one response, so
+the page has nothing to fetch after it and no script to run. What a login may
+see is `home.dashboard`'s question, answered item by item; who may open the
+page at all is answered here, **before** a single fact is read.
+
+**No `login_required`**, for the oracle reason `results/views.py` gives: a
+redirect on a guessable URL says the URL is real. Signed out, the page says
+where to sign in; signed in as somebody who is not staff here, it says the page
+is not theirs, in one sentence whatever the school holds; on the portal, it
+says the dashboard lives on the school's own address.
 """
 
 from django.shortcuts import render
 
-import pages
 from schools.hosts import portal_host
 
-#: Every module the home page loads, entry point last. `fees/money.js` is the
-#: fee book's own formatter, reused so a naira reads the same on both pages.
-HOME_MODULES = (
-    "web/html.js",
-    "web/http.js",
-    "fees/money.js",
-    "home/api.js",
-    "home/states.js",
-    "home/app.js",
-)
+from . import dashboard, facts
+
+TEMPLATE = "home/dashboard.html"
 
 
 def home_page(request):
-    return render(
-        request,
-        "home/home_page.html",
-        {
-            "import_map": pages.import_map(*HOME_MODULES),
-            "portal_host": portal_host(),
-        },
-    )
+    school = getattr(request, "school", None)
+    if school is None:
+        return render(request, TEMPLATE, {"state": "elsewhere"}, status=404)
+    user = request.user
+    if not user.is_authenticated:
+        return render(request, TEMPLATE, {"state": "signed-out", "portal_host": portal_host()})
+    roles = request.school_roles
+    if not roles & dashboard.HOME_ROLES:
+        return render(request, TEMPLATE, {"state": "not-yours"}, status=403)
+    dash = dashboard.build(facts.load(school), school=school, user=user, roles=roles)
+    return render(request, TEMPLATE, {"state": "home", "dash": dash})
 
 
-__all__ = ["HOME_MODULES", "home_page"]
+__all__ = ["home_page"]
