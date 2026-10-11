@@ -10,8 +10,9 @@
  * ## The rules this file is written to
  *
  * - One brand colour, #143D8C: buttons, links, the active nav item, the logo.
- *   No other accent and no gradients. Where something needs to be lighter, it
- *   is this blue with less of it (`--brand-tint`), not a second colour.
+ *   Lighter is this blue with less of it (`--brand-tint`), not a second
+ *   colour. Three accents for the public site's icon tiles; three gradients
+ *   (`tests/test_design.py` names them).
  * - Status colours — green, amber, red — belong on **small labels** (`.label`).
  *   The row notes pages still tint (`.note`, `.problem`, `.row.conflict`) move
  *   to a neutral message with a label when their page is restyled.
@@ -74,6 +75,11 @@
   --warn-bg: #FDF1DC;
   --stop: #B42318;
   --stop-bg: #FDECEA;
+
+  /* The public site's icon tiles only, never words. */
+  --teal: #0F766E;
+  --amber: #B45309;
+  --coral: #C2452D;
 
   /* The blue, lighter and darker, for hover, the active nav item and bars.
      Mixed from the one colour rather than named as another. */

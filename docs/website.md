@@ -48,8 +48,9 @@ contents list at the top that matches the sections in order.
 `website.DemoRequest`, in the public schema (the school has no schema yet).
 A plain form post, CSRF-checked, that works with no script.
 
-- **Saved first, then emailed** to every active platform staff login with an
-  email address (`website/notify.py`), after the row commits. A send that fails
+- **Saved first, then emailed** to the demo inbox, `DEMO_REQUEST_INBOX`
+  (`hello@` the platform's domain unless set: hello@classnode.co in production), and to every active platform staff login
+  with an email address (`website/notify.py`), after the row commits. A send that fails
   is logged and the row stays: the admin (on the portal) lists every request,
   read only.
 - **Honeypot**: a field named `website`, off screen and out of the tab order. A
@@ -63,65 +64,98 @@ A plain form post, CSRF-checked, that works with no script.
 
 ## The page
 
+Seven sections in order: the hero, four benefits, how it works, the price
+beside the demo form, six questions, a final call to action, and the footer.
+
 - **The words say what the product does and promise no outcome we cannot
-  show** (no speed, no "same week", no "nothing is lost"; a receipt waits for
-  morning when a payment lands at night). Kept as the owner gave them: the
-  price (₦2,500 per student, per term, no setup fee), the call-back time (one
-  working day), the footer (Classnode. Nigeria.) and the contact address
-  (hello@classnode.co). The two form refusals are one plain sentence each.
-  `website/tests/test_homepage.py` holds the page to that copy
-  and to the writing rules: no en or em dash, no exclamation or question mark,
-  no sentence starting "Imagine", none of the banned words.
+  show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
+  no setup fee), the call-back time (**two working days**), the footer
+  (Classnode. Nigeria.) and the contact address (hello@classnode.co).
+  `website/tests/test_homepage.py` holds the page to that copy and to the
+  writing rules: no en or em dash, no exclamation mark, no sentence starting
+  "Imagine", none of the banned words, and **no question mark outside the six
+  questions** (native `<details>`, each one ending in its question mark).
+- **No invented proof.** No testimonial, school logo or customer count. A
+  `<section class="proof" hidden>` is kept for real quotes and logos, each with
+  the school's written permission, and is empty until then.
 - **TODO notes** on the privacy notice and the terms are drawn only when `SHOW_LEGAL_TODOS` is on (off by
   default; on with `DJANGO_DEBUG=1` and in the legal tests). Every open one is listed in `docs/handover.md`.
-- **One Blue** (`docs/design.md`): the tokens from `design.css`, Hanken
-  Grotesk, no gradient. The one dark band is the fees section, on the ink. It
-  is the one thing that runs edge to edge; everything else stops at 1200px.
-- **Screenshots** are real screens of a school having a good day: the
-  showcase school, `manage.py load_demo --showcase` (`schools/showcase.py`, demo
-  data only, on a demo server). A strong student's card (about 78%, A1 to B3,
-  attendance and both remarks), a healthy marks sheet, a home with every
-  register in, results released and nothing flagged, and a released
-  broadsheet. `scripts/site_shots.mjs` takes them and `scripts/site_shots.py`
-  cuts them to size into `static/website/shots/`, as WebP with their sizes set.
-  Their `alt` is empty: the words beside each say what it shows.
-  - **Load a fresh showcase before each capture.** SS 1A's register for today
-    is left untaken on purpose: the script photographs its teacher about to
-    take it, then submits it on the page, so the home it photographs next has
-    every register in. On a second run the script stops and says so.
-  - Laptop shots are taken 1000px tall and cut just under the last whole menu
-    item, so no item is cut in half and Sign out is not in the picture
-    (1280 by 919).
-  - The home says "2 of 3" released: SS 1A is the open class the marks sheet is
-    taken from, since a released class's marks sheet is locked. It raises no
-    row on the home: a class with no sheet is waiting on nobody.
-- **Drawings** are inline SVG built from the mark's shapes (rounded square,
-  nodes, lines), styled from the tokens, under 15 KB together: the logo, which
-  draws itself once on load (nodes, then lines, 1 second); the results, fees
-  and bad-network flows, which play once when scrolled into view (results sits
-  under its words, as fees sits in its band; the fees one runs top to bottom on
-  a phone; bad network is a phone holding queued marks, then the cloud with a
-  tick once they are sent); and the still pattern behind the hero, at 2.5%, a contrast
-  of about 1.04:1.
-- **Motion** is the slides (every 6 seconds, a 400ms crossfade, held on hover,
-  focus or a touch), the fade-up of each section, and the drawings. All of it
-  plays once, and all of it is off under `prefers-reduced-motion`: then the
-  slides change only from their dots, with no fade, and everything is drawn
-  finished. Without the script the page reads in full, on its first slide.
-- **Weight**: under 400 KB with every image counted, lazy ones too (about
-  250 KB today, the drawings about 3 KB). One module, `static/website/site.js`, no imports, nothing from
-  another host.
+- **One Blue, with more of it** (`docs/design.md`): the top band (the header
+  and the hero, or a legal page's title) is One Blue deepening toward the ink;
+  the four benefit rows alternate white and a 5% wash of blue; "How it works"
+  sits on One Blue with white step cards; the price is white on a blue band;
+  the final band is One Blue again and the footer the deepest blue. Words on
+  every blue are 4.5:1 or better, worked out from the tokens by a test. Icon
+  tiles are One Blue, teal, amber or coral, white icons on each (5:1 or
+  better), and those three accents are used for nothing else.
+- **The slider's screens are real screens of a demo school**: the showcase,
+  `manage.py load_demo --showcase` (`schools/showcase.py`), Crestfield Demo
+  College, 612 students, ₦48.6m of ₦71.2m collected, seven classes checked and
+  waiting on the principal, about 94% in each day, on the Ogun State template.
+  Four screens, each at a desk's shape and a phone's: the principal's home, the
+  strong student's Ogun State report sheet, the register on a teacher's phone
+  (in a phone frame, not the browser frame), and the bursar's fee collection.
+  `scripts/site_shots.mjs` takes them **on a weekday** (a weekend home says
+  there are no registers on a weekend) and `scripts/site_shots.py` cuts them
+  into `static/website/shots/`. The page says under the slider that the school
+  is a demo and every name and figure is made up.
+- **The floating cards carry the screens' own figures** (₦48.6m, 93.8% today,
+  seven classes, a ₦120,700 payment), never rounder ones; a test counts them.
+  Retaking the screens is a reason to check them: 93.8% was a Thursday's.
+- **The photos** are three the owner supplied, cut to their spaces as WebP
+  under 60 KB each, with their sizes set: a principal at her desk (the hero), a
+  bursar at a laptop (fees) and a teacher with a phone (the register). No photo
+  shows a child's face. Their sources and licences are recorded below.
+- **Drawings** are inline SVG: the Classnode mark grown into a network of
+  nodes and lines behind the hero's picture (under 5 KB, never behind the
+  words: the right half on a desk, under the picture on a phone), a still copy
+  of it either side of the final band on a desk, and the product parts the
+  benefit rows draw in CSS (the report sheet, the register, the roles), each
+  read by its description.
+- **Motion**, all of it inside `prefers-reduced-motion: no-preference`:
+  - the slider: a new screen every 5 seconds, a 600ms crossfade, held while the
+    pointer is over it, while keyboard focus is inside it and for two seconds
+    after a touch, and stopped by its own Pause button; dots jump to a screen.
+    Screens 2 to 4 are fetched only after the page has loaded. Under reduced
+    motion it does not move and the Pause button is not drawn; without the
+    script the first screen shows and no controls are drawn;
+  - the network: lines draw in once, then the nodes breathe;
+  - the floating cards drift 5px up and down, each on its own 4.4 to 5.8
+    second loop; the dot grids drift one tile, slowly;
+  - sections fade and rise as they scroll in (CSS scroll-driven animation,
+    staggered across a row; a browser without it shows them finished);
+  - the cards' figures count up once as they come into view.
+- **One script, inline**: closing the phone menu on every page, plus the
+  slider (under 2 KB) and the counting figures (under 1 KB) on the homepage.
+  No library and nothing from another host.
+- **Weight**: a phone fetches about 350 KB uncompressed with every image
+  counted at 2x, the deferred screens and the lazy photos too (under the
+  400 KB budget a test holds), and less over the wire.
+
+### Photo sources and licences
+
+| photo | where | source | licence |
+| --- | --- | --- | --- |
+| `photos/principal-*.webp` | hero | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
+| `photos/bursar-*.webp` | fees row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
+| `photos/teacher-*.webp` | register row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
 
 ## What holds it
 
 - `website/tests/test_legal.py`: the two pages answer on the site host only,
   contents match sections, the NDPA topics and the controller and processor
   are there, the TODOs are there, the writing rules and sentence length hold.
-- `website/tests/test_homepage.py`: the hosts, the copy and the writing rules,
-  the form, the 400 KB and 15 KB budgets, that no motion sits outside
-  `no-preference` and nothing loops, and the pattern's contrast, worked out
-  from the stylesheet.
+- `website/tests/test_homepage.py`: the hosts, the copy and the writing rules
+  (question marks in the FAQ only), the hidden proof section, the floating
+  figures, the form and its inbox, the phone's 400 KB budget, photos under
+  60 KB, images sized, described and lazy below the hero, the one inline
+  script and its sizes, motion only inside `no-preference`, and the contrast
+  of every word on every blue.
+- `schools/tests/test_seed_demo.py` `ShowcaseTests`: the showcase's figures,
+  the ones the homepage prints.
 - `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 390, 414, 768, 1024, 1280
-  and 1920, photographed finished, and held to the layout above; and its motion
-  (`the homepage's motion`) on a fake clock: the 6 seconds, the 400ms fade, the
-  three holds, nothing moving under reduced motion, every animation once.
+  and 1920, photographed finished and held to the layout above; and its motion
+  (`the homepage's motion`) on a fake clock: the 5 seconds, the 600ms fade, the
+  hover, keyboard, touch and Pause holds, nothing moving under reduced motion,
+  only the floating cards, the network's dots and the dot grids looping, and
+  every figure counting to the screens' own.

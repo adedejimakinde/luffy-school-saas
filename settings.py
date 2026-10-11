@@ -76,6 +76,12 @@ SITE_URLCONF = "urls_site"
 #: the saved requests themselves (`website.views`), so it holds across worker
 #: processes the way `accounts.throttling` explains a cache would not.
 DEMO_REQUESTS_PER_HOUR = int(os.environ.get("DEMO_REQUESTS_PER_HOUR", 5))
+#: Where every demo request is emailed, as well as to each platform staff login
+#: with an address (`website.notify`): the `hello@` address the homepage gives a
+#: school, on the platform's own domain unless set.
+DEMO_REQUEST_INBOX = os.environ.get(
+    "DEMO_REQUEST_INBOX", f"hello@{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else ""
+)
 
 #: Whether the privacy notice and the terms draw their open TODO notes (the
 #: boxes naming what the lawyer or the owner still has to settle). Off for the

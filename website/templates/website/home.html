@@ -1,183 +1,408 @@
 {% extends "website/base.html" %}{% load static %}
+{% block title %}Classnode: results, fees and registers for your school{% endblock %}
+{% block description %}Results, fees and registers for Nigerian private secondary schools, in one place. ₦2,500 per student, per term. No setup fee.{% endblock %}
 {% block main %}
 {% comment %}
-The homepage. Every sentence on it says what the product does and promises no
-outcome we cannot show: no speed, no "same week", no "nothing is lost". The
-price and the call-back time are the owner's own terms. A fact still to be
-decided is left out of the page rather than guessed. The
-screenshots are real screens from the demo (`scripts/site_shots.mjs`), and
-their `alt` is empty because the words beside each one already say what it
-shows.
+The homepage (`docs/website.md`). Every sentence on it says what the product
+does and promises no outcome we cannot show. The price and the call-back time
+are the owner's own terms.
 
-The slides are in the markup in order and the first is showing, so the page
-reads with no script. `site.js` moves them every 6 seconds, crossfading, and
-not at all under reduced motion.
+The screens in the slider and the figures in the floating cards are the
+showcase school's, `load_demo --showcase` (`schools/showcase.py`), taken by
+`scripts/site_shots.mjs` on a weekday: a demo school, and the page says so
+under the slider. A floating card's figure is the figure in the screens, never
+a rounder one. The three photos were supplied by the owner (sources and
+licences in `docs/website.md`); none shows a child's face.
+
+The slider's screens are in the markup in order and the first is showing, so
+the page reads with no script; screens 2 to 4 carry `data-srcset` and are only
+fetched once the page has loaded (the script below). Real quotes and school
+logos have a place kept for them, hidden, and nothing invented fills it.
 {% endcomment %}
-<section class="hero wrap">
-  {% include "website/parts/pattern.html" %}
-  <h1 class="sr">Classnode</h1>
-  <div class="carousel" data-carousel aria-roledescription="carousel" aria-label="Classnode">
-    <div class="slides">
-      <article class="slide is-active" aria-roledescription="slide" aria-label="1 of 3">
-        <div class="slide-text">
-          <h2>Teachers enter marks on their phones.</h2>
-          <p>The principal checks the marks and releases them. Parents then read the report card online.</p>
-        </div>
-        <div class="slide-device">
-          <div class="phone"><img src="{% static 'website/shots/marks.webp' %}" width="540" height="1110" alt="" fetchpriority="high"></div>
-        </div>
-      </article>
-      <article class="slide" aria-roledescription="slide" aria-label="2 of 3" aria-hidden="true" inert>
-        <div class="slide-text">
-          <h2>Every child gets their own account number for fees.</h2>
-          <p>Parents pay by transfer, the way they already do. The payment is matched to the right child's record, and the parent can be emailed a receipt.</p>
-        </div>
-        <div class="slide-device">
-          <div class="phone"><img src="{% static 'website/shots/fees.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
-        </div>
-      </article>
-      <article class="slide" aria-roledescription="slide" aria-label="3 of 3" aria-hidden="true" inert>
-        <div class="slide-text">
-          <h2>Know who came to school today.</h2>
-          <p>Class teachers take the register on their phones. When a child is absent, the parent gets an email.</p>
-        </div>
-        <div class="slide-device">
-          <div class="phone"><img src="{% static 'website/shots/register.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
-        </div>
-      </article>
+<div class="top-band">
+<section class="hero">
+  {% comment %}
+The Classnode mark, grown into a network: lines draw in once, nodes breathe. Decorative.
+{% endcomment %}
+  <svg class="nodes" viewBox="0 0 640 560" aria-hidden="true" focusable="false">
+    <g class="n-lines">
+      <path pathLength="1" style="--d:.1s" d="M90 120L300 80"/>
+      <path pathLength="1" style="--d:.3s" d="M300 80L210 260"/>
+      <path pathLength="1" style="--d:.5s" d="M90 120L210 260"/>
+      <path pathLength="1" style="--d:.7s" d="M300 80L520 150"/>
+      <path pathLength="1" style="--d:.9s" d="M520 150L430 330"/>
+      <path pathLength="1" style="--d:1.1s" d="M210 260L430 330"/>
+      <path pathLength="1" style="--d:1.3s" d="M300 80L430 330"/>
+      <path pathLength="1" style="--d:1.5s" d="M210 260L150 450"/>
+      <path pathLength="1" style="--d:1.7s" d="M430 330L360 500"/>
+      <path pathLength="1" style="--d:1.9s" d="M150 450L360 500"/>
+      <path pathLength="1" style="--d:2.1s" d="M430 330L600 430"/>
+      <path pathLength="1" style="--d:2.3s" d="M360 500L600 430"/>
+    </g>
+    <g class="n-dots">
+      <circle style="--d:0s" cx="90" cy="120" r="5"/>
+      <circle style="--d:1.2s" cx="300" cy="80" r="7"/>
+      <circle style="--d:2.4s" cx="210" cy="260" r="6"/>
+      <circle style="--d:.6s" cx="520" cy="150" r="5"/>
+      <circle style="--d:1.8s" cx="430" cy="330" r="8"/>
+      <circle style="--d:3s" cx="150" cy="450" r="5"/>
+      <circle style="--d:.9s" cx="360" cy="500" r="6"/>
+      <circle style="--d:2.1s" cx="600" cy="430" r="5"/>
+    </g>
+  </svg>
+
+  <div class="wrap hero-inner">
+    <div class="hero-text">
+      <p class="eyebrow">For Nigerian private secondary schools</p>
+      <h1>Results, fees and registers, all in one place.</h1>
+      <p class="hero-lead">Teachers enter scores and take the register on their phones. You approve results, see who has paid, and keep less paper in the office.</p>
+      <p class="hero-actions">
+        <a class="btn btn-lg btn-light" href="#demo">Book a demo</a>
+        <a class="btn btn-lg btn-outline" href="#pricing">See pricing</a>
+      </p>
+      <p class="hero-note">&#8358;2,500 per student, per term. No setup fee.</p>
     </div>
-    <div class="dots" role="group" aria-label="Slides" hidden>
-      <button type="button" data-go="0" aria-label="Slide 1" aria-current="true"><span></span></button>
-      <button type="button" data-go="1" aria-label="Slide 2" aria-current="false"><span></span></button>
-      <button type="button" data-go="2" aria-label="Slide 3" aria-current="false"><span></span></button>
+
+    <div class="hero-visual">
+      <span class="dot-grid dot-grid-hero" aria-hidden="true"></span>
+      <img class="photo photo-hero" src="{% static 'website/photos/principal-300.webp' %}" srcset="{% static 'website/photos/principal-300.webp' %} 300w, {% static 'website/photos/principal-600.webp' %} 600w" sizes="(min-width: 1024px) 280px, 48vw" width="300" height="375" decoding="async" alt="A school principal smiling at her desk in front of a whiteboard.">
+
+      <div class="slider" data-slider data-current="0" aria-roledescription="carousel" aria-label="Classnode screens with Crestfield Demo College demo data">
+        <div class="slides">
+            <figure class="slide is-on" data-name="Home dashboard" aria-roledescription="slide" aria-label="1 of 4">
+              <div class="browser">
+                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
+                <picture>
+                  <source media="(max-width: 639.98px)" srcset="{% static 'website/shots/slide-home-phone-390.webp' %} 390w, {% static 'website/shots/slide-home-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <img src="{% static 'website/shots/slide-home-desk-640.webp' %}" srcset="{% static 'website/shots/slide-home-desk-640.webp' %} 640w, {% static 'website/shots/slide-home-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" fetchpriority="high" decoding="async" alt="Home dashboard for Crestfield Demo College, a demo school: 612 students, ₦48.6m of ₦71.2m fees collected, 93.8% attendance today, and 7 classes' results waiting for approval.">
+                </picture>
+              </div>
+            </figure>
+            <figure class="slide" aria-hidden="true" inert data-name="Ogun State report sheet" aria-roledescription="slide" aria-label="2 of 4">
+              <div class="browser">
+                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
+                <picture>
+                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-report-phone-390.webp' %} 390w, {% static 'website/shots/slide-report-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <img data-srcset="{% static 'website/shots/slide-report-desk-640.webp' %} 640w, {% static 'website/shots/slide-report-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="A report sheet on the Ogun State template for a demo student at Crestfield Demo College, with continuous assessment, exam and weighted average for six subjects.">
+                </picture>
+              </div>
+            </figure>
+            <figure class="slide slide-phone" aria-hidden="true" inert data-name="Register on a phone" aria-roledescription="slide" aria-label="3 of 4">
+              <div class="phone-frame">
+                <img data-srcset="{% static 'website/shots/slide-register-phone-300.webp' %} 300w, {% static 'website/shots/slide-register-phone-600.webp' %} 600w" sizes="(min-width: 1024px) 170px, 250px" width="300" height="649" decoding="async" alt="A teacher's phone taking the SS 1A register at Crestfield Demo College, a demo school, with two children marked absent.">
+              </div>
+            </figure>
+            <figure class="slide" aria-hidden="true" inert data-name="Fee collection" aria-roledescription="slide" aria-label="4 of 4">
+              <div class="browser">
+                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
+                <picture>
+                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-fees-phone-390.webp' %} 390w, {% static 'website/shots/slide-fees-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <img data-srcset="{% static 'website/shots/slide-fees-desk-640.webp' %} 640w, {% static 'website/shots/slide-fees-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="Fee collection for Crestfield Demo College, a demo school: ₦48,600,000 collected of ₦71,206,200 expected this term, 367 students owing, and the latest payments.">
+                </picture>
+              </div>
+            </figure>
+        </div>
+        <div class="slider-bar">
+          <button class="slider-pause" type="button" data-pause aria-pressed="false" hidden>
+            <svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg><span>Pause</span>
+          </button>
+          <div class="slider-dots" role="group" aria-label="Choose a screen" hidden>
+            <button type="button" data-go="0" aria-current="true" aria-label="Home dashboard"><i></i></button>
+            <button type="button" data-go="1" aria-current="false" aria-label="Ogun State report sheet"><i></i></button>
+            <button type="button" data-go="2" aria-current="false" aria-label="Register on a phone"><i></i></button>
+            <button type="button" data-go="3" aria-current="false" aria-label="Fee collection"><i></i></button>
+          </div>
+          <p class="slider-name" data-label aria-hidden="true">Home dashboard</p>
+        </div>
+      </div>
+
+      <div class="float-card float-a" aria-hidden="true">
+        <span class="tile tile-amber"><svg class="icon"><use href="#i-fees"/></svg></span>
+        <span><span class="fc-label">Fees collected</span><b class="fc-value">&#8358;<span data-count="48.6" data-dp="1">48.6</span>m</b></span>
+      </div>
+      <div class="float-card float-b" aria-hidden="true">
+        <span class="tile tile-teal"><svg class="icon"><use href="#i-register"/></svg></span>
+        <span><span class="fc-label">Attendance today</span><b class="fc-value"><span data-count="93.8" data-dp="1">93.8</span>%</b></span>
+      </div>
     </div>
   </div>
-  <p class="actions hero-actions">
-    <a class="btn btn-primary" href="#demo">Book a demo</a>
-    <a class="btn" href="#features">See what it does</a>
-  </p>
-  <p class="hero-note">Made for Nigerian secondary schools. Works on the phones your teachers already carry.</p>
+  <p class="wrap hero-demo-note">Screens show Crestfield Demo College, a demo school. Every name and figure is made up.</p>
 </section>
+</div>
 
+{% comment %}
+PROOF: real quotes and school logos go here, each with the school's written
+  permission. Hidden until we have real ones. Never placeholder or invented.
+{% endcomment %}
+<section class="proof" hidden aria-label="What schools say"></section>
+
+{% comment %}
+2. Benefits, as four rows on alternating grounds
+{% endcomment %}
 <section id="features" class="features" aria-labelledby="features-title">
+  <div class="wrap section-head reveal">
+    <p class="eyebrow">What changes in your school</p>
+    <h2 id="features-title">Less chasing, less paper, fewer late nights.</h2>
+  </div>
+
+  <div class="feature-row">
+    <div class="wrap feature">
+      <div class="feature-text reveal">
+        <span class="tile tile-lg tile-brand"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
+        <h3>Report cards that add up by themselves</h3>
+        <p>Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every report card carries your crest.</p>
+        <p>Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.</p>
+      </div>
+      <div class="feature-media reveal">
+        <span class="dot-grid dot-grid-media" aria-hidden="true"></span>
+        <div class="mini mini-card" role="img" aria-label="A report sheet on the Ogun State template for a demo student at Crestfield Demo College, showing CA, exam and weighted average for three subjects.">
+          <div class="mini-head">
+            <span><b>Crestfield Demo College</b><br><span class="quiet">Report sheet, First term 2026/2027</span></span>
+            <span class="chip">Ogun State template</span>
+          </div>
+          <table class="mini-table">
+            <thead><tr><th>Subject</th><th class="num">CA<br>30</th><th class="num">Exam<br>70</th><th class="num">Weighted<br>100</th></tr></thead>
+            <tbody>
+              <tr><td>Basic Science</td><td class="num">23</td><td class="num">56</td><td class="num"><b>79</b></td></tr>
+              <tr><td>Civic Education</td><td class="num">24</td><td class="num">53</td><td class="num"><b>77</b></td></tr>
+              <tr><td>Mathematics</td><td class="num">26</td><td class="num">60</td><td class="num"><b>86</b></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="float-card float-c" aria-hidden="true">
+          <span class="tile tile-brand"><svg class="icon"><use href="#i-results"/></svg></span>
+          <span><span class="fc-label">Waiting for your approval</span><b class="fc-value"><span data-count="7">7</span> classes</b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feature-row tint">
+    <div class="wrap feature feature-flip">
+      <div class="feature-text reveal">
+        <span class="tile tile-lg tile-amber"><svg class="icon" aria-hidden="true"><use href="#i-fees"/></svg></span>
+        <h3>See who has paid, and who still owes</h3>
+        <p>Each child has their own account number, so a transfer lands on the right record. You see what came in this term and what is still outstanding, without matching bank alerts to names.</p>
+      </div>
+      <div class="feature-media reveal">
+        <span class="dot-grid dot-grid-media" aria-hidden="true"></span>
+        <img class="photo photo-feature" src="{% static 'website/photos/bursar-440.webp' %}" srcset="{% static 'website/photos/bursar-440.webp' %} 440w, {% static 'website/photos/bursar-880.webp' %} 880w" sizes="(min-width: 900px) 440px, calc(100vw - 32px)" width="440" height="352" loading="lazy" decoding="async" alt="A school bursar in a suit checking papers at a laptop with a calculator.">
+        <div class="float-card float-d" aria-hidden="true">
+          <span class="tile tile-amber"><svg class="icon"><use href="#i-fees"/></svg></span>
+          <span><span class="fc-label">Fees collected</span><b class="fc-value">&#8358;<span data-count="48.6" data-dp="1">48.6</span>m <span class="fc-of">of &#8358;71.2m</span></b><span class="meter"><i style="width:68.3%"></i></span></span>
+        </div>
+        <div class="float-card float-e" aria-hidden="true">
+          <span class="tile tile-teal"><svg class="icon"><use href="#i-check"/></svg></span>
+          <span><span class="fc-label">Payment recorded</span><b class="fc-value">&#8358;120,700 <span class="fc-of">Lanre Bello</span></b></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feature-row">
+    <div class="wrap feature">
+      <div class="feature-text reveal">
+        <span class="tile tile-lg tile-teal"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg></span>
+        <h3>The register, taken on staff phones every morning</h3>
+        <p>Class teachers mark the register with one tap per child. If the network drops, it waits on the phone and sends when the connection comes back.</p>
+      </div>
+      <div class="feature-media reveal">
+        <span class="dot-grid dot-grid-media" aria-hidden="true"></span>
+        <img class="photo photo-feature" src="{% static 'website/photos/teacher-440.webp' %}" srcset="{% static 'website/photos/teacher-440.webp' %} 440w, {% static 'website/photos/teacher-880.webp' %} 880w" sizes="(min-width: 900px) 440px, calc(100vw - 32px)" width="440" height="352" loading="lazy" decoding="async" alt="A teacher at her desk holding a phone, with a world map and a globe behind her.">
+        <div class="mini mini-phone float-card float-f" role="img" aria-label="The SS 1A register at Crestfield Demo College, a demo school, on a phone: three children present and one absent.">
+          <div class="mini-head"><span><b>SS 1A register</b><br><span class="quiet">Thu 15 Oct</span></span></div>
+          <ul class="mini-reg">
+            <li><span>Tobi Bello</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+            <li><span>Uzo Nwosu</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+            <li><span>Victor Ogunleye</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+            <li><span>Wuraola Ibrahim</span><span class="mark mark-out"><svg class="icon" aria-hidden="true"><use href="#i-absent"/></svg>Absent</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="feature-row tint">
+    <div class="wrap feature feature-flip">
+      <div class="feature-text reveal">
+        <span class="tile tile-lg tile-coral"><svg class="icon" aria-hidden="true"><use href="#i-staff"/></svg></span>
+        <h3>Each person sees only their own part</h3>
+        <p>Teachers see their own classes. The bursar sees fees. You see the whole school. A payment cannot be edited or deleted, only reversed with a reason, and every school's records are kept apart from every other school's.</p>
+      </div>
+      <div class="feature-media reveal">
+        <span class="dot-grid dot-grid-media" aria-hidden="true"></span>
+        <div class="mini mini-card mini-roles" role="img" aria-label="Roles and what each one can see: principal, bursar, class teacher and parent.">
+          <span class="role-row"><span class="tile tile-brand">PR</span><span><b>Principal</b><br><span class="quiet">The whole school</span></span></span>
+          <span class="role-row"><span class="tile tile-amber">BU</span><span><b>Bursar</b><br><span class="quiet">Fees and the bank</span></span></span>
+          <span class="role-row"><span class="tile tile-teal">CT</span><span><b>Class teacher</b><br><span class="quiet">Own class: register and scores</span></span></span>
+          <span class="role-row"><span class="tile tile-coral">PA</span><span><b>Parent</b><br><span class="quiet">Own child's report card</span></span></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% comment %}
+3. How it works, on One Blue
+{% endcomment %}
+<section id="how" class="section how" aria-labelledby="how-title">
+  <span class="dot-grid dot-grid-corner" aria-hidden="true"></span>
   <div class="wrap">
-    <h2 id="features-title" class="section-title reveal">What changes in your school</h2>
-
-    <article class="feature feature-laptop feature-results reveal">
-      <div class="feature-text">
-        <h3>Results</h3>
-        <p class="lead">No more typing broadsheets late at night.</p>
-        <p>Marks go in once. Totals, grades and the broadsheet add up by themselves, and every report card carries your crest and your colours.</p>
-        {% include "website/parts/flow_results.html" %}
-      </div>
-      <div class="feature-media">
-        <div class="laptop"><div class="laptop-screen"><picture><source media="(max-width: 839.98px)" srcset="{% static 'website/shots/broadsheet-phone.webp' %}" width="472" height="494"><img src="{% static 'website/shots/broadsheet.webp' %}" width="1280" height="919" alt="" loading="lazy"></picture></div><div class="laptop-base"></div></div>
-      </div>
-    </article>
-  </div>
-
-  <section class="band" aria-labelledby="fees-title">
-    <div class="wrap band-inner reveal">
-      <div class="feature-text">
-        <h3 id="fees-title">Fees</h3>
-        <p class="lead">Stop matching bank alerts to names.</p>
-        <p>Each child has a bank account number. Whatever a parent pays shows on that child's record without anyone typing it in.</p>
-        <p>A payment can't be edited or deleted. If a mistake is made, it is reversed with a reason, and the reversal stays on record.</p>
-      </div>
-      {% include "website/parts/flow_fees.html" %}
+    <div class="section-head reveal">
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-title">Ready for your next term in three steps.</h2>
     </div>
-  </section>
+    <ol class="steps stagger">
+      <li class="step reveal">
+        <span class="step-num">1</span>
+        <h3>We set up your school</h3>
+        <p>Send us your class lists and fee items. We add your classes, students and staff, then walk your team through it.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">2</span>
+        <h3>Teachers enter scores and registers</h3>
+        <p>On their own phones, through the term. You can see what is done and what is still waiting.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">3</span>
+        <h3>You approve and release results</h3>
+        <p>Check each class's broadsheet, approve it, and release. Parents read the report card online.</p>
+      </li>
+    </ol>
+  </div>
+</section>
 
+{% comment %}
+4. Pricing, and the demo form it leads to
+{% endcomment %}
+<section id="pricing" class="section pricing" aria-labelledby="pricing-title">
   <div class="wrap">
-    <article class="feature feature-device reveal">
-      <div class="feature-media">
-        <div class="phone"><img src="{% static 'website/shots/card.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+    <div class="section-head reveal">
+      <p class="eyebrow">Pricing</p>
+      <h2 id="pricing-title">One simple price.</h2>
+    </div>
+    <div class="pricing-grid stagger">
+      <div class="price-card reveal">
+        <div class="price-band">
+          <p class="price-label">Per student, per term</p>
+          <p class="price"><span class="price-figure num">&#8358;2,500</span></p>
+          <p class="price-sub">No setup fee.</p>
+        </div>
+        <ul class="included">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Results and report cards, including the Ogun State template</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Fee tracking, with an account number for each child</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Daily registers on staff phones</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Logins for the principal, bursar and teachers</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Parents read report cards online</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>We set up your school with you</li>
+        </ul>
       </div>
-      <div class="feature-text">
-        <h3>Parents</h3>
-        <p class="lead">No scratch cards.</p>
-        <p>Parents sign in with a code sent to their phone. Families without a smartphone can check a result with the PIN slip you print for them.</p>
-      </div>
-    </article>
 
-    <article class="feature feature-device feature-flip reveal">
-      <div class="feature-media">
-        <div class="phone"><img src="{% static 'website/shots/register.webp' %}" width="540" height="1110" alt="" loading="lazy"></div>
+      <div id="demo" class="demo-card reveal">
+        <h3>Book a demo</h3>
+        <p class="quiet">Leave your details and we will call you within two working days.</p>
+        {% if sent %}
+        <p class="sent" role="status">Thank you. We will be in touch soon.</p>
+        {% else %}
+        <form class="demo-form" method="post" action="/#demo">
+          {% csrf_token %}
+          {% if refused == "invalid" %}<p class="refused" role="alert">Something is missing or not right. Check the marked fields and send it again.</p>
+          {% elif refused == "limited" %}<p class="refused" role="alert">Too many requests from this connection. Try again in an hour.</p>{% endif %}
+          <div class="field"><label for="demo-name">Your name</label><input id="demo-name" name="name" type="text" autocomplete="name" maxlength="120" required value="{{ form.name.value|default_if_none:'' }}"{% if form.name.errors %} aria-invalid="true"{% endif %}></div>
+          <div class="field"><label for="demo-school">School name</label><input id="demo-school" name="school" type="text" autocomplete="organization" maxlength="200" required value="{{ form.school.value|default_if_none:'' }}"{% if form.school.errors %} aria-invalid="true"{% endif %}></div>
+          <div class="field-row">
+            <div class="field"><label for="demo-phone">Phone number</label><input id="demo-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="32" required value="{{ form.phone.value|default_if_none:'' }}"{% if form.phone.errors %} aria-invalid="true"{% endif %}></div>
+            <div class="field"><label for="demo-students">Number of students</label><input id="demo-students" class="num" name="students" type="number" inputmode="numeric" min="1" max="100000" required value="{{ form.students.value|default_if_none:'' }}"{% if form.students.errors %} aria-invalid="true"{% endif %}></div>
+          </div>
+          <div class="field"><label for="demo-email">Email (optional)</label><input id="demo-email" name="email" type="email" autocomplete="email" maxlength="254" value="{{ form.email.value|default_if_none:'' }}"{% if form.email.errors %} aria-invalid="true"{% endif %}></div>
+          <div class="bait" aria-hidden="true"><input name="website" type="text" tabindex="-1" autocomplete="off"></div>
+          <button type="submit">Request a call</button>
+        </form>
+        {% endif %}
       </div>
-      <div class="feature-text">
-        <h3>Register</h3>
-        <p class="lead">Mark the class in one tap per child.</p>
-        <p>Absences that keep repeating are flagged for you before they become a problem.</p>
-      </div>
-    </article>
-
-    <article class="feature feature-laptop reveal">
-      <div class="feature-text">
-        <h3>For the proprietor</h3>
-        <p class="lead">A short summary in your inbox every day: what came in, and what is still owed.</p>
-      </div>
-      <div class="feature-media">
-        <div class="laptop"><div class="laptop-screen"><picture><source media="(max-width: 839.98px)" srcset="{% static 'website/shots/home-phone.webp' %}" width="471" height="480"><img src="{% static 'website/shots/home.webp' %}" width="1280" height="919" alt="" loading="lazy"></picture></div><div class="laptop-base"></div></div>
-      </div>
-    </article>
-
-    <article class="feature feature-network reveal">
-      <div class="feature-text">
-        <h3>Bad network</h3>
-        <p class="lead">Teachers can keep entering marks when the network drops.</p>
-        <p>Marks stay on the phone and send when the connection comes back.</p>
-      </div>
-      {% include "website/parts/flow_network.html" %}
-    </article>
+    </div>
   </div>
 </section>
 
-<section id="pricing" class="pricing wrap reveal" aria-labelledby="pricing-title">
-  <div class="panel">
-    <h2 id="pricing-title" class="statement">Priced per student, per term.</h2>
-    <p class="price"><span class="num">&#8358;2,500</span> per student, per term. <span class="nowrap">No setup fee.</span></p>
-    <p class="actions"><a class="btn btn-primary" href="#demo">Book a demo</a></p>
+{% comment %}
+5. FAQ
+{% endcomment %}
+<section id="faq" class="section faq tint" aria-labelledby="faq-title">
+  <div class="wrap faq-inner">
+    <div class="section-head reveal">
+      <p class="eyebrow">Questions</p>
+      <h2 id="faq-title">What schools ask us.</h2>
+    </div>
+    <div class="faq-list reveal">
+      <details>
+        <summary>Do our teachers need laptops?</summary>
+        <p>No. Classnode works in the browser on the phones your teachers already carry. There is nothing to install.</p>
+      </details>
+      <details>
+        <summary>What happens when the network is bad?</summary>
+        <p>Scores and registers stay on the phone and send when the connection comes back. Teachers can keep working in the meantime.</p>
+      </details>
+      <details>
+        <summary>Can we use the Ogun State report sheet?</summary>
+        <p>Yes. Switch on the Ogun State template in setup and your report cards follow the sheet the Ministry and OGSERA ask for.</p>
+      </details>
+      <details>
+        <summary>Can we bring our current student list?</summary>
+        <p>Yes. Send it as an Excel or CSV file and it is imported into your classes. We help you with it during setup.</p>
+      </details>
+      <details>
+        <summary>How do parents pay school fees?</summary>
+        <p>By bank transfer, the way they already do. Each child has their own account number, so the payment shows on that child's record.</p>
+      </details>
+      <details>
+        <summary>Who can see our school's records?</summary>
+        <p>Only your staff, each according to their role, and parents for their own children. Your records are kept apart from every other school's. Our <a href="/privacy/">privacy notice</a> has the details.</p>
+      </details>
+    </div>
   </div>
 </section>
 
-<section id="demo" class="demo wrap reveal" aria-labelledby="demo-title">
-  <div class="demo-text">
-    <h2 id="demo-title" class="eyebrow">Book a demo</h2>
-    <p class="statement">See it with your own classes.</p>
-    <p>Leave your details and we will call you within one working day.</p>
+{% comment %}
+6. Final call to action
+{% endcomment %}
+<section class="cta" aria-labelledby="cta-title">
+  <svg class="nodes nodes-cta nodes-left" viewBox="0 0 640 560" aria-hidden="true" focusable="false"><use href="#cta-net"/></svg>
+  <svg class="nodes nodes-cta nodes-right" viewBox="0 0 640 560" aria-hidden="true" focusable="false"><use href="#cta-net"/></svg>
+  <div class="wrap cta-inner reveal">
+    <h2 id="cta-title">See it with your own classes.</h2>
+    <p>Book a demo and we will call you within two working days.</p>
+    <a class="btn btn-lg btn-light" href="#demo">Book a demo</a>
   </div>
-  {% if sent %}
-  <p class="sent" role="status">Thank you. We will be in touch soon.</p>
-  {% else %}
-  <form class="demo-form" method="post" action="/#demo">
-    {% csrf_token %}
-    {% if refused == "invalid" %}<p class="refused" role="alert">Something is missing or not right. Check the marked fields and send it again.</p>
-    {% elif refused == "limited" %}<p class="refused" role="alert">Too many requests from this connection. Try again in an hour.</p>{% endif %}
-    <div class="field">
-      <label for="demo-name">Your name</label>
-      <input id="demo-name" name="name" type="text" autocomplete="name" maxlength="120" required value="{{ form.name.value|default_if_none:'' }}"{% if form.name.errors %} aria-invalid="true"{% endif %}>
-    </div>
-    <div class="field">
-      <label for="demo-school">School name</label>
-      <input id="demo-school" name="school" type="text" autocomplete="organization" maxlength="200" required value="{{ form.school.value|default_if_none:'' }}"{% if form.school.errors %} aria-invalid="true"{% endif %}>
-    </div>
-    <div class="field">
-      <label for="demo-phone">Phone number</label>
-      <input id="demo-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" maxlength="32" required value="{{ form.phone.value|default_if_none:'' }}"{% if form.phone.errors %} aria-invalid="true"{% endif %}>
-    </div>
-    <div class="field">
-      <label for="demo-email">Email (optional)</label>
-      <input id="demo-email" name="email" type="email" autocomplete="email" maxlength="254" value="{{ form.email.value|default_if_none:'' }}"{% if form.email.errors %} aria-invalid="true"{% endif %}>
-    </div>
-    <div class="field">
-      <label for="demo-students">Number of students</label>
-      <input id="demo-students" class="num" name="students" type="number" inputmode="numeric" min="1" max="100000" required value="{{ form.students.value|default_if_none:'' }}"{% if form.students.errors %} aria-invalid="true"{% endif %}>
-    </div>
-    <div class="bait" aria-hidden="true">
-      <input name="website" type="text" tabindex="-1" autocomplete="off">
-    </div>
-    <button type="submit">Request a call</button>
-  </form>
-  {% endif %}
 </section>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="cta-net" viewBox="0 0 640 560">
+    <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity=".35" stroke-linejoin="round"><path d="M90 120L300 80L210 260ZM300 80L520 150L430 330L210 260M300 80L430 330M210 260L150 450L360 500L430 330L600 430L360 500"/></g>
+    <g fill="currentColor"><circle cx="90" cy="120" r="5"/><circle cx="300" cy="80" r="7"/><circle cx="210" cy="260" r="6"/><circle cx="520" cy="150" r="5"/><circle cx="430" cy="330" r="8"/><circle cx="150" cy="450" r="5"/><circle cx="360" cy="500" r="6"/><circle cx="600" cy="430" r="5"/></g>
+  </symbol>
+</svg>
+{% endblock %}
+
+{% block script %}{{ block.super }}
+/* The hero slider: 5 seconds a screen, held on hover, keyboard focus or a touch,
+   and by its pause button. Still under reduced motion. Screens 2 to 4 load after the page. */
+(()=>{const s=document.querySelector("[data-slider]");if(!s)return;
+const sl=[...s.querySelectorAll(".slide")],ds=[...s.querySelectorAll("[data-go]")],pb=s.querySelector("[data-pause]"),nm=s.querySelector("[data-label]"),
+calm=matchMedia("(prefers-reduced-motion: reduce)").matches,held=new Set;let i=0,t,stop=false;
+const load=e=>e.querySelectorAll("[data-srcset]").forEach(x=>{x.srcset=x.dataset.srcset;x.removeAttribute("data-srcset")});
+const show=n=>{i=(n+sl.length)%sl.length;s.dataset.current=i;load(sl[i]);sl.forEach((e,k)=>{const on=k==i;e.classList.toggle("is-on",on);e.inert=!on;e.toggleAttribute("aria-hidden",!on)});
+ds.forEach((d,k)=>d.setAttribute("aria-current",k==i));nm.textContent=sl[i].dataset.name};
+const run=()=>{clearTimeout(t);if(!calm&&!stop&&!held.size&&!document.hidden)t=setTimeout(()=>{show(i+1);run()},5000)};
+const hold=(k,on)=>{on?held.add(k):held.delete(k);run()};
+s.classList.add("is-live");ds[0].parentNode.hidden=false;pb.hidden=calm;
+ds.forEach(d=>d.onclick=()=>{show(+d.dataset.go);run()});
+pb.onclick=()=>{stop=!stop;pb.setAttribute("aria-pressed",stop);pb.lastChild.textContent=stop?"Play":"Pause";run()};
+s.onmouseenter=()=>hold("m",1);s.onmouseleave=()=>hold("m",0);
+s.addEventListener("focusin",e=>e.target!=pb&&e.target.matches(":focus-visible")&&hold("f",1));s.addEventListener("focusout",()=>hold("f",0));
+s.addEventListener("touchstart",()=>hold("t",1),{passive:true});s.addEventListener("touchend",()=>setTimeout(()=>hold("t",0),2000));
+document.addEventListener("visibilitychange",run);addEventListener("load",()=>setTimeout(()=>sl.forEach(load),1200));run()})();
+/* Figures in the floating cards count up once as they come into view. */
+(()=>{if(matchMedia("(prefers-reduced-motion: reduce)").matches||!window.IntersectionObserver)return;
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(!e.isIntersecting)return;io.unobserve(e.target);const x=e.target,end=+x.dataset.count,dp=+(x.dataset.dp||0),t0=performance.now(),
+f=t=>{const p=Math.min((t-t0)/1000,1);x.textContent=(end*(1-(1-p)**3)).toFixed(dp);p<1&&requestAnimationFrame(f)};requestAnimationFrame(f)}),{threshold:.6});
+document.querySelectorAll("[data-count]").forEach(x=>{if(!x.getClientRects().length)return;x.textContent=(0).toFixed(+(x.dataset.dp||0));io.observe(x)})})();
 {% endblock %}

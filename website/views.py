@@ -2,8 +2,8 @@
 privacy notice and the terms.
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
-one module it loads moves the slides and the fade-ups and is not needed to read
-anything or to send the form.
+one inline script moves the homepage's slider, counts its figures up and closes
+the phone menu, and is not needed to read anything or to send the form.
 """
 
 import re
@@ -21,11 +21,6 @@ from schools.hosts import portal_host
 from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
-
-#: The site's one module. It imports nothing, so it needs no import map: its
-#: `{% static %}` URL is hashed and there is nothing behind it to go stale
-#: (`tests/test_pages.py` holds it to that).
-SITE_MODULES = ("website/site.js",)
 
 #: A fact or a claim still to be settled, drawn on the legal pages as a box
 #: (`.todo`). Only `settings.SHOW_LEGAL_TODOS` shows them; a public reader gets
