@@ -4,28 +4,36 @@ What `manage.py load_demo --showcase` makes, and what the public homepage's
 screenshots are taken from (`scripts/site_shots.mjs`). The other demo schools
 are for clicking through every state a school can be in, the awkward ones
 included: a class waiting on remarks, a child absent too often, a family in
-debt. This one is for showing a school the product on its best day, so it holds
-nothing that is waiting, flagged or owed past the ordinary:
+debt. This one is for showing a school the product on a full, ordinary day, at
+the size of a real private secondary school:
 
+- **612 students** in 18 classes, JSS 1A to SS 3C, 34 to a class.
+- **The Ogun State template**, so the report sheet photographed is the one an
+  Ogun school prints.
 - **JSS 2A and JSS 2B released**, with both remarks on every card and every
   card's attendance recorded (the registers are taken before the release, which
   is when a card freezes them). JSS 2A's broadsheet is the one photographed.
 - **One strong student**, the demo parent's child, at about 78%: mostly A1 to
   B3 on the default scale.
-- **SS 1A still open**, its first CA marked with healthy scores and no sheet
-  opened, so a teacher has a marks sheet to show that is not locked. It is the
-  one class still to go on the principal's home, and it raises no row there:
-  a class with no sheet is waiting on nobody (`home.summary.waiting()`).
-- **Every register taken**, every school day of the term so far, with absences
-  rare enough that the absences list is empty. Today's too, but for SS 1A: the
-  screenshot script photographs its teacher about to take it, then submits it
-  on the page, so the home it photographs next has every register in.
-- **Fees mostly paid**, and the strong student's family paid in full into the
-  child's own account number.
+- **Seven classes checked and waiting on the principal**: JSS 1A to 1C, JSS 2C
+  and JSS 3A to 3C, marked, remarked, submitted by the class teacher and
+  checked by the vice principal. The principal's home says so.
+- **SS 1A to SS 3C still open**, their first test marked with healthy scores and
+  the principal's remarks written, so a teacher has a marks sheet to show that
+  is not locked and the principal's home asks for nothing but the approvals.
+- **Every register taken**, every school day of the term so far, each child
+  away one day in sixteen or so, which is about 94% a day and nobody on the
+  absences list. Today's too, but for SS 1A: the screenshot script photographs
+  its teacher about to take it, then submits it on the page, so the home it
+  photographs next has every register in.
+- **Fees**: ₦71.2m billed for the term and ₦48.6m of it paid, the strong
+  student's family in full into the child's own account number.
 
+Every name and figure is made up, and the school's name says it is a demo.
 Demo data only, and only on a demo server: `load_demo` asks `DEMO_SERVER=1`
 before it calls this, messages nobody, and stores no phone number. The bank and
 the child's account are demo rows with made-up numbers; nothing asks Paystack.
+Students get no password: nobody signs in as one.
 """
 
 import random
@@ -53,7 +61,7 @@ from gradebook.models import Assessment, Subject
 from schools.models import Domain, School
 
 SLUG = "showcase-demo"
-NAME = "Crestfield College"
+NAME = "Crestfield Demo College"
 #: Logins are `<PREFIX>.<key>`, as in `seed_demo`.
 PREFIX = "crestfield"
 CONTACT_EMAIL = "office@crestfield.example"
@@ -67,15 +75,21 @@ SUBJECTS = (
     ("Computer Studies", "CMP"),
 )
 
-#: First CA, second CA and exam: a hundred marks between them.
-ASSESSMENTS = (("First CA", 20), ("Second CA", 20), ("Exam", 60))
-
 #: The strong student's percentage in each subject, in `SUBJECTS` order: an
 #: average of 78.0, every one of them A1, B2 or B3 on the default scale.
 STAR = (86, 81, 79, 74, 77, 71)
 
-CLASSES = (("JSS 2A", 2), ("JSS 2B", 2), ("SS 1A", 4))
-PER_CLASS = 12
+#: 18 classes, three to a level. The star is the first child in JSS 2A.
+CLASSES = tuple((f"{stage} {year}{arm}", level)
+                for level, (stage, year) in enumerate(
+                    (("JSS", 1), ("JSS", 2), ("JSS", 3), ("SS", 1), ("SS", 2), ("SS", 3)), start=1)
+                for arm in "ABC")
+PER_CLASS = 34
+RELEASED = ("JSS 2A", "JSS 2B")
+#: Submitted, checked, and waiting on the principal's approval.
+WAITING = ("JSS 1A", "JSS 1B", "JSS 1C", "JSS 2C", "JSS 3A", "JSS 3B", "JSS 3C")
+#: Its register for today is taken on screen by `scripts/site_shots.mjs`.
+TODAYS_OPEN_REGISTER = "SS 1A"
 
 FIRST_NAMES = (
     "Amaka", "Bolu", "Chinedu", "Damilola", "Ebuka", "Folake", "Gift", "Hauwa", "Ikenna",
@@ -83,10 +97,16 @@ FIRST_NAMES = (
     "Tobi", "Uzo", "Victor", "Wuraola", "Yusuf", "Zainab", "Adaeze", "Bisola", "Chioma",
     "Dapo", "Emeka", "Fatima", "Gbemi", "Hassan", "Ifeoma", "Kelechi", "Lanre", "Mide",
 )
-SURNAMES = ("Okafor", "Adebayo", "Bello", "Nwosu", "Ogunleye", "Ibrahim", "Eze", "Afolabi", "Usman", "Okoro")
+SURNAMES = (
+    "Okafor", "Adebayo", "Bello", "Nwosu", "Ogunleye", "Ibrahim", "Eze", "Afolabi", "Usman", "Okoro",
+    "Adeyemi", "Chukwu", "Balogun", "Mohammed", "Olawale", "Nnamdi", "Lawal", "Obi", "Salami", "Onyeka",
+)
 
-TUITION = 120_000 * KOBO_PER_NAIRA
-LEVY = 10_000 * KOBO_PER_NAIRA
+#: The term's bill: JSS ₦112,000 and SS ₦120,700 a child, ₦71,206,200 for the
+#: whole school, of which `COLLECTED` is paid.
+LEVY = 7_000 * KOBO_PER_NAIRA
+TUITION = {"JSS": 105_000 * KOBO_PER_NAIRA, "SS": 113_700 * KOBO_PER_NAIRA}
+COLLECTED = 48_600_000 * KOBO_PER_NAIRA
 
 
 def _weekdays(start, end):
@@ -95,6 +115,11 @@ def _weekdays(start, end):
         if day.weekday() < 5:
             yield day
         day += timedelta(days=1)
+
+
+def _name(i):
+    """612 different names, and no class full of one surname."""
+    return f"{FIRST_NAMES[i % len(FIRST_NAMES)]} {SURNAMES[(i + 17 * (i // len(FIRST_NAMES))) % len(SURNAMES)]}"
 
 
 def exists():
@@ -110,8 +135,8 @@ def make(password, suffix, write=print):
     Domain.objects.create(tenant=school, domain=host, is_primary=True)
     write(f"{NAME}: http://{host}/  (schema {school.schema_name})")
 
-    def login(key, full_name):
-        return User.objects.create_user(f"{PREFIX}.{key}", password, full_name=full_name)
+    def login(key, full_name, secret=password):
+        return User.objects.create_user(f"{PREFIX}.{key}", secret, full_name=full_name)
 
     with transaction.atomic():
         staff = {
@@ -125,8 +150,7 @@ def make(password, suffix, write=print):
         }
         children = []
         for i in range(PER_CLASS * len(CLASSES)):
-            name = f"{FIRST_NAMES[i]} {SURNAMES[(i * 7) % len(SURNAMES)]}"
-            user = login(f"s{i + 1:02d}", name)
+            user = login(f"s{i + 1:03d}", _name(i), secret=None)
             children.append(enroll_student(user, school, reference=f"CFC/{i + 1:03d}"))
         parent = login("parent", "Mr Chukwuma Okafor")
         star = children[0]
@@ -134,7 +158,7 @@ def make(password, suffix, write=print):
         activate_guardian_links(parent, school)
 
     with schema_context(school.schema_name), transaction.atomic():
-        _term(staff, children, star, rng)
+        _term(school, staff, children, star, rng)
 
     labels = {"admin": "Administrator", "principal": "Principal", "vp": "Vice Principal",
               "teacher": "Teacher", "bursar": "Bursar"}
@@ -143,7 +167,10 @@ def make(password, suffix, write=print):
     return logins
 
 
-def _term(staff, children, star, rng):
+def _term(school, staff, children, star, rng):
+    from academics import details
+    from results import ogun
+
     today = timezone.localdate()
     starts = today - timedelta(days=today.weekday()) - timedelta(weeks=5)
     term = academics.create_term(
@@ -152,59 +179,73 @@ def _term(staff, children, star, rng):
     )
     academics.set_current_term(term)
 
-    groups = [ClassGroup.objects.create(name=name, level=level) for name, level in CLASSES]
-    placed = {g: children[n * PER_CLASS:(n + 1) * PER_CLASS] for n, g in enumerate(groups)}
+    groups = {name: ClassGroup.objects.create(name=name, level=level) for name, level in CLASSES}
+    # The star first, into JSS 2A; everyone else in order.
+    order = ["JSS 2A"] + [name for name, _ in CLASSES if name != "JSS 2A"]
+    placed = {groups[name]: children[n * PER_CLASS:(n + 1) * PER_CLASS] for n, name in enumerate(order)}
+    teacher = staff["teacher"]
     for group, members in placed.items():
         for child in members:
             academics.place_student(group, term, child)
-    teacher = staff["teacher"]
-    for group in groups:
         academics.assign_class_teacher(group, term, teacher)
-    released, still_open = groups[:2], groups[2]
+    details.record(star.pk, learner_id="CFD-2013-0001", sex="female",
+                   date_of_birth=today.replace(year=today.year - 13, month=3, day=14), by=staff["admin"].user)
 
     # Registers first: a card freezes its attendance when it is released. Every
-    # school day so far and today, whatever day today is, so the home has a
-    # register for today. A child misses at most one day, which keeps everyone
-    # under the absences list's 10%.
+    # school day so far and today, whatever day today is. Each child is away on
+    # one or two days, dealt round so every day is about 94%; the star never.
     days = sorted(set(_weekdays(starts, today)) | {today})
-    away_on = {c.pk: rng.choice(days[:-1]) for c in children if rng.random() < 0.35 and c is not star}
+    away_on = {
+        c.pk: {days[(i * 7) % len(days)]} | ({days[(i * 7 + 13) % len(days)]} if i % 5 else set())
+        for i, c in enumerate(children) if c is not star
+    }
     for group, members in placed.items():
         for day in days:
-            if group is still_open and day == today:
-                continue  # SS 1A's teacher takes today's on screen (`scripts/site_shots.mjs`)
-            absent = [c.pk for c in members if away_on.get(c.pk) == day]
+            if group.name == TODAYS_OPEN_REGISTER and day == today:
+                continue  # its teacher takes today's on screen (`scripts/site_shots.mjs`)
+            absent = [c.pk for c in members if day in away_on.get(c.pk, ())]
             attendance.take_register(group, term, on=day, absent_ids=absent, by=teacher.user)
 
-    # Marks. The released classes have every assessment; SS 1A only its first
-    # CA, which is the sheet a teacher is still filling in.
-    by_subject = []
-    for subject_name, code in SUBJECTS:
-        subject = Subject.objects.create(name=subject_name, code=code)
-        made = [
-            Assessment.objects.create(term=term, subject=subject, name=n, max_score=m, position=p)
-            for p, (n, m) in enumerate(ASSESSMENTS)
-        ]
-        by_subject.append(made)
-    for s, assessments in enumerate(by_subject):
-        for group in released:
+    # The Ogun State sheet's papers (1st Test, 2nd Test, Assignment, Exam) for
+    # every subject, set up the way a school's choice sets them up.
+    subjects = [Subject.objects.create(name=n, code=c) for n, c in SUBJECTS]
+    ogun.set_template_as(staff["principal"].user, school, "ogun")
+    papers = [list(Assessment.objects.filter(term=term, subject=s).order_by("position")) for s in subjects]
+
+    # Marks: every paper for the released and waiting classes; the first test
+    # alone for the open ones, the sheet a teacher is still filling in.
+    marked = [g for g in placed if g.name in RELEASED + WAITING]
+    for s, assessments in enumerate(papers):
+        for group in marked:
             for child in placed[group]:
                 percent = STAR[s] if child is star else rng.randint(58, 88)
                 for assessment in assessments:
                     score = round(assessment.max_score * percent / 100 + rng.uniform(-1, 1))
-                    score = max(0, min(assessment.max_score, score))
-                    gradebook.set_score(assessment, child, score, by=teacher.user)
-        first_ca = assessments[0]
-        for child in placed[still_open]:
-            gradebook.set_score(first_ca, child, rng.randint(12, 19), by=teacher.user)
+                    gradebook.set_score(assessment, child, max(0, min(assessment.max_score, score)), by=teacher.user)
+        for group in placed:
+            if group in marked:
+                continue
+            for child in placed[group]:
+                gradebook.set_score(assessments[0], child, rng.randint(6, 10), by=teacher.user)
 
-    for group in released:
-        _release(term, group, placed[group], staff, star, rng)
+    for group in marked:
+        _results(term, group, placed[group], staff, star, rng, release=group.name in RELEASED)
+    # The open classes' principal's remarks are in already, so the home asks
+    # the principal for nothing but the seven approvals.
+    from results import comments
+    from results.models import CommentAuthor
 
-    _fees(term, groups, children, star, staff["bursar"].user, days, rng)
+    for group in placed:
+        if group not in marked:
+            for child in placed[group]:
+                comments.write(term, child, CommentAuthor.PRINCIPAL, "A good start to the term.",
+                               by=staff["principal"].user)
+
+    _fees(term, placed, children, star, staff["bursar"].user, days, rng)
 
 
-def _release(term, group, members, staff, star, rng):
-    """Both remarks on every card, conduct rated, and the sheet walked to released."""
+def _results(term, group, members, staff, star, rng, *, release):
+    """Both remarks on every card, then the sheet walked to checked, or on to released."""
     from results import comments, ratings
     from results import services as chain
     from results.models import CommentAuthor, TraitGroup
@@ -223,17 +264,19 @@ def _release(term, group, members, staff, star, rng):
             principal_says = "Well done. Keep reading every evening."
         comments.write(term, child, CommentAuthor.CLASS_TEACHER, teacher_says, by=teacher)
         comments.write(term, child, CommentAuthor.PRINCIPAL, principal_says, by=principal)
-        for trait_group in TraitGroup:
-            for trait in ratings.traits(trait_group):
-                ratings.rate(term, trait, child, 5 if child is star else rng.randint(3, 5), by=teacher)
+        if release:
+            for trait_group in TraitGroup:
+                for trait in ratings.traits(trait_group):
+                    ratings.rate(term, trait, child, 5 if child is star else rng.randint(3, 5), by=teacher)
     chain.submit(sheet, teacher)
     chain.check(sheet, staff["vp"].user)
-    chain.approve(sheet, principal)
-    chain.release(sheet, principal)
+    if release:
+        chain.approve(sheet, principal)
+        chain.release(sheet, principal)
 
 
-def _fees(term, groups, children, star, bursar, days, rng):
-    """Each class billed, most families paid, the star's paid in full into her account."""
+def _fees(term, placed, children, star, bursar, days, rng):
+    """Each class billed, `COLLECTED` of it paid, the star's paid in full into her account."""
     SchoolBank.objects.create(
         bank_code="035", bank_name="Wema Bank", account_number="0123456789",
         account_name=NAME, subaccount_code="ACCT_showcase", split_code="SPL_showcase",
@@ -245,22 +288,37 @@ def _fees(term, groups, children, star, bursar, days, rng):
         bank_name="Wema Bank", split_code="SPL_showcase",
         created_by_id=bursar.pk, created_by_name=bursar.full_name,
     )
-    for group in groups:
+    owed = {}
+    for group, members in placed.items():
+        tuition = TUITION[group.name.split()[0]]
         bill = billing.open_bill(group, term)
-        billing.add_line(bill, "Tuition", TUITION)
+        billing.add_line(bill, "Tuition", tuition)
         billing.add_line(bill, "PTA levy", LEVY)
         billing.apply(bill, by=bursar)
-    methods = [PaymentMethod.BANK_TRANSFER, PaymentMethod.BANK_TRANSFER, PaymentMethod.POS, PaymentMethod.CASH]
+        owed.update({child.pk: tuition + LEVY for child in members})
+
+    # Two families in five pay in full, two half, the rest nothing yet; then
+    # part-payments from those until the total is exactly `COLLECTED`.
+    plan = []
     for i, child in enumerate(children):
-        if child is not star and i % 6 == 5:
-            continue  # a few families still to pay
+        share = 1 if child is star or i % 5 in (0, 2) else (0.5 if i % 5 in (1, 4) else 0)
+        plan.append([child, round(owed[child.pk] * share / KOBO_PER_NAIRA) * KOBO_PER_NAIRA])
+    short = COLLECTED - sum(amount for _, amount in plan)
+    for row in (r for r in plan if r[1] == 0):
+        if short <= 0:
+            break
+        row[1] = min(short, 60_000 * KOBO_PER_NAIRA)
+        short -= row[1]
+    methods = [PaymentMethod.BANK_TRANSFER, PaymentMethod.BANK_TRANSFER, PaymentMethod.POS, PaymentMethod.CASH]
+    for i, (child, amount) in enumerate(plan):
+        if not amount:
+            continue
         method = PaymentMethod.BANK_TRANSFER if child is star else methods[i % len(methods)]
-        amount = TUITION + LEVY if child is star or i % 3 else TUITION
         fees.record_payment(
             child, term, amount,
             method=method,
             narration="Paid by transfer into the child's account" if child is star else "Payment received",
             reference=f"TRF-{rng.randint(100000, 999999)}" if method == PaymentMethod.BANK_TRANSFER else "",
-            effective_on=days[min(i % 10, len(days) - 1)],
+            effective_on=days[(i * 11) % len(days)],
             recorded_by=bursar,
         )
