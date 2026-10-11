@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Classnode: results, fees and registers for your school</title>
+<meta name="description" content="Results, fees and registers for Nigerian private secondary schools, in one place. ₦2,500 per student, per term. No setup fee.">
+<!--
+  PHASE 1 MOCKUP of the new homepage (static, not served by Django).
+  Phase 2 moves this into website/templates/website/home.html and base.html,
+  and this stylesheet into static/website/website.css.
+-->
+<link rel="preload" href="../../static/web/fonts/hanken-grotesk-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="../../static/web/fonts/hanken-grotesk-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../../static/web/design.css">
+<link rel="stylesheet" href="homepage.css">
+<body class="site">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="17" cy="8" r="2.1" fill="var(--card)"/>
+    <circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-register" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M9 13l2 2 4-4"/></symbol>
+  <symbol id="i-fees" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M16 15h2"/></symbol>
+  <symbol id="i-staff" viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="10" r="3"/><path d="M8 17c.5-2 2-3 4-3s3.5 1 4 3"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h13v15H6a2 2 0 00-2 2z"/><path d="M4 20a2 2 0 002 2h13v-4"/><path d="M8 7h7"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-absent" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M17 8l4 4M21 8l-4 4"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+</svg>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head">
+  <div class="wrap head-inner">
+    <a class="logo" href="/" aria-label="Classnode home">
+      <svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span>
+    </a>
+    <nav class="site-nav" aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">Questions</a>
+      <a href="#">Staff sign in</a>
+      <a class="btn btn-primary" href="#demo">Book a demo</a>
+    </nav>
+    <button class="menu-toggle" type="button" popovertarget="site-menu" aria-label="Menu">
+      <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
+    </button>
+    <div id="site-menu" class="site-menu" popover>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">Questions</a>
+      <a href="#">Staff sign in</a>
+      <a href="#">Parent sign in</a>
+      <a class="btn btn-primary" href="#demo">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- 1. Hero -->
+<section class="hero">
+  <div class="wrap hero-inner">
+    <div class="hero-text">
+      <p class="eyebrow">For Nigerian private secondary schools</p>
+      <h1>Results, fees and registers, all in one place.</h1>
+      <p class="hero-lead">Teachers enter scores and take the register on their phones. You approve results, see who has paid, and keep less paper in the office.</p>
+      <p class="hero-actions">
+        <a class="btn btn-primary btn-lg" href="#demo">Book a demo</a>
+        <a class="btn btn-lg" href="#pricing">See pricing</a>
+      </p>
+      <p class="hero-note">&#8358;2,500 per student, per term. No setup fee.</p>
+    </div>
+    <figure class="hero-shot">
+      <div class="browser">
+        <div class="browser-bar" aria-hidden="true">
+          <span class="dots"><i></i><i></i><i></i></span>
+          <span class="url">sunrise-demo.classnode.co/home</span>
+        </div>
+        <picture>
+          <source media="(max-width: 639.98px)" srcset="../../static/website/shots/hero-phone-390.webp 390w, ../../static/website/shots/hero-phone-780.webp 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+          <img src="../../static/website/shots/hero-desk-640.webp" srcset="../../static/website/shots/hero-desk-640.webp 640w, ../../static/website/shots/hero-desk-1280.webp 1280w" sizes="(min-width: 1024px) 620px, calc(100vw - 50px)" width="640" height="350" fetchpriority="high" decoding="async" alt="The Classnode Home dashboard for Sunrise Demo Academy, a demo school: 20 students enrolled, ₦1.5m of ₦3.1m fees collected, 100% attendance last school day, and two items needing attention.">
+        </picture>
+      </div>
+      <figcaption>Sunrise Demo Academy is a demo school. Every name and figure is made up.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!--
+  PROOF: real quotes and school logos go here, each with the school's written
+  permission. Hidden until we have real ones. Never placeholder or invented.
+-->
+<section class="proof" hidden aria-label="What schools say"></section>
+
+<!-- 2. Benefits -->
+<section id="features" class="section features" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">What changes in your school</p>
+      <h2 id="features-title">Less chasing, less paper, fewer late nights.</h2>
+    </div>
+
+    <div class="benefits">
+      <article class="benefit reveal">
+        <span class="benefit-icon"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
+        <h3>Report cards that add up by themselves</h3>
+        <p>Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every report card carries your crest. Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.</p>
+        <div class="benefit-visual" role="img" aria-label="A report sheet for a demo student at Sunrise Demo Academy on the Ogun State template, showing CA, exam, total and grade for four subjects.">
+          <div class="mini mini-card">
+            <div class="mini-head">
+              <span><b>Sunrise Demo Academy</b><br><span class="quiet">Report sheet, First term 2026/2027</span></span>
+              <span class="chip">Ogun State template</span>
+            </div>
+            <table class="mini-table">
+              <thead><tr><th>Subject</th><th class="num">CA<br>30</th><th class="num">Exam<br>70</th><th class="num">Total</th><th>Grade</th></tr></thead>
+              <tbody>
+                <tr><td>Mathematics</td><td class="num">26</td><td class="num">58</td><td class="num"><b>84</b></td><td>A1</td></tr>
+                <tr><td>English</td><td class="num">22</td><td class="num">49</td><td class="num"><b>71</b></td><td>B2</td></tr>
+                <tr><td>Basic Science</td><td class="num">25</td><td class="num">52</td><td class="num"><b>77</b></td><td>A1</td></tr>
+                <tr><td>Civic Education</td><td class="num">20</td><td class="num">46</td><td class="num"><b>66</b></td><td>B3</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </article>
+
+      <article class="benefit reveal">
+        <span class="benefit-icon"><svg class="icon" aria-hidden="true"><use href="#i-fees"/></svg></span>
+        <h3>See who has paid, and who still owes</h3>
+        <p>Each child has their own account number, so a transfer lands on the right record. You see what came in this term and what is still outstanding, without matching bank alerts to names.</p>
+        <div class="benefit-visual benefit-shot">
+          <img src="../../static/website/shots/fee-card-382.webp" srcset="../../static/website/shots/fee-card-382.webp 382w, ../../static/website/shots/fee-card-764.webp 764w" sizes="(min-width: 1024px) 382px, calc(100vw - 98px)" width="382" height="348" loading="lazy" decoding="async" alt="Fee collection card for Sunrise Demo Academy, a demo school: ₦1,520,000 collected of ₦3,125,000 expected this term, 48.6%, ₦1.6m outstanding, 19 students owing.">
+        </div>
+      </article>
+
+      <article class="benefit reveal">
+        <span class="benefit-icon"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg></span>
+        <h3>The register, taken on staff phones every morning</h3>
+        <p>Class teachers mark the register with one tap per child. If the network drops, it waits on the phone and sends when the connection comes back.</p>
+        <div class="benefit-visual" role="img" aria-label="A register for JSS 1A at Sunrise Demo Academy, a demo school, on a phone: three students present and one absent.">
+          <div class="mini mini-phone">
+            <div class="mini-head">
+              <span><b>JSS 1A register</b><br><span class="quiet">Sunrise Demo Academy, Mon 5 Oct</span></span>
+            </div>
+            <ul class="mini-reg">
+              <li><span>Ada Adeyemi</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+              <li><span>Bayo Falana</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+              <li><span>Chidi Hassan</span><span class="mark mark-out"><svg class="icon" aria-hidden="true"><use href="#i-absent"/></svg>Absent</span></li>
+              <li><span>Kemi Johnson</span><span class="mark mark-in"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Present</span></li>
+            </ul>
+            <span class="mini-btn">Submit register</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="benefit reveal">
+        <span class="benefit-icon"><svg class="icon" aria-hidden="true"><use href="#i-staff"/></svg></span>
+        <h3>Each person sees only their own part</h3>
+        <p>Teachers see their own classes. The bursar sees fees. You see the whole school. A payment cannot be edited or deleted, only reversed with a reason, and every school's records are kept apart from every other school's.</p>
+        <div class="benefit-visual" role="img" aria-label="A list of roles and what each one can see: principal, bursar, class teacher and parent.">
+          <ul class="mini mini-card mini-roles">
+            <li><span class="avatar">PR</span><span><b>Principal</b><br><span class="quiet">The whole school</span></span></li>
+            <li><span class="avatar">BU</span><span><b>Bursar</b><br><span class="quiet">Fees and the bank</span></span></li>
+            <li><span class="avatar">CT</span><span><b>Class teacher</b><br><span class="quiet">Own class: register and scores</span></span></li>
+            <li><span class="avatar">PA</span><span><b>Parent</b><br><span class="quiet">Own child's report card</span></span></li>
+          </ul>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- 3. How it works -->
+<section id="how" class="section how" aria-labelledby="how-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">How it works</p>
+      <h2 id="how-title">Ready for your next term in three steps.</h2>
+    </div>
+    <ol class="steps">
+      <li class="step reveal">
+        <span class="step-num">1</span>
+        <h3>We set up your school</h3>
+        <p>Send us your class lists and fee items. We add your classes, students and staff, then walk your team through it.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">2</span>
+        <h3>Teachers enter scores and registers</h3>
+        <p>On their own phones, through the term. You can see what is done and what is still waiting.</p>
+      </li>
+      <li class="step reveal">
+        <span class="step-num">3</span>
+        <h3>You approve and release results</h3>
+        <p>Check each class's broadsheet, approve it, and release. Parents read the report card online.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<!-- 4. Pricing, and the demo form it leads to -->
+<section id="pricing" class="section pricing" aria-labelledby="pricing-title">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <p class="eyebrow">Pricing</p>
+      <h2 id="pricing-title">One simple price.</h2>
+    </div>
+    <div class="pricing-grid">
+      <div class="price-card reveal">
+        <p class="price"><span class="price-figure num">&#8358;2,500</span><span class="price-unit">per student, per term</span></p>
+        <p class="price-sub"><b>No setup fee.</b> Everything below is included.</p>
+        <ul class="included">
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Results and report cards, including the Ogun State template</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Fee tracking, with an account number for each child</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Daily registers on staff phones</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Logins for the principal, bursar and teachers</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Parents read report cards online</li>
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>We set up your school with you</li>
+        </ul>
+      </div>
+
+      <div id="demo" class="demo-card reveal">
+        <h3>Book a demo</h3>
+        <p class="quiet">Leave your details and we will call you within two working days.</p>
+        <form class="demo-form" method="post" action="/#demo">
+          <div class="field"><label for="demo-name">Your name</label><input id="demo-name" name="name" type="text" autocomplete="name" required></div>
+          <div class="field"><label for="demo-school">School name</label><input id="demo-school" name="school" type="text" autocomplete="organization" required></div>
+          <div class="field-row">
+            <div class="field"><label for="demo-phone">Phone number</label><input id="demo-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" required></div>
+            <div class="field"><label for="demo-students">Number of students</label><input id="demo-students" class="num" name="students" type="number" inputmode="numeric" min="1" required></div>
+          </div>
+          <div class="field"><label for="demo-email">Email (optional)</label><input id="demo-email" name="email" type="email" autocomplete="email"></div>
+          <button type="submit">Request a call</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5. FAQ -->
+<section id="faq" class="section faq" aria-labelledby="faq-title">
+  <div class="wrap faq-inner">
+    <div class="section-head reveal">
+      <p class="eyebrow">Questions</p>
+      <h2 id="faq-title">What schools ask us.</h2>
+    </div>
+    <div class="faq-list reveal">
+      <details>
+        <summary>Do our teachers need laptops?</summary>
+        <p>No. Classnode works in the browser on the phones your teachers already carry. There is nothing to install.</p>
+      </details>
+      <details>
+        <summary>What happens when the network is bad?</summary>
+        <p>Scores and registers stay on the phone and send when the connection comes back. Teachers can keep working in the meantime.</p>
+      </details>
+      <details>
+        <summary>Can we use the Ogun State report sheet?</summary>
+        <p>Yes. Switch on the Ogun State template in setup and your report cards follow the sheet the Ministry and OGSERA ask for.</p>
+      </details>
+      <details>
+        <summary>Can we bring our current student list?</summary>
+        <p>Yes. Send it as an Excel or CSV file and it is imported into your classes. We help you with it during setup.</p>
+      </details>
+      <details>
+        <summary>How do parents pay school fees?</summary>
+        <p>By bank transfer, the way they already do. Each child has their own account number, so the payment shows on that child's record.</p>
+      </details>
+      <details>
+        <summary>Who can see our school's records?</summary>
+        <p>Only your staff, each according to their role, and parents for their own children. Your records are kept apart from every other school's. Our <a href="/privacy/">privacy notice</a> has the details.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- 6. Final call to action -->
+<section class="cta" aria-labelledby="cta-title">
+  <div class="wrap cta-inner reveal">
+    <h2 id="cta-title">See it with your own classes.</h2>
+    <p>Book a demo and we will call you within two working days.</p>
+    <a class="btn btn-lg btn-on-blue" href="#demo">Book a demo</a>
+  </div>
+</section>
+
+</main>
+
+<!-- 7. Footer -->
+<footer class="site-foot">
+  <div class="wrap foot-inner">
+    <div class="foot-brand">
+      <a class="logo" href="/" aria-label="Classnode home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+      <p class="quiet">Classnode. Nigeria.</p>
+    </div>
+    <nav class="foot-nav" aria-label="Footer">
+      <a href="/privacy/">Privacy</a>
+      <a href="/terms/">Terms</a>
+      <a href="mailto:hello@classnode.co">hello@classnode.co</a>
+      <a href="#">Staff sign in</a>
+      <a href="#">Parent sign in</a>
+    </nav>
+    <p class="quiet num foot-copy">&copy; 2026 Classnode</p>
+  </div>
+</footer>
+</body>
+</html>
