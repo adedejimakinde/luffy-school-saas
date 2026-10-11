@@ -40,6 +40,14 @@ class TheLegalPagesTests(SiteSetUp):
         for path in PAGES:
             self.assertIn(f'href="{path}"', home)
 
+    def test_every_public_page_names_the_company_in_its_footer(self):
+        """The legal name and RC number, on every page of the site; no address."""
+        for path in ("/", *PAGES):
+            footer = self.page(path).split('<footer class="site-foot', 1)[1].split("</footer>", 1)[0]
+            with self.subTest(path=path):
+                self.assertIn("Classnode Edtech Limited · RC 9926572", visible_text("<body>" + footer))
+                self.assertNotIn("TODO", footer)
+
     def test_the_contents_list_matches_the_sections_in_order(self):
         for path in PAGES:
             page = self.page(path)

@@ -555,6 +555,8 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .foot-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--on-deep); text-decoration: none; border-radius: 8px; }
 .foot-nav a:hover { color: var(--card); text-decoration: underline; }
 .foot-copy { margin: 0; font-size: 0.9375rem; }
+/* The company's legal name and RC number: its own row under the rest, on every width. */
+.foot-legal { grid-column: 1 / -1; margin: 0; font-size: 0.9375rem; }
 @media (min-width: 900px) {
   .foot-inner { grid-template-columns: auto 1fr auto; align-items: center; }
   .foot-nav { justify-content: center; margin-left: 0; }

@@ -79,7 +79,8 @@ COPY = [
     "Who can see our school's records?",
     "See it with your own classes.",
     "Book a demo and we will call you within two working days.",
-    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode",
+    "Classnode. Nigeria.", "Privacy", "Terms", "hello@classnode.co", "© 2026 Classnode Edtech Limited",
+    "Classnode Edtech Limited · RC 9926572",
 ]
 
 #: The floating cards' figures, each the figure in the showcase's screens
