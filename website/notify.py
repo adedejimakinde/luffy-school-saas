@@ -1,4 +1,6 @@
-"""Telling platform staff a school asked for a demo."""
+"""Telling Classnode a school asked for a demo: the inbox the homepage names
+(`settings.DEMO_REQUEST_INBOX`, hello@classnode.co) and every platform staff
+login with an address."""
 
 import logging
 import smtplib
@@ -16,16 +18,20 @@ _NETWORK_BACKENDS = ("django.core.mail.backends.smtp.EmailBackend",)
 
 
 def staff_addresses():
-    """Every active platform staff login with an email address."""
-    return sorted(
+    """The demo inbox and every active platform staff login with an email address."""
+    found = set(
         User.objects.filter(is_platform_staff=True, is_active=True, email__isnull=False)
         .exclude(email="")
         .values_list("email", flat=True)
     )
+    inbox = getattr(settings, "DEMO_REQUEST_INBOX", "")
+    if inbox:
+        found.add(inbox)
+    return sorted(found)
 
 
 def demo_requested(request_id):
-    """Email platform staff one demo request. Run after the row has committed.
+    """Email one demo request to the inbox and platform staff. Run after the row has committed.
 
     Never raises: the request is saved, and the admin lists it whether or not
     this arrives. A send that fails is logged with its cause, for the reason
@@ -39,7 +45,7 @@ def demo_requested(request_id):
         return
     to = staff_addresses()
     if not to:
-        logger.warning("Demo request %s saved; no platform staff has an email address.", demo.pk)
+        logger.warning("Demo request %s saved; no inbox and no platform staff address to send it to.", demo.pk)
         return
     if settings.EMAIL_BACKEND in _NETWORK_BACKENDS and not getattr(settings, "EMAIL_HOST", ""):
         logger.warning("Demo request %s saved; no EMAIL_HOST to send it with.", demo.pk)

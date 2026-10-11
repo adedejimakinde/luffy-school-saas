@@ -1,10 +1,16 @@
-"""Turn `scripts/site_shots.mjs`'s PNGs into the homepage's WebP files.
+"""Cut `scripts/site_shots.mjs`'s PNGs into the homepage slider's WebP files.
 
     python scripts/site_shots.py shots/ static/website/shots/
 
-Phones are drawn about 270px wide and the laptop about 640px, so each file is
-cut to twice that: sharp on a phone's screen, and no heavier than it needs to
-be. The two laptop shots also get a phone-sized crop (`CROPS`). The page's `<img>` tags carry these same sizes as `width` and `height`.
+Four screens, each at a desk's shape (1280 by 700, drawn about 600px wide) and
+a phone's (390 by 565, drawn the width of the phone), at 1x and 2x: the
+principal's home, the strong student's Ogun State report sheet, the bursar's
+fee collection, and the register, which is a phone in every size (300 and 600
+wide). The page's `<img>` and `<source>` tags carry these sizes.
+
+The cuts are boxes in the PNGs' own pixels (twice the CSS pixels). They were
+set against the showcase as `schools/showcase.py` makes it; a change to the
+showcase or to a page's layout is a reason to look at the output again.
 """
 
 import sys
@@ -12,54 +18,58 @@ from pathlib import Path
 
 from PIL import Image
 
-#: name: pixel width of the WebP.
-WIDTHS = {
-    "marks": 540,
-    "fees": 540,
-    "register": 540,
-    "card": 540,
-    "broadsheet": 1280,
-    "home": 1280,
-}
-QUALITY = 74
-
-#: Phone-sized crops of the two laptop shots, cut from the WebP files above
-#: (so run this after the loop that writes them): name: (source, boxes). Each
-#: box is (left, top, right, bottom) in the source's own pixels; several boxes
-#: are stacked, centred, on the app's grey. A phone shows these at about 360px
-#: wide, where the whole 1280px screen would be unreadable.
-CROPS = {
-    # The broadsheet: the class, then position, name and the first two subjects.
-    "broadsheet-phone": ("broadsheet", [(288, 148, 760, 214), (288, 288, 760, 700)]),
-    # The proprietor's home: what came in (the two middle figures), then today's
-    # timed steps under its heading.
-    "home-phone": ("home", [(533, 170, 1004, 366), (934, 396, 1248, 450), (934, 562, 1248, 760)]),
-}
 GREY = (245, 246, 248)  # --bg
+QUALITY = {"big": 74, "small": 72}
+DESK, PHONE = ((1280, 700), (640, 350)), ((780, 1130), (390, 565))
+
+
+def fit(image, size, pad):
+    """The image, scaled to fit inside `size` less `pad`, centred on the grey."""
+    width, height = size
+    canvas = Image.new("RGB", size, GREY)
+    scale = min((width - 2 * pad) / image.width, (height - 2 * pad) / image.height)
+    image = image.resize((round(image.width * scale), round(image.height * scale)), Image.LANCZOS)
+    canvas.paste(image, ((width - image.width) // 2, (height - image.height) // 2))
+    return canvas
+
+
+def stack(image, boxes):
+    """Cuts from one long screenshot, one under the other."""
+    parts = [image.crop(box) for box in boxes]
+    out = Image.new("RGB", (max(p.width for p in parts), sum(p.height for p in parts)), GREY)
+    top = 0
+    for part in parts:
+        out.paste(part, (0, top))
+        top += part.height
+    return out
+
+
+def save(image, target, name, sizes):
+    for (width, height), quality in zip(sizes, (QUALITY["big"], QUALITY["small"])):
+        out = target / f"slide-{name}-{width}.webp"
+        image.resize((width, height), Image.LANCZOS).save(out, "WEBP", quality=quality, method=6)
+        print(f"{out}  {width}x{height}  {out.stat().st_size} bytes")
 
 
 def main(source, target):
     source, target = Path(source), Path(target)
     target.mkdir(parents=True, exist_ok=True)
-    for name, width in WIDTHS.items():
-        image = Image.open(source / f"{name}.png").convert("RGB")
-        height = round(image.height * width / image.width)
-        image = image.resize((width, height), Image.LANCZOS)
-        out = target / f"{name}.webp"
-        image.save(out, "WEBP", quality=QUALITY, method=6)
-        print(f"{out}  {width}x{height}  {out.stat().st_size} bytes")
-    for name, (source_name, boxes) in CROPS.items():
-        source_image = Image.open(target / f"{source_name}.webp").convert("RGB")
-        pieces = [source_image.crop(box) for box in boxes]
-        width = max(piece.width for piece in pieces)
-        height = sum(piece.height for piece in pieces) + 16 * (len(pieces) - 1)
-        image = Image.new("RGB", (width, height), GREY)
-        top = 0
-        for piece in pieces:
-            image.paste(piece, ((width - piece.width) // 2, top))
-            top += piece.height + 16
-        out = target / f"{name}.webp"
-        image.save(out, "WEBP", quality=QUALITY, method=6)
+    png = lambda name: Image.open(source / f"{name}.png").convert("RGB")  # noqa: E731
+
+    save(png("home-desk").crop((0, 0, 2560, 1400)), target, "home-desk", DESK)
+    save(png("home-phone").crop((0, 0, 780, 1130)), target, "home-phone", PHONE)
+    # The sheet's head, the learner box and the subjects.
+    save(fit(png("card-desk").crop((380, 180, 2180, 1420)), (2560, 1400), 70), target, "report-desk", DESK)
+    sheet = stack(png("card-phone"), [(0, 170, 780, 410), (0, 560, 780, 812), (0, 1300, 780, 2100)])
+    save(fit(sheet, (780, 1130), 0), target, "report-phone", PHONE)
+    # The bursar's money: what is owed, the latest payments and the term's collection.
+    save(fit(png("bursar-desk").crop((520, 330, 2520, 1490)), (2560, 1400), 60), target, "fees-desk", DESK)
+    save(png("bursar-phone").crop((0, 0, 780, 1130)), target, "fees-phone", PHONE)
+    register = png("register")
+    for width, quality in ((600, QUALITY["big"]), (300, QUALITY["small"])):
+        height = round(register.height * width / register.width)
+        out = target / f"slide-register-phone-{width}.webp"
+        register.resize((width, height), Image.LANCZOS).save(out, "WEBP", quality=quality, method=6)
         print(f"{out}  {width}x{height}  {out.stat().st_size} bytes")
 
 

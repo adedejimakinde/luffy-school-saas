@@ -6,9 +6,9 @@ that true after the first restyle, when "just this once" a page wants its own
 shade of grey:
 
 - **One palette, in one file.** Every colour literal in `design.css` is one of
-  the palette's thirteen, and no stylesheet, module or page template anywhere
+  the palette's sixteen, and no stylesheet, module or page template anywhere
   else writes a colour of its own — they say `var(--muted)`, not `#5B6475`.
-- **No gradients, no emoji, no icon pack.**
+- **No gradients but the three named below, no emoji, no icon pack.**
 - **One font, two weights, served from here.** Hanken Grotesk at 400 and 700,
   `font-display: swap`, from files beside the stylesheet; and no stylesheet
   asks for a weight in between, which the browser would have to fake.
@@ -41,6 +41,19 @@ PALETTE = {
     "#16693F", "#E7F4EC",  # green label
     "#8A5A00", "#FDF1DC",  # amber label
     "#B42318", "#FDECEA",  # red label
+    # The public site's three accents, for its icon tiles and nothing else.
+    "#0F766E",  # teal
+    "#B45309",  # amber
+    "#C2452D",  # coral
+}
+
+#: The only gradients, each One Blue deepening: the public site's top band (the
+#: header and hero, or a legal page's title) and its final band, and the staff
+#: sign-in's background, One Blue fading into the grey. (file, selector)
+GRADIENTS = {
+    ("static/website/website.css", ".top-band"),
+    ("static/website/website.css", ".cta"),
+    ("static/staff-signin/staff-signin.css", "body.door"),
 }
 
 #: Page templates that are not drawn from `design.css`, and why.
@@ -127,10 +140,14 @@ class OnePaletteInOneFileTests(SimpleTestCase):
         self.assertTrue(used, "the 403 page is styled at all")
         self.assertLessEqual(used, PALETTE)
 
-    def test_no_gradients_anywhere(self):
+    def test_no_gradients_but_the_three(self):
+        found = set()
         for name, css in [*stylesheets(), *((n, style_blocks(h)) for n, h in page_templates())]:
-            with self.subTest(file=name):
-                self.assertNotIn("gradient(", css)
+            for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+                if "gradient(" in body:
+                    found.add((name, selector.strip()))
+                    self.assertRegex(body, r"linear-gradient\(\d+deg, (var\(--brand\)|color-mix\(in srgb, var\(--brand\))", f"{name} {selector}")
+        self.assertEqual(found, GRADIENTS)
 
 
 class NoEmojiAndNoIconPackTests(SimpleTestCase):
