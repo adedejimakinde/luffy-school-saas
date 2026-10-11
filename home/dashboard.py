@@ -40,7 +40,7 @@ from fees.authority import WRITING_ROLES as FEE_KEEPING_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
 from results import services as chain
 from results.comments_api import VIEWING_ROLES as REMARK_ROLES
-from typography import keep_together
+from typography import NBSP, keep_together
 
 from . import charts
 from .facts import monday_of
@@ -120,7 +120,12 @@ def when(at: datetime, today: date) -> str:
         return at.strftime("%H:%M")
     if day == today - timedelta(days=1):
         return "Yesterday"
-    return f"{at.strftime('%a')} {day.day} {at.strftime('%b')}"
+    return short_day(day)
+
+
+def short_day(day: date) -> str:
+    """"Thu 1 Oct", held on one line."""
+    return f"{day.strftime('%a')}{NBSP}{day.day}{NBSP}{day.strftime('%b')}"
 
 
 def days_ago(at: datetime, today: date) -> str:
@@ -309,10 +314,12 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
         present, marked = by_day.get(day, (0, 0))
         bars.append((label, percent(present, marked), day == today, day >= today))
     today_present, today_marked = by_day.get(today, (0, 0))
+    # A weekend is named as one only while nobody has taken a register on it.
+    weekend = today.weekday() >= 5 and not taken_today
     if school_wide:
         foot = (
             "No registers on a weekend"
-            if today.weekday() >= 5
+            if weekend
             else f"{len(taken_today & placed)} of {plural(len(placed), 'class', 'classes')} "
             "have taken today's register"
         )
@@ -320,7 +327,7 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
     else:
         label = scope.label()
         missing = placed - taken_today
-        if today.weekday() >= 5:
+        if weekend:
             foot = "No registers on a weekend"
         elif not missing:
             foot = f"Today's register for {label} is taken"
@@ -742,7 +749,7 @@ def activity(facts, scope: Scope, today: date) -> list:
         for cid, on, _, _, created, taken_by, taken_name in registers:
             at, on = _at(created), date.fromisoformat(on)
             # A register entered on a later day says which day it was for.
-            day = "" if on == at.date() else f" for {on.strftime('%a')} {on.day} {on.strftime('%b')}"
+            day = "" if on == at.date() else f" for {short_day(on)}"
             events.append((at, "register", "i-register", f"{scope.names[cid]} register{day} taken by {by(taken_by, taken_name)}"))
 
     if scope.may(MEMBERSHIP_GRANTING_ROLES):

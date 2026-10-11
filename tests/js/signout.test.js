@@ -95,8 +95,9 @@ test("a page with the menu leaves sign-out to the menu", async () => {
   // family's cards, the portal's landing and the two sign-in doors) keep theirs,
   // because it is the only one they have.
   const { readFileSync } = await import("node:fs");
+  // The dashboard (`home`) is drawn on the server and has no modules at all.
   const shellPages = [
-    "absences", "broadsheet", "comments", "fees", "home", "marking",
+    "absences", "broadsheet", "comments", "fees", "marking",
     "register", "results", "roll", "setup", "staff", "timetable",
   ];
   for (const page of shellPages) {
