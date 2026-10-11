@@ -9,11 +9,15 @@ template.
   four screens: the form, the form after a refusal, the school picker and the
   empty state.
 
-They link `../../static/web/design.css`, the fonts and the new WebP shots in
-`static/website/shots/` (`hero-desk-*`, `hero-phone-*`, `fee-card-*`), so serve
+They link `../../static/web/design.css`, the fonts and the slider's WebP shots
+in `static/website/shots/` (`slide-{home,report,register,fees}-{desk,phone}-*`), so serve
 the repository root to view them, for example `npx http-server -p 8090 .` and
 open `http://127.0.0.1:8090/docs/mockups/homepage.html`.
 
-The shots are Sunrise Demo Academy from `seed_demo`, with one week of
-registers added on the local demo so the attendance chart is not empty.
+The shots are Sunrise Demo Academy from `seed_demo`, on a local demo with
+one week of registers added (so the attendance chart is not empty), the Ogun
+State template switched on, and Friday's JSS 1A register left open so it could
+be photographed being taken.
+
+The three photo spots are marked placeholders until licensed photos arrive.
 Every name and figure is made up.
