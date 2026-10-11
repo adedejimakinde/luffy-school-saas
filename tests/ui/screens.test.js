@@ -330,7 +330,10 @@ function measureSite({ width }) {
         problems.push(`the footer's ${el.className || el.tagName} is not left-aligned`);
       }
     }
-    if (Math.round(box(foot.querySelector(".foot-legal")).left) !== 16) problems.push("the footer's legal line is off the left edge");
+    const legal = foot.querySelector(".foot-legal");
+    if (Math.round(box(legal).left) !== 16) problems.push("the footer's legal line is off the left edge");
+    // It may wrap: text kept on one line runs past its box on a small phone.
+    if (legal.scrollWidth > legal.clientWidth) problems.push(`the footer's legal line is ${legal.scrollWidth}px in ${legal.clientWidth}px`);
     for (const a of foot.querySelectorAll(".foot-col a")) {
       if (box(a).height < 44) problems.push(`a footer link is ${Math.round(box(a).height)}px tall, under 44: "${a.textContent.trim()}"`);
     }
