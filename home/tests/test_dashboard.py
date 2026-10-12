@@ -412,7 +412,13 @@ class ThreeStatementsAndThenNoneTests(DashboardSetUp):
     def test_three_aggregate_statements_on_a_cold_cache_and_none_on_a_warm_one(self):
         self.assertEqual(len(self.aggregates(self.head)), 3)
         self.assertEqual(self.aggregates(self.head), [])
-        # Another role at the same school is served from the same copy.
+        # Another role at the same school is served from the same copy. The
+        # teacher is past their first fourteen days, so the first-days card
+        # (`onboarding.first`, a statement about this person and not about the
+        # school) is not asked for either.
+        User.objects.filter(pk=self.teacher.user.pk).update(
+            first_signed_in_at=timezone.now() - timedelta(days=30)
+        )
         self.assertEqual(self.aggregates(self.teacher), [])
 
     def test_the_count_does_not_grow_with_the_school(self):
