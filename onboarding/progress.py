@@ -448,16 +448,6 @@ def for_request(request) -> Optional[Progress]:
     return progress
 
 
-def needs_start_here(user, school) -> bool:
-    """Whether signing in should take this login to Start here at `school`:
-    an administrator there, at a school whose setup has never been finished."""
-    if school.setup_completed_at is not None:
-        return False
-    if not is_onboarding(user.roles_at(school)):
-        return False
-    return not progress_for(school).complete
-
-
 __all__ = [
     "BY_KEY",
     "ONBOARDING_ROLES",
@@ -470,7 +460,6 @@ __all__ = [
     "for_request",
     "is_onboarding",
     "judge",
-    "needs_start_here",
     "progress_for",
     "read",
     "waits_on",

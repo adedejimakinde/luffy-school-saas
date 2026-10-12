@@ -316,7 +316,7 @@ class SchoolOut(Schema):
     has_children_here: bool = False
 
     #: Is this login the administrator here, at a school whose setup has never
-    #: been finished? `onboarding.progress.needs_start_here()`'s question. The
+    #: been finished (`onboarding.progress`, `School.setup_completed_at`)? The
     #: landing then goes straight to Start here when this is the only school,
     #: and lists Start here first when it is one of several. Nobody else is
     #: ever sent anywhere: everyone else keeps the normal landing.
