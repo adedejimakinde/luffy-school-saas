@@ -39,6 +39,9 @@ def home_page(request):
     # there are no students yet, how far the administrator has got. Never a
     # redirect: only signing in sends an administrator to Start here.
     setup = onboarding.for_request(request)
+    if setup is not None and setup.next is not None:
+        # The next-step card says it already; the list below need not repeat it.
+        dash["attention"] = [item for item in dash["attention"] if item["key"] != "contact"]
     if setup is None and dash["setup"] and not onboarding.is_onboarding(roles):
         setup = onboarding.progress_for(school)
     return render(request, TEMPLATE, {

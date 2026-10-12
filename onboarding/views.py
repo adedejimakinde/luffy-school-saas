@@ -10,12 +10,16 @@ the school's own address.
 **No `login_required`**, for the oracle reason `results/views.py` gives.
 """
 
+from datetime import date
+
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import redirect, render
+from django.utils import timezone
 
 from home.dashboard import HOME_ROLES, first_name
 from schools.hosts import portal_host
 
+from . import handover
 from . import help as tips
 from . import progress as steps
 
@@ -90,4 +94,54 @@ def help_page(request):
     })
 
 
-__all__ = ["help_page", "start_here", "step_page"]
+
+
+# -- New school handover: the platform's, on the portal ---------------------------
+
+
+def handover_page(request):
+    """Every new school's handover checklist, and its welcome message.
+
+    The portal only, and platform staff only, both asked before any table is
+    read: a school's host has no such page (404), and anybody else is told
+    in one sentence that the page is not theirs (403). A school never sees it.
+    """
+    template = "onboarding/handover.html"
+    if getattr(request, "school", None) is not None:
+        raise Http404("This page is on the portal host.")
+    if not handover.is_platform_staff(request.user):
+        state = "signed-out" if not request.user.is_authenticated else "not-yours"
+        return render(request, template, {"state": state, "portal_host": portal_host()}, status=403)
+
+    schools = handover.customers()
+    hosts = handover.hosts_of(schools)
+    slug = request.POST.get("school") if request.method == "POST" else request.GET.get("school")
+    chosen = next((s for s in schools if s.slug == slug), schools[0] if schools else None)
+
+    note = ""
+    if request.method == "POST" and chosen is not None:
+        try:
+            signed_on = date.fromisoformat(request.POST.get("signed_on", ""))
+        except ValueError:
+            note = "Give the date the agreement was signed."
+        else:
+            try:
+                handover.record_pilot_agreement(request.user, chosen, signed_on)
+            except handover.HandoverRefused as exc:
+                note = str(exc)
+            else:
+                return redirect(f"/platform/handover/?school={chosen.slug}")
+
+    portal = portal_host()
+    rows = [handover.handover_for(s, host=hosts.get(s.pk), portal=portal) for s in schools]
+    current = next((r for r in rows if chosen is not None and r.school.pk == chosen.pk), None)
+    return render(request, template, {
+        "state": "handover",
+        "rows": rows,
+        "current": current,
+        "note": note,
+        "today": timezone.localdate(),
+    }, status=422 if note else 200)
+
+
+__all__ = ["handover_page", "help_page", "start_here", "step_page"]

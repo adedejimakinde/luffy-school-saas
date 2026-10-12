@@ -17,6 +17,7 @@ from django.urls import path
 
 from accounts.views import invitation_page, sign_in_page, staff_sign_in_page
 from fees.webhook_view import paystack_webhook
+from onboarding.views import handover_page
 from schools.views import platform_page
 from urls import handler403, urlpatterns as tenant_urlpatterns
 
@@ -41,6 +42,9 @@ urlpatterns = [
     # and only here; its API answers 404 on a school's host and 403 to anyone
     # who is not platform staff.
     path("platform/", platform_page, name="platform"),
+    # New school handover: each school's checklist and its welcome message.
+    # Here and only here, and platform staff only (`onboarding.handover`).
+    path("platform/handover/", handover_page, name="platform-handover"),
     # Paystack's webhook: here and only here, and signed instead of logged in.
     path("api/paystack/webhook/", paystack_webhook, name="paystack-webhook"),
     *tenant_urlpatterns,

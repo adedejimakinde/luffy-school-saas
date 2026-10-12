@@ -47,12 +47,17 @@ SELECT json_build_object(
 """
 
 
-def in_first_days(user, now=None) -> bool:
+def now():
+    """The time the fourteen days are counted to. One function, so a test can pin it."""
+    return timezone.now()
+
+
+def in_first_days(user, at=None) -> bool:
     """Within fourteen days of this login's first sign-in."""
     first = getattr(user, "first_signed_in_at", None)
     if first is None:
         return True
-    return (now or timezone.now()) < first + FIRST_DAYS
+    return (at or now()) < first + FIRST_DAYS
 
 
 def _cards(roles, done) -> list:
@@ -83,10 +88,10 @@ def _cards(roles, done) -> list:
     return [card for card in cards if not all(a["done"] for a in card["actions"])]
 
 
-def card_for(request, school, user, roles, now=None) -> Optional[list]:
+def card_for(request, school, user, roles) -> Optional[list]:
     """The first-days cards for this login at this school, or None."""
     roles = set(roles)
-    if not roles & set(ROLES) or not in_first_days(user, now):
+    if not roles & set(ROLES) or not in_first_days(user):
         return None
     with connection.cursor() as cursor:
         cursor.execute(_DONE_SQL, {"user": user.pk})

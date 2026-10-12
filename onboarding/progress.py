@@ -275,7 +275,7 @@ WITH t AS (SELECT id FROM academics_term WHERE is_current ORDER BY starts_on DES
 SELECT json_build_object(
     'term', EXISTS (SELECT 1 FROM t),
     'classes', (SELECT count(*) FROM academics_classgroup WHERE is_active),
-    'subjects', (SELECT count(*) FROM gradebook_subject),
+    'subjects', (SELECT count(*) FROM gradebook_subject WHERE is_active),
     'teachers', (
         SELECT count(*) FROM accounts_membership
         WHERE school_id = %(school)s AND role = 'teacher' AND status IN ('active', 'invited')
