@@ -145,6 +145,14 @@ export const SCREENS = [
   { name: "home-teacher", as: "sunrise.teacher", url: `${SUNRISE}/home/` },
   { name: "home-bursar", as: "sunrise.bursar", url: `${SUNRISE}/home/` },
 
+  // Onboarding: Start here, a step, a locked step's page and Help, as the
+  // demo's administrator (whose school is part set up), and Help as a teacher.
+  { name: "start-here", as: "sunrise.admin", url: `${SUNRISE}/start/` },
+  { name: "start-step", as: "sunrise.admin", url: `${SUNRISE}/start/school-details/` },
+  { name: "start-report-card", as: "sunrise.admin", url: `${SUNRISE}/start/report-card/` },
+  { name: "help", as: "sunrise.admin", url: `${SUNRISE}/help/` },
+  { name: "help-teacher", as: "sunrise.teacher", url: `${SUNRISE}/help/` },
+
   // The principal.
   { name: "results", as: "sunrise.principal", url: `${SUNRISE}/results/` },
   {
