@@ -140,7 +140,7 @@ test("a day nobody opened here shows the class from the newest copy, every child
   assert.match(page.root.innerHTML, /This is a copy from yesterday 08:30/, "the roster is as old as it is");
   assert.match(page.root.innerHTML, /Ada Obi/);
   assert.match(page.root.innerHTML, /Emeka Nwosu/);
-  assert.match(page.root.innerHTML, /2025-09-17/, "filed against the day asked for");
+  assert.match(page.root.innerHTML, /Wed 17 Sep/, "filed against the day asked for");
   assert.doesNotMatch(page.root.innerHTML, /already been taken/, "and not yesterday's marks");
   assert.match(page.root.innerHTML, /0 marked absent of 2/);
 });

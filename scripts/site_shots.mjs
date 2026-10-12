@@ -8,6 +8,13 @@
  * homepage's floating cards print the figures these screens show (93.8% was a
  * Thursday's), so check them against the new screens after every retake.
  *
+ * The homepage's slides show Thursday 15 October 2026 ("Thu 15 Oct" on every
+ * screen, and the 93.8% in the floating card). To take them on that day from
+ * another, run the server and `load_demo --showcase` with their clock set to
+ * it (libfaketime or `time_machine`) and give this script the same moment as
+ * `SHOTS_NOW` (say `2026-10-15T09:30:00+01:00`): the pages' own scripts read
+ * today from the browser's clock, the register's date among them.
+ *
  * Writes PNGs at twice the pixels to `SHOTS_OUT` (default `shots/`);
  * `scripts/site_shots.py` cuts them into the WebP files in
  * `static/website/shots/`.
@@ -27,6 +34,7 @@ const DOMAIN = process.env.SCREENS_DOMAIN || "classnode.test";
 const PORT = process.env.SCREENS_PORT || "8000";
 const PASSWORD = process.env.SCREENS_PASSWORD || "demo-pass-2026";
 const OUT = process.env.SHOTS_OUT || "shots";
+const NOW = process.env.SHOTS_NOW;
 const PORTAL = `http://app.${DOMAIN}:${PORT}`;
 const SCHOOL = `http://showcase-demo.${DOMAIN}:${PORT}`;
 
@@ -38,6 +46,7 @@ mkdirSync(OUT, { recursive: true });
 
 async function as(who, size) {
   const context = await browser.newContext({ viewport: size, deviceScaleFactor: 2 });
+  if (NOW) await context.clock.install({ time: new Date(NOW) });
   const page = await context.newPage();
   await page.goto(`${PORTAL}/staff-sign-in/`);
   const status = await page.evaluate(async ({ identifier, password }) => {

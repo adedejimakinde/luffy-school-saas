@@ -114,6 +114,16 @@ test("today is the default day and it is still editable", () => {
   assert.match(html, /<input id="on" name="on" type="date" data-field="on" value="2025-09-17">/);
 });
 
+test("the register names its day the way the home does, not as ISO", () => {
+  // Django's `D j M` on the home: "Sep", where en-GB's locale says "Sept".
+  assert.equal(states.dayText("2026-10-15"), "Thu 15 Oct");
+  assert.equal(states.dayText("2025-09-17"), "Wed 17 Sep");
+  assert.equal(states.dayText("not a day"), "not a day");
+  const html = states.marking({ ...REGISTER, taken_on: "2026-10-15" });
+  assert.match(html, /<p class="when">2025\/2026 First term &middot; Thu 15 Oct<\/p>/);
+  assert.doesNotMatch(html, /2026-10-15/);
+});
+
 // -- the school's day, not Greenwich's (docs/offline.md, requirement 7) -----
 
 test("half past midnight in Lagos is already the new day", () => {

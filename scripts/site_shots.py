@@ -3,10 +3,11 @@
     python scripts/site_shots.py shots/ static/website/shots/
 
 Four screens, each at a desk's shape (1280 by 700, drawn about 600px wide) and
-a phone's (390 by 565, drawn the width of the phone), at 1x and 2x: the
-principal's home, the strong student's Ogun State report sheet, the bursar's
-fee collection, and the register, which is a phone in every size (300 and 600
-wide). The page's `<img>` and `<source>` tags carry these sizes.
+a whole phone screen's (300 by 649, the 390 by 844 phone the script uses, drawn
+in the phone frame), at 1x and 2x: the principal's home, the strong student's
+Ogun State report sheet, the bursar's fee collection, and the register, which
+is the phone screen at every size. The page's `<img>` and `<source>` tags carry
+these sizes.
 
 The cuts are boxes in the PNGs' own pixels (twice the CSS pixels). They were
 set against the showcase as `schools/showcase.py` makes it; a change to the
@@ -20,7 +21,9 @@ from PIL import Image
 
 GREY = (245, 246, 248)  # --bg
 QUALITY = {"big": 74, "small": 72}
-DESK, PHONE = ((1280, 700), (640, 350)), ((780, 1130), (390, 565))
+DESK, PHONE = ((1280, 700), (640, 350)), ((600, 1298), (300, 649))
+#: One phone screen in the PNGs' pixels: 390 by 844 at 2x.
+SCREEN = (780, 1688)
 
 
 def fit(image, size, pad):
@@ -57,20 +60,17 @@ def main(source, target):
     png = lambda name: Image.open(source / f"{name}.png").convert("RGB")  # noqa: E731
 
     save(png("home-desk").crop((0, 0, 2560, 1400)), target, "home-desk", DESK)
-    save(png("home-phone").crop((0, 0, 780, 1130)), target, "home-phone", PHONE)
+    save(png("home-phone").crop((0, 0, *SCREEN)), target, "home-phone", PHONE)
     # The sheet's head, the learner box and the subjects.
     save(fit(png("card-desk").crop((380, 180, 2180, 1420)), (2560, 1400), 70), target, "report-desk", DESK)
-    sheet = stack(png("card-phone"), [(0, 170, 780, 410), (0, 560, 780, 812), (0, 1300, 780, 2100)])
-    save(fit(sheet, (780, 1130), 0), target, "report-phone", PHONE)
+    # On a phone: the logo, the sheet's head, the learner's name and ID (not
+    # the date of birth), the subjects and the attendance, one screen tall.
+    sheet = stack(png("card-phone"), [(0, 0, 780, 160), (0, 170, 780, 410), (0, 560, 780, 812), (0, 1300, 780, 2346)])
+    save(fit(sheet, SCREEN, 0), target, "report-phone", PHONE)
     # The bursar's money: what is owed, the latest payments and the term's collection.
     save(fit(png("bursar-desk").crop((520, 330, 2520, 1490)), (2560, 1400), 60), target, "fees-desk", DESK)
-    save(png("bursar-phone").crop((0, 0, 780, 1130)), target, "fees-phone", PHONE)
-    register = png("register")
-    for width, quality in ((600, QUALITY["big"]), (300, QUALITY["small"])):
-        height = round(register.height * width / register.width)
-        out = target / f"slide-register-phone-{width}.webp"
-        register.resize((width, height), Image.LANCZOS).save(out, "WEBP", quality=quality, method=6)
-        print(f"{out}  {width}x{height}  {out.stat().st_size} bytes")
+    save(png("bursar-phone").crop((0, 0, *SCREEN)), target, "fees-phone", PHONE)
+    save(png("register").crop((0, 0, *SCREEN)), target, "register-phone", PHONE)
 
 
 if __name__ == "__main__":

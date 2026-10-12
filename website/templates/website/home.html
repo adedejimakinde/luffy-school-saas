@@ -16,8 +16,10 @@ licences in `docs/website.md`); none shows a child's face.
 
 The slider's screens are in the markup in order and the first is showing, so
 the page reads with no script; screens 2 to 4 carry `data-srcset` and are only
-fetched once the page has loaded (the script below). Real quotes and school
-logos have a place kept for them, hidden, and nothing invented fills it.
+fetched once the page has loaded (the script below). On a phone every screen is
+a whole phone screen in the register's phone frame, with the "Fees collected"
+card beside it on every screen. Real quotes and school logos have a place kept
+for them, hidden, and nothing invented fills it.
 {% endcomment %}
 <div class="top-band">
 <section class="hero">
@@ -73,7 +75,7 @@ The Classnode mark, grown into a network: lines draw in once, nodes breathe. Dec
               <div class="browser">
                 <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
                 <picture>
-                  <source media="(max-width: 639.98px)" srcset="{% static 'website/shots/slide-home-phone-390.webp' %} 390w, {% static 'website/shots/slide-home-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <source media="(max-width: 639.98px)" srcset="{% static 'website/shots/slide-home-phone-300.webp' %} 300w, {% static 'website/shots/slide-home-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
                   <img src="{% static 'website/shots/slide-home-desk-640.webp' %}" srcset="{% static 'website/shots/slide-home-desk-640.webp' %} 640w, {% static 'website/shots/slide-home-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" fetchpriority="high" decoding="async" alt="Home dashboard for Crestfield Demo College, a demo school: 612 students, ₦48.6m of ₦71.2m fees collected, 93.8% attendance today, and 7 classes' results waiting for approval.">
                 </picture>
               </div>
@@ -82,7 +84,7 @@ The Classnode mark, grown into a network: lines draw in once, nodes breathe. Dec
               <div class="browser">
                 <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
                 <picture>
-                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-report-phone-390.webp' %} 390w, {% static 'website/shots/slide-report-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-report-phone-300.webp' %} 300w, {% static 'website/shots/slide-report-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
                   <img data-srcset="{% static 'website/shots/slide-report-desk-640.webp' %} 640w, {% static 'website/shots/slide-report-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="A report sheet on the Ogun State template for a demo student at Crestfield Demo College, with continuous assessment, exam and weighted average for six subjects.">
                 </picture>
               </div>
@@ -96,7 +98,7 @@ The Classnode mark, grown into a network: lines draw in once, nodes breathe. Dec
               <div class="browser">
                 <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
                 <picture>
-                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-fees-phone-390.webp' %} 390w, {% static 'website/shots/slide-fees-phone-780.webp' %} 780w" sizes="calc(100vw - 34px)" width="390" height="565">
+                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-fees-phone-300.webp' %} 300w, {% static 'website/shots/slide-fees-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
                   <img data-srcset="{% static 'website/shots/slide-fees-desk-640.webp' %} 640w, {% static 'website/shots/slide-fees-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="Fee collection for Crestfield Demo College, a demo school: ₦48,600,000 collected of ₦71,206,200 expected this term, 367 students owing, and the latest payments.">
                 </picture>
               </div>

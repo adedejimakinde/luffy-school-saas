@@ -16,6 +16,20 @@ import { heldNote } from "../web/offline.js";
 import { asOfText, copyNote } from "../web/snapshots.js";
 
 /**
+ * The register's day as a teacher reads it: "Thu 15 Oct", as the home prints
+ * today (Django's `D j M`). Names of its own rather than a locale's, which
+ * says "Sept". The API's `YYYY-MM-DD` is a whole day, read in UTC so no zone
+ * moves it; anything else is shown as it came.
+ */
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export function dayText(iso) {
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
+  if (!day || Number.isNaN(day.getTime())) return iso;
+  return `${DAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]}`;
+}
+
+/**
  * Which class, and for which day.
  *
  * **Every class the school teaches, because that is who may mark them.**
@@ -115,7 +129,7 @@ export function marking({
   return [
     '<section class="state state-marking" data-state="marking">',
     `<h1>${esc(class_group)}</h1>`,
-    `<p class="when">${esc(term)} &middot; ${esc(taken_on)}</p>`,
+    `<p class="when">${esc(term)} &middot; ${esc(dayText(taken_on))}</p>`,
     copyNote(asOf, {
       timeZone,
       now,
