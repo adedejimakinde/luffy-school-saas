@@ -320,6 +320,21 @@ class NumbersAndNamesTests(DashboardSetUp):
             ["\u20a648.6m", "\u20a61.5m", "\u20a61bn", "\u20a6500"],
         )
 
+    def test_attendance_that_has_not_moved_has_no_change_line(self):
+        from datetime import date
+
+        from home.dashboard import _attendance_tile
+
+        today = date(2026, 10, 15)
+
+        def tile(present, before):
+            week = {"school_wide": True, "shown": today, "present": present, "marked": 1000, "before": before}
+            return _attendance_tile(week, None, today)
+
+        self.assertIsNone(tile(938, (9380, 10000))["change"], "0 pts is never printed")
+        self.assertIsNone(tile(938, (9384, 10000))["change"], "nor a change that rounds to 0.0")
+        self.assertEqual(tile(938, (9300, 10000))["change"], "+0.8 pts")
+
     def test_no_figure_on_the_page_ends_in_point_zero(self):
         with connected_to(self.stmarys):
             registers.take_register(

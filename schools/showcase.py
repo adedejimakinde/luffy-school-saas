@@ -64,6 +64,9 @@ SLUG = "showcase-demo"
 NAME = "Crestfield Demo College"
 #: Logins are `<PREFIX>.<key>`, as in `seed_demo`.
 PREFIX = "crestfield"
+#: The school's code: admission numbers are `CFC/001` and the learner ID
+#: `CFC-2013-0001`, one code for one school.
+CODE = "CFC"
 CONTACT_EMAIL = "office@crestfield.example"
 
 SUBJECTS = (
@@ -154,7 +157,7 @@ def make(password, suffix, write=print):
         children = []
         for i in range(PER_CLASS * len(CLASSES)):
             user = login(f"s{i + 1:03d}", _name(i), secret=None)
-            children.append(enroll_student(user, school, reference=f"CFC/{i + 1:03d}"))
+            children.append(enroll_student(user, school, reference=f"{CODE}/{i + 1:03d}"))
         parent = login("parent", "Mr Okafor")
         star = children[0]
         link_guardian(parent, star)
@@ -181,6 +184,10 @@ def _term(school, staff, children, star, rng):
         next_term_starts_on=starts + timedelta(weeks=14),
     )
     academics.set_current_term(term)
+    # The term's school days, as a school declares them: every weekday from the
+    # first day to the last (61), so the Ogun sheet's "Times school opened"
+    # prints a number. Before the release below, which freezes it on the cards.
+    academics.set_school_days(term, sum(1 for _ in _weekdays(term.starts_on, term.ends_on)))
 
     groups = {name: ClassGroup.objects.create(name=name, level=level) for name, level in CLASSES}
     # The star first, into JSS 2A; everyone else in order.
@@ -191,7 +198,7 @@ def _term(school, staff, children, star, rng):
         for child in members:
             academics.place_student(group, term, child)
         academics.assign_class_teacher(group, term, teacher)
-    details.record(star.pk, learner_id="CFD-2013-0001", sex="female",
+    details.record(star.pk, learner_id=f"{CODE}-2013-0001", sex="female",
                    date_of_birth=today.replace(year=today.year - 13, month=3, day=14), by=staff["admin"].user)
 
     # Registers first: a card freezes its attendance when it is released. Every

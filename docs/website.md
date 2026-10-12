@@ -73,35 +73,54 @@ final call to action, and the footer.
   headline, "How it works" and the questions start at the left
   (`.section-head-start`), the questions' headline beside the list on a desk;
   each benefit's heading sits beside its picture; the price and the final band
-  stay centred. Section headlines are balanced; card and benefit headings
-  (`h3`) wrap where the line ends, with no balancing and no `<br>`. Tests hold
-  all three.
+  stay centred. **No word sits alone on a line**: every heading, question and
+  short line (the notes under the hero and the sheet, the price's line, the
+  final band's) is balanced, longer copy wraps "pretty", and no heading has a
+  `<br>`. Tests hold all three (`loneWords` measures it at every width).
 - **Sizes** (the owner's rules, fintech sizes rather than a template's, held
-  by `the homepage's sizes` in the browser at 375 x 812 and 1280 x 800):
-  section headlines 24 to 28px on a phone and 32 to 40px on a desk (`h2` is
-  `clamp(28px, 20px + 1.6vw, 40px)`), other headings at most 28px and 40px;
-  the hero headline 30 to 36px on a phone and 48 to 56px on a desk
-  (`clamp(30px, 24px + 2.5vw, 56px)`), line height 1.1; body copy 15 to 16px
+  by `the homepage's sizes` in the browser at 360 x 800, 375 x 812 and 1280 x
+  800; the viewport is `width=device-width, initial-scale=1`): section
+  headlines at most 24px at 360px, 24 to 28px on a phone and 32 to 40px on a
+  desk (`h2` is `clamp(24px, 14.4px + 2.4vw, 40px)`), other headings at most
+  28px and 40px (`h3` 20px at 360px); the hero headline at most 30px at 360px,
+  30 to 36px on a phone and 48 to 56px on a desk (`clamp(30px, 18px + 3.33vw,
+  56px)`), line height 1.1; body copy 15 to 16px
   on a phone and 16 to 17px on a desk (`--copy-lg`, the lead and the larger
   copy, is 16px and 17px from 768px; `--copy-note`, the notes under the hero,
   the slider and the sheet and the form's labels, 15px and 16px); small
   labels 13 to 14px (`--label-sm`, 13px); buttons 44 to 48px tall with 15 to
-  16px words and 8 to 10px corners; sections 56px top and bottom on a phone
-  and 104px from 768px, the benefit rows 64px and 88px; cards 24px in
-  (`--card-pad`) and 14px round, photos 16px round; content at most 1160px
+  16px words and 8 to 10px corners, the hero's two 44px tall and side by side
+  on a phone from 360px, stacked below it; sections 56px top and bottom on a
+  phone and 104px from 768px, the benefit rows 64px and 88px; cards 20px in on
+  a phone and 24px from 640px (`--card-pad`) and 14px round, the benefit
+  rows' icon tiles 36px on a phone and 56px from 640px, each step's number
+  28px on its title's line on a phone; photos 16px round; content at most 1160px
   wide; two font weights (400 and 700) in every section and no long centred
   paragraph. On a 375 x 812 phone the first screen holds the headline, its
-  subline, the main button and the top of the screens (from 632px); the hero
+  subline, the main buttons and the top of the screens; the hero
   is tighter below 640px to make the room. Not held to them: the price figure
   (64px, a figure rather than a heading), the slider's own controls and its
   address bar (the slider is kept as it is), the drawings' own paddings (the
   report sheet, the roles, the register phone and the floating cards are
   pictures of the product) and the footer (its links are 14px, its own spec).
+  Measured at 360px before this pass: the hero 33px, section headlines 28px,
+  body 16px, buttons 48px and full width, cards and steps 24px in, the step
+  number 44px above its title, benefit tiles 56px.
 - **The slider's register screen gives the slider no height** on a desk
   (`contain: size` on `.slide-phone`): it takes the height of the other
   screens. Before, its picture had none until it loaded, a second after the
   page, and the slider stood twice as tall until then, pushing the desk's
-  headline below the fold and then snapping back.
+  headline below the fold and then snapping back. Its phone is exactly as tall
+  as the screens (one grid row, `minmax(0, 1fr)`): it was sized by its image's
+  `sizes` and ran past the slider, over the caption at 768px.
+- **From 768px the hero is two columns**, the words at the left and the
+  picture at the right, even columns to 1024px and 5 to 7 from there. From
+  640px the screens start below the principal's shoulders, so no frame covers
+  her face; no frame covers a word of the page (the headline, the lead, the
+  buttons, the price line or the slider's controls); and the
+  "Fees collected" card shows on every screen at every width, clear of her
+  face, the screen and every word. `heroEverywhere` holds it on every screen
+  at 320, 360, 375, 414, 640, 768, 900, 1024, 1280 and 1920px.
 - **On a phone (below 640px) every screen is a phone screen in the register's
   phone frame**, one size (`min(250px, 72%)` wide, the shape of a 390 x 844
   phone), at the left, and no screen has the browser frame; from 640px the
@@ -121,8 +140,8 @@ final call to action, and the footer.
   Company: Privacy, Terms, hello@classnode.co), a thin rule, and one legal
   line, the only place the company is named: © 2026 Classnode Edtech Limited ·
   RC 9926572. No address there; the registered address waits for the lawyer.
-  On phones it is all left-aligned, the columns two across with Company on a
-  row of its own.
+  On phones it is all left-aligned, Product and Sign in two across and
+  Company's three links in one row under them, so no column stands alone.
   `website/tests/test_homepage.py` holds the page to that copy and to the
   writing rules: no en or em dash, no exclamation mark, no sentence starting
   "Imagine", none of the banned words, and **no question mark outside the six
@@ -133,7 +152,14 @@ final call to action, and the footer.
 - **TODO notes** on the privacy notice and the terms are drawn only when `SHOW_LEGAL_TODOS` is on (off by
   default; on with `DJANGO_DEBUG=1` and in the legal tests). Every open one is listed in `docs/handover.md`.
 - **One Blue, with more of it** (`docs/design.md`): the top band (the header
-  and the hero, or a legal page's title) is One Blue deepening toward the ink;
+  and the hero, or a legal page's title) is light, the 5% wash of One Blue
+  (the owner's choice of three, 12 October 2026), with ink headings, One Blue
+  for the headline's last words ("all in one place."), the eyebrow, the
+  buttons and the product's frames, and a faint One Blue glow behind the
+  screens, under the photo so it is never a halo. The photo sits in a frame:
+  20px round, a 1px white edge, a soft blue shadow and the faintest blue on the
+  whiteboard along its top edge, gone before her hair begins; nothing touches
+  her face or skin;
   the four benefit rows alternate white and a 5% wash of blue; "How it works"
   sits on One Blue with white step cards; the price is white on a blue band;
   the final band is One Blue again and the footer the deepest blue. Words on
@@ -149,17 +175,25 @@ final call to action, and the footer.
   (in a phone frame, not the browser frame), and the bursar's fee collection.
   `scripts/site_shots.mjs` takes them **on a weekday** (a weekend home says
   there are no registers on a weekend) and `scripts/site_shots.py` cuts them
-  into `static/website/shots/`. The page says under the slider that the school
-  is a demo and every name and figure is made up. They were taken with the
+  into `static/website/shots/`. Each screen's description names the school as
+  a demo (the line under the slider that said so was taken out by the owner,
+  12 October 2026). They were taken with the
   clock at Thursday 15 October 2026 (`SHOTS_NOW` in the script's header says
   how), so every screen names the day one way, "Thu 15 Oct", the register's
   date included (`dayText` in `static/register/states.js`, no longer ISO). The
   showcase's logins are a title and a surname ("Mr Oyelaran"), so each
   avatar's letters are the greeted name's: MO beside "Good morning, Mr
   Oyelaran", where "Mr Segun Oyelaran" drew MS. The desk's home still prints
-  the day in full in its own header ("Thursday 15 October").
+  the day in full in its own header ("Thursday 15 October"). The school has one
+  code, CFC: admission numbers `CFC/001` and the learner ID `CFC-2013-0001`.
+  The term declares its 61 school days (`set_school_days`), so the report
+  sheet's "Times school opened" is a number, never a dash. The home's
+  attendance tile prints no change line when the day matches the week before
+  it to a tenth of a point ("0 pts" read as a figure).
 - **The floating cards carry the screens' own figures** (₦48.6m, 93.8% today,
-  a ₦120,700 payment), never rounder ones; a test counts them.
+  a ₦120,700 payment), never rounder ones; a test counts them. A card's figure
+  counts up from 0 only once some of it is on screen; until then it shows its
+  real figure, so none ever sits at 0.0%.
   Retaking the screens is a reason to check them: 93.8% was a Thursday's.
 - **The report sheet** is the first benefit, in place of the small report
   card it replaced: a large Ogun State sheet beside "Report cards that add up
@@ -183,8 +217,8 @@ final call to action, and the footer.
   bursar at a laptop (fees) and a teacher with a phone (the register). No photo
   shows a child's face. Their sources and licences are recorded below.
 - **Drawings** are inline SVG: the Classnode mark grown into a network of
-  nodes and lines behind the hero's picture (under 5 KB, never behind the
-  words: the right half on a desk, under the picture on a phone), a still copy
+  nodes and lines behind the hero's picture (under 5 KB, inside the picture's
+  column above the slider's controls, so never behind a word), a still copy
   of it either side of the final band on a desk, and the product parts the
   benefit rows draw in CSS (the report sheet, the register, the roles), each
   read by its description.

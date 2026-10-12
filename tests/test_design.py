@@ -47,12 +47,14 @@ PALETTE = {
     "#C2452D",  # coral
 }
 
-#: The only gradients, each One Blue deepening: the public site's top band (the
-#: header and hero, or a legal page's title) and its final band, and the staff
-#: sign-in's background, One Blue fading into the grey. (file, selector)
+#: The only gradients, each of One Blue: the public site's final band, One Blue
+#: deepening; the faintest blue on the hero photo's top edge and a faint glow
+#: behind its screens, on the light top band; and the staff sign-in's
+#: background, One Blue fading into the grey. (file, selector)
 GRADIENTS = {
-    ("static/website/website.css", ".top-band"),
     ("static/website/website.css", ".cta"),
+    ("static/website/website.css", ".photo-hero::after"),
+    ("static/website/website.css", ".hero-visual::before"),
     ("static/staff-signin/staff-signin.css", "body.door"),
 }
 
@@ -140,13 +142,13 @@ class OnePaletteInOneFileTests(SimpleTestCase):
         self.assertTrue(used, "the 403 page is styled at all")
         self.assertLessEqual(used, PALETTE)
 
-    def test_no_gradients_but_the_three(self):
+    def test_no_gradients_but_the_four(self):
         found = set()
         for name, css in [*stylesheets(), *((n, style_blocks(h)) for n, h in page_templates())]:
             for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
                 if "gradient(" in body:
                     found.add((name, selector.strip()))
-                    self.assertRegex(body, r"linear-gradient\(\d+deg, (var\(--brand\)|color-mix\(in srgb, var\(--brand\))", f"{name} {selector}")
+                    self.assertRegex(body, r"(linear-gradient\(\d+deg|radial-gradient\(closest-side), (var\(--brand\)|color-mix\(in srgb, var\(--brand\))", f"{name} {selector}")
         self.assertEqual(found, GRADIENTS)
 
 
