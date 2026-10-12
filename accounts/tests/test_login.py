@@ -150,6 +150,8 @@ class SigningInTests(SignInSetUp):
                     "may_see_fees": False,
                     "may_see_timetable": True,
                     "has_children_here": False,
+                    # Not the administrator, so never sent to Start here.
+                    "start_here": False,
                 }
             ],
         )

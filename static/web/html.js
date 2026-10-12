@@ -1,21 +1,10 @@
 /**
- * Escaping, and the one rule every renderer in this directory obeys.
- *
- * These modules build strings and the page assigns them to `innerHTML`, so
- * **every interpolated value goes through `esc()`**. That is not belt-and-
- * braces: `school_name`, `student_name`, `class_group_name`, a subject name and
- * every remark on the card are typed by a school into the admin, and a remark
- * reading `<img src=x onerror=...>` would otherwise execute in the browser of
- * the parent reading it. Django escapes by default in a template; a string
- * built by hand has no default, so the escape has to be a named rule with a
- * test on it rather than a habit.
- *
- * Building DOM nodes and assigning `textContent` would escape by construction
- * and was the alternative. It was not taken because it makes every renderer
- * need a DOM to run, and there is no DOM in `node --test` without adding a
- * dependency and a build step to a page whose whole premise is having neither.
- * Strings keep the renderers pure functions of their data, which is what the
- * tests in `results/tests/js/` assert.
+ * Escaping, and the one rule every renderer here obeys: these modules build
+ * strings for `innerHTML`, so **every interpolated value goes through
+ * `esc()`**. Names and remarks are typed by a school, and a remark reading
+ * `<img src=x onerror=...>` would otherwise run in a parent's browser. Strings
+ * rather than DOM nodes keep the renderers pure functions that `node --test`
+ * can check with no DOM, no dependency and no build step.
  */
 
 const ESCAPES = {

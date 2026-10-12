@@ -1,17 +1,11 @@
 /*
- * Classnode's design, "One Blue": the tokens and the parts every page shares.
- *
- * Loaded first on every page (`templates/design/head.html`), and each page's
- * own stylesheet after it holds only what is that page's: its width, its rows,
- * its layout. **No page declares a colour.** `tests/test_design.py` refuses a
- * hex, rgb() or hsl() anywhere in `static/` outside this file, and refuses one
- * here that is not in the palette below — which is the whole of the palette.
- *
- * The rules it is written to (one brand colour, status colour on small
- * labels only, Hanken Grotesk at 400 and 700, 44px targets, 15px phone text)
- * are `docs/design.md`'s, and are not repeated here: this file is sent to
- * every phone on every page, and the page budget (`tests/test_budget.py`)
- * counts every byte of it, comments included. Plain CSS, no build, no CDN.
+ * Classnode's design, "One Blue": the tokens and the parts every page shares,
+ * loaded first on every page (`templates/design/head.html`); a page's own
+ * stylesheet holds only its layout. **No page declares a colour**:
+ * `tests/test_design.py` refuses one outside this file, and one here that is
+ * not in the palette below. The rules are `docs/design.md`'s, not repeated
+ * here, because this file goes to every phone on every page and the page
+ * budget (`tests/test_budget.py`) counts its comments too.
  */
 
 @font-face {
