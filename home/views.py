@@ -14,6 +14,8 @@ says the dashboard lives on the school's own address.
 
 from django.shortcuts import render
 
+from onboarding import first as first_days
+from onboarding import progress as onboarding
 from schools.hosts import portal_host
 
 from . import dashboard, facts
@@ -32,7 +34,23 @@ def home_page(request):
     if not roles & dashboard.HOME_ROLES:
         return render(request, TEMPLATE, {"state": "not-yours"}, status=403)
     dash = dashboard.build(facts.load(school), school=school, user=user, roles=roles)
-    return render(request, TEMPLATE, {"state": "home", "dash": dash})
+    # Setup, from `onboarding.progress`: the administrator's next step as a
+    # card at the top, until setup is first finished; the principal, while
+    # there are no students yet, how far the administrator has got. Never a
+    # redirect: only signing in sends an administrator to Start here.
+    setup = onboarding.for_request(request)
+    if setup is not None and setup.next is not None:
+        # The next-step card says it already; the list below need not repeat it.
+        dash["attention"] = [item for item in dash["attention"] if item["key"] != "contact"]
+    if setup is None and dash["setup"] and not onboarding.is_onboarding(roles):
+        setup = onboarding.progress_for(school)
+    return render(request, TEMPLATE, {
+        "state": "home",
+        "dash": dash,
+        "setup": setup,
+        "leads_setup": onboarding.is_onboarding(roles),
+        "first": first_days.card_for(request, school, user, roles),
+    })
 
 
 __all__ = ["home_page"]

@@ -21,6 +21,11 @@ served, for the oracle reason `home/views.py` gives.
       {% if state == "home" %}
       {% include "home/parts/icons.html" %}
       {% include "home/parts/head.html" %}
+      {% if setup and leads_setup and setup.next %}
+        {% include "onboarding/parts/step_icons.html" %}
+        {% include "onboarding/parts/next_card.html" with progress=setup on_dashboard=True %}
+      {% endif %}
+      {% if first %}{% include "home/parts/first.html" %}{% endif %}
       {% if dash.setup %}
         {% include "home/parts/setup.html" %}
       {% elif dash.waiting %}

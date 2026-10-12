@@ -37,6 +37,48 @@ export function nothing({ hasChildren = false } = {}) {
 }
 
 /**
+ * A family's first fourteen days (`first_days` from the API): what they can
+ * see here, child by child, in two short lines. Only this caller's own
+ * children reach this page (`card_api._children_of()`).
+ *
+ * "Report card ready" only for a card released to families and not being
+ * held: the API lists nothing else, and a held card says so in the list
+ * below instead. Fees only where the existing page would show them, which is
+ * where to pay (`payInto`, from `GET /api/fees/virtual/mine/`), never a
+ * balance.
+ */
+export function welcome({ name = "", children = [], payInto = {} } = {}) {
+  if (!children.length) return "";
+  const lines = children.map((c) => {
+    const ready = (c.cards || []).filter((card) => !card.is_withheld);
+    const latest = ready[0]; // newest first (`card_api._cards_of()`)
+    const cardLine = latest
+      ? `<a href="/cards/${encodeURIComponent(c.student_membership_id)}/${encodeURIComponent(latest.term_id)}/">` +
+        `See the report card</a>: ${esc(latest.term_label)} ${esc(latest.academic_session)} is ready`
+      : "No report card has been released yet. It shows here as soon as the school releases it.";
+    const pay = payInto[c.student_membership_id];
+    const feeLine = pay
+      ? `Fees: pay into ${esc(pay.bank_name)} <strong>${esc(pay.account_number)}</strong>, ${esc(pay.account_name)}`
+      : "";
+    return [
+      `<li data-welcome-child="${esc(c.student_membership_id)}">`,
+      `<strong>${esc(c.student_name)}</strong>`,
+      `<span>${cardLine}</span>`,
+      feeLine ? `<span>${feeLine}</span>` : "",
+      "</li>",
+    ].join("");
+  });
+  return [
+    '<section class="welcome" data-state="welcome">',
+    `<h2>Welcome${name ? `, ${esc(name)}` : ""}</h2>`,
+    "<p>Here is what you can see for your children on Classnode.</p>",
+    `<ul>${lines.join("")}</ul>`,
+    "<p class=\"blank\">A child missing? Call the school office and they will add them to your account.</p>",
+    "</section>",
+  ].join("");
+}
+
+/**
  * 401. Sign-in is on the portal and this page is on a school's host, so the
  * link out has to be absolute — and the portal's address is **not** something
  * the API will tell this page. `api._portal_only()` settles that: the client

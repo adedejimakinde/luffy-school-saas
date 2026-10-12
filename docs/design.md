@@ -81,7 +81,13 @@ Mobile first, checked at 360, 768 and 1280.
   (`table.stack`): the row's name or number heads the card, each other cell is
   a "label  value" line from its `data-label`, and a row's problems or buttons
   close the card. A list that is already a `ul` (the roll, results, staff) is
-  the same card (`.stack-list`).
+  the same card (`.stack-list`). In the markup: `td.stack-head` is the card's
+  first line (what the row is, with a status label pushed right), `td.stack-full`
+  a block under the lines (problems, a note, the row's buttons), `td.stack-hide`
+  says again what the head said and is left out, and an empty labelled cell is
+  left out rather than a label beside nothing. A table clipped at "Full name"
+  with the rest in a sideways scroller is a table nobody on a phone reads to the
+  end, which is why this exists.
 - **Three tables keep scrolling sideways on a phone**, because their columns
   are the point: the broadsheet, the timetable and the marking sheet. They sit
   in a `.wide` scroller with the first column fixed (the broadsheet fixes the

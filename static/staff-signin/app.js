@@ -27,6 +27,7 @@
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
 import { postJson } from "../web/http.js";
+import { hostHref } from "../web/html.js";
 import * as steps from "./states.js";
 
 const LOGIN_URL = "/api/login/";
@@ -85,6 +86,23 @@ export function afterSignOut(state, answer) {
   return { ...state, signOutFailed: true };
 }
 
+/**
+ * Where a successful sign-in goes by itself, or null to stay on the landing.
+ *
+ * Only an administrator whose school has never finished setup is sent on,
+ * to Start here, and only when that is the one school this login reaches:
+ * with several, the landing lists Start here first and lets them choose.
+ * Everybody else keeps the landing. `start_here` is the server's answer
+ * (`api._schools_of()`), so this never guesses from a role.
+ */
+export function landingRedirect(state) {
+  if (state.step !== "landed") return null;
+  const schools = (state.body && state.body.schools) || [];
+  if (schools.length !== 1 || !schools[0].start_here) return null;
+  const school = schools[0];
+  return hostHref(school.host, "/start/", { pathOnly: Boolean(school.path_only) }) || null;
+}
+
 /** The markup for a state. Pure, so the dispatch itself is testable. */
 export function htmlFor(state) {
   const body = state.body || {};
@@ -116,7 +134,7 @@ function note(state) {
   return state.signOutFailed ? failureNote() : "";
 }
 
-export function mount(root, { fetchImpl = fetch } = {}) {
+export function mount(root, { fetchImpl = fetch, go = (url) => window.location.assign(url) } = {}) {
   let state = initialState();
 
   const draw = () => {
@@ -140,6 +158,8 @@ export function mount(root, { fetchImpl = fetch } = {}) {
     }
     state = advance(state, answer);
     draw();
+    const next = landingRedirect(state);
+    if (next) go(next);
   });
 
   root.addEventListener("click", async (event) => {

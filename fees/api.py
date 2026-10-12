@@ -82,6 +82,9 @@ class BooksOut(Schema):
     #: The bursar or an administrator, at a school that sends fee reminders
     #: (docs/messaging.md D10). The page offers "Remind families" only then.
     may_remind: bool = False
+    #: Has any class a bill with a line on it for this term? Without one the
+    #: page shows its empty state, "No fees yet".
+    has_fee_items: bool = False
 
 
 class ChildBalanceOut(Schema):
@@ -344,6 +347,7 @@ def books(request, term_id: Optional[int] = None):
         may_write=may_write(request.user, school),
         classes=classes,
         may_remind=_may_remind(request.user, school),
+        has_fee_items=term is not None and FeeScheduleLine.objects.filter(schedule__term=term).exists(),
     )
 
 

@@ -179,3 +179,16 @@ class TheWorkerKeepsWhatThePagesLoadTests(MarkingSetUp):
                 changed = views.config()["version"]
 
         self.assertNotEqual(first, changed)
+
+    def test_the_version_changes_when_the_generation_is_bumped(self):
+        """Same names, new bytes: under plain storage only the generation says
+        the shell changed, so bumping it must give the worker a new cache."""
+        from unittest import mock
+
+        from sync import views
+
+        first = self.config()["version"]
+        with mock.patch.object(views, "CACHE_GENERATION", views.CACHE_GENERATION + 1):
+            bumped = views.config()["version"]
+
+        self.assertNotEqual(first, bumped)

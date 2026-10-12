@@ -212,6 +212,9 @@ TENANT_APPS = [
     # The principal's home: no tables of its own, only a read over the ones
     # above. An app so its page template sits where every other page's does.
     "home",
+    # Start here, the step pages and Help and next steps: no tables of its
+    # own either. What is done is read from the tables above every time.
+    "onboarding",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

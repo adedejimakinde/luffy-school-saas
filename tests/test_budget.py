@@ -73,6 +73,7 @@ SCHOOL_PAGES = (
     "/promotion/",
     "/ogsera/",
     "/teaching/",
+    "/help/",
     "/",
 )
 
@@ -98,6 +99,13 @@ QUERIES["/"] = 20
 #: students costs three statements on a cold cache and none on a warm one
 #: (`home.tests.test_dashboard.ThreeStatementsAndThenNoneTests`).
 QUERIES["/home/"] = 16
+#: These logins are teachers in their first fourteen days, so Home also asks
+#: whether each has taken a register and entered a mark yet, for the first-days
+#: card (`onboarding.first`): one statement and its search path.
+QUERIES["/home/"] += 2
+#: Help and next steps draws tips and support, and reads nothing of its own;
+#: like Home it does not ask for the portal's hostname.
+QUERIES["/help/"] = 14
 
 _ASSET = re.compile(r'<(?:link|script|img|iframe|source|video|audio)\b[^>]*?\b(?:src|href)="([^"]*)"', re.I)
 _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)

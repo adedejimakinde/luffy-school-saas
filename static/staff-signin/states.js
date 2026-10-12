@@ -169,6 +169,10 @@ function school(entry) {
   const { name = "", host = null } = entry;
   const where = { pathOnly: Boolean(entry.path_only) };
   const links = [];
+  // An administrator whose school is not set up yet: Start here comes first.
+  if (entry.start_here) {
+    links.push([hostHref(host, "/start/", where), "Start here: set up your school"]);
+  }
   if (entry.may_take_a_register) {
     links.push([hostHref(host, "/register/", where), "Take a register"]);
   }

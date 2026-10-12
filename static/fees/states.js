@@ -22,7 +22,7 @@
  * and why — issue #75. Nothing about a concession is ever edited.
  */
 
-import { esc } from "../web/html.js";
+import { emptyState, esc } from "../web/html.js";
 import { balanceWords, naira, signed } from "./money.js";
 
 function termOptions(terms, chosen) {
@@ -45,14 +45,26 @@ export function balance(kobo) {
 export function books({
   books: body = {}, notSent = [], reminding = null, note = "", noteTone = "",
 } = {}) {
-  const { terms = [], term_id: termId, term = "", classes = [], may_remind: mayRemind = false } = body;
+  const {
+    terms = [], term_id: termId, term = "", classes = [], may_remind: mayRemind = false,
+    may_write: mayWrite = false, has_fee_items: hasFeeItems = true,
+  } = body;
   return [
     '<section class="state state-books" data-state="books">',
     "<h1>Fees</h1>",
     `<form class="chooser"><label for="term">Term</label>`,
     `<select id="term" data-term>${termOptions(terms, termId)}</select></form>`,
     `<h2>${esc(term)}</h2>`,
-    '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>',
+    hasFeeItems
+      ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>'
+      : emptyState({
+          key: "fees",
+          icon: "i-fees",
+          title: "No fees yet",
+          text: "Add what parents pay this term, such as school fees, PTA levy and uniform. Then payments can be recorded against them.",
+          action: mayWrite ? { data: "open-bills", label: "Set up this term's bills" } : null,
+          who: "The bursar sets up fees.",
+        }),
     classes.length
       ? '<ul class="classes">' +
         classes

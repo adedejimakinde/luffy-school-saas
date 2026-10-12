@@ -1,0 +1,4 @@
+<div class="progress">
+  <p class="progress-line"><strong>{{ progress.done }} of {{ progress.total }} done</strong>{% if progress.minutes_left %}<span>About {{ progress.minutes_left }} minutes left</span>{% endif %}</p>
+  <svg class="meter" role="img" aria-label="{{ progress.done }} of {{ progress.total }} steps done"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ progress.percent }}%" height="8" rx="4"/></svg>
+</div>

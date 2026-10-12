@@ -10,7 +10,7 @@
  * not.
  */
 
-import { esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, numberOrBlank } from "../web/html.js";
 import { heldNote } from "../web/offline.js";
 import { copyNote } from "../web/snapshots.js";
 
@@ -24,7 +24,25 @@ import { copyNote } from "../web/snapshots.js";
  * which students take which subject, which is issue #127 and why SSS electives
  * cannot be expressed at all.
  */
-export function choose({ term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [] } = {}) {
+export function choose({
+  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false,
+} = {}) {
+  // Only from a live answer: never from a failed fetch or the phone's copy.
+  if ((!assessments.length || !classes.length) && !asOf) {
+    const none = !classes.length;
+    return (
+      '<section class="state state-choose" data-state="choose"><h1>Enter marks</h1>' +
+      emptyState({
+        key: "marks",
+        icon: "i-marks",
+        title: none ? "No classes yet" : "No papers to mark yet",
+        text: `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
+        action: may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
+        who: "The school office adds these.",
+      }) +
+      "</section>"
+    );
+  }
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Enter marks</h1>",

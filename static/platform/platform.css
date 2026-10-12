@@ -19,3 +19,32 @@ input { width: 100%; }
 .payments li { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--divider); }
 .payments .reference, .payments .account { color: var(--muted); word-break: break-all; }
 .handover { word-break: break-all; padding: 8px 12px; background: var(--card); border-radius: var(--radius); }
+
+/* New school handover (`onboarding.handover`): a wider page, two columns on a desk. */
+main.handover-page { max-width: 60rem; }
+.school-pick { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; padding: 0; list-style: none; }
+.school-pick a {
+  display: inline-flex; align-items: center; gap: 8px; min-height: var(--control); padding: 0 14px;
+  color: var(--text); text-decoration: none; border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--small);
+}
+.school-pick a[aria-current="page"] { color: var(--brand); background: var(--brand-tint); border-color: var(--brand-soft); font-weight: 700; }
+.handover-grid { display: grid; gap: 16px; }
+@media (min-width: 1024px) { .handover-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.check-list { list-style: none; margin: 0; padding: 0; }
+.check-list li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 0; }
+.check-list li + li { border-top: 1px solid var(--divider); }
+.check-list .mark { width: 24px; height: 24px; }
+.check-list .yes .mark { color: var(--ok); }
+.check-list .no .mark { color: var(--field-border); }
+.check-list .text { display: grid; min-width: 0; }
+.check-list .text span { color: var(--muted); font-size: var(--small); }
+.check-list form { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.check-list form label { margin: 0; flex: 1 1 10rem; }
+.check-list form input { margin-top: 6px; }
+.welcome-text {
+  margin: 0 0 12px; padding: 14px; white-space: pre-wrap; font: inherit; font-size: var(--small); line-height: 1.55;
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  user-select: all; -webkit-user-select: all; overflow-wrap: anywhere;
+}
+.platform-only { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+.platform-only .icon { width: 16px; height: 16px; }

@@ -403,54 +403,84 @@ a.kpi:hover {
 .feed p { padding-top: var(--s-half); line-height: 1.45; }
 .feed time { padding-top: var(--s-half); color: var(--muted); font-size: var(--t-3); white-space: nowrap; }
 
-/* -- Set up your school ----------------------------------------------------- */
-.setup-head { display: grid; gap: var(--s-1); margin: 0 0 var(--s-2); }
-.setup-head h2 { font-size: var(--t-5); }
-.setup-head p { color: var(--muted); }
-
-.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-1); }
-
-.steps a, .steps .step-static {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--s-2);
-  min-height: 64px;
-  padding: var(--s-2);
-  color: var(--text);
-  text-decoration: none;
-  border: 1px solid var(--border);
-  border-radius: var(--r-control);
-  transition: border-color var(--ease), background-color var(--ease);
-}
-
-.steps a:hover { color: var(--text); border-color: var(--brand-soft); background: var(--brand-tint); }
-.steps .done .icon:first-child { color: var(--ok); }
-.steps .todo .icon:first-child { color: var(--field-border); }
-.steps .step-text { display: grid; gap: 2px; }
-.steps .step-text span { color: var(--muted); font-size: var(--t-3); }
-.steps .done strong { color: var(--muted); }
-
-.steps .go {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 var(--s-2);
-  color: var(--card);
-  background: var(--brand);
-  border-radius: var(--r-control);
-  font-weight: 700;
-  font-size: var(--t-3);
-  transition: background-color var(--ease);
-}
-
-.steps a:hover .go { background: var(--brand-strong); }
-
-/* On a phone the step's own icon says done or not, and the text gets the width. */
-@media (max-width: 639.98px) {
-  .steps .go, .steps .chip { display: none; }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .dash * { transition: none !important; }
 }
+
+/* -- Your next step --------------------------------------------------------
+ *
+ * The administrator's one big card while setup is not finished, at the top
+ * of the dashboard and of Start here (`onboarding`). One button. Its own
+ * scale is this file's, so Start here loads this file too.
+ */
+.next-card {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--brand-soft);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-2);
+}
+.next-card h2 { font-size: var(--t-5); line-height: 1.25; }
+.next-card p { color: var(--muted); }
+.next-card .btn-primary { width: 100%; }
+.next-top { display: flex; align-items: center; gap: var(--s-2); }
+.next-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: var(--r-card);
+}
+.next-icon .icon { width: 24px; height: 24px; }
+.next-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); font-size: var(--t-3); }
+.next-meta a { display: inline-flex; align-items: center; min-height: var(--control); font-weight: 700; text-decoration: none; }
+
+@media (min-width: 640px) {
+  .next-card { padding: var(--s-4); }
+  .next-card .btn-primary { justify-self: start; width: auto; min-width: 240px; }
+}
+
+/* Progress: one line of words and a bar. */
+.progress { display: grid; gap: var(--s-1); }
+.progress-line { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--t-3); }
+.progress-line strong { font-variant-numeric: tabular-nums; }
+.progress-line span { color: var(--muted); }
+
+/* -- First days: one card per role ------------------------------------------
+ *
+ * A teacher's or a bursar's first things to do, until they have done them or
+ * fourteen days have passed (`onboarding.first`).
+ */
+.first-card { display: grid; gap: var(--s-2); }
+.first-card h2 { font-size: var(--t-5); }
+.first-actions { display: grid; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) {
+  .first-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); }
+}
+.first-action {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: 72px;
+  height: 100%;
+  padding: var(--s-2);
+  color: var(--text);
+  text-decoration: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-card);
+  transition: border-color var(--ease), box-shadow var(--ease);
+}
+a.first-action:hover { color: var(--text); border-color: var(--brand-soft); box-shadow: var(--shadow-2); }
+.first-action .todo-text span { color: var(--muted); }
+.first-action.is-done { background: var(--bg); }
+.first-action.is-done strong { color: var(--muted); font-weight: 400; }
+.first-action > .icon { width: 18px; height: 18px; color: var(--muted); }
+.first-action.is-done > .icon { color: var(--ok); }
+

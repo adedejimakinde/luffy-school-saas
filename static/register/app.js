@@ -146,6 +146,7 @@ export function fromWhere(answer, { on = "" } = {}) {
     term: answer.body.term,
     term_id: answer.body.term_id,
     classes: answer.body.classes || [],
+    may_set_up: Boolean(answer.body.may_set_up),
     on,
     asOf: answer.asOf || null,
   };

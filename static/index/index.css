@@ -65,3 +65,16 @@ h2 { font-size: 1.05rem; margin: 20px 0 6px; }
  * sign-in pages and the card page are on as well.
  */
 button.signout { display: block; margin: 24px 0 0; padding-left: 0; }
+
+/* A family's first fourteen days: what they can see, child by child. */
+.welcome {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+.welcome h2 { margin: 0 0 4px; }
+.welcome ul { display: grid; gap: 12px; margin: 12px 0; padding: 0; list-style: none; }
+.welcome li { display: grid; gap: 2px; }
+.welcome li span { color: var(--muted); font-size: var(--small); }
+.welcome a { font-weight: 700; }

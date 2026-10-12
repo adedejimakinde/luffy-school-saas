@@ -1,0 +1,74 @@
+{% load static %}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New school handover</title>
+
+{% comment %}
+The platform's New school handover page (`onboarding.handover`): drawn whole
+on the server, no script. The portal only, and platform staff only; the
+title names no school and no person, since a refusal is served from here too.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'platform/platform.css' %}">
+
+{% include "design/icons.html" %}
+{% include "onboarding/parts/icons.html" %}
+<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+<main class="handover-page" data-state="{{ state }}">
+  {% if state == "handover" %}
+  <div class="page-head">
+    <div>
+      <p class="platform-only"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Platform staff only</p>
+      <h1>New school handover</h1>
+      <p>What is done and what is left for each new school.</p>
+    </div>
+    <a href="/platform/">All schools</a>
+  </div>
+  {% if rows %}
+  <ul class="school-pick" aria-label="Schools">
+    {% for row in rows %}
+    <li><a href="/platform/handover/?school={{ row.school.slug|urlencode }}"{% if current and row.school.pk == current.school.pk %} aria-current="page"{% endif %}><span class="label {% if row.done == row.total %}label-ok{% else %}label-warn{% endif %}">{{ row.done }} of {{ row.total }}</span>{{ row.school.name }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if current %}
+  <div class="handover-grid">
+    <section class="card" aria-labelledby="checks-title" data-school="{{ current.school.slug }}">
+      <div class="card-head"><h2 id="checks-title">{{ current.school.name }}</h2><span class="label {% if current.done == current.total %}label-ok{% else %}label-warn{% endif %}">{{ current.done }} of {{ current.total }}</span></div>
+      <ul class="check-list">
+        {% for check in current.checks %}
+        <li class="{% if check.done %}yes{% else %}no{% endif %}" data-check="{{ check.key }}" data-done="{{ check.done|yesno:'yes,no' }}">
+          <svg class="icon mark" aria-hidden="true"><use href="#{% if check.done %}i-check{% else %}i-todo{% endif %}"/></svg>
+          <span class="text"><strong>{{ check.title }}</strong><span>{{ check.detail }}</span></span>
+          {% if check.key == "setup" and not check.done %}<span class="label label-warn">{{ current.progress.done }} of {{ current.progress.total }}</span>{% elif check.done %}<span class="label label-ok">Done</span>{% else %}<span class="label">Not yet</span>{% endif %}
+          {% if check.key == "pilot" %}
+          <form method="post" action="/platform/handover/">
+            {% csrf_token %}
+            <input type="hidden" name="school" value="{{ current.school.slug }}">
+            <label for="signed_on">Signed on<input id="signed_on" name="signed_on" type="date" max="{{ today|date:'Y-m-d' }}" value="{{ current.school.pilot_agreement_signed_on|date:'Y-m-d' }}" required></label>
+            <button type="submit">{% if check.done %}Change{% else %}Record{% endif %}</button>
+          </form>
+          {% if note %}<p class="msg" role="alert"><span class="label label-stop">Not saved</span> {{ note }}</p>{% endif %}
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    <section class="card" aria-labelledby="welcome-title">
+      <div class="card-head"><h2 id="welcome-title">Welcome message</h2></div>
+      <p class="quiet">Tap the message once to select it all, then copy it into WhatsApp or an email to the administrator. It carries no invitation link.</p>
+      <pre class="welcome-text" data-welcome>{{ current.welcome }}</pre>
+    </section>
+  </div>
+  {% else %}
+  <p class="blank">No school has been added yet. <a href="/platform/">Add one</a></p>
+  {% endif %}
+  {% elif state == "signed-out" %}
+  <h1>Please sign in</h1>
+  <p>This page is for the platform's own staff.</p>
+  {% if portal_host %}<p><a href="//{{ portal_host }}/staff-sign-in/">Sign in</a></p>{% endif %}
+  {% else %}
+  <h1>This page is not yours</h1>
+  <p>This page is for the platform's own staff.</p>
+  {% endif %}
+</main>

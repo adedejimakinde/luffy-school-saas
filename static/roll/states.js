@@ -12,7 +12,7 @@
  * panel's own boolean: ADMIN alone links and removes, and a principal reads.
  */
 
-import { esc } from "../web/html.js";
+import { emptyState, esc } from "../web/html.js";
 
 /** The roll: every child, where they sit, and what may be done about it. */
 export function roll({
@@ -30,18 +30,51 @@ export function roll({
     "<h1>The roll</h1>",
     `<p class="term">${esc(term) || "No term is open"}</p>`,
     // A whole class from a spreadsheet: the same authority as admitting one.
-    may_admit ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>' : "",
+    // Left off an empty roll, whose empty state carries the one button.
+    may_admit && children.length
+      ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>'
+      : "",
     panel ? guardiansPanel(panel) : "",
     details ? detailsPanel(details) : "",
     children.length
       ? `<ul class="children stack-list">${children
           .map((c) => childRow(c, { classes, may_place }))
           .join("")}</ul>`
-      : '<p class="blank">Nobody is enrolled here yet.</p>',
+      : emptyRoll({ classes, may_admit, may_place }),
     may_admit ? admitForm(classes, notes.admit) : notTheAdmissionsOffice(),
     notes.place ? `<p class="note" role="alert">${esc(notes.place.detail)}</p>` : "",
     "</section>",
   ].join("");
+}
+
+/**
+ * Nobody on the roll yet. Before the school has a class that is the thing to
+ * do first, since every student is placed in a class as they join: an
+ * administrator is sent to that setup step, a principal to the setup page.
+ */
+export function emptyRoll({ classes = [], may_admit = false, may_place = false } = {}) {
+  if (!classes.length) {
+    return emptyState({
+      key: "students-need-classes",
+      icon: "i-sheet",
+      title: "Add your classes first",
+      text: "Each student is placed in a class as they join, so the roll needs your classes before anybody can be added.",
+      action: may_admit
+        ? { href: "/start/classes/", label: "Go to Add your classes" }
+        : may_place
+          ? { href: "/setup/#classes", label: "Add your classes" }
+          : null,
+      who: "The school administrator adds the classes.",
+    });
+  }
+  return emptyState({
+    key: "students",
+    icon: "i-people",
+    title: "No students yet",
+    text: "Import your roll from an Excel or CSV file. Each student goes straight into their class.",
+    action: may_admit ? { href: "/roll/import/", label: "Import students" } : null,
+    who: "The school administrator adds students.",
+  });
 }
 
 /**

@@ -57,9 +57,6 @@ ROLL_ROLES = MEMBERSHIP_GRANTING_ROLES | PLACEMENT_ROLES
 #: the classes they form-teach.
 WHOLE_SCHOOL_ROLES = STAFF_ROLES - {Role.TEACHER.value}
 
-#: The roll import needs both authorities (`enrolment_api._may_import()`).
-IMPORT_ROLES = MEMBERSHIP_GRANTING_ROLES & PLACEMENT_ROLES
-
 MINUS = "−"
 MAX_ATTENTION = 5
 MAX_ACTIVITY = 5
@@ -263,8 +260,11 @@ def build(facts: dict, *, school, user, roles, now: Optional[datetime] = None) -
     }
     if facts["setting_up"]:
         dash["greeting"] = "Welcome"
+        # The steps themselves are `onboarding.progress`'s: the administrator
+        # gets the next one as a card above this, and the principal how far
+        # the administrator has got (`home/views.py`).
         if scope.may(SETUP_ROLES | MEMBERSHIP_GRANTING_ROLES):
-            dash["setup"] = setup_steps(facts, scope)
+            dash["setup"] = True
         else:
             dash["waiting"] = True
         return dash
@@ -278,48 +278,6 @@ def build(facts: dict, *, school, user, roles, now: Optional[datetime] = None) -
         dash["week"] = week["card"]
     dash["activity"] = activity(facts, scope, today)[:MAX_ACTIVITY]
     return dash
-
-
-# -- set up your school ----------------------------------------------------------
-
-
-def setup_steps(facts: dict, scope: Scope) -> dict:
-    people = facts["people"]
-    steps = [
-        {
-            "title": "Add your classes",
-            "detail": "JSS 1 to SS 3, with arms such as A, B and C",
-            "href": "/setup/",
-            "action": "Add classes",
-            "done": bool(people["classes"]),
-            "roles": SETUP_ROLES,
-        },
-        {
-            "title": "Invite your teachers",
-            "detail": "They get an email or SMS link to set a password",
-            "href": "/staff/",
-            "action": "Invite",
-            "done": bool(people["people"].get(Role.TEACHER.value)),
-            "roles": MEMBERSHIP_GRANTING_ROLES,
-        },
-        {
-            "title": "Import your students",
-            "detail": "Upload the roll as an Excel or CSV file",
-            "href": "/roll/import/",
-            "action": "Import",
-            "done": bool(people["people"].get(Role.STUDENT.value)),
-            "roles": IMPORT_ROLES,
-        },
-    ]
-    for step in steps:
-        if not scope.may(step.pop("roles")):
-            # Shown, so the reader knows what is left, but not linked: the page
-            # behind it would refuse them.
-            step["href"] = None
-            if not step["done"]:
-                step["detail"] = "Your school administrator does this"
-    done = sum(step["done"] for step in steps)
-    return {"steps": steps, "done": done, "percent": round(done * 100 / len(steps))}
 
 
 # -- attendance ------------------------------------------------------------------

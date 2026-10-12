@@ -219,8 +219,34 @@ class EmailChannel(Channel):
             f"{invitation.invited_by.get_full_name()} has invited you to join "
             f"{invitation.school.name} as {invitation.membership.get_role_display()}.\n\n"
             f"Accept the invitation:\n{accept_url}\n\n"
-            f"The link stops working on {expires_at.strftime('%d %B %Y')}."
+            f"The link stops working on {expires_at.strftime('%d %B %Y')}.\n\n"
+            f"{first_step_for(invitation.membership.role)}"
         )
+
+
+#: What to do after accepting, in plain words, by role (`onboarding`). The
+#: administrator's points at step 1 of Start here.
+FIRST_STEPS = {
+    "admin": (
+        "What happens next: set your password, then sign in. Classnode opens "
+        "Start here, which takes you through setting up your school one step "
+        "at a time. Step 1 is your school's contact email and crest, and it "
+        "takes about two minutes."
+    ),
+    "teacher": (
+        "What happens next: set your password, then sign in. Your home page "
+        "shows you how to take a register and enter marks."
+    ),
+    "bursar": (
+        "What happens next: set your password, then sign in. Your home page "
+        "shows you how to set up fees and record a payment."
+    ),
+}
+FIRST_STEP_OTHERWISE = "What happens next: set your password, then sign in to your school's home page."
+
+
+def first_step_for(role: str) -> str:
+    return FIRST_STEPS.get(role, FIRST_STEP_OTHERWISE)
 
 
 def get_channel():

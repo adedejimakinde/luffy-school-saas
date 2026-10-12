@@ -31,7 +31,8 @@ function schoolList(schools) {
       .map(
         (s) =>
           `<li><span><strong>${esc(s.name)}</strong> <span class="host">${esc(s.host || s.subdomain)}</span></span>` +
-          `<span class="count">${esc(s.students)} ${s.students === 1 ? "student" : "students"}</span></li>`,
+          `<span class="count">${esc(s.students)} ${s.students === 1 ? "student" : "students"}</span>` +
+          `<a href="/platform/handover/?school=${encodeURIComponent(s.subdomain)}">Handover</a></li>`,
       )
       .join(""),
     "</ul>",
@@ -75,7 +76,7 @@ export function unroutedList(payments = []) {
 export function main({ schools = [], made = null, note = null, values = {}, unrouted = [] } = {}) {
   return [
     '<section class="state state-main" data-state="main">',
-    '<div class="page-head"><div><h1>Schools</h1></div></div>',
+    '<div class="page-head"><div><h1>Schools</h1></div><a href="/platform/handover/">New school handover</a></div>',
     made ? invited(made) : "",
     addForm(made ? {} : values, note),
     `<h2>${esc(schools.length)} ${schools.length === 1 ? "school" : "schools"}</h2>`,

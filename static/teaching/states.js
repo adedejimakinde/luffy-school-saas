@@ -26,7 +26,7 @@ export function overview({ term = null, subjects = [], classes = [], teachers = 
       : '<p class="blank">No classes yet. Open them on the Setup page.</p>',
     teachers.length ? "" : '<p class="hint">No teachers yet. Invite them on the Staff page.</p>',
 
-    "<h2>Subjects</h2>",
+    '<h2 id="subjects">Subjects</h2>',
     subjects.length
       ? `<ul class="subjects-list">${subjects.map(subjectRow).join("")}</ul>`
       : '<p class="blank">No subjects yet.</p>',
@@ -88,7 +88,7 @@ export function subject(s, { editing = null, confirming = null, notes = {} } = {
     note(notes.subject),
     "</form>",
 
-    "<h2>Papers this term</h2>",
+    '<h2 id="papers">Papers this term</h2>',
     s.papers.length
       ? `<ul class="classes">${s.papers.map((p) => paperRow(p, editing, confirming, notes["paper" + p.assessment_id])).join("")}</ul>`
       : '<p class="blank">No papers yet. Add the first CA and the exam.</p>',

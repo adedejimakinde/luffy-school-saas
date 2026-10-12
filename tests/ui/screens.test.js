@@ -87,6 +87,9 @@ const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet, table.og
 const SMALL_ON_PURPOSE =
   ".label, .tag, .revised, .nav-heading, .tab-label, .marks-summary, " +
   ".eyebrow, .chip, .spark-axis, .week-labels, .fee-split dt, " +
+  // The administrator's setup chip in the top bar: a status chip like `.chip`,
+  // 13px so the bar still fits a 360px phone beside the logo and the avatar.
+  ".setup-chip, " +
   // The homepage's drawings of the product: pictures, each read by its
   // description (`role="img"` and `aria-label`, or `aria-hidden` beside a
   // screen that has one), like the screenshots beside them.
@@ -144,6 +147,14 @@ export const SCREENS = [
   { name: "home-admin", as: "sunrise.admin", url: `${SUNRISE}/home/` },
   { name: "home-teacher", as: "sunrise.teacher", url: `${SUNRISE}/home/` },
   { name: "home-bursar", as: "sunrise.bursar", url: `${SUNRISE}/home/` },
+
+  // Onboarding: Start here, a step, a locked step's page and Help, as the
+  // demo's administrator (whose school is part set up), and Help as a teacher.
+  { name: "start-here", as: "sunrise.admin", url: `${SUNRISE}/start/` },
+  { name: "start-step", as: "sunrise.admin", url: `${SUNRISE}/start/school-details/` },
+  { name: "start-report-card", as: "sunrise.admin", url: `${SUNRISE}/start/report-card/` },
+  { name: "help", as: "sunrise.admin", url: `${SUNRISE}/help/` },
+  { name: "help-teacher", as: "sunrise.teacher", url: `${SUNRISE}/help/` },
 
   // The principal.
   { name: "results", as: "sunrise.principal", url: `${SUNRISE}/results/` },

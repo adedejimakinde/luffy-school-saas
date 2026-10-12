@@ -179,6 +179,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Membership.role; this flag is only for platform-wide access.
     is_platform_staff = models.BooleanField(default=False)
     date_joined = models.DateTimeField(default=timezone.now)
+    #: The first time this login signed in anywhere on the platform, set once
+    #: (`onboarding.signals`). The first-day cards count fourteen days from it;
+    #: `last_login` moves on every sign-in and cannot answer that.
+    first_signed_in_at = models.DateTimeField(null=True, blank=True)
 
     objects = UserManager()
 

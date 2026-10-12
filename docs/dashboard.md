@@ -19,7 +19,8 @@ nothing to fetch after it and no script to run.
 | Fee collection | Collected against billed, a sparkline of the term's weeks so far, the meter, and this week, outstanding and owing. |
 | Attendance this week | Monday to Friday as bars, plus a Saturday or Sunday only if a register was taken on it. A day with no register yet is a dashed empty slot labelled "Not yet" (or "None" once it has passed), never a low bar. |
 | Recent activity | The latest five lines from the logs the school already keeps (below). |
-| Set up your school | Instead of all the above while the school has no students: add classes, invite teachers, import students, each ticked off as it is done. |
+| Your next step | The administrator, until setup is first finished: one card at the top with the next of the eight setup steps and one button (`docs/onboarding.md`). While the school has no students it stands instead of the figures; the principal then sees how far the administrator has got. |
+| First days | A teacher (register, marks) or a bursar (fees, a payment), until they have done both or for fourteen days after their first sign-in. |
 
 ## Attendance: one day, told three ways
 
@@ -62,8 +63,9 @@ minutes (`CACHE_SECONDS`) under `home:facts:v1:<schema>:<school id>:<day>`. The
 schema is the tenant the statements ran in; the id is there because a schema
 name can be reused and an id never is. One cached copy serves every role at
 one school; `home.dashboard.build()` narrows it to one login after it leaves
-the cache. A school still being set up is read fresh every time, so its
-checklist ticks the moment a step is done.
+the cache. A school still being set up is read fresh every time. The setup steps are
+not read from this cache at all: `onboarding.progress` reads them fresh, one
+statement, so a step shows done the moment it is.
 
 The cache is Django's default, per process. A shared cache (Redis is already
 running for Celery) is a one-line `CACHES` setting if more workers ever make

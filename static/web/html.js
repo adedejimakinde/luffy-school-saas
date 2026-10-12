@@ -1,21 +1,10 @@
 /**
- * Escaping, and the one rule every renderer in this directory obeys.
- *
- * These modules build strings and the page assigns them to `innerHTML`, so
- * **every interpolated value goes through `esc()`**. That is not belt-and-
- * braces: `school_name`, `student_name`, `class_group_name`, a subject name and
- * every remark on the card are typed by a school into the admin, and a remark
- * reading `<img src=x onerror=...>` would otherwise execute in the browser of
- * the parent reading it. Django escapes by default in a template; a string
- * built by hand has no default, so the escape has to be a named rule with a
- * test on it rather than a habit.
- *
- * Building DOM nodes and assigning `textContent` would escape by construction
- * and was the alternative. It was not taken because it makes every renderer
- * need a DOM to run, and there is no DOM in `node --test` without adding a
- * dependency and a build step to a page whose whole premise is having neither.
- * Strings keep the renderers pure functions of their data, which is what the
- * tests in `results/tests/js/` assert.
+ * Escaping, and the one rule every renderer here obeys: these modules build
+ * strings for `innerHTML`, so **every interpolated value goes through
+ * `esc()`**. Names and remarks are typed by a school, and a remark reading
+ * `<img src=x onerror=...>` would otherwise run in a parent's browser. Strings
+ * rather than DOM nodes keep the renderers pure functions that `node --test`
+ * can check with no DOM, no dependency and no build step.
  */
 
 const ESCAPES = {
@@ -68,35 +57,37 @@ export function waitInWords(seconds) {
 }
 
 /**
- * A page on a school's own host, as a link this page can actually draw.
+ * A page on a school's own host, as a link this page can draw.
  *
- * **Scheme-relative on purpose.** `//host/path` keeps whatever scheme the
- * deployment is served over, where a hard-coded `https://` is wrong in
- * development and a bare `/path` is wrong everywhere that matters here: every
- * caller is on a *different* host from the one it is linking to, so a path
- * would resolve against the page's own host and 404. That is the dead
- * `<a href="/">` the card page shipped, and the reason
- * `accounts/templates/403.html` names the portal by host too.
- *
- * **`""` for a school with no host, and every caller must branch on it.** A
- * deployment with no primary `Domain` for that school has nothing to link to,
- * and a school named without a link is honest where `//null/cards/` is a
- * broken link that looks like a working one. Returning the empty string rather
- * than throwing keeps the decision — what to say instead — with the page that
- * knows what it is offering, because the two callers say different things: the
- * guardian chooser explains the missing web address, and the staff landing has
- * its own reasons a school may not be linked.
- *
- * `pathOnly` is the school's `path_only` from the API, true only in the
- * development single-host demo: the link is then the path alone.
- *
- * The host is escaped here rather than by each caller. It is a value a school
- * typed into the admin, it lands inside a quoted attribute, and an escape that
- * every caller has to remember is an escape one of them will not.
+ * Scheme-relative (`//host/path`): every caller links to a host other than
+ * its own, so a bare path would 404, and a fixed `https://` is wrong in
+ * development. `""` for a school with no host, and each caller says what to
+ * show instead. `pathOnly` (the API's `path_only`, the single-host demo) is
+ * the path alone. The host is a school's typing, so it is escaped here.
  */
 export function hostHref(host, path, { pathOnly = false } = {}) {
   // The single-host demo: the school is the host this page is on (`path_only`).
   if (pathOnly) return path;
   if (!host) return "";
   return `//${esc(host)}${path}`;
+}
+
+/**
+ * An empty list's state: what is missing and one button (`{ href, label }`, or
+ * `{ data, label }` for a `data-action`), else who does it. Drawn only from a
+ * successful answer with no rows: a failed fetch has its own states.
+ */
+export function emptyState({ key = "", icon = "", title = "", text = "", action = null, who = "" } = {}) {
+  const button = !action
+    ? ""
+    : action.href
+      ? `<a class="btn btn-primary" href="${esc(action.href)}">${esc(action.label)}</a>`
+      : `<button type="button" class="btn-primary" data-action="${esc(action.data)}">${esc(action.label)}</button>`;
+  return (
+    `<section class="empty-card" data-empty="${esc(key)}">` +
+    (icon ? `<span class="empty-icon" aria-hidden="true"><svg class="icon"><use href="#${esc(icon)}"/></svg></span>` : "") +
+    `<h2>${esc(title)}</h2><p>${esc(text)}</p>${button}` +
+    (!button && who ? `<p class="quiet">${esc(who)}</p>` : "") +
+    "</section>"
+  );
 }

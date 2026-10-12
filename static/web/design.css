@@ -1,37 +1,11 @@
 /*
- * Classnode's design, "One Blue": the tokens and the parts every page shares.
- *
- * Loaded first on every page (`templates/design/head.html`), and each page's
- * own stylesheet after it holds only what is that page's: its width, its rows,
- * its layout. **No page declares a colour.** `tests/test_design.py` refuses a
- * hex, rgb() or hsl() anywhere in `static/` outside this file, and refuses one
- * here that is not in the palette below — which is the whole of the palette.
- *
- * ## The rules this file is written to
- *
- * - One brand colour, #143D8C: buttons, links, the active nav item, the logo.
- *   Lighter is this blue with less of it (`--brand-tint`), not a second
- *   colour. Three accents for the public site's icon tiles; three gradients
- *   (`tests/test_design.py` names them).
- * - Status colours — green, amber, red — belong on **small labels** (`.label`).
- *   The row notes pages still tint (`.note`, `.problem`, `.row.conflict`) move
- *   to a neutral message with a label when their page is restyled.
- * - Hanken Grotesk, self-hosted here, Latin only, 400 and 700 and nothing in
- *   between: a `font-weight: 600` would be a third face the browser has to
- *   fake. `swap`, so text is never invisible on a slow connection, and the
- *   system stack behind it for the glyphs Latin does not cover (the naira sign
- *   among them).
- * - Numbers in tables are tabular and right-aligned (`.num`).
- * - 10px radius on controls, 12px on cards. Controls 44px tall at least, the
- *   primary action 48px.
- * - Phones: nothing a finger has to hit is under 44px, and no body text is
- *   under 15px. `tests/ui/screens.test.js` measures both at 360px.
- *
- * ## No framework, no build, no CDN
- *
- * Plain CSS the browser reads as written. The fonts are files beside this one,
- * so a page asks nothing of any host but its school's. The page budget
- * (`tests/test_budget.py`) counts this file on every page.
+ * Classnode's design, "One Blue": the tokens and the parts every page shares,
+ * loaded first on every page (`templates/design/head.html`); a page's own
+ * stylesheet holds only its layout. **No page declares a colour**:
+ * `tests/test_design.py` refuses one outside this file, and one here that is
+ * not in the palette below. The rules are `docs/design.md`'s, not repeated
+ * here, because this file goes to every phone on every page and the page
+ * budget (`tests/test_budget.py`) counts its comments too.
  */
 
 @font-face {
@@ -432,30 +406,11 @@ td small { color: var(--muted); }
 }
 
 /*
- * **Below 640px every list table is a stack of cards, one to a row.** A table
- * clipped at "Full name" with the rest in a sideways scroller is a table
- * nobody on a phone reads to the end. So a list table carries
- * `class="stack"`, and each cell a `data-label` naming its column: on a phone
- * the row becomes a card and each cell a "label  value" line, with the label
- * taken from the cell rather than from a header row the card no longer has.
- *
- * - `td.stack-head` is the card's first line, full width and bold: what the
- *   row is (the child, the class, "Row 3"), with anything after it (a status
- *   label) pushed to the right. It carries no label of its own.
- * - `td.stack-full` is a block under the lines, left-aligned: a list of
- *   problems, a note, a row's buttons.
- * - `td.stack-hide` says again what the head already said, and is left out.
- * - An empty labelled cell is left out, rather than a label beside nothing.
- *
- * `.stack-list` is the same card for a list that is a `ul` already (the roll,
- * the results list, staff invitations): each `li` is a card, and anything in
- * it with a `data-label` is a labelled line.
- *
- * **Three tables keep scrolling sideways**, because their columns are the
- * point: the broadsheet, the timetable and the marking sheet. Their scroller is
- * `.wide`, the first column stays put, and a "Swipe for more" cue says there is
- * more to the right. `tests/ui/screens.test.js` fails a page with any other
- * table wider than a 360px screen.
+ * Below 640px a list table (`table.stack`) is a stack of cards, one per row,
+ * each cell a "label  value" line from its `data-label`; `.stack-list` is the
+ * same for a `ul`. `stack-head` heads the card, `stack-full` is a block under
+ * it, `stack-hide` is left out. Only `.wide` tables scroll sideways. The whole
+ * rule, and why, is `docs/design.md`'s ("Widths").
  */
 .swipe-cue { display: none; }
 
@@ -580,6 +535,21 @@ td small { color: var(--muted); }
 .empty h2 { margin: 0 0 6px; }
 .empty p { margin: 0 auto 16px; max-width: 28rem; }
 
+/* An empty list (`emptyState()` in `web/html.js`): what is missing, one button. */
+.empty-card {
+  display: grid; justify-items: center; gap: 8px; margin: 16px 0; padding: 32px 16px; text-align: center;
+  background: var(--card); border: 1px dashed var(--field-border); border-radius: var(--radius-card);
+}
+.empty-card .empty-icon {
+  display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px;
+  color: var(--brand); background: var(--brand-tint); border-radius: 50%;
+}
+.empty-card .empty-icon .icon { width: 28px; height: 28px; }
+.empty-card h2 { margin: 0; font-size: 1.25rem; }
+.empty-card p { max-width: 30rem; margin: 0 0 8px; color: var(--muted); }
+.empty-card .btn-primary { width: 100%; }
+@media (min-width: 640px) { .empty-card .btn-primary { width: auto; min-width: 220px; } }
+
 /* A score out of 100 on a subject row. */
 .scorebar {
   height: 6px;
@@ -595,12 +565,9 @@ td small { color: var(--muted); }
 /* ------------------------------------------------------------------------ */
 
 /*
- * Sign-in, the card index, a report card, the checker: pages with no shell,
- * above the lone card `body > main` draws. `.logo` is the shell's own mark,
- * reused here rather than redrawn — the icon and the wordmark are one thing
- * wherever they appear, and a second definition is a second thing to keep
- * blue. Not a link: none of these pages has anywhere to send a reader back
- * to, and `results/views.py` says `/` is routed nowhere.
+ * Sign-in, the card index, a report card, the checker: pages with no shell.
+ * `.logo` is the shell's own mark, reused, and not a link: these pages have
+ * nowhere to send a reader back to (`results/views.py`).
  */
 .brand-bar {
   display: flex;
@@ -613,13 +580,9 @@ td small { color: var(--muted); }
 /* ------------------------------------------------------------------------ */
 
 /*
- * A white sidebar on the left, a white bar across the top, the work on the
- * grey. `body.has-shell` drops the lone-card padding the frame pages use.
- *
- * Below 1024px the sidebar is a `popover`, opened from the bar's menu button:
- * the browser gives it light dismiss, Escape and focus return with no script.
- * A browser without popovers never matches `:popover-open`, drops the rule that
- * hides it, and shows the sidebar above the page instead — worse, but whole.
+ * A white sidebar, a white top bar, the work on the grey. Below 1024px the
+ * sidebar is a `popover` from the menu button: light dismiss, Escape and
+ * focus return with no script, and shown above the page where unsupported.
  */
 body.has-shell { padding: 0; }
 
@@ -743,6 +706,22 @@ body.has-shell { padding: 0; }
   padding-bottom: env(safe-area-inset-bottom, 0px);
   border-top: 1px solid var(--divider);
 }
+
+/* Help and next steps, above Sign out inside the same rule. */
+.sidebar .nav-help { flex: none; margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--divider); }
+.sidebar .nav-help + .nav-end { margin-top: 2px; padding-top: 0; border-top: 0; }
+
+/* The administrator's setup chip (`onboarding`): a 36px pill, a 44px target. */
+.setup-chip {
+  position: relative; display: inline-flex; flex: none; align-items: center; gap: 6px;
+  min-height: 36px; padding: 0 10px; color: var(--brand); background: var(--brand-tint);
+  border: 1px solid var(--brand-soft); border-radius: 999px;
+  font-size: 0.8125rem; font-weight: 700; text-decoration: none; white-space: nowrap;
+}
+.setup-chip::after { content: ""; position: absolute; inset: -4px 0; }
+.setup-chip:hover { color: var(--brand-strong); border-color: var(--brand); }
+.setup-chip .icon { width: 16px; height: 16px; }
+@media (max-width: 639.98px) { .setup-chip .icon { display: none; } }
 
 .topbar {
   position: sticky;

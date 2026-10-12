@@ -46,7 +46,7 @@ from ninja.utils import check_csrf
 
 from accounts import guardian_signin, signin
 from accounts.enrolment_api import router as enrolment_router
-from accounts.models import STAFF_ROLES, Membership, Role
+from accounts.models import STAFF_ROLES, Membership, MembershipStatus, Role
 from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
@@ -72,6 +72,8 @@ from results.health_api import router as health_router
 from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.platform_api import router as platform_router
+from onboarding.progress import ONBOARDING_ROLES
+from onboarding.progress import progress_for as onboarding_progress
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.demo import single_host
 from schools.models import (
@@ -313,6 +315,13 @@ class SchoolOut(Schema):
     #: `results.tests.test_card_api.AStaffParentOnAPasswordSessionIsServedHerOwnChild`.
     has_children_here: bool = False
 
+    #: Is this login the administrator here, at a school whose setup has never
+    #: been finished (`onboarding.progress`, `School.setup_completed_at`)? The
+    #: landing then goes straight to Start here when this is the only school,
+    #: and lists Start here first when it is one of several. Nobody else is
+    #: ever sent anywhere: everyone else keeps the normal landing.
+    start_here: bool = False
+
 
 class SignedInOut(Schema):
     """What a client gets back, which is what it needs to do anything next.
@@ -469,6 +478,24 @@ def _schools_of(user, *, parent_scoped=False):
         .filter(Q(user=user) | Q(guardianships__guardian=user))
         .values_list("school_id", flat=True)
     )
+    # Start here, for an administrator whose school has never finished setup.
+    # One query for the administrator memberships, then the steps of each such
+    # school (one statement each, in its own schema); none at a school whose
+    # setup was finished, which is every school after its first weeks.
+    starting = set()
+    if not parent_scoped:
+        administered = set(
+            user.memberships.with_access()
+            .filter(school__in=schools, role__in=ONBOARDING_ROLES)
+            .values_list("school_id", flat=True)
+        )
+        starting = {
+            school.pk
+            for school in schools
+            if school.pk in administered
+            and school.setup_completed_at is None
+            and not onboarding_progress(school).complete
+        }
     return [
         SchoolOut(
             slug=school.slug,
@@ -480,6 +507,7 @@ def _schools_of(user, *, parent_scoped=False):
             may_see_fees=not parent_scoped and school.pk in book_readers,
             may_see_timetable=not parent_scoped and school.pk in timetable_readers,
             has_children_here=school.pk in families,
+            start_here=school.pk in starting,
         )
         for school in schools
     ]
@@ -873,6 +901,9 @@ class InvitationListOut(Schema):
     invitations: List[InvitationRowOut]
     #: The roles the form may offer: `invite_staff()` refuses anything else.
     roles: List[str]
+    #: Has the school a teacher yet, invited or signed in? With none and no
+    #: invitation waiting, the page shows its empty state.
+    has_teachers: bool = False
 
 
 _MAY_NOT_INVITE = "Staff are invited by an administrator of the school."
@@ -928,7 +959,10 @@ def list_invitations(request, slug: str):
                 expires_at=invitation.expires_at.isoformat(),
             )
         )
-    return InvitationListOut(invitations=rows, roles=sorted(STAFF_ROLES))
+    has_teachers = Membership.objects.filter(
+        school=school, role=Role.TEACHER, status__in=(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
+    ).exists()
+    return InvitationListOut(invitations=rows, roles=sorted(STAFF_ROLES), has_teachers=has_teachers)
 
 
 @api.post(

@@ -37,15 +37,28 @@ export function offer({ preview = {}, note = "" } = {}) {
   ].join("");
 }
 
-export function accepted({ school = "" } = {}) {
+export function accepted({ school = "", role = "" } = {}) {
   return [
     '<section class="state state-accepted" data-state="accepted">',
     "<h1>You are in</h1>",
     `<p>You are now part of ${esc(school)} on Classnode.</p>`,
+    `<p>${FIRST_STEP[role] || FIRST_STEP_OTHERWISE}</p>`,
     '<p><a href="/staff-sign-in/">Sign in</a></p>',
     "</section>",
   ].join("");
 }
+
+/**
+ * What happens after signing in, in plain words, by role: the same sentences
+ * the invitation email ends with (`schools.delivery.FIRST_STEPS`). The
+ * administrator's points at step 1 of Start here.
+ */
+export const FIRST_STEP = {
+  admin: "Sign in and Classnode opens Start here. Step 1 is your school's contact email and crest.",
+  teacher: "Sign in and your home page shows you how to take a register and enter marks.",
+  bursar: "Sign in and your home page shows you how to set up fees and record a payment.",
+};
+const FIRST_STEP_OTHERWISE = "Sign in to reach your school's home page.";
 
 /**
  * **One state for every refusal about the token** — see `api.js`. It says

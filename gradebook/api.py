@@ -62,6 +62,7 @@ from pydantic import field_validator
 
 from sync import receipts
 
+from academics.services import SETUP_ROLES
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
 from accounts.session import session_auth
@@ -200,6 +201,9 @@ class WhereToMarkOut(Schema):
     #: The caller's own name, so a shared phone can say whose work it holds
     #: (`docs/offline.md` D7). Nobody else's.
     full_name: str = ""
+    #: May this login add classes and papers here (`academics.services.SETUP_ROLES`)?
+    #: The empty state then offers the way to do it; otherwise it says who does.
+    may_set_up: bool = False
 
 
 class SaveIn(Schema):
@@ -443,6 +447,7 @@ def where_to_mark(request):
         ],
         user_id=request.user.pk,
         full_name=request.user.full_name,
+        may_set_up=bool(getattr(request, "school_roles", frozenset()) & SETUP_ROLES),
     )
 
 

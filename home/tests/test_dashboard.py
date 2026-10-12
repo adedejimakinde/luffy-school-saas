@@ -140,7 +140,9 @@ class EachRoleSeesItsOwnTests(DashboardSetUp):
         tiles, items, events, _ = self.shown(self.admin)
 
         self.assertEqual(tiles, {"students", "fees", "attendance", "results"})
-        self.assertEqual(items, {"fees", "scores", "invites", "contact"})
+        # No "contact" item: the contact email is step 1 of the administrator's
+        # setup, and the next-step card above the list already says it.
+        self.assertEqual(items, {"fees", "scores", "invites"})
         self.assertEqual(events, {"results", "payment", "registers"})
 
     def test_the_bursar(self):
@@ -410,7 +412,13 @@ class ThreeStatementsAndThenNoneTests(DashboardSetUp):
     def test_three_aggregate_statements_on_a_cold_cache_and_none_on_a_warm_one(self):
         self.assertEqual(len(self.aggregates(self.head)), 3)
         self.assertEqual(self.aggregates(self.head), [])
-        # Another role at the same school is served from the same copy.
+        # Another role at the same school is served from the same copy. The
+        # teacher is past their first fourteen days, so the first-days card
+        # (`onboarding.first`, a statement about this person and not about the
+        # school) is not asked for either.
+        User.objects.filter(pk=self.teacher.user.pk).update(
+            first_signed_in_at=timezone.now() - timedelta(days=30)
+        )
         self.assertEqual(self.aggregates(self.teacher), [])
 
     def test_the_count_does_not_grow_with_the_school(self):
@@ -435,24 +443,24 @@ class ANewSchoolTests(DashboardSetUp):
             User.objects.create_user("fola", PASSWORD, full_name="Fola Admin"), self.fresh, Role.ADMIN
         )
 
-    def test_no_students_is_the_set_up_checklist_and_no_figures(self):
+    def test_no_students_is_the_next_step_card_and_no_figures(self):
         with connected_to(self.fresh):
             ClassGroup.objects.create(name="JSS 1A", level=1)
 
         tiles, items, events, html = self.shown(self.fresh_admin, host="fresh.testserver")
 
-        self.assertIn("Set up your school", html)
-        self.assertIn("1 of 3 done", html)
+        # The administrator's steps are `onboarding.progress`'s: the next one
+        # is the card on top, and the list is one tap away on Start here.
+        self.assertIn('data-next="school-details"', html)
+        self.assertIn('href="/start/"', html)
         self.assertEqual((tiles, items, events), (set(), set(), set()))
-        for href in ("/setup/", "/staff/", "/roll/import/"):
-            self.assertIn(f'href="{href}"', html)
 
-    def test_the_checklist_is_not_cached_so_a_step_ticks_at_once(self):
-        self.shown(self.fresh_admin, host="fresh.testserver")
+    def test_the_steps_are_not_cached_so_a_step_ticks_at_once(self):
+        self.assertIn("Setup 0 of 8", self.shown(self.fresh_admin, host="fresh.testserver")[3])
         with connected_to(self.fresh):
             ClassGroup.objects.create(name="JSS 1A", level=1)
 
-        self.assertIn("1 of 3 done", self.shown(self.fresh_admin, host="fresh.testserver")[3])
+        self.assertIn("Setup 1 of 8", self.shown(self.fresh_admin, host="fresh.testserver")[3])
 
     def test_a_teacher_at_a_new_school_is_told_and_offered_nothing_to_open(self):
         teacher = grant_membership(
@@ -462,10 +470,22 @@ class ANewSchoolTests(DashboardSetUp):
         html = self.shown(teacher, host="fresh.testserver")[3]
 
         self.assertIn("Your school is being set up", html)
-        self.assertNotIn("Set up your school", html)
+        self.assertNotIn("data-next=", html)
+        self.assertNotIn('href="/start/', html)
 
-    def test_the_control_a_school_with_students_gets_no_checklist(self):
-        self.assertNotIn("Set up your school", self.shown(self.admin)[3])
+    def test_the_principal_is_told_how_far_the_administrator_has_got(self):
+        principal = grant_membership(
+            User.objects.create_user("pat", PASSWORD, full_name="Pat Principal"), self.fresh, Role.PRINCIPAL
+        )
+
+        html = self.shown(principal, host="fresh.testserver")[3]
+
+        self.assertIn("Your school is being set up", html)
+        self.assertIn("0 of 8 setup steps", html)
+        self.assertNotIn("data-next=", html)
+
+    def test_the_control_a_school_with_students_gets_no_dashboard_set_up_panel(self):
+        self.assertNotIn("data-setup=", self.shown(self.admin)[3])
 
 
 # -- the doors -----------------------------------------------------------------------

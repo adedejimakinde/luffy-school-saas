@@ -1,0 +1,16 @@
+{% comment %}
+The administrator's one next step, as one big card with one button. On Start
+here and at the top of the dashboard. `progress.next` is never an optional
+step and never a locked one (`onboarding.progress.judge()`).
+{% endcomment %}{% with s=progress.next %}<section class="next-card" aria-labelledby="next-title" data-next="{{ s.step.key }}">
+  <div class="next-top">
+    <span class="next-icon" aria-hidden="true"><svg class="icon"><use href="#{{ s.step.icon }}"/></svg></span>
+    <div>
+      <p class="eyebrow">Your next step &middot; Step {{ s.number }} of {{ progress.total }}</p>
+      <h2 id="next-title">{{ s.step.title }}</h2>
+    </div>
+  </div>
+  <p>{{ s.step.detail }}. {{ s.step.why }}</p>
+  <a class="btn btn-primary" href="/start/{{ s.step.key }}/">{{ s.step.title }}<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+  <p class="next-meta"><span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>About {{ s.step.minutes }} minutes</span>{% if on_dashboard %}<a href="/start/">See all {{ progress.total }} steps</a>{% endif %}</p>
+</section>{% endwith %}
