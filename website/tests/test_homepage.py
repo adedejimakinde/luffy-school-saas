@@ -31,7 +31,7 @@ PORTAL = "app.classnode.testserver"
 #: Every sentence the page was given, word for word.
 COPY = [
     "Features", "How it works", "Pricing", "Questions", "Staff sign in", "Parent sign in", "Book a demo",
-    "For Nigerian private secondary schools",
+    "For Nigerian secondary schools",
     "Results, fees and registers, all in one place.",
     "Teachers enter scores and take the register on their phones. You approve results, see who "
     "has paid, and keep less paper in the office.",
@@ -209,7 +209,7 @@ class TheWordsTests(SiteSetUp):
             page = self.get(path).content.decode()
             text = visible_text(page)
             with self.subTest(path=path):
-                self.assertNotRegex(text, "[–—]", "an en or em dash")
+                self.assertNotRegex(text, "[\u2013\u2014]", "an en or em dash")
                 self.assertNotIn("!", text)
                 self.assertNotIn("?", visible_text(page, questions=False), "a question outside the FAQ")
                 self.assertNotRegex(text, r"(^|[.:] )Imagine\b")
@@ -243,7 +243,7 @@ class TheWordsTests(SiteSetUp):
         page = self.get().content.decode()
         self.assertEqual(page.count('class="eyebrow"'), 1)
         hero = page.split('<section class="proof"', 1)[0]
-        self.assertIn('<p class="eyebrow">For Nigerian private secondary schools</p>', hero)
+        self.assertIn('<p class="eyebrow">For Nigerian secondary schools</p>', hero)
 
     def test_the_report_sheet_line_names_the_ministry_alone(self):
         """The printed Ogun sheet carries the ministry's name; what OGSERA asks a
@@ -271,8 +271,8 @@ class TheWordsTests(SiteSetUp):
 
     def test_the_writing_rules_find_what_they_look_for(self):
         """The control: a page breaking each rule is caught by the same checks."""
-        broken = visible_text("<body><p>A seamless journey — imagine it! Why?</p><summary>Fine?</summary>")
-        self.assertRegex(broken, "[–—]")
+        broken = visible_text("<body><p>A seamless journey \u2014 imagine it! Why?</p><summary>Fine?</summary>")
+        self.assertRegex(broken, "[\u2013\u2014]")
         self.assertIn("?", visible_text("<body><p>Why?</p><summary>Fine?</summary>", questions=False))
         self.assertNotIn("?", visible_text("<body><summary>Fine?</summary>", questions=False))
         self.assertIn("!", broken)

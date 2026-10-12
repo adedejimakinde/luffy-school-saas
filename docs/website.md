@@ -76,19 +76,27 @@ final call to action, and the footer.
   stay centred. Section headlines are balanced; card and benefit headings
   (`h3`) wrap where the line ends, with no balancing and no `<br>`. Tests hold
   all three.
-- **Sizes** (the owner's rules, held by `the homepage's sizes` in the browser
-  at 375 x 812 and 1280 x 800): headings at most 28px on a phone and 40px on a
-  desk (`h2` is `clamp(28px, 20px + 1.6vw, 40px)`); the hero headline 30 to
-  36px on a phone and 48 to 56px on a desk (`clamp(30px, 24px + 2.5vw,
-  56px)`); body copy 15 to 17px (the lead, the final band's line and "No
-  setup fee." are 17px); buttons 44 to 48px tall; sections 56px top and bottom
-  on a phone and 104px from 768px, the benefit rows 64px and 88px; content at
-  most 1160px wide. On a 375 x 812 phone the first screen holds the headline,
-  its subline, the main button and the top of the screens (from 662px); the
-  hero is tighter below 640px to make the room. Not held to them: the price
-  figure (64px, a figure rather than a heading) and the small labels the
-  drawings and the footer set on purpose (the footer's links are 14px, its own
-  spec).
+- **Sizes** (the owner's rules, fintech sizes rather than a template's, held
+  by `the homepage's sizes` in the browser at 375 x 812 and 1280 x 800):
+  section headlines 24 to 28px on a phone and 32 to 40px on a desk (`h2` is
+  `clamp(28px, 20px + 1.6vw, 40px)`), other headings at most 28px and 40px;
+  the hero headline 30 to 36px on a phone and 48 to 56px on a desk
+  (`clamp(30px, 24px + 2.5vw, 56px)`), line height 1.1; body copy 15 to 16px
+  on a phone and 16 to 17px on a desk (`--copy-lg`, the lead and the larger
+  copy, is 16px and 17px from 768px; `--copy-note`, the notes under the hero,
+  the slider and the sheet and the form's labels, 15px and 16px); small
+  labels 13 to 14px (`--label-sm`, 13px); buttons 44 to 48px tall with 15 to
+  16px words and 8 to 10px corners; sections 56px top and bottom on a phone
+  and 104px from 768px, the benefit rows 64px and 88px; cards 24px in
+  (`--card-pad`) and 14px round, photos 16px round; content at most 1160px
+  wide; two font weights (400 and 700) in every section and no long centred
+  paragraph. On a 375 x 812 phone the first screen holds the headline, its
+  subline, the main button and the top of the screens (from 632px); the hero
+  is tighter below 640px to make the room. Not held to them: the price figure
+  (64px, a figure rather than a heading), the slider's own controls and its
+  address bar (the slider is kept as it is), the drawings' own paddings (the
+  report sheet, the roles, the register phone and the floating cards are
+  pictures of the product) and the footer (its links are 14px, its own spec).
 - **The slider's register screen gives the slider no height** (`contain:
   size` on `.slide-phone`): it takes the height of the other screens. Before,
   its picture had none until it loaded, a second after the page, and the
