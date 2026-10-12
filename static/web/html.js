@@ -68,31 +68,13 @@ export function waitInWords(seconds) {
 }
 
 /**
- * A page on a school's own host, as a link this page can actually draw.
+ * A page on a school's own host, as a link this page can draw.
  *
- * **Scheme-relative on purpose.** `//host/path` keeps whatever scheme the
- * deployment is served over, where a hard-coded `https://` is wrong in
- * development and a bare `/path` is wrong everywhere that matters here: every
- * caller is on a *different* host from the one it is linking to, so a path
- * would resolve against the page's own host and 404. That is the dead
- * `<a href="/">` the card page shipped, and the reason
- * `accounts/templates/403.html` names the portal by host too.
- *
- * **`""` for a school with no host, and every caller must branch on it.** A
- * deployment with no primary `Domain` for that school has nothing to link to,
- * and a school named without a link is honest where `//null/cards/` is a
- * broken link that looks like a working one. Returning the empty string rather
- * than throwing keeps the decision — what to say instead — with the page that
- * knows what it is offering, because the two callers say different things: the
- * guardian chooser explains the missing web address, and the staff landing has
- * its own reasons a school may not be linked.
- *
- * `pathOnly` is the school's `path_only` from the API, true only in the
- * development single-host demo: the link is then the path alone.
- *
- * The host is escaped here rather than by each caller. It is a value a school
- * typed into the admin, it lands inside a quoted attribute, and an escape that
- * every caller has to remember is an escape one of them will not.
+ * Scheme-relative (`//host/path`): every caller links to a host other than
+ * its own, so a bare path would 404, and a fixed `https://` is wrong in
+ * development. `""` for a school with no host, and each caller says what to
+ * show instead. `pathOnly` (the API's `path_only`, the single-host demo) is
+ * the path alone. The host is a school's typing, so it is escaped here.
  */
 export function hostHref(host, path, { pathOnly = false } = {}) {
   // The single-host demo: the school is the host this page is on (`path_only`).
@@ -102,16 +84,9 @@ export function hostHref(host, path, { pathOnly = false } = {}) {
 }
 
 /**
- * An empty list's state: what is missing, why it matters, and one button.
- *
- * Drawn **only from a successful answer with no rows**. A refused, failed or
- * offline fetch has its own states and never reaches this, so "No students
- * yet" is never said about a school whose roll simply did not load. Each
- * page's `from…()` decides; this only draws.
- *
- * `action` is `{ href, label }` for a link or `{ data, label }` for a button
- * the page already handles (`data-action="…"`). Without one, the card says
- * who does this instead (`who`). The icon is a symbol of the shared sprite.
+ * An empty list's state: what is missing and one button (`{ href, label }`, or
+ * `{ data, label }` for a `data-action`), else who does it. Drawn only from a
+ * successful answer with no rows: a failed fetch has its own states.
  */
 export function emptyState({ key = "", icon = "", title = "", text = "", action = null, who = "" } = {}) {
   const button = !action
@@ -119,13 +94,11 @@ export function emptyState({ key = "", icon = "", title = "", text = "", action 
     : action.href
       ? `<a class="btn btn-primary" href="${esc(action.href)}">${esc(action.label)}</a>`
       : `<button type="button" class="btn-primary" data-action="${esc(action.data)}">${esc(action.label)}</button>`;
-  return [
-    `<section class="empty-card" data-empty="${esc(key)}">`,
-    icon ? `<span class="empty-icon" aria-hidden="true"><svg class="icon"><use href="#${esc(icon)}"/></svg></span>` : "",
-    `<h2>${esc(title)}</h2>`,
-    `<p>${esc(text)}</p>`,
-    button,
-    !button && who ? `<p class="quiet">${esc(who)}</p>` : "",
-    "</section>",
-  ].join("");
+  return (
+    `<section class="empty-card" data-empty="${esc(key)}">` +
+    (icon ? `<span class="empty-icon" aria-hidden="true"><svg class="icon"><use href="#${esc(icon)}"/></svg></span>` : "") +
+    `<h2>${esc(title)}</h2><p>${esc(text)}</p>${button}` +
+    (!button && who ? `<p class="quiet">${esc(who)}</p>` : "") +
+    "</section>"
+  );
 }

@@ -142,7 +142,9 @@ class EveryLinkOpensTests(ChainSetUp):
         """The keys the sidebar and the tab bar link to, from a real page."""
         self.client.force_login(member.user)
         page = self.client.get("/results/", HTTP_HOST=host).content.decode()
-        sidebar = {_KEY_OF[h] for h in _HREF.findall(_SIDEBAR.search(page).group(0))}
+        # Help and next steps is every member of staff's, beside the role's
+        # links rather than one of them (`onboarding.tests` holds it opening).
+        sidebar = {_KEY_OF[h] for h in _HREF.findall(_SIDEBAR.search(page).group(0)) if h != "/help/"}
         tabbar = _TABBAR.search(page)
         tabs = {_KEY_OF[h] for h in _HREF.findall(tabbar.group(0))} if tabbar else set()
         return sidebar, tabs

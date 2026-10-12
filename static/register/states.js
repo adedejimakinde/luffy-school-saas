@@ -31,23 +31,20 @@ import { asOfText, copyNote } from "../web/snapshots.js";
 export function choose({
   term = "", classes = [], on = "", asOf = null, timeZone, now, held = [], may_set_up = false,
 } = {}) {
-  // No classes, said only from a live answer: a copy kept on the phone
-  // (`asOf`) is not the school's word today, and a fetch that failed never
-  // reaches this screen at all.
+  // Only from a live answer: never from a failed fetch or the phone's copy.
   if (!classes.length && !asOf) {
-    return [
-      '<section class="state state-choose" data-state="choose">',
-      "<h1>Take a register</h1>",
+    return (
+      '<section class="state state-choose" data-state="choose"><h1>Take a register</h1>' +
       emptyState({
         key: "register",
         icon: "i-register",
         title: "No classes yet",
-        text: "A register is taken for a class. Once the school's classes are added, they show here.",
-        action: may_set_up ? { href: "/setup/#classes", label: "Add your classes" } : null,
+        text: "A register is taken for a class. Once the classes are added, they show here.",
+        action: may_set_up && { href: "/setup/#classes", label: "Add your classes" },
         who: "The school office adds the classes.",
-      }),
-      "</section>",
-    ].join("");
+      }) +
+      "</section>"
+    );
   }
   return [
     '<section class="state state-choose" data-state="choose">',
