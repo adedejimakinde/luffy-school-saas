@@ -135,24 +135,27 @@ def make(password, suffix, write=print):
     Domain.objects.create(tenant=school, domain=host, is_primary=True)
     write(f"{NAME}: http://{host}/  (schema {school.schema_name})")
 
+    # A title and a surname, as the home greets them: the avatar's two letters
+    # are the name's first two words, so "Mr Oyelaran" is MO beside "Good
+    # morning, Mr Oyelaran", where "Mr Segun Oyelaran" drew MS.
     def login(key, full_name, secret=password):
         return User.objects.create_user(f"{PREFIX}.{key}", secret, full_name=full_name)
 
     with transaction.atomic():
         staff = {
-            "admin": grant_membership(login("admin", "Mrs Funke Adewale"), school, Role.ADMIN),
-            "principal": grant_membership(login("principal", "Dr Ngozi Okonkwo"), school, Role.PRINCIPAL),
+            "admin": grant_membership(login("admin", "Mrs Adewale"), school, Role.ADMIN),
+            "principal": grant_membership(login("principal", "Dr Okonkwo"), school, Role.PRINCIPAL),
             "vp": grant_membership(
-                login("vp", "Mr Tunde Bakare"), school, Role.VICE_PRINCIPAL_ACADEMIC
+                login("vp", "Mr Bakare"), school, Role.VICE_PRINCIPAL_ACADEMIC
             ),
-            "teacher": grant_membership(login("teacher", "Mrs Aisha Danladi"), school, Role.TEACHER),
-            "bursar": grant_membership(login("bursar", "Mr Segun Oyelaran"), school, Role.BURSAR),
+            "teacher": grant_membership(login("teacher", "Mrs Danladi"), school, Role.TEACHER),
+            "bursar": grant_membership(login("bursar", "Mr Oyelaran"), school, Role.BURSAR),
         }
         children = []
         for i in range(PER_CLASS * len(CLASSES)):
             user = login(f"s{i + 1:03d}", _name(i), secret=None)
             children.append(enroll_student(user, school, reference=f"CFC/{i + 1:03d}"))
-        parent = login("parent", "Mr Chukwuma Okafor")
+        parent = login("parent", "Mr Okafor")
         star = children[0]
         link_guardian(parent, star)
         activate_guardian_links(parent, school)

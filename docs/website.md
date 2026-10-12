@@ -97,11 +97,21 @@ final call to action, and the footer.
   address bar (the slider is kept as it is), the drawings' own paddings (the
   report sheet, the roles, the register phone and the floating cards are
   pictures of the product) and the footer (its links are 14px, its own spec).
-- **The slider's register screen gives the slider no height** (`contain:
-  size` on `.slide-phone`): it takes the height of the other screens. Before,
-  its picture had none until it loaded, a second after the page, and the
-  slider stood twice as tall until then, pushing the desk's headline below the
-  fold and then snapping back.
+- **The slider's register screen gives the slider no height** on a desk
+  (`contain: size` on `.slide-phone`): it takes the height of the other
+  screens. Before, its picture had none until it loaded, a second after the
+  page, and the slider stood twice as tall until then, pushing the desk's
+  headline below the fold and then snapping back.
+- **On a phone (below 640px) every screen is a phone screen in the register's
+  phone frame**, one size (`min(250px, 72%)` wide, the shape of a 390 x 844
+  phone), at the left, and no screen has the browser frame; from 640px the
+  desk keeps its frames. The screens start 38% of the column down, below the
+  principal's shoulders, so her face is never under the phone, and the
+  "Fees collected" card sits to the left of her, clear of both. The card steps
+  aside (a 600ms fade with the screens) while a screen that already prints
+  fees collected is showing, the home and the fee collection
+  (`data-shows-fees`). `heroOnAPhone` in `tests/ui/screens.test.js` holds all
+  of it on every screen at 320, 375 and 414px.
 
 - **The words say what the product does and promise no outcome we cannot
   show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
@@ -142,7 +152,14 @@ final call to action, and the footer.
   `scripts/site_shots.mjs` takes them **on a weekday** (a weekend home says
   there are no registers on a weekend) and `scripts/site_shots.py` cuts them
   into `static/website/shots/`. The page says under the slider that the school
-  is a demo and every name and figure is made up.
+  is a demo and every name and figure is made up. They were taken with the
+  clock at Thursday 15 October 2026 (`SHOTS_NOW` in the script's header says
+  how), so every screen names the day one way, "Thu 15 Oct", the register's
+  date included (`dayText` in `static/register/states.js`, no longer ISO). The
+  showcase's logins are a title and a surname ("Mr Oyelaran"), so each
+  avatar's letters are the greeted name's: MO beside "Good morning, Mr
+  Oyelaran", where "Mr Segun Oyelaran" drew MS. The desk's home still prints
+  the day in full in its own header ("Thursday 15 October").
 - **The floating cards carry the screens' own figures** (₦48.6m, 93.8% today,
   a ₦120,700 payment), never rounder ones; a test counts them.
   Retaking the screens is a reason to check them: 93.8% was a Thursday's.
@@ -200,7 +217,7 @@ final call to action, and the footer.
 - **One script, inline**: closing the phone menu on every page, plus the
   slider (under 2 KB) and the counting figures (under 1 KB) on the homepage.
   No library and nothing from another host.
-- **Weight**: a phone fetches about 350 KB uncompressed with every image
+- **Weight**: a phone fetches about 360 KB uncompressed with every image
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
 

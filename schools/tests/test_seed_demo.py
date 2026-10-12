@@ -334,6 +334,14 @@ class ShowcaseTests(TestCase):
         students = Membership.objects.filter(school=school, role=Role.STUDENT)
         self.assertEqual(students.count(), 612)
         self.assertFalse(any(u.has_usable_password() for u in User.objects.filter(memberships__in=students)))
+        # The screens' avatars carry the letters of the name the home greets:
+        # Mr Oyelaran is MO, not MS (`menu.initials`, `home.dashboard.first_name`).
+        from home.dashboard import first_name
+        from menu import initials
+
+        for user in User.objects.filter(username__startswith="crestfield.").exclude(memberships__in=students):
+            with self.subTest(login=user.username):
+                self.assertEqual(initials(user.full_name), initials(first_name(user)))
 
         with schema_context(school.schema_name):
             term = Term.objects.get(is_current=True)

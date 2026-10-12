@@ -29,8 +29,9 @@
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
- * side, the hero's buttons are full width, one floating card shows and it is
- * clear of the screens. Its motion (the slider, the network, the floating
+ * side, the hero's buttons are full width, every screen is in the phone
+ * frame, the principal's face is clear of it and of the card, and the one card
+ * shows only beside a screen that does not already print its figure. Its motion (the slider, the network, the floating
  * cards, the counting figures) is checked in its own `describe` below.
  *
  * ## What it runs against
@@ -359,10 +360,62 @@ function measureSite({ width }) {
         problems.push(`a button is not full width: "${button.textContent.trim()}"`);
       }
     }
-    const cards = [...document.querySelectorAll(".hero .float-card")].filter(visible);
-    if (cards.length !== 1) problems.push(`${cards.length} floating cards in the hero on a phone, not 1`);
-    const screens = box(document.querySelector(".slides"));
-    for (const card of cards) if (overlaps(box(card), screens)) problems.push("a floating card covers the screens");
+  }
+  return problems;
+}
+
+/**
+ * The hero on a phone, on whichever screen is showing: that screen is in the
+ * phone frame (the register's), at the left, the same box as every other
+ * screen's; the principal's face, down to her shoulders, is under neither the
+ * phone nor a card; and the "Fees collected" card shows only beside a screen
+ * that does not already print that figure (`data-shows-fees`), clear of the
+ * phone. Pure, like `measureSite`; [] on a page with no slider.
+ */
+function heroOnAPhone() {
+  const problems = [];
+  const slider = document.querySelector("[data-slider]");
+  if (!slider) return problems;
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const box = (el) => el.getBoundingClientRect();
+  const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const on = slider.querySelector(".slide.is-on");
+  const name = on.dataset.name;
+  const frames = [...slider.querySelectorAll(".slide")].map((s) => s.querySelector(".browser, .phone-frame"));
+  const frame = on.querySelector(".browser, .phone-frame");
+  const f = box(frame);
+  const style = getComputedStyle(frame);
+  if (style.backgroundColor !== getComputedStyle(slider.querySelector(".phone-frame")).backgroundColor || parseFloat(style.borderRadius) < 24) {
+    problems.push(`${name}: not in the phone frame`);
+  }
+  if ([...frame.querySelectorAll(".browser-bar")].some(visible)) problems.push(`${name}: a browser bar on a phone`);
+  const shot = box(frame.querySelector("img"));
+  if (Math.abs(shot.width / shot.height - 300 / 649) > 0.01) problems.push(`${name}: the screen is not a phone's shape`);
+  for (const other of frames) {
+    const o = box(other);
+    if (Math.abs(o.width - f.width) > 0.5 || Math.abs(o.left - f.left) > 0.5) problems.push(`${name}: the frames are not one size and place`);
+  }
+  if (Math.round(f.left) !== Math.round(box(slider).left)) problems.push(`${name}: the phone is not at the left`);
+
+  const photo = box(document.querySelector(".photo-hero"));
+  // Her face and shoulders: the top 56% of the photo, but for its outer edges.
+  const face = {
+    left: photo.left + photo.width * 0.1,
+    right: photo.right - photo.width * 0.05,
+    top: photo.top,
+    bottom: photo.top + photo.height * 0.56,
+  };
+  if (overlaps(f, face)) problems.push(`${name}: the phone covers the principal's face`);
+  const cards = [...document.querySelectorAll(".hero .float-card")].filter(visible);
+  const want = on.hasAttribute("data-shows-fees") ? 0 : 1;
+  if (cards.length !== want) problems.push(`${name}: ${cards.length} floating cards in the hero on a phone, not ${want}`);
+  for (const card of cards) {
+    if (overlaps(box(card), f)) problems.push(`${name}: a floating card covers the screen`);
+    if (overlaps(box(card), face)) problems.push(`${name}: a floating card covers the principal's face`);
   }
   return problems;
 }
@@ -434,6 +487,7 @@ async function settle(page) {
 async function check(page, width, name, site = false) {
   mkdirSync(join(OUT, String(width)), { recursive: true });
   const siteProblems = site ? await page.evaluate(measureSite, { width }) : [];
+  if (site && width < 640) siteProblems.push(...(await page.evaluate(heroOnAPhone)));
   await page.screenshot({ path: join(OUT, String(width), `${name}.png`), fullPage: true });
   return (
     await page.evaluate(measure, {
@@ -773,6 +827,50 @@ describe("the homepage's sizes", () => {
         mkdirSync(join(OUT, String(width)), { recursive: true });
         await page.screenshot({ path: join(OUT, String(width), "homepage-first-screen.png") });
         assert.deepEqual(problems, []);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
+describe("the hero on a phone", () => {
+  // Every screen in turn, by its dot, held to `heroOnAPhone`: each one in the
+  // register's phone frame, her face clear, the fees card beside only the
+  // screens that do not print it. From 640px the desk keeps its frames.
+  for (const width of [320, 375, 414]) {
+    test(`every screen at ${width}px`, async () => {
+      const context = await browser.newContext({ viewport: { width, height: 812 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        const problems = [];
+        for (let n = 0; n < 4; n++) {
+          await page.click(`[data-go="${n}"]`);
+          await page.mouse.move(0, 0);
+          problems.push(...(await page.evaluate(heroOnAPhone)));
+        }
+        assert.deepEqual(problems, []);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  for (const width of [640, 768]) {
+    test(`the desk's frames from ${width}px`, async () => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        const bars = await page.evaluate(() =>
+          [...document.querySelectorAll(".slide")].map((s) => {
+            const bar = s.querySelector(".browser-bar");
+            return bar ? getComputedStyle(bar).display !== "none" : "phone";
+          }),
+        );
+        assert.deepEqual(bars, [true, true, "phone", true]);
       } finally {
         await context.close();
       }
