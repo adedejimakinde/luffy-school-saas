@@ -238,6 +238,11 @@ MIDDLEWARE = [
     # comes through the TLS proxy. It answers from one `SELECT 1` and returns
     # before any tenant is resolved — see `schools/health.py`.
     "schools.health.HealthCheckMiddleware",
+    # Next, so it sees every response below it: `/robots.txt` on every host,
+    # `www.` on the public site sent to the bare domain in one hop (ahead of
+    # the HTTPS redirect for that reason), and `X-Robots-Tag: noindex` on
+    # everything that is not the public site. See `website/crawlers.py`.
+    "website.crawlers.CrawlerMiddleware",
     # First of the real stack, as Django asks: it is the one that can end a
     # request before the rest of the stack has done any work. What it buys here is the header set
     # — nosniff, referrer policy, and HSTS once a deployment turns it on.

@@ -15,7 +15,9 @@ answered 200 without asking would wave a deploy through onto exactly that. One
 nothing that belongs to one.
 
 It answers the same on every host, including ones that are nobody's: it has
-nothing to say about which hosts exist, so it is not an oracle for them.
+nothing to say about which hosts exist, so it is not an oracle for them. And it
+tells search engines to leave it alone on every host, the public site's too:
+it answers above `website.crawlers`, which marks everything else.
 """
 
 from django.db import DatabaseError, connection
@@ -27,6 +29,7 @@ PATH = "/healthz/"
 def _answer(body, status):
     response = HttpResponse(body, status=status, content_type="text/plain; charset=utf-8")
     response["Cache-Control"] = "no-store"
+    response["X-Robots-Tag"] = "noindex, nofollow"
     return response
 
 

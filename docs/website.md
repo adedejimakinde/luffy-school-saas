@@ -2,8 +2,9 @@
 
 Classnode's own homepage, for a school that is not a customer yet. It lives on
 the bare platform domain (`SITE_HOST`, which is `PLATFORM_DOMAIN` unless set),
-and `www.` is the same site (django-tenants drops `www.` before it looks a host
-up). `/privacy/` and `/terms/` are on it too, and nothing else is.
+and `www.` and plain HTTP are sent to `https://` and the bare domain in one hop
+(Caddy, and `website/crawlers.py` for any that reach the app). `/privacy/`,
+`/terms/` and `/sitemap.xml` are on it too, and nothing else is.
 
 ## Where it answers, and where it does not
 
@@ -253,6 +254,37 @@ final call to action, and the footer.
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
 
+## Search engines and shared links
+
+The site is the only thing on the platform a search engine is asked to index.
+
+- **Noindex everywhere else, by default.** `website/crawlers.py` adds
+  `X-Robots-Tag: noindex, nofollow` to every response on every host but
+  `SITE_HOST`: the portal (`app.`), its sign-in pages, `/platform/`, every
+  school's host, demo schools and test schools alike, and a host nobody owns.
+  `templates/design/head.html` writes the same meta tag unless the view sets
+  `indexable`, which only `website.views.site_page` does; the 403 page carries
+  it itself. `/healthz/` answers above all of this and marks itself.
+- **robots.txt** is answered on every host by the same middleware: on the site
+  it allows everything and names `/sitemap.xml`; on every other host it
+  disallows everything.
+- **Each page's own title and description** are `website.views.PAGES`: under
+  60 and 155 characters, but the homepage's title, which is the owner's words
+  (68 characters). The sitemap lists the same pages, and each names its own
+  canonical address, `https://` and the bare domain with no query.
+- **Structured data, on the homepage only.** Organization (Classnode Edtech
+  Limited, `static/website/logo.png`, `hello@classnode.co`, no address),
+  SoftwareApplication (EducationalApplication, ₦2,500 per student per term)
+  and FAQPage. The FAQ on the page and in the data are drawn from one list,
+  `website.views.FAQ`. No ratings and no reviews: there are none to stand
+  behind.
+- **The share card.** Open Graph and a large Twitter card on every page, with
+  `static/website/share.png` (1200 x 630, One Blue, the logo and the
+  headline), drawn by `scripts/share_image.html`.
+- **Measured** with Lighthouse 12.8 mobile, 3 runs each against a local server
+  with `DEBUG` off (12 October 2026): performance 99 on the homepage and 100 on
+  the privacy notice and the terms, SEO 100 on all three.
+
 ### Photo sources and licences
 
 | photo | where | source | licence |
@@ -275,6 +307,12 @@ final call to action, and the footer.
   60 KB, images sized, described and lazy below the hero, the one inline
   script and its sizes, motion only inside `no-preference`, and the contrast
   of every word on every blue.
+- `website/tests/test_seo.py`: noindex in the header and the page on a school's
+  host and the portal and not on the site, robots.txt on each, the sitemap,
+  canonical addresses and the one-hop redirects, titles and descriptions, the
+  share card and its image, the structured data against the visible FAQ, one
+  h1 with no skipped heading, every image described and every public page
+  linked from every other.
 - `schools/tests/test_seed_demo.py` `ShowcaseTests`: the showcase's figures,
   the ones the homepage prints.
 - `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 375, 390, 414, 768, 1024, 1280

@@ -166,8 +166,10 @@ class TheSiteHostTests(SiteSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Results, fees and registers, all in one place.", visible_text(response.content.decode()))
 
-    def test_www_is_the_same_site(self):
-        self.assertEqual(self.get(host=f"www.{SITE}").status_code, 200)
+    def test_www_is_sent_to_the_bare_domain_over_https(self):
+        response = self.get("/privacy/?a=1", host=f"www.{SITE}")
+        self.assertEqual(response.status_code, 301)
+        self.assertEqual(response["Location"], f"https://{SITE}/privacy/?a=1")
 
     def test_the_site_host_serves_no_door_admin_or_api(self):
         for path in ("/admin/", "/sign-in/", "/staff-sign-in/", "/api/csrf/", "/platform/",
@@ -549,13 +551,16 @@ class TheBudgetsTests(SiteSetUp):
                 self.assertLess(photo.stat().st_size, 60 * 1000)
 
     def test_every_asset_is_from_this_host(self):
-        for url in _ASSET.findall(self.page):
+        """The canonical address is the one absolute link, and it is no asset."""
+        page = re.sub(r'<link rel="canonical" href="[^"]*">', "", self.page, count=1)
+        self.assertNotEqual(page, self.page)
+        for url in _ASSET.findall(page):
             with self.subTest(url=url):
                 self.assertTrue(url.startswith(settings.STATIC_URL), url)
-        for srcset in re.findall(r'srcset="([^"]+)"', self.page):
+        for srcset in re.findall(r'srcset="([^"]+)"', page):
             for url, _ in _CANDIDATE.findall(srcset):
                 self.assertTrue(url.startswith(settings.STATIC_URL), url)
-        self.assertNotRegex(self.page, r'(src|href|srcset)="https?://')
+        self.assertNotRegex(page, r'(src|href|srcset)="https?://')
 
     def test_images_are_webp_sized_described_and_only_the_hero_eager(self):
         top, below = self.page.split('<section class="proof"', 1)
@@ -588,7 +593,10 @@ class TheBudgetsTests(SiteSetUp):
             self.assertNotRegex(drawing, r"<animate|#[0-9A-Fa-f]{3,6}\b(?!-)|rgb\(", drawing[:60])
 
     def test_there_is_one_script_inline_and_small(self):
+        """One that runs. The structured data is a `<script>` no browser runs."""
         scripts = re.findall(r"<script\b([^>]*)>(.*?)</script>", self.page, flags=re.S)
+        self.assertEqual([a for a, _ in scripts].count(' type="application/ld+json"'), 1)
+        scripts = [s for s in scripts if s[0] != ' type="application/ld+json"']
         self.assertEqual(len(scripts), 1)
         attrs, code = scripts[0]
         self.assertEqual(attrs.strip(), 'type="module"')

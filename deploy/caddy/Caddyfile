@@ -13,10 +13,22 @@
 	email {$ACME_EMAIL}
 }
 
+# The public site has one address, https://{$PLATFORM_DOMAIN}: plain HTTP and
+# www. are each sent there in one hop. Caddy already sends every other plain
+# HTTP request to HTTPS on the same host; www. is named here so it skips the
+# stop at https://www. on the way. website/crawlers.py does the same for any
+# www. request that reaches the app.
+http://{$PLATFORM_DOMAIN}, http://www.{$PLATFORM_DOMAIN} {
+	redir https://{$PLATFORM_DOMAIN}{uri} permanent
+}
+
 {$PLATFORM_DOMAIN}, *.{$PLATFORM_DOMAIN} {
 	tls {
 		dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 	}
+
+	@www host www.{$PLATFORM_DOMAIN}
+	redir @www https://{$PLATFORM_DOMAIN}{uri} permanent
 
 	encode zstd gzip
 

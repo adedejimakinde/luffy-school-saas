@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+The public site's two pictures for other sites, drawn here and photographed
+with Chromium. Neither is shown on the site itself.
+
+  static/website/share.png  1200 x 630, the card WhatsApp, LinkedIn and X draw
+                            under a shared link (og:image, twitter:image).
+  static/website/logo.png   512 x 512, the logo search engines are given in
+                            the Organization structured data.
+
+From the repository root, with Chromium's headless shell (Playwright's
+`chromium_headless_shell`; `chrome --headless` draws a shorter page than the
+window it is given):
+
+  headless_shell --hide-scrollbars --force-device-scale-factor=1 \
+    --window-size=1200,630 --screenshot=static/website/share.png \
+    "file://$PWD/scripts/share_image.html"
+  headless_shell --hide-scrollbars --force-device-scale-factor=1 \
+    --window-size=512,512 --screenshot=static/website/logo.png \
+    "file://$PWD/scripts/share_image.html#logo"
+
+The blue is One Blue (`--brand` in static/web/design.css), the mark is
+`i-brand-mark` (templates/design/icons.html) and the type is the site's own.
+-->
+<html lang="en">
+<meta charset="utf-8">
+<style>
+@font-face { font-family: "Hanken Grotesk"; font-weight: 700; src: url("../static/web/fonts/hanken-grotesk-700.woff2") format("woff2"); }
+@font-face { font-family: "Hanken Grotesk"; font-weight: 400; src: url("../static/web/fonts/hanken-grotesk-400.woff2") format("woff2"); }
+:root { --brand: #143D8C; --card: #FFFFFF; }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { width: 1200px; height: 630px; overflow: hidden; font-family: "Hanken Grotesk", system-ui, sans-serif; color: var(--card); background: var(--brand); }
+.card { position: relative; display: flex; flex-direction: column; justify-content: space-between; height: 100%; padding: 72px 80px; }
+.logo { display: flex; align-items: center; gap: 20px; font-size: 52px; font-weight: 700; letter-spacing: -0.01em; }
+.logo svg { width: 72px; height: 72px; }
+h1 { margin: 0; max-width: 15em; font-size: 68px; line-height: 1.08; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
+p { margin: 0; font-size: 34px; opacity: 0.86; }
+.net { position: absolute; right: -90px; top: -110px; width: 520px; height: 455px; opacity: 0.5; }
+body.only-logo { width: 512px; height: 512px; display: grid; place-items: center; background: var(--card); }
+body.only-logo .card { display: none; }
+body.only-logo .mark { display: block; width: 448px; height: 448px; color: var(--brand); }
+.mark { display: none; }
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="m" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--dot)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--dot)"/>
+    <circle cx="17" cy="8" r="2.1" fill="var(--dot)"/>
+    <circle cx="12" cy="17" r="2.1" fill="var(--dot)"/>
+  </symbol>
+</svg>
+<body>
+<svg class="mark" style="--dot: var(--card)"><use href="#m"/></svg>
+<div class="card">
+  <svg class="net" viewBox="0 0 640 560" aria-hidden="true">
+    <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity=".35" stroke-linejoin="round"><path d="M90 120L300 80L210 260ZM300 80L520 150L430 330L210 260M300 80L430 330M210 260L150 450L360 500L430 330L600 430L360 500"/></g>
+    <g fill="currentColor"><circle cx="90" cy="120" r="5"/><circle cx="300" cy="80" r="7"/><circle cx="210" cy="260" r="6"/><circle cx="520" cy="150" r="5"/><circle cx="430" cy="330" r="8"/><circle cx="150" cy="450" r="5"/><circle cx="360" cy="500" r="6"/><circle cx="600" cy="430" r="5"/></g>
+  </svg>
+  <div class="logo"><svg style="color: var(--card); --dot: var(--brand)"><use href="#m"/></svg>classnode</div>
+  <h1>School management software for Nigerian secondary schools</h1>
+  <p>Results, fees and registers in one place.</p>
+</div>
+<script>if (location.hash === "#logo") document.body.className = "only-logo";</script>
+</body>
+</html>

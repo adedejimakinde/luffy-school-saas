@@ -1,26 +1,179 @@
 """Classnode's public site, on `settings.SITE_HOST` only: the homepage, the
-privacy notice and the terms.
+privacy notice, the terms and the sitemap.
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
 one inline script moves the homepage's slider, counts its figures up and closes
-the phone menu, and is not needed to read anything or to send the form.
+the phone menu, and is not needed to read anything or to send the form. The
+homepage's other `<script>` is structured data for search engines, which no
+browser runs.
+
+The only host search engines are asked to index (`website/crawlers.py`), so
+every page here carries its own title, description, canonical address and
+share card (`site_page`).
 """
 
+import json
 import re
 from datetime import timedelta
 
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import redirect, render
+from django.templatetags.static import static
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import strip_tags
+from django.utils.safestring import mark_safe
 from django.views.decorators.http import require_http_methods
 
 from accounts.throttling import client_address
 from schools.hosts import portal_host
 
+from .crawlers import site_url
 from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
+
+#: Each public page's title and description, by route name, in the order the
+#: sitemap lists them. Every title is the page's own and under 60 characters,
+#: but the homepage's, which is the owner's words; every description is under
+#: 155. A page added to `urls_site.py` is added here too, or its tests say so.
+PAGES = {
+    "site-home": (
+        "Classnode: School management software for Nigerian secondary schools",
+        "Results, report cards, fees and registers for Nigerian secondary schools, in one "
+        "place. ₦2,500 per student, per term. No setup fee.",
+    ),
+    "site-privacy": (
+        "Privacy notice: Classnode",
+        "What Classnode collects about schools, staff, students and parents, why we use it, "
+        "who sees it, how long we keep it, and your rights.",
+    ),
+    "site-terms": (
+        "Terms of use: Classnode",
+        "The terms for schools using Classnode: what the service does, signing in, fees, "
+        "the school's data, our responsibility and ending the service.",
+    ),
+}
+
+#: The homepage's questions and answers, drawn on the page and given to search
+#: engines as FAQPage structured data from this one list, so the two cannot
+#: differ. Answers are HTML written here; the structured data carries their text.
+FAQ = [
+    ("Do our teachers need laptops?",
+     "No. Classnode works in the browser on the phones your teachers already carry. "
+     "There is nothing to install."),
+    ("What happens when the network is bad?",
+     "Scores and registers stay on the phone and send when the connection comes back. "
+     "Teachers can keep working in the meantime."),
+    ("Can we use the Ogun State report sheet?",
+     "Yes. Switch on the Ogun State template in setup and your report cards follow the "
+     "sheet the Ministry asks for."),
+    ("Can we bring our current student list?",
+     "Yes. Send it as an Excel or CSV file and it is imported into your classes. We help "
+     "you with it during setup."),
+    ("How do parents pay school fees?",
+     "By bank transfer, the way they already do. Each child has their own account number, "
+     "so the payment shows on that child's record."),
+    ("Who can see our school's records?",
+     "Only your staff, each according to their role, and parents for their own children. "
+     "Your records are kept apart from every other school's. Our "
+     '<a href="/privacy/">privacy notice</a> has the details.'),
+]
+
+
+def site_page(request, template, context=None, status=200):
+    """A page of the public site: the one kind of page search engines are asked to index.
+
+    Every view below draws through here, so each page carries its title and
+    description from `PAGES`, its canonical address (the bare domain over
+    https, no query) and the site's address for the share image, and says it
+    is `indexable`, which is what keeps `templates/design/head.html` from
+    writing its noindex.
+    """
+    title, description = PAGES[request.resolver_match.url_name]
+    return render(
+        request,
+        template,
+        {
+            "indexable": True,
+            "title": title,
+            "description": description,
+            "site_url": site_url(),
+            "canonical": site_url() + request.path,
+            "portal_host": portal_host(),
+            **(context or {}),
+        },
+        status=status,
+    )
+
+
+def _json_ld(data):
+    """`data` as JSON safe to put inside a `<script>` element."""
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    return mark_safe(text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026"))
+
+
+def structured_data():
+    """Who publishes the site, what it sells, and the homepage's questions.
+
+    No address, no ratings and no reviews: there is no public office, and no
+    rating or review exists that we could stand behind.
+    """
+    site = site_url()
+    organization = f"{site}/#organization"
+    return _json_ld({
+        "@context": "https://schema.org",
+        "@graph": [
+            {
+                "@type": "Organization",
+                "@id": organization,
+                "name": "Classnode Edtech Limited",
+                "alternateName": "Classnode",
+                "url": f"{site}/",
+                "logo": {
+                    "@type": "ImageObject",
+                    "url": site + static("website/logo.png"),
+                    "width": 512,
+                    "height": 512,
+                },
+                "email": "hello@classnode.co",
+            },
+            {
+                "@type": "SoftwareApplication",
+                "name": "Classnode",
+                "url": f"{site}/",
+                "applicationCategory": "EducationalApplication",
+                "operatingSystem": "Web browser",
+                "description": "School management software for Nigerian secondary schools: "
+                               "results and report cards, fees and registers in one place.",
+                "publisher": {"@id": organization},
+                "offers": {
+                    "@type": "Offer",
+                    "price": "2500",
+                    "priceCurrency": "NGN",
+                    "description": "Per student, per term. No setup fee.",
+                    "priceSpecification": {
+                        "@type": "UnitPriceSpecification",
+                        "price": "2500",
+                        "priceCurrency": "NGN",
+                        "unitText": "per student, per term",
+                    },
+                },
+            },
+            {
+                "@type": "FAQPage",
+                "mainEntity": [
+                    {
+                        "@type": "Question",
+                        "name": question,
+                        "acceptedAnswer": {"@type": "Answer", "text": strip_tags(answer)},
+                    }
+                    for question, answer in FAQ
+                ],
+            },
+        ],
+    })
 
 #: A fact or a claim still to be settled, drawn on the legal pages as a box
 #: (`.todo`). Only `settings.SHOW_LEGAL_TODOS` shows them; a public reader gets
@@ -30,7 +183,7 @@ _TODO_NOTE = re.compile(r'[ \t]*<span class="todo">.*?</span>', re.S)
 
 def legal_page(request, template):
     """A legal page, with its TODO notes only where the setting asks for them."""
-    response = render(request, template, {"portal_host": portal_host()})
+    response = site_page(request, template)
     if not settings.SHOW_LEGAL_TODOS:
         response.content = _TODO_NOTE.sub("", response.content.decode())
     return response
@@ -72,14 +225,15 @@ def homepage(request):
                 demo.save()
                 transaction.on_commit(lambda: demo_requested(demo.pk))
                 return redirect(SENT)
-    return render(
+    return site_page(
         request,
         "website/home.html",
         {
             "form": form,
             "refused": refused,
             "sent": request.method == "GET" and request.GET.get("sent") == "1",
-            "portal_host": portal_host(),
+            "faq": [(question, mark_safe(answer)) for question, answer in FAQ],
+            "structured_data": structured_data(),
         },
         status=status,
     )
@@ -95,3 +249,14 @@ def privacy(request):
 def terms(request):
     """The terms of use, on the same terms as `privacy`."""
     return legal_page(request, "website/terms.html")
+
+
+@require_http_methods(["GET", "HEAD"])
+def sitemap(request):
+    """Every public page, `PAGES`, and nothing on any other host."""
+    return render(
+        request,
+        "website/sitemap.xml",
+        {"urls": [site_url() + reverse(name) for name in PAGES]},
+        content_type="application/xml; charset=utf-8",
+    )

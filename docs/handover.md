@@ -433,7 +433,7 @@ Two PRs, each merged on green after review, then this docs-only one.
 `docs/website.md` is the description of both.
 
 ## Where the site answers (#226)
-`SITE_HOST` (defaults to `PLATFORM_DOMAIN`; `www.` is the same site). `schools/middleware.py`
+`SITE_HOST` (defaults to `PLATFORM_DOMAIN`; `www.` redirects to it). `schools/middleware.py`
 (`PlatformTenantMiddleware`, replacing django-tenants' middleware in `settings.MIDDLEWARE`) sends that one host
 to `urls_site.py`: the homepage, `/privacy/`, `/terms/`, nothing else. **Not a `Domain` row**, on purpose: a row
 would make it the portal, with the admin and both sign-in doors on it. Every other host resolves as before.
