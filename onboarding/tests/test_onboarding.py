@@ -429,8 +429,13 @@ class SignInSendsAnUnfinishedAdministratorToStartHereTests(TwoSchools):
             with self.subTest(username=username):
                 self.assertEqual(self.sign_in(username), {"sunrise": False})
 
-    def test_one_schools_progress_does_not_send_the_other_schools_administrator(self):
+    def test_one_schools_finished_setup_does_not_stop_the_other_schools_administrator(self):
+        """Control: `_schools_of()` was made to read "has any school finished"
+        and this went red. It first survived that control, because Sunrise's
+        finish had never been written down; it is written down here first."""
         self.set_up_everything(self.a, "a")
+        self.steps_of(self.a)
+        self.assertIsNotNone(School.objects.get(pk=self.a.pk).setup_completed_at)
 
         self.assertEqual(self.sign_in("bisi"), {"harbour": True})
 
