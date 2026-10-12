@@ -5,7 +5,8 @@
  * guardian usually has a phone and nothing else. `tests/js/` proves the list and the file; only a
  * browser shows the list on a phone and the download arriving. Runs against the same demo as
  * `screens.test.js` (see its header), as Sunrise's administrator, at 360px. The three children are
- * added to JSS 1A under admission numbers made from the clock, so a second run does not collide.
+ * admitted into this file's own class, UI Import (`manage.py seed_ui`), which no other file reads or
+ * writes, under admission numbers made from the clock, so a second run does not collide.
  */
 
 import assert from "node:assert/strict";
@@ -56,9 +57,9 @@ describe("the import's gap report", () => {
     const phone = `0803${stamp.slice(-7)}`;
     const csv = [
       "Full name,Class group,Reference,Guardian name,Guardian contact",
-      `Gap One,JSS 1A,G${stamp}1,Mrs One,${phone}`,
-      `Gap Two,JSS 1A,G${stamp}2,Mr Two,two${stamp}@example.test`,
-      `Gap Three,JSS 1A,G${stamp}3,,`,
+      `Gap One,UI Import,G${stamp}1,Mrs One,${phone}`,
+      `Gap Two,UI Import,G${stamp}2,Mr Two,two${stamp}@example.test`,
+      `Gap Three,UI Import,G${stamp}3,,`,
     ].join("\n");
 
     await page.goto(`${SUNRISE}/roll/import/`);
@@ -89,8 +90,8 @@ describe("the import's gap report", () => {
     assert.equal(text.charCodeAt(0), 0xfeff, "a byte-order mark, so Excel reads the names as UTF-8");
     const lines = text.slice(1).trim().split("\r\n");
     assert.equal(lines.length, 3);
-    assert.match(lines[1], new RegExp(`^"\\d+","Gap One","JSS 1A","G${stamp}1","Mrs One","\\+234803\\d{7}","A phone number only\\."$`));
-    assert.match(lines[2], new RegExp(`"Gap Three","JSS 1A","G${stamp}3","","","No guardian was given\\."$`));
+    assert.match(lines[1], new RegExp(`^"\\d+","Gap One","UI Import","G${stamp}1","Mrs One","\\+234803\\d{7}","A phone number only\\."$`));
+    assert.match(lines[2], new RegExp(`"Gap Three","UI Import","G${stamp}3","","","No guardian was given\\."$`));
     assert.doesNotMatch(text, /Gap Two/);
   });
 });

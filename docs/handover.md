@@ -269,8 +269,8 @@ guardian was given" or "A phone number only") and offers a CSV (BOM, quoted, for
 ## Not verified
 - All of it ran against the demo, a local Postgres and Redis and Chromium at 360px with touch, not a real handset, host or
   provider. The soft keyboard dropping is inferred from focus loss.
-- `tests/ui/roll_import_gap.test.js` adds three children to JSS 1A in the demo database on each run (admission numbers from
-  the clock); the other UI files do not depend on the class's size.
+- `tests/ui/roll_import_gap.test.js` adds three children to its own class, UI Import (`seed_ui`), on each run (admission
+  numbers from the clock); no other UI file reads or writes that class.
 - Nothing here touched Paystack, hosting or domains.
 
 ---
@@ -362,7 +362,9 @@ which stops for your review with screenshots. Part 6 (the OGSERA filler) and the
 - **Health entry** sits on the comments page (class teacher), fetched separately; there is no class-wide health
   screen, on purpose (it would be a class list of health data).
 - **`tests/ui/offline.test.js` flaked once** in the `screens` job on #239 ("no copy of a sheet is left", 2 !== 0),
-  in code none of these PRs touch; it passed 3/3 locally and on one re-run. Worth watching.
+  in code none of these PRs touch; it passed 3/3 locally and on one re-run. Worth watching. It flaked again on #267 and
+  #268, from another cause found: the import test admitted children into the class its register was being taken for.
+  Each UI file now has its own class (`seed_ui`, `docs/design.md`).
 - The OGSERA page is the newest entry in `tests/test_budget.py`; the card page grew by `card/ogun.js` and is within
   budget.
 

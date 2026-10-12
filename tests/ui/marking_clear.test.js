@@ -5,8 +5,9 @@
  * the school kept the old mark, which came back at the next redraw. `tests/js/` proves the
  * requests; only a browser shows what the box, the school and the phone's queue each end up
  * holding. Runs against the same demo as `screens.test.js` (see its header), as Sunrise's
- * teacher, on JSS 1A's Mathematics exam, which `seed_demo` leaves unmarked and which no other
- * file in `tests/ui/` uses (they run side by side, in separate processes).
+ * teacher, on the Mathematics exam of its own class, UI Marking Clear (`manage.py seed_ui`): children
+ * nobody has marked and no other file in `tests/ui/` touches (they run side by side, in separate
+ * processes).
  */
 
 import assert from "node:assert/strict";
@@ -74,7 +75,7 @@ async function openSheet() {
   const exam = page.locator('[data-action="pick-assessment"]', { hasText: "Mathematics · Exam" });
   assessment = await exam.getAttribute("data-assessment");
   await exam.click();
-  const group = page.locator('[data-action="pick-class"]', { hasText: "JSS 1A" });
+  const group = page.locator('[data-action="pick-class"]', { hasText: "UI Marking Clear" });
   classGroup = await group.getAttribute("data-class");
   await group.click();
   await page.waitForSelector("ul.roster");

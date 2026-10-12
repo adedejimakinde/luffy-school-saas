@@ -195,6 +195,74 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
 PASSWORD = "a-long-demo-password-1"
 
 
+class SeedUiTests(SendsThroughTheFake, TestCase):
+    """`seed_ui`: a class and children of its own for each file in `tests/ui/`.
+
+    The files run side by side against one demo, and two that wrote to one class
+    raced: the offline register was held whenever the import admitted children
+    into the same class mid-test. No two files may share a class again.
+    """
+
+    def tearDown(self):
+        connection.set_schema_to_public()
+
+    @override_settings(DEBUG=True)
+    def test_each_file_gets_a_class_and_children_nobody_else_has(self):
+        from academics.models import ClassGroup
+        from schools.management.commands.seed_ui import CLASSES, LEVEL
+
+        with self.assertRaisesMessage(CommandError, "Run seed_demo first"):
+            call_command("seed_ui", stdout=StringIO())
+        call_command("seed_demo", stdout=StringIO())
+        call_command("seed_ui", stdout=StringIO())
+
+        school = School.objects.get(slug="sunrise-demo")
+        with schema_context(school.schema_name):
+            term = Term.objects.get(is_current=True)
+            seen = set()
+            for name, _, count in CLASSES:
+                with self.subTest(name=name):
+                    group = ClassGroup.objects.get(name=name)
+                    self.assertEqual(group.level, LEVEL, "after JSS 1A and JSS 1B in every list")
+                    members = set(ClassPlacement.objects.filter(class_group=group, term=term).values_list("student_membership_id", flat=True))
+                    self.assertEqual(len(members), count)
+                    self.assertFalse(members & seen, "a child in two of the tests' classes")
+                    seen |= members
+            demo = set(ClassPlacement.objects.filter(class_group__name__in=("JSS 1A", "JSS 1B")).values_list("student_membership_id", flat=True))
+            self.assertFalse(seen & demo, "a test's child in a demo class")
+        with self.assertRaisesMessage(CommandError, "already here"):
+            call_command("seed_ui", stdout=StringIO())
+
+    def test_it_will_not_run_in_production(self):
+        with override_settings(DEBUG=False):
+            with self.assertRaisesMessage(CommandError, "only runs with DEBUG on"):
+                call_command("seed_ui", stdout=StringIO())
+
+    def test_no_two_browser_test_files_name_the_same_class(self):
+        """Each class the browser tests use is named in one file of `tests/ui/`
+        only, and every file that writes names its own: none picks "the first"."""
+        from pathlib import Path
+
+        from django.conf import settings
+
+        from schools.management.commands.seed_ui import CLASSES
+
+        files = {path.name: path.read_text() for path in (Path(settings.BASE_DIR) / "tests" / "ui").glob("*.test.js")}
+        names = ["JSS 1A", "JSS 1B", *(name for name, _, _ in CLASSES)]
+        for name in names:
+            with self.subTest(name=name):
+                using = [file for file, text in files.items() if name in text]
+                self.assertEqual(len(using), 1, f"{name} is named in {using}")
+        owners = {"offline.test.js": "UI Offline", "marking_clear.test.js": "UI Marking Clear",
+                  "marking_focus.test.js": "UI Marking Focus", "roll_import_gap.test.js": "UI Import",
+                  "teaching.test.js": "UI Teaching", "screens.test.js": "JSS 1A"}
+        self.assertEqual(set(owners), set(files), "a browser test file with no class of its own")
+        for file, name in owners.items():
+            with self.subTest(file=file):
+                self.assertIn(name, files[file])
+                self.assertNotRegex(files[file], r"""\[data-action="(open|pick-class|pick-assessment)"\]'\)\.first\(\)""")
+
+
 class LoadDemoTests(TestCase):
     """`manage.py load_demo`: the same schools on a server with DEBUG off."""
 

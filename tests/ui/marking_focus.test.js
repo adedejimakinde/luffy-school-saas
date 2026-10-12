@@ -7,7 +7,8 @@
  * typing could save the first digit alone ("1" for "11"). `tests/js/` cannot see it (its stub has
  * no focus) and `offline.test.js` fills each box directly, so only a real browser typing in turn
  * would. Runs against the same demo as `screens.test.js` (see its header), as Sunrise's teacher,
- * on a sheet nobody has marked: JSS 1A's exams, which `seed_demo` leaves empty.
+ * on a sheet nobody has marked: the English exam of its own class, UI Marking Focus (`manage.py
+ * seed_ui`), whose children no other file in `tests/ui/` touches.
  */
 
 import assert from "node:assert/strict";
@@ -54,7 +55,7 @@ describe("typing marks down a column", () => {
     const exam = page.locator('[data-action="pick-assessment"]', { hasText: "English Language · Exam" });
     const assessment = await exam.getAttribute("data-assessment");
     await exam.click();
-    const group = page.locator('[data-action="pick-class"]', { hasText: "JSS 1A" });
+    const group = page.locator('[data-action="pick-class"]', { hasText: "UI Marking Focus" });
     const classGroup = await group.getAttribute("data-class");
     await group.click();
     await page.waitForSelector("ul.roster");
