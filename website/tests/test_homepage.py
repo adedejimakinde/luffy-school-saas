@@ -41,7 +41,7 @@ COPY = [
     "Report cards that add up by themselves",
     "Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every "
     "report card carries your crest.",
-    "Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.",
+    "Schools in Ogun State can switch on the report sheet the Ministry asks for.",
     "Sunrise Demo Academy is a demo school. Every name and figure is made up.",
     "See who has paid, and who still owes",
     "Each child has their own account number, so a transfer lands on the right record. You see "
@@ -245,6 +245,21 @@ class TheWordsTests(SiteSetUp):
         hero = page.split('<section class="proof"', 1)[0]
         self.assertIn('<p class="eyebrow">For Nigerian private secondary schools</p>', hero)
 
+    def test_the_report_sheet_line_names_the_ministry_alone(self):
+        """The printed Ogun sheet carries the ministry's name; what OGSERA asks a
+        school for is its own spreadsheet (`results/ogsera.py`), not the sheet."""
+        text = visible_text(self.get().content.decode())
+        self.assertNotIn("OGSERA", text)
+        self.assertIn("the sheet the Ministry asks for.", text)
+
+    def test_card_and_benefit_headings_wrap_where_the_line_ends(self):
+        page = self.get().content.decode()
+        for heading in re.findall(r"<h3\b[^>]*>(.*?)</h3>", page, flags=re.S):
+            self.assertNotIn("<br", heading)
+        css = without_comments(CSS.read_text())
+        for rule in re.findall(r"([^{}]*\bh3\b[^{}]*)\{([^}]*)\}", css):
+            self.assertNotIn("text-wrap", rule[1], rule[0].strip())
+
     def test_headlines_over_content_start_at_the_left_and_the_price_is_centred(self):
         page = self.get().content.decode()
         for section in ("features", "how", "faq"):
@@ -274,11 +289,12 @@ class TheReportSheetTests(SiteSetUp):
     Drawn complete in the markup, so a reader with reduced motion or a browser
     without scroll timelines has the whole sheet, and its sums are the sums."""
 
-    #: Sunrise's Tolu Adeyemi on the Ogun split: subject, CA, exam, weighted average, grade.
+    #: Made-up demo marks on the Ogun split under Sunrise's names: subject, CA,
+    #: exam, weighted average.
     ROWS = [
-        ("Mathematics", 18, 46, 64, "C4"),
-        ("English Language", 26, 62, 88, "A1"),
-        ("Basic Science", 18, 51, 69, "B3"),
+        ("Mathematics", 18, 46, 64),
+        ("English Language", 26, 62, 88),
+        ("Basic Science", 18, 51, 69),
     ]
 
     def setUp(self):
@@ -294,13 +310,13 @@ class TheReportSheetTests(SiteSetUp):
         text = words(self.sheet)
         for fact in ("Sunrise Demo Academy", "Junior Secondary School Continuous Assessment Report Sheet",
                      "Ogun State template", "Tolu Adeyemi", "SUN/019", "JSS 1B", "First term, 2026/2027",
-                     "Cont. Assess (30)", "Exam (70)", "Weighted Average", "(100)", "Grade",
+                     "Cont. Assess (30)", "Exam (70)", "Weighted Average", "(100)", "Class position",
                      "Works carefully and helps others. More care with spelling.",
                      "A steady term. Keep reading every evening."):
             with self.subTest(fact=fact):
                 self.assertIn(fact, text)
 
-    def test_every_row_adds_up_and_carries_its_grade(self):
+    def test_every_row_adds_up(self):
         rows = re.findall(r'<tr style="--r:(\d)">(.*?)</tr>', self.sheet, flags=re.S)
         self.assertEqual([int(r) for r, _ in rows], [0, 1, 2])
         found = []
@@ -308,23 +324,23 @@ class TheReportSheetTests(SiteSetUp):
             name = words(re.search(r"<th[^>]*>(.*?)</th>", row, flags=re.S).group(1))
             ca, exam = (int(v) for v in re.findall(r'class="ink ink-(?:ca|exam)">(\d+)<', row))
             to, total = re.search(r'class="ink ink-sum" style="--to:(\d+)">(\d+)<', row).groups()
-            grade = re.search(r'class="stamp">(\w+)<', row).group(1)
             self.assertEqual(to, total, "the count ends on the figure in the markup")
             self.assertEqual(ca + exam, int(total), name)
             self.assertLessEqual(ca, 30)
             self.assertLessEqual(exam, 70)
-            found.append((name, ca, exam, int(total), grade))
+            found.append((name, ca, exam, int(total)))
         self.assertEqual(found, self.ROWS)
 
-    def test_the_grades_are_the_default_scale(self):
-        def grade(score):
-            for floor, letter in ((75, "A1"), (70, "B2"), (65, "B3"), (60, "C4"), (55, "C5"),
-                                  (50, "C6"), (45, "D7"), (40, "E8"), (0, "F9")):
-                if score >= floor:
-                    return letter
-        for name, _, _, total, letter in self.ROWS:
-            with self.subTest(subject=name):
-                self.assertEqual(grade(total), letter)
+    def test_no_grade_as_the_ogun_sheet_prints_none_and_the_position_is_stamped(self):
+        """The Ogun sheet Classnode prints (`static/card/ogun.js`) has no grade
+        column, and prints "Class position" in its summary as "2nd of 10"."""
+        self.assertNotIn("Grade", words(self.sheet))
+        self.assertEqual(re.findall(r'class="stamp">([^<]+)<', self.sheet), ["2nd of 10"])
+        summary = self.sheet.split('class="sheet-summary"', 1)[1].split("</dl>", 1)[0]
+        self.assertIn("<dt>Class position</dt><dd><span class=\"stamp\">2nd of 10</span>", summary)
+        card = (Path(settings.BASE_DIR) / "static" / "card" / "ogun.js").read_text()
+        self.assertIn('cell("Class position"', card)
+        self.assertNotIn("Grade", card)
 
     def test_the_summary_is_the_rows_sum(self):
         obtained = sum(r[3] for r in self.ROWS)
@@ -618,11 +634,12 @@ class TheMotionRulesTests(TestCase):
         # Its own feature test: a browser without scroll timelines is never emptied.
         self.assertLess(motion.index("@supports (animation-timeline: view())"),
                         motion.index("animation-timeline: --sheet"))
-        self.assertNotIn("color: transparent", outside_media(css, "prefers-reduced-motion: no-preference"))
-        # Each step ends where the still sheet is: written, counted, stamped at -6deg.
-        self.assertRegex(css, r"\.stamp \{[^}]*rotate: -6deg;")
-        self.assertRegex(css, r"@keyframes stamp \{.*100% \{ opacity: 1; scale: 1; rotate: -6deg; \} \}")
-        self.assertRegex(css, r"@keyframes add-up \{.*100% \{ --n: var\(--to\); opacity: 1; \} \}")
+        # A figure is only ever hidden for its count while motion is allowed.
+        self.assertNotRegex(outside_media(css, "prefers-reduced-motion: no-preference"), r"(?<![\w-])color: transparent")
+        # Each step ends where the still sheet is: written, counted, stamped at -4deg.
+        self.assertRegex(css, r"\.stamp \{[^}]*rotate: -4deg;")
+        self.assertRegex(css, r"@keyframes stamp \{.*100% \{ opacity: 1; scale: 1; rotate: -4deg; \} \}")
+        self.assertRegex(css, r"@keyframes add-up \{.*100% \{ --n: var\(--to\); opacity: 1; background-color: transparent; \} \}")
         self.assertRegex(css, r"@keyframes write \{.*to \{ opacity: 1; translate: 0 0; \} \}")
 
     def test_the_crossfade_the_float_and_the_rise(self):

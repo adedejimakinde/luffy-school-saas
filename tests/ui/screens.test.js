@@ -25,7 +25,7 @@
  * artifact: `<width>/<screen>.png`.
  *
  * Classnode's own public site (`website/`, on the bare platform domain: the
- * homepage, the privacy notice and the terms) is photographed at eight widths, `SITE_WIDTHS`, under reduced motion so every
+ * homepage, the privacy notice and the terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
@@ -69,8 +69,8 @@ const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
 
-/** The public site's extra widths: a small Android, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
-export const SITE_WIDTHS = [320, 390, 414, 1024, 1920];
+/** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
+export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
 
 /**
  * The only tables that may be wider than a phone: the broadsheet, the
@@ -668,6 +668,74 @@ describe("the roll import's preview", () => {
     }
     assert.deepEqual(problems, []);
   });
+});
+
+describe("the homepage's sizes", () => {
+  // The owner's sizing rules, measured finished and still on a 375 x 812 phone
+  // and a 1280 x 800 desk: headings at most 28px on a phone and 40px on a
+  // desk, the hero 30 to 36px and 48 to 56px, body copy 15 to 17px, buttons 44
+  // to 48px tall, sections 48 to 64px and 80 to 112px top and bottom, content
+  // at most 1200px wide, and the phone's first screen holding the headline,
+  // its subline, the main button and the top of the screens.
+  for (const [width, height, phone] of [[375, 812, true], [1280, 800, false]]) {
+    test(`at ${width} x ${height}`, async () => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        // The deferred screens in, so the first screen is the one a visitor keeps.
+        await page.waitForTimeout(2000);
+        const problems = await page.evaluate((phone) => {
+          const found = [];
+          const visible = (el) => {
+            const box = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+          };
+          const size = (el) => parseFloat(getComputedStyle(el).fontSize);
+          const within = (what, value, low, high) => {
+            if (value < low - 0.5 || value > high + 0.5) found.push(`${what} is ${Math.round(value * 10) / 10}px, not ${low} to ${high}`);
+          };
+          const main = document.querySelector("main");
+          within("the hero headline", size(main.querySelector("h1")), ...(phone ? [30, 36] : [48, 56]));
+          for (const h of main.querySelectorAll("h2, h3")) {
+            if (visible(h)) within(`"${h.textContent.trim().slice(0, 24)}"`, size(h), 0, phone ? 28 : 40);
+          }
+          const copy = [...main.querySelectorAll("p, li, summary")].filter(
+            (el) => visible(el) && !el.closest(".mini, .float-card, .sheet, .slider-bar, .eyebrow, .bait"),
+          );
+          for (const el of copy) within(`body copy "${el.textContent.trim().slice(0, 24)}"`, size(el), 15, 17);
+          for (const b of document.querySelectorAll(".btn, button")) {
+            if (visible(b)) within(`the button "${b.textContent.trim().slice(0, 18)}"`, b.getBoundingClientRect().height, 44, 48);
+          }
+          for (const s of main.querySelectorAll(".section, .cta, .feature-row")) {
+            const style = getComputedStyle(s);
+            for (const side of ["paddingTop", "paddingBottom"]) {
+              within(`${s.className.split(" ").slice(0, 2).join(".")} ${side}`, parseFloat(style[side]), ...(phone ? [48, 64] : [80, 112]));
+            }
+          }
+          for (const w of document.querySelectorAll(".wrap")) {
+            if (visible(w) && w.getBoundingClientRect().width > 1200.5) found.push(`a .wrap is ${Math.round(w.getBoundingClientRect().width)}px wide`);
+          }
+          if (document.documentElement.scrollWidth > innerWidth) found.push(`scrolls sideways: ${document.documentElement.scrollWidth}px`);
+          if (phone) {
+            for (const [what, sel] of [["the headline", ".hero h1"], ["the subline", ".hero-lead"], ["the main button", ".hero-actions .btn"]]) {
+              if (document.querySelector(sel).getBoundingClientRect().bottom > innerHeight) found.push(`${what} is below the first screen`);
+            }
+            const screens = document.querySelector(".slider").getBoundingClientRect().top;
+            if (screens > innerHeight - 96) found.push(`the screens start at ${Math.round(screens)}px, under 96px of them on the first screen`);
+          }
+          return found;
+        }, phone);
+        mkdirSync(join(OUT, String(width)), { recursive: true });
+        await page.screenshot({ path: join(OUT, String(width), "homepage-first-screen.png") });
+        assert.deepEqual(problems, []);
+      } finally {
+        await context.close();
+      }
+    });
+  }
 });
 
 describe("the homepage's motion", () => {

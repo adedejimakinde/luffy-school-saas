@@ -146,19 +146,18 @@ PROOF: real quotes and school logos go here, each with the school's written
 
   {% comment %}
 The report sheet, filling in as the visitor scrolls: each subject's CA and
-exam are written in, the weighted average counts up to their sum, and the
-grade is stamped beside it; then the summary and the two remarks. CSS
-scroll-driven animation (`website.css`, "the report sheet"). Under reduced
-motion, and in a browser without scroll timelines, it is drawn complete.
+exam are written in and the weighted average counts up to their sum, the
+moment the section is for; then the summary, the class position stamped in,
+and the two remarks. CSS scroll-driven animation (`website.css`, "the report
+sheet"). Under reduced motion, and in a browser without scroll timelines, it
+is drawn complete.
 
-Sunrise Demo Academy's (`seed_demo`): Tolu Adeyemi, SUN/019, JSS 1B, first
-term, the school's three subjects and the two remarks every JSS 1B card
-carries. Sunrise prints the Standard card on papers of CA 20 and exam 60, so
-Tolu's own marks (Mathematics 12 and 39, English Language 17 and 53, Basic
-Science 11 and 44) are set out here on the Ogun split of 30 and 70, so each
-weighted average is Sunrise's own percentage for the subject, rounded (63.75,
-87.5, 68.75). The grades are the default scale's (A1 from 75, B3 from 65, C4
-from 60).
+Sunrise Demo Academy's names (`seed_demo`): Tolu Adeyemi, SUN/019, JSS 1B,
+the school's three subjects and the two remarks every JSS 1B card carries.
+The marks are made-up demo figures on the Ogun split (CA 30, exam 70), not
+Sunrise's database. No grade: the Ogun sheet Classnode prints has no grade
+column. The class position is printed as the Ogun sheet prints it, "2nd of
+10", in its summary.
 {% endcomment %}
   <div class="feature-row sheet-row">
     <div class="wrap sheet-stage">
@@ -166,7 +165,7 @@ from 60).
         <span class="tile tile-lg tile-brand"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
         <h3>Report cards that add up by themselves</h3>
         <p>Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every report card carries your crest.</p>
-        <p>Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.</p>
+        <p>Schools in Ogun State can switch on the report sheet the Ministry asks for.</p>
         <p class="sheet-note">Sunrise Demo Academy is a demo school. Every name and figure is made up.</p>
       </div>
 
@@ -192,7 +191,6 @@ from 60).
               <th scope="col" class="num">Cont. Assess <span class="out">(30)</span></th>
               <th scope="col" class="num">Exam <span class="out">(70)</span></th>
               <th scope="col" class="num"><span class="long">Weighted Average</span><span class="short">Total</span> <span class="out">(100)</span></th>
-              <th scope="col" class="num">Grade</th>
             </tr>
           </thead>
           <tbody>
@@ -201,21 +199,18 @@ from 60).
               <td class="num"><span class="ink ink-ca">18</span></td>
               <td class="num"><span class="ink ink-exam">46</span></td>
               <td class="num"><b class="ink ink-sum" style="--to:64">64</b></td>
-              <td class="num"><span class="stamp">C4</span></td>
             </tr>
             <tr style="--r:1">
               <th scope="row">English Language</th>
               <td class="num"><span class="ink ink-ca">26</span></td>
               <td class="num"><span class="ink ink-exam">62</span></td>
               <td class="num"><b class="ink ink-sum" style="--to:88">88</b></td>
-              <td class="num"><span class="stamp">A1</span></td>
             </tr>
             <tr style="--r:2">
               <th scope="row">Basic Science</th>
               <td class="num"><span class="ink ink-ca">18</span></td>
               <td class="num"><span class="ink ink-exam">51</span></td>
               <td class="num"><b class="ink ink-sum" style="--to:69">69</b></td>
-              <td class="num"><span class="stamp">B3</span></td>
             </tr>
           </tbody>
         </table>
@@ -224,6 +219,7 @@ from 60).
             <div><dt>Marks obtainable</dt><dd>300</dd></div>
             <div><dt>Marks obtained</dt><dd><b class="ink ink-total" style="--to:221">221</b></dd></div>
             <div><dt>Percentage</dt><dd><span class="ink ink-pct">73.67%</span></dd></div>
+            <div><dt>Class position</dt><dd><span class="stamp">2nd of 10</span></dd></div>
           </dl>
           <div class="sheet-remarks">
             <div class="ink ink-remark"><p class="sheet-label">Class teacher&#39;s comment</p><p>Works carefully and helps others. More care with spelling.</p></div>
@@ -398,7 +394,7 @@ from 60).
       </details>
       <details>
         <summary>Can we use the Ogun State report sheet?</summary>
-        <p>Yes. Switch on the Ogun State template in setup and your report cards follow the sheet the Ministry and OGSERA ask for.</p>
+        <p>Yes. Switch on the Ogun State template in setup and your report cards follow the sheet the Ministry asks for.</p>
       </details>
       <details>
         <summary>Can we bring our current student list?</summary>
