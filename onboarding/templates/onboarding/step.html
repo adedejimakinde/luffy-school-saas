@@ -31,15 +31,15 @@
           <h1>{{ here.step.title }}</h1>
           <div class="explain">
             <section>
-              <h2>What this does</h2>
+              <h2 class="eyebrow">What this does</h2>
               <p>{{ here.step.what }}</p>
             </section>
             <section>
-              <h2>Why it matters</h2>
+              <h2 class="eyebrow">Why it matters</h2>
               <p>{{ here.step.why }}</p>
             </section>
             <section>
-              <h2>What to do</h2>
+              <h2 class="eyebrow">What to do</h2>
               <ol>{% for line in here.step.todo %}<li>{{ line }}</li>{% endfor %}</ol>
             </section>
           </div>
