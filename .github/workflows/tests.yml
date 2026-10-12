@@ -319,6 +319,9 @@ jobs:
           python manage.py migrate_schemas --shared -v 0
           python manage.py setup_portal
           python manage.py seed_demo
+          # A class and children of its own for each file in tests/ui/, which
+          # run side by side: no two of them write to the same class.
+          python manage.py seed_ui
 
       - name: Serve it
         run: |

@@ -113,9 +113,21 @@ Mobile first, checked at 360, 768 and 1280.
   are drawn and measured.
 
 To run the screens locally, do what the `screens` job does: seed the demo
-under `PLATFORM_DOMAIN=classnode.test` with `DJANGO_DEBUG=1`, serve it on port
-8000, install `playwright` outside the repository's dependencies, then run
-`npm run screens`. The photographs go to `SCREENS_OUT` (default `screens/`).
+under `PLATFORM_DOMAIN=classnode.test` with `DJANGO_DEBUG=1` (`seed_demo`, then
+`seed_ui`), serve it on port 8000, install `playwright` outside the repository's
+dependencies, then run `npm run screens`. The photographs go to `SCREENS_OUT`
+(default `screens/`).
+
+The files in `tests/ui/` run side by side, one process each, against that one
+demo, so **no two of them share a class**: `seed_ui` gives each file that writes
+a class and children of its own in Sunrise (UI Offline, UI Marking Clear, UI
+Marking Focus, UI Import, UI Teaching), `screens.test.js` keeps `seed_demo`'s
+JSS 1A and JSS 1B, and every file names its class and its paper rather than
+tapping "the first". `schools/tests/test_seed_demo.py` (`SeedUiTests`) fails if
+two files name the same class. Before this, `offline.test.js` failed now and
+then: `roll_import_gap.test.js` admitted three children into the class whose
+register it was taking on a phone, between the phone's copy and the send, and
+the register was held for review.
 
 ## Order of work
 

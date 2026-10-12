@@ -36,8 +36,10 @@
  *
  * ## What it runs against
  *
- * The demo (`manage.py seed_demo`), served by the development server, with
- * `PLATFORM_DOMAIN=classnode.test`. `*.classnode.test` is pointed at this
+ * The demo (`manage.py seed_demo`, then `manage.py seed_ui`, which gives each
+ * other file here a class and children of its own: the files run side by side,
+ * one process each, and no two write to the same class), served by the
+ * development server, with `PLATFORM_DOMAIN=classnode.test`. `*.classnode.test` is pointed at this
  * machine by Chromium's own resolver, so nothing needs a hosts file, and the
  * session cookie is scoped to the domain every school's host shares, which is
  * how a sign-in on the portal reaches Sunrise's pages, as it does in
@@ -69,6 +71,15 @@ const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
+
+// The class this file photographs and marks in, and the paper: `seed_demo`'s,
+// named rather than "the first", because the other files in `tests/ui/` add
+// classes and papers of their own while this one runs (`manage.py seed_ui`).
+const OWN_CLASS = "JSS 1A";
+const OWN_PAPER = "Basic Science · First CA";
+const OPEN_CLASS = `[data-action="open"]:has-text("${OWN_CLASS}")`;
+const PICK_PAPER = `[data-action="pick-assessment"]:has-text("${OWN_PAPER}")`;
+const PICK_CLASS = `[data-action="pick-class"]:has-text("${OWN_CLASS}")`;
 
 /** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
 export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
@@ -129,15 +140,15 @@ export const SCREENS = [
     name: "register",
     as: "sunrise.teacher",
     url: `${SUNRISE}/register/`,
-    steps: [["register-class", '[data-action="open"]']],
+    steps: [["register-class", OPEN_CLASS]],
   },
   {
     name: "marking",
     as: "sunrise.teacher",
     url: `${SUNRISE}/marking/`,
     steps: [
-      ["marking-classes", '[data-action="pick-assessment"]'],
-      ["marking-sheet", '[data-action="pick-class"]'],
+      ["marking-classes", PICK_PAPER],
+      ["marking-sheet", PICK_CLASS],
     ],
   },
   // No drill-down: the frame never says which class, so the page asks for
@@ -697,8 +708,8 @@ describe("a phone's 390px", () => {
   // bottom padding must be the bar's height: a bar over the last button is a
   // button nobody can press.
   const WITH_TAB_BAR = [
-    ["register", "/register/", ['[data-action="open"]']],
-    ["marking", "/marking/", ['[data-action="pick-assessment"]', '[data-action="pick-class"]']],
+    ["register", "/register/", [OPEN_CLASS]],
+    ["marking", "/marking/", [PICK_PAPER, PICK_CLASS]],
     ["remarks", "/comments/", []],
     ["timetable", "/timetable/", []],
   ];
@@ -752,7 +763,7 @@ describe("a phone's 390px", () => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${SUNRISE}/marking/`);
       await settle(page);
-      for (const selector of ['[data-action="pick-assessment"]', '[data-action="pick-class"]']) {
+      for (const selector of [PICK_PAPER, PICK_CLASS]) {
         await page.locator(selector).first().click();
         await settle(page);
       }

@@ -4,8 +4,9 @@
  * `tests/js/` walks the page against a stub and `gradebook/tests/test_teaching.py` walks the
  * routes; only a browser shows that the two meet and that a teacher's marking page sees what the
  * administrator made. Runs against the same demo as `screens.test.js` (see its header), as
- * Sunrise's administrator and teacher at 360px, and puts everything back: the other files here
- * run side by side in the same database.
+ * Sunrise's administrator and teacher at 360px, on its own class, UI Teaching (`manage.py seed_ui`),
+ * and puts everything back: the other files here run side by side in the same database, and none of
+ * them picks a subject or a paper it did not name.
  */
 
 import assert from "node:assert/strict";
@@ -82,13 +83,13 @@ describe("the office builds a subject and a teacher marks it", () => {
 
     // A class with no class teacher in the demo, then one chosen, as the office does it.
     await admin.click('[data-action="back"]');
-    const select = admin.locator("li", { hasText: "JSS 1B" }).locator("select");
+    const select = admin.locator("li", { hasText: "UI Teaching" }).locator("select");
     await select.selectOption({ label: "Teacher Sunrise" });
     await admin.waitForTimeout(600);
     await admin.reload();
     await admin.waitForSelector("form[data-form=subject]");
     assert.equal(
-      await admin.locator("li", { hasText: "JSS 1B" }).locator("select option:checked").innerText(),
+      await admin.locator("li", { hasText: "UI Teaching" }).locator("select option:checked").innerText(),
       "Teacher Sunrise",
       "the choice was kept by the school",
     );
@@ -102,7 +103,7 @@ describe("the office builds a subject and a teacher marks it", () => {
     );
 
     // Put it all back: the class teacher, the paper (nobody marked it), the subject.
-    await admin.locator("li", { hasText: "JSS 1B" }).locator("select").selectOption({ label: "No class teacher" });
+    await admin.locator("li", { hasText: "UI Teaching" }).locator("select").selectOption({ label: "No class teacher" });
     await admin.waitForTimeout(600);
     await admin.locator("li", { hasText: "Civic Education" }).locator('[data-action="open-subject"]').click();
     await admin.locator("li", { hasText: "First CA" }).locator('[data-action="ask-remove-paper"]').click();

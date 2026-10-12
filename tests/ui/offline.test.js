@@ -12,7 +12,9 @@
  * what the first left unsent is said to the second, not shown and not sent.
  *
  * Runs against the same demo as `screens.test.js` (see its header), as Sunrise's
- * teacher. A service worker needs a secure context and `*.classnode.test` over
+ * teacher, on its own class, UI Offline (`manage.py seed_ui`): its marks and its
+ * two registers are on children no other file touches, as the files run side
+ * by side. A service worker needs a secure context and `*.classnode.test` over
  * plain HTTP is not one, so the browser is told to treat that one origin as
  * secure; production is HTTPS.
  */
@@ -97,9 +99,14 @@ after(async () => {
   await browser?.close();
 });
 
+/** This file's own class (`manage.py seed_ui`), and the paper it marks there. */
+const CLASS = "UI Offline";
+const PAPER = "Mathematics · First CA";
+const openClass = (tab) => tab.locator('[data-action="open"]', { hasText: CLASS }).click();
+
 async function openSheet() {
-  await page.locator('[data-action="pick-assessment"]').first().click();
-  await page.locator('[data-action="pick-class"]').first().click();
+  await page.locator('[data-action="pick-assessment"]', { hasText: PAPER }).click();
+  await page.locator('[data-action="pick-class"]', { hasText: CLASS }).click();
   await page.waitForSelector("ul.roster");
 }
 
@@ -209,7 +216,7 @@ describe("the register with no connection (S6)", () => {
     await tab.evaluate(() => navigator.serviceWorker.ready);
     await tab.reload();
     await tab.waitForSelector('[data-action="open"]');
-    await tab.locator('[data-action="open"]').first().click();
+    await openClass(tab);
     await tab.waitForSelector('[data-action="toggle"]');
     first = await tab.locator('[data-action="toggle"]').first().getAttribute("data-child");
   });
@@ -218,7 +225,7 @@ describe("the register with no connection (S6)", () => {
     await registers.setOffline(true);
     await tab.reload();
     await tab.waitForSelector('[data-action="open"]', { timeout: 15000 });
-    await tab.locator('[data-action="open"]').first().click();
+    await openClass(tab);
     await tab.waitForSelector('[data-action="toggle"]');
     assert.match(await tab.locator("#register").innerHTML(), /This is a copy/);
 
@@ -247,13 +254,14 @@ describe("the register with no connection (S6)", () => {
     }
     assert.deepEqual(left, [], "nothing left on the phone");
 
-    const status = await tab.evaluate(async (child) => {
+    const status = await tab.evaluate(async ([child, name]) => {
       const where = await (await fetch("/api/attendance/where/")).json();
       const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Lagos" }).format(new Date());
-      const url = `/api/attendance/classes/${where.classes[0].id}/terms/${where.term_id}/${today}/`;
+      const group = where.classes.find((c) => c.name === name);
+      const url = `/api/attendance/classes/${group.id}/terms/${where.term_id}/${today}/`;
       const register = await (await fetch(url)).json();
       return register.rows.find((row) => String(row.student_membership_id) === child).status;
-    }, first);
+    }, [first, CLASS]);
     assert.equal(status, chosen, "the school's register has the teacher's answer");
   });
 
@@ -296,7 +304,7 @@ describe("a phone two people sign in to (S7)", () => {
     await tab.evaluate(() => navigator.serviceWorker.ready);
     await tab.reload();
     await tab.waitForSelector('[data-action="open"]');
-    await tab.locator('[data-action="open"]').first().click();
+    await openClass(tab);
     await tab.waitForSelector('[data-action="toggle"]');
     first = await tab.locator('[data-action="toggle"]').first().getAttribute("data-child");
 
