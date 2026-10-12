@@ -1,6 +1,6 @@
 {% extends "website/base.html" %}{% load static %}
-{% block title %}Classnode: results, fees and registers for your school{% endblock %}
-{% block description %}Results, fees and registers for Nigerian secondary schools, in one place. ₦2,500 per student, per term. No setup fee.{% endblock %}
+{% block head %}<script type="application/ld+json">{{ structured_data }}</script>
+{% endblock %}
 {% block main %}
 {% comment %}
 The homepage (`docs/website.md`). Every sentence on it says what the product
@@ -385,30 +385,13 @@ column. The class position is printed as the Ogun sheet prints it, "2nd of
       <h2 id="faq-title">What schools ask us.</h2>
     </div>
     <div class="faq-list reveal">
+      {% comment %}`website.views.FAQ`, which the structured data reads too.{% endcomment %}
+      {% for question, answer in faq %}
       <details>
-        <summary>Do our teachers need laptops?</summary>
-        <p>No. Classnode works in the browser on the phones your teachers already carry. There is nothing to install.</p>
+        <summary>{{ question }}</summary>
+        <p>{{ answer }}</p>
       </details>
-      <details>
-        <summary>What happens when the network is bad?</summary>
-        <p>Scores and registers stay on the phone and send when the connection comes back. Teachers can keep working in the meantime.</p>
-      </details>
-      <details>
-        <summary>Can we use the Ogun State report sheet?</summary>
-        <p>Yes. Switch on the Ogun State template in setup and your report cards follow the sheet the Ministry asks for.</p>
-      </details>
-      <details>
-        <summary>Can we bring our current student list?</summary>
-        <p>Yes. Send it as an Excel or CSV file and it is imported into your classes. We help you with it during setup.</p>
-      </details>
-      <details>
-        <summary>How do parents pay school fees?</summary>
-        <p>By bank transfer, the way they already do. Each child has their own account number, so the payment shows on that child's record.</p>
-      </details>
-      <details>
-        <summary>Who can see our school's records?</summary>
-        <p>Only your staff, each according to their role, and parents for their own children. Your records are kept apart from every other school's. Our <a href="/privacy/">privacy notice</a> has the details.</p>
-      </details>
+      {% endfor %}
     </div>
   </div>
 </section>

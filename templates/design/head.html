@@ -7,6 +7,12 @@ The regular weight is preloaded because it is the text of every page; the bold
 one is left to the stylesheet to ask for, since a page can draw without it.
 `crossorigin` is required on a font preload even from our own host — without it
 the browser fetches the file twice.
+
+Every page that draws from here asks search engines to leave it alone, unless
+its view says it is the public site's (`indexable`, which only `website.views`
+sets). Default deny, so a new staff page cannot be indexed by forgetting:
+`website/crawlers.py` sends the same as a header on every host but the site's.
 {% endcomment %}
-<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
+{% if not indexable %}<meta name="robots" content="noindex, nofollow">
+{% endif %}<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'web/design.css' %}">
