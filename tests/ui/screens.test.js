@@ -94,6 +94,9 @@ const SMALL_ON_PURPOSE =
   // description (`role="img"` and `aria-label`, or `aria-hidden` beside a
   // screen that has one), like the screenshots beside them.
   ".mini, .float-card, .browser-bar, " +
+  // The Ogun State sheet beside the report card's words: a drawing of the
+  // paper sheet at its own sizes, its labels small as the paper's are.
+  ".sheet, " +
   // The public footer: the owner's spec sets its links at 14px and its
   // column headings at 12px, white on navy at 9.3:1 and 5.6:1.
   ".site-foot";
@@ -331,7 +334,7 @@ function measureSite({ width }) {
     const gutter = box(document.querySelector("main .wrap")).left;
     if (Math.round(gutter) !== 16) problems.push(`the page padding is ${Math.round(gutter)}px, not 16`);
     for (const p of document.querySelectorAll("main p, main li, main summary")) {
-      if (!visible(p) || p.closest(".mini, .float-card, .todo, .slider-bar, .eyebrow")) continue;
+      if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
     // The footer on a phone: all of it on the left, its links a thumb tall.
@@ -785,6 +788,67 @@ describe("the homepage's motion", () => {
     }
   });
 
+  // The report sheet: empty when it arrives, row by row as the page scrolls,
+  // complete with every total counted and every grade stamped by the end, on
+  // a desk (pinned) and a phone (rising up the screen).
+  for (const [width, height] of [[1280, 800], [390, 800]]) {
+    test(`the report sheet fills in as the page scrolls, at ${width}px`, async () => {
+      const { context, page } = await open({ viewport: { width, height } });
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        // The deferred screens land first, so the page below the hero has stopped moving.
+        await page.waitForTimeout(2000);
+        const state = () =>
+          page.evaluate(() => {
+            const cells = [...document.querySelectorAll(".sheet .ink, .sheet .stamp")];
+            const counted = [...document.querySelectorAll(".sheet .ink-sum, .sheet .ink-total")].map((x) =>
+              getComputedStyle(x).getPropertyValue("--n").trim() === x.textContent.trim(),
+            );
+            return { shown: cells.filter((x) => getComputedStyle(x).opacity === "1").length, all: cells.length, counted };
+          });
+        const scrollTo = (y) => page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+        const { top, size } = await page.evaluate(() => {
+          const el = document.querySelector(innerWidth >= 900 ? ".sheet-row" : ".sheet");
+          return { top: el.getBoundingClientRect().top + scrollY, size: el.offsetHeight };
+        });
+        await scrollTo(top - height);
+        await page.waitForTimeout(100);
+        const before = await state();
+        assert.equal(before.shown, 0, "the sheet is filled before it arrives");
+        const middle = width >= 900 ? top + (size - height) * 0.45 : top - height + (size + height) * 0.45;
+        await scrollTo(middle);
+        await page.waitForTimeout(100);
+        const during = await state();
+        assert.ok(during.shown > 0 && during.shown < during.all, `${during.shown} of ${during.all} filled halfway`);
+        await scrollTo(top + size);
+        await page.waitForTimeout(100);
+        const after = await state();
+        assert.equal(after.shown, after.all, "the sheet is not complete at the end");
+        assert.deepEqual(after.counted, after.counted.map(() => true), "a total stopped short");
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  test("under reduced motion the report sheet is complete and does not move", async () => {
+    const { context, page } = await open({ reducedMotion: "reduce" });
+    try {
+      await page.goto(`${SITE}/`);
+      await page.locator(".sheet").scrollIntoViewIfNeeded();
+      const still = await page.evaluate(() =>
+        [...document.querySelectorAll(".sheet .ink, .sheet .stamp")].every(
+          (x) => getComputedStyle(x).opacity === "1" && getComputedStyle(x).color !== "rgba(0, 0, 0, 0)",
+        ),
+      );
+      assert.ok(still, "something on the sheet is left undrawn");
+      assert.equal(await page.evaluate(() => document.querySelector(".sheet-row").offsetHeight < innerHeight * 2), true, "the sheet is pinned");
+    } finally {
+      await context.close();
+    }
+  });
+
   for (const width of [1280, 360]) {
     test(`only the floating cards, the network's dots and the dot grids loop, at ${width}px`, async () => {
       const { context, page } = await open({ viewport: { width, height: 800 } });
@@ -803,7 +867,7 @@ describe("the homepage's motion", () => {
                 name: a.animationName || a.transitionProperty,
                 iterations: t.iterations,
                 duration: t.duration,
-                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .slide, .slider-dots, .btn, .step")
+                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .slide, .slider-dots, .btn, .step, .sheet")
                   ? "ok" : a.effect.target.outerHTML.slice(0, 60),
               };
             }),
@@ -815,13 +879,13 @@ describe("the homepage's motion", () => {
             kinds.add(a.name);
           }
         }
-        for (const name of ["draw", "breathe", "float", "drift", "rise"]) assert.ok(kinds.has(name), `${name} never ran: ${[...kinds]}`);
+        for (const name of ["draw", "breathe", "float", "drift", "rise", "write", "add-up", "stamp"]) assert.ok(kinds.has(name), `${name} never ran: ${[...kinds]}`);
         // Every figure counted up to the screens' own figure.
         await page.waitForTimeout(1500);
         const figures = await page.evaluate(() =>
           [...document.querySelectorAll("[data-count]")].filter((x) => x.getClientRects().length).map((x) => [x.dataset.count, x.textContent]),
         );
-        assert.ok(figures.length >= 3);
+        assert.ok(figures.length >= 2);
         for (const [want, shown] of figures) assert.equal(Number(shown), Number(want), "a figure stopped short");
       } finally {
         await context.close();

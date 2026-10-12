@@ -37,11 +37,12 @@ COPY = [
     "has paid, and keep less paper in the office.",
     "See pricing", "₦2,500 per student, per term. No setup fee.",
     "Screens show Crestfield Demo College, a demo school. Every name and figure is made up.",
-    "What changes in your school", "Less chasing, less paper, fewer late nights.",
+    "Less chasing, less paper, fewer late nights.",
     "Report cards that add up by themselves",
     "Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every "
     "report card carries your crest.",
     "Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.",
+    "Sunrise Demo Academy is a demo school. Every name and figure is made up.",
     "See who has paid, and who still owes",
     "Each child has their own account number, so a transfer lands on the right record. You see "
     "what came in this term and what is still outstanding, without matching bank alerts to names.",
@@ -87,7 +88,7 @@ COPY = [
 
 #: The floating cards' figures, each the figure in the showcase's screens
 #: (`schools/showcase.py`, `ShowcaseTests` holds the school to them).
-FIGURES = {"48.6": 2, "93.8": 1, "7": 1}
+FIGURES = {"48.6": 2, "93.8": 1}
 
 #: The writing rules' words and phrases, never on the page.
 BANNED = [
@@ -238,6 +239,21 @@ class TheWordsTests(SiteSetUp):
             counts[value] = counts.get(value, 0) + 1
         self.assertEqual(counts, FIGURES)
 
+    def test_only_the_hero_has_an_eyebrow(self):
+        page = self.get().content.decode()
+        self.assertEqual(page.count('class="eyebrow"'), 1)
+        hero = page.split('<section class="proof"', 1)[0]
+        self.assertIn('<p class="eyebrow">For Nigerian private secondary schools</p>', hero)
+
+    def test_headlines_over_content_start_at_the_left_and_the_price_is_centred(self):
+        page = self.get().content.decode()
+        for section in ("features", "how", "faq"):
+            with self.subTest(section=section):
+                head = page.split(f'id="{section}"', 1)[1].split("<h2", 1)[0]
+                self.assertIn("section-head-start", head)
+        pricing = page.split('id="pricing"', 1)[1].split("<h2", 1)[0]
+        self.assertNotIn("section-head-start", pricing)
+
     def test_the_writing_rules_find_what_they_look_for(self):
         """The control: a page breaking each rule is caught by the same checks."""
         broken = visible_text("<body><p>A seamless journey — imagine it! Why?</p><summary>Fine?</summary>")
@@ -246,6 +262,81 @@ class TheWordsTests(SiteSetUp):
         self.assertNotIn("?", visible_text("<body><summary>Fine?</summary>", questions=False))
         self.assertIn("!", broken)
         self.assertRegex(broken.lower(), r"(?<![a-z])journey(?![a-z])")
+
+
+def _sheet(page):
+    return page.split('<figure class="sheet"', 1)[1].split("</figure>", 1)[0]
+
+
+class TheReportSheetTests(SiteSetUp):
+    """The Ogun State sheet that fills in as the page scrolls (`docs/website.md`).
+
+    Drawn complete in the markup, so a reader with reduced motion or a browser
+    without scroll timelines has the whole sheet, and its sums are the sums."""
+
+    #: Sunrise's Tolu Adeyemi on the Ogun split: subject, CA, exam, weighted average, grade.
+    ROWS = [
+        ("Mathematics", 18, 46, 64, "C4"),
+        ("English Language", 26, 62, 88, "A1"),
+        ("Basic Science", 18, 51, 69, "B3"),
+    ]
+
+    def setUp(self):
+        self.page = self.get().content.decode()
+        self.sheet = _sheet(self.page)
+
+    def test_it_replaces_the_small_report_card(self):
+        self.assertNotIn("mini-table", self.page)
+        self.assertNotIn("Crestfield Demo College</b><br>", self.page)
+        self.assertEqual(self.page.count('<figure class="sheet"'), 1)
+
+    def test_it_is_sunrises_child_on_the_ogun_template(self):
+        text = words(self.sheet)
+        for fact in ("Sunrise Demo Academy", "Junior Secondary School Continuous Assessment Report Sheet",
+                     "Ogun State template", "Tolu Adeyemi", "SUN/019", "JSS 1B", "First term, 2026/2027",
+                     "Cont. Assess (30)", "Exam (70)", "Weighted Average", "(100)", "Grade",
+                     "Works carefully and helps others. More care with spelling.",
+                     "A steady term. Keep reading every evening."):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, text)
+
+    def test_every_row_adds_up_and_carries_its_grade(self):
+        rows = re.findall(r'<tr style="--r:(\d)">(.*?)</tr>', self.sheet, flags=re.S)
+        self.assertEqual([int(r) for r, _ in rows], [0, 1, 2])
+        found = []
+        for _, row in rows:
+            name = words(re.search(r"<th[^>]*>(.*?)</th>", row, flags=re.S).group(1))
+            ca, exam = (int(v) for v in re.findall(r'class="ink ink-(?:ca|exam)">(\d+)<', row))
+            to, total = re.search(r'class="ink ink-sum" style="--to:(\d+)">(\d+)<', row).groups()
+            grade = re.search(r'class="stamp">(\w+)<', row).group(1)
+            self.assertEqual(to, total, "the count ends on the figure in the markup")
+            self.assertEqual(ca + exam, int(total), name)
+            self.assertLessEqual(ca, 30)
+            self.assertLessEqual(exam, 70)
+            found.append((name, ca, exam, int(total), grade))
+        self.assertEqual(found, self.ROWS)
+
+    def test_the_grades_are_the_default_scale(self):
+        def grade(score):
+            for floor, letter in ((75, "A1"), (70, "B2"), (65, "B3"), (60, "C4"), (55, "C5"),
+                                  (50, "C6"), (45, "D7"), (40, "E8"), (0, "F9")):
+                if score >= floor:
+                    return letter
+        for name, _, _, total, letter in self.ROWS:
+            with self.subTest(subject=name):
+                self.assertEqual(grade(total), letter)
+
+    def test_the_summary_is_the_rows_sum(self):
+        obtained = sum(r[3] for r in self.ROWS)
+        self.assertIn(f'class="ink ink-total" style="--to:{obtained}">{obtained}<', self.sheet)
+        self.assertIn("<dd>300</dd>", self.sheet)
+        self.assertIn(f">{obtained * 100 / 300:.2f}%<", self.sheet)
+
+    def test_it_is_described_for_a_reader(self):
+        label = re.search(r'aria-labelledby="([^"]+)"', self.page.split('<figure class="sheet"', 1)[1]).group(1)
+        caption = re.search(rf'id="{label}"[^>]*>(.*?)<', self.sheet).group(1)
+        self.assertIn("Tolu Adeyemi", caption)
+        self.assertIn("a demo school", caption)
 
 
 class TheFooterTests(SiteSetUp):
@@ -518,6 +609,21 @@ class TheMotionRulesTests(TestCase):
         # The control: the cut found the motion it was meant to cut.
         self.assertRegex(css, r"animation:")
         self.assertRegex(css, r"transition:")
+
+    def test_the_report_sheet_fills_on_a_scroll_timeline_and_ends_drawn(self):
+        css = without_comments(CSS.read_text())
+        motion = css.split("@media (prefers-reduced-motion: no-preference)", 1)[1]
+        self.assertIn("view-timeline: --sheet block", motion)
+        self.assertIn("animation-timeline: --sheet", motion)
+        # Its own feature test: a browser without scroll timelines is never emptied.
+        self.assertLess(motion.index("@supports (animation-timeline: view())"),
+                        motion.index("animation-timeline: --sheet"))
+        self.assertNotIn("color: transparent", outside_media(css, "prefers-reduced-motion: no-preference"))
+        # Each step ends where the still sheet is: written, counted, stamped at -6deg.
+        self.assertRegex(css, r"\.stamp \{[^}]*rotate: -6deg;")
+        self.assertRegex(css, r"@keyframes stamp \{.*100% \{ opacity: 1; scale: 1; rotate: -6deg; \} \}")
+        self.assertRegex(css, r"@keyframes add-up \{.*100% \{ --n: var\(--to\); opacity: 1; \} \}")
+        self.assertRegex(css, r"@keyframes write \{.*to \{ opacity: 1; translate: 0 0; \} \}")
 
     def test_the_crossfade_the_float_and_the_rise(self):
         css = without_comments(CSS.read_text())

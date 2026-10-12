@@ -140,40 +140,97 @@ PROOF: real quotes and school logos go here, each with the school's written
 2. Benefits, as four rows on alternating grounds
 {% endcomment %}
 <section id="features" class="features" aria-labelledby="features-title">
-  <div class="wrap section-head reveal">
-    <p class="eyebrow">What changes in your school</p>
+  <div class="wrap section-head section-head-start reveal">
     <h2 id="features-title">Less chasing, less paper, fewer late nights.</h2>
   </div>
 
-  <div class="feature-row">
-    <div class="wrap feature">
-      <div class="feature-text reveal">
+  {% comment %}
+The report sheet, filling in as the visitor scrolls: each subject's CA and
+exam are written in, the weighted average counts up to their sum, and the
+grade is stamped beside it; then the summary and the two remarks. CSS
+scroll-driven animation (`website.css`, "the report sheet"). Under reduced
+motion, and in a browser without scroll timelines, it is drawn complete.
+
+Sunrise Demo Academy's (`seed_demo`): Tolu Adeyemi, SUN/019, JSS 1B, first
+term, the school's three subjects and the two remarks every JSS 1B card
+carries. Sunrise prints the Standard card on papers of CA 20 and exam 60, so
+Tolu's own marks (Mathematics 12 and 39, English Language 17 and 53, Basic
+Science 11 and 44) are set out here on the Ogun split of 30 and 70, so each
+weighted average is Sunrise's own percentage for the subject, rounded (63.75,
+87.5, 68.75). The grades are the default scale's (A1 from 75, B3 from 65, C4
+from 60).
+{% endcomment %}
+  <div class="feature-row sheet-row">
+    <div class="wrap sheet-stage">
+      <div class="feature-text sheet-text reveal">
         <span class="tile tile-lg tile-brand"><svg class="icon" aria-hidden="true"><use href="#i-book"/></svg></span>
         <h3>Report cards that add up by themselves</h3>
         <p>Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every report card carries your crest.</p>
         <p>Schools in Ogun State can switch on the report sheet the Ministry and OGSERA ask for.</p>
+        <p class="sheet-note">Sunrise Demo Academy is a demo school. Every name and figure is made up.</p>
       </div>
-      <div class="feature-media reveal">
-        <span class="dot-grid dot-grid-media" aria-hidden="true"></span>
-        <div class="mini mini-card" role="img" aria-label="A report sheet on the Ogun State template for a demo student at Crestfield Demo College, showing CA, exam and weighted average for three subjects.">
-          <div class="mini-head">
-            <span><b>Crestfield Demo College</b><br><span class="quiet">Report sheet, First term 2026/2027</span></span>
-            <span class="chip">Ogun State template</span>
+
+      <figure class="sheet" aria-labelledby="sheet-label">
+        <figcaption id="sheet-label" class="visually-hidden">A report sheet on the Ogun State template for Tolu Adeyemi of JSS 1B at Sunrise Demo Academy, a demo school, first term 2026/2027.</figcaption>
+        <div class="sheet-head">
+          <div>
+            <p class="sheet-school">Sunrise Demo Academy</p>
+            <p class="sheet-title">Junior Secondary School Continuous Assessment Report Sheet</p>
           </div>
-          <table class="mini-table">
-            <thead><tr><th>Subject</th><th class="num">CA<br>30</th><th class="num">Exam<br>70</th><th class="num">Weighted<br>100</th></tr></thead>
-            <tbody>
-              <tr><td>Basic Science</td><td class="num">23</td><td class="num">56</td><td class="num"><b>79</b></td></tr>
-              <tr><td>Civic Education</td><td class="num">24</td><td class="num">53</td><td class="num"><b>77</b></td></tr>
-              <tr><td>Mathematics</td><td class="num">26</td><td class="num">60</td><td class="num"><b>86</b></td></tr>
-            </tbody>
-          </table>
+          <span class="chip">Ogun State template</span>
         </div>
-        <div class="float-card float-c" aria-hidden="true">
-          <span class="tile tile-brand"><svg class="icon"><use href="#i-results"/></svg></span>
-          <span><span class="fc-label">Waiting for your approval</span><b class="fc-value"><span data-count="7">7</span> classes</b></span>
+        <dl class="sheet-who">
+          <div><dt>Learner&#39;s name</dt><dd>Tolu Adeyemi</dd></div>
+          <div><dt>Admission no.</dt><dd>SUN/019</dd></div>
+          <div><dt>Class</dt><dd>JSS 1B</dd></div>
+          <div><dt>Term</dt><dd>First term, 2026/2027</dd></div>
+        </dl>
+        <table class="sheet-grid">
+          <thead>
+            <tr>
+              <th scope="col">Subject</th>
+              <th scope="col" class="num">Cont. Assess <span class="out">(30)</span></th>
+              <th scope="col" class="num">Exam <span class="out">(70)</span></th>
+              <th scope="col" class="num"><span class="long">Weighted Average</span><span class="short">Total</span> <span class="out">(100)</span></th>
+              <th scope="col" class="num">Grade</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="--r:0">
+              <th scope="row">Mathematics</th>
+              <td class="num"><span class="ink ink-ca">18</span></td>
+              <td class="num"><span class="ink ink-exam">46</span></td>
+              <td class="num"><b class="ink ink-sum" style="--to:64">64</b></td>
+              <td class="num"><span class="stamp">C4</span></td>
+            </tr>
+            <tr style="--r:1">
+              <th scope="row">English Language</th>
+              <td class="num"><span class="ink ink-ca">26</span></td>
+              <td class="num"><span class="ink ink-exam">62</span></td>
+              <td class="num"><b class="ink ink-sum" style="--to:88">88</b></td>
+              <td class="num"><span class="stamp">A1</span></td>
+            </tr>
+            <tr style="--r:2">
+              <th scope="row">Basic Science</th>
+              <td class="num"><span class="ink ink-ca">18</span></td>
+              <td class="num"><span class="ink ink-exam">51</span></td>
+              <td class="num"><b class="ink ink-sum" style="--to:69">69</b></td>
+              <td class="num"><span class="stamp">B3</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="sheet-foot">
+          <dl class="sheet-summary">
+            <div><dt>Marks obtainable</dt><dd>300</dd></div>
+            <div><dt>Marks obtained</dt><dd><b class="ink ink-total" style="--to:221">221</b></dd></div>
+            <div><dt>Percentage</dt><dd><span class="ink ink-pct">73.67%</span></dd></div>
+          </dl>
+          <div class="sheet-remarks">
+            <div class="ink ink-remark"><p class="sheet-label">Class teacher&#39;s comment</p><p>Works carefully and helps others. More care with spelling.</p></div>
+            <div class="ink ink-remark ink-remark-2"><p class="sheet-label">Principal&#39;s remark</p><p>A steady term. Keep reading every evening.</p></div>
+          </div>
         </div>
-      </div>
+      </figure>
     </div>
   </div>
 
@@ -248,8 +305,7 @@ PROOF: real quotes and school logos go here, each with the school's written
 <section id="how" class="section how" aria-labelledby="how-title">
   <span class="dot-grid dot-grid-corner" aria-hidden="true"></span>
   <div class="wrap">
-    <div class="section-head reveal">
-      <p class="eyebrow">How it works</p>
+    <div class="section-head section-head-start reveal">
       <h2 id="how-title">Ready for your next term in three steps.</h2>
     </div>
     <ol class="steps stagger">
@@ -278,7 +334,6 @@ PROOF: real quotes and school logos go here, each with the school's written
 <section id="pricing" class="section pricing" aria-labelledby="pricing-title">
   <div class="wrap">
     <div class="section-head reveal">
-      <p class="eyebrow">Pricing</p>
       <h2 id="pricing-title">One simple price.</h2>
     </div>
     <div class="pricing-grid stagger">
@@ -329,8 +384,7 @@ PROOF: real quotes and school logos go here, each with the school's written
 {% endcomment %}
 <section id="faq" class="section faq tint" aria-labelledby="faq-title">
   <div class="wrap faq-inner">
-    <div class="section-head reveal">
-      <p class="eyebrow">Questions</p>
+    <div class="section-head section-head-start reveal">
       <h2 id="faq-title">What schools ask us.</h2>
     </div>
     <div class="faq-list reveal">
