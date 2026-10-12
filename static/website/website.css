@@ -21,6 +21,13 @@
 :root {
   --wrap: 1160px;
   --section: 56px;
+  /* Type and card sizes (`docs/website.md`): body copy 16px on a phone and
+     17px for the larger copy on a desk; notes 15px on a phone and 16px on a
+     desk; small labels 13px; cards 24px in, 12 to 16px round. */
+  --copy-lg: 1rem;
+  --copy-note: 0.9375rem;
+  --label-sm: 0.8125rem;
+  --card-pad: 24px;
   /* One Blue deeper toward the ink, for the far end of the top band and the
      footer; a wash of it for the alternate sections; and the words that sit on
      the blue (6.8:1 on One Blue) and on the deepest blue (links 9.3:1, the
@@ -43,7 +50,7 @@
     0 32px 80px color-mix(in srgb, var(--text) 32%, transparent);
 }
 
-@media (min-width: 768px) { :root { --section: 104px; } }
+@media (min-width: 768px) { :root { --section: 104px; --copy-lg: 1.0625rem; --copy-note: 1rem; } }
 
 body.site {
   padding: 0;
@@ -76,7 +83,7 @@ h1, h2 { text-wrap: balance; }
 h2 { margin: 0; font-size: clamp(1.75rem, 1.25rem + 1.6vw, 2.5rem); line-height: 1.15; }
 h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line-height: 1.2; }
 
-.btn-lg { min-height: 48px; padding: 12px 24px; font-weight: 700; border-radius: 10px; }
+.btn-lg { min-height: 48px; padding: 0 24px; font-weight: 700; border-radius: 10px; }
 .btn { font-weight: 700; }
 .btn-light { color: var(--brand); background: var(--card); border-color: var(--card); }
 .btn-light:hover { color: var(--brand-strong); background: var(--brand-tint); border-color: var(--brand-tint); }
@@ -92,7 +99,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   width: 36px;
   height: 36px;
   color: var(--card);
-  font-size: 0.75rem;
+  font-size: var(--label-sm);
   font-weight: 700;
   border-radius: 10px;
 }
@@ -186,14 +193,14 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   margin: 0 0 24px;
   color: var(--card);
   font-size: clamp(1.875rem, 1.5rem + 2.5vw, 3.5rem);
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: -0.035em;
   max-width: 14ch;
 }
-.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-brand); font-size: 1.0625rem; line-height: 1.55; }
+.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-brand); font-size: var(--copy-lg); line-height: 1.55; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
-.hero-note { margin: 0; color: var(--on-brand); font-size: 0.9375rem; }
-.hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-brand); font-size: 0.9375rem; }
+.hero-note { margin: 0; color: var(--on-brand); font-size: var(--copy-note); }
+.hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-brand); font-size: var(--copy-note); }
 
 /* The network sits behind the picture, never behind the words: the right
    half on a desk, the lower half (under the picture) on a phone. */
@@ -207,7 +214,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 
 .hero-visual { position: relative; min-width: 0; padding-top: 56px; }
 
-.photo { position: relative; z-index: 0; border-radius: 24px; overflow: hidden; }
+.photo { position: relative; z-index: 0; border-radius: 16px; overflow: hidden; }
 .photo-hero {
   position: absolute;
   top: 0;
@@ -379,7 +386,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   .feature { grid-template-columns: 1fr 1fr; gap: 80px; }
   .feature-flip .feature-text { order: 2; }
 }
-.feature-text p { margin: 0 0 16px; color: var(--muted); font-size: 1.0625rem; max-width: 34em; }
+.feature-text p { margin: 0 0 16px; color: var(--muted); font-size: var(--copy-lg); max-width: 34em; }
 
 .feature-media { position: relative; display: grid; place-items: center; min-width: 0; padding: 24px 0; }
 .feature-media > .mini, .feature-media > .photo { position: relative; z-index: 1; }
@@ -400,7 +407,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 }
 .mini .quiet { color: var(--muted); }
 .mini-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.chip { flex: none; padding: 4px 10px; color: var(--brand); font-size: 0.75rem; font-weight: 700; background: var(--brand-tint); border-radius: 999px; }
+.chip { flex: none; padding: 4px 10px; color: var(--brand); font-size: var(--label-sm); font-weight: 700; background: var(--brand-tint); border-radius: 999px; }
 
 .mini-roles { display: grid; gap: 4px; padding: 8px 20px; }
 .mini-roles .role-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--divider); }
@@ -411,7 +418,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .mini-reg { list-style: none; margin: 0; padding: 0; }
 .mini-reg li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--divider); }
 .mini-reg li:last-child { border-bottom: 0; }
-.mark { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; font-size: 0.75rem; font-weight: 700; border-radius: 999px; }
+.mark { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 6px; font-size: var(--label-sm); font-weight: 700; border-radius: 999px; }
 .mark .icon { width: 14px; height: 14px; stroke-width: 2; }
 .mark-in { color: var(--ok); background: var(--ok-bg); }
 .mark-out { color: var(--stop); background: var(--stop-bg); }
@@ -451,7 +458,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   .sheet-grid td { font-size: 1.1875rem; }
   .sheet-grid th, .sheet-grid td { padding-block: 14px; }
 }
-.sheet-text .sheet-note { margin-top: 24px; font-size: 0.9375rem; }
+.sheet-text .sheet-note { margin-top: 24px; font-size: var(--copy-note); }
 
 .sheet {
   margin: 0;
@@ -474,12 +481,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .sheet-who, .sheet-summary { margin: 0; }
 .sheet-who { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding: 16px 0; }
 @media (min-width: 1100px) { .sheet-who { grid-template-columns: repeat(4, auto); } }
-.sheet-who dt, .sheet-summary dt, .sheet-label { margin: 0; color: var(--muted); font-size: 0.75rem; }
+.sheet-who dt, .sheet-summary dt, .sheet-label { margin: 0; color: var(--muted); font-size: var(--label-sm); }
 .sheet-who dd { margin: 0; font-weight: 700; }
 
 .sheet-grid { width: 100%; border-collapse: collapse; }
 .sheet-grid th, .sheet-grid td { padding: 12px 6px; text-align: left; border-bottom: 1px solid var(--divider); }
-.sheet-grid thead th { white-space: normal; padding-top: 8px; color: var(--muted); font-size: 0.75rem; font-weight: 700; line-height: 1.25; vertical-align: bottom; border-bottom: 1px solid var(--border); }
+.sheet-grid thead th { white-space: normal; padding-top: 8px; color: var(--muted); font-size: var(--label-sm); font-weight: 700; line-height: 1.25; vertical-align: bottom; border-bottom: 1px solid var(--border); }
 .sheet-grid tbody th { font-weight: 700; }
 .sheet-grid td { font-size: 1.0625rem; }
 .sheet-grid .num { text-align: right; }
@@ -534,13 +541,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .steps { list-style: none; display: grid; gap: 24px; margin: 0; padding: 0; }
 @media (min-width: 900px) { .steps { grid-template-columns: repeat(3, 1fr); gap: 32px; } }
 .step {
-  padding: 32px 24px;
+  padding: var(--card-pad);
   color: var(--text);
   background: var(--card);
   border-radius: 14px;
   box-shadow: var(--shadow-float);
 }
-@media (min-width: 640px) { .step { padding: 40px 32px; } }
 .step h3 { font-size: 1.25rem; }
 .step p { margin: 0; color: var(--muted); }
 .step-num {
@@ -568,23 +574,20 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   box-shadow: var(--shadow-soft);
   overflow: hidden;
 }
-.price-band { padding: 32px 24px; color: var(--card); background: var(--brand); }
+.price-band { padding: var(--card-pad); color: var(--card); background: var(--brand); }
 .price-label { margin: 0 0 8px; color: var(--on-brand); font-weight: 700; }
 .price { margin: 0 0 8px; }
 .price-figure { font-size: clamp(3rem, 2.2rem + 3vw, 4rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--card); }
-.price-sub { margin: 0; font-weight: 700; font-size: 1.0625rem; }
-.included { list-style: none; display: grid; gap: 16px; margin: 0; padding: 32px 24px; }
+.price-sub { margin: 0; font-weight: 700; font-size: var(--copy-lg); }
+.included { list-style: none; display: grid; gap: 16px; margin: 0; padding: var(--card-pad); }
 .included li { display: flex; gap: 12px; align-items: flex-start; }
 .included .icon { margin-top: 2px; color: var(--brand); }
-.demo-card { padding: 32px 24px; }
-@media (min-width: 640px) {
-  .price-band, .included, .demo-card { padding: 40px; }
-}
+.demo-card { padding: var(--card-pad); }
 
 .demo-card h3 { font-size: 1.5rem; }
 .demo-card > p { margin: 0 0 24px; }
 .demo-form { display: grid; gap: 16px; }
-.field label { display: block; margin-bottom: 8px; font-weight: 700; font-size: 0.9375rem; }
+.field label { display: block; margin-bottom: 8px; font-weight: 700; font-size: var(--copy-note); }
 .field input { width: 100%; min-height: 48px; border-radius: 8px; }
 .field-row { display: grid; gap: 16px; }
 @media (min-width: 480px) { .field-row { grid-template-columns: 1fr 1fr; } }
@@ -608,7 +611,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   min-height: 64px;
   padding: 16px 24px;
   font-weight: 700;
-  font-size: 1.0625rem;
+  font-size: var(--copy-lg);
   cursor: pointer;
   list-style: none;
   border-radius: 14px;
@@ -641,7 +644,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 }
 .cta-inner { position: relative; z-index: 1; text-align: center; }
 .cta h2 { color: var(--card); margin-bottom: 16px; }
-.cta p { margin: 0 0 32px; color: var(--on-brand); font-size: 1.0625rem; }
+.cta p { margin: 0 0 32px; color: var(--on-brand); font-size: var(--copy-lg); }
 .nodes-cta { display: none; width: 280px; top: 50%; color: var(--brand-soft); opacity: 0.7; translate: 0 -50%; }
 .nodes-left { left: -60px; scale: -1 1; }
 .nodes-right { right: -60px; }
@@ -701,7 +704,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 /* ---------------------------------------------------------------- form states */
 
 .demo-form > .refused { margin: 0; padding: 8px 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 8px; }
-.sent { margin: 0; padding: 24px; font-size: 1.0625rem; font-weight: 700; background: var(--brand-wash); border-radius: 12px; }
+.sent { margin: 0; padding: var(--card-pad); font-size: var(--copy-lg); font-weight: 700; background: var(--brand-wash); border-radius: 12px; }
 .num { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 

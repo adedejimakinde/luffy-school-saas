@@ -7,7 +7,7 @@
  *
  * - **the page scrolls sideways.** A wide table scrolls inside its own box;
  *   the page itself never does, at any width;
- * - **something a finger has to hit is under 44px tall** — a button, a field,
+ * - **something a finger has to hit is under 44px tall**: a button, a field,
  *   a select, a nav or tab link;
  * - **text on a phone is under 15px.** At 360 only, and not for the small
  *   labels the design sets smaller on purpose (`.label`, `.tag`, `.revised`,
@@ -38,7 +38,7 @@
  * The demo (`manage.py seed_demo`), served by the development server, with
  * `PLATFORM_DOMAIN=classnode.test`. `*.classnode.test` is pointed at this
  * machine by Chromium's own resolver, so nothing needs a hosts file, and the
- * session cookie is scoped to the domain every school's host shares — which is
+ * session cookie is scoped to the domain every school's host shares, which is
  * how a sign-in on the portal reaches Sunrise's pages, as it does in
  * production. `.github/workflows/tests.yml` (`screens`) sets all of this up;
  * to run it by hand, do what that job does and then `npm run screens`.
@@ -206,11 +206,11 @@ export const SCREENS = [
   // the page telling the office where the Ogun template is chosen.
   { name: "ogsera", as: "sunrise.admin", url: `${SUNRISE}/ogsera/` },
 
-  // A parent, of one child with a released card and one without —
+  // A parent, of one child with a released card and one without:
   // `seed_demo`'s own reason for releasing one class and not the other. The
   // switcher sorts by name (`_children_of()`'s own order), so "Ada", child 0
   // of JSS 1A, is always first and "Kemi", child 10 of JSS 1B, is always
-  // second — a fact about the alphabet, not a guess about a random surname.
+  // second: a fact about the alphabet, not a guess about a random surname.
   // The second switcher tab is Kemi's, whichever school this is.
   {
     name: "cards",
@@ -672,11 +672,15 @@ describe("the roll import's preview", () => {
 
 describe("the homepage's sizes", () => {
   // The owner's sizing rules, measured finished and still on a 375 x 812 phone
-  // and a 1280 x 800 desk: headings at most 28px on a phone and 40px on a
-  // desk, the hero 30 to 36px and 48 to 56px, body copy 15 to 17px, buttons 44
-  // to 48px tall, sections 48 to 64px and 80 to 112px top and bottom, content
-  // at most 1200px wide, and the phone's first screen holding the headline,
-  // its subline, the main button and the top of the screens.
+  // and a 1280 x 800 desk: the hero 30 to 36px and 48 to 56px with a line
+  // height about 1.1, section headlines 24 to 28px and 32 to 40px, other
+  // headings at most 28px and 40px, body copy 15 to 16px and 16 to 17px,
+  // small labels 13 to 14px, buttons 44 to 48px tall with 15 to 16px words and
+  // 8 to 10px corners, sections 48 to 64px and 80 to 112px top and bottom,
+  // cards 20 to 24px in and 12 to 16px round, content at most 1200px wide, two
+  // font weights a section at most, no long centred paragraph, and the phone's
+  // first screen holding the headline, its subline, the main button and the
+  // top of the screens.
   for (const [width, height, phone] of [[375, 812, true], [1280, 800, false]]) {
     test(`at ${width} x ${height}`, async () => {
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
@@ -698,16 +702,54 @@ describe("the homepage's sizes", () => {
             if (value < low - 0.5 || value > high + 0.5) found.push(`${what} is ${Math.round(value * 10) / 10}px, not ${low} to ${high}`);
           };
           const main = document.querySelector("main");
-          within("the hero headline", size(main.querySelector("h1")), ...(phone ? [30, 36] : [48, 56]));
-          for (const h of main.querySelectorAll("h2, h3")) {
+          const h1 = main.querySelector("h1");
+          within("the hero headline", size(h1), ...(phone ? [30, 36] : [48, 56]));
+          within("the hero's line height x 10", (parseFloat(getComputedStyle(h1).lineHeight) / size(h1)) * 10, 10.5, 11.5);
+          for (const h of main.querySelectorAll("h2")) {
+            if (visible(h)) within(`the headline "${h.textContent.trim().slice(0, 24)}"`, size(h), ...(phone ? [24, 28] : [32, 40]));
+          }
+          for (const h of main.querySelectorAll("h3")) {
             if (visible(h)) within(`"${h.textContent.trim().slice(0, 24)}"`, size(h), 0, phone ? 28 : 40);
           }
-          const copy = [...main.querySelectorAll("p, li, summary")].filter(
+          const copy = [...main.querySelectorAll("p, li, summary, label")].filter(
             (el) => visible(el) && !el.closest(".mini, .float-card, .sheet, .slider-bar, .eyebrow, .bait"),
           );
-          for (const el of copy) within(`body copy "${el.textContent.trim().slice(0, 24)}"`, size(el), 15, 17);
+          for (const el of copy) within(`body copy "${el.textContent.trim().slice(0, 24)}"`, size(el), ...(phone ? [15, 16] : [16, 17]));
+          const labels = ".eyebrow, .chip, .mark, .fc-label, .fc-of, .sheet-title, .sheet-label, .sheet-who dt, .sheet-grid thead th, .tile";
+          for (const el of main.querySelectorAll(labels)) {
+            if (visible(el)) within(`the label "${el.textContent.trim().slice(0, 18)}"`, size(el), 13, 14);
+          }
           for (const b of document.querySelectorAll(".btn, button")) {
-            if (visible(b)) within(`the button "${b.textContent.trim().slice(0, 18)}"`, b.getBoundingClientRect().height, 44, 48);
+            if (!visible(b)) continue;
+            const what = `the button "${b.textContent.trim().slice(0, 18)}"`;
+            within(`${what}'s height`, b.getBoundingClientRect().height, 44, 48);
+            // The slider's own controls (its dots and Pause) are the slider's, and kept as they are.
+            if (b.closest(".slider-bar")) continue;
+            within(`${what}'s words`, size(b), 15, 16);
+            within(`${what}'s corners`, parseFloat(getComputedStyle(b).borderTopLeftRadius), 8, 10);
+          }
+          for (const c of main.querySelectorAll(".step, .price-band, .included, .demo-card")) {
+            const style = getComputedStyle(c);
+            for (const side of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"]) {
+              within(`the card .${c.classList[0]} ${side}`, parseFloat(style[side]), 20, 24);
+            }
+          }
+          for (const c of main.querySelectorAll(".step, .price-card, .demo-card, .faq-list")) {
+            within(`the card .${c.classList[0]}'s corners`, parseFloat(getComputedStyle(c).borderTopLeftRadius), 12, 16);
+          }
+          for (const s of main.querySelectorAll(".hero, .feature-row, .section, .cta")) {
+            const weights = new Set();
+            const walk = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+            while (walk.nextNode()) {
+              const el = walk.currentNode.parentElement;
+              if (walk.currentNode.textContent.trim() && visible(el)) weights.add(getComputedStyle(el).fontWeight);
+            }
+            if (weights.size > 2) found.push(`.${s.classList[0]} uses ${weights.size} font weights`);
+          }
+          for (const p of main.querySelectorAll("p, li")) {
+            if (visible(p) && getComputedStyle(p).textAlign === "center" && p.textContent.trim().length > 90) {
+              found.push(`a long centred paragraph: "${p.textContent.trim().slice(0, 24)}"`);
+            }
           }
           for (const s of main.querySelectorAll(".section, .cta, .feature-row")) {
             const style = getComputedStyle(s);

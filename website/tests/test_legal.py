@@ -91,7 +91,7 @@ class TheLegalPagesTests(SiteSetUp):
         for path in PAGES:
             text = visible_text(self.page(path))
             with self.subTest(path=path):
-                self.assertNotRegex(text, "[–—]", "an en or em dash")
+                self.assertNotRegex(text, "[\u2013\u2014]", "an en or em dash")
                 self.assertNotIn("!", text)
                 self.assertNotIn("?", text)
                 self.assertNotRegex(text, r"(^|[.:] )Imagine\b")
