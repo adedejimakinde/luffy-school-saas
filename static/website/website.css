@@ -12,12 +12,15 @@
  * - Phones first. Below 1024px the nav is a menu button.
  * - Every animation and transition is inside `prefers-reduced-motion:
  *   no-preference`, at the end of the file. Without it the page is drawn
- *   finished and still, and the slider shows its first screen.
+ *   finished and still, the slider shows its first screen and the report
+ *   sheet is complete.
+ * - Only the hero has an eyebrow. Headlines that sit over content start at
+ *   the left (`.section-head-start`); the price and the final band are centred.
  */
 
 :root {
   --wrap: 1160px;
-  --section: 72px;
+  --section: 56px;
   /* One Blue deeper toward the ink, for the far end of the top band and the
      footer; a wash of it for the alternate sections; and the words that sit on
      the blue (6.8:1 on One Blue) and on the deepest blue (links 9.3:1, the
@@ -67,8 +70,10 @@ body.site > main { margin: 0; padding: 0; background: none; border: 0; border-ra
   text-transform: uppercase;
 }
 
-h1, h2, h3 { color: var(--text); letter-spacing: -0.02em; text-wrap: balance; }
-h2 { margin: 0; font-size: clamp(1.875rem, 1.25rem + 2.4vw, 2.75rem); line-height: 1.12; }
+h1, h2, h3 { color: var(--text); letter-spacing: -0.02em; }
+/* Section headlines are balanced; card and benefit headings wrap where the line ends. */
+h1, h2 { text-wrap: balance; }
+h2 { margin: 0; font-size: clamp(1.75rem, 1.25rem + 1.6vw, 2.5rem); line-height: 1.15; }
 h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line-height: 1.2; }
 
 .btn-lg { min-height: 48px; padding: 12px 24px; font-weight: 700; border-radius: 10px; }
@@ -180,12 +185,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .hero h1 {
   margin: 0 0 24px;
   color: var(--card);
-  font-size: clamp(2.375rem, 1.5rem + 3.6vw, 3.75rem);
-  line-height: 1.05;
+  font-size: clamp(1.875rem, 1.5rem + 2.5vw, 3.5rem);
+  line-height: 1.08;
   letter-spacing: -0.035em;
   max-width: 14ch;
 }
-.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-brand); font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); line-height: 1.55; }
+.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-brand); font-size: 1.0625rem; line-height: 1.55; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
 .hero-note { margin: 0; color: var(--on-brand); font-size: 0.9375rem; }
 .hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-brand); font-size: 0.9375rem; }
@@ -251,8 +256,10 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .slides { display: grid; }
 .slide { grid-area: 1 / 1; margin: 0; min-width: 0; }
 .slide img { display: block; width: 100%; height: auto; }
-/* The register is a phone, so it sits in a phone, as tall as the screens. */
-.slide-phone { display: grid; place-items: center; }
+/* The register is a phone, so it sits in a phone, as tall as the screens. It
+   takes its height from them and gives none (`contain: size`): its picture
+   loads after the page, and before it does it stretched the slider. */
+.slide-phone { display: grid; place-items: center; contain: size; }
 .phone-frame {
   height: 100%;
   padding: 8px;
@@ -321,6 +328,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 /* ---------------------------------------------------------------- hero, wide */
 
 @media (max-width: 639.98px) {
+  .hero { padding-top: 96px; }
+  .hero h1 { margin-bottom: 16px; }
+  .hero-lead { margin-bottom: 24px; }
+  .hero-inner { gap: 32px; }
+  .hero-visual { padding-top: 32px; }
+  .slider { margin-top: 64px; }
   .hero-actions .btn { flex: 1 1 100%; }
   .dots { display: none; }
   .float-card { padding: 8px 12px 8px 8px; gap: 8px; border-radius: 12px; }
@@ -331,7 +344,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   }
 
 @media (min-width: 1024px) {
-  .hero { padding: 120px 0 72px; }
+  .hero { padding: 120px 0 80px; }
   .hero-inner { grid-template-columns: 5fr 7fr; gap: 56px; }
   .hero-visual { padding-top: 40px; }
   .photo-hero { width: 44%; }
@@ -351,6 +364,8 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .section { position: relative; padding: var(--section) 0; }
 .section-head { max-width: 42rem; margin: 0 auto 48px; text-align: center; }
 @media (min-width: 768px) { .section-head { margin-bottom: 64px; } }
+.section-head-start { max-width: none; text-align: left; }
+.section-head-start h2 { max-width: 20ch; }
 
 /* ---------------------------------------------------------------- features */
 
@@ -387,12 +402,6 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .mini-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .chip { flex: none; padding: 4px 10px; color: var(--brand); font-size: 0.75rem; font-weight: 700; background: var(--brand-tint); border-radius: 999px; }
 
-.mini-table { width: 100%; border-collapse: collapse; }
-.mini-table th { padding: 6px 4px; color: var(--muted); font-size: 0.75rem; font-weight: 700; text-align: left; vertical-align: bottom; border-bottom: 1px solid var(--border); }
-.mini-table td { padding: 10px 4px; border-bottom: 1px solid var(--divider); }
-.mini-table tr:last-child td { border-bottom: 0; }
-.mini-table .num { text-align: right; }
-
 .mini-roles { display: grid; gap: 4px; padding: 8px 20px; }
 .mini-roles .role-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--divider); }
 .mini-roles .role-row:last-child { border-bottom: 0; }
@@ -408,28 +417,114 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .mark-out { color: var(--stop); background: var(--stop-bg); }
 
 /* Floating cards on the feature pictures. */
-.float-c { right: 0; bottom: -28px; }
 .float-d { left: -8px; bottom: 8px; }
 .float-e { right: -8px; top: 8px; }
 .feature-media > .float-f { position: absolute; z-index: 2; right: -4px; bottom: -16px; }
 @media (min-width: 900px) {
-  .float-c { right: -16px; bottom: -40px; }
   .float-d { left: -16px; bottom: 24px; }
   .float-e { right: -16px; top: 32px; }
   .feature-media > .float-f { right: -16px; bottom: -24px; }
 }
 @media (min-width: 1280px) {
-  .float-c { right: -24px; }
   .float-d { left: -40px; }
   .float-e, .feature-media > .float-f { right: -32px; }
 }
 @media (max-width: 479.98px) {
   .mini { padding: 14px; }
-  .mini-table { font-size: 0.8125rem; }
-  .mini-table th, .mini-table td { padding-inline: 2px; }
   .float-e { top: -4px; }
   .float-f { width: 220px; }
 }
+
+/* ---------------------------------------------------------------- the report sheet */
+
+/*
+ * Sunrise Demo Academy's Ogun State sheet, large, beside its words. Drawn
+ * complete here; the motion block at the end empties it and fills it in as
+ * the page scrolls.
+ */
+.sheet-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: center; }
+@media (min-width: 900px) { .sheet-stage { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 64px; } }
+@media (min-width: 1100px) {
+  .sheet-stage { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); }
+  .sheet { padding: 36px 40px 40px; }
+  .sheet-school { font-size: 1.75rem; }
+  .sheet-grid td { font-size: 1.1875rem; }
+  .sheet-grid th, .sheet-grid td { padding-block: 14px; }
+}
+.sheet-text .sheet-note { margin-top: 24px; font-size: 0.9375rem; }
+
+.sheet {
+  margin: 0;
+  padding: 20px 16px;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-top: 6px solid var(--brand);
+  border-radius: 14px;
+  box-shadow: var(--shadow-float);
+}
+@media (min-width: 640px) { .sheet { padding: 28px 32px 32px; font-size: 0.9375rem; } }
+
+.sheet-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 16px; padding-bottom: 16px; border-bottom: 2px solid var(--text); }
+.sheet-school { margin: 0; font-size: 1.25rem; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+.sheet-title { margin: 4px 0 0; color: var(--muted); font-size: 0.8125rem; font-weight: 700; }
+@media (min-width: 640px) { .sheet-school { font-size: 1.5rem; } }
+
+.sheet-who, .sheet-summary { margin: 0; }
+.sheet-who { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; padding: 16px 0; }
+@media (min-width: 1100px) { .sheet-who { grid-template-columns: repeat(4, auto); } }
+.sheet-who dt, .sheet-summary dt, .sheet-label { margin: 0; color: var(--muted); font-size: 0.75rem; }
+.sheet-who dd { margin: 0; font-weight: 700; }
+
+.sheet-grid { width: 100%; border-collapse: collapse; }
+.sheet-grid th, .sheet-grid td { padding: 12px 6px; text-align: left; border-bottom: 1px solid var(--divider); }
+.sheet-grid thead th { white-space: normal; padding-top: 8px; color: var(--muted); font-size: 0.75rem; font-weight: 700; line-height: 1.25; vertical-align: bottom; border-bottom: 1px solid var(--border); }
+.sheet-grid tbody th { font-weight: 700; }
+.sheet-grid td { font-size: 1.0625rem; }
+.sheet-grid .num { text-align: right; }
+.sheet-grid th:first-child, .sheet-grid td:first-child { padding-left: 0; }
+.sheet-grid .out { white-space: nowrap; }
+.sheet-grid .short { display: none; }
+/* A phone: shorter words, so four columns fit in 288px. */
+@media (max-width: 479.98px) {
+  .sheet { padding-inline: 14px; }
+  .sheet-grid th, .sheet-grid td { padding-inline: 2px; }
+  .sheet-grid tbody th { font-size: 0.875rem; }
+  .sheet-grid td { font-size: 0.9375rem; }
+  .sheet-grid .long { display: none; }
+  .sheet-grid .short { display: inline; }
+}
+
+/* The total, the sheet's main figure: larger, in One Blue, on a pad the
+   count lights up while it runs (the motion block). */
+.sheet-grid .ink-sum { margin: -2px -6px; padding: 2px 6px; color: var(--brand); font-size: 1.25em; line-height: 1.2; border-radius: 6px; }
+
+/* The class position, as the Ogun sheet's summary prints it, stamped: One
+   Blue ink, a little crooked. */
+.stamp {
+  display: inline-block;
+  padding: 1px 8px;
+  color: var(--brand);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  background: var(--brand-tint);
+  border: 2px solid currentColor;
+  border-radius: 6px;
+  rotate: -4deg;
+}
+
+.sheet-foot { display: grid; gap: 20px; margin-top: 20px; }
+@media (min-width: 640px) { .sheet-foot { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 24px; } }
+.sheet-summary { display: grid; gap: 8px; align-self: start; padding: 14px 16px; background: var(--brand-wash); border-radius: 10px; }
+.sheet-summary > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sheet-summary dd { margin: 0; font-weight: 700; }
+.sheet-remarks { display: grid; gap: 14px; }
+.sheet-remarks p { margin: 0; }
+.sheet-remarks .sheet-label { margin-bottom: 2px; }
+.ink { display: inline-block; }
+.ink-remark { display: block; }
 
 /* ---------------------------------------------------------------- how */
 
@@ -477,7 +572,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .price-label { margin: 0 0 8px; color: var(--on-brand); font-weight: 700; }
 .price { margin: 0 0 8px; }
 .price-figure { font-size: clamp(3rem, 2.2rem + 3vw, 4rem); font-weight: 700; line-height: 1; letter-spacing: -0.03em; color: var(--card); }
-.price-sub { margin: 0; font-weight: 700; font-size: 1.125rem; }
+.price-sub { margin: 0; font-weight: 700; font-size: 1.0625rem; }
 .included { list-style: none; display: grid; gap: 16px; margin: 0; padding: 32px 24px; }
 .included li { display: flex; gap: 12px; align-items: flex-start; }
 .included .icon { margin-top: 2px; color: var(--brand); }
@@ -498,7 +593,11 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 
 /* ---------------------------------------------------------------- faq */
 
-.faq-inner { max-width: 780px; }
+/* The headline at the left of the questions on a desk, and over them on a phone. */
+@media (min-width: 900px) {
+  .faq-inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 64px; align-items: start; }
+  .faq-inner .section-head { margin: 0; }
+}
 .faq-list { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-soft); }
 .faq-list details + details { border-top: 1px solid var(--divider); }
 .faq-list summary {
@@ -542,7 +641,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 }
 .cta-inner { position: relative; z-index: 1; text-align: center; }
 .cta h2 { color: var(--card); margin-bottom: 16px; }
-.cta p { margin: 0 0 32px; color: var(--on-brand); font-size: 1.125rem; }
+.cta p { margin: 0 0 32px; color: var(--on-brand); font-size: 1.0625rem; }
 .nodes-cta { display: none; width: 280px; top: 50%; color: var(--brand-soft); opacity: 0.7; translate: 0 -50%; }
 .nodes-left { left: -60px; scale: -1 1; }
 .nodes-right { right: -60px; }
@@ -602,7 +701,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 /* ---------------------------------------------------------------- form states */
 
 .demo-form > .refused { margin: 0; padding: 8px 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 8px; }
-.sent { margin: 0; padding: 24px; font-size: 1.125rem; font-weight: 700; background: var(--brand-wash); border-radius: 12px; }
+.sent { margin: 0; padding: 24px; font-size: 1.0625rem; font-weight: 700; background: var(--brand-wash); border-radius: 12px; }
 .num { font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 
@@ -667,7 +766,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   /* Floating cards: 5px, each on its own clock. */
   .float-card { animation: float 5s ease-in-out infinite; }
   .float-b, .float-d { animation-duration: 5.8s; animation-delay: -1.4s; }
-  .float-c, .float-e { animation-duration: 4.4s; animation-delay: -2.6s; }
+  .float-e { animation-duration: 4.4s; animation-delay: -2.6s; }
   .float-f { animation-duration: 5.4s; animation-delay: -0.8s; }
 
   /* Dot grids drift one tile, very slowly. */
@@ -685,6 +784,46 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
     .stagger > .reveal:nth-child(3) { animation-range: entry 20% entry 75%; }
     .feature-media.reveal { animation-range: entry 10% entry 65%; }
   }
+
+  /*
+   * The report sheet fills in as it scrolls through: per subject the CA, then
+   * the exam, then the weighted average counting up to their sum on a lit pad
+   * (the longest step, the one the section is for); then the marks obtained,
+   * the percentage, the class position stamped in, and the two remarks. Each
+   * step's share of the scroll is `--s` to `--e`. On a desk tall enough to
+   * hold it, the sheet is pinned while the page scrolls 160vh past it;
+   * elsewhere it fills while it rises up the screen. A browser
+   * without scroll timelines skips all of it and shows the sheet complete.
+   */
+  @supports (animation-timeline: view()) {
+    .sheet { view-timeline: --sheet block; }
+    .sheet .ink, .sheet .stamp {
+      animation: write linear both;
+      animation-timeline: --sheet;
+      animation-range: cover calc(25% + var(--s) * 40%) cover calc(25% + var(--e) * 40%);
+    }
+    .ink-ca { --s: calc(0.02 + var(--r) * 0.24); --e: calc(var(--s) + 0.05); }
+    .ink-exam { --s: calc(0.07 + var(--r) * 0.24); --e: calc(var(--s) + 0.05); }
+    .ink-sum { --s: calc(0.12 + var(--r) * 0.24); --e: calc(var(--s) + 0.12); }
+    .ink-total { --s: 0.74; --e: 0.82; }
+    .ink-pct { --s: 0.8; --e: 0.84; }
+    .sheet .stamp { --s: 0.84; --e: 0.88; animation-name: stamp; }
+    .ink-remark { --s: 0.88; --e: 0.94; }
+    .ink-remark-2 { --s: 0.93; --e: 0.99; }
+
+    /* A total counts: its own figure is kept for reading and drawn over by a
+       counter of the same value at the end. */
+    .sheet .ink-sum, .sheet .ink-total { position: relative; color: transparent; counter-reset: n var(--n); animation-name: add-up; }
+    .ink-total::after, .ink-sum::after { content: counter(n); content: counter(n) / ""; position: absolute; inset: 0; color: var(--text); text-align: right; }
+    .sheet .ink-sum::after { padding: inherit; color: var(--brand); }
+
+    @media (min-width: 900px) and (min-height: 700px) {
+      .sheet-row { height: 260vh; padding: 0; view-timeline: --sheet block; }
+      .sheet { view-timeline: none; }
+      .sheet-stage { position: sticky; top: 0; min-height: 100vh; align-content: center; padding-block: 48px; }
+      .sheet .ink, .sheet .stamp { animation-range: contain calc(var(--s) * 100%) contain calc(var(--e) * 100%); }
+    }
+  }
 }
 
 @keyframes rise { from { opacity: 0; translate: 0 32px; } to { opacity: 1; translate: 0 0; } }
@@ -693,4 +832,10 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
 @keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
 @keyframes drift { to { -webkit-mask-position: 18px 18px; mask-position: 18px 18px; } }
+@keyframes write { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+@keyframes add-up { 0% { --n: 0; opacity: 0; } 10% { opacity: 1; background-color: var(--brand-tint); } 85% { background-color: var(--brand-tint); } 100% { --n: var(--to); opacity: 1; background-color: transparent; } }
+@keyframes stamp { 0% { opacity: 0; scale: 2; rotate: -18deg; } 60% { opacity: 1; scale: 0.92; rotate: -2deg; } 100% { opacity: 1; scale: 1; rotate: -4deg; } }
+
+/* The figure a total counts with (the report sheet). */
+@property --n { syntax: "<integer>"; inherits: false; initial-value: 0; }
 .mini-phone.float-card { display: block; }

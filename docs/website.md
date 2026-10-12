@@ -64,8 +64,36 @@ A plain form post, CSRF-checked, that works with no script.
 
 ## The page
 
-Seven sections in order: the hero, four benefits, how it works, the price
-beside the demo form, six questions, a final call to action, and the footer.
+Seven sections in order: the hero, four benefits (the first of them the
+report sheet), how it works, the price beside the demo form, six questions, a
+final call to action, and the footer.
+
+- **Only the hero has an eyebrow** (its small blue line over the headline); no
+  other section has one. **Headlines are not all centred**: the benefits'
+  headline, "How it works" and the questions start at the left
+  (`.section-head-start`), the questions' headline beside the list on a desk;
+  each benefit's heading sits beside its picture; the price and the final band
+  stay centred. Section headlines are balanced; card and benefit headings
+  (`h3`) wrap where the line ends, with no balancing and no `<br>`. Tests hold
+  all three.
+- **Sizes** (the owner's rules, held by `the homepage's sizes` in the browser
+  at 375 x 812 and 1280 x 800): headings at most 28px on a phone and 40px on a
+  desk (`h2` is `clamp(28px, 20px + 1.6vw, 40px)`); the hero headline 30 to
+  36px on a phone and 48 to 56px on a desk (`clamp(30px, 24px + 2.5vw,
+  56px)`); body copy 15 to 17px (the lead, the final band's line and "No
+  setup fee." are 17px); buttons 44 to 48px tall; sections 56px top and bottom
+  on a phone and 104px from 768px, the benefit rows 64px and 88px; content at
+  most 1160px wide. On a 375 x 812 phone the first screen holds the headline,
+  its subline, the main button and the top of the screens (from 662px); the
+  hero is tighter below 640px to make the room. Not held to them: the price
+  figure (64px, a figure rather than a heading) and the small labels the
+  drawings and the footer set on purpose (the footer's links are 14px, its own
+  spec).
+- **The slider's register screen gives the slider no height** (`contain:
+  size` on `.slide-phone`): it takes the height of the other screens. Before,
+  its picture had none until it loaded, a second after the page, and the
+  slider stood twice as tall until then, pushing the desk's headline below the
+  fold and then snapping back.
 
 - **The words say what the product does and promise no outcome we cannot
   show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
@@ -108,8 +136,25 @@ beside the demo form, six questions, a final call to action, and the footer.
   into `static/website/shots/`. The page says under the slider that the school
   is a demo and every name and figure is made up.
 - **The floating cards carry the screens' own figures** (₦48.6m, 93.8% today,
-  seven classes, a ₦120,700 payment), never rounder ones; a test counts them.
+  a ₦120,700 payment), never rounder ones; a test counts them.
   Retaking the screens is a reason to check them: 93.8% was a Thursday's.
+- **The report sheet** is the first benefit, in place of the small report
+  card it replaced: a large Ogun State sheet beside "Report cards that add up
+  by themselves", in HTML (a real table, read by its caption). It is Sunrise
+  Demo Academy's (`seed_demo`, the development demo, not the showcase): Tolu
+  Adeyemi, SUN/019, JSS 1B, first term 2026/2027, the school's three subjects
+  and the class teacher's and principal's remarks every JSS 1B card carries.
+  The line under its words says Sunrise is a demo school. **The marks are
+  made-up demo figures** on the Ogun split (CA 30, exam 70), not Sunrise's
+  database (Sunrise prints the Standard card). Each row adds up and the
+  summary is the rows' sum (221 of 300, 73.67%); a test holds the sums. **No
+  grade**: the Ogun sheet Classnode prints (`static/card/ogun.js`) has no
+  grade column, so the drawing has none either. Its summary does print the
+  class position when the school prints positions ("4th of 45"), so the
+  drawing's summary carries one, "2nd of 10", stamped in. The words beside it
+  say the sheet is the one the Ministry asks for: the printed sheet carries the
+  ministry's name, and what OGSERA asks a school for is its own spreadsheet
+  (`results/ogsera.py`), so the homepage no longer names OGSERA for the sheet.
 - **The photos** are three the owner supplied, cut to their spaces as WebP
   under 60 KB each, with their sizes set: a principal at her desk (the hero), a
   bursar at a laptop (fees) and a teacher with a phone (the register). No photo
@@ -132,6 +177,17 @@ beside the demo form, six questions, a final call to action, and the footer.
     second loop; the dot grids drift one tile, slowly;
   - sections fade and rise as they scroll in (CSS scroll-driven animation,
     staggered across a row; a browser without it shows them finished);
+  - the report sheet fills in on its own scroll timeline: per subject the CA
+    and the exam are written in, then the weighted average counts up to their
+    sum on a lit pad, larger and in One Blue (a registered `--n`, drawn by a
+    counter over the figure in the markup): the longest step, the moment the
+    section is for; then the marks obtained, the percentage, the class
+    position stamped in, and the two remarks. On a desk at least 900px wide and 700px tall the sheet is
+    pinned while the page scrolls 160vh past it; elsewhere it fills as it rises
+    up the screen. Every step ends on the still sheet (the stamp at -4deg), so
+    under reduced motion, or in a browser without scroll timelines
+    (`@supports (animation-timeline: view())`), it is drawn complete and not
+    pinned;
   - the cards' figures count up once as they come into view.
 - **One script, inline**: closing the phone menu on every page, plus the
   slider (under 2 KB) and the counting figures (under 1 KB) on the homepage.
@@ -154,16 +210,22 @@ beside the demo form, six questions, a final call to action, and the footer.
   contents match sections, the NDPA topics and the controller and processor
   are there, the TODOs are there, the writing rules and sentence length hold.
 - `website/tests/test_homepage.py`: the hosts, the copy and the writing rules
-  (question marks in the FAQ only), the hidden proof section, the floating
-  figures, the form and its inbox, the phone's 400 KB budget, photos under
+  (question marks in the FAQ only), the one eyebrow and the left-aligned
+  headlines, the headings with no forced breaks, the Ministry's line, the
+  hidden proof section, the floating figures, the report sheet's sums, its
+  stamped class position and no grade, its description and its scroll
+  timeline, the form and its inbox, the phone's 400 KB budget, photos under
   60 KB, images sized, described and lazy below the hero, the one inline
   script and its sizes, motion only inside `no-preference`, and the contrast
   of every word on every blue.
 - `schools/tests/test_seed_demo.py` `ShowcaseTests`: the showcase's figures,
   the ones the homepage prints.
-- `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 390, 414, 768, 1024, 1280
-  and 1920, photographed finished and held to the layout above; and its motion
+- `tests/ui/screens.test.js`: the homepage, the privacy notice and the terms at 320, 360, 375, 390, 414, 768, 1024, 1280
+  and 1920, photographed finished and held to the layout above; the sizes
+  above (`the homepage's sizes`); and its motion
   (`the homepage's motion`) on a fake clock: the 5 seconds, the 600ms fade, the
   hover, keyboard, touch and Pause holds, nothing moving under reduced motion,
-  only the floating cards, the network's dots and the dot grids looping, and
-  every figure counting to the screens' own.
+  only the floating cards, the network's dots and the dot grids looping,
+  every figure counting to the screens' own, and the report sheet empty as it
+  arrives, part filled halfway and complete at the end (desk and phone), and
+  complete and unpinned under reduced motion.

@@ -25,7 +25,7 @@
  * artifact: `<width>/<screen>.png`.
  *
  * Classnode's own public site (`website/`, on the bare platform domain: the
- * homepage, the privacy notice and the terms) is photographed at eight widths, `SITE_WIDTHS`, under reduced motion so every
+ * homepage, the privacy notice and the terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
@@ -69,8 +69,8 @@ const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
 export const WIDTHS = [360, 768, 1280];
 
-/** The public site's extra widths: a small Android, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
-export const SITE_WIDTHS = [320, 390, 414, 1024, 1920];
+/** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
+export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
 
 /**
  * The only tables that may be wider than a phone: the broadsheet, the
@@ -94,6 +94,9 @@ const SMALL_ON_PURPOSE =
   // description (`role="img"` and `aria-label`, or `aria-hidden` beside a
   // screen that has one), like the screenshots beside them.
   ".mini, .float-card, .browser-bar, " +
+  // The Ogun State sheet beside the report card's words: a drawing of the
+  // paper sheet at its own sizes, its labels small as the paper's are.
+  ".sheet, " +
   // The public footer: the owner's spec sets its links at 14px and its
   // column headings at 12px, white on navy at 9.3:1 and 5.6:1.
   ".site-foot";
@@ -331,7 +334,7 @@ function measureSite({ width }) {
     const gutter = box(document.querySelector("main .wrap")).left;
     if (Math.round(gutter) !== 16) problems.push(`the page padding is ${Math.round(gutter)}px, not 16`);
     for (const p of document.querySelectorAll("main p, main li, main summary")) {
-      if (!visible(p) || p.closest(".mini, .float-card, .todo, .slider-bar, .eyebrow")) continue;
+      if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
     // The footer on a phone: all of it on the left, its links a thumb tall.
@@ -667,6 +670,74 @@ describe("the roll import's preview", () => {
   });
 });
 
+describe("the homepage's sizes", () => {
+  // The owner's sizing rules, measured finished and still on a 375 x 812 phone
+  // and a 1280 x 800 desk: headings at most 28px on a phone and 40px on a
+  // desk, the hero 30 to 36px and 48 to 56px, body copy 15 to 17px, buttons 44
+  // to 48px tall, sections 48 to 64px and 80 to 112px top and bottom, content
+  // at most 1200px wide, and the phone's first screen holding the headline,
+  // its subline, the main button and the top of the screens.
+  for (const [width, height, phone] of [[375, 812, true], [1280, 800, false]]) {
+    test(`at ${width} x ${height}`, async () => {
+      const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        // The deferred screens in, so the first screen is the one a visitor keeps.
+        await page.waitForTimeout(2000);
+        const problems = await page.evaluate((phone) => {
+          const found = [];
+          const visible = (el) => {
+            const box = el.getBoundingClientRect();
+            const style = getComputedStyle(el);
+            return box.width > 0 && box.height > 0 && style.display !== "none" && style.visibility !== "hidden";
+          };
+          const size = (el) => parseFloat(getComputedStyle(el).fontSize);
+          const within = (what, value, low, high) => {
+            if (value < low - 0.5 || value > high + 0.5) found.push(`${what} is ${Math.round(value * 10) / 10}px, not ${low} to ${high}`);
+          };
+          const main = document.querySelector("main");
+          within("the hero headline", size(main.querySelector("h1")), ...(phone ? [30, 36] : [48, 56]));
+          for (const h of main.querySelectorAll("h2, h3")) {
+            if (visible(h)) within(`"${h.textContent.trim().slice(0, 24)}"`, size(h), 0, phone ? 28 : 40);
+          }
+          const copy = [...main.querySelectorAll("p, li, summary")].filter(
+            (el) => visible(el) && !el.closest(".mini, .float-card, .sheet, .slider-bar, .eyebrow, .bait"),
+          );
+          for (const el of copy) within(`body copy "${el.textContent.trim().slice(0, 24)}"`, size(el), 15, 17);
+          for (const b of document.querySelectorAll(".btn, button")) {
+            if (visible(b)) within(`the button "${b.textContent.trim().slice(0, 18)}"`, b.getBoundingClientRect().height, 44, 48);
+          }
+          for (const s of main.querySelectorAll(".section, .cta, .feature-row")) {
+            const style = getComputedStyle(s);
+            for (const side of ["paddingTop", "paddingBottom"]) {
+              within(`${s.className.split(" ").slice(0, 2).join(".")} ${side}`, parseFloat(style[side]), ...(phone ? [48, 64] : [80, 112]));
+            }
+          }
+          for (const w of document.querySelectorAll(".wrap")) {
+            if (visible(w) && w.getBoundingClientRect().width > 1200.5) found.push(`a .wrap is ${Math.round(w.getBoundingClientRect().width)}px wide`);
+          }
+          if (document.documentElement.scrollWidth > innerWidth) found.push(`scrolls sideways: ${document.documentElement.scrollWidth}px`);
+          if (phone) {
+            for (const [what, sel] of [["the headline", ".hero h1"], ["the subline", ".hero-lead"], ["the main button", ".hero-actions .btn"]]) {
+              if (document.querySelector(sel).getBoundingClientRect().bottom > innerHeight) found.push(`${what} is below the first screen`);
+            }
+            const screens = document.querySelector(".slider").getBoundingClientRect().top;
+            if (screens > innerHeight - 96) found.push(`the screens start at ${Math.round(screens)}px, under 96px of them on the first screen`);
+          }
+          return found;
+        }, phone);
+        mkdirSync(join(OUT, String(width)), { recursive: true });
+        await page.screenshot({ path: join(OUT, String(width), "homepage-first-screen.png") });
+        assert.deepEqual(problems, []);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
 describe("the homepage's motion", () => {
   // The slider runs on `setTimeout`, so the page's clock is Playwright's here
   // and five seconds pass when the test says so. The network, the floating
@@ -785,6 +856,67 @@ describe("the homepage's motion", () => {
     }
   });
 
+  // The report sheet: empty when it arrives, row by row as the page scrolls,
+  // complete with every total counted and every grade stamped by the end, on
+  // a desk (pinned) and a phone (rising up the screen).
+  for (const [width, height] of [[1280, 800], [390, 800]]) {
+    test(`the report sheet fills in as the page scrolls, at ${width}px`, async () => {
+      const { context, page } = await open({ viewport: { width, height } });
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        // The deferred screens land first, so the page below the hero has stopped moving.
+        await page.waitForTimeout(2000);
+        const state = () =>
+          page.evaluate(() => {
+            const cells = [...document.querySelectorAll(".sheet .ink, .sheet .stamp")];
+            const counted = [...document.querySelectorAll(".sheet .ink-sum, .sheet .ink-total")].map((x) =>
+              getComputedStyle(x).getPropertyValue("--n").trim() === x.textContent.trim(),
+            );
+            return { shown: cells.filter((x) => getComputedStyle(x).opacity === "1").length, all: cells.length, counted };
+          });
+        const scrollTo = (y) => page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y);
+        const { top, size } = await page.evaluate(() => {
+          const el = document.querySelector(innerWidth >= 900 ? ".sheet-row" : ".sheet");
+          return { top: el.getBoundingClientRect().top + scrollY, size: el.offsetHeight };
+        });
+        await scrollTo(top - height);
+        await page.waitForTimeout(100);
+        const before = await state();
+        assert.equal(before.shown, 0, "the sheet is filled before it arrives");
+        const middle = width >= 900 ? top + (size - height) * 0.45 : top - height + (size + height) * 0.45;
+        await scrollTo(middle);
+        await page.waitForTimeout(100);
+        const during = await state();
+        assert.ok(during.shown > 0 && during.shown < during.all, `${during.shown} of ${during.all} filled halfway`);
+        await scrollTo(top + size);
+        await page.waitForTimeout(100);
+        const after = await state();
+        assert.equal(after.shown, after.all, "the sheet is not complete at the end");
+        assert.deepEqual(after.counted, after.counted.map(() => true), "a total stopped short");
+      } finally {
+        await context.close();
+      }
+    });
+  }
+
+  test("under reduced motion the report sheet is complete and does not move", async () => {
+    const { context, page } = await open({ reducedMotion: "reduce" });
+    try {
+      await page.goto(`${SITE}/`);
+      await page.locator(".sheet").scrollIntoViewIfNeeded();
+      const still = await page.evaluate(() =>
+        [...document.querySelectorAll(".sheet .ink, .sheet .stamp")].every(
+          (x) => getComputedStyle(x).opacity === "1" && getComputedStyle(x).color !== "rgba(0, 0, 0, 0)",
+        ),
+      );
+      assert.ok(still, "something on the sheet is left undrawn");
+      assert.equal(await page.evaluate(() => document.querySelector(".sheet-row").offsetHeight < innerHeight * 2), true, "the sheet is pinned");
+    } finally {
+      await context.close();
+    }
+  });
+
   for (const width of [1280, 360]) {
     test(`only the floating cards, the network's dots and the dot grids loop, at ${width}px`, async () => {
       const { context, page } = await open({ viewport: { width, height: 800 } });
@@ -803,7 +935,7 @@ describe("the homepage's motion", () => {
                 name: a.animationName || a.transitionProperty,
                 iterations: t.iterations,
                 duration: t.duration,
-                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .slide, .slider-dots, .btn, .step")
+                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .slide, .slider-dots, .btn, .step, .sheet")
                   ? "ok" : a.effect.target.outerHTML.slice(0, 60),
               };
             }),
@@ -815,13 +947,13 @@ describe("the homepage's motion", () => {
             kinds.add(a.name);
           }
         }
-        for (const name of ["draw", "breathe", "float", "drift", "rise"]) assert.ok(kinds.has(name), `${name} never ran: ${[...kinds]}`);
+        for (const name of ["draw", "breathe", "float", "drift", "rise", "write", "add-up", "stamp"]) assert.ok(kinds.has(name), `${name} never ran: ${[...kinds]}`);
         // Every figure counted up to the screens' own figure.
         await page.waitForTimeout(1500);
         const figures = await page.evaluate(() =>
           [...document.querySelectorAll("[data-count]")].filter((x) => x.getClientRects().length).map((x) => [x.dataset.count, x.textContent]),
         );
-        assert.ok(figures.length >= 3);
+        assert.ok(figures.length >= 2);
         for (const [want, shown] of figures) assert.equal(Number(shown), Number(want), "a figure stopped short");
       } finally {
         await context.close();
