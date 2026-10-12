@@ -1,0 +1,21 @@
+{% comment %}
+A teacher's or a bursar's first things to do (`onboarding.first`), one card
+per role this login holds. Gone once both are done, or fourteen days after
+the first sign-in.
+{% endcomment %}{% for card in first %}<section class="panel first-card" aria-labelledby="first-{{ card.role }}" data-first="{{ card.role }}">
+  <div>
+    <p class="eyebrow">Your first days on Classnode</p>
+    <h2 id="first-{{ card.role }}">{{ card.title }}</h2>
+  </div>
+  <ul class="first-actions">
+    {% for a in card.actions %}
+    <li data-first-action="{{ a.key }}"{% if a.done %} data-done{% endif %}>
+      <a class="first-action{% if a.done %} is-done{% endif %}" href="{{ a.href }}">
+        <span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#{{ a.icon }}"/></svg></span>
+        <span class="todo-text"><strong>{% if a.done %}<span class="sr">Done: </span>{% endif %}{{ a.title }}</strong><span>{% if a.done %}Done. You can do it again any time.{% else %}{{ a.detail }}{% endif %}</span></span>
+        <svg class="icon" aria-hidden="true"><use href="#{% if a.done %}i-check{% else %}i-chevron{% endif %}"/></svg>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+</section>{% endfor %}

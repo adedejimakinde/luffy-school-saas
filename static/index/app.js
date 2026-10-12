@@ -62,8 +62,9 @@ export function htmlFor(
   const children = body.children || [];
   const cards = children.reduce((n, child) => n + (child.cards || []).length, 0);
   const after = (signOutFailed ? failureNote() : "") + signOutButton();
+  const hello = body.first_days ? states.welcome({ name: body.first_name, children, payInto }) : "";
   if (!cards) {
-    return states.nothing({ hasChildren: children.length > 0 }) + payPanel(children, payInto) + after;
+    return hello + states.nothing({ hasChildren: children.length > 0 }) + payPanel(children, payInto) + after;
   }
 
   const active = children.some((c) => c.student_membership_id === activeChild)
@@ -71,6 +72,7 @@ export function htmlFor(
     : children[0] && children[0].student_membership_id;
 
   return [
+    hello,
     '<section class="index" data-state="cards">',
     "<h1>Report cards</h1>",
     children.length > 1 ? switcher(children, active) : "",

@@ -1,0 +1,41 @@
+{% extends "onboarding/layout.html" %}
+{% block title %}Start here{% endblock %}
+{% block content %}
+      <header class="ob-head">
+        <div>
+          <p class="eyebrow">Start here</p>
+          <h1>Welcome{% if name %}, {{ name }}{% endif %}</h1>
+          {% if progress.complete %}<p>{{ school_name }} is set up. Well done.</p>{% else %}<p>Let us get {{ school_name }} ready. Do one step at a time, and stop whenever you like.</p>{% endif %}
+        </div>
+        <a class="skip" href="/home/">Skip to dashboard<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>
+      </header>
+
+      {% if progress.complete %}
+      <section class="next-card celebrate" aria-labelledby="done-title" data-next="first-register">
+        <div class="next-top">
+          <span class="next-icon" aria-hidden="true"><svg class="icon"><use href="#i-check"/></svg></span>
+          <div>
+            <p class="eyebrow">{% if progress.register_taken %}All set{% else %}One last thing{% endif %}</p>
+            <h2 id="done-title">{% if progress.register_taken %}Your first register is in{% else %}Take your first register{% endif %}</h2>
+          </div>
+        </div>
+        {% if progress.register_taken %}
+        <p>Your school is running on Classnode. Your dashboard now fills in with attendance, fees and results as the term goes on.</p>
+        <a class="btn btn-primary" href="/home/">Go to your dashboard<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        {% else %}
+        <p>Every step is done. When a teacher takes the first register, your dashboard starts to fill in. You can take one yourself to see how it works.</p>
+        <a class="btn btn-primary" href="/register/">Take a register<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+        <p class="next-meta"><a href="/home/">Go to your dashboard</a></p>
+        {% endif %}
+      </section>
+      {% elif progress.next %}
+      {% include "onboarding/parts/next_card.html" %}
+      {% endif %}
+
+      <section class="panel" aria-labelledby="steps-title">
+        <div class="panel-head"><h2 id="steps-title">Your setup</h2></div>
+        {% include "onboarding/parts/progress.html" %}
+        {% include "onboarding/parts/steps.html" %}
+        {% if not progress.complete %}<p class="ob-finish"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span>When these are done, take your first register and your dashboard fills in.</span></p>{% endif %}
+      </section>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% load static shell %}<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{% endblock %}</title>
+
+{% comment %}
+The onboarding pages' frame: the design, the dashboard's scale (these pages
+share its `.dash` sizes and its next-step card) and the onboarding layout.
+The title names no school and no person: this document is also what a
+signed-out caller is served.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'home/dashboard.css' %}">
+<link rel="stylesheet" href="{% static 'onboarding/onboarding.css' %}">
+
+{% shell_open current %}
+    <main class="dash" data-state="{{ state }}">
+      {% if state == "not-yours" %}
+      <section class="panel">
+        <h1>This page is not yours</h1>
+        <p>This page is for {% if current == "help" %}the school's staff{% else %}the school administrator{% endif %}. Your school office can tell you which pages are yours.</p>
+        <p><a href="/home/">Go to Home</a></p>
+      </section>
+      {% elif state == "signed-out" %}
+      <section class="panel">
+        <h1>Please sign in</h1>
+        <p>Sign in with your password to see this page.</p>
+        {% if portal_host %}<p><a href="//{{ portal_host }}/staff-sign-in/">Sign in</a></p>{% endif %}
+      </section>
+      {% elif state == "elsewhere" %}
+      <section class="panel">
+        <h1>This page lives on your school's own web address</h1>
+        <p>Open it again from your school's own address, the link on the page you signed in on.</p>
+      </section>
+      {% else %}
+      {% include "onboarding/parts/icons.html" %}
+      {% block content %}{% endblock %}
+      {% endif %}
+    </main>
+{% shell_close current %}

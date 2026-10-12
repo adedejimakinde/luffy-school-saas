@@ -1,0 +1,215 @@
+/*
+ * Start here, the step pages and Help and next steps (`onboarding`).
+ *
+ * Colours, the font, buttons and the shell are `web/design.css`'s. The scale
+ * (type, space, radii) and the next-step card are `home/dashboard.css`'s,
+ * through the `.dash` wrapper these pages share with the dashboard. This
+ * file is the layout and nothing else: no colour is declared here.
+ */
+
+/* -- The head: a welcome and the way out ------------------------------------ */
+.ob-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-2);
+}
+.ob-head h1 { font-size: var(--t-5); line-height: 1.2; }
+.ob-head p { color: var(--muted); margin-top: var(--s-half); }
+
+.skip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-half);
+  min-height: var(--control);
+  font-size: var(--t-3);
+  font-weight: 700;
+  text-decoration: none;
+}
+.skip .icon { width: 16px; height: 16px; }
+
+@media (min-width: 1024px) {
+  .ob-head h1 { font-size: var(--t-6); }
+}
+
+/* -- The steps: done, next, to do, locked, optional --------------------------- */
+.ob-steps { list-style: none; margin: var(--s-2) calc(-1 * var(--s-1)) 0; padding: 0; }
+.ob-steps li + li { border-top: 1px solid var(--divider); }
+.ob-steps a {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s-1) var(--s-2);
+  min-height: 60px;
+  padding: var(--s-1);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--r-control);
+  transition: background-color var(--ease);
+}
+.ob-steps a:hover { color: var(--text); background: var(--bg); }
+.ob-steps .mark { width: 24px; height: 24px; }
+.ob-steps .done .mark { color: var(--ok); }
+.ob-steps .next .mark { color: var(--brand); }
+.ob-steps .todo .mark { color: var(--field-border); }
+.ob-steps .locked .mark { color: var(--muted); }
+.ob-steps .text { display: grid; gap: 2px; min-width: 0; }
+.ob-steps .text strong { line-height: 1.35; }
+.ob-steps .text > span { color: var(--muted); font-size: var(--t-3); line-height: 1.4; }
+.ob-steps .done strong { color: var(--muted); font-weight: 400; }
+.ob-steps .locked strong { color: var(--muted); }
+.ob-steps .next a { background: var(--brand-tint); }
+.ob-steps .next .chip-brand { background: var(--card); }
+.ob-steps .next + li, .ob-steps li:has(+ .next) { border-color: transparent; }
+.ob-steps .end { display: flex; align-items: center; gap: var(--s-1); color: var(--muted); }
+.ob-steps .end > .icon { width: 18px; height: 18px; }
+.ob-steps .here a { box-shadow: inset 3px 0 0 var(--brand); }
+
+/* On a phone the chip rides under the title, so the title keeps the width. */
+.ob-steps .in-text { justify-self: start; margin-top: var(--s-half); }
+@media (min-width: 640px) { .ob-steps .in-text { display: none; } }
+@media (max-width: 639.98px) {
+  .ob-steps .end .chip { display: none; }
+  .ob-steps a { grid-template-columns: 28px minmax(0, 1fr) 18px; }
+}
+
+.ob-finish {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-2) 0 0;
+  padding: var(--s-2);
+  color: var(--muted);
+  background: var(--bg);
+  border-radius: var(--r-control);
+  font-size: var(--t-3);
+}
+.ob-finish .icon { color: var(--brand); }
+
+/* -- Finished: the first register ------------------------------------------ */
+.celebrate { text-align: left; }
+.celebrate .next-icon { color: var(--ok); background: var(--ok-bg); }
+
+/* -- One step --------------------------------------------------------------- */
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--s-1);
+  color: var(--muted);
+  font-size: var(--t-3);
+}
+.crumbs a:first-child {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control);
+  font-weight: 700;
+  text-decoration: none;
+}
+.crumbs .icon { width: 14px; height: 14px; }
+.crumbs .skip { margin-left: auto; }
+
+.step-page { display: grid; gap: var(--s-2); }
+.step-page h1 { font-size: var(--t-5); line-height: 1.2; margin: 0; }
+.explain { display: grid; gap: var(--s-2); }
+.explain h2 {
+  margin: 0 0 var(--s-half);
+  color: var(--muted);
+  font-size: var(--t-1);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.explain p { margin: 0; }
+.explain ol { display: grid; gap: var(--s-half); margin: 0; padding-left: 1.25rem; }
+.explain section + section { padding-top: var(--s-2); border-top: 1px solid var(--divider); }
+
+.action-box {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  background: var(--bg);
+  border-radius: var(--r-control);
+}
+.action-box .status { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+.action-box .status span { font-size: var(--t-3); }
+.action-box .go { display: grid; gap: var(--s-1); }
+.action-box .btn-primary { width: 100%; }
+.action-box .also { display: inline-flex; align-items: center; justify-content: center; min-height: var(--control); font-size: var(--t-3); font-weight: 700; }
+
+.step-foot {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-2);
+}
+
+@media (max-width: 639.98px) {
+  .step-foot .btn { width: 100%; }
+}
+
+@media (min-width: 640px) {
+  .action-box { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+  .action-box .btn-primary { width: auto; }
+}
+
+@media (min-width: 1024px) {
+  .step-page h1 { font-size: var(--t-6); }
+}
+
+/* The steps beside the page, on a desk only. */
+.side-steps { display: none; }
+@media (min-width: 1024px) {
+  .side-steps { display: block; }
+}
+
+/* Locked. */
+.locked-box { display: grid; gap: var(--s-2); justify-items: start; }
+.locked-box p { margin: 0; }
+.lock-badge {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  color: var(--muted);
+  background: var(--divider);
+  border-radius: var(--r-card);
+}
+.lock-badge .icon { width: 24px; height: 24px; }
+.locked-box .btn-primary { width: 100%; }
+@media (min-width: 640px) { .locked-box .btn-primary { width: auto; } }
+
+.need { display: grid; gap: var(--s-half); width: 100%; padding: var(--s-2); background: var(--bg); border-radius: var(--r-control); }
+.need strong { font-size: var(--t-3); }
+.need ul { margin: 0; padding-left: 1.25rem; color: var(--muted); font-size: var(--t-3); }
+
+/* -- Help and next steps ---------------------------------------------------- */
+.help-grid { display: grid; gap: var(--s-2); }
+@media (min-width: 1024px) {
+  .help-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--s-3); align-items: start; }
+}
+.tips { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; }
+.tips li { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s-1); }
+.num-dot {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: 50%;
+  font-size: var(--t-2);
+  font-weight: 700;
+}
+.tips p { margin: 0; }
+.tips strong { display: block; }
+.tips span { color: var(--muted); font-size: var(--t-3); }
+.contact { display: grid; gap: var(--s-1); }
+.contact p { color: var(--muted); }
+.came-from a { font-weight: 700; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ob-steps a { transition: none; }
+}

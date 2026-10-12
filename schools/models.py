@@ -16,7 +16,10 @@ import hashlib
 import secrets
 from datetime import timedelta
 
+from zoneinfo import ZoneInfo
+
 from django.db import models, transaction
+from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django_tenants.models import DomainMixin, TenantMixin
 
@@ -76,6 +79,9 @@ DEFAULT_INVITATION_TTL = timedelta(days=7)
 TOKEN_BYTES = 32
 
 
+LAGOS = ZoneInfo("Africa/Lagos")
+
+
 class School(TenantMixin):
     """One customer school. Lives in the public schema; owns a private schema.
 
@@ -107,6 +113,21 @@ class School(TenantMixin):
     #: brackets after the LGA on the Ogun State card. Optional; blank until set.
     school_code = models.CharField(max_length=20, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+    #: When the administrator's setup steps were first all found done
+    #: (`onboarding.progress`). Not a tick anybody sets: the steps are read
+    #: from the school's own tables, and this only records the first time they
+    #: all held, so a finished school is never sent back to Start here and
+    #: pays no query for the setup chip again.
+    setup_completed_at = models.DateTimeField(null=True, blank=True)
+    #: The date the signed pilot agreement came back, recorded by platform
+    #: staff on the handover page (`onboarding.handover`), with who recorded it
+    #: and when. Never shown to the school. All three are set together or not
+    #: at all, and the date is never later than the day it was recorded.
+    pilot_agreement_signed_on = models.DateField(null=True, blank=True)
+    pilot_agreement_recorded_by = models.ForeignKey(
+        "accounts.User", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
+    )
+    pilot_agreement_recorded_at = models.DateTimeField(null=True, blank=True)
 
     # Schemas are created on save in real use; tests turn this off per instance.
     auto_create_schema = True
@@ -114,6 +135,35 @@ class School(TenantMixin):
 
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.CheckConstraint(
+                name="pilot_agreement_is_recorded_whole",
+                condition=(
+                    models.Q(
+                        pilot_agreement_signed_on__isnull=True,
+                        pilot_agreement_recorded_by__isnull=True,
+                        pilot_agreement_recorded_at__isnull=True,
+                    )
+                    | models.Q(
+                        pilot_agreement_signed_on__isnull=False,
+                        pilot_agreement_recorded_by__isnull=False,
+                        pilot_agreement_recorded_at__isnull=False,
+                    )
+                ),
+            ),
+            # "Not in the future" as a constraint can read it: not after the
+            # Lagos day it was recorded on. `now()` is not something a CHECK
+            # may lean on; the recording time beside it is.
+            models.CheckConstraint(
+                name="pilot_agreement_is_not_signed_after_it_was_recorded",
+                condition=models.Q(
+                    pilot_agreement_signed_on__lte=TruncDate(
+                        "pilot_agreement_recorded_at", tzinfo=LAGOS
+                    )
+                )
+                | models.Q(pilot_agreement_signed_on__isnull=True),
+            ),
+        ]
 
     def __str__(self):
         return self.name

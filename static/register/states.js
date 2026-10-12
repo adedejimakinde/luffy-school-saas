@@ -11,7 +11,7 @@
  * and was not.
  */
 
-import { esc } from "../web/html.js";
+import { emptyState, esc } from "../web/html.js";
 import { heldNote } from "../web/offline.js";
 import { asOfText, copyNote } from "../web/snapshots.js";
 
@@ -28,7 +28,27 @@ import { asOfText, copyNote } from "../web/snapshots.js";
  * paper on Friday afternoon for Wednesday is ordinary office work — the case
  * `MARKING_ROLES` admits principals and administrators for.
  */
-export function choose({ term = "", classes = [], on = "", asOf = null, timeZone, now, held = [] } = {}) {
+export function choose({
+  term = "", classes = [], on = "", asOf = null, timeZone, now, held = [], may_set_up = false,
+} = {}) {
+  // No classes, said only from a live answer: a copy kept on the phone
+  // (`asOf`) is not the school's word today, and a fetch that failed never
+  // reaches this screen at all.
+  if (!classes.length && !asOf) {
+    return [
+      '<section class="state state-choose" data-state="choose">',
+      "<h1>Take a register</h1>",
+      emptyState({
+        key: "register",
+        icon: "i-register",
+        title: "No classes yet",
+        text: "A register is taken for a class. Once the school's classes are added, they show here.",
+        action: may_set_up ? { href: "/setup/#classes", label: "Add your classes" } : null,
+        who: "The school office adds the classes.",
+      }),
+      "</section>",
+    ].join("");
+  }
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Take a register</h1>",

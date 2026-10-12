@@ -775,6 +775,13 @@ class CardIndexOut(Schema):
     """
 
     children: List[ListedChildOut]
+    #: Within fourteen days of this login's first sign-in
+    #: (`onboarding.first.in_first_days()`): the page opens with a short
+    #: welcome that says what this family can see. Read off the user row the
+    #: session already loaded, so it costs nothing.
+    first_days: bool = False
+    #: The name to greet, only while `first_days`.
+    first_name: str = ""
 
 
 # -- who may read one --------------------------------------------------------
@@ -1317,16 +1324,23 @@ def card_index(request):
     digits — and a page parameter here would be a knob nobody turns standing in
     for a limit nobody needs.
     """
+    from home.dashboard import first_name
+    from onboarding.first import in_first_days
+
     school = _school_of(request)
+    children = [
+        ListedChildOut(
+            student_membership_id=child.pk,
+            student_name=child.name,
+            cards=_cards_of(request.user, school, child),
+        )
+        for child in _children_of(request.user, school)
+    ]
+    welcome = bool(children) and in_first_days(request.user)
     return CardIndexOut(
-        children=[
-            ListedChildOut(
-                student_membership_id=child.pk,
-                student_name=child.name,
-                cards=_cards_of(request.user, school, child),
-            )
-            for child in _children_of(request.user, school)
-        ]
+        children=children,
+        first_days=welcome,
+        first_name=first_name(request.user) if welcome else "",
     )
 
 

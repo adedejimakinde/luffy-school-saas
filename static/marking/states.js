@@ -10,7 +10,7 @@
  * not.
  */
 
-import { esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, numberOrBlank } from "../web/html.js";
 import { heldNote } from "../web/offline.js";
 import { copyNote } from "../web/snapshots.js";
 
@@ -24,7 +24,34 @@ import { copyNote } from "../web/snapshots.js";
  * which students take which subject, which is issue #127 and why SSS electives
  * cannot be expressed at all.
  */
-export function choose({ term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [] } = {}) {
+export function choose({
+  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false,
+} = {}) {
+  // Nothing to mark, said only from a live answer: a copy kept on the phone
+  // (`asOf`) is not the school's word today, and a fetch that failed never
+  // reaches this screen at all.
+  if ((!assessments.length || !classes.length) && !asOf) {
+    const noClasses = !classes.length;
+    return [
+      '<section class="state state-choose" data-state="choose">',
+      "<h1>Enter marks</h1>",
+      emptyState({
+        key: "marks",
+        icon: "i-marks",
+        title: noClasses ? "No classes yet" : "No papers to mark yet",
+        text: noClasses
+          ? "Marks are entered for a class. Once the school's classes are added, they show here."
+          : "Marks are entered against a paper, such as First CA. Once this term's papers are set, they show here.",
+        action: may_set_up
+          ? noClasses
+            ? { href: "/setup/#classes", label: "Add your classes" }
+            : { href: "/teaching/#papers", label: "Add this term's papers" }
+          : null,
+        who: noClasses ? "The school office adds the classes." : "The school office sets this term's papers.",
+      }),
+      "</section>",
+    ].join("");
+  }
   return [
     '<section class="state state-choose" data-state="choose">',
     "<h1>Enter marks</h1>",

@@ -66,12 +66,21 @@ def shell_paths():
 
 SOURCE = Path(__file__).parent / "worker.js"
 
+#: Bumped by hand when a shell module's bytes change under a name that does
+#: not: under plain storage (development, and any deploy without hashed
+#: names) the shell's URLs alone would give the same version, and a phone
+#: would go on serving yesterday's module. 2: the register and marking pages
+#: learned their empty states (`onboarding`).
+CACHE_GENERATION = 2
+
 
 def config():
     prefix = settings.STATIC_URL or "/"
     shell = [static(path) for path in shell_paths()]
     source = SOURCE.read_text()
-    version = hashlib.sha256((source + "\n".join(shell)).encode()).hexdigest()[:12]
+    version = hashlib.sha256(
+        (f"{CACHE_GENERATION}\n" + source + "\n".join(shell)).encode()
+    ).hexdigest()[:12]
     return {
         "version": version,
         "pages": list(PAGES),

@@ -1,19 +1,14 @@
-<section class="panel" aria-labelledby="setup-title">
-  <div class="setup-head">
-    <p class="eyebrow">{{ dash.setup.done }} of {{ dash.setup.steps|length }} done</p>
-    <h2 id="setup-title">Set up your school</h2>
-    <p>Three steps and your dashboard fills in with enrolment, fees, attendance and results.</p>
-    <svg class="meter" role="img" aria-label="{{ dash.setup.done }} of {{ dash.setup.steps|length }} steps done"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ dash.setup.percent }}%" height="8" rx="4"/></svg>
-  </div>
-  <ol class="steps">
-    {% for step in dash.setup.steps %}
-    <li class="{% if step.done %}done{% else %}todo{% endif %}">
-      {% if step.href %}<a href="{{ step.href }}">{% else %}<div class="step-static">{% endif %}
-        <svg class="icon" aria-hidden="true"><use href="#{% if step.done %}i-check{% else %}i-todo{% endif %}"/></svg><span class="sr">{% if step.done %}Done: {% else %}To do: {% endif %}</span>
-        <span class="step-text"><strong>{{ step.title }}</strong><span>{{ step.detail }}</span></span>
-        {% if not step.done %}{% if step.href %}<span class="go">{{ step.action }}</span>{% endif %}{% else %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Done</span>{% endif %}
-      {% if step.href %}</a>{% else %}</div>{% endif %}
-    </li>
-    {% endfor %}
-  </ol>
+{% comment %}
+A school with no students yet: the dashboard has no figures to show. The
+administrator has the next-step card above this; the principal is told how
+far the administrator has got. The steps are `onboarding.progress`'s.
+{% endcomment %}<section class="panel" aria-labelledby="setup-title" data-setup="{{ setup.done }}">
+  {% if leads_setup %}
+  <h2 id="setup-title">Your dashboard fills in soon</h2>
+  <p class="quiet">Once your students are in, this page shows enrolment, fees, attendance and results. <a href="/start/">See all your setup steps</a></p>
+  {% else %}
+  <h2 id="setup-title">Your school is being set up</h2>
+  {% if setup %}<p class="quiet">Your school administrator has done {{ setup.done }} of {{ setup.total }} setup steps. This page fills in once classes and students are added.</p>
+  <svg class="meter" role="img" aria-label="{{ setup.done }} of {{ setup.total }} steps done"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ setup.percent }}%" height="8" rx="4"/></svg>{% endif %}
+  {% endif %}
 </section>

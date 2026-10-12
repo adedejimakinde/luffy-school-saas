@@ -1,0 +1,39 @@
+{% extends "onboarding/layout.html" %}
+{% block title %}Help and next steps{% endblock %}
+{% block content %}
+      <header class="ob-head">
+        <div>
+          <p class="eyebrow">Help and next steps</p>
+          <h1>{% if page.key %}Tips for {{ page.heading }}{% else %}Getting around Classnode{% endif %}</h1>
+          <p class="came-from">{% if page.key %}You came from the {{ page.heading }} page. {% endif %}<a href="{{ page.back }}">Go back</a></p>
+        </div>
+      </header>
+      <div class="help-grid">
+        <section class="panel" aria-labelledby="tips-title" data-tips="{{ page.key|default:'general' }}">
+          <div class="panel-head"><h2 id="tips-title">{% if page.key %}On this page{% else %}Good to know{% endif %}</h2></div>
+          <ol class="tips">
+            {% for title, line in page.tips %}
+            <li><span class="num-dot" aria-hidden="true">{{ forloop.counter }}</span><p><strong>{{ title }}</strong><span>{{ line }}</span></p></li>
+            {% endfor %}
+          </ol>
+        </section>
+        <div class="dash-col">
+          {% if progress and progress.next %}
+          <section class="panel" aria-labelledby="next-title" data-next="{{ progress.next.step.key }}">
+            <div class="panel-head"><h2 id="next-title">Your next step</h2><a href="/start/">Start here</a></div>
+            {% include "onboarding/parts/progress.html" %}
+            <ul class="todo-list">
+              <li><a href="/start/{{ progress.next.step.key }}/"><span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#{{ progress.next.step.icon }}"/></svg></span><span class="todo-text"><strong>{{ progress.next.step.title }}</strong><span>Step {{ progress.next.number }} of {{ progress.total }}</span></span><span class="todo-end"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+            </ul>
+          </section>
+          {% endif %}
+          <section class="panel contact" aria-labelledby="contact-title">
+            <div class="panel-head"><h2 id="contact-title">Talk to Classnode</h2></div>
+            <p>Stuck, or something not working? Write to us with your school's name and what you were trying to do. {{ support_promise }}</p>
+            <ul class="todo-list">
+              <li><a href="mailto:{{ support_email }}"><span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#i-mail"/></svg></span><span class="todo-text"><strong>{{ support_email }}</strong><span>Email Classnode support</span></span><span class="todo-end"><svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></span></a></li>
+            </ul>
+          </section>
+        </div>
+      </div>
+{% endblock %}

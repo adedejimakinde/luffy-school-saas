@@ -100,3 +100,32 @@ export function hostHref(host, path, { pathOnly = false } = {}) {
   if (!host) return "";
   return `//${esc(host)}${path}`;
 }
+
+/**
+ * An empty list's state: what is missing, why it matters, and one button.
+ *
+ * Drawn **only from a successful answer with no rows**. A refused, failed or
+ * offline fetch has its own states and never reaches this, so "No students
+ * yet" is never said about a school whose roll simply did not load. Each
+ * page's `from…()` decides; this only draws.
+ *
+ * `action` is `{ href, label }` for a link or `{ data, label }` for a button
+ * the page already handles (`data-action="…"`). Without one, the card says
+ * who does this instead (`who`). The icon is a symbol of the shared sprite.
+ */
+export function emptyState({ key = "", icon = "", title = "", text = "", action = null, who = "" } = {}) {
+  const button = !action
+    ? ""
+    : action.href
+      ? `<a class="btn btn-primary" href="${esc(action.href)}">${esc(action.label)}</a>`
+      : `<button type="button" class="btn-primary" data-action="${esc(action.data)}">${esc(action.label)}</button>`;
+  return [
+    `<section class="empty-card" data-empty="${esc(key)}">`,
+    icon ? `<span class="empty-icon" aria-hidden="true"><svg class="icon"><use href="#${esc(icon)}"/></svg></span>` : "",
+    `<h2>${esc(title)}</h2>`,
+    `<p>${esc(text)}</p>`,
+    button,
+    !button && who ? `<p class="quiet">${esc(who)}</p>` : "",
+    "</section>",
+  ].join("");
+}

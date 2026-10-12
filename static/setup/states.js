@@ -5,7 +5,7 @@
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  */
 
-import { esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, numberOrBlank } from "../web/html.js";
 
 /**
  * The school's shape: its terms and its class groups.
@@ -23,16 +23,22 @@ export function shape({
     '<section class="state state-setup" data-state="setup">',
     "<h1>School setup</h1>",
 
-    "<h2>Terms</h2>",
+    '<h2 id="terms">Terms</h2>',
     terms.length
       ? `<ul class="terms">${terms.map((t) => termRow(t)).join("")}</ul>`
       : '<p class="blank">No terms yet. The first one opens the school\'s calendar.</p>',
     newTermForm(notes.term),
 
-    "<h2>Classes</h2>",
+    '<h2 id="classes">Classes</h2>',
     classes.length
       ? `<ul class="classes">${classes.map(classRow).join("")}</ul>`
-      : '<p class="blank">No class groups yet.</p>',
+      : emptyState({
+          key: "classes",
+          icon: "i-sheet",
+          title: "No classes yet",
+          text: "Add JSS 1 to SS 3, one class for each arm. Registers, marks and report cards all belong to a class.",
+          action: { href: "#class_name", label: "Add your first class" },
+        }),
     newClassForm(notes.class),
 
     card ? cardLook(card, notes) : "",

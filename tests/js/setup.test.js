@@ -90,7 +90,9 @@ test("a school with nothing set up yet is told so rather than shown blank lists"
   const html = states.shape({ terms: [], classes: [], may_set_up: true });
 
   assert.match(html, /No terms yet/);
-  assert.match(html, /No class groups yet/);
+  assert.match(html, /data-empty="classes"/);
+  assert.match(html, /No classes yet/);
+  assert.match(html, /href="#class_name"/);
   assert.match(html, /data-form="term"/);
 });
 

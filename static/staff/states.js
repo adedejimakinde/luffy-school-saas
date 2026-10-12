@@ -9,7 +9,7 @@
  * existed has nothing to show, and says "-" rather than borrowing a name.
  */
 
-import { esc } from "../web/html.js";
+import { emptyState, esc } from "../web/html.js";
 
 /** What each status means to the person reading the list. */
 const STANDING = {
@@ -18,14 +18,28 @@ const STANDING = {
   revoked: "Cancelled. Nobody can use that link now.",
 };
 
-export function list({ invitations = [], roles = [], note = null, typed = null } = {}) {
+export function list({ invitations = [], roles = [], note = null, typed = null, has_teachers = true } = {}) {
+  // No teacher yet and nobody invited: the empty state comes first, and its
+  // one button goes to the form under it.
+  const empty = !invitations.length && !has_teachers;
   return [
     '<section class="state state-list" data-state="list">',
     "<h1>Staff invitations</h1>",
+    empty
+      ? emptyState({
+          key: "teachers",
+          icon: "i-staff",
+          title: "No teachers yet",
+          text: "Invite each teacher by email. They set their own password, then take registers and enter marks themselves.",
+          action: { href: "#address", label: "Invite your first teacher" },
+        })
+      : "",
     inviteForm(roles, note, typed),
     invitations.length
       ? `<ul class="invitations stack-list">${invitations.map(row).join("")}</ul>`
-      : '<p class="blank">Nobody is waiting on an invitation from this school.</p>',
+      : empty
+        ? ""
+        : '<p class="blank">Nobody is waiting on an invitation from this school.</p>',
     "</section>",
   ].join("");
 }

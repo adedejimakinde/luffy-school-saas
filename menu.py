@@ -200,6 +200,14 @@ def shell_open(context, current):
     # menu there is a person icon and Sign out.
     personal = signed_in and path not in OFFLINE_PAGES
     name = (user.get_full_name() or user.get_username()) if personal else ""
+    # The setup chip: an administrator's, until the school's setup is first
+    # finished, and never on the offline pages, which carry nothing personal.
+    # `onboarding.progress.for_request()` reads nothing for anybody else.
+    setup_chip = None
+    if personal and request is not None:
+        from onboarding.progress import for_request
+
+        setup_chip = for_request(request)
     return {
         "menu": _menu(context, current),
         "signed_in": signed_in,
@@ -211,6 +219,7 @@ def shell_open(context, current):
         "user_name": name,
         "user_initials": initials(name) if name else "",
         "role_names": _role_names(getattr(request, "school_roles", ())) if personal else "",
+        "setup_chip": setup_chip,
     }
 
 
