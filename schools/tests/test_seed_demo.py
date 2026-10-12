@@ -348,6 +348,14 @@ class ShowcaseTests(TestCase):
             self.assertEqual(ReportCardSettings.objects.get().template, "ogun")
             card = card_for(star, term)
             self.assertAlmostEqual(float(card.own_average), 78, delta=1.5)
+            # "Times school opened" is a number on the sheet: the term's 61 weekdays.
+            self.assertEqual(term.school_days, 61)
+            self.assertEqual(card.days_open, 61)
+            # One school code: the learner ID and the admission number agree.
+            from academics.models import StudentDetails
+
+            self.assertEqual(star.reference, "CFC/001")
+            self.assertEqual(StudentDetails.objects.get(student_membership_id=star.pk).learner_id, "CFC-2013-0001")
             grades = list(card.subject_results.values_list("grade_letter", flat=True))
             self.assertEqual(len(grades), 6)
             self.assertLessEqual(set(grades), {"A1", "B2", "B3"})

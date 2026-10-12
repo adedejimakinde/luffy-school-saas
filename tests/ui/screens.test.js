@@ -354,10 +354,14 @@ function measureSite({ width }) {
     }
   }
   if (width < 640 && home) {
+    // The form's button is full width; the hero's two share the row from 360px
+    // (each half of it), and each has the row to itself below.
     for (const button of document.querySelectorAll(".hero-actions .btn, .demo-form button")) {
       if (!visible(button)) continue;
-      if (Math.abs(box(button).width - box(button.parentElement).width) > 1) {
-        problems.push(`a button is not full width: "${button.textContent.trim()}"`);
+      const room = box(button.parentElement).width;
+      const share = button.closest(".hero-actions") && width >= 360 ? (room - 8) / 2 : room;
+      if (Math.abs(box(button).width - share) > 1) {
+        problems.push(`a button is ${Math.round(box(button).width)}px wide, not ${Math.round(share)}: "${button.textContent.trim()}"`);
       }
     }
   }
@@ -415,6 +419,96 @@ function heroOnAPhone() {
   for (const card of cards) {
     if (overlaps(box(card), f)) problems.push(`${name}: a floating card covers the screen`);
     if (overlaps(box(card), face)) problems.push(`${name}: a floating card covers the principal's face`);
+  }
+  return problems;
+}
+
+/**
+ * The hero at any width, on whichever screen is showing. The frame of that
+ * screen covers no words of the page (the headline, the lead, the buttons, the
+ * price line, the slider's controls and name, and the caption under it) and
+ * not her face, down to her shoulders. The "Fees collected" card shows, and
+ * covers neither her face, the frame, nor any of those words. The network's
+ * lines never run under a word. Pure, like `measureSite`.
+ */
+function heroEverywhere() {
+  const problems = [];
+  const visible = (el) => {
+    const r = el.getBoundingClientRect();
+    const style = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && style.visibility !== "hidden" && style.display !== "none";
+  };
+  const box = (el) => el.getBoundingClientRect();
+  const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+  const inside = (x, y, r) => x > r.left && x < r.right && y > r.top && y < r.bottom;
+  const on = document.querySelector(".slide.is-on");
+  const name = on.dataset.name;
+  const frame = box(on.querySelector(".browser, .phone-frame"));
+  const words = [...document.querySelectorAll(".hero-text > *, .hero-demo-note, .slider-bar > *")].filter(visible).map((el) => [el.className || el.tagName.toLowerCase(), box(el)]);
+  const photo = box(document.querySelector(".photo-hero"));
+  const face = {
+    left: photo.left + photo.width * 0.1,
+    right: photo.right - photo.width * 0.05,
+    top: photo.top,
+    bottom: photo.top + photo.height * 0.56,
+  };
+  for (const [what, r] of words) if (overlaps(frame, r)) problems.push(`${name}: the frame covers ${what}`);
+  if (overlaps(frame, face)) problems.push(`${name}: the frame covers her face`);
+  const fees = document.querySelector(".float-a");
+  if (!visible(fees)) problems.push(`${name}: no "Fees collected" card`);
+  else {
+    const card = box(fees);
+    if (overlaps(card, face)) problems.push(`${name}: the fees card covers her face`);
+    if (overlaps(card, frame)) problems.push(`${name}: the fees card covers the screen`);
+    for (const [what, r] of words) if (overlaps(card, r)) problems.push(`${name}: the fees card covers ${what}`);
+  }
+  for (const path of document.querySelectorAll(".hero .n-lines path")) {
+    const m = path.getScreenCTM();
+    const length = path.getTotalLength();
+    for (let at = 0; at <= length; at += 4) {
+      const p = path.getPointAtLength(at);
+      const x = m.a * p.x + m.c * p.y + m.e;
+      const y = m.b * p.x + m.d * p.y + m.f;
+      const hit = words.find(([, r]) => inside(x, y, r));
+      if (hit) {
+        problems.push(`${name}: a line of the network runs under ${hit[0]}`);
+        break;
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * No heading and no short line ends on a word of its own. Every visible
+ * heading, question and paragraph of the page, but for the drawings of the
+ * product (`.mini`, `.sheet`, the cards, the slider): its last line holds at
+ * least two words, unless it has only one. Pure.
+ */
+function loneWords() {
+  const problems = [];
+  const main = document.querySelector("main");
+  const all = main.querySelectorAll("h1, h2, h3, summary, p, li");
+  for (const el of all) {
+    if (el.closest(".mini, .sheet, .float-card, .slider, .bait, .todo, [hidden]")) continue;
+    const r = el.getBoundingClientRect();
+    if (!r.width || getComputedStyle(el).visibility === "hidden") continue;
+    if (el.querySelector("p, li, ul, ol, div")) continue;
+    const tops = [];
+    const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    while (walk.nextNode()) {
+      const node = walk.currentNode;
+      for (const m of node.textContent.matchAll(/\S+/g)) {
+        const range = document.createRange();
+        range.setStart(node, m.index);
+        range.setEnd(node, m.index + m[0].length);
+        const rect = range.getClientRects()[0];
+        if (rect) tops.push(Math.round(rect.top));
+      }
+    }
+    if (tops.length < 2) continue;
+    const last = Math.max(...tops);
+    if (tops.filter((t) => Math.abs(t - last) < 4).length === 1) problems.push(`one word alone on the last line: "${el.textContent.trim().slice(0, 40)}"`);
   }
   return problems;
 }
@@ -724,17 +818,19 @@ describe("the roll import's preview", () => {
 });
 
 describe("the homepage's sizes", () => {
-  // The owner's sizing rules, measured finished and still on a 375 x 812 phone
-  // and a 1280 x 800 desk: the hero 30 to 36px and 48 to 56px with a line
-  // height about 1.1, section headlines 24 to 28px and 32 to 40px, other
-  // headings at most 28px and 40px, body copy 15 to 16px and 16 to 17px,
-  // small labels 13 to 14px, buttons 44 to 48px tall with 15 to 16px words and
-  // 8 to 10px corners, sections 48 to 64px and 80 to 112px top and bottom,
-  // cards 20 to 24px in and 12 to 16px round, content at most 1200px wide, two
-  // font weights a section at most, no long centred paragraph, and the phone's
-  // first screen holding the headline, its subline, the main button and the
-  // top of the screens.
-  for (const [width, height, phone] of [[375, 812, true], [1280, 800, false]]) {
+  // The owner's sizing rules, measured finished and still on a 360 x 800 and a
+  // 375 x 812 phone and a 1280 x 800 desk: the hero at most 30px at 360px, 30 to
+  // 36px on a phone and 48 to 56px on a desk, with a line height about 1.1;
+  // section headlines at most 24px at 360px, 24 to 28px on a phone and 32 to
+  // 40px on a desk; other headings at most 28px and 40px; body copy 15 to 16px
+  // and 16 to 17px; small labels 13 to 14px; buttons 44 to 48px tall with 15 to
+  // 16px words and 8 to 10px corners, the hero's two 44px and side by side on a
+  // phone from 360px; sections 48 to 64px and 80 to 112px top and bottom; cards
+  // 16 to 20px in on a phone and 20 to 24px on a desk, 12 to 16px round; content
+  // at most 1200px wide; two font weights a section at most; no long centred
+  // paragraph; and the phone's first screen holding the headline, its subline,
+  // the main button and the top of the screens.
+  for (const [width, height, phone] of [[360, 800, true], [375, 812, true], [1280, 800, false]]) {
     test(`at ${width} x ${height}`, async () => {
       const context = await browser.newContext({ viewport: { width, height }, reducedMotion: "reduce" });
       const page = await context.newPage();
@@ -743,7 +839,7 @@ describe("the homepage's sizes", () => {
         await page.waitForLoadState("networkidle");
         // The deferred screens in, so the first screen is the one a visitor keeps.
         await page.waitForTimeout(2000);
-        const problems = await page.evaluate((phone) => {
+        const problems = await page.evaluate(([phone, width]) => {
           const found = [];
           const visible = (el) => {
             const box = el.getBoundingClientRect();
@@ -756,10 +852,10 @@ describe("the homepage's sizes", () => {
           };
           const main = document.querySelector("main");
           const h1 = main.querySelector("h1");
-          within("the hero headline", size(h1), ...(phone ? [30, 36] : [48, 56]));
+          within("the hero headline", size(h1), ...(width === 360 ? [28, 30] : phone ? [30, 36] : [48, 56]));
           within("the hero's line height x 10", (parseFloat(getComputedStyle(h1).lineHeight) / size(h1)) * 10, 10.5, 11.5);
           for (const h of main.querySelectorAll("h2")) {
-            if (visible(h)) within(`the headline "${h.textContent.trim().slice(0, 24)}"`, size(h), ...(phone ? [24, 28] : [32, 40]));
+            if (visible(h)) within(`the headline "${h.textContent.trim().slice(0, 24)}"`, size(h), ...(width === 360 ? [22, 24] : phone ? [24, 28] : [32, 40]));
           }
           for (const h of main.querySelectorAll("h3")) {
             if (visible(h)) within(`"${h.textContent.trim().slice(0, 24)}"`, size(h), 0, phone ? 28 : 40);
@@ -784,7 +880,7 @@ describe("the homepage's sizes", () => {
           for (const c of main.querySelectorAll(".step, .price-band, .included, .demo-card")) {
             const style = getComputedStyle(c);
             for (const side of ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"]) {
-              within(`the card .${c.classList[0]} ${side}`, parseFloat(style[side]), 20, 24);
+              within(`the card .${c.classList[0]} ${side}`, parseFloat(style[side]), ...(phone ? [16, 20] : [20, 24]));
             }
           }
           for (const c of main.querySelectorAll(".step, .price-card, .demo-card, .faq-list")) {
@@ -815,6 +911,9 @@ describe("the homepage's sizes", () => {
           }
           if (document.documentElement.scrollWidth > innerWidth) found.push(`scrolls sideways: ${document.documentElement.scrollWidth}px`);
           if (phone) {
+            const [book, pricing] = [...document.querySelectorAll(".hero-actions .btn")].map((b) => b.getBoundingClientRect());
+            if (Math.abs(book.top - pricing.top) > 1) found.push("the hero's two buttons are not side by side");
+            for (const b of [book, pricing]) within("a hero button's height", b.height, 44, 44);
             for (const [what, sel] of [["the headline", ".hero h1"], ["the subline", ".hero-lead"], ["the main button", ".hero-actions .btn"]]) {
               if (document.querySelector(sel).getBoundingClientRect().bottom > innerHeight) found.push(`${what} is below the first screen`);
             }
@@ -822,9 +921,36 @@ describe("the homepage's sizes", () => {
             if (screens > innerHeight - 96) found.push(`the screens start at ${Math.round(screens)}px, under 96px of them on the first screen`);
           }
           return found;
-        }, phone);
+        }, [phone, width]);
         mkdirSync(join(OUT, String(width)), { recursive: true });
         await page.screenshot({ path: join(OUT, String(width), "homepage-first-screen.png") });
+        assert.deepEqual(problems, []);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
+describe("the hero at every width", () => {
+  // Every screen in turn, by its dot, held to `heroEverywhere`, and the whole
+  // page to `loneWords`, from the smallest phone to a wide desk.
+  for (const width of [320, 360, 375, 414, 640, 768, 900, 1024, 1280, 1920]) {
+    test(`every screen at ${width}px`, async () => {
+      const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        await page.waitForTimeout(1500); // the deferred screens in
+        const problems = [];
+        for (let n = 0; n < 4; n++) {
+          await page.click(`[data-go="${n}"]`);
+          await page.mouse.move(0, 0);
+          problems.push(...(await page.evaluate(heroEverywhere)));
+        }
+        problems.push(...(await page.evaluate(loneWords)));
+        if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) problems.push("the page scrolls sideways");
         assert.deepEqual(problems, []);
       } finally {
         await context.close();

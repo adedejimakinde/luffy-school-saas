@@ -165,7 +165,7 @@ class TheSiteHostTests(SiteSetUp):
     def test_the_site_host_serves_the_homepage(self):
         response = self.get()
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Results, fees and registers, all in one place.")
+        self.assertIn("Results, fees and registers, all in one place.", visible_text(response.content.decode()))
 
     def test_www_is_the_same_site(self):
         self.assertEqual(self.get(host=f"www.{SITE}").status_code, 200)
@@ -252,13 +252,16 @@ class TheWordsTests(SiteSetUp):
         self.assertNotIn("OGSERA", text)
         self.assertIn("the sheet the Ministry asks for.", text)
 
-    def test_card_and_benefit_headings_wrap_where_the_line_ends(self):
+    def test_every_heading_is_balanced_with_no_forced_break(self):
+        """No heading ends on a word of its own: balanced by the browser, never
+        broken by hand. `loneWords` in `tests/ui/screens.test.js` measures it."""
         page = self.get().content.decode()
-        for heading in re.findall(r"<h3\b[^>]*>(.*?)</h3>", page, flags=re.S):
-            self.assertNotIn("<br", heading)
+        for heading in re.findall(r"<h([123])\b[^>]*>(.*?)</h\1>", page, flags=re.S):
+            self.assertNotIn("<br", heading[1])
         css = without_comments(CSS.read_text())
-        for rule in re.findall(r"([^{}]*\bh3\b[^{}]*)\{([^}]*)\}", css):
-            self.assertNotIn("text-wrap", rule[1], rule[0].strip())
+        balanced = [sel for sel, body in re.findall(r"([^{}]+)\{([^}]*)\}", css) if "text-wrap: balance" in body]
+        selectors = {part.strip() for sel in balanced for part in sel.split(",")}
+        self.assertLessEqual({"h1", "h2", "h3", "summary"}, selectors)
 
     def test_headlines_over_content_start_at_the_left_and_the_price_is_centred(self):
         page = self.get().content.decode()
@@ -668,9 +671,12 @@ def _tokens():
             return resolved[name]
         text = raw[name].strip()
         mix = re.fullmatch(r"color-mix\(in srgb, var\(--([a-z-]+)\) (\d+)%, var\(--([a-z-]+)\)\)", text)
+        alias = re.fullmatch(r"var\(--([a-z-]+)\)", text)
         if mix:
             a, share, b = value(mix.group(1)), int(mix.group(2)) / 100, value(mix.group(3))
             resolved[name] = tuple(x * share + y * (1 - share) for x, y in zip(a, b))
+        elif alias:
+            resolved[name] = value(alias.group(1))
         else:
             resolved[name] = _hex(text)
         return resolved[name]
@@ -691,9 +697,10 @@ def contrast(a, b):
 class TheContrastTests(TestCase):
     """Worked out from the tokens, so a change of shade is checked where it is made."""
 
-    def test_words_on_the_blues_are_4_5_to_1_or_better(self):
+    def test_words_on_the_blues_and_the_light_band_are_4_5_to_1_or_better(self):
         token = _tokens()
-        for text, ground in (("card", "brand"), ("on-brand", "brand"), ("on-brand", "brand-deep"),
+        for text, ground in (("text", "band"), ("on-band", "band"), ("brand", "band"), ("muted", "band"),
+                             ("card", "brand"), ("on-brand", "brand"), ("on-brand", "brand-deep"),
                              ("card", "brand-deeper"), ("on-deep", "brand-deeper"),
                              ("on-deep-muted", "brand-deeper"), ("on-deep-legal", "brand-deeper"),
                              ("muted", "brand-wash"), ("text", "brand-wash"), ("brand", "card")):

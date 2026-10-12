@@ -430,9 +430,12 @@ def _attendance_tile(week, scope: Scope, today: date) -> dict:
     exact = present * 100 / marked
     change = None
     if week["before"][1]:
-        # The day shown against the seven days before it.
+        # The day shown against the seven days before it. No change is no line:
+        # "0 pts" reads as a figure, and "same as yesterday" would not be true of
+        # a week's average.
         points = exact - week["before"][0] * 100 / week["before"][1]
-        change = f"{signed(points)} pts"
+        if round(points, 1):
+            change = f"{signed(points)} pts"
     meta = (
         f"{present:,} of {marked:,} present{where}"
         if shown == today

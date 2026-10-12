@@ -40,6 +40,10 @@
   --on-deep: color-mix(in srgb, var(--card) 75%, var(--brand-deeper));
   --on-deep-muted: color-mix(in srgb, var(--card) 55%, var(--brand-deeper));
   --on-deep-legal: color-mix(in srgb, var(--card) 60%, var(--brand-deeper));
+  /* The top band is light: the wash of One Blue, ink headings, and words a
+     shade off the ink (10:1 on the wash). */
+  --band: var(--brand-wash);
+  --on-band: color-mix(in srgb, var(--text) 78%, var(--card));
 
 
   --shadow-soft: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
@@ -48,6 +52,9 @@
     0 16px 40px color-mix(in srgb, var(--text) 14%, transparent);
   --shadow-shot: 0 4px 12px color-mix(in srgb, var(--text) 18%, transparent),
     0 32px 80px color-mix(in srgb, var(--text) 32%, transparent);
+  /* The product's frames on the light band: a One Blue shadow, softer. */
+  --shadow-frame: 0 3px 8px color-mix(in srgb, var(--brand) 12%, transparent),
+    0 16px 36px -12px color-mix(in srgb, var(--brand) 40%, transparent);
 }
 
 @media (min-width: 768px) { :root { --section: 104px; --copy-lg: 1.0625rem; --copy-note: 1rem; } }
@@ -78,17 +85,21 @@ body.site > main { margin: 0; padding: 0; background: none; border: 0; border-ra
 }
 
 h1, h2, h3 { color: var(--text); letter-spacing: -0.02em; }
-/* Section headlines are balanced; card and benefit headings wrap where the line ends. */
-h1, h2 { text-wrap: balance; }
-h2 { margin: 0; font-size: clamp(1.75rem, 1.25rem + 1.6vw, 2.5rem); line-height: 1.15; }
-h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line-height: 1.2; }
+/* Every heading is balanced, and so is every short line: no word sits alone
+   on a line. Longer copy wraps "pretty", which keeps its last line from being
+   one word. */
+h1, h2, h3, summary, .hero-note, .hero-demo-note, .sheet-note, .price-sub, .cta p, .demo-card > p { text-wrap: balance; }
+main p, main li { text-wrap: pretty; }
+/* 24px at 360px, 40px on a desk. */
+h2 { margin: 0; font-size: clamp(1.5rem, 0.9rem + 2.4vw, 2.5rem); line-height: 1.15; }
+h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-height: 1.2; }
 
 .btn-lg { min-height: 48px; padding: 0 24px; font-weight: 700; border-radius: 10px; }
 .btn { font-weight: 700; }
 .btn-light { color: var(--brand); background: var(--card); border-color: var(--card); }
 .btn-light:hover { color: var(--brand-strong); background: var(--brand-tint); border-color: var(--brand-tint); }
-.btn-outline { color: var(--card); background: transparent; border: 1.5px solid color-mix(in srgb, var(--card) 70%, transparent); }
-.btn-outline:hover { color: var(--card); background: color-mix(in srgb, var(--card) 10%, transparent); border-color: var(--card); }
+.btn-outline { color: var(--brand); background: transparent; border: 1.5px solid var(--brand); }
+.btn-outline:hover { color: var(--brand-strong); background: var(--brand-tint); border-color: var(--brand-strong); }
 
 /* ---------------------------------------------------------------- tiles */
 
@@ -124,21 +135,20 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   -webkit-mask-size: 18px 18px;
   mask-size: 18px 18px;
 }
-.dot-grid-hero { top: 8px; right: -40px; width: 198px; height: 162px; background-color: color-mix(in srgb, var(--card) 22%, transparent); }
+.dot-grid-hero { top: 8px; right: -40px; width: 198px; height: 162px; background-color: color-mix(in srgb, var(--brand) 14%, transparent); }
 .dot-grid-corner { top: 32px; right: 24px; width: 162px; height: 126px; background-color: color-mix(in srgb, var(--card) 22%, transparent); }
 .dot-grid-media { width: 54%; height: 70%; right: -8px; top: -24px; z-index: 0; }
 .feature-flip .dot-grid-media { right: auto; left: -8px; }
 
 /* ---------------------------------------------------------------- header */
 
-.top-band { position: relative; isolation: isolate; color: var(--card); background: linear-gradient(160deg, var(--brand) 0%, var(--brand) 35%, var(--brand-deep) 100%); overflow: hidden; }
+.top-band { position: relative; isolation: isolate; color: var(--text); background: var(--band); overflow: hidden; }
 
 .site-head { position: absolute; top: 0; left: 0; right: 0; z-index: 3; }
 .head-inner { display: flex; align-items: center; gap: 8px; min-height: 72px; }
-.site-head .logo { margin-right: auto; padding: 0; font-size: 1.375rem; color: var(--card); }
-/* The mark in reverse: white square, One Blue nodes. */
+.site-head .logo { margin-right: auto; padding: 0; font-size: 1.375rem; color: var(--brand); }
+/* On the light band the mark is as it is everywhere: a One Blue square. */
 .site-head .logo-mark, .site-foot .logo-mark { width: 32px; height: 32px; }
-.site-head .logo-mark { --card: var(--brand); }
 .site-foot .logo-mark { --card: var(--brand-deeper); }
 
 .site-nav { display: none; align-items: center; gap: 4px; }
@@ -152,15 +162,15 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   text-decoration: none;
   border-radius: 8px;
 }
-.site-nav a:not(.btn) { color: var(--card); }
-.site-nav a:not(.btn):hover { color: var(--card); background: color-mix(in srgb, var(--card) 12%, transparent); }
+.site-nav a:not(.btn) { color: var(--text); }
+.site-nav a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
 .site-menu a:not(.btn) { color: var(--text); }
 .site-menu a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
 .site-nav .btn { margin-left: 8px; min-height: 44px; }
-.site-head :focus-visible, .top-band :focus-visible, .how :focus-visible, .cta :focus-visible, .site-foot :focus-visible { outline-color: var(--card); }
-.site-head .site-menu :focus-visible { outline-color: var(--brand); }
+.how :focus-visible, .cta :focus-visible, .site-foot :focus-visible { outline-color: var(--card); }
+.top-band :focus-visible { outline-color: var(--brand); }
 
-.menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; color: var(--card); background: transparent; border-color: color-mix(in srgb, var(--card) 40%, transparent); }
+.menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; color: var(--text); background: transparent; border-color: color-mix(in srgb, var(--text) 25%, transparent); }
 .menu-toggle .icon { width: 24px; height: 24px; }
 
 .site-menu {
@@ -188,33 +198,47 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 .hero { position: relative; padding: 112px 0 56px; }
 .hero-inner { position: relative; z-index: 1; display: grid; gap: 48px; align-items: center; }
 
-.hero .eyebrow { color: var(--on-brand); }
+.hero .eyebrow { color: var(--brand); }
 .hero h1 {
   margin: 0 0 24px;
-  color: var(--card);
-  font-size: clamp(1.875rem, 1.5rem + 2.5vw, 3.5rem);
+  color: var(--text);
+  font-size: clamp(1.875rem, 1.125rem + 3.33vw, 3.5rem);  /* 30px at 360px, 56px on a desk */
   line-height: 1.1;
   letter-spacing: -0.035em;
   max-width: 14ch;
 }
-.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-brand); font-size: var(--copy-lg); line-height: 1.55; }
+.hero h1 .accent { color: var(--brand); }
+.hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-band); font-size: var(--copy-lg); line-height: 1.55; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
-.hero-note { margin: 0; color: var(--on-brand); font-size: var(--copy-note); }
-.hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-brand); font-size: var(--copy-note); }
+.hero-note { margin: 0; color: var(--on-band); font-size: var(--copy-note); }
+.hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-band); font-size: var(--copy-note); }
 
-/* The network sits behind the picture, never behind the words: the right
-   half on a desk, the lower half (under the picture) on a phone. */
+/* The network sits inside the picture's column, above the slider's bar:
+   behind the photo and the screens, never under the headline, the lead, the
+   buttons, the slider's controls or the caption. */
 .nodes { position: absolute; z-index: 0; pointer-events: none; }
-.hero .nodes { right: -40px; bottom: 0; width: min(110%, 720px); height: auto; opacity: 0.9; }
-.n-lines path { fill: none; stroke: color-mix(in srgb, var(--card) 30%, transparent); stroke-width: 1.5; }
-.n-dots circle { fill: var(--brand-soft); }
-@media (min-width: 1024px) {
-  .hero .nodes { right: -60px; top: 40px; bottom: auto; width: 58%; }
-}
+.hero-visual > .nodes { top: 0; right: -24px; bottom: 64px; left: -24px; width: auto; height: auto; }
+.n-lines path { fill: none; stroke: color-mix(in srgb, var(--brand) 16%, transparent); stroke-width: 1.5; }
+.n-dots circle { fill: color-mix(in srgb, var(--brand) 22%, var(--card)); }
 
 .hero-visual { position: relative; min-width: 0; padding-top: 56px; }
+/* A faint glow behind the screens, under the photo: never a halo round her. */
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -10%;
+  bottom: 32px;
+  left: -10%;
+  height: 72%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--brand) 7%, transparent), transparent);
+}
 
 .photo { position: relative; z-index: 0; border-radius: 16px; overflow: hidden; }
+/* The photo in a frame of its own: rounded, a 1px white edge and a soft blue
+   shadow, and the faintest blue on the whiteboard along its top edge, gone
+   well before her hair begins (13% down): no halo, and nothing on her face or skin. */
 .photo-hero {
   position: absolute;
   top: 0;
@@ -222,8 +246,19 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   width: 48%;
   height: auto;
   aspect-ratio: 4 / 5;
-  object-fit: cover;
-  box-shadow: var(--shadow-float);
+  border: 1px solid var(--card);
+  border-radius: 20px;
+  box-shadow: 0 18px 40px -14px color-mix(in srgb, var(--brand) 35%, transparent),
+    0 3px 8px color-mix(in srgb, var(--brand) 12%, transparent);
+}
+.photo-hero img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.photo-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 12%, transparent), transparent 10%);
+  mix-blend-mode: multiply;
 }
 
 .slider { position: relative; z-index: 1; width: 100%; margin-top: 88px; }
@@ -232,7 +267,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   width: 100%;
   background: var(--card);
   border-radius: 12px;
-  box-shadow: var(--shadow-shot);
+  box-shadow: var(--shadow-frame);
 }
 .browser-bar {
   display: flex;
@@ -240,24 +275,24 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   gap: 16px;
   height: 32px;
   padding: 0 12px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--border);
+  background: var(--brand);
+  border-bottom: 1px solid var(--brand);
 }
 .dots { display: flex; gap: 6px; }
-.dots i { width: 9px; height: 9px; border-radius: 50%; background: var(--border); }
+.dots i { width: 9px; height: 9px; border-radius: 50%; background: color-mix(in srgb, var(--card) 45%, transparent); }
 .url {
   flex: 1;
   max-width: 240px;
   margin-inline: auto;
   padding: 1px 12px;
-  color: var(--muted);
+  color: var(--card);
   font-size: 0.75rem;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: var(--card);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 14%, transparent);
+  border: 1px solid transparent;
   border-radius: 6px;
 }
 .slides { display: grid; }
@@ -266,13 +301,13 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 /* The register is a phone, so it sits in a phone, as tall as the screens. It
    takes its height from them and gives none (`contain: size`): its picture
    loads after the page, and before it does it stretched the slider. */
-.slide-phone { display: grid; place-items: center; contain: size; }
+.slide-phone { display: grid; grid-template-rows: minmax(0, 1fr); justify-items: center; contain: size; }
 .phone-frame {
   height: 100%;
   padding: 8px;
-  background: var(--text);
+  background: var(--brand);
   border-radius: 30px;
-  box-shadow: var(--shadow-shot);
+  box-shadow: var(--shadow-frame);
 }
 .phone-frame img { width: auto; height: 100%; aspect-ratio: 300 / 649; border-radius: 22px; }
 .slide:not(.is-on) { opacity: 0; visibility: hidden; }
@@ -284,13 +319,13 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   gap: 6px;
   min-height: 44px;
   padding: 0 12px 0 8px;
-  color: var(--card);
+  color: var(--brand);
   font-size: 0.875rem;
-  background: color-mix(in srgb, var(--card) 12%, transparent);
+  background: color-mix(in srgb, var(--brand) 9%, transparent);
   border: 0;
   border-radius: 999px;
 }
-.slider-pause:hover { color: var(--card); background: color-mix(in srgb, var(--card) 20%, transparent); }
+.slider-pause:hover { color: var(--brand-strong); background: color-mix(in srgb, var(--brand) 15%, transparent); }
 .slider-pause .icon { width: 18px; height: 18px; stroke-width: 2.25; }
 .slider-pause .i-play, .slider-pause[aria-pressed="true"] .i-pause { display: none; }
 .slider-pause[aria-pressed="true"] .i-play { display: block; }
@@ -305,9 +340,11 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   background: none;
   border: 0;
 }
-.slider-dots i { width: 8px; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--card) 45%, transparent); }
-.slider-dots [aria-current="true"] i { width: 22px; background: var(--card); }
-.slider-name { margin: 0 0 0 auto; color: var(--on-brand); font-size: 0.875rem; text-align: right; }
+.slider-dots i { width: 8px; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--brand) 30%, transparent); }
+.slider-dots [aria-current="true"] i { width: 22px; background: var(--brand); }
+.slider-name { margin: 0 0 0 auto; color: var(--on-band); font-size: 0.875rem; text-align: right; }
+/* Only a desk has room for the screen's name beside the controls. */
+@media (max-width: 1023.98px) { .slider-name { display: none; } }
 
 /* ---------------------------------------------------------------- floating cards */
 
@@ -344,34 +381,53 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
      and 5:4, so 60% of the column tall, her shoulders at about half of it):
      her face is never under the phone. */
   .slider { margin-top: 38%; }
-  .hero-actions .btn { flex: 1 1 100%; }
+  /* The two buttons side by side from 360px, 44px tall; stacked below it. */
+  .hero-actions { gap: 8px; }
+  .hero-actions .btn { flex: 1 1 0; min-height: 44px; padding: 0 12px; }
   .float-card { padding: 8px 12px 8px 8px; gap: 8px; border-radius: 12px; }
   .float-card .tile { width: 32px; height: 32px; }
   .fc-value { font-size: 1.0625rem; }
   .float-b { display: none; }  /* one card on a phone, clear of the screen */
-  .slider-name { display: none; }
   /* Every screen is a phone screen here, in the register's frame, one size,
      at the left, beside the photo rather than over it. */
   .slide-phone { display: block; place-items: normal; contain: none; }
+  .phone-frame { height: auto; }
   .browser, .phone-frame {
     width: min(250px, 72%);
     height: auto;
     padding: 8px;
-    background: var(--text);
+    background: var(--brand);
     border-radius: 30px;
   }
   .browser-bar { display: none; }
   .browser img, .phone-frame img { width: 100%; height: auto; aspect-ratio: 300 / 649; border-radius: 22px; }
 }
 
+/* 640 to 767px: the desk's frames under the words, starting below her
+   shoulders (the photo is 48% wide and 5:4, her shoulders 34% of the column
+   down). */
+@media (min-width: 640px) and (max-width: 767.98px) {
+  .slider { margin-top: calc(34% - 48px); }
+}
+/* From 768px the words and the picture sit side by side, in two even columns
+   until 1024px, where the picture's grows. The "Fees collected" card stays
+   inside its own column until the gap is wide enough to lean into. */
+@media (min-width: 768px) {
+  .hero { padding: 112px 0 72px; }
+  .hero-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+  .hero-visual { padding-top: 40px; }
+  .photo-hero { width: 44%; }
+  /* The screens start below her shoulders: the photo is 44% wide and 5:4, so
+     55% of the column tall, her shoulders at 56% of it (31% of the column). */
+  .slider { width: 92%; margin-top: max(96px, calc(31% - 32px)); }
+  .float-a { top: 24px; left: 0; }
+  .float-b { right: 0; bottom: 96px; }
+}
 @media (min-width: 1024px) {
   .hero { padding: 120px 0 80px; }
   .hero-inner { grid-template-columns: 5fr 7fr; gap: 56px; }
-  .hero-visual { padding-top: 40px; }
-  .photo-hero { width: 44%; }
-  .slider { width: 90%; margin-top: 120px; }
-  .float-a { top: 72px; left: -40px; }
-  .float-b { right: 0; bottom: 96px; }
+  .slider { width: 90%; }
+  .float-a { top: 48px; left: -40px; }
 }
 /* Only where the gutter is wide enough does the picture lean past the column. */
 @media (min-width: 1280px) {
@@ -737,7 +793,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
 
 /* The title sits in the top band, under the header. */
 .legal-top { padding: 112px 0 40px; }
-.legal-top h1 { margin: 0; max-width: 760px; color: var(--card); font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.02em; }
+.legal-top h1 { margin: 0; max-width: 760px; color: var(--text); font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.02em; }
 .legal { padding: 48px 0 72px; }
 .legal > * { max-width: 760px; }
 .legal-contents { margin: 0 0 48px; padding: 24px; background: var(--brand-wash); border-radius: 12px; }
@@ -760,6 +816,28 @@ h3 { margin: 0 0 12px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line
   .legal { padding: 28px 0 40px; }
   .legal-contents { margin-bottom: 28px; padding: 16px; }
   .legal-body p, .legal-body li { font-size: 1rem; line-height: 1.55; }
+}
+
+/* ---------------------------------------------------------------- density on a phone */
+
+/* Below 640px: cards 20px in, benefit tiles 36px, each step's 28px number on
+   its title's line, the hero's two buttons stacked only below 360px, and the
+   footer's Company links in a row of their own under the two columns. */
+@media (max-width: 639.98px) {
+  :root { --card-pad: 20px; }
+  .tile-lg { width: 36px; height: 36px; margin-bottom: 16px; border-radius: 10px; }
+  .tile-lg .icon { width: 20px; height: 20px; }
+  .steps { gap: 16px; }
+  .step { display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; align-items: center; }
+  .step-num { width: 28px; height: 28px; margin: 0; font-size: 0.9375rem; }
+  .step h3 { margin: 0; }
+  .step p { grid-column: 1 / -1; margin-top: 8px; }
+  .sheet { padding: 20px 16px; }
+  .mini { padding: 16px; }
+  .foot-col-company ul { display: flex; flex-wrap: wrap; column-gap: 24px; }
+}
+@media (max-width: 359.98px) {
+  .hero-actions .btn { flex-basis: 100%; }
 }
 
 /* ---------------------------------------------------------------- motion */
