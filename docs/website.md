@@ -107,10 +107,8 @@ final call to action, and the footer.
   phone), at the left, and no screen has the browser frame; from 640px the
   desk keeps its frames. The screens start 38% of the column down, below the
   principal's shoulders, so her face is never under the phone, and the
-  "Fees collected" card sits to the left of her, clear of both. The card steps
-  aside (a 600ms fade with the screens) while a screen that already prints
-  fees collected is showing, the home and the fee collection
-  (`data-shows-fees`). `heroOnAPhone` in `tests/ui/screens.test.js` holds all
+  "Fees collected" card shows on every screen, to the left of her and above
+  the phone, clear of her face and of every word on the screen. `heroOnAPhone` in `tests/ui/screens.test.js` holds all
   of it on every screen at 320, 375 and 414px.
 
 - **The words say what the product does and promise no outcome we cannot

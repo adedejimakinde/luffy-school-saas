@@ -17,10 +17,9 @@ licences in `docs/website.md`); none shows a child's face.
 The slider's screens are in the markup in order and the first is showing, so
 the page reads with no script; screens 2 to 4 carry `data-srcset` and are only
 fetched once the page has loaded (the script below). On a phone every screen is
-a whole phone screen in the register's phone frame, and the "Fees collected"
-card steps aside while a screen that prints that figure (`data-shows-fees`) is
-showing. Real quotes and school logos have a place kept for them, hidden, and
-nothing invented fills it.
+a whole phone screen in the register's phone frame, with the "Fees collected"
+card beside it on every screen. Real quotes and school logos have a place kept
+for them, hidden, and nothing invented fills it.
 {% endcomment %}
 <div class="top-band">
 <section class="hero">
@@ -72,7 +71,7 @@ The Classnode mark, grown into a network: lines draw in once, nodes breathe. Dec
 
       <div class="slider" data-slider data-current="0" aria-roledescription="carousel" aria-label="Classnode screens with Crestfield Demo College demo data">
         <div class="slides">
-            <figure class="slide is-on" data-name="Home dashboard" data-shows-fees aria-roledescription="slide" aria-label="1 of 4">
+            <figure class="slide is-on" data-name="Home dashboard" aria-roledescription="slide" aria-label="1 of 4">
               <div class="browser">
                 <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
                 <picture>
@@ -95,7 +94,7 @@ The Classnode mark, grown into a network: lines draw in once, nodes breathe. Dec
                 <img data-srcset="{% static 'website/shots/slide-register-phone-300.webp' %} 300w, {% static 'website/shots/slide-register-phone-600.webp' %} 600w" sizes="(min-width: 1024px) 170px, 250px" width="300" height="649" decoding="async" alt="A teacher's phone taking the SS 1A register at Crestfield Demo College, a demo school, with two children marked absent.">
               </div>
             </figure>
-            <figure class="slide" aria-hidden="true" inert data-name="Fee collection" data-shows-fees aria-roledescription="slide" aria-label="4 of 4">
+            <figure class="slide" aria-hidden="true" inert data-name="Fee collection" aria-roledescription="slide" aria-label="4 of 4">
               <div class="browser">
                 <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
                 <picture>

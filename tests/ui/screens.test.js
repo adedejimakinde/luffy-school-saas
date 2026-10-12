@@ -31,7 +31,7 @@
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
  * side, the hero's buttons are full width, every screen is in the phone
  * frame, the principal's face is clear of it and of the card, and the one card
- * shows only beside a screen that does not already print its figure. Its motion (the slider, the network, the floating
+ * shows on every screen, clear of the phone. Its motion (the slider, the network, the floating
  * cards, the counting figures) is checked in its own `describe` below.
  *
  * ## What it runs against
@@ -368,9 +368,9 @@ function measureSite({ width }) {
  * The hero on a phone, on whichever screen is showing: that screen is in the
  * phone frame (the register's), at the left, the same box as every other
  * screen's; the principal's face, down to her shoulders, is under neither the
- * phone nor a card; and the "Fees collected" card shows only beside a screen
- * that does not already print that figure (`data-shows-fees`), clear of the
- * phone. Pure, like `measureSite`; [] on a page with no slider.
+ * phone nor a card; and the one card, "Fees collected", shows on every screen,
+ * clear of the phone and so of every word on it. Pure, like `measureSite`; []
+ * on a page with no slider.
  */
 function heroOnAPhone() {
   const problems = [];
@@ -411,8 +411,7 @@ function heroOnAPhone() {
   };
   if (overlaps(f, face)) problems.push(`${name}: the phone covers the principal's face`);
   const cards = [...document.querySelectorAll(".hero .float-card")].filter(visible);
-  const want = on.hasAttribute("data-shows-fees") ? 0 : 1;
-  if (cards.length !== want) problems.push(`${name}: ${cards.length} floating cards in the hero on a phone, not ${want}`);
+  if (cards.length !== 1) problems.push(`${name}: ${cards.length} floating cards in the hero on a phone, not 1`);
   for (const card of cards) {
     if (overlaps(box(card), f)) problems.push(`${name}: a floating card covers the screen`);
     if (overlaps(box(card), face)) problems.push(`${name}: a floating card covers the principal's face`);
@@ -836,8 +835,8 @@ describe("the homepage's sizes", () => {
 
 describe("the hero on a phone", () => {
   // Every screen in turn, by its dot, held to `heroOnAPhone`: each one in the
-  // register's phone frame, her face clear, the fees card beside only the
-  // screens that do not print it. From 640px the desk keeps its frames.
+  // register's phone frame, her face clear, the fees card on every screen and
+  // clear of the phone. From 640px the desk keeps its frames.
   for (const width of [320, 375, 414]) {
     test(`every screen at ${width}px`, async () => {
       const context = await browser.newContext({ viewport: { width, height: 812 }, reducedMotion: "reduce" });
