@@ -426,8 +426,8 @@ function heroOnAPhone() {
 /**
  * The hero at any width, on whichever screen is showing. The frame of that
  * screen covers no words of the page (the headline, the lead, the buttons, the
- * price line, the slider's controls and name, and the caption under it) and
- * not her face, down to her shoulders. The "Fees collected" card shows, and
+ * price line, and the slider's controls and name) and not her face, down to her
+ * shoulders. The "Fees collected" card shows, and
  * covers neither her face, the frame, nor any of those words. The network's
  * lines never run under a word. Pure, like `measureSite`.
  */
@@ -444,7 +444,7 @@ function heroEverywhere() {
   const on = document.querySelector(".slide.is-on");
   const name = on.dataset.name;
   const frame = box(on.querySelector(".browser, .phone-frame"));
-  const words = [...document.querySelectorAll(".hero-text > *, .hero-demo-note, .slider-bar > *")].filter(visible).map((el) => [el.className || el.tagName.toLowerCase(), box(el)]);
+  const words = [...document.querySelectorAll(".hero-text > *, .slider-bar > *")].filter(visible).map((el) => [el.className || el.tagName.toLowerCase(), box(el)]);
   const photo = box(document.querySelector(".photo-hero"));
   const face = {
     left: photo.left + photo.width * 0.1,

@@ -117,7 +117,7 @@ final call to action, and the footer.
   picture at the right, even columns to 1024px and 5 to 7 from there. From
   640px the screens start below the principal's shoulders, so no frame covers
   her face; no frame covers a word of the page (the headline, the lead, the
-  buttons, the price line, the slider's controls or the caption); and the
+  buttons, the price line or the slider's controls); and the
   "Fees collected" card shows on every screen at every width, clear of her
   face, the screen and every word. `heroEverywhere` holds it on every screen
   at 320, 360, 375, 414, 640, 768, 900, 1024, 1280 and 1920px.
@@ -175,8 +175,9 @@ final call to action, and the footer.
   (in a phone frame, not the browser frame), and the bursar's fee collection.
   `scripts/site_shots.mjs` takes them **on a weekday** (a weekend home says
   there are no registers on a weekend) and `scripts/site_shots.py` cuts them
-  into `static/website/shots/`. The page says under the slider that the school
-  is a demo and every name and figure is made up. They were taken with the
+  into `static/website/shots/`. Each screen's description names the school as
+  a demo (the line under the slider that said so was taken out by the owner,
+  12 October 2026). They were taken with the
   clock at Thursday 15 October 2026 (`SHOTS_NOW` in the script's header says
   how), so every screen names the day one way, "Thu 15 Oct", the register's
   date included (`dayText` in `static/register/states.js`, no longer ISO). The

@@ -36,7 +36,6 @@ COPY = [
     "Teachers enter scores and take the register on their phones. You approve results, see who "
     "has paid, and keep less paper in the office.",
     "See pricing", "₦2,500 per student, per term. No setup fee.",
-    "Screens show Crestfield Demo College, a demo school. Every name and figure is made up.",
     "Less chasing, less paper, fewer late nights.",
     "Report cards that add up by themselves",
     "Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every "
@@ -198,6 +197,14 @@ class TheWordsTests(SiteSetUp):
         for sentence in COPY:
             with self.subTest(sentence=sentence[:40]):
                 self.assertIn(sentence, text)
+
+    def test_no_line_under_the_slider(self):
+        """The owner took the line under the slider out (12 October 2026); each
+        screen's description still names the school as a demo."""
+        page = self.get().content.decode()
+        self.assertNotIn("Screens show Crestfield Demo College", visible_text(page))
+        self.assertNotIn("hero-demo-note", page)
+        self.assertEqual(len(re.findall(r'<img [^>]*alt="[^"]*Crestfield Demo College, a demo school', page)), 3)
 
     def test_the_thank_you_replaces_the_form_once_sent(self):
         text = visible_text(self.get("/?sent=1").content.decode())

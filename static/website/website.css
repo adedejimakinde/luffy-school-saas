@@ -88,7 +88,7 @@ h1, h2, h3 { color: var(--text); letter-spacing: -0.02em; }
 /* Every heading is balanced, and so is every short line: no word sits alone
    on a line. Longer copy wraps "pretty", which keeps its last line from being
    one word. */
-h1, h2, h3, summary, .hero-note, .hero-demo-note, .sheet-note, .price-sub, .cta p, .demo-card > p { text-wrap: balance; }
+h1, h2, h3, summary, .hero-note, .sheet-note, .price-sub, .cta p, .demo-card > p { text-wrap: balance; }
 main p, main li { text-wrap: pretty; }
 /* 24px at 360px, 40px on a desk. */
 h2 { margin: 0; font-size: clamp(1.5rem, 0.9rem + 2.4vw, 2.5rem); line-height: 1.15; }
@@ -211,7 +211,6 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 .hero-lead { margin: 0 0 32px; max-width: 34em; color: var(--on-band); font-size: var(--copy-lg); line-height: 1.55; }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
 .hero-note { margin: 0; color: var(--on-band); font-size: var(--copy-note); }
-.hero-demo-note { position: relative; z-index: 1; margin-top: 32px; margin-bottom: 0; color: var(--on-band); font-size: var(--copy-note); }
 
 /* The network sits inside the picture's column, above the slider's bar:
    behind the photo and the screens, never under the headline, the lead, the
