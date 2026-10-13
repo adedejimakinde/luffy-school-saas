@@ -28,6 +28,14 @@
 #     by the GitHub Actions key. deploy.yml signs in as this user.
 #  9. The directories the compose file expects, and the clone of the repository
 #     at /opt/classnode (docs/deployment.md, "One layout on the server").
+#     The repository is PRIVATE, so the server reads it with its own read-only
+#     GitHub deploy key (made here, on the server; the private half never
+#     leaves it). The first run stops after making the key and printing its
+#     public half: add that to GitHub (docs/first-day.md, step 6) and run this
+#     again. GitHub's host key is pinned by fingerprint, not trusted on first use.
+# 10. Permission for `deploy` to read /root/ghcr-login (root-only) through one
+#     fixed sudo command, so deploy.sh can log in to ghcr.io for each deploy and
+#     keep no copy of the token (docs/first-day.md, step 12).
 #
 # The two keys are PUBLIC keys (not secrets), copied here from your computer:
 #   /root/deploy_key.pub   the GitHub Actions key        -> deploy's authorized_keys
@@ -44,7 +52,12 @@ set -euo pipefail
 
 DEPLOY_KEY_FILE=/root/deploy_key.pub
 ADMIN_KEY_FILE=/root/admin_key.pub
-REPO_URL="${CLASSNODE_REPO_URL:-https://github.com/adedejimakinde/luffy-school-saas.git}"
+REPO_URL="${CLASSNODE_REPO_URL:-git@github.com:adedejimakinde/luffy-school-saas.git}"
+REPO_KEY=/home/deploy/.ssh/classnode_repo
+REPO_KNOWN_HOSTS=/home/deploy/.ssh/known_hosts_github
+# GitHub's published ED25519 host key fingerprint
+# (docs.github.com, "GitHub's SSH key fingerprints").
+GITHUB_ED25519_FP="SHA256:+DhBA4GPHI2fvkC6EqMRVYKl0yUIGwYpMgQexs8WLp0"
 SSHD_DROPIN=/etc/ssh/sshd_config.d/00-classnode.conf
 MODE=run
 
@@ -209,7 +222,7 @@ say "Updating the system (a few minutes the first time)"
 "${APT[@]}" upgrade
 
 say "Installing the tools"
-"${APT[@]}" install ufw fail2ban python3-systemd unattended-upgrades ca-certificates curl git gnupg openssl
+"${APT[@]}" install ufw fail2ban python3-systemd unattended-upgrades ca-certificates curl git gnupg openssl sudo openssh-client
 
 # --------------------------------------------------------------- your key, root
 say "Your login key for root"
@@ -324,11 +337,66 @@ install -d -m 755 /srv/classnode /srv/classnode/postgres /srv/classnode/redis
 # The secrets. deploy must be able to read them: `docker compose` reads an
 # env_file on the CLIENT side, as whoever runs it. Nobody else can.
 install -d -m 750 -o root -g deploy /etc/classnode
-if [ ! -d /opt/classnode/.git ]; then
-  git clone "$REPO_URL" /opt/classnode
+
+# The server's read-only key to the repository. Made here so its private half
+# never exists anywhere else; GitHub gets only the public half, as a deploy key
+# WITHOUT "Allow write access".
+if [ ! -f "$REPO_KEY" ]; then
+  runuser -u deploy -- ssh-keygen -q -t ed25519 -N '' -C "classnode-server-readonly" -f "$REPO_KEY"
+fi
+if ! grep -q '^github.com ' "$REPO_KNOWN_HOSTS" 2>/dev/null; then
+  scanned="$(ssh-keyscan -t ed25519 github.com 2>/dev/null)" || scanned=""
+  [ -n "$scanned" ] || die "could not fetch github.com's host key (no network to github.com on port 22?)."
+  seen_fp="$(printf '%s\n' "$scanned" | ssh-keygen -lf - | awk '{print $2}')"
+  [ "$seen_fp" = "$GITHUB_ED25519_FP" ] || die "github.com offered host key $seen_fp, not the $GITHUB_ED25519_FP that GitHub publishes. Not trusting it; nothing was written."
+  printf '%s\n' "$scanned" | install_file "$REPO_KNOWN_HOSTS" 644 deploy:deploy || true
+fi
+install_file /home/deploy/.ssh/config 600 deploy:deploy <<EOF || true
+Host github.com
+  HostName github.com
+  User git
+  IdentityFile $REPO_KEY
+  IdentitiesOnly yes
+  UserKnownHostsFile $REPO_KNOWN_HOSTS
+  StrictHostKeyChecking yes
+EOF
+
+install -d -m 755 -o deploy -g deploy /opt/classnode
+if [ -d /opt/classnode/.git ]; then
+  # A clone made before the repository went private points at https.
+  current_url="$(runuser -u deploy -- env HOME=/home/deploy git -C /opt/classnode remote get-url origin)"
+  if [ "$current_url" != "$REPO_URL" ]; then
+    runuser -u deploy -- env HOME=/home/deploy git -C /opt/classnode remote set-url origin "$REPO_URL"
+  fi
+elif ! runuser -u deploy -- env HOME=/home/deploy git clone "$REPO_URL" /opt/classnode; then
+  echo
+  echo "The server cannot read the repository yet. Add this key to GitHub as a"
+  echo "read-only deploy key (repository, Settings, Deploy keys, Add deploy key;"
+  echo "leave 'Allow write access' UNTICKED), then run this script again:"
+  echo
+  cat "$REPO_KEY.pub"
+  die "waiting for the deploy key to be added on GitHub (docs/first-day.md, step 6). Nothing else is left to do but run the same command again."
 fi
 # deploy.sh writes `deployed-sha` next to itself, as deploy.
 chown -R deploy:deploy /opt/classnode
+
+# --------------------------------------------------------------- 10. GHCR login
+say "GHCR login (read by deploy.sh, kept in a root-only file)"
+# deploy.sh cannot read /root/ghcr-login itself. This lets `deploy` run exactly
+# one command as root: print that file. No wildcard, so no other file and no
+# other argument matches. The token is never stored for deploy; deploy.sh logs in
+# into a throwaway Docker config that it deletes when it exits.
+sudoers_tmp="$(mktemp)"
+printf 'deploy ALL=(root) NOPASSWD: /usr/bin/cat /root/ghcr-login\n' > "$sudoers_tmp"
+visudo -cf "$sudoers_tmp" >/dev/null || die "the sudoers rule for the GHCR login did not validate; nothing was installed."
+install_file /etc/sudoers.d/classnode-ghcr 440 root:root < "$sudoers_tmp" || true
+rm -f "$sudoers_tmp"
+if [ -e /root/ghcr-login ]; then
+  chown root:root /root/ghcr-login
+  chmod 600 /root/ghcr-login
+else
+  echo "/root/ghcr-login does not exist yet: create it in docs/first-day.md, step 12."
+fi
 
 say "Done"
 if [ -f /var/run/reboot-required ]; then

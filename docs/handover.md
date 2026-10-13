@@ -1,3 +1,30 @@
+# Where I stopped: 2026-10-13, preparing the repository to go private
+
+The repository is **not yet private**: changing its visibility is yours to do, last, after the steps under "Only you" below. This change makes everything work once it is.
+
+**What changed.**
+- **History scanned for secrets** (gitleaks 8, all 683 commits reachable from any branch or pull-request ref, plus a pattern sweep for PEM keys, `ghp_`/`github_pat_`/`AKIA`/`xox`/`AIza`/Cloudflare token shapes, live Stripe-style keys, and added `.env`, key, certificate and database files). No real key, token, password, `.env` or private key. 7 hits in 5 commits, all test fixtures: made-up `sk_live_`-shaped strings in `fees/tests/` (they test that the Paystack client *refuses* a live key), a fake Termii key in `messaging/tests/test_termii.py`, and UUID form keys. Nothing needs rotating. Still in history: `dump.rdb` (a Redis snapshot, added and removed across six commits, last removed in #252; it held no key or token, only the demo school's queued task arguments) and `deploy/env/secrets.env.example` (placeholders). Values were never printed.
+- **The server reads the private repository with its own read-only deploy key.** `deploy/bootstrap.sh` makes `/home/deploy/.ssh/classnode_repo` on the server, pins GitHub's ED25519 host key by fingerprint, clones over `git@github.com:`, and turns an old https origin into the ssh one. Its first run stops after printing the public key; you add it as a read-only deploy key and run it again (`docs/first-day.md` step 6). The deploy workflow's `git fetch origin main` needed no change.
+- **The images are pulled with a root-only token.** `/root/ghcr-login` (username, then a classic `read:packages` token), mode 600. `deploy.sh` reads it through one sudo rule (`/etc/sudoers.d/classnode-ghcr`: `deploy` may run `cat /root/ghcr-login`, nothing else) and logs in inside a temporary `DOCKER_CONFIG` that is deleted on exit, so no copy stays in `deploy`'s home. Step 12 is rewritten.
+- **`LICENSE`** is now all rights reserved, Classnode Edtech Limited. The MIT licence is gone; nothing else in the repository named a licence.
+- **The three Dockerfiles carry `org.opencontainers.image.source`**, which links each GHCR package to this repository, so the repository's access rules and the workflow token's package access apply once it is private.
+- CI needed no change: both workflows use the run's `GITHUB_TOKEN` (`contents: read`, `packages: write`), and the deploy workflow checks out with it. There is no unauthenticated download of the repository or its images anywhere in `.github/`.
+
+**Actions minutes (estimate, trailing 30 days to 2026-10-13).** 391 `tests` runs (154 push to main, 237 pull request) and 9 manual deploys (under a minute each). The run list gives wall time, not billed minutes (the usage endpoint reports 0 for a public repository), so billed minutes come from the job lists of three sampled runs, each job rounded up to a minute as GitHub bills it: a sharded run on main is about 75 minutes (four test jobs of 11 to 19, screens 6, image 4, test and publish 1 each), a sharded pull-request run about 90. Before the suite was sharded on 2026-09-27, a run was one job of about 30 minutes. That gives about **23,000 billed minutes in the last 30 days** (173 unsharded runs, about 5,400 minutes, plus 214 sharded runs at 75 to 90), and about **31,000 a month at the current pace** (12.6 runs a day, mostly pull requests). A private repository on the Free plan includes 2,000 Linux minutes a month, Pro and Team 3,000, Enterprise 50,000; beyond that Linux costs about USD 0.006 to 0.008 a minute (check the current rate): roughly USD 170 to 230 a month over the allowance at today's pace. Levers, none applied: cancel superseded runs of a pull request (`concurrency` with `cancel-in-progress` for `pull_request` only), skip the `screens` and `image` jobs on docs-only changes, and fewer pushes to open pull requests.
+
+**Verified (run here).** `deploy.sh` run against stand-in `sudo`, `docker` and `curl`: it logs in before the pull, with the token on stdin and not in any argument, in a temporary Docker config that no longer exists afterwards. `tests/test_private_repo.py` (structure tests) and the existing deploy, first-day and budget tests pass against a local Postgres.
+
+**Not verified.** None of the server steps has run on the real server, and the new section of `bootstrap.sh` (key, pinned host key, clone, sudoers rule) has not been run even against a stand-in; `bootstrap.sh` and `deploy.sh` pass `bash -n` and the repository's tests here, nothing more. GitHub's host-key fingerprint in `bootstrap.sh` was written from memory of GitHub's published value and could not be checked from this environment (no route to GitHub's docs or `ssh-keyscan`); the script fails closed if it is wrong, and the runbook asks you to compare it once. Whether the existing packages are currently public, and whether they are linked to the repository, could not be read from here.
+
+**Only you, before and after making the repository private.**
+1. Compare `GITHUB_ED25519_FP` in `deploy/bootstrap.sh` with GitHub's "SSH key fingerprints" page.
+2. On the server: `docs/first-day.md` steps 6 and 12 (deploy key, `/root/ghcr-login`).
+3. Make the repository private, then for each of the three packages check visibility is Private and the repository has Write under Manage Actions access.
+4. **Calendar the GHCR token's expiry**, two weeks early. When it lapses, every deploy fails at the pull with `denied` or `unauthorized`. Renewal is step 12, "Renewing the token". The token belongs to a person: if they leave the repository it stops that day.
+5. Anyone who cloned or forked while it was public keeps their copy; making it private does not recall it. Forks made while it was public stay public as separate repositories; check the Forks list.
+
+---
+
 # Where I stopped: 2026-10-12, guided onboarding (PR #264)
 
 Everybody who signs in now knows what to do next. The main case is a school administrator whose school was just added. Phase 1 mockups were approved (`docs/mockups/`); Phase 2 is built. The reference is `docs/onboarding.md`.

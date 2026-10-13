@@ -51,6 +51,14 @@ origins, `https://…`; default **none**). Neither is secret, so either goes in
 purpose: the platform never posts across hosts (`docs/sign-in-page.md`), so the
 same-origin check is the whole rule and an extra origin needs a reason.
 
+**The repository is private.** The server reads it with a read-only GitHub deploy
+key of its own (`/home/deploy/.ssh/classnode_repo`, origin `git@github.com:...`), so
+the deploy button's `git fetch` works without a password. The images on `ghcr.io` are
+private too: `deploy.sh` logs in from the root-only `/root/ghcr-login` for each deploy
+and keeps no copy. The setup, and renewing the token that expires, are
+`docs/first-day.md` steps 6 and 12. CI needs nothing extra: the workflows use the
+run's own `GITHUB_TOKEN` (`contents: read`, `packages: write`) to check out and push.
+
 **One layout on the server.** The repository is cloned to `/opt/classnode`, so the
 deploy files are in `/opt/classnode/deploy/`, and that is the directory every
 command runs from: `deploy.sh`, `restore-check.sh`, the cron jobs
@@ -222,7 +230,8 @@ parameters are children's names), and tags every report with the school.
 | step | needs |
 |---|---|
 | H1, H2, H3 as code, tests and CI | nothing — no account and no domain |
-| First CI push of images to GHCR | nothing new (GitHub's own token) |
+| First CI push of images to GHCR | nothing new (GitHub's own token); the three packages must be private and list this repository under Manage Actions access with Write |
+| The server downloading the code and images (private repository) | a read-only deploy key added in GitHub, and a classic token with `read:packages` that **expires** (`docs/first-day.md` steps 6 and 12) |
 | Provisioning the server | the VPS account (any Ubuntu 24.04 VPS, Contabo or similar), your SSH public key, your admin IPs |
 | DNS records and the first certificate | the domain registered, the zone on Cloudflare, a DNS-edit token for that zone |
 | Emailing invitations (until then `create_school` prints the link to hand over) | a transactional email provider, and SPF/DKIM/DMARC on the domain |
