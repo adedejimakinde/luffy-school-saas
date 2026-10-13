@@ -185,27 +185,61 @@ be run again whenever you like without harm:
 - installs **Docker**, with its logs capped so they cannot fill the disk;
 - creates the **deploy** user, which only the GitHub Actions key can log in as;
 - installs your own key for root;
-- copies the project to `/opt/classnode`.
+- makes the server's own **read-only key to the repository**, because the repository
+  is **private** and the server must prove who it is to download it;
+- copies the project to `/opt/classnode`;
+- lets the `deploy` user read one root-only file, `/root/ghcr-login` (step 12), so it
+  can download the images, which are private too.
 
 It does **not** turn off password login. That is step 8, after you have proved the
 key works.
 
+**The repository is private, so the script cannot be downloaded with `curl`.** Get
+it onto the server from your PC instead. On GitHub, open `deploy/bootstrap.sh` in
+the repository, click **Download raw file** (the icon at the top right of the file),
+and save it in your Downloads folder. Then, in PowerShell on your PC:
+
+```powershell
+scp "$env:USERPROFILE\Downloads\bootstrap.sh" root@169.58.181.9:/root/bootstrap.sh
+```
+
 On the server (`ssh root@169.58.181.9`), then:
 
 ```bash
-curl -fsSL -o /root/bootstrap.sh https://raw.githubusercontent.com/adedejimakinde/luffy-school-saas/main/deploy/bootstrap.sh
 bash /root/bootstrap.sh
 ```
 
 It takes five to ten minutes and prints a `==>` heading for each stage.
 
-**Confirm.** It ends with `==> Done`. If it says **STOPPED**, it says why: either
+**The first run is meant to stop at the very end.** It cannot download the project
+yet, because GitHub does not know the server. It prints the server's **public** key
+(one line starting `ssh-ed25519`) and then `STOPPED: waiting for the deploy key to be
+added on GitHub`. That is the expected result, not a fault. Do this:
+
+1. Copy that one line.
+2. On GitHub, repository, **Settings**, **Deploy keys**, **Add deploy key**. Title:
+   `classnode-server (read-only)`. Paste the line into **Key**. **Leave "Allow write
+   access" unticked**: a ticked box would let anyone who breaks into the server change
+   the code that is then deployed. **Add key.**
+3. On the server, run the same command again: `bash /root/bootstrap.sh`. Everything
+   already done is skipped, and it now clones the project.
+
+The script also refuses to continue if the server that answers as `github.com` is not
+the one with GitHub's published fingerprint, so a faked GitHub cannot hand the server
+code. The fingerprint is written in the script (`GITHUB_ED25519_FP`); once, compare it
+with the ED25519 line on GitHub's page "GitHub's SSH key fingerprints" (search for
+that title in GitHub's documentation).
+
+**Confirm.** The second run ends with `==> Done`. If it says **STOPPED**, it says why: either
 a sentence, or the line number, the command that failed and its exit code
 (`STOPPED at line 164: the command  ...  failed with exit code 1.`). Send that
 line to whoever is helping you. Nothing it did before that is harmed by running
 the same command again. Then:
 
 ```bash
+ls /opt/classnode/deploy/deploy.sh                         # the project was downloaded
+su - deploy -c 'cd /opt/classnode && git fetch --dry-run origin main && echo READ-OK'
+su - deploy -c 'ssh -T git@github.com' 2>&1 | head -3      # Hi adedejimakinde/luffy-school-saas! (deploy keys name the repository)
 ufw status verbose        # Status: active; only 22/tcp, 80/tcp, 443/tcp, 443/udp allowed
 systemctl is-active fail2ban unattended-upgrades docker     # three lines: active
 docker --version
@@ -218,7 +252,9 @@ again with `ssh root@169.58.181.9` (the password is still how you log in until s
 **Undo.** The script only adds. To take pieces back off:
 `ufw disable` (firewall off), `systemctl disable --now fail2ban`,
 `rm /etc/apt/apt.conf.d/52classnode-unattended` (no automatic reboot; security
-updates still install), `deluser --remove-home deploy` (the deploy user). Docker
+updates still install), `deluser --remove-home deploy` (the deploy user, and with it
+the server's repository key; also delete the deploy key on GitHub),
+`rm /etc/sudoers.d/classnode-ghcr`. Docker
 and the updates stay; you would not want them gone.
 
 ## 7. Prove your key works, in a second window
@@ -373,36 +409,73 @@ the copy from your password manager. `caddy.env` can be edited any time.
 
 ## 12. Let the server pull our images
 
-**What it does.** The app is built by GitHub and stored in GitHub's registry. A
-read-only token lets the `deploy` user download it. You do this once.
+**What it does.** The app is built by GitHub and stored in GitHub's registry
+(`ghcr.io`), where, because the repository is private, the images are private too. A
+read-only token lets the server download them. You do this once, and again each time
+the token runs out.
 
-1. On GitHub, signed in as someone who can read the repository: Settings, Developer
-   settings, Personal access tokens, **Tokens (classic)**, Generate new token (classic).
-2. Tick **`read:packages` and nothing else.** Give it an expiry and put the date in
-   your calendar: when it lapses, every deploy fails with `denied`.
-3. Copy it, and on the server (as root) put it in a file, paste, save:
+**Where the token lives.** In **one file, `/root/ghcr-login`, that only `root` can
+read** (mode 600). Nowhere else: not in `deploy`'s home, not in the repository, not in
+any GitHub secret. On each deploy, `deploy.sh` asks for that file through one fixed
+`sudo` rule (`bootstrap.sh` made it: `deploy` may run `cat /root/ghcr-login` and
+nothing else as root), logs in to `ghcr.io` in a temporary Docker folder, pulls, and
+deletes the folder when it ends. No copy of the token stays on the disk.
+
+1. On GitHub, signed in as the account that owns the repository (or any account that
+   can read it): your picture, Settings, Developer settings, Personal access tokens,
+   **Tokens (classic)**, Generate new token (classic). Use the **classic** kind: the
+   registry does not accept the newer fine-grained tokens.
+2. Tick **`read:packages` and nothing else.** Set the **expiry** (90 days is sensible;
+   the longest GitHub offers is a year) and **put the expiry date in your calendar,
+   two weeks early.** On the day it lapses every deploy stops at the pull with
+   `denied` or `unauthorized`, and nothing else warns you. Renewing is the same
+   steps with a new token (below).
+3. Copy the token. On the server, as root, make the file empty and root-only first,
+   then open it:
 
    ```bash
-   install -m 600 -o deploy -g deploy /dev/null /home/deploy/ghcr-token
-   nano /home/deploy/ghcr-token
+   install -m 600 -o root -g root /dev/null /root/ghcr-login
+   nano /root/ghcr-login
    ```
 
-4. Log in with it as `deploy`, then destroy the file (replace `YOUR-GITHUB-USERNAME`):
+   Type your GitHub **username** on line 1 and paste the **token** on line 2. Nothing
+   else, no spaces. Save (Ctrl+O, Enter) and leave (Ctrl+X).
 
-   ```bash
-   su - deploy -c 'docker login ghcr.io -u YOUR-GITHUB-USERNAME --password-stdin < /home/deploy/ghcr-token'
-   shred -u /home/deploy/ghcr-token
-   ```
+   If an earlier version of this runbook already logged `deploy` in, remove that copy
+   of the token too: `su - deploy -c 'docker logout ghcr.io'`.
 
-**Confirm.** It prints `Login Succeeded`, and `ls /home/deploy/ghcr-token` says no such file.
+**Confirm.**
 
-**Undo.** `su - deploy -c 'docker logout ghcr.io'`, and delete the token on GitHub.
-Docker keeps the login in `/home/deploy/.docker/config.json`; use this token for nothing else.
+```bash
+ls -l /root/ghcr-login                      # -rw------- 1 root root ...
+su - deploy -c 'cat /root/ghcr-login'       # Permission denied (deploy cannot read it directly)
+su - deploy -c 'sudo -n /usr/bin/cat /root/ghcr-login >/dev/null && echo SUDO-RULE-OK'
+```
+
+Whether the token itself works shows in step 15: the deploy prints `Login Succeeded`
+before it pulls.
+
+**Renewing the token (every time the date in your calendar comes).** Make a new token
+as in steps 1 and 2, then on the server `nano /root/ghcr-login`, replace line 2, save.
+Nothing to restart. Then delete the old token on GitHub. The next deploy uses the new
+one. If the person whose token it is leaves the repository, the token stops working
+that day: make a new one from an account that stays.
+
+**Undo.** `rm /root/ghcr-login` (deploys then say they pull anonymously and fail on a
+private image), and delete the token on GitHub.
+
+**Also once the repository is private** (GitHub, repository, **Packages** on the
+right of the main page, then each of the three: the app, `caddy`, `postgres`): open
+the package, **Package settings**, check **Change visibility** says **Private**, and
+that under **Manage Actions access** this repository is listed with **Write**. A
+package that was public before stays public until you change it.
 
 ## 13. Give GitHub the deploy key and the server's address
 
 **What it does.** The **deploy** button on GitHub needs to know where the server is,
-how to log in, and which server it is meant to be talking to.
+how to log in, and which server it is meant to be talking to. (This is the
+*GitHub-to-server* key from step 2. It is a different key from the *server-to-GitHub*
+read-only key you added under Settings, Deploy keys in step 6.)
 
 First, the server's identity, which is public. On the server:
 
@@ -887,10 +960,13 @@ the data in `/srv/classnode` goes with it, which is what the backups (Part 7) ar
 | The app's secrets | `/etc/classnode/secrets.env` (root:deploy, mode 640) and your password manager |
 | Cloudflare token | `/etc/classnode/caddy.env` |
 | Backup details and key | `/etc/classnode/backup.env` and your password manager |
-| The project and the deploy scripts | `/opt/classnode/deploy/` |
+| The project and the deploy scripts | `/opt/classnode/deploy/` (downloaded with the server's read-only deploy key, `/home/deploy/.ssh/classnode_repo`) |
+| The registry login (private images) | `/root/ghcr-login`, root-only; the token expires, see step 12 |
 | The database and Redis | `/srv/classnode/postgres`, `/srv/classnode/redis` |
 | Which commit is running | `/opt/classnode/deploy/deployed-sha` |
 | Nightly job logs | `/var/log/classnode-*.log` |
+| Deploys fail at the pull with `denied` / `unauthorized` | The GHCR token expired or was revoked: renew it, step 12 |
+| `git fetch` says `Permission denied (publickey)` on the server | The server's deploy key was removed from GitHub: add `/home/deploy/.ssh/classnode_repo.pub` again, read-only (step 6) |
 | Re-run the server setup | `bash /opt/classnode/deploy/bootstrap.sh` (safe at any time) |
 | The wider runbook | `docs/deployment.md`; the demo server's variant, `docs/demo-server.md` |
 

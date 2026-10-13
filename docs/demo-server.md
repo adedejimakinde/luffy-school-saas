@@ -86,7 +86,9 @@ echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.
 apt-get update && apt-get -y install docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
 # The deploy files, at the commit you are running.
-git clone https://github.com/adedejimakinde/luffy-school-saas.git /opt/classnode
+# The repository is private: clone with the read-only deploy key set up in
+# docs/first-day.md (step 6), not an https URL.
+git clone git@github.com:adedejimakinde/luffy-school-saas.git /opt/classnode
 cd /opt/classnode && git checkout <the full commit SHA>
 
 # Where the data and the secrets live (compose's defaults).

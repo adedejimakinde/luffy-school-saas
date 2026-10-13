@@ -7,6 +7,7 @@
 # the server, with the same argument.
 #
 # Order, and why:
+#  0. Log in to ghcr.io from the root-only /root/ghcr-login (private repository).
 #  1. Pull the images CI built for this SHA — never a tag like `latest`, which
 #     names whatever was pushed last rather than what was tested.
 #  2. Migrate with the NEW image while the OLD one is still serving. Additive
@@ -34,6 +35,23 @@ set -a
 set +a
 PREVIOUS="$(cat deployed-sha 2>/dev/null || true)"
 export CLASSNODE_TAG="$SHA"
+
+# The repository, and so its images on ghcr.io, are private: pulling needs a
+# login. The token lives only in root's /root/ghcr-login (line 1 the GitHub
+# username, line 2 a classic token with read:packages and nothing else), which
+# `deploy` may print through one fixed sudo rule (bootstrap.sh, step 10). The
+# login goes into a throwaway Docker config that is deleted when this script
+# exits, so no copy of the token is left in deploy's home.
+DOCKER_CONFIG="$(mktemp -d)"
+export DOCKER_CONFIG
+trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+if ghcr_login="$(sudo -n /usr/bin/cat /root/ghcr-login 2>/dev/null)" && [ -n "$ghcr_login" ]; then
+  { IFS= read -r ghcr_user; IFS= read -r ghcr_token; } <<<"$ghcr_login"
+  printf '%s' "$ghcr_token" | docker login ghcr.io -u "$ghcr_user" --password-stdin
+  unset ghcr_login ghcr_user ghcr_token
+else
+  echo "No GHCR login (/root/ghcr-login is missing or unreadable): pulling anonymously, which only works for public images. docs/first-day.md, step 12." >&2
+fi
 
 docker compose pull web worker caddy db
 docker compose up -d db redis

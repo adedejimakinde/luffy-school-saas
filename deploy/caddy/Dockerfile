@@ -15,5 +15,8 @@ FROM caddy:2.11.4-builder AS builder
 RUN xcaddy build v2.11.4 --with github.com/caddy-dns/cloudflare@v0.2.4
 
 FROM caddy:2.11.4
+# Links the package to this repository on GHCR, so a private repository's workflow
+# token may push it and the repository's access rules apply to it.
+LABEL org.opencontainers.image.source="https://github.com/adedejimakinde/luffy-school-saas"
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 COPY Caddyfile /etc/caddy/Caddyfile

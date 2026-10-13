@@ -8,6 +8,10 @@
 
 FROM python:3.11-slim-bookworm
 
+# Links the package to this repository on GHCR, so a private repository's workflow
+# token may push it and the repository's access rules apply to it.
+LABEL org.opencontainers.image.source="https://github.com/adedejimakinde/luffy-school-saas"
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \

@@ -11,6 +11,10 @@
 # a backup tool is the last binary to take on trust from a moving target.
 FROM postgres:15-bookworm
 
+# Links the package to this repository on GHCR, so a private repository's workflow
+# token may push it and the repository's access rules apply to it.
+LABEL org.opencontainers.image.source="https://github.com/adedejimakinde/luffy-school-saas"
+
 ARG WALG_VERSION=v3.0.9
 ARG WALG_ASSET=wal-g-pg-22.04-amd64
 ARG WALG_SHA256=d6795c663894d836ba20840bffe8970aed81bbe25d3151bd4951f6f9c362def9
