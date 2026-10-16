@@ -382,7 +382,8 @@ class TheFooterTests(SiteSetUp):
             for column in columns
         ]
         self.assertEqual(found, [
-            ("Product", [("/#features", "Features"), ("/#pricing", "Pricing"), ("/#demo", "Book a demo")]),
+            ("Product", [("/#features", "Features"), ("/#pricing", "Pricing"), ("/blog/", "Blog"),
+                         ("/#demo", "Book a demo")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
             ("Company", [("/privacy/", "Privacy"), ("/terms/", "Terms"),

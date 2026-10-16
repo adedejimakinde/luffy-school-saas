@@ -1,0 +1,33 @@
+{% extends "blog/write/base.html" %}
+{% block title %}Your posts{% endblock %}
+{% comment %}
+/write/: the signed-in writer's or editor's own posts, and nobody else's
+(`blog.write_views.posts`). A row is a card on a phone (`table.stack`).
+{% endcomment %}
+{% block main %}
+<div class="wrap-writer">
+  <div class="page-head">
+    <div><h1>Your posts</h1><p>Write a draft, then send it for review. An editor publishes it.</p></div>
+    <form method="post" action="{% url 'write-new' %}">{% csrf_token %}<button type="submit" class="btn-primary"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>New post</button></form>
+  </div>
+  {% include "blog/parts/tabs.html" with label="Posts by state" %}
+  {% if posts %}
+  <table class="stack posts-table">
+    <thead><tr><th scope="col">Post</th><th scope="col">Updated</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+    <tbody>
+    {% for post in posts %}<tr>
+      <td class="stack-head title-cell"><span class="title-text"><a href="{% url 'write-post' post.pk %}">{{ post.title|default:"Untitled draft" }}</a><small>{% if post.slug|slice:":6" == "draft-" %}No address yet{% else %}/blog/{{ post.slug }}/{% endif %}</small>{% if post.status == "draft" and post.review_note %}<small class="note"><strong>Sent back:</strong> {{ post.review_note }}</small>{% elif post.status == "review" %}<small class="note">Sent for review {{ post.submitted_at|date:"j M Y" }}. You can edit it again if an editor sends it back.</small>{% endif %}</span>{% include "blog/parts/status.html" %}</td>
+      <td data-label="Updated">{{ post.updated_at|date:"j M Y, H:i" }}</td>
+      <td class="stack-full"><div class="row-actions">{% if post.status == "draft" %}<a class="btn" href="{% url 'write-post' post.pk %}">Edit</a>{% elif post.status == "published" %}<a class="btn" href="{{ site_url }}/blog/{{ post.slug }}/">View<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>{% else %}<a class="btn" href="{% url 'write-view' post.pk %}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Preview</a>{% endif %}</div></td>
+    </tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <section class="empty-card card">
+    <h2>No posts here yet</h2>
+    <p>Start a draft. Nobody sees it until an editor publishes it.</p>
+  </section>
+  {% endif %}
+  <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Drafts and posts in review are seen only by you and the editors. They are never on classnode.co until an editor publishes them.</p>
+</div>
+{% endblock %}

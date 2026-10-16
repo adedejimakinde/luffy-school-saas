@@ -1,0 +1,41 @@
+{% extends "blog/write/base.html" %}
+{% block title %}Sign in{% endblock %}
+{% comment %}
+/write/sign-in/: the email, then the code sent to it (`blog.signin`). The same
+words whether or not the address is a blog account's, and one sentence for
+every code that does not work. A plain form: no script.
+{% endcomment %}
+{% block main %}
+<div class="door">
+  <a class="logo door-logo" href="{{ site_url }}/blog/" aria-label="Classnode blog"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+  <section class="card door-card" aria-labelledby="door-title">
+    <h1 id="door-title">Sign in to the blog</h1>
+    {% if step == "code" %}
+      {% if sent %}<div class="msg" role="status"><span class="label">Check your email</span><p>{{ sent }}</p></div>{% endif %}
+      <form method="post" class="door-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="field"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" value="{{ email }}" required></div>
+        <div class="field"><label for="code">Code from the email</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="12" required{% if refused %} aria-describedby="code-error" aria-invalid="true"{% endif %} autofocus></div>
+        {% if refused %}<p class="field-error" id="code-error"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>{{ refused }}</p>{% endif %}
+        <button type="submit" class="btn-primary">Sign in</button>
+      </form>
+      <form method="post" class="door-again">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <input type="hidden" name="email" value="{{ email }}">
+        <button type="submit" class="btn-quiet">Send a new code</button>
+      </form>
+    {% else %}
+      <p class="quiet">For Classnode's writers and editors. We email you a code; there is no password.</p>
+      <form method="post" class="door-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="field"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" required{% if refused %} aria-describedby="email-error" aria-invalid="true"{% endif %} autofocus></div>
+        {% if refused %}<p class="field-error" id="email-error"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg>{{ refused }}</p>{% endif %}
+        <button type="submit" class="btn-primary">Email me a code</button>
+      </form>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

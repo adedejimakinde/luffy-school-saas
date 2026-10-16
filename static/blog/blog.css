@@ -1,0 +1,111 @@
+/*
+ * Classnode's blog on classnode.co: the list and a post (`blog/templates/blog/`).
+ * Loaded after website.css, whose header, top band and footer it uses. Layout
+ * only, every colour a design.css token or a mix of two, like website.css.
+ *
+ * - One reading column, 68ch at most.
+ * - Nothing makes the page scroll sideways: a table scrolls inside its own
+ *   box (`.post-table`), code inside its block, and a long word or address
+ *   breaks where it has to (`overflow-wrap: anywhere`).
+ * - Covers are drawn at 1200 x 630 from the first byte (`aspect-ratio`), so
+ *   nothing below them moves as they load.
+ */
+
+.blog-top { padding: 104px 0 32px; }
+.blog-top h1 { margin: 0; color: var(--text); font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.02em; }
+.blog-top p { margin: 12px 0 0; max-width: 60ch; color: var(--on-band); font-size: var(--copy-lg); }
+@media (min-width: 768px) { .blog-top { padding: 120px 0 40px; } }
+
+.cover { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; object-fit: cover; background: var(--brand-wash); border-radius: 12px; }
+.post-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; color: var(--muted); font-size: var(--copy-note); }
+.post-meta .dot::before { content: "\00B7"; }
+.post-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
+
+/* ---------------------------------------------------------------- /blog/ */
+
+.blog-list { padding: 40px 0 72px; }
+.post-lead { display: grid; gap: 20px; margin: 0 0 48px; }
+.post-lead h2 { margin: 0 0 10px; font-size: clamp(1.5rem, 1rem + 1.6vw, 2.25rem); line-height: 1.15; }
+.post-lead h2 a, .post-card h3 a { color: var(--text); text-decoration: none; }
+.post-lead h2 a:hover, .post-card h3 a:hover { color: var(--brand); text-decoration: underline; text-underline-offset: 3px; }
+.post-lead .summary { margin: 0 0 14px; color: var(--on-band); font-size: var(--copy-lg); }
+@media (min-width: 768px) {
+  .post-lead { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 40px; align-items: center; }
+}
+
+.list-head { margin: 0 0 20px; padding-top: 32px; border-top: 1px solid var(--divider); }
+.list-head h2 { font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); }
+
+.post-grid { display: grid; gap: 32px; margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) { .post-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px 24px; } }
+@media (min-width: 1024px) { .post-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.post-card { display: grid; align-content: start; min-width: 0; }
+.post-card .cover { margin: 0 0 14px; }
+.post-card h3 { margin: 0 0 8px; font-size: 1.25rem; line-height: 1.25; }
+.post-card .summary { margin: 0 0 10px; color: var(--muted); font-size: var(--copy-note); }
+.post-lead, .post-card, .post-top, .blog-empty { overflow-wrap: anywhere; }
+
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 48px 0 0; padding-top: 24px; border-top: 1px solid var(--divider); }
+.pager .quiet { font-size: var(--copy-note); }
+.pager .btn { min-height: 44px; }
+
+/* No post published yet. */
+.blog-empty { max-width: 560px; padding: var(--card-pad); background: var(--brand-wash); border-radius: 14px; }
+.blog-empty h2 { margin: 0 0 8px; font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem); }
+.blog-empty p { margin: 0 0 20px; color: var(--on-band); }
+.blog-empty .btn { min-height: 44px; }
+
+/* ---------------------------------------------------------------- a post */
+
+.post-top { padding: 96px 0 32px; }
+.post-top .wrap > * { max-width: 760px; }
+.crumb { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 0 0 8px; font-size: var(--copy-note); font-weight: 700; }
+.crumb .icon { width: 18px; height: 18px; }
+.post-top h1 { margin: 0 0 14px; color: var(--text); font-size: clamp(1.875rem, 1.2rem + 2.6vw, 3rem); line-height: 1.1; letter-spacing: -0.02em; }
+.post-top .lead { margin: 0 0 18px; color: var(--on-band); font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.25rem); }
+.byline { display: flex; align-items: center; gap: 12px; }
+.byline .avatar-sm { display: inline-grid; place-items: center; flex: none; width: 40px; height: 40px; color: var(--card); font-size: var(--label-sm); font-weight: 700; background: var(--brand); border-radius: 50%; }
+.byline strong { display: block; font-size: var(--copy-note); }
+
+.post-cover { margin: 0 auto; padding-top: 8px; max-width: 1000px; }
+@media (min-width: 768px) { .post-cover { padding-top: 32px; } }
+
+/* The words. Shared with the editor's preview (`static/write/write.css`
+   draws the same rules for `.prose`), so a writer sees what is published. */
+.prose { max-width: 68ch; font-size: 1.0625rem; line-height: 1.7; overflow-wrap: anywhere; }
+.prose > * { margin: 0 0 1.1em; }
+.prose > :last-child { margin-bottom: 0; }
+.prose h2 { margin: 1.8em 0 0.6em; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); line-height: 1.25; letter-spacing: -0.01em; }
+.prose h3 { margin: 1.5em 0 0.5em; font-size: 1.25rem; line-height: 1.3; }
+.prose h4 { margin: 1.4em 0 0.4em; font-size: 1.0625rem; }
+.prose ul, .prose ol { padding-left: 1.4em; }
+.prose li + li { margin-top: 0.35em; }
+.prose blockquote { margin-inline: 0; padding: 4px 0 4px 20px; color: var(--on-band); border-left: 3px solid var(--brand); }
+.prose img { display: block; max-width: 100%; height: auto; border-radius: 12px; }
+.prose code { padding: 1px 6px; font-size: 0.9em; background: var(--divider); border-radius: 6px; }
+.prose pre { max-width: 100%; padding: 16px; overflow-x: auto; background: var(--divider); border-radius: 10px; overflow-wrap: normal; }
+.prose pre code { padding: 0; background: none; }
+.prose a { text-underline-offset: 3px; }
+.prose hr { border: 0; border-top: 1px solid var(--border); }
+/* A table scrolls sideways inside the article, never the page. */
+.prose .post-table { max-width: 100%; overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; }
+.prose table { width: 100%; margin: 0; font-size: 0.9375rem; line-height: 1.5; overflow-wrap: normal; border-collapse: collapse; }
+.prose th, .prose td { padding: 10px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--divider); }
+.prose tr:last-child td { border-bottom: 0; }
+.prose thead th { background: var(--bg); }
+
+.post-body { padding: 32px 0 24px; }
+.post-body .prose { margin-inline: auto; }
+@media (min-width: 768px) { .post-body { padding-top: 48px; } }
+
+.post-end { max-width: 68ch; margin: 0 auto; padding: 24px 0 56px; border-top: 1px solid var(--divider); }
+.post-end .post-tags { margin: 0; }
+@media (max-width: 767.98px) { .post-end { width: calc(100% - 32px); } }
+
+.more { padding: 56px 0 72px; background: var(--brand-wash); }
+.more h2 { margin: 0 0 24px; font-size: clamp(1.375rem, 1.1rem + 1vw, 2rem); }
+
+.post-cta { padding: 48px 0; color: var(--card); background: var(--brand); text-align: center; }
+.post-cta h2 { color: var(--card); font-size: clamp(1.375rem, 1.1rem + 1vw, 2rem); }
+.post-cta p { margin: 8px auto 20px; max-width: 46ch; color: var(--on-brand); }
+.post-cta :focus-visible { outline-color: var(--card); }

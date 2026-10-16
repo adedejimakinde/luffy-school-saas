@@ -13,9 +13,10 @@ cannot go missing here.
 
 from django.conf import settings
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, re_path
 
 from accounts.views import invitation_page, sign_in_page, staff_sign_in_page
+from blog import write_views as write
 from fees.webhook_view import paystack_webhook
 from onboarding.views import handover_page
 from schools.views import platform_page
@@ -47,6 +48,20 @@ urlpatterns = [
     path("platform/handover/", handover_page, name="platform-handover"),
     # Paystack's webhook: here and only here, and signed instead of logged in.
     path("api/paystack/webhook/", paystack_webhook, name="paystack-webhook"),
+    # Classnode's blog, the writing side (`blog.write_views`): here and only
+    # here, for the blog's writers and editors. The published posts are on the
+    # public site (`urls_site.py`); nothing unpublished is ever served there.
+    path("write/sign-in/", write.sign_in, name="write-sign-in"),
+    path("write/sign-out/", write.sign_out, name="write-sign-out"),
+    path("write/", write.posts, name="write-posts"),
+    path("write/new/", write.new, name="write-new"),
+    path("write/review/", write.review, name="write-review"),
+    path("write/posts/<int:pk>/", write.editor, name="write-post"),
+    path("write/posts/<int:pk>/preview/", write.preview, name="write-preview"),
+    path("write/posts/<int:pk>/images/", write.upload, name="write-upload"),
+    path("write/posts/<int:pk>/view/", write.view, name="write-view"),
+    re_path(r"^write/images/(?P<key>[0-9a-f]{32})\.webp$", write.portal_image, name="write-image"),
+    re_path(r"^write/images/(?P<key>[0-9a-f]{32})-small\.webp$", write.portal_image_small, name="write-image-small"),
     *tenant_urlpatterns,
 ]
 

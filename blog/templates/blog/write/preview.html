@@ -1,0 +1,11 @@
+{% extends "blog/write/base.html" %}
+{% block title %}Preview: {{ post.title|default:"Untitled draft" }}{% endblock %}
+{% comment %}
+/write/posts/<id>/view/: the post as a reader will see it, drawn by the same
+part classnode.co uses (`blog/parts/article.html`) with the portal's pictures.
+For the writer and the editors only, and noindex like all of /write/.
+{% endcomment %}
+{% block main %}
+<p class="preview-bar">{% include "blog/parts/status.html" %} Preview. {% if post.status == "published" %}This is on classnode.co.{% else %}Nobody else can see this.{% endif %} <a href="{% url 'write-post' post.pk %}">Back to the editor</a></p>
+<div class="site-preview">{% url 'write-post' post.pk as back %}{% include "blog/parts/article.html" with blog_home=back crumb="Editor" %}</div>
+{% endblock %}

@@ -165,6 +165,9 @@ SHARED_APPS = [
     # Classnode's own public site on `SITE_HOST`: the homepage and the demo
     # requests it collects. The platform's, not any school's.
     "website",
+    # Classnode's own blog: posts, their pictures and its writers' sign-in
+    # codes. The platform's too (`docs/blog.md`).
+    "blog",
 ]
 
 TENANT_APPS = [
@@ -262,6 +265,10 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # A writer or an editor of the blog reaches the blog and nothing else:
+    # refused on every school's host and on every portal page but /write/.
+    # Ahead of the school check, so it answers whatever that one would.
+    "blog.middleware.BlogAccountMiddleware",
     # Enforces that whoever is signed in actually belongs to the school whose
     # domain they are on. Must come after AuthenticationMiddleware.
     "accounts.middleware.SchoolAccessMiddleware",

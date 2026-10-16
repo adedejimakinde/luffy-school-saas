@@ -39,6 +39,7 @@ from accounts.views import (
 )
 from academics.views import PROMOTION_MODULES, SETUP_MODULES
 from schools.views import PLATFORM_MODULES
+from blog.write_views import EDITOR_MODULES as BLOG_EDITOR_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import BANK_MODULES, FEES_MODULES
 from gradebook.views import MARKING_MODULES, TEACHING_MODULES
@@ -85,7 +86,12 @@ PAGES = {
     "notices-settings": SETTINGS_MODULES,
     "ogsera": OGSERA_MODULES,
     "teaching": TEACHING_MODULES,
+    "blog-editor": BLOG_EDITOR_MODULES,
 }
+
+#: Pages whose modules build no markup of their own, and so import no escaping
+#: (`test_a_page_that_draws_no_markup_imports_no_escaping` says what holds them).
+DRAWS_NO_MARKUP = {"blog-editor"}
 
 #: `from "./x.js"` and `from "../web/x.js"` — the only import shape these
 #: modules use, and the only one a browser resolves without a map entry.
@@ -169,5 +175,22 @@ class EveryPagesMapCoversItsWholeGraphTests(SimpleTestCase):
         the duplication `settings.STATICFILES_DIRS` was changed to prevent.
         """
         for page, modules in PAGES.items():
+            if page in DRAWS_NO_MARKUP:
+                continue
             with self.subTest(page=page):
                 self.assertIn("web/html.js", modules)
+
+    def test_a_page_that_draws_no_markup_imports_no_escaping(self):
+        """The control for the allowance above: it is used, and only where true.
+
+        The blog editor writes text with `textContent` and puts in only the
+        preview the server drew and sanitised (`blog.markdown.render`), so it
+        builds no markup of its own to escape. A module there that started
+        building HTML from strings would need `web/html.js` like every page.
+        """
+        for page in DRAWS_NO_MARKUP:
+            with self.subTest(page=page):
+                self.assertNotIn("web/html.js", PAGES[page])
+                for module in PAGES[page]:
+                    source = (STATIC / module).read_text()
+                    self.assertNotRegex(source, r"innerHTML\s*=\s*`|insertAdjacentHTML|outerHTML")

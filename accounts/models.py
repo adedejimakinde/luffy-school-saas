@@ -178,6 +178,19 @@ class User(AbstractBaseUser, PermissionsMixin):
     # The SaaS operator — us, not a school. School authority comes from
     # Membership.role; this flag is only for platform-wide access.
     is_platform_staff = models.BooleanField(default=False)
+    #: Classnode's own blog (`blog/`, `docs/blog.md`): "writer" or "editor",
+    #: or blank for everybody else. A login that holds one is a blog account
+    #: and nothing more: it is never platform staff (`blog_account_is_not_staff`
+    #: below), never holds a membership at a school (a trigger on both tables,
+    #: `accounts/migrations/0017`), and `blog.middleware` keeps it to the
+    #: blog's own pages. A column rather than a row elsewhere, so the check
+    #: every request makes reads the user already loaded.
+    blog_role = models.CharField(
+        max_length=8,
+        blank=True,
+        default="",
+        choices=[("writer", "Writer"), ("editor", "Editor")],
+    )
     date_joined = models.DateTimeField(default=timezone.now)
     #: The first time this login signed in anywhere on the platform, set once
     #: (`onboarding.signals`). The first-day cards count fourteen days from it;
@@ -191,6 +204,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         ordering = ["full_name"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(blog_role__in=["", "writer", "editor"]),
+                name="blog_role_is_known",
+            ),
+            # A blog account reaches the blog and nothing else, and platform
+            # staff reach every school. One login cannot be both.
+            models.CheckConstraint(
+                condition=models.Q(blog_role="")
+                | models.Q(is_platform_staff=False, is_superuser=False),
+                name="blog_account_is_not_staff",
+            ),
+        ]
 
     def __str__(self):
         return self.full_name or self.username
@@ -1130,6 +1156,10 @@ class SignInScope(models.TextChoices):
     CHANNEL = "channel", "Guardian contact channel"
     CHECKER_NUMBER = "checker_number", "Result checker admission number"
     CHECKER_ADDRESS = "checker_address", "Result checker network address"
+    #: The blog's sign-in door (`blog.signin`): an email typed there, in a
+    #: bucket of its own for CHANNEL's reason. A writer's address guessed at
+    #: here must not close anybody's guardian door, and the other way round.
+    BLOG_EMAIL = "blog_email", "Blog sign-in email"
 
 
 class SignInAttempts(models.Model):

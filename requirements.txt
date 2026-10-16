@@ -59,3 +59,11 @@ sentry-sdk[django,celery]>=2.0
 # D6): Redis may write its messages to disk. Fernet seals it — authenticated,
 # and dead when the code is — rather than a cipher written here.
 cryptography>=42
+
+# Classnode's blog (`blog/`, `docs/blog.md`): a post is written in Markdown and
+# drawn as HTML on classnode.co. Python-Markdown turns one into the other, and
+# nh3 (the Rust `ammonia` sanitiser) keeps only an allowlist of tags and
+# attributes, so no script, frame or event handler a writer types reaches the
+# page.
+markdown>=3.6
+nh3>=0.2.17
