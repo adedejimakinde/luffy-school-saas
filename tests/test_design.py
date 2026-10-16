@@ -8,7 +8,7 @@ shade of grey:
 - **One palette, in one file.** Every colour literal in `design.css` is one of
   the palette's sixteen, and no stylesheet, module or page template anywhere
   else writes a colour of its own — they say `var(--muted)`, not `#5B6475`.
-- **No gradients but the three named below, no emoji, no icon pack.**
+- **No gradients but the ones named below, no emoji, no icon pack.**
 - **One font, two weights, served from here.** Hanken Grotesk at 400 and 700,
   `font-display: swap`, from files beside the stylesheet; and no stylesheet
   asks for a weight in between, which the browser would have to fake.
@@ -49,13 +49,17 @@ PALETTE = {
 
 #: The only gradients, each of One Blue: the public site's final band, One Blue
 #: deepening; the faintest blue on the hero photo's top edge and a faint glow
-#: behind its screens, on the light top band; and the staff sign-in's
-#: background, One Blue fading into the grey. (file, selector)
+#: behind its screens, on the light top band; the staff sign-in's
+#: background, One Blue fading into the grey; and the blog's tab row on a
+#: phone, whose last 32px fade out so a tab past the edge reads as more to
+#: scroll to. That last one is a mask, not a colour: only its opacity is drawn.
+#: (file, selector)
 GRADIENTS = {
     ("static/website/website.css", ".cta"),
     ("static/website/website.css", ".photo-hero::after"),
     ("static/website/website.css", ".hero-visual::before"),
     ("static/staff-signin/staff-signin.css", "body.door"),
+    ("static/write/write.css", ".tabs"),
 }
 
 #: Page templates that are not drawn from `design.css`, and why.
@@ -142,7 +146,7 @@ class OnePaletteInOneFileTests(SimpleTestCase):
         self.assertTrue(used, "the 403 page is styled at all")
         self.assertLessEqual(used, PALETTE)
 
-    def test_no_gradients_but_the_four(self):
+    def test_no_gradients_but_the_named_ones(self):
         found = set()
         for name, css in [*stylesheets(), *((n, style_blocks(h)) for n, h in page_templates())]:
             for selector, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):

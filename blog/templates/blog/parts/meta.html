@@ -1,0 +1,1 @@
+<p class="post-meta"><span>{{ post.author.full_name }}</span><span class="dot" aria-hidden="true"></span>{% if post.published_at %}<time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"j M Y" }}</time>{% else %}<span>Not published</span>{% endif %}<span class="dot" aria-hidden="true"></span><span>{{ post.minutes }} min read</span></p>

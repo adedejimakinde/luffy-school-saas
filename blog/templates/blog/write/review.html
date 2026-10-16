@@ -1,0 +1,32 @@
+{% extends "blog/write/base.html" %}
+{% block title %}Review queue{% endblock %}
+{% comment %}
+/write/review/: every post, for editors only (`blog.write_views.review`), the
+ones waiting for review first, oldest at the top. Review opens the editor,
+where an editor publishes, edits, sends back or unpublishes.
+{% endcomment %}
+{% block main %}
+<div class="wrap-writer">
+  <div class="page-head"><div><h1>Review queue</h1><p>{% if state == "review" %}Posts writers have sent for review, oldest first.{% elif state == "published" %}Every published post. Open one to edit or unpublish it.{% else %}Every writer's drafts.{% endif %}</p></div></div>
+  {% include "blog/parts/tabs.html" with label="Posts by state" %}
+  {% if posts %}
+  <table class="stack posts-table">
+    <thead><tr><th scope="col">Post</th><th scope="col">Writer</th><th scope="col">{% if state == "review" %}Sent{% else %}Updated{% endif %}</th><th scope="col" class="num">Words</th><th scope="col"><span class="sr">Actions</span></th></tr></thead>
+    <tbody>
+    {% for post in posts %}<tr>
+      <td class="stack-head title-cell"><span class="title-text"><a href="{% url 'write-post' post.pk %}">{{ post.title|default:"Untitled draft" }}</a><small>{% if post.slug|slice:":6" == "draft-" %}No address yet{% else %}/blog/{{ post.slug }}/{% endif %}</small></span>{% include "blog/parts/status.html" %}</td>
+      <td data-label="Writer">{{ post.author.full_name }}</td>
+      <td data-label="{% if state == 'review' %}Sent{% else %}Updated{% endif %}">{% if state == "review" %}{{ post.submitted_at|date:"j M Y" }}{% else %}{{ post.updated_at|date:"j M Y" }}{% endif %}</td>
+      <td data-label="Words" class="num">{{ post.words }}</td>
+      <td class="stack-full"><div class="row-actions"><a class="btn" href="{% url 'write-view' post.pk %}"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Preview</a><a class="btn btn-primary" href="{% url 'write-post' post.pk %}">{% if state == "review" %}Review{% else %}Open{% endif %}</a></div></td>
+    </tr>{% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <section class="empty-card card">
+    <h2>{% if state == "review" %}Nothing waiting for review{% elif state == "published" %}Nothing published yet{% else %}No drafts{% endif %}</h2>
+    <p>{% if state == "review" %}When a writer sends a post for review, it is listed here.{% else %}Posts appear here as writers start them.{% endif %}</p>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}

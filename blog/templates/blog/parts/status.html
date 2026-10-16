@@ -1,0 +1,1 @@
+<span class="label{% if post.status == 'published' %} label-ok{% elif post.status == 'review' %} label-warn{% endif %}">{{ post.get_status_display }}</span>

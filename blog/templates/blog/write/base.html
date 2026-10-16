@@ -1,0 +1,49 @@
+{% load static blog_tags %}<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1{% if editor_page %}, interactive-widget=resizes-content{% endif %}">
+<title>{% block title %}{% endblock %} | Classnode blog</title>
+{% comment %}
+The writing side of Classnode's blog, on the portal's /write/ (`blog.write_views`).
+Its own shell rather than a school's: a writer belongs to no school, so there
+is no sidebar of a school's screens, only the blog's. The top bar carries
+the blog's two lists on a desk and a menu on a phone, where the same links
+sit with signing out. Noindex like every page off the public site
+(`design/head.html`, `website.crawlers`).
+
+The only script on these pages is the editor's (`static/write/app.js`),
+named by `editor.html` and nowhere else.
+{% endcomment %}
+{% include "design/head.html" %}
+{% if prose %}<link rel="stylesheet" href="{% static 'blog/blog.css' %}">
+{% endif %}<link rel="stylesheet" href="{% static 'write/write.css' %}">
+<body class="writer{% if editor_page %} editing{% endif %}">
+{% include "design/icons.html" %}
+{% include "blog/parts/write_icons.html" %}
+<a class="skip" href="#main">Skip to content</a>
+{% if me.blog_role %}<header class="topbar">
+  <a class="logo" href="{% url 'write-posts' %}" aria-label="Blog home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+  <span class="topbar-title">Blog</span>
+  <nav class="topbar-nav" aria-label="Blog">
+    <a href="{% url 'write-posts' %}"{% if current == "posts" %} aria-current="page"{% endif %}>Your posts</a>
+    {% if is_editor %}<a href="{% url 'write-review' %}"{% if current == "review" %} aria-current="page"{% endif %}>Review queue</a>{% endif %}
+    <a href="{{ site_url }}/blog/">View the blog</a>
+  </nav>
+  <span class="spacer"></span>
+  <span class="who"><span class="name">{{ me.full_name }} <span class="label">{{ me.get_blog_role_display }}</span></span><span class="avatar" aria-hidden="true">{{ me.full_name|initials }}</span></span>
+  <form class="signout-desk" method="post" action="{% url 'write-sign-out' %}">{% csrf_token %}<button type="submit" class="btn-quiet">Sign out</button></form>
+  <button class="icon-button menu-toggle" type="button" popovertarget="write-menu" aria-label="Menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+  <div id="write-menu" class="write-menu" popover>
+    <p class="menu-who"><strong>{{ me.full_name }}</strong> <span class="label">{{ me.get_blog_role_display }}</span></p>
+    <a href="{% url 'write-posts' %}"{% if current == "posts" %} aria-current="page"{% endif %}>Your posts</a>
+    {% if is_editor %}<a href="{% url 'write-review' %}"{% if current == "review" %} aria-current="page"{% endif %}>Review queue</a>{% endif %}
+    <a href="{{ site_url }}/blog/">View the blog</a>
+    <form method="post" action="{% url 'write-sign-out' %}">{% csrf_token %}<button type="submit" class="btn-quiet">Sign out</button></form>
+  </div>
+</header>{% endif %}
+<main id="main">
+{% block main %}{% endblock %}
+</main>
+{% block script %}{% endblock %}
+</body>
+</html>

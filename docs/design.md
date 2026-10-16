@@ -15,11 +15,13 @@ nothing else: no page declares a colour.
 - **Three accents, on the public site's icon tiles only**: teal `#0F766E`,
   amber `#B45309`, coral `#C2452D`, each with a white icon at 5:1 or better.
   Never for words.
-- **Four gradients and no others**, each of One Blue: the public site's final
+- **Five gradients and no others**, each of One Blue: the public site's final
   band, One Blue deepening; on its light top band, the faintest blue along the
-  hero photo's top edge and a faint glow behind its screens; and the staff
-  sign-in's background, One Blue fading into the grey from the top.
-  `tests/test_design.py` names them.
+  hero photo's top edge and a faint glow behind its screens; the staff
+  sign-in's background, One Blue fading into the grey from the top; and the
+  blog's tab row on a phone (`static/write/write.css`), a mask rather than a
+  colour, fading its last 32px so a tab past the edge reads as more to scroll
+  to. `tests/test_design.py` names them.
 - **Status colour only on small labels** (`.label-ok`, `.label-warn`,
   `.label-stop`): green `#16693F` on `#E7F4EC`, amber `#8A5A00` on `#FDF1DC`,
   red `#B42318` on `#FDECEA`. A message is neutral and carries its label

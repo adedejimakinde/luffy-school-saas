@@ -1,0 +1,1 @@
+<nav class="tabs-wrap" aria-label="{{ label }}"><ul class="tabs">{% for tab in tabs %}<li><a href="{{ tab.href }}"{% if tab.current %} aria-current="page"{% endif %}>{{ tab.label }} <span class="count">{{ tab.count }}</span></a></li>{% endfor %}</ul></nav>

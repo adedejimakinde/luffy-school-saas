@@ -153,7 +153,10 @@ class TheSitemapTests(SiteSetUp):
     def test_every_route_on_the_site_is_a_page_or_the_sitemap(self):
         from urls_site import urlpatterns
 
-        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap"})
+        # And the blog's: its later pages, its posts and their pictures, each
+        # held by `blog/tests/test_public.py` to published posts only.
+        blog = {"blog-page", "blog-post", "blog-image", "blog-image-small"}
+        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap", *blog})
 
     def test_every_listed_page_answers_and_names_itself_canonical(self):
         for url in re.findall(r"<loc>([^<]*)</loc>", self.get("/sitemap.xml").content.decode()):

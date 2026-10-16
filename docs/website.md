@@ -4,7 +4,8 @@ Classnode's own homepage, for a school that is not a customer yet. It lives on
 the bare platform domain (`SITE_HOST`, which is `PLATFORM_DOMAIN` unless set),
 and `www.` and plain HTTP are sent to `https://` and the bare domain in one hop
 (Caddy, and `website/crawlers.py` for any that reach the app). `/privacy/`,
-`/terms/` and `/sitemap.xml` are on it too, and nothing else is.
+`/terms/`, the blog (`/blog/`, its posts and their pictures: `docs/blog.md`)
+and `/sitemap.xml` are on it too, and nothing else is.
 
 ## Where it answers, and where it does not
 
@@ -135,9 +136,9 @@ final call to action, and the footer.
   show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
   no setup fee), the call-back time (**two working days**) and the contact
   address (hello@classnode.co). The footer, the same on every page of the site
-  (homepage, privacy notice, terms): the logo with one line under it (School
+  (homepage, privacy notice, terms, the blog): the logo with one line under it (School
   management for Nigerian secondary schools.), three columns of links (Product:
-  Features, Pricing, Book a demo; Sign in: Staff sign in, Parent sign in;
+  Features, Pricing, Blog, Book a demo; Sign in: Staff sign in, Parent sign in;
   Company: Privacy, Terms, hello@classnode.co), a thin rule, and one legal
   line, the only place the company is named: © 2026 Classnode Edtech Limited ·
   RC 9926572. No address there; the registered address waits for the lawyer.
@@ -268,11 +269,13 @@ The site is the only thing on the platform a search engine is asked to index.
 - **robots.txt** is answered on every host by the same middleware: on the site
   it allows everything and names `/sitemap.xml`; on every other host it
   disallows everything.
-- **Each page's own title and description** are `website.views.PAGES`: under
+- **Each page's own title and description** are `website.views.PAGES` (a blog
+  post's are its own SEO title and description): under
   60 and 155 characters, but the homepage's title, which is the owner's words
   (68 characters). The sitemap lists the same pages, and each names its own
   canonical address, `https://` and the bare domain with no query.
-- **Structured data, on the homepage only.** Organization (Classnode Edtech
+- **Structured data, on the homepage and each blog post only.** On a post it
+  is an Article (`docs/blog.md`). On the homepage: Organization (Classnode Edtech
   Limited, `static/website/logo.png`, `hello@classnode.co`, no address),
   SoftwareApplication (EducationalApplication, ₦2,500 per student per term)
   and FAQPage. The FAQ on the page and in the data are drawn from one list,

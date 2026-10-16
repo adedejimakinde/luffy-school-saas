@@ -1,0 +1,17 @@
+{% load blog_tags %}{% comment %}
+One post as a reader sees it: the header in the top band, the cover, the
+words, the tags. Drawn on classnode.co by `blog/post.html`, and on the portal
+by `blog/write/preview.html` with `base` set to the portal's own picture
+address, so a writer previews exactly what will be published.
+{% endcomment %}<article class="post">
+  <header class="top-band post-top"><div class="wrap">
+    <a class="crumb" href="{{ blog_home|default:'/blog/' }}"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>{{ crumb|default:"Blog" }}</a>
+    {% if post.tags %}<ul class="post-tags">{% for tag in post.tags %}<li><span class="label label-brand">{{ tag }}</span></li>{% endfor %}</ul>{% endif %}
+    <h1>{{ post.title }}</h1>
+    {% if post.summary %}<p class="lead">{{ post.summary }}</p>{% endif %}
+    <div class="byline"><span class="avatar-sm" aria-hidden="true">{{ post.author.full_name|initials }}</span><div><strong>{{ post.author.full_name }}</strong><p class="post-meta">{% if post.published_at %}<time datetime="{{ post.published_at|date:'c' }}">{{ post.published_at|date:"j M Y" }}</time>{% else %}<span>Not published</span>{% endif %}<span class="dot" aria-hidden="true"></span><span>{{ post.minutes }} min read</span></p></div></div>
+  </div></header>
+  {% if post.cover %}<div class="wrap"><figure class="post-cover">{% cover post.cover post.cover_alt "(min-width: 1048px) 1000px, calc(100vw - 32px)" eager=True base=base|default:"/blog/images/" %}</figure></div>{% endif %}
+  <div class="wrap post-body"><div class="prose">{{ html }}</div></div>
+  {% if post.tags %}<footer class="wrap post-end"><ul class="post-tags">{% for tag in post.tags %}<li><span class="label label-brand">{{ tag }}</span></li>{% endfor %}</ul></footer>{% endif %}
+</article>

@@ -94,4 +94,17 @@ __all__ = [
     "SchoolAccessRefused",
     "NoMembershipHere",
     "CodeSessionCannotEscalate",
+    "BlogAccountOnly",
 ]
+
+
+class BlogAccountOnly(SchoolAccessRefused):
+    """A writer or an editor of Classnode's blog, anywhere but the blog.
+
+    Raised by `blog.middleware.BlogAccountMiddleware` on a school's host and on
+    every portal page that is not the blog's. A password fixes nothing: a blog
+    account is a login of its own and reaches nothing else, by design
+    (`docs/blog.md`).
+    """
+
+    a_password_fixes_it = False

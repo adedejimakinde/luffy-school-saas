@@ -1,0 +1,7 @@
+{% load blog_tags %}<li class="post-card">
+  {% cover post.cover post.cover_alt "(min-width: 1024px) 360px, (min-width: 640px) 50vw, 100vw" %}
+  {% if post.tags %}<ul class="post-tags">{% for tag in post.tags %}<li><span class="label label-brand">{{ tag }}</span></li>{% endfor %}</ul>{% endif %}
+  <h3><a href="/blog/{{ post.slug }}/">{{ post.title }}</a></h3>
+  <p class="summary">{{ post.summary }}</p>
+  {% include "blog/parts/meta.html" %}
+</li>

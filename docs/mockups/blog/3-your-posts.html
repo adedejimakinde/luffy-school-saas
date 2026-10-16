@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your posts | Classnode blog</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="blog.css">
+<body class="writer">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 16l-5-5-9 9"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-quote" viewBox="0 0 24 24"><path d="M5 18h4l1-5V6H4v7h3zM14 18h4l1-5V6h-6v7h3z"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></symbol>
+</svg>
+<p class="mock-note">Mockup. app.classnode.co/write/, the portal, noindex. A writer sees their own posts and nothing else. Phone: each row is a card.</p>
+<header class="topbar">
+  <a class="logo" href="/write/"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+  <span class="topbar-title">Blog</span>
+  <nav class="topbar-nav" aria-label="Blog"><a href="/write/" aria-current="page">Your posts</a></nav>
+  <span class="spacer"></span>
+  <span class="who"><span class="name">Kemi Oladipo <span class="label">Writer</span></span><span class="avatar" aria-hidden="true">KO</span></span>
+</header>
+<main>
+<div class="wrap-writer">
+  <div class="page-head"><div><h1>Your posts</h1><p>Write a draft, then send it for review. An editor publishes it.</p></div><a class="btn btn-primary" href="#"><svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>New post</a></div>
+  <ul class="tabs"><li><a href="#" aria-current="page">All <span class="count">4</span></a></li><li><a href="#">Drafts <span class="count">2</span></a></li><li><a href="#">In review <span class="count">1</span></a></li><li><a href="#">Published <span class="count">1</span></a></li></ul>
+  <table class="stack posts-table">
+    <thead><tr><th>Post</th><th>Updated</th><th class="num"><span class="sr">Actions</span></th></tr></thead>
+    <tbody>
+<tr>
+  <td class="stack-head title-cell"><span><a href="#">Getting ready for second term fees</a><small>/blog/second-term-fees/</small></span><span class="label ">Draft</span></td>
+  <td data-label="Updated">Today, 10:42</td>
+  <td class="stack-full"><div class="row-actions"><a class="btn" href="#">Edit</a></div></td>
+</tr>
+<tr>
+  <td class="stack-head title-cell"><span><a href="#">Taking the register on a shared phone</a><small>/blog/register-on-a-shared-phone/</small></span><span class="label label-ok">Published</span></td>
+  <td data-label="Updated">2 Oct 2026</td>
+  <td class="stack-full"><div class="row-actions"><a class="btn" href="#">View<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div></td>
+</tr>
+<tr>
+  <td class="stack-head title-cell"><span><a href="#">Marking a late exam fairly</a><small>/blog/marking-a-late-exam/</small><small>Sent for review on 15 Oct. You can edit it again once an editor sends it back.</small></span><span class="label label-warn">In review</span></td>
+  <td data-label="Updated">Yesterday</td>
+  <td class="stack-full"><div class="row-actions"><a class="btn" href="#"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Preview</a></div></td>
+</tr>
+<tr>
+  <td class="stack-head title-cell"><span><a href="#">What a class teacher's remark should say</a><small>/blog/class-teacher-remarks/</small><small><strong>Sent back by Tunde Bello:</strong> shorten the opening, and add one example remark.</small></span><span class="label ">Draft</span></td>
+  <td data-label="Updated">12 Oct 2026</td>
+  <td class="stack-full"><div class="row-actions"><a class="btn" href="#">Edit</a></div></td>
+</tr>
+    </tbody>
+  </table>
+  <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Drafts and posts in review are seen only by you and the editors. They are never on classnode.co until published.</p>
+</div>
+</main>
+</body>
+</html>

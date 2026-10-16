@@ -72,7 +72,7 @@ def _limit(scope) -> int:
     """
     if scope == SignInScope.ADDRESS:
         return settings.SIGN_IN_MAX_FAILURES_PER_ADDRESS
-    if scope == SignInScope.CHANNEL:
+    if scope in (SignInScope.CHANNEL, SignInScope.BLOG_EMAIL):
         return settings.SIGN_IN_MAX_FAILURES_PER_CHANNEL
     if scope == SignInScope.CHECKER_NUMBER:
         return settings.CHECKER_MAX_FAILURES_PER_ADMISSION_NUMBER

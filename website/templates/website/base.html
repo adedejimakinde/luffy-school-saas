@@ -5,13 +5,22 @@
 <title>{{ title }}</title>
 <meta name="description" content="{{ description }}">
 <link rel="canonical" href="{{ canonical }}">
-<meta property="og:type" content="website">
+<meta property="og:type" content="{{ og_type|default:"website" }}">
 <meta property="og:site_name" content="Classnode">
 <meta property="og:locale" content="en_NG">
 <meta property="og:title" content="{{ title }}">
 <meta property="og:description" content="{{ description }}">
 <meta property="og:url" content="{{ canonical }}">
-<meta property="og:image" content="{{ site_url }}{% static 'website/share.png' %}">
+{% if og_image %}<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:type" content="image/webp">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="{{ og_image_alt }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ title }}">
+<meta name="twitter:description" content="{{ description }}">
+<meta name="twitter:image" content="{{ og_image }}">
+<meta name="twitter:image:alt" content="{{ og_image_alt }}">{% else %}<meta property="og:image" content="{{ site_url }}{% static 'website/share.png' %}">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -20,7 +29,7 @@
 <meta name="twitter:title" content="{{ title }}">
 <meta name="twitter:description" content="{{ description }}">
 <meta name="twitter:image" content="{{ site_url }}{% static 'website/share.png' %}">
-<meta name="twitter:image:alt" content="Classnode: School management software for Nigerian secondary schools. Results, fees and registers in one place.">
+<meta name="twitter:image:alt" content="Classnode: School management software for Nigerian secondary schools. Results, fees and registers in one place.">{% endif %}
 {% comment %}
 Classnode's own public site (`website/views.py`), on `SITE_HOST` only. Every
 page on it extends this file: the header, the footer, the one stylesheet and
@@ -29,7 +38,8 @@ the one script. Drawn by the server and readable with no script at all.
 The head above is the page's for search engines and for a shared link: the
 title, description and canonical address `website.views.site_page` gives
 every page, and the card WhatsApp, LinkedIn and X draw from
-`static/website/share.png` (`scripts/share_image.html` draws it).
+`static/website/share.png` (`scripts/share_image.html` draws it), or, on a
+blog post, from the post's own cover (`og_image`, `blog.views`).
 
 The header sits over the page's top band, the One Blue strip each page opens
 with (`.top-band`: the homepage's hero, or a legal page's title), so the blue
@@ -43,7 +53,8 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
 <link rel="preload" href="{% static 'web/fonts/hanken-grotesk-700.woff2' %}" as="font" type="font/woff2" crossorigin>
 {% block preload %}{% endblock %}
 <link rel="stylesheet" href="{% static 'website/website.css' %}">
-{% block head %}{% endblock %}
+{% for sheet in stylesheets %}<link rel="stylesheet" href="{% static sheet %}">
+{% endfor %}{% block head %}{% endblock %}
 <body class="site">
 {% include "design/icons.html" %}
 {% include "website/parts/icons.html" %}
@@ -58,6 +69,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       <a href="/#how">How it works</a>
       <a href="/#pricing">Pricing</a>
       <a href="/#faq">Questions</a>
+      <a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a>
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
     </nav>
@@ -69,6 +81,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       <a href="/#how">How it works</a>
       <a href="/#pricing">Pricing</a>
       <a href="/#faq">Questions</a>
+      <a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a>
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
       <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
@@ -91,6 +104,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
           <ul>
             <li><a href="/#features">Features</a></li>
             <li><a href="/#pricing">Pricing</a></li>
+            <li><a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a></li>
             <li><a href="/#demo">Book a demo</a></li>
           </ul>
         </div>

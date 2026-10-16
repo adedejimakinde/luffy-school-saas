@@ -1,0 +1,131 @@
+{% extends "blog/write/base.html" %}{% load static blog_tags %}
+{% block title %}{{ post.title|default:"Untitled draft" }}{% endblock %}
+{% comment %}
+/write/posts/<id>/: the editor (`blog.write_views.editor`). One form that posts
+and redirects, so it saves with no script; its buttons are the moves this
+person may make on this post now (`blog.workflow`). `static/write/app.js`
+adds the live preview, the counters, the picture box and, on a phone, the
+Write, Preview and Details tabs. It is the only page that names that module.
+
+On a phone the two main buttons sit in a bar fixed to the bottom of the
+screen, above the keyboard while typing (`interactive-widget` in the
+viewport, and the module for browsers without it), and the page is padded
+by the bar's height so it never covers a word.
+{% endcomment %}
+{% block main %}
+<form method="post" enctype="multipart/form-data" class="ed" id="post-form" novalidate
+      data-preview="{% url 'write-preview' post.pk %}" data-upload="{% url 'write-upload' post.pk %}">
+  {% csrf_token %}
+  <div class="ed-main">
+    {% if done %}<div class="msg" role="status"><span class="label label-ok">Done</span><p>{{ done }}</p></div>{% endif %}
+    {% if refused %}<div class="msg" role="alert"><span class="label label-stop">Not allowed</span><p>{{ refused }}</p></div>{% endif %}
+    {% if problems %}<div class="msg problems" role="alert"><span class="label label-stop">Not yet</span><div><p>This post still needs these before it can go further:</p><ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul></div></div>{% endif %}
+    {% if form.errors and not problems %}<div class="msg" role="alert"><span class="label label-stop">Not saved</span><p>Some details need fixing. They are marked below.</p></div>{% endif %}
+    {% if post.status == "draft" and post.review_note %}<div class="msg"><span class="label label-warn">Sent back</span><p>{{ post.review_note }}</p></div>{% endif %}
+    {% if not may_edit %}<div class="msg"><span class="label">Read only</span><p>{% if post.status == "review" %}This post is with the editors. You can edit it again if it is sent back.{% else %}This post is published. Only an editor can change it.{% endif %}</p></div>{% endif %}
+
+    <fieldset class="ed-fields"{% if not may_edit %} disabled{% endif %}>
+    <legend class="sr">The post</legend>
+    <label class="sr" for="id_title">Title</label>
+    <textarea id="id_title" name="title" class="ed-title" rows="1" maxlength="120" placeholder="Title">{{ form.title.value|default:"" }}</textarea>
+    {% include "blog/parts/errors.html" with errors=form.title.errors id="id_title" %}
+    <div class="ed-status">{% include "blog/parts/status.html" %}<span data-words>{{ words }} word{{ words|pluralize }}</span><span>Saved {{ post.updated_at|date:"j M, H:i" }}</span></div>
+
+    <div class="ed-tabs" role="tablist" aria-label="Editor" hidden>
+      <button type="button" role="tab" aria-selected="true" data-tab="write">Write</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="preview">Preview</button>
+      <button type="button" role="tab" aria-selected="false" data-tab="details">Details</button>
+    </div>
+
+    <div class="ed-panes">
+      <section class="pane pane-write" data-pane="write" aria-labelledby="write-head">
+        <div class="pane-head"><h2 id="write-head">Markdown</h2>
+          <div class="toolbar" role="toolbar" aria-label="Format" hidden>
+            <button type="button" data-md="h2" aria-label="Heading">H</button>
+            <button type="button" data-md="bold" aria-label="Bold">B</button>
+            <button type="button" data-md="link" aria-label="Link"><svg class="icon" aria-hidden="true"><use href="#i-link"/></svg></button>
+            <button type="button" data-md="list" aria-label="List"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></button>
+            <button type="button" data-md="quote" aria-label="Quote"><svg class="icon" aria-hidden="true"><use href="#i-quote"/></svg></button>
+            <button type="button" data-md="image" aria-label="Picture"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></button>
+          </div>
+        </div>
+        <label class="sr" for="id_body">The post, in Markdown</label>
+        <textarea id="id_body" name="body" class="md" spellcheck="true" placeholder="Write the post. ## for a heading, **bold**, - for a list.">{{ form.body.value|default:"" }}</textarea>
+        <p class="md-help">## heading &middot; **bold** &middot; [words](https://...) &middot; - list &middot; &gt; quote &middot; | table |</p>
+      </section>
+      <section class="pane pane-preview" data-pane="preview" aria-labelledby="preview-head">
+        <div class="pane-head"><h2 id="preview-head">Preview</h2><span class="pane-note">As it will look on classnode.co</span></div>
+        <div class="preview"><div class="prose" id="preview" aria-live="polite">{{ preview|safe }}</div></div>
+      </section>
+    </div>
+    </fieldset>
+  </div>
+
+  <aside class="ed-side" data-pane="details" aria-label="Post details">
+    <section class="card ed-actions ed-actions-desk">
+      {% include "blog/parts/actions.html" %}
+    </section>
+
+    <fieldset class="ed-fields"{% if not may_edit %} disabled{% endif %}>
+    <legend class="sr">Details</legend>
+    <section class="card" aria-labelledby="cover-head">
+      <h2 id="cover-head">Cover picture</h2>
+      <div class="cover-box">
+        {% if post.cover %}{% cover post.cover post.cover_alt "340px" base=portal_images %}<p class="cover-meta"><span>{{ post.cover.width }} x {{ post.cover.height }}, WebP, {{ post.cover.bytes|filesizeformat }}</span></p>{% else %}<p class="cover-empty">No cover yet. It is also the picture shown when the post is shared.</p>{% endif %}
+        <div class="field"><label for="id_cover">{% if post.cover %}Replace the cover{% else %}Choose a cover{% endif %}</label><input id="id_cover" name="cover" type="file" accept="image/jpeg,image/png,image/webp"><span class="hint">JPG, PNG or WebP. Cut to 1200 x 630 and saved as WebP.</span>{% include "blog/parts/errors.html" with errors=form.cover.errors id="id_cover" %}</div>
+        <div class="field"><div class="field-top"><label for="id_cover_alt">Describe the cover</label><span class="counter" data-count="id_cover_alt" data-max="200"></span></div><input id="id_cover_alt" name="cover_alt" maxlength="200" value="{{ form.cover_alt.value|default:"" }}"><span class="hint">What it shows, for someone who cannot see it. Required.</span>{% include "blog/parts/errors.html" with errors=form.cover_alt.errors id="id_cover_alt" %}</div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="post-head">
+      <h2 id="post-head">Post</h2>
+      <div class="field"><label for="id_slug">Address</label>
+        <div class="slug-row"><span>/blog/</span><input id="id_slug" name="slug" maxlength="80" value="{{ form.slug.value|default:"" }}" placeholder="second-term-fees"{% if post.first_published_at %} readonly{% endif %} autocapitalize="none" spellcheck="false"></div>
+        <span class="hint">{% if post.first_published_at %}Fixed once published, so links keep working.{% else %}Lower-case words joined by hyphens.{% endif %}</span>
+        {% include "blog/parts/errors.html" with errors=form.slug.errors id="id_slug" %}</div>
+      <div class="field"><div class="field-top"><label for="id_summary">Summary</label><span class="counter" data-count="id_summary" data-max="200"></span></div><textarea id="id_summary" name="summary" rows="3" maxlength="200">{{ form.summary.value|default:"" }}</textarea><span class="hint">Shown on the blog list and under the title.</span>{% include "blog/parts/errors.html" with errors=form.summary.errors id="id_summary" %}</div>
+      <div class="field"><label for="id_tags">Tags</label><input id="id_tags" name="tags" maxlength="200" value="{{ form.tags.value|default:"" }}" placeholder="Fees, Bursars"><span class="hint">Up to five, separated by commas.</span>{% include "blog/parts/errors.html" with errors=form.tags.errors id="id_tags" %}</div>
+    </section>
+
+    <section class="card" aria-labelledby="seo-head">
+      <h2 id="seo-head">Search and sharing</h2>
+      <div class="field"><div class="field-top"><label for="id_seo_title">SEO title</label><span class="counter" data-count="id_seo_title" data-max="60"></span></div><input id="id_seo_title" name="seo_title" maxlength="60" value="{{ form.seo_title.value|default:"" }}">{% include "blog/parts/errors.html" with errors=form.seo_title.errors id="id_seo_title" %}</div>
+      <div class="field"><div class="field-top"><label for="id_seo_description">SEO description</label><span class="counter" data-count="id_seo_description" data-max="155"></span></div><textarea id="id_seo_description" name="seo_description" rows="4" maxlength="155">{{ form.seo_description.value|default:"" }}</textarea>{% include "blog/parts/errors.html" with errors=form.seo_description.errors id="id_seo_description" %}</div>
+      <div class="serp" aria-label="How it may look in a search result">
+        <p class="serp-url">classnode.co &rsaquo; blog &rsaquo; <span data-serp="slug">{{ post.slug }}</span></p>
+        <p class="serp-title" data-serp="title">{{ post.page_title|default:"SEO title" }}</p>
+        <p class="serp-desc" data-serp="description">{{ post.page_description|default:"SEO description" }}</p>
+      </div>
+    </section>
+    </fieldset>
+
+    {% if may_send_back %}<section class="card" aria-labelledby="back-head">
+      <h2 id="back-head">Send back to the writer</h2>
+      <div class="field"><label for="id_note">A note for {{ post.author.full_name }}</label><textarea id="id_note" name="note" rows="3" maxlength="2000" placeholder="What to change before it is published"></textarea></div>
+      <button type="submit" name="action" value="send_back" class="secondary send-back">Send back with this note</button>
+    </section>{% endif %}
+    {% if may_unpublish %}<section class="card" aria-labelledby="off-head">
+      <h2 id="off-head">Unpublish</h2>
+      <p class="quiet">Takes it off classnode.co and out of the sitemap at once, and back to Drafts.</p>
+      <button type="submit" name="action" value="unpublish" class="btn-stop">Unpublish</button>
+    </section>{% endif %}
+  </aside>
+
+  {% if may_edit or may_submit or may_publish %}<div class="ed-bottom" role="group" aria-label="Save">
+    {% include "blog/parts/actions.html" with bar=True %}
+  </div>{% endif %}
+</form>
+
+<dialog id="img-dialog" class="img-dialog" aria-labelledby="img-title">
+  <form method="dialog" id="img-form">
+    <h2 id="img-title">Add a picture</h2>
+    <div class="field"><label for="img-file">Picture</label><input id="img-file" type="file" accept="image/jpeg,image/png,image/webp" required></div>
+    <div class="field"><label for="img-alt">Describe the picture</label><input id="img-alt" maxlength="200" aria-describedby="img-alt-hint"><span class="hint" id="img-alt-hint">What it shows, for someone who cannot see it. Required.</span></div>
+    <p class="field-error" id="img-error" hidden><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg><span></span></p>
+    <p class="hint">Saved as WebP, at most 1600 pixels wide.</p>
+    <div class="dialog-actions"><button type="button" class="btn-quiet" data-close>Cancel</button><button type="submit" class="btn-primary" id="img-insert">Insert</button></div>
+  </form>
+</dialog>
+{% endblock %}
+{% block script %}<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" src="{% static 'write/app.js' %}"></script>{% endblock %}

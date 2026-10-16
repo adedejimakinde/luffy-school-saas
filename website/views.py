@@ -54,6 +54,11 @@ PAGES = {
         "The terms for schools using Classnode: what the service does, signing in, fees, "
         "the school's data, our responsibility and ending the service.",
     ),
+    "site-blog": (
+        "Blog: Classnode",
+        "Notes for principals, bursars and teachers on running a Nigerian secondary school: "
+        "results, fees, registers and the term in between.",
+    ),
 }
 
 #: The homepage's questions and answers, drawn on the page and given to search
@@ -90,8 +95,12 @@ def site_page(request, template, context=None, status=200):
     https, no query) and the site's address for the share image, and says it
     is `indexable`, which is what keeps `templates/design/head.html` from
     writing its noindex.
+
+    A page that is not one of `PAGES` (a blog post, the blog's later pages)
+    passes its own `title`, `description` and `canonical` in `context`, which
+    is read last.
     """
-    title, description = PAGES[request.resolver_match.url_name]
+    title, description = PAGES.get(request.resolver_match.url_name, ("", ""))
     return render(
         request,
         template,
@@ -253,10 +262,23 @@ def terms(request):
 
 @require_http_methods(["GET", "HEAD"])
 def sitemap(request):
-    """Every public page, `PAGES`, and nothing on any other host."""
+    """Every public page, `PAGES`, then every published blog post, and nothing on any other host.
+
+    A post is listed while it is published and not a moment longer: a draft, a
+    post in review and an unpublished one are never here (`blog.models.PostQuerySet.published`).
+    """
+    from blog.models import Post
+
+    posts = Post.objects.published().order_by("-published_at").only("slug", "updated_at")
     return render(
         request,
         "website/sitemap.xml",
-        {"urls": [site_url() + reverse(name) for name in PAGES]},
+        {
+            "urls": [site_url() + reverse(name) for name in PAGES],
+            "posts": [
+                (site_url() + reverse("blog-post", args=[post.slug]), post.updated_at)
+                for post in posts
+            ],
+        },
         content_type="application/xml; charset=utf-8",
     )

@@ -1,0 +1,48 @@
+{% extends "website/base.html" %}{% load blog_tags %}
+{% comment %}
+classnode.co/blog/: every published post, newest first, twelve to a page
+(`blog.views.index`). The newest leads on the first page. With none published
+yet it says the first posts are coming, and nothing else.
+{% endcomment %}
+{% block preload %}{% if lead_image %}<link rel="preload" as="image" href="/blog/images/{{ lead_image.key }}.webp" imagesrcset="/blog/images/{{ lead_image.key }}-small.webp {{ lead_image.small_width }}w, /blog/images/{{ lead_image.key }}.webp {{ lead_image.width }}w" imagesizes="(min-width: 768px) 58vw, 100vw" fetchpriority="high">{% endif %}{% endblock %}
+{% block main %}
+<div class="top-band blog-top"><div class="wrap">
+  <h1>Blog</h1>
+  <p>Notes for principals, bursars and teachers on running a Nigerian secondary school: results, fees, registers and the term in between.</p>
+</div></div>
+<div class="wrap blog-list">
+{% if not posts %}
+  <section class="blog-empty" aria-labelledby="empty-title">
+    <h2 id="empty-title">First posts coming soon</h2>
+    <p>We are writing the first notes now. Until then, see what Classnode does for a school.</p>
+    <a class="btn btn-outline" href="/#features">See the features</a>
+  </section>
+{% else %}
+{% with lead=posts.0 %}{% if page.number == 1 %}
+  <article class="post-lead">
+    {% cover lead.cover lead.cover_alt "(min-width: 768px) 58vw, 100vw" eager=True %}
+    <div>
+      {% if lead.tags %}<ul class="post-tags">{% for tag in lead.tags %}<li><span class="label label-brand">{{ tag }}</span></li>{% endfor %}</ul>{% endif %}
+      <h2><a href="/blog/{{ lead.slug }}/">{{ lead.title }}</a></h2>
+      <p class="summary">{{ lead.summary }}</p>
+      {% with post=lead %}{% include "blog/parts/meta.html" %}{% endwith %}
+    </div>
+  </article>
+  {% if posts|length > 1 %}<div class="list-head"><h2>More posts</h2></div>
+  <ul class="post-grid">
+{% for post in posts|slice:"1:" %}{% include "blog/parts/card.html" %}{% endfor %}
+  </ul>{% endif %}
+{% else %}
+  <h2 class="sr">Posts</h2>
+  <ul class="post-grid">
+{% for post in posts %}{% include "blog/parts/card.html" %}{% endfor %}
+  </ul>
+{% endif %}{% endwith %}
+  {% if paginator.num_pages > 1 %}<nav class="pager" aria-label="Pages">
+    {% if page.has_previous %}<a class="btn btn-outline" href="{% if page.previous_page_number == 1 %}/blog/{% else %}/blog/page/{{ page.previous_page_number }}/{% endif %}"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Newer posts</a>{% else %}<span></span>{% endif %}
+    <span class="quiet">Page {{ page.number }} of {{ paginator.num_pages }}</span>
+    {% if page.has_next %}<a class="btn btn-outline" href="/blog/page/{{ page.next_page_number }}/">Older posts<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>{% else %}<span></span>{% endif %}
+  </nav>{% endif %}
+{% endif %}
+</div>
+{% endblock %}
