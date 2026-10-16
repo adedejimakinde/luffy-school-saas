@@ -119,7 +119,7 @@ posts = [
 for (title, slug, tag, summary), picture in zip(posts, pictures):
     post = workflow.new_post(editor)
     workflow.save(editor, post, {"title": title, "slug": slug, "summary": summary, "tags": [tag],
-        "body": "## Why it matters\\n\\n" + summary + "\\n\\nA second paragraph with a very long address in it: https://classnode.co/blog/a-very-long-address-that-has-to-wrap-on-a-small-phone-screen/ and a table:\\n\\n| Class | Students | Collected | Outstanding | Last payment |\\n|---|---|---|---|---|\\n| JSS 1A | 45 | 1,200,000 | 300,000 | 14 Oct 2026 |\\n| JSS 1B | 44 | 1,150,000 | 350,000 | 13 Oct 2026 |\\n",
+        "body": "## Why it matters\\n\\n" + summary + "\\n\\nA second paragraph with a very long address in it: https://classnode.co/blog/a-very-long-address-that-has-to-wrap-on-a-small-phone-screen/ and a table:\\n\\n| Term | Students | Collected | Outstanding | Last payment |\\n|---|---|---|---|---|\\n| First term | 45 | 1,200,000 | 300,000 | 14 Oct 2026 |\\n| Second term | 44 | 1,150,000 | 350,000 | 13 Oct 2026 |\\n",
         "seo_title": title[:60], "seo_description": summary[:155], "cover_alt": "A picture for " + title})
     cover = images.store(post, Path(picture).read_bytes(), cover=True, by=editor)
     workflow.set_cover(editor, post, cover)
