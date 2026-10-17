@@ -1,3 +1,82 @@
+# Where I stopped: 2026-10-17, blog accounts on the live server
+
+How to make yourself the blog's editor and add a writer, on the live server. The blog itself is PR #272, merged as `c8cfde2b6a0f841c35179c33070abe27f0b90bc8`; `docs/blog.md` is its reference.
+
+**There is no invitation screen.** A blog account is made by the operator with one command on the server, `manage.py blog_account`. The person then signs in at `https://app.classnode.co/write/sign-in/` with their email address and a 6-digit code emailed to them. There is no password and no link to send.
+
+**Your own account cannot be the editor.** A blog account reaches the blog and nothing else, so an address that is platform staff (your `createsuperuser` account) or that belongs to anybody at a school is refused, by the command and by the database. Give the blog an address of its own. A `+blog` address works and lands in the same inbox: if you sign in as `name@gmail.com`, use `name+blog@gmail.com` for the blog.
+
+## Before the first account: two things must be true
+
+**1. The server is running the blog.** On the server, as `deploy`:
+
+```bash
+cd /opt/classnode && git merge-base --is-ancestor c8cfde2b6a0f841c35179c33070abe27f0b90bc8 "$(cat deploy/deployed-sha)" && echo "the blog is deployed"
+```
+
+If it prints nothing, deploy a commit on `main` at or after `c8cfde2`, with the deploy button (GitHub, Actions, `deploy`, Run workflow, the full 40-character SHA, as in `docs/deployment.md`). The deploy runs the blog's migrations itself.
+
+**2. The server can send email.** The sign-in code is emailed, so with no email provider nobody can sign in to the blog: the code is made, the provider is missing, and it is dropped (logged as `No email provider: blog code ... was not sent`). Day one set none up (`docs/first-day.md`, step 20). To set one up, add your mail server's details to `/etc/classnode/secrets.env` (as root; `deploy/env/secrets.env.example` has the names):
+
+```bash
+EMAIL_HOST=smtp.your-provider.example
+EMAIL_PORT=587
+EMAIL_USE_TLS=1
+EMAIL_HOST_USER=...
+EMAIL_HOST_PASSWORD=...
+DEFAULT_FROM_EMAIL=Classnode <no-reply@classnode.co>
+MESSAGING_EMAIL_PROVIDER=messaging.smtp.SmtpProvider
+```
+
+then, as `deploy`, recreate the two containers that read it (the worker is the one that sends the code):
+
+```bash
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
+docker compose up -d --force-recreate web worker
+docker compose ps    # web and worker both "running"
+```
+
+Setting up email also turns on the emails the rest of the platform already sends (staff invitations, codes to parents), which until now have only been printed or not sent. That is a decision about the whole platform, not only the blog.
+
+## Make yourself the editor
+
+On the server, as `deploy` (`su - deploy` from root), every time in a new login:
+
+```bash
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
+docker compose run --rm web python manage.py blog_account name+blog@gmail.com --name "Your Full Name" --role editor
+```
+
+**Confirm.** It prints `Your Full Name (name+blog@gmail.com) is now a blog editor.` Then open `https://app.classnode.co/write/sign-in/`, type that address, and type the code from the email. You land on Your posts, with Review queue in the top bar. An editor can also write: New post, then Publish.
+
+**If it refuses.** `... is platform staff ... use another address for it.` or `... belongs to somebody at a school ...`: the address is already a login. Use another one.
+
+## Add a writer
+
+Same place, their real email and name:
+
+```bash
+docker compose run --rm web python manage.py blog_account kemi@example.com --name "Kemi Oladipo" --role writer
+```
+
+**Confirm.** It prints `Kemi Oladipo (kemi@example.com) is now a blog writer.` Nothing is sent to them by this. Tell them yourself: "Go to https://app.classnode.co/write/sign-in/ and sign in with this email address; we will email you a code." Their posts reach you in the Review queue when they press Send for review.
+
+## Change or remove an account
+
+```bash
+# A writer becomes an editor, or the other way round: run it again with the other role.
+docker compose run --rm web python manage.py blog_account kemi@example.com --role editor
+
+# Stop someone signing in. Their posts stay, published ones included.
+docker compose run --rm web python manage.py blog_account kemi@example.com --remove
+```
+
+Removing makes the login inactive, so a code is never sent to it again; a session already open lasts until it expires (12 hours of no use). To bring them back, run the `--role` line again.
+
+**Verified (run here).** Every command above, against a local database: each success line and both refusals are the command's own words. **Not verified.** Nothing here has run on the live server; whether `c8cfde2` is deployed there, and whether any email provider is configured, could not be checked from here.
+
+---
+
 # Where I stopped: 2026-10-13, preparing the repository to go private
 
 The repository is **not yet private**: changing its visibility is yours to do, last, after the steps under "Only you" below. This change makes everything work once it is.
