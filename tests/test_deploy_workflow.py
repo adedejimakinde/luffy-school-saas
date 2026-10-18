@@ -15,6 +15,12 @@ Two kinds of test, because each fails to see what the other sees:
 * **Behaviour.** The step's script is lifted out of the workflow and run, as the
   server would run it, against a real repository with a real origin. A string
   match cannot tell a checkout that works from one that merely looks right.
+
+And a rollback is never silent (2026-10-18: two green runs deployed a week-old
+SHA pasted in place of the new one, and the run list named the new one). The run
+is named after its SHA, the checkout refuses a SHA older than `deployed-sha`
+unless `rollback` is ticked, and the last step reads `deployed-sha` back into
+the run's summary and fails when it is not the SHA asked for.
 """
 
 import os
@@ -34,6 +40,7 @@ SERVER_CHECKOUT = "/opt/classnode"
 STEP_CHECKOUT = "Check out the SHA on the server"
 STEP_DEPLOY = "Deploy over SSH"
 STEP_RESTORE = "Put the checkout back on what is running"
+STEP_READ_BACK = "Read back what is running"
 
 
 def steps():
@@ -55,6 +62,14 @@ def remote_script(step_name):
     if not match:
         raise AssertionError(f"step {step_name!r} sends no REMOTE script")
     return textwrap.dedent(match.group(1)) + "\n"
+
+
+def run_block(step_name):
+    """The bash a step runs on the runner: its `run: |` block, dedented."""
+    match = re.search(r"\n        run: \|\n(.*)", steps()[step_name], re.S)
+    if not match:
+        raise AssertionError(f"step {step_name!r} has no run block")
+    return textwrap.dedent(match.group(1)).rstrip() + "\n"
 
 
 class TheWorkflowChecksOutTheShaTests(SimpleTestCase):
@@ -123,6 +138,107 @@ class TheWorkflowChecksOutTheShaTests(SimpleTestCase):
         self.assertIn("id: checkout", steps()[STEP_CHECKOUT])
 
 
+class ARollbackIsNeverSilentTests(SimpleTestCase):
+    def test_the_run_is_named_after_the_sha_it_was_given(self):
+        """The run list showed main's head beside two runs that deployed
+        something else: GitHub names a dispatched run after its branch."""
+        (run_name,) = re.findall(r"(?m)^run-name: (.+)$", WORKFLOW.read_text())
+        self.assertIn("${{ inputs.sha }}", run_name)
+        self.assertIn("inputs.rollback", run_name)
+
+    def test_rollback_is_a_box_left_unticked(self):
+        text = WORKFLOW.read_text()
+        (block,) = re.findall(r"(?m)^      rollback:\n((?:        .*\n)+)", text)
+        self.assertIn("type: boolean", block)
+        self.assertIn("default: false", block)
+        self.assertIn("ROLLBACK: ${{ inputs.rollback }}", text)
+        self.assertIn('bash -s -- "$SHA" "$ROLLBACK"', steps()[STEP_CHECKOUT])
+
+    def test_the_check_comes_before_anything_moves(self):
+        """CONTROL 7: the comparison moved below `git checkout` makes this red."""
+        script = remote_script(STEP_CHECKOUT)
+        self.assertIn("deploy/deployed-sha", script)
+        self.assertLess(script.index('git merge-base --is-ancestor "$running" "$sha"'),
+                        script.index("git checkout"))
+
+    def test_the_read_back_comes_after_the_deploy_and_before_the_put_back(self):
+        order = list(steps())
+        self.assertLess(order.index(STEP_DEPLOY), order.index(STEP_READ_BACK))
+        self.assertLess(order.index(STEP_READ_BACK), order.index(STEP_RESTORE))
+        body = steps()[STEP_READ_BACK]
+        # Runs after a failed deploy too, to say what is serving instead; not
+        # before there is a key to log in with.
+        self.assertIn("!cancelled()", body)
+        self.assertIn("steps.ssh.outcome == 'success'", body)
+        self.assertIn("id: ssh", steps()["Set up SSH"])
+        self.assertNotIn("continue-on-error", body)
+
+
+class TheReadBackWorksTests(SimpleTestCase):
+    """The step's own script, run with an `ssh` that runs the remote command
+    here, against a `deployed-sha` in a temporary directory."""
+
+    SHA = "b4396458769f0029a786c9a9c6c1635fa338a789"
+    OLD = "d895d50ab55c2d1b43a12f996966fd08957a909c"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.server = root / "server"
+        (self.server / "deploy").mkdir(parents=True)
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        fake_ssh = bin_dir / "ssh"
+        fake_ssh.write_text(
+            "#!/usr/bin/env bash\n"
+            f'exec bash -c "$(printf %s "${{@: -1}}" | sed "s#{SERVER_CHECKOUT}#{self.server}#g")"\n'
+        )
+        fake_ssh.chmod(0o755)
+        self.summary = root / "summary.md"
+        self.env = {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "HOME": str(root),
+            "SHA": self.SHA,
+            "ROLLBACK": "false",
+            "DEPLOY_HOST": "server.example.test",
+            "GITHUB_STEP_SUMMARY": str(self.summary),
+        }
+
+    def read_back(self, deployed):
+        if deployed is not None:
+            (self.server / "deploy" / "deployed-sha").write_text(deployed + "\n")
+        return subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", run_block(STEP_READ_BACK)],
+            env=self.env, capture_output=True, text=True,
+        )
+
+    def test_the_sha_asked_for_is_running_green_and_in_the_summary(self):
+        result = self.read_back(self.SHA)
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        summary = self.summary.read_text()
+        self.assertIn(f"| Asked for | `{self.SHA}` |", summary)
+        self.assertIn(f"| Running now (`deploy/deployed-sha`) | `{self.SHA}` |", summary)
+        self.assertIn("| Rollback ticked | false |", summary)
+
+    def test_another_sha_running_is_red_and_named(self):
+        """What happened on 2026-10-18, read back.
+
+        CONTROL 8: the comparison's `exit 1` removed makes this red."""
+        result = self.read_back(self.OLD)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"The server is running {self.OLD}, not {self.SHA}.", result.stdout)
+        self.assertIn(f"| Running now (`deploy/deployed-sha`) | `{self.OLD}` |", self.summary.read_text())
+
+    def test_nothing_recorded_is_red(self):
+        result = self.read_back(None)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("| Running now (`deploy/deployed-sha`) | `nothing` |", self.summary.read_text())
+
+
 class TheCheckoutStepWorksAgainstARealRepositoryTests(SimpleTestCase):
     """The step's own script, run as the server would run it, with
     `/opt/classnode` pointed at a clone in a temporary directory."""
@@ -174,6 +290,10 @@ class TheCheckoutStepWorksAgainstARealRepositoryTests(SimpleTestCase):
     def head(self):
         return self.git("rev-parse", "HEAD", cwd=self.server)
 
+    def record(self, sha):
+        """What `deploy.sh` writes after a deploy that went green."""
+        (self.server / "deploy" / "deployed-sha").write_text(sha + "\n")
+
     def run_remote(self, step_name, *args):
         script = remote_script(step_name).replace(SERVER_CHECKOUT, str(self.server))
         return subprocess.run(
@@ -218,6 +338,64 @@ class TheCheckoutStepWorksAgainstARealRepositoryTests(SimpleTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.head(), self.v1)
+
+    def test_an_older_sha_than_the_one_running_is_refused_and_moves_nothing(self):
+        """The 2026-10-18 deploy: a week-old SHA pasted in place of the new one.
+
+        CONTROL 9: the refusal's `exit 1` removed makes this red."""
+        self.assertEqual(self.run_remote(STEP_CHECKOUT, self.v2).returncode, 0)
+        self.record(self.v2)
+
+        result = self.run_remote(STEP_CHECKOUT, self.v1)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(f"{self.v2} is running and {self.v1} is not newer", result.stderr)
+        self.assertIn("rollback", result.stderr)
+        self.assertEqual(self.head(), self.v2)
+
+    def test_unticked_is_the_same_as_leaving_it_out(self):
+        self.assertEqual(self.run_remote(STEP_CHECKOUT, self.v2).returncode, 0)
+        self.record(self.v2)
+
+        result = self.run_remote(STEP_CHECKOUT, self.v1, "false")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.head(), self.v2)
+
+    def test_ticked_it_goes_back_and_says_so(self):
+        self.assertEqual(self.run_remote(STEP_CHECKOUT, self.v2).returncode, 0)
+        self.record(self.v2)
+
+        result = self.run_remote(STEP_CHECKOUT, self.v1, "true")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(f"Rolling back from {self.v2} to {self.v1}", result.stdout)
+        self.assertEqual(self.head(), self.v1)
+
+    def test_a_newer_sha_and_the_same_sha_need_no_box(self):
+        self.record(self.v1)
+        self.assertEqual(self.run_remote(STEP_CHECKOUT, self.v2).returncode, 0)
+        self.assertEqual(self.head(), self.v2)
+        self.record(self.v2)
+
+        result = self.run_remote(STEP_CHECKOUT, self.v2)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("Rolling back", result.stdout)
+        self.assertEqual(self.head(), self.v2)
+
+    def test_a_running_sha_git_cannot_place_needs_the_box(self):
+        """A `deployed-sha` that is not in the history (a hand edit, a rewritten
+        main) cannot be shown to be older or newer: ask, rather than guess."""
+        self.record("f" * 40)
+
+        refused = self.run_remote(STEP_CHECKOUT, self.v2)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertEqual(self.head(), self.v1)
+
+        result = self.run_remote(STEP_CHECKOUT, self.v2, "true")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.head(), self.v2)
 
     def test_running_it_twice_changes_nothing(self):
         self.assertEqual(self.run_remote(STEP_CHECKOUT, self.v2).returncode, 0)

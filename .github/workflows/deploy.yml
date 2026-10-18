@@ -15,6 +15,15 @@ name: deploy
 # an older commit would deploy new images with old orchestration.
 # tests/test_deploy_workflow.py pins this, and runs the step against a real
 # repository.
+#
+# **A rollback is never silent** (decided 2026-10-18, after two runs deployed a
+# week-old SHA pasted in place of the new one and went green). The run is named
+# after the SHA it was given, not the branch it ran from; it refuses a SHA that
+# is not a descendant of the one running (`deploy/deployed-sha`) unless
+# `rollback` is ticked; and it ends by reading `deployed-sha` back, writing it to
+# the run's summary and failing if it is not the SHA it was given.
+
+run-name: deploy ${{ inputs.sha }}${{ inputs.rollback && ' (rollback)' || '' }}
 
 on:
   workflow_dispatch:
@@ -22,6 +31,10 @@ on:
       sha:
         description: Full 40-character commit SHA on main whose CI passed
         required: true
+      rollback:
+        description: Tick only to go back to a commit older than the one running
+        type: boolean
+        default: false
 
 # One deploy at a time, and a second never cancels a first mid-migration.
 concurrency:
@@ -41,6 +54,7 @@ jobs:
         shell: bash
     env:
       SHA: ${{ inputs.sha }}
+      ROLLBACK: ${{ inputs.rollback }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +91,7 @@ jobs:
           fi
 
       - name: Set up SSH
+        id: ssh
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
@@ -91,14 +106,20 @@ jobs:
       # moved to since. It refuses a checkout with local edits (a hand-edited
       # compose.yml would otherwise survive the checkout and be deployed), and
       # it asks git afterwards rather than trusting the command that just ran.
+      #
+      # Before it moves anything, it compares the SHA with the one running: a
+      # SHA that does not contain `deployed-sha` (an older commit, or one git
+      # cannot place) goes back in time, and is refused unless `rollback` is
+      # ticked. With nothing deployed yet there is nothing to compare.
       - name: Check out the SHA on the server
         id: checkout
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
-          ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" bash -s -- "$SHA" <<'REMOTE'
+          ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" bash -s -- "$SHA" "$ROLLBACK" <<'REMOTE'
           set -euo pipefail
           sha=$1
+          rollback=${2:-false}
           cd /opt/classnode
           if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
             echo "The server's checkout has local changes; refusing to deploy over them:" >&2
@@ -106,6 +127,15 @@ jobs:
             exit 1
           fi
           git fetch --quiet origin main
+          running=$(cat deploy/deployed-sha 2>/dev/null || true)
+          if [ -n "$running" ] && ! git merge-base --is-ancestor "$running" "$sha" 2>/dev/null; then
+            if [ "$rollback" != "true" ]; then
+              echo "Refusing to go back: $running is running and $sha is not newer than it." >&2
+              echo "Check the SHA you pasted. To roll back on purpose, run again with 'rollback' ticked." >&2
+              exit 1
+            fi
+            echo "Rolling back from $running to $sha, as asked"
+          fi
           git checkout --quiet --detach "$sha"
           if [ "$(git rev-parse HEAD)" != "$sha" ]; then
             echo "The server's checkout is not at $sha." >&2
@@ -119,6 +149,31 @@ jobs:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
         run: |
           ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" "/opt/classnode/deploy/deploy.sh $SHA"
+
+      # What the server says it is running, read back rather than assumed: the
+      # run's summary names it, and a run that did not end on the SHA it was
+      # given is red. After a failed deploy it still runs, to say what is
+      # serving instead.
+      - name: Read back what is running
+        if: ${{ !cancelled() && steps.ssh.outcome == 'success' }}
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          deployed=$(ssh -i ~/.ssh/deploy_key "deploy@$DEPLOY_HOST" "cd /opt/classnode/deploy && cat deployed-sha 2>/dev/null || true")
+          {
+            echo "### Deploy"
+            echo ""
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Asked for | \`$SHA\` |"
+            echo "| Rollback ticked | $ROLLBACK |"
+            echo "| Running now (\`deploy/deployed-sha\`) | \`${deployed:-nothing}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$deployed" != "$SHA" ]; then
+            echo "::error::The server is running ${deployed:-nothing}, not $SHA."
+            exit 1
+          fi
+          echo "The server is running $SHA"
 
       # A deploy that fails leaves the old images running (deploy.sh puts them
       # back, or never swapped them), and `deployed-sha` still names them. Put the
