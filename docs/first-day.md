@@ -589,24 +589,37 @@ Never do that once a real school exists.
 **What it does.** Proves the button works, while no school is waiting on it.
 
 GitHub, **Actions**, **deploy** (left list), **Run workflow**, paste the **same**
-SHA, Run. If you set reviewers on `production`, approve. It checks the SHA is on
-`main` and passed CI, logs in with the deploy key, moves the server's copy of the
-project to that exact SHA (`git fetch`, then `git checkout`, so the deploy files
-are the release's own and not an older commit's), and runs `deploy.sh` from it.
-Redeploying the same commit changes nothing. This is how every later release goes;
-the by-hand `git checkout` in step 15 was needed only because the button did not
-exist yet.
+SHA, leave **rollback** unticked, Run. If you set reviewers on `production`,
+approve. It checks the SHA is on `main` and passed CI, logs in with the deploy key,
+checks the SHA is not older than the one running (`deployed-sha`), moves the
+server's copy of the project to that exact SHA (`git fetch`, then `git checkout`,
+so the deploy files are the release's own and not an older commit's), runs
+`deploy.sh` from it, and reads `deployed-sha` back. Redeploying the same commit
+changes nothing. This is how every later release goes; the by-hand `git checkout`
+in step 15 was needed only because the button did not exist yet.
 
-**Confirm.** The run goes green. Its step "Check out the SHA on the server" prints
-`Server checkout is at <your sha>`, and its last step prints `DEPLOYED <sha>`. Now you
-may delete the key file from your PC (GitHub has its copy):
+**Confirm.** The run goes green, and the run list names it `deploy <your sha>`
+(the SHA you pasted, not the newest commit on `main`; check the two match). Open
+the run: its summary shows **Asked for** and **Running now**, and both are your
+SHA. Its step "Check out the SHA on the server" prints `Server checkout is at <your
+sha>`. Now you may delete the key file from your PC (GitHub has its copy):
 `Remove-Item "$env:USERPROFILE\.ssh\classnode_deploy"` (keep the `.pub` if you wish).
+
+**The rollback box.** Leave it unticked for every normal release. The button
+refuses a SHA older than the one running ("Refusing to go back: ... is running and
+... is not newer than it"): that almost always means the wrong SHA was pasted, so
+copy it again from **Commits** (step 14). Tick **rollback** only when you mean to go
+back to an earlier release, for example after a release that misbehaves; the run is
+then named `deploy <sha> (rollback)` and its log says `Rolling back from <running>
+to <sha>`. A rollback puts back the older code, not the database: migrations stay
+(`docs/deployment.md`, "Deploying").
 
 **Undo.** Nothing changed. If it fails at "Check out the SHA on the server", the log
 says why: usually someone edited a file in `/opt/classnode` by hand, and the button
 refuses to deploy over it (look with `su - deploy -c 'git -C /opt/classnode status'`).
 If it fails at "Deploy over SSH", the cause is one of the three secrets or step 7's
-test; fix and run again. A deploy that fails puts the server's copy back on the
+test; fix and run again. If it fails at "Read back what is running", the summary
+shows which SHA the server is running instead; that is the one serving. A deploy that fails puts the server's copy back on the
 commit that is still running, so the files always match what is serving.
 
 Deploy outside school hours: the website restarts for a few seconds.

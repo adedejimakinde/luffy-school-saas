@@ -99,6 +99,13 @@ validates the compose file. It pushes from `main` only, and nothing deploys a
    `compose.yml` and `deploy.sh` are the release's own, and runs
    `/opt/classnode/deploy/deploy.sh <sha>` on the server over SSH. If the deploy
    fails it puts the checkout back on `deployed-sha`, the commit still running.
+   **A rollback is never silent:** the run is named `deploy <sha>`; before the
+   checkout moves, a SHA that does not contain the one in `deployed-sha` (an
+   older commit, or one git cannot place) is refused unless the **rollback**
+   box is ticked; and the last step reads `deployed-sha` back, puts the SHA
+   asked for and the SHA running in the run's summary, and fails the run when
+   they differ. Decided 2026-10-18, after two green runs deployed a week-old SHA
+   (`docs/handover.md`).
 3. `deploy.sh` pulls the two images, migrates with the new image while the old
    one serves, swaps `web`, `worker` and `caddy`, and asks `/healthz/` inside
    the container and then through Caddy over HTTPS. Unhealthy: it puts the

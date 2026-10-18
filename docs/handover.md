@@ -1,3 +1,21 @@
+# Where I stopped: 2026-10-18, the deploy that went backwards, and the rollback box
+
+**What happened.** Deploys #12 and #13 were both started with `d895d50ab55c2d1b43a12f996966fd08957a909c` in the SHA box: PR #268, 12 October. Both went green, and production went back past #269 to #274: the browser-test split, the public site's SEO, the blog and its accounts, and the favicon. The run list showed `b4396458…` beside both runs, because GitHub names a dispatched run after its branch's newest commit, not after what it was given. The blog's migration stayed in the database; the older code does not read it, so nothing was lost.
+
+**To put production right**, if it has not been done: run the deploy button with `b4396458769f0029a786c9a9c6c1635fa338a789` (#274) or any later green commit on `main`, rollback unticked. Then, on the server, `cat /opt/classnode/deploy/deployed-sha` prints that SHA, and https://classnode.co/favicon.ico shows the blue mark.
+
+**What changed in the button** (`.github/workflows/deploy.yml`, `docs/deployment.md` "Deploying", `docs/first-day.md` step 16):
+
+- The run is named `deploy <sha>`, and `deploy <sha> (rollback)` when the box is ticked.
+- A **rollback** box, unticked by default. Before the server's checkout moves, the SHA is compared with `deployed-sha`: one that does not contain the running SHA (older, or one git cannot place, such as a hand-edited `deployed-sha`) is refused with "Refusing to go back: … is running and … is not newer than it". Ticked, it goes back and says `Rolling back from … to …`. The first deploy, with nothing recorded, passes.
+- A last step, *Read back what is running*, reads `deployed-sha` over SSH, writes **Asked for**, **Rollback ticked** and **Running now** to the run's summary, and fails the run if the SHA running is not the one asked for. It runs after a failed deploy too, to say what is serving instead.
+
+**Rolling back on purpose** is the same button with the box ticked: paste the older release's SHA (the run list now names each deploy's SHA; or **Commits**), tick **rollback**, Run. Images go back; migrations do not.
+
+**Test.** `tests/test_deploy_workflow.py`: the run-name, the input, the comparison before `git checkout`, the step order, and the scripts run for real (the checkout against a real origin with `deployed-sha` in place: older refused and nothing moved, unticked the same as left out, ticked goes back, newer and the same SHA need no box, an unknown running SHA needs the box; the read-back with an `ssh` that runs the command locally: match green and in the summary, another SHA red and named, nothing recorded red). **Controls run (broken, seen red, restored):** the refusal's `exit 1`, the read-back's `exit 1`, the comparison moved below the checkout, `run-name` deleted.
+
+**Not verified.** The new steps have not run against the real server; the first real run is the next deploy. GitHub's rendering of `run-name` and the summary table is as documented, not seen.
+
 # Where I stopped: 2026-10-17, blog accounts on the live server
 
 How to make yourself the blog's editor and add a writer, on the live server. The blog itself is PR #272, merged as `c8cfde2b6a0f841c35179c33070abe27f0b90bc8`; `docs/blog.md` is its reference.
