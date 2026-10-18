@@ -38,6 +38,7 @@ from accounts.models import Role, User
 from accounts.services import grant_membership
 from schools.models import Domain, School
 from schools.tests.tenants import make_school
+from website.crawlers import ICONS
 
 STATIC = Path(settings.BASE_DIR) / "static"
 
@@ -236,7 +237,11 @@ class NoCdnAndNoFrameworkTests(SpeedBudgetSetUp):
             with self.subTest(host=host, page=path):
                 for url in _ASSET.findall(html):
                     self.assertNotRegex(url, _EXTERNAL, "an asset from another host")
-                    self.assertTrue(url.startswith(settings.STATIC_URL), url)
+                    # The icons are the one exception, and still this host's:
+                    # fixed names at its root (`website.crawlers.ICONS`), fetched
+                    # after the page has drawn, so not in its weight either.
+                    if url not in ICONS:
+                        self.assertTrue(url.startswith(settings.STATIC_URL), url)
 
     def test_every_script_is_a_module_or_the_map_that_resolves_them(self):
         for host, path, user in self.pages():

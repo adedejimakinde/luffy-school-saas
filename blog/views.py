@@ -13,12 +13,11 @@ on the portal's `/write/` and is never named by a page here.
 
 from django.core.paginator import EmptyPage, Paginator
 from django.http import Http404, HttpResponse
-from django.templatetags.static import static
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 
 from website.crawlers import site_url
-from website.views import _json_ld, site_page
+from website.views import _json_ld, logo, site_page
 
 from .models import BlogImage, Post
 
@@ -88,12 +87,7 @@ def _article(post, canonical, image_url):
             "@type": "Organization",
             "@id": f"{site}/#organization",
             "name": "Classnode Edtech Limited",
-            "logo": {
-                "@type": "ImageObject",
-                "url": site + static("website/logo.png"),
-                "width": 512,
-                "height": 512,
-            },
+            "logo": logo(site),
         },
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical},
         "keywords": ", ".join(post.tags),

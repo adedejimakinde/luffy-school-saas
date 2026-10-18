@@ -19,7 +19,6 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import transaction
 from django.shortcuts import redirect, render
-from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -34,15 +33,20 @@ from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
 
+#: The price as the page prints it, comma and all. Structured data's `price`
+#: stays the bare number schema.org asks for; every sentence carries this.
+PRICE = "₦2,500 per student, per term. No setup fee."
+
 #: Each public page's title and description, by route name, in the order the
-#: sitemap lists them. Every title is the page's own and under 60 characters,
-#: but the homepage's, which is the owner's words; every description is under
-#: 155. A page added to `urls_site.py` is added here too, or its tests say so.
+#: sitemap lists them. Every title is the page's own, starts or ends with the
+#: name, and is 60 characters or fewer, so a search result shows all of it; every
+#: description is under 155. A page added to `urls_site.py` is added here too,
+#: or its tests say so.
 PAGES = {
     "site-home": (
-        "Classnode: School management software for Nigerian secondary schools",
+        "Classnode: School software for Nigerian schools",
         "Results, report cards, fees and registers for Nigerian secondary schools, in one "
-        "place. ₦2,500 per student, per term. No setup fee.",
+        "place. " + PRICE,
     ),
     "site-privacy": (
         "Privacy notice: Classnode",
@@ -117,6 +121,17 @@ def site_page(request, template, context=None, status=200):
     )
 
 
+#: The logo search engines are given, a 512 x 512 PNG of the header's mark at
+#: a fixed address on the site (`WHITENOISE_ROOT` in settings.py), never a
+#: hashed static name that moves when the file is collected again.
+LOGO = "/icon-512.png"
+
+
+def logo(site):
+    """The Organization's `logo`, at `site`'s address."""
+    return {"@type": "ImageObject", "url": site + LOGO, "width": 512, "height": 512}
+
+
 def _json_ld(data):
     """`data` as JSON safe to put inside a `<script>` element."""
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
@@ -140,12 +155,7 @@ def structured_data():
                 "name": "Classnode Edtech Limited",
                 "alternateName": "Classnode",
                 "url": f"{site}/",
-                "logo": {
-                    "@type": "ImageObject",
-                    "url": site + static("website/logo.png"),
-                    "width": 512,
-                    "height": 512,
-                },
+                "logo": logo(site),
                 "email": "hello@classnode.co",
             },
             {
@@ -155,13 +165,14 @@ def structured_data():
                 "applicationCategory": "EducationalApplication",
                 "operatingSystem": "Web browser",
                 "description": "School management software for Nigerian secondary schools: "
-                               "results and report cards, fees and registers in one place.",
+                               "results and report cards, fees and registers in one place. "
+                               + PRICE,
                 "publisher": {"@id": organization},
                 "offers": {
                     "@type": "Offer",
                     "price": "2500",
                     "priceCurrency": "NGN",
-                    "description": "Per student, per term. No setup fee.",
+                    "description": PRICE,
                     "priceSpecification": {
                         "@type": "UnitPriceSpecification",
                         "price": "2500",
