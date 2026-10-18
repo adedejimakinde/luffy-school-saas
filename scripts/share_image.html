@@ -1,12 +1,13 @@
 <!doctype html>
 <!--
-The public site's two pictures for other sites, drawn here and photographed
-with Chromium. Neither is shown on the site itself.
+The public site's picture for other sites, drawn here and photographed with
+Chromium. It is not shown on the site itself.
 
   static/website/share.png  1200 x 630, the card WhatsApp, LinkedIn and X draw
                             under a shared link (og:image, twitter:image).
-  static/website/logo.png   512 x 512, the logo search engines are given in
-                            the Organization structured data.
+
+The logo in the Organization structured data is `webroot/icon-512.png`, which
+`scripts/favicons.py` draws.
 
 From the repository root, with Chromium's headless shell (Playwright's
 `chromium_headless_shell`; `chrome --headless` draws a shorter page than the
@@ -15,9 +16,6 @@ window it is given):
   headless_shell --hide-scrollbars --force-device-scale-factor=1 \
     --window-size=1200,630 --screenshot=static/website/share.png \
     "file://$PWD/scripts/share_image.html"
-  headless_shell --hide-scrollbars --force-device-scale-factor=1 \
-    --window-size=512,512 --screenshot=static/website/logo.png \
-    "file://$PWD/scripts/share_image.html#logo"
 
 The blue is One Blue (`--brand` in static/web/design.css), the mark is
 `i-brand-mark` (templates/design/icons.html) and the type is the site's own.
@@ -37,10 +35,6 @@ body { width: 1200px; height: 630px; overflow: hidden; font-family: "Hanken Grot
 h1 { margin: 0; max-width: 15em; font-size: 68px; line-height: 1.08; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
 p { margin: 0; font-size: 34px; opacity: 0.86; }
 .net { position: absolute; right: -90px; top: -110px; width: 520px; height: 455px; opacity: 0.5; }
-body.only-logo { width: 512px; height: 512px; display: grid; place-items: center; background: var(--card); }
-body.only-logo .card { display: none; }
-body.only-logo .mark { display: block; width: 448px; height: 448px; color: var(--brand); }
-.mark { display: none; }
 </style>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <symbol id="m" viewBox="0 0 24 24">
@@ -52,7 +46,6 @@ body.only-logo .mark { display: block; width: 448px; height: 448px; color: var(-
   </symbol>
 </svg>
 <body>
-<svg class="mark" style="--dot: var(--card)"><use href="#m"/></svg>
 <div class="card">
   <svg class="net" viewBox="0 0 640 560" aria-hidden="true">
     <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-opacity=".35" stroke-linejoin="round"><path d="M90 120L300 80L210 260ZM300 80L520 150L430 330L210 260M300 80L430 330M210 260L150 450L360 500L430 330L600 430L360 500"/></g>
@@ -62,6 +55,5 @@ body.only-logo .mark { display: block; width: 448px; height: 448px; color: var(-
   <h1>School management software for Nigerian secondary schools</h1>
   <p>Results, fees and registers in one place.</p>
 </div>
-<script>if (location.hash === "#logo") document.body.className = "only-logo";</script>
 </body>
 </html>

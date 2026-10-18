@@ -268,17 +268,33 @@ The site is the only thing on the platform a search engine is asked to index.
   it itself. `/healthz/` answers above all of this and marks itself.
 - **robots.txt** is answered on every host by the same middleware: on the site
   it allows everything and names `/sitemap.xml`; on every other host it
-  disallows everything.
+  disallows everything but the icons below.
+- **The icon beside a search result** (Google showed a grey globe before, 18
+  October 2026) is the header's mark, white nodes on a One Blue rounded
+  square, drawn by `scripts/favicons.py` into `webroot/`: `/favicon.ico` (16,
+  32 and 48 inside), `/favicon.svg`, `/apple-touch-icon.png` (180, square to
+  the edge for iOS to round), and `/icon-192.png` and `/icon-512.png` named in
+  `/site.webmanifest`. WhiteNoise serves that directory at the root of every
+  host (`WHITENOISE_ROOT`), above the tenant middleware, so each is a 200 with
+  its image type on the site, the portal and every school, never a redirect;
+  the addresses are fixed, not hashed. `templates/design/head.html` names them
+  on every page.
 - **Each page's own title and description** are `website.views.PAGES` (a blog
-  post's are its own SEO title and description): under
-  60 and 155 characters, but the homepage's title, which is the owner's words
-  (68 characters). The sitemap lists the same pages, and each names its own
-  canonical address, `https://` and the bare domain with no query.
+  post's are its own SEO title and description): titles 60 characters or
+  fewer, so a result shows them whole, descriptions under 155. The homepage's
+  is "Classnode: School software for Nigerian schools", the name first (the
+  owner's, 18 October 2026; the one before, 68 characters, was cut off). The
+  sitemap lists the same pages, and each names its own canonical address,
+  `https://` and the bare domain with no query.
+- **The price is written ₦2,500**, with its comma, in the description, the
+  share card's and the structured data's words (`website.views.PRICE`), as the
+  page writes it. The structured data's `price` field stays `2500`: schema.org
+  asks for a bare number there, and a comma would read as a decimal point.
 - **Structured data, on the homepage and each blog post only.** On a post it
   is an Article (`docs/blog.md`). On the homepage: Organization (Classnode Edtech
-  Limited, `static/website/logo.png`, `hello@classnode.co`, no address),
-  SoftwareApplication (EducationalApplication, ₦2,500 per student per term)
-  and FAQPage. The FAQ on the page and in the data are drawn from one list,
+  Limited, its logo `https://classnode.co/icon-512.png`, `hello@classnode.co`,
+  no address), SoftwareApplication (EducationalApplication, ₦2,500 per student
+  per term) and FAQPage. The FAQ on the page and in the data are drawn from one list,
   `website.views.FAQ`. No ratings and no reviews: there are none to stand
   behind.
 - **The share card.** Open Graph and a large Twitter card on every page, with
@@ -313,6 +329,7 @@ The site is the only thing on the platform a search engine is asked to index.
 - `website/tests/test_seo.py`: noindex in the header and the page on a school's
   host and the portal and not on the site, robots.txt on each, the sitemap,
   canonical addresses and the one-hop redirects, titles and descriptions, the
+  price's comma, the icons on every host and in every page's head, the
   share card and its image, the structured data against the visible FAQ, one
   h1 with no skipped heading, every image described and every public page
   linked from every other.

@@ -12,7 +12,15 @@ Every page that draws from here asks search engines to leave it alone, unless
 its view says it is the public site's (`indexable`, which only `website.views`
 sets). Default deny, so a new staff page cannot be indexed by forgetting:
 `website/crawlers.py` sends the same as a header on every host but the site's.
+
+The icons are the header's mark (`scripts/favicons.py`), at fixed addresses at
+the root of whichever host drew the page (`WHITENOISE_ROOT` in settings.py):
+the public site, the portal and every school.
 {% endcomment %}
 {% if not indexable %}<meta name="robots" content="noindex, nofollow">
-{% endif %}<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
+{% endif %}<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'web/design.css' %}">

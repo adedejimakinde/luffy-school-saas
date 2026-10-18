@@ -9,7 +9,8 @@ from the site host, and every page drawn from `templates/design/head.html`
 carries the same in a meta tag unless its view says it is the public site's.
 
 This middleware also answers `/robots.txt` for every host (the site's points to
-its sitemap; every other host disallows everything), and sends `www.` on the
+its sitemap; every other host disallows everything but its icons, `ICONS`,
+which are Classnode's mark and nobody's school), and sends `www.` on the
 site host to the bare domain over https in one hop. It sits near the top of
 the stack, under `/healthz/` alone, so it sees every response, the 404 of a
 host nobody owns included, and `schools.health` marks its own answers.
@@ -22,8 +23,22 @@ from django.http.request import split_domain_port
 
 NOINDEX = "noindex, nofollow"
 
+#: The files every host serves at its root (`WHITENOISE_ROOT` in settings.py),
+#: which a search engine fetches for the icon beside a result.
+ICONS = (
+    "/favicon.ico",
+    "/favicon.svg",
+    "/apple-touch-icon.png",
+    "/icon-192.png",
+    "/icon-512.png",
+    "/site.webmanifest",
+)
+
 SITE_ROBOTS = "User-agent: *\nAllow: /\n\nSitemap: {site_url}/sitemap.xml\n"
-CLOSED_ROBOTS = "User-agent: *\nDisallow: /\n"
+#: The allowances first: a crawler that takes the first matching line, as
+#: Python's own `urllib.robotparser` does, then agrees with one that takes the
+#: longest, as Google does.
+CLOSED_ROBOTS = "User-agent: *\n" + "".join(f"Allow: {path}\n" for path in ICONS) + "Disallow: /\n"
 
 
 def site_url():
@@ -62,4 +77,4 @@ class CrawlerMiddleware:
         return response
 
 
-__all__ = ["CrawlerMiddleware", "NOINDEX", "site_url"]
+__all__ = ["CLOSED_ROBOTS", "ICONS", "CrawlerMiddleware", "NOINDEX", "site_url"]

@@ -926,6 +926,17 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # `static/card/`, `static/signin/`, `static/index/` for each page's own.
 # `STATICFILES_DIRS` is what makes that tree visible to the finders.
 STATICFILES_DIRS = [BASE_DIR / "static"]
+
+# The few files a browser or a search engine asks for by a fixed name at the
+# root of a host, whatever the page says: `/favicon.ico`, `/favicon.svg`,
+# `/apple-touch-icon.png`, `/site.webmanifest` and the manifest's two icons
+# (`scripts/favicons.py` draws them). WhiteNoise serves them as they are, at
+# that one address, on every host, and before any tenant is resolved, so the
+# public site, the portal and every school answer each with a 200 and the
+# file, never a redirect and never a 404. Not hashed, so their addresses stay
+# put; a minute's cache, WhiteNoise's own for files that are not.
+WHITENOISE_ROOT = BASE_DIR / "webroot"
+WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
 #
 # ## The hashed manifest, and why it is off in development
 #
