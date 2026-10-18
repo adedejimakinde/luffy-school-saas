@@ -19,7 +19,9 @@ jobs:
   # does can make another pass.
   shard:
     name: tests ${{ matrix.shard }}/4
-    runs-on: ubuntu-latest
+    # Pinned to the server's release, Ubuntu 24.04, not ubuntu-latest, which
+    # moves to Ubuntu 26.04 on 19 October 2026. The same pin is on every job.
+    runs-on: ubuntu-24.04
 
     strategy:
       # All four run to the end even when one fails, so a red run shows every
@@ -105,9 +107,9 @@ jobs:
       LUFFY_CLASS_SECONDS: 1
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
@@ -186,7 +188,7 @@ jobs:
       # A refusal is the path nobody demos — a withheld card, a lapsed session,
       # a wrong link — which is exactly why they are tested here rather than
       # eyeballed once.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: matrix.shard == 1
         with:
           node-version: '22'
@@ -236,7 +238,7 @@ jobs:
     name: test
     needs: [shard, screens]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: All four jobs and the screens passed
         env:
@@ -266,7 +268,7 @@ jobs:
   # domain so the session cookie is scoped to a domain Chromium accepts, which
   # `localhost` is not.
   screens:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         shell: bash
@@ -296,9 +298,9 @@ jobs:
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
       SCREENS_OUT: screens
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
           cache: pip
@@ -333,7 +335,7 @@ jobs:
           cat "$RUNNER_TEMP/server.log"
           exit 1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
 
@@ -349,7 +351,7 @@ jobs:
 
       - name: The screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: screens
           path: screens/
@@ -375,7 +377,7 @@ jobs:
   # Docker in it), so this job is the only place the image, the Caddyfile and
   # the compose file are tested at all.
   image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -387,7 +389,7 @@ jobs:
       CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:candidate-${{ github.sha }}
       POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:candidate-${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Build the application image
         run: docker build -t "$APP_IMAGE" .
@@ -470,7 +472,7 @@ jobs:
   publish:
     needs: [test, image]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
