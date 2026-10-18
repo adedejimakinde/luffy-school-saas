@@ -18,6 +18,7 @@ from results.tests.fixtures import HOST, PASSWORD, PORTAL, THEIR_HOST, ChainSetU
 from schools.models import School
 from schools.tests.tenants import connected_to
 from tests.test_budget import BUDGET, STATIC, _ASSET, served_files
+from website.crawlers import ICONS
 
 PUBLIC = "/api/academics/public-page/"
 SETUP = "/api/academics/setup/"
@@ -111,7 +112,9 @@ class ThePageTests(SiteSetUp):
 
         self.assertNotIn("<script", html)
         for url in _ASSET.findall(html):
-            self.assertTrue(url.startswith(("/static/", "data:")), url)
+            # The icons are this host's too, at fixed names at its root.
+            if url not in ICONS:
+                self.assertTrue(url.startswith(("/static/", "data:")), url)
 
     def test_the_portal_has_no_school_page(self):
         self.assertEqual(self.page(PORTAL).status_code, 404)

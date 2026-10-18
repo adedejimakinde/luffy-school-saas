@@ -23,6 +23,7 @@ from django.utils import timezone
 from accounts.models import User
 from schools.models import Domain, School
 from tests.test_budget import STATIC, _ASSET, served_files, urls_in_css
+from website.crawlers import ICONS
 from website.models import DemoRequest
 
 SITE = "classnode.testserver"
@@ -557,7 +558,9 @@ class TheBudgetsTests(SiteSetUp):
         self.assertNotEqual(page, self.page)
         for url in _ASSET.findall(page):
             with self.subTest(url=url):
-                self.assertTrue(url.startswith(settings.STATIC_URL), url)
+                # The icons are this host's too, at fixed names at its root.
+                if url not in ICONS:
+                    self.assertTrue(url.startswith(settings.STATIC_URL), url)
         for srcset in re.findall(r'srcset="([^"]+)"', page):
             for url, _ in _CANDIDATE.findall(srcset):
                 self.assertTrue(url.startswith(settings.STATIC_URL), url)
