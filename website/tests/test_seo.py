@@ -29,7 +29,7 @@ from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX
 from website.tests.test_homepage import PORTAL, SITE, SiteSetUp, words
 from website.views import FAQ, LEGAL_PAGES, LOGO, PAGES
 
-SCHOOL = "sunrise-demo.classnode.testserver"
+SCHOOL = "sunrise-school.classnode.testserver"
 PAGE_PATHS = {name: reverse(name, urlconf=settings.SITE_URLCONF) for name in PAGES}
 #: The pages the sitemap lists and search engines may index: not the privacy
 #: notice and the terms while they wait for the lawyer (`website.views.LEGAL_IN_DRAFT`).
@@ -49,11 +49,15 @@ def structured(page):
 
 
 class SchoolSetUp(SiteSetUp):
-    """The site's set-up, and one school on its own subdomain: a demo school."""
+    """The site's set-up, and one school on its own subdomain.
+
+    Not named like a demo school: `School.save()` refuses those unless `DEBUG`
+    is on or `DEMO_SERVER=1`, and a test run is neither (`schools.demo_slugs`).
+    """
 
     def setUp(self):
         super().setUp()
-        self.school = make_school("Sunrise Demo Academy", "sunrise-demo", "sunrise_demo")
+        self.school = make_school("Sunrise Academy", "sunrise-school", "sunrise_school")
         Domain.objects.create(tenant=self.school, domain=SCHOOL, is_primary=True)
 
     def tearDown(self):

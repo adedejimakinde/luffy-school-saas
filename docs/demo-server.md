@@ -167,6 +167,19 @@ nothing can send an SMS, which is what a demo wants.
 `DEMO_SERVER=1` is what lets `load_demo` run. **Never set it anywhere that holds
 real data.** The demo password is *not* in either file: you type it in step 5.
 
+**It is also what lets a school have a demo name.** A school called `sunrise-demo`,
+`harbour-demo`, `showcase-demo`, or anything that is `demo`, starts `demo-` or ends
+`-demo`, can be created only with `DJANGO_DEBUG=1` or `DEMO_SERVER=1`
+(`schools/demo_slugs.py`): `School.save()` and `create_school` refuse it with a
+sentence naming both switches. And the web process refuses to start on a server
+that has one and has neither switch: gunicorn reports a worker that failed to boot
+with `Refusing to start: ... demo school(s): ...`, and `deploy.sh` rolls back to
+the previous image. If you see that on a production server, a demo school got into
+its database (a restore from the demo server's backup, or a row written by hand):
+remove the school and its schema, do not set `DEMO_SERVER`. If Postgres cannot be
+reached at the instant the process starts, the check cannot run and says so in the
+log; `/healthz/` reports the database as down in that case.
+
 ## 4. Deploy
 
 Exactly as production does it (`docs/deployment.md`, "Deploying"): `deploy.sh`
