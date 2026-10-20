@@ -125,9 +125,13 @@ on the setup page under "Report card template"
   A released term is covered by the same rule: its subject lines exist only
   where the class was marked, and its marks cannot be deleted
   (`gradebook/0002`).
-- **A trait that has ever been rated is never hidden**, even when the sheet
-  does not print it; it is reported as kept and stays at the end of its
-  section. Unrated lines the sheet does not print are hidden, never deleted.
+- **Choosing the template sets the active trait list to the sheet's.** Every
+  line the sheet does not print is hidden, rated or not, and never deleted: a
+  hidden trait keeps every rating made against it and they come back if the
+  school shows it again. A card already released keeps the section it froze.
+  (Until 2026-10-20 a trait that had ever been rated stayed on the sheet, so a
+  school with a rated Standard list got the sheet's twelve lines plus its own
+  leftovers.)
 - Seeded lines that are the sheet's line under another spelling are
   renamed (`ogun.RENAMES`: "Attentiveness in class", "Games/Sports",
   "Handling of tools and equipment"). A rename keeps every rating, and a
@@ -149,7 +153,7 @@ every choice at St Mary's), and the template tests in `tests/js/setup.test.js`.
 | broken | what went red |
 | --- | --- |
 | the marks check in `apply_assessments()` removed | the three tests with a mark in (errors: `Score`'s PROTECT key refuses the delete, so a mark was never at risk; the preset would have failed whole) |
-| the rated-trait check in `apply_traits()` removed | `test_a_rated_trait_the_sheet_does_not_print_stays_on_the_sheet` |
+| `apply_traits()` made to keep a rated line on the sheet again | `ChoosingATemplateSetsTheTraitListTests` (two) and `test_a_rated_trait_the_sheet_does_not_print_is_hidden_and_its_rating_kept` |
 | `set_template_as()`'s authority check removed | `test_the_service_refuses_a_teacher_without_the_route` |
 
 ## Part 3: physical development and health
@@ -303,7 +307,7 @@ the One Blue card, unchanged.
 | "St Mary's (Abeokuta South LGA) [B13003]" | `School.name`, `School.lga`, `School.school_code` (new, set beside the LGA in setup) |
 | learner's ID, sex, date of birth, passport photo | `academics.StudentDetails` (part 1) |
 | crest and colour | `results.look`, as on the Standard card |
-| subject grid | the card's frozen subject lines: Cont. Assess = every paper but the one named Exam, Exam, Weighted Average = the subject's percentage. Row labels say (30) and (70) when every subject agrees. |
+| subject grid | the card's frozen subject lines: Cont. Assess = every paper but the one named Exam, Exam, Weighted Average = the subject's percentage, **only when every paper of the subject has a mark, the exam included**; otherwise a dash, and the annual score built on it is a dash too. The summary's Marks obtainable, Marks obtained and Percentage count the whole subjects only, and say how many were not counted. The Standard card is unchanged: it prints the percentage over the papers marked, beside the marks. Row labels say (30) and (70) when every subject agrees. |
 | senior grouping | a class whose name starts SS or SSS groups subject columns under `gradebook.Department` headings (General, Business, Humanities, Science & Mathematics, Technology, Trade), then "Other" for subjects with none. Departments are set per subject in setup (Ogun schools only). A junior class has one run of columns. |
 | third term | 1st, 2nd and 3rd term scores per subject (each out of 100) from this child's card for each term of the session, and the Weighted Annual Score, their average over the terms taken; "-" for a term with none |
 | promotion box (third term) | the child's placement in next session's first term (`academics.promotion`): another class is "Promoted to JSS 3A", the same class "Not promoted, to repeat JSS 2A"; failing that, a recorded `PromotionDecision`; else no box |

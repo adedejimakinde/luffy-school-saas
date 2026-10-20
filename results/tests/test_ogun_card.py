@@ -360,3 +360,80 @@ class TheMinistryHeadingTests(OgunCardSetUp):
         self.assertTrue(sheet["crest"].startswith("data:image/png;base64,"))
         with Image.open(io.BytesIO(base64.b64decode(sheet["crest"].split(",", 1)[1]))) as image:
             self.assertEqual(image.size, (look.SITE_CREST_SIDE, look.SITE_CREST_SIDE))
+
+
+class AMissingPaperIsNotATotalTests(OgunCardSetUp):
+    """A subject with a paper still unmarked has no weighted average, and is left
+    out of the summary, on the Ogun card. The Standard card is not changed: it
+    reports the percentage over the papers that were marked, beside the marks."""
+
+    def whole_and_missing_exam(self):
+        self.ogun_papers(SECOND, self.ada, "maths", 8, 9, 7, 61)
+        self.ogun_papers(SECOND, self.ada, "english", 6, 7, 5, None)
+
+    def test_the_subject_without_an_exam_shows_a_dash_and_is_not_in_the_summary(self):
+        self.whole_and_missing_exam()
+        self.release(term_name=SECOND)
+
+        sheet = self.payload(SECOND)["ogun"]
+
+        by_name = {s["name"]: s for s in sheet["groups"][0]["subjects"]}
+        self.assertEqual(by_name["Mathematics"]["weighted"], "85")
+        self.assertIsNone(by_name["English"]["weighted"], "the CA alone is 60 of 30 papers' worth, not a total")
+        self.assertEqual((by_name["English"]["ca"], by_name["English"]["exam"]), (18, None))
+        self.assertEqual(
+            sheet["summary"],
+            {"obtainable": 100, "obtained": 85, "percentage": "85", "left_out": 1},
+        )
+
+    def test_the_printed_card_says_the_same(self):
+        self.whole_and_missing_exam()
+        self.release(term_name=SECOND)
+        with connected_to(self.stmarys):
+            html = pdf.html_for(ReleasedCard.objects.get(student_membership_id=self.ada.pk, term__name=SECOND))
+
+        weighted = html.split("Weighted Average (100)", 1)[1].split("</tr>", 1)[0]
+        self.assertEqual(weighted.count('class="n">-<'), 1, weighted)
+        self.assertIn('<td class="n">85</td>', weighted)
+        summary = html.split("Marks obtainable", 1)[1].split("</tr>", 2)[1]
+        self.assertIn('<td class="n">100</td><td class="n">85</td><td class="n">85%</td>', summary)
+        self.assertIn("Not counted: 1 subject with a paper not yet marked.", html)
+
+    def test_a_child_with_no_whole_subject_has_dashes_in_the_summary(self):
+        self.ogun_papers(SECOND, self.ada, "maths", 8, 9, 7, None)
+        self.release(term_name=SECOND)
+
+        sheet = self.payload(SECOND)["ogun"]
+
+        self.assertEqual(
+            sheet["summary"],
+            {"obtainable": None, "obtained": None, "percentage": None, "left_out": 1},
+        )
+        self.assertTrue(all(s["weighted"] is None for s in sheet["groups"][0]["subjects"]))
+
+    def test_a_whole_card_is_as_it_was(self):
+        self.ogun_papers(SECOND, self.ada, "maths", 8, 9, 7, 61)
+        self.ogun_papers(SECOND, self.ada, "english", 6, 7, 5, 40)
+        self.release(term_name=SECOND)
+
+        sheet = self.payload(SECOND)["ogun"]
+
+        self.assertEqual(sheet["summary"]["left_out"], 0)
+        self.assertEqual(
+            (sheet["summary"]["obtainable"], sheet["summary"]["obtained"]), (200, 85 + 58)
+        )
+
+    def test_the_other_school_is_untouched_and_its_standard_card_still_reports_what_was_marked(self):
+        # Grace prints the Standard card: the same shape of marks, one paper missing.
+        self._mark(self.grace, SECOND, self.ngozi, "maths", "1st Test", 8, out_of=10)
+        self.release(self.grace, term_name=SECOND)
+        self.ogun_papers(SECOND, self.ada, "maths", 8, 9, 7, None)
+        self.release(term_name=SECOND)
+
+        theirs = self.fetch(self.their_principal, self.grace, self.ngozi, SECOND).json()
+
+        self.assertIsNone(theirs["ogun"])
+        line = [s for s in theirs["subjects"] if s["subject_name"] == "Mathematics"][0]
+        self.assertEqual((line["total_scored"], line["total_available"]), (8, 10))
+        self.assertEqual(float(line["percentage"]), 80.0)
+        self.assertEqual(self.payload(SECOND)["ogun"]["summary"]["left_out"], 1)

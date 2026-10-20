@@ -135,3 +135,33 @@ test("the page asks for health only for an Ogun card", async () => {
   assert.ok(asked.some((u) => u === "/api/results/health/1/?term_id=7"));
   assert.match(root.innerHTML, /Shown only to the child/);
 });
+
+test("the summary counts the whole subjects only, not the card's totals over what was marked", () => {
+  const html = card({
+    ...PAYLOAD,
+    ogun: { ...OGUN, summary: { obtainable: 100, obtained: 82, percentage: "82", left_out: 1 } },
+  });
+
+  assert.match(html, /Marks obtainable<\/dt><dd>100/);
+  assert.match(html, /Marks obtained<\/dt><dd>82/);
+  assert.match(html, /Percentage<\/dt><dd>82%/);
+  assert.doesNotMatch(html, /Marks obtainable<\/dt><dd>200/);
+  assert.match(html, /Not counted: 1 subject with a paper not yet marked\./);
+});
+
+test("with no whole subject the summary is dashes and says how many were not counted", () => {
+  const html = card({
+    ...PAYLOAD,
+    ogun: { ...OGUN, summary: { obtainable: null, obtained: null, percentage: null, left_out: 2 } },
+  });
+
+  assert.match(html, /Marks obtainable<\/dt><dd>-/);
+  assert.match(html, /Marks obtained<\/dt><dd>-/);
+  assert.match(html, /Percentage<\/dt><dd>-/);
+  assert.match(html, /Not counted: 2 subjects with a paper not yet marked\./);
+});
+
+test("a summary with nothing left out says nothing about it", () => {
+  const html = card({ ...PAYLOAD, ogun: { ...OGUN, summary: { obtainable: 200, obtained: 140, percentage: "70", left_out: 0 } } });
+  assert.doesNotMatch(html, /Not counted/);
+});

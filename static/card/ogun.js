@@ -116,6 +116,14 @@ function grid(o) {
 }
 
 function summary(payload, o) {
+  // Over the subjects whose every paper is marked; the card's own totals count
+  // what has been marked so far, which reads as final when it is not.
+  const sum = o.summary || {
+    obtainable: payload.total_available,
+    obtained: payload.total_scored,
+    percentage: payload.percentage,
+    left_out: 0,
+  };
   const cell = (label, value) => `<div><dt>${label}</dt><dd>${value}</dd></div>`;
   return [
     '<section class="ogun-pair">',
@@ -125,11 +133,15 @@ function summary(payload, o) {
     cell("Times absent", dash(o.times_absent)),
     "</dl></div>",
     '<div><h2>Summary</h2><dl class="ogun-facts">',
-    cell("Marks obtainable", dash(payload.total_available)),
-    cell("Marks obtained", dash(payload.total_scored)),
-    cell("Percentage", payload.percentage ? `${esc(payload.percentage)}%` : "-"),
+    cell("Marks obtainable", dash(sum.obtainable)),
+    cell("Marks obtained", dash(sum.obtained)),
+    cell("Percentage", sum.percentage ? `${esc(sum.percentage)}%` : "-"),
     payload.place_in_class ? cell("Class position", esc(payload.place_in_class.label)) : "",
-    "</dl></div>",
+    "</dl>",
+    sum.left_out
+      ? `<p class="blank">Not counted: ${esc(sum.left_out)} subject${sum.left_out === 1 ? "" : "s"} with a paper not yet marked.</p>`
+      : "",
+    "</div>",
     "</section>",
   ].join("");
 }

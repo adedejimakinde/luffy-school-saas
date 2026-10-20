@@ -146,8 +146,9 @@ names are set sideways.
     <h3>Summary</h3>
     <table>
       <tr><th>Marks obtainable</th><th>Marks obtained</th><th>Percentage</th><th>Class position</th></tr>
-      <tr><td class="n">{{ card.total_available }}</td><td class="n">{{ card.total_scored }}</td><td class="n">{% if card.percentage %}{{ card.percentage }}%{% endif %}</td><td class="n">{% if card.place_in_class %}{{ card.place_in_class.label }}{% endif %}</td></tr>
+      <tr><td class="n">{{ card.ogun.summary.obtainable|default_if_none:"-" }}</td><td class="n">{{ card.ogun.summary.obtained|default_if_none:"-" }}</td><td class="n">{% if card.ogun.summary.percentage %}{{ card.ogun.summary.percentage }}%{% else %}-{% endif %}</td><td class="n">{% if card.place_in_class %}{{ card.place_in_class.label }}{% endif %}</td></tr>
     </table>
+    {% if card.ogun.summary.left_out %}<p class="key">Not counted: {{ card.ogun.summary.left_out }} subject{{ card.ogun.summary.left_out|pluralize }} with a paper not yet marked.</p>{% endif %}
   </div>
 </div>
 

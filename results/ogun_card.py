@@ -104,6 +104,39 @@ def _split(line) -> dict:
     return {"ca": ca, "ca_max": ca_max, "exam": exam_score, "exam_max": exam_max}
 
 
+def _is_complete(line) -> bool:
+    """Every paper of this subject has a mark for this child, exam included.
+
+    A paper with no mark is not nought (`gradebook.Score`: no row is "not
+    marked"), and a subject still waiting on a paper has no total yet. The sheet
+    needs both halves, so a subject with no paper named Exam, or none but the
+    exam, is not whole either. The Standard card prints the percentage over what
+    was marked, with the marks beside it; the Ogun sheet's Weighted Average (100)
+    and its summary have no room for that denominator, so they wait until the
+    subject is whole.
+    """
+    cells = line.assessments
+    exam = [c for c in cells if c.assessment_name.strip().lower() == "exam"]
+    return bool(exam) and len(exam) < len(cells) and all(c.score is not None for c in cells)
+
+
+def _summary(subjects, whole) -> dict:
+    """Marks obtainable, obtained and percentage over the complete subjects only."""
+    done = [s for s in subjects if id(s) in whole]
+    obtainable = sum(s["ca_max"] + s["exam_max"] for s in done)
+    obtained = sum((s["ca"] or 0) + (s["exam"] or 0) for s in done)
+    percentage = None
+    if obtainable:
+        share = Decimal(obtained) * 100 / Decimal(obtainable)
+        percentage = _text(share.quantize(Decimal("0.01")))
+    return {
+        "obtainable": obtainable or None,
+        "obtained": obtained if obtainable else None,
+        "percentage": percentage,
+        "left_out": len(subjects) - len(done),
+    }
+
+
 def _other_terms(card) -> dict:
     """`{"first": {subject_id: percentage}, "second": {...}}` from this child's cards."""
     from . import cards
@@ -199,10 +232,15 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     others = _other_terms(card) if third else {}
 
     subjects = []
+    whole = set()
     for line in payload.subjects:
         sid = subject_of.get(line.subject_name)
         split = _split(line)
-        percentage = Decimal(line.percentage) if line.percentage else None
+        complete = _is_complete(line)
+        # A total over some of the papers must not look final: with a paper
+        # still unmarked the weighted average is a dash, and the annual score
+        # that would be built on it is too.
+        percentage = Decimal(line.percentage) if line.percentage and complete else None
         row = {
             "name": line.subject_name,
             "department": departments.get(sid, "") or "",
@@ -223,6 +261,8 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
                 annual=_text(_annual(terms)),
             )
         subjects.append(row)
+        if complete:
+            whole.add(id(row))
 
     senior = is_senior(card.class_group_name)
     if senior:
@@ -286,6 +326,7 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         #: The card's own key, as it was printed: relabelling a point of
         #: the scale later does not reword a card that has gone home.
         "key": ratings.scale_of_card(card),
+        "summary": _summary(subjects, whole),
     }
 
 
