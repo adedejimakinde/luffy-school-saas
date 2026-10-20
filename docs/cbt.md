@@ -3,24 +3,23 @@
 Status: **Phase 1, design only.** No feature code. The screens are in
 [`docs/mockups/cbt/`](mockups/cbt/index.html), each at 375 and 1280 px in
 `docs/mockups/cbt/shots/`. The owner's decisions of 20 October 2026 are folded in
-below and summarised next. One question is still open: what the administrator can
-do in CBT (open question 1).
+below and summarised next. No question is open.
 
 ## Decisions
 
 | topic | decided |
 | --- | --- |
 | Power cuts | A student whose computer switches off signs in again, on the same or another computer, and continues with the time left. See "Power cuts and resuming". |
-| Extra time | A teacher or an exam officer can give one student extra minutes, with a reason. Logged. |
+| Extra time | A teacher of the test, an exam officer or the administrator can give one student extra minutes, with a reason. Logged. |
 | Names | "UTME-style practice" and "WASSCE-style objectives". See "Names and claims". |
 | Sign-in | Option B: test code, admission number, exam PIN. Option A only as a per-test switch, only for tests that cannot send scores to CA, enforced on the server. Option C later. |
 | Cross-subject practice | UTME-style practice is set by the principal, who can name exam officers. Naming one is a permission, and it is logged. |
 | Vice principal | Sees banks and results. |
-| Administrator | **No access to question banks** (decided). Whether it has any other CBT access (setting tests, PIN slips, results) is open, question 1. |
+| Administrator | Runs sittings, not content. Can print PIN slips, open and close sittings, change a test code, give extra time with a reason, and see the sitting log. Cannot see or edit banks, or see a test's questions before it opens. Sees scores only after release. See "The administrator". |
 | Late window | Default 2 minutes, at most 5. |
 | Release | Final, like results. Undoing it uses a restore action with a reason. |
 | Marking sheet | Narrowed by subject-teacher assignments once a school has made some. Until then today's behaviour stands and the principal sees a prompt. |
-| PIN slips | The principal or an exam officer prints them per class as a PDF. Printing again cancels the old PINs. Logged. |
+| PIN slips | The principal, an exam officer or the administrator prints them per class as a PDF. Printing again cancels the old PINs. Logged. |
 
 ### Phase 2 order
 
@@ -112,11 +111,49 @@ the gradebook's authority check, so it carries controls (below).
 ### Exam officers
 
 `ExamOfficerGrant(membership, kind, by, at, note)`, where kind is `named` or `ended`, append-only:
-the principal names a teacher or the vice principal with a `named` row, and ends it
-with an `ended` row; the latest row decides. Both are logged with who and when. An
-exam officer can:
+the principal names a teacher, the vice principal or **the administrator** with a
+`named` row, and ends it with an `ended` row; the latest row decides. Both are logged
+with who and when. An exam officer can:
 set cross-subject UTME-style practice, print PIN slips, give extra time, and allow
 a retake. Nothing else: not release, not send to CA, not see another teacher's bank.
+
+**An administrator named exam officer has exactly these exam officer rights, on top of
+what the role has.** Being named does not open banks to them: an exam officer's
+banks are "their own, as a teacher", and an administrator has none.
+
+### The administrator
+
+The administrator runs the school's sittings and does not touch their content
+(decided 20 October 2026).
+
+| | |
+| --- | --- |
+| **Can** | print PIN slips (below); open and close sittings; change a test's code; give one student extra time with a reason, logged; see the sitting log: who started, dropped off and submitted, and when |
+| **Cannot** | see or edit question banks; see a test's questions before the test opens |
+| **Scores** | sees CBT scores only after release, the same moment a student does |
+| **Not included** | anything done with a score, such as send to CA and release, which stay with the teacher and the principal as above |
+
+How the can-do items work:
+
+- **Open and close a sitting.** A sitting is a test being open to a class. The test
+  has its own window (`opens_at`, `closes_at`); opening or closing a sitting early by
+  hand writes `SittingControl(test, class_group, kind, by, at, reason)`, append-only,
+  where kind is `opened` or `closed`, and the latest row decides whether students of
+  that class can start. Closing never discards answers: an attempt in progress goes
+  on to its own deadline unless the close says to end it, and that is logged too.
+  The test window is not rewritten, so the record of what was planned survives.
+- **Change a test code.** Replaces the digest and writes `TestCodeChange(test, by,
+  at)`, never the code itself. A student already inside an attempt is not signed out
+  (the code is a gate to start and to resume, not to continue); a student who must
+  sign in again after a power cut needs the new one.
+- **The sitting log** is the log on screen 7 without the answers: events and times
+  per student, `extra_time` and `replaced` included, but no score, no item, no chosen
+  option. A teacher's or the principal's view is screen 7 as drawn; the
+  administrator's is its Students table alone.
+- **Questions before the test opens.** The administrator never sees a bank, and never
+  sees the questions of a test that has not opened: not in the preview, not in a
+  results page, not in a PIN slip. Draft and published-but-not-yet-open tests show
+  the administrator their title, class, window, size and code state only.
 
 ### Banks and questions
 
@@ -222,14 +259,13 @@ considered, kept so the reasoning can be checked:
 ### Exam PINs and slips
 
 `ExamPin(student_membership_id, class_group, term, digest, issued_by, issued_at,
-cancelled_at, cancelled_by_print)`. **The principal or an exam officer prints slips
-per class, as a PDF**, through the same rendering path as checker slips
+cancelled_at, cancelled_by_print)`. **The principal, an exam officer or the
+administrator prints slips per class, as a PDF**, through the same rendering path as checker slips
 (`results/pdf.py`). Printing for a class again **cancels every earlier PIN for that
 class** in the same transaction and writes `PinSlipPrint(class_group, printed_by, at,
 count, cancelled_count)`. Reprinting for one student (a lost slip) cancels only that
-student's. PINs are shown once, on the PDF, and kept only as digests. The administrator
-is not on this list (open question 1), which differs from today's checker slips,
-where principal and administrator print.
+student's. PINs are shown once, on the PDF, and kept only as digests. This matches
+today's checker slips, which the principal and the administrator both print.
 
 ## Offline
 
@@ -298,8 +334,8 @@ the attempt, and must not gain time or a second copy of it.
 
 ## Extra time
 
-A teacher of the test, or an exam officer, can give one student extra minutes with a
-reason (screen 7, per student). It is a `TimeExtension` row and an `extra_time`
+A teacher of the test, an exam officer or the administrator can give one student extra
+minutes with a reason (screen 7, per student). It is a `TimeExtension` row and an `extra_time`
 event, visible in the log with who gave it and why. It moves that student's
 `deadline` and, if needed, their close time; nobody else's. It can be given before the
 student starts, while they are sitting (their timer grows on the next sync) or after
@@ -324,7 +360,7 @@ by the clock: that is a retake.
 | Vice principal | All banks (read) | All tests (read) | All attempts and results (read); not release, not send to CA |
 | Principal | All | All | All; release and restore; sets cross-subject practice; names exam officers |
 | Exam officer (a teacher or the vice principal the principal names) | Their own, as a teacher | Cross-subject practice and, for extra time, PIN slips and retakes, any test in the school | No scores beyond what their role already shows |
-| Administrator | **None** (decided) | **Open**, question 1 | **Open**, question 1 |
+| Administrator | **None** | Title, class, window, size and code state; never the questions before the test opens. Opens and closes sittings, changes the code | The sitting log from the start; **scores only after release**. Prints PIN slips; gives extra time |
 | Platform staff | None of a school's content (as `gradebook` excludes them) | None | None; they run provider removal |
 
 Tenant isolation as everywhere else: every table above lives in the school's schema;
@@ -414,7 +450,10 @@ two schools, at least two tests each, sharing ids where they can.
 | access | Only platform staff turn a provider on; a provider question is read-only | drop the staff check; drop the trigger |
 | access | A second computer's sign-in ends the first, and only one holds the attempt | drop the single-holder index; skip ending the first |
 | access | Of two answers, the one chosen later counts, and both are kept | take the later-received; delete the loser |
-| access | Extra time is given only by a teacher of the test or an exam officer, with a reason, and logged | allow any teacher; allow an empty reason |
+| access | Extra time is given only by a teacher of the test, an exam officer or the administrator, with a reason, and logged | allow any teacher; allow an empty reason |
+| access | The administrator cannot read or write a bank, nor read a test's questions before it opens | drop the role check on the bank routes; serve the paper to the administrator's preview |
+| access | The administrator sees a score only after release, and the sitting log carries no answers | serve the results page to the administrator; add the chosen option to the log view |
+| access | Opening or closing a sitting, and changing a code, are logged; a close does not discard an attempt in progress | skip the `SittingControl` row; delete answers on close |
 | access | A test with the PIN off cannot send to CA, checked by the server | drop the check in the send service |
 | access | Only the principal names exam officers; an exam officer cannot release or send to CA | let an exam officer release |
 | access | Printing slips again cancels the old PINs; the old PIN then fails | skip the cancel |
@@ -442,13 +481,8 @@ tests.
 
 ## Open questions
 
-1. **What else can the administrator do in CBT?** Banks are decided: none. Today the
-   administrator enters marks for any class, prints checker slips, sets up classes,
-   staff and fees, and submits results for any class. In many schools it is the
-   owner's or the proprietor's office. For everything outside banks the options are:
-   (a) nothing in CBT; (b) set up tests and print PIN slips, no questions and no
-   results; (c) also see results. Until decided, the administrator has no CBT
-   access, and the mockups show none.
+None. The administrator's CBT access was decided on 20 October 2026 (see "The
+administrator").
 
 ## Settled in interpretation, to check
 
@@ -457,7 +491,15 @@ tests.
   procedure. Say if it meant something else.
 - An exam officer is a permission held by a teacher or the vice principal, not a new
   role, so a membership keeps one role per school.
-- Retakes: the test's teacher or an exam officer, with a reason, as extra time.
+- Retakes: the test's teacher or an exam officer, with a reason, as extra time. The
+  administrator gives extra time but is not listed for retakes unless named an exam
+  officer.
+- "Open and close sittings" is read as opening or closing a test to a class by hand,
+  inside or beyond its planned window, logged, and never discarding an attempt in
+  progress. Say if it meant something narrower.
+- "Cannot see a test's questions before the test opens" is read literally: after a
+  test has opened the administrator may see its questions, read-only, as published.
+  If it meant never, that is one more route to close.
 
 ## Notes on the mockups
 
@@ -468,6 +510,8 @@ tests.
 - The test screen's top band is solid One Blue, and nothing on it imitates a centre's
   branding. The flagged mark on the number grid
   is a small amber corner, always beside the legend and in the cell's label.
+- Screen 7 is a teacher's view. The administrator's is its Students table without
+  scores or answers, until release. The mockups do not draw it separately.
 - Every question shown was written for the mockups. Names and numbers are invented.
 - Built at 375 and 1280 px; the test screen moves Previous, Flag and Next to a bar at
   the foot of a phone.
