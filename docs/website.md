@@ -153,6 +153,9 @@ final call to action, and the footer.
   the school's written permission, and is empty until then.
 - **TODO notes** on the privacy notice and the terms are drawn only when `SHOW_LEGAL_TODOS` is on (off by
   default; on with `DJANGO_DEBUG=1` and in the legal tests). Every open one is listed in `docs/handover.md`.
+  While `website.views.LEGAL_IN_DRAFT` is set, the two pages say so in one line at the top, are `noindex`
+  and are not in the sitemap; `website/tests/test_legal.py` holds all three, and that no page the site serves
+  has "TODO" in it.
 - **One Blue, with more of it** (`docs/design.md`): the top band (the header
   and the hero, or a legal page's title) is light, the 5% wash of One Blue
   (the owner's choice of three, 12 October 2026), with ink headings, One Blue
