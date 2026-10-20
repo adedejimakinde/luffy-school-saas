@@ -300,6 +300,7 @@ def freeze_a_revision(
         versions={student_id: version},
         attendance=_carried_forward(supersedes, student_id),
         by=by,
+        rating_scale=_LIVE_SCALE if supersedes is None else supersedes.rating_scale,
     )
 
 
@@ -385,7 +386,13 @@ def _carried_forward(supersedes, student_id) -> dict:
     }
 
 
-def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int, ReleasedCard]:
+#: `_freeze()`'s default for the rating key: read the school's scale as it is now.
+_LIVE_SCALE = object()
+
+
+def _freeze(
+    sheet, results, whose, *, versions, attendance=None, by, rating_scale=_LIVE_SCALE
+) -> dict[int, ReleasedCard]:
     """The card rows and their two content tables, for `whose`.
 
     Split out of `freeze_for_release()` when task 8 needed the same freeze for
@@ -409,6 +416,13 @@ def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int
     from .look import settings as card_settings
 
     position_printed = card_settings().show_position
+    # The key to the rating scale, read once for the reason the bands are: one
+    # class's cards agree about what a 4 is called. A revision hands in the
+    # predecessor's own key instead, so reissuing a card never rewords it.
+    if rating_scale is _LIVE_SCALE:
+        from . import ratings
+
+        rating_scale = ratings.frozen_scale()
     cards = [
         _card_for(
             sheet,
@@ -421,6 +435,7 @@ def _freeze(sheet, results, whose, *, versions, attendance=None, by) -> dict[int
             versions.get(student_id, 1),
             (attendance or {}).get(student_id),
             position_printed=position_printed,
+            rating_scale=rating_scale,
         )
         for student_id in whose
     ]
@@ -481,6 +496,7 @@ def _card_for(
     attendance=None,
     *,
     position_printed=False,
+    rating_scale=None,
 ) -> ReleasedCard:
     """One child's card row. **Never conditional** — see the module docstring.
 
@@ -516,6 +532,7 @@ def _card_for(
         position=results.positions.get(student_id),
         roster_size=len(results.student_ids),
         position_printed=position_printed,
+        rating_scale=rating_scale,
         days_present=attendance.present if attendance else None,
         days_absent=attendance.absent if attendance else None,
         days_open=attendance.open if attendance else None,

@@ -283,7 +283,9 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         "times_present": present,
         "times_absent": absent,
         "traits": traits,
-        "key": [{"value": p.value, "label": p.label} for p in ratings.scale()],
+        #: The card's own key, as it was printed: relabelling a point of
+        #: the scale later does not reword a card that has gone home.
+        "key": ratings.scale_of_card(card),
     }
 
 

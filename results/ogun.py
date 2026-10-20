@@ -50,6 +50,7 @@ from gradebook.models import Assessment, Score, Subject
 from . import ratings
 from .models import (
     CardTemplate,
+    ConductSettingChange,
     ReportCardSettings,
     Trait,
     TraitGroup,
@@ -275,6 +276,15 @@ def set_template_as(actor, school, template: str):
         fields.append("show_position")
     row.save(update_fields=fields)
     applied = apply_presets() if template == CardTemplate.OGUN else None
+    if applied is not None:
+        # One entry for the whole set-up, so the settings log accounts for the
+        # traits and the scale it changed without a line for each.
+        ratings.record_change(
+            actor,
+            ConductSettingChange.Kind.TEMPLATE_APPLIED,
+            "Chose the Ogun State template: affective and psychomotor traits "
+            "and the rating key set to the sheet's",
+        )
     return row, applied
 
 
