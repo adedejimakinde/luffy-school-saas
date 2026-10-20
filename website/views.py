@@ -28,7 +28,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.throttling import client_address
 from schools.hosts import portal_host
 
-from .crawlers import site_url
+from .crawlers import NOINDEX, site_url
 from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
@@ -195,17 +195,47 @@ def structured_data():
         ],
     })
 
+#: Whether the privacy notice and the terms are still waiting for the lawyer's
+#: wording. While they are, each says so in one line at the top, asks search
+#: engines not to index it (the page and the `X-Robots-Tag` header, which says
+#: it for a reader that is not a browser), and is left out of the sitemap. Flip
+#: it to `False` when the lawyer's version is in: the line goes, the pages
+#: become indexable and the sitemap lists them again. `docs/handover.md`.
+LEGAL_IN_DRAFT = True
+
+#: The routes of the pages `LEGAL_IN_DRAFT` governs.
+LEGAL_PAGES = frozenset({"site-privacy", "site-terms"})
+
 #: A fact or a claim still to be settled, drawn on the legal pages as a box
 #: (`.todo`). Only `settings.SHOW_LEGAL_TODOS` shows them; a public reader gets
-#: the text without them. `docs/handover.md` lists every open one.
+#: the text without them. The notes stay in the templates, so nothing is lost.
 _TODO_NOTE = re.compile(r'[ \t]*<span class="todo">.*?</span>', re.S)
+
+#: What a stripped note can leave behind: a paragraph with nothing in it, and a
+#: section with a heading and nothing under it (with its line in the contents).
+_EMPTY_PARAGRAPH = re.compile(r"[ \t]*<p>\s*</p>\n?")
+_EMPTY_SECTION = re.compile(r'<section id="([a-z-]+)">\s*<h2>[^<]*</h2>\s*</section>\n?')
+
+
+def _without_todo_notes(page):
+    """The page as a public reader gets it: no note, no empty paragraph or section."""
+    page = _EMPTY_PARAGRAPH.sub("", _TODO_NOTE.sub("", page))
+    for section in _EMPTY_SECTION.findall(page):
+        page = re.sub(rf'[ \t]*<li><a href="#{section}">[^<]*</a></li>\n?', "", page)
+    return _EMPTY_SECTION.sub("", page)
 
 
 def legal_page(request, template):
-    """A legal page, with its TODO notes only where the setting asks for them."""
-    response = site_page(request, template)
+    """A legal page: its TODO notes only where the setting asks, and a draft's marks while it is one."""
+    response = site_page(
+        request,
+        template,
+        {"indexable": not LEGAL_IN_DRAFT, "legal_draft": LEGAL_IN_DRAFT},
+    )
     if not settings.SHOW_LEGAL_TODOS:
-        response.content = _TODO_NOTE.sub("", response.content.decode())
+        response.content = _without_todo_notes(response.content.decode())
+    if LEGAL_IN_DRAFT:
+        response["X-Robots-Tag"] = NOINDEX
     return response
 
 
@@ -275,6 +305,8 @@ def terms(request):
 def sitemap(request):
     """Every public page, `PAGES`, then every published blog post, and nothing on any other host.
 
+    The privacy notice and the terms are left out while `LEGAL_IN_DRAFT`.
+
     A post is listed while it is published and not a moment longer: a draft, a
     post in review and an unpublished one are never here (`blog.models.PostQuerySet.published`).
     """
@@ -285,7 +317,11 @@ def sitemap(request):
         request,
         "website/sitemap.xml",
         {
-            "urls": [site_url() + reverse(name) for name in PAGES],
+            "urls": [
+                site_url() + reverse(name)
+                for name in PAGES
+                if not (LEGAL_IN_DRAFT and name in LEGAL_PAGES)
+            ],
             "posts": [
                 (site_url() + reverse("blog-post", args=[post.slug]), post.updated_at)
                 for post in posts

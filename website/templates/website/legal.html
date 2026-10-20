@@ -5,12 +5,15 @@ in the top band, one reading column, and a contents list at the top. Each page
 fills `heading`, `contents` (one `<li><a href="#id">` per section) and `body`
 (one `<section id>` per entry, in the same order; `website/tests/test_legal.py`
 holds the two lists to each other). Every legal claim and every fact still to
-be filled in carries a visible `.todo`.
+be filled in carries a `.todo`, drawn only where `SHOW_LEGAL_TODOS` asks
+(`website.views.legal_page`). While `legal_draft` is set, one plain line at the
+top says the page is being finalised.
 {% endcomment %}
 {% block main %}
 <div class="top-band legal-top"><div class="wrap"><h1>{% block heading %}{% endblock %}</h1></div></div>
 <article class="legal wrap">
-  <nav class="legal-contents" aria-labelledby="contents-title">
+{% if legal_draft %}  <div class="legal-body legal-draft"><p>This notice is being finalised with our lawyer. Questions: <a href="mailto:hello@classnode.co">hello@classnode.co</a>.</p></div>
+{% endif %}  <nav class="legal-contents" aria-labelledby="contents-title">
     <h2 id="contents-title">Contents</h2>
     <ol>
 {% block contents %}{% endblock %}

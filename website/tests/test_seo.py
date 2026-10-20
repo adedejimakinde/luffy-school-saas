@@ -27,10 +27,13 @@ from schools.tests.tenants import make_school
 from tests.test_budget import STATIC, served_files
 from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX
 from website.tests.test_homepage import PORTAL, SITE, SiteSetUp, words
-from website.views import FAQ, LOGO, PAGES
+from website.views import FAQ, LEGAL_PAGES, LOGO, PAGES
 
 SCHOOL = "sunrise-demo.classnode.testserver"
 PAGE_PATHS = {name: reverse(name, urlconf=settings.SITE_URLCONF) for name in PAGES}
+#: The pages the sitemap lists and search engines may index: not the privacy
+#: notice and the terms while they wait for the lawyer (`website.views.LEGAL_IN_DRAFT`).
+INDEXED_PATHS = {name: path for name, path in PAGE_PATHS.items() if name not in LEGAL_PAGES}
 ROBOTS_META = re.compile(r'<meta name="robots" content="([^"]*)">')
 DASHES = re.compile("[\u2013\u2014]")
 
@@ -94,7 +97,7 @@ class NoindexOffThePublicSiteTests(SchoolSetUp):
         self.assertEqual(response["X-Robots-Tag"], NOINDEX)
 
     def test_the_public_site_does_not(self):
-        for path in [*PAGE_PATHS.values(), "/?sent=1", "/sitemap.xml", "/robots.txt"]:
+        for path in [*INDEXED_PATHS.values(), "/?sent=1", "/sitemap.xml", "/robots.txt"]:
             with self.subTest(path=path):
                 response = self.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -167,7 +170,7 @@ class TheSitemapTests(SiteSetUp):
         response = self.get("/sitemap.xml")
         self.assertEqual(response["Content-Type"], "application/xml; charset=utf-8")
         listed = re.findall(r"<loc>([^<]*)</loc>", response.content.decode())
-        self.assertEqual(listed, [f"https://{SITE}{path}" for path in PAGE_PATHS.values()])
+        self.assertEqual(listed, [f"https://{SITE}{path}" for path in INDEXED_PATHS.values()])
 
     def test_every_route_on_the_site_is_a_page_or_the_sitemap(self):
         from urls_site import urlpatterns
