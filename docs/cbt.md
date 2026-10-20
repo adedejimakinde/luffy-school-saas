@@ -16,7 +16,7 @@ do in CBT (open question 1).
 | Sign-in | Option B: test code, admission number, exam PIN. Option A only as a per-test switch, only for tests that cannot send scores to CA, enforced on the server. Option C later. |
 | Cross-subject practice | UTME-style practice is set by the principal, who can name exam officers. Naming one is a permission, and it is logged. |
 | Vice principal | Sees banks and results. |
-| Administrator | **Open**, question 1. |
+| Administrator | **No access to question banks** (decided). Whether it has any other CBT access (setting tests, PIN slips, results) is open, question 1. |
 | Late window | Default 2 minutes, at most 5. |
 | Release | Final, like results. Undoing it uses a restore action with a reason. |
 | Marking sheet | Narrowed by subject-teacher assignments once a school has made some. Until then today's behaviour stands and the principal sees a prompt. |
@@ -324,7 +324,7 @@ by the clock: that is a retake.
 | Vice principal | All banks (read) | All tests (read) | All attempts and results (read); not release, not send to CA |
 | Principal | All | All | All; release and restore; sets cross-subject practice; names exam officers |
 | Exam officer (a teacher or the vice principal the principal names) | Their own, as a teacher | Cross-subject practice and, for extra time, PIN slips and retakes, any test in the school | No scores beyond what their role already shows |
-| Administrator | **Open**, question 1 | **Open** | **Open** |
+| Administrator | **None** (decided) | **Open**, question 1 | **Open**, question 1 |
 | Platform staff | None of a school's content (as `gradebook` excludes them) | None | None; they run provider removal |
 
 Tenant isolation as everywhere else: every table above lives in the school's schema;
@@ -442,12 +442,13 @@ tests.
 
 ## Open questions
 
-1. **What can the administrator do in CBT?** Today the administrator enters marks
-   for any class, prints checker slips, sets up classes, staff and fees, and submits
-   results for any class. In many schools it is the owner's or the proprietor's
-   office. The options: (a) nothing in CBT; (b) the principal's powers over banks,
-   tests and results; (c) set up and print slips only, no results. Until decided,
-   the administrator has no CBT access, and the mockups show none.
+1. **What else can the administrator do in CBT?** Banks are decided: none. Today the
+   administrator enters marks for any class, prints checker slips, sets up classes,
+   staff and fees, and submits results for any class. In many schools it is the
+   owner's or the proprietor's office. For everything outside banks the options are:
+   (a) nothing in CBT; (b) set up tests and print PIN slips, no questions and no
+   results; (c) also see results. Until decided, the administrator has no CBT
+   access, and the mockups show none.
 
 ## Settled in interpretation, to check
 
