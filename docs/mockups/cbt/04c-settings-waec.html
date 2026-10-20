@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test settings: WAEC objectives</title>
+<title>Test settings: WASSCE-style objectives</title>
 <link rel="stylesheet" href="../../../static/web/design.css">
 <link rel="stylesheet" href="cbt.css">
 <body class="has-shell has-tabbar">
@@ -36,7 +36,7 @@
   <symbol id="i-signout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></symbol>
   <symbol id="i-test" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M8.5 11h7M8.5 15h4"/></symbol>
 </svg>
-<p class="mock-note">Mockup. /tests/53/settings/, a teacher, WAEC objectives. Question counts and minutes are settings per subject, never fixed in code. Mathematics 50 in 90 minutes is the commonly published format; the others are school defaults to check.</p>
+<p class="mock-note">Mockup. /tests/53/settings/, a teacher, WASSCE-style objectives. Question counts and minutes are settings per subject, never fixed in code. Mathematics 50 in 90 minutes is a starting default; the others are school defaults to check.</p>
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
     <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
@@ -60,8 +60,8 @@
     <main class="cbt">
 
 <a class="crumb" href="03-create-test.html"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Set a test</a>
-<div class="head"><div><p class="eyebrow">Settings</p><h1>WAEC objectives practice: Mathematics</h1><p>SS&nbsp;3A and SS&nbsp;3B. One subject, its own timer.</p></div></div>
-<div class="modes" role="list"><a class="mode" href="04a-settings-custom.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WAEC objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
+<div class="head"><div><p class="eyebrow">Settings</p><h1>WASSCE-style objectives: Mathematics</h1><p>SS&nbsp;3A and SS&nbsp;3B. One subject, its own timer.</p></div></div>
+<div class="modes" role="list"><a class="mode" href="04a-settings-custom.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME-style practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WASSCE-style objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
 <div class="cols">
   <div style="display:grid;gap:16px">
     <section class="panel form">
@@ -74,7 +74,7 @@
       <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Options A to D. Taken from Mathematics, SS&nbsp;3: 180 questions with A to D.</p>
     </section>
     <section class="panel flush">
-      <div class="panel-head"><div><h2>Paper settings by subject</h2><p>Used each time anyone sets a WAEC paper in that subject. WAEC's own paper for the year decides; check it and change these.</p></div></div>
+      <div class="panel-head"><div><h2>Paper settings by subject</h2><p>Used each time anyone sets a WASSCE-style paper in that subject. Set them to match the paper you want to practise.</p></div></div>
       <div style="padding:0 16px 16px">
       <table class="stack settings-table">
         <thead><tr><th>Subject</th><th>Paper</th><th class="num">Questions</th><th class="num">Minutes</th></tr></thead>
@@ -95,7 +95,7 @@
       <h2>Signing in to sit it</h2>
       <ul class="switch-list" style="margin-top:12px">
         <li class="switch-row"><div><strong>Test code</strong><span class="quiet">Six letters you read out or write on the board when the sitting starts. You can change it at any time.</span></div><label class="toggle"><input type="checkbox" checked disabled><span></span></label></li>
-        <li class="switch-row"><div><strong>Exam PIN from the student's slip</strong><span class="quiet">Proves the student is who the admission number says. Recommended for anything that goes to CA.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+        <li class="switch-row"><div><strong>Exam PIN from the student's slip</strong><span class="quiet">Proves the student is who the admission number says. Turning it off is allowed only for a test whose scores cannot be sent to CA; the school's server refuses the send otherwise.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
       </ul>
       <p class="note-line" style="margin-top:8px"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>This does not lock the browser. Supervise the room; the log shows when each student started, dropped off and submitted.</p>
     </section>

@@ -2,7 +2,7 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Test settings: UTME practice</title>
+<title>Test settings: UTME-style practice</title>
 <link rel="stylesheet" href="../../../static/web/design.css">
 <link rel="stylesheet" href="cbt.css">
 <body class="has-shell has-tabbar">
@@ -38,7 +38,7 @@
   <symbol id="i-signout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></symbol>
   <symbol id="i-test" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M8.5 11h7M8.5 15h4"/></symbol>
 </svg>
-<p class="mock-note">Mockup. /tests/52/settings/, the principal, UTME practice. It spans subjects, so the principal sets it (or a teacher the school names exam officer: an open question). Each subject draws only from the school's own bank.</p>
+<p class="mock-note">Mockup. /tests/52/settings/, the principal, UTME-style practice. It spans subjects, so the principal sets it, or an exam officer the principal has named. Each subject draws only from the school's own bank.</p>
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
     <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
@@ -62,12 +62,12 @@
     <main class="cbt">
 
 <a class="crumb" href="03-create-test.html"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Set a test</a>
-<div class="head"><div><p class="eyebrow">Settings</p><h1>UTME practice, October</h1><p>SS&nbsp;3A and SS&nbsp;3B. One timer for all four subjects.</p></div></div>
-<div class="modes" role="list"><a class="mode" href="04a-settings-custom.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WAEC objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
+<div class="head"><div><p class="eyebrow">Settings</p><h1>UTME-style practice, October</h1><p>SS&nbsp;3A and SS&nbsp;3B. One timer for all four subjects.</p></div></div>
+<div class="modes" role="list"><a class="mode" href="04a-settings-custom.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME-style practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WASSCE-style objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
 <div class="cols">
   <div style="display:grid;gap:16px">
     <section class="panel flush">
-      <div class="panel-head"><div><h2>Subjects and questions</h2><p>Defaults from JAMB's 2026 manual for officials. Every number can be changed, and you should check it each year.</p></div><a class="btn btn-quiet" href="#"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Reset to defaults</a></div>
+      <div class="panel-head"><div><h2>Subjects and questions</h2><p>Defaults based on the published UTME format. Every number can be changed, and you should check them each year.</p></div><a class="btn btn-quiet" href="#"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Reset to defaults</a></div>
       <div style="padding:0 16px">
       <table class="stack settings-table">
         <thead><tr><th>Subject</th><th>Bank</th><th class="num">A to D questions</th><th class="num">Questions</th></tr></thead>
@@ -107,7 +107,7 @@
       <h2>Signing in to sit it</h2>
       <ul class="switch-list" style="margin-top:12px">
         <li class="switch-row"><div><strong>Test code</strong><span class="quiet">Six letters you read out or write on the board when the sitting starts. You can change it at any time.</span></div><label class="toggle"><input type="checkbox" checked disabled><span></span></label></li>
-        <li class="switch-row"><div><strong>Exam PIN from the student's slip</strong><span class="quiet">Proves the student is who the admission number says. Recommended for anything that goes to CA.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+        <li class="switch-row"><div><strong>Exam PIN from the student's slip</strong><span class="quiet">Proves the student is who the admission number says. Turning it off is allowed only for a test whose scores cannot be sent to CA; the school's server refuses the send otherwise.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
       </ul>
       <p class="note-line" style="margin-top:8px"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>This does not lock the browser. Supervise the room; the log shows when each student started, dropped off and submitted.</p>
     </section>
@@ -124,7 +124,7 @@
         <div><dt>Each subject</dt><dd>out of 100</dd></div>
         <div><dt>Total</dt><dd>out of 400</dd></div>
       </dl>
-      <p class="note-line" style="margin-top:8px"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>A practice score, not a JAMB score. It is not sent to CA unless you choose to send one subject.</p>
+      <p class="note-line" style="margin-top:8px"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>A practice score, not an exam result. A school can send a subject's score to CA only through a test whose sign-in includes the exam PIN.</p>
     </section>
   </aside>
   <div class="summary-bar" style="grid-column:1/-1">
