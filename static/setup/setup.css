@@ -84,3 +84,9 @@ label.switch input:focus-visible + .track { outline: 3px solid var(--brand); out
 .change-log summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 700; }
 .change-log ul { margin: 0; padding-left: 18px; font-size: var(--small); }
 .change-log .when { color: var(--muted); }
+/* On a phone the three buttons would leave the name too little to read, so they
+   take their own line under it. */
+@media (max-width: 479px) {
+  .trait { grid-template-columns: minmax(0, 1fr); }
+  .trait-actions { justify-content: flex-end; }
+}
