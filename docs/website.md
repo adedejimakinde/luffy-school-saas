@@ -244,12 +244,16 @@ final call to action, and the footer.
     sum on a lit pad, larger and in One Blue (a registered `--n`, drawn by a
     counter over the figure in the markup): the longest step, the moment the
     section is for; then the marks obtained, the percentage, the class
-    position stamped in, and the two remarks. On a desk at least 900px wide and 700px tall the sheet is
+    position stamped in, and the two remarks. On a desk at least 900px wide and 920px tall (the sheet, with its Affective and
+    Psychomotor block, is about 830px) the sheet is
     pinned while the page scrolls 160vh past it; elsewhere it fills as it rises
     up the screen. Every step ends on the still sheet (the stamp at -4deg), so
     under reduced motion, or in a browser without scroll timelines
     (`@supports (animation-timeline: view())`), it is drawn complete and not
     pinned;
+  - the Affective and Psychomotor block under the marks is drawn complete and
+    not scroll-written: the Ogun sheet's six lines for each, ticked in the
+    column of a made-up 1 to 5 rating, with the sheet's key;
   - the cards' figures count up once as they come into view.
 - **One script, inline**: closing the phone menu on every page, plus the
   slider (under 2 KB) and the counting figures (under 1 KB) on the homepage.

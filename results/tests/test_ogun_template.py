@@ -189,7 +189,7 @@ class NeverOverAMarkOrARatingTests(OgunSetUp):
         with connected_to(self.stmarys):
             self.assertEqual(ReleasedAssessmentScore.objects.count(), released)
 
-    def test_a_rated_trait_the_sheet_does_not_print_stays_on_the_sheet(self):
+    def test_a_rated_trait_the_sheet_does_not_print_is_hidden_and_its_rating_kept(self):
         with connected_to(self.stmarys):
             politeness = Trait.objects.get(name="Politeness")
             TraitRating.objects.create(
@@ -198,10 +198,12 @@ class NeverOverAMarkOrARatingTests(OgunSetUp):
 
         applied = self.choose(self.head).json()["applied"]
 
-        self.assertIn("Politeness", applied["traits_kept"])
-        self.assertIn("Politeness", self.visible(self.stmarys, "affective"))
+        self.assertIn("Politeness", applied["traits_hidden"])
+        self.assertNotIn("traits_kept", applied)
+        self.assertNotIn("Politeness", self.visible(self.stmarys, "affective"))
         self.assertNotIn("Attendance", self.visible(self.stmarys, "affective"))
         with connected_to(self.stmarys):
+            self.assertTrue(Trait.objects.get(pk=politeness.pk).is_hidden)
             self.assertEqual(TraitRating.objects.get(trait=politeness).score, 4)
 
     def test_a_seeded_line_with_another_spelling_is_renamed_and_its_rating_kept(self):
@@ -243,3 +245,93 @@ class WhoMayChooseTests(OgunSetUp):
         self.choose(self.head)
         self.client.force_login(self.head.user)
         self.assertEqual(self.client.get("/api/academics/setup/", HTTP_HOST=HOST).json()["card"]["template"], "ogun")
+
+
+class ChoosingATemplateSetsTheTraitListTests(OgunSetUp):
+    """The active list becomes the template's, whether or not the old lines were
+    rated. Hidden, never deleted; a released card is untouched; and one school's
+    choice leaves the other's list as it was."""
+
+    def rate_every_trait(self, school, child_id):
+        with connected_to(school):
+            term = Term.objects.get(is_current=True)
+            for trait in Trait.objects.visible():
+                TraitRating.objects.create(
+                    term=term, trait=trait, student_membership_id=child_id, score=3
+                )
+            return TraitRating.objects.count()
+
+    def test_every_standard_line_is_replaced_even_when_all_of_them_were_rated(self):
+        ours = self.rate_every_trait(self.stmarys, self.children["ada"].pk)
+        theirs = self.rate_every_trait(self.grace, 1)
+        with connected_to(self.stmarys):
+            standard = {
+                g: list(Trait.objects.in_group(g).visible().values_list("name", flat=True))
+                for g in ("affective", "psychomotor")
+            }
+
+        self.choose(self.head)
+
+        self.assertEqual(self.visible(self.stmarys, "affective"), list(ogun.AFFECTIVE))
+        self.assertEqual(self.visible(self.stmarys, "psychomotor"), list(ogun.PSYCHOMOTOR))
+        with connected_to(self.stmarys):
+            hidden = set(Trait.objects.filter(is_hidden=True).values_list("name", flat=True))
+            self.assertTrue(
+                {"Attendance", "Politeness", "Relationship with others", "Drawing/Craft"} <= hidden
+            )
+            self.assertEqual(TraitRating.objects.count(), ours, "a rating was deleted")
+            self.assertTrue(
+                TraitRating.objects.filter(trait__name="Politeness", score=3).exists(),
+                "the hidden line keeps its rating",
+            )
+        # Grace chose nothing: its list and its ratings are exactly what they were.
+        with connected_to(self.grace):
+            for group, names in standard.items():
+                self.assertEqual(
+                    sorted(Trait.objects.in_group(group).visible().values_list("name", flat=True)),
+                    sorted(n for n in names),
+                )
+            self.assertEqual(Trait.objects.filter(is_hidden=True).count(), 0)
+            self.assertEqual(TraitRating.objects.count(), theirs)
+
+    def test_hiding_a_line_again_by_choosing_twice_changes_nothing(self):
+        self.rate_every_trait(self.stmarys, self.children["ada"].pk)
+        self.choose(self.head)
+        again = self.choose(self.head).json()["applied"]
+        self.assertEqual((again["traits_hidden"], again["traits_added"]), ([], []))
+        self.assertEqual(self.visible(self.stmarys, "affective"), list(ogun.AFFECTIVE))
+
+    def test_a_card_already_released_keeps_the_lines_it_was_sent_with(self):
+        from results import ratings
+
+        with connected_to(self.stmarys):
+            ratings.set_group_enabled("affective", True)
+            ratings.set_group_enabled("psychomotor", True)
+        self.rate_every_trait(self.stmarys, self.children["ada"].pk)
+        with connected_to(self.stmarys):
+            sheet = results_services.open_sheet(self.jss1a, self.term, self.head.user)
+            results_services.submit(sheet, self.teacher.user)
+            results_services.check(sheet, self.vp.user)
+            results_services.approve(sheet, self.head.user)
+            results_services.release(sheet, self.head.user)
+            from results.models import ReleasedTraitRating
+
+            def printed():
+                return list(
+                    ReleasedTraitRating.objects.filter(student_membership_id=self.children["ada"].pk)
+                    .order_by("id")
+                    .values_list("group", "trait_name", "position", "score", "score_label")
+                )
+
+            before = printed()
+            self.assertIn("Politeness", [row[1] for row in before], "the Standard lines, not the sheet's")
+
+        self.choose(self.head)
+
+        with connected_to(self.stmarys):
+            self.assertEqual(printed(), before)
+            sections = ratings.card_sections(self.children["ada"].pk, self.jss1a, self.term)
+            self.assertEqual(
+                [line.name for s in sections for line in s.lines],
+                [row[1] for row in before],
+            )

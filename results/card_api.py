@@ -494,6 +494,20 @@ class OgunSubjectOut(Schema):
     annual: Optional[str] = None
 
 
+class OgunSummaryOut(Schema):
+    """The Ogun sheet's summary: the subjects whose every paper has a mark.
+
+    A subject with a paper still to be marked is left out of all three, so a
+    total over what has been marked so far never reads as the term's total.
+    `left_out` says how many, for the page to say so.
+    """
+
+    obtainable: Optional[int] = None
+    obtained: Optional[int] = None
+    percentage: Optional[str] = None
+    left_out: int = 0
+
+
 class OgunGroupOut(Schema):
     #: The department heading on a senior card; blank on a junior one.
     label: str
@@ -552,6 +566,7 @@ class OgunSheetOut(Schema):
     times_absent: Optional[int] = None
     traits: List[OgunTraitGroupOut]
     key: List[OgunKeyOut]
+    summary: Optional[OgunSummaryOut] = None
 
 
 class PlaceOut(Schema):

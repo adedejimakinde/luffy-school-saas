@@ -16,11 +16,16 @@
 import {
   REFUSAL,
   SAVE,
+  addTrait,
+  changeTrait,
   createClass,
   createTerm,
   fetchSetup,
   makeCurrent,
   removeCrest,
+  saveOrder,
+  saveScaleLabel,
+  saveSection,
   saveColour,
   saveContactEmail,
   saveDepartment,
@@ -77,6 +82,31 @@ export function applyWrite(state, key, result) {
   return { state: { ...state, notes }, reload: false };
 }
 
+/** The trait with this id, with the section it is in, from the last answer. */
+function findTrait(state, traitId) {
+  for (const section of (state.conduct && state.conduct.sections) || []) {
+    const trait = section.traits.find((t) => t.trait_id === traitId);
+    if (trait) return { ...trait, group: section.group };
+  }
+  return null;
+}
+
+/**
+ * A section's trait ids with one moved a place, or `null` at the end of the list.
+ * The whole list is sent, hidden traits included: the server renumbers the
+ * group, and a list that left some out would put them after the others.
+ */
+export function movedOrder(state, group, traitId, by) {
+  const section = ((state.conduct && state.conduct.sections) || []).find((s) => s.group === group);
+  if (!section) return null;
+  const ids = section.traits.map((t) => t.trait_id);
+  const at = ids.indexOf(traitId);
+  const to = at + by;
+  if (at < 0 || to < 0 || to >= ids.length) return null;
+  [ids[at], ids[to]] = [ids[to], ids[at]];
+  return ids;
+}
+
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
@@ -106,6 +136,20 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       await after("crest", await removeCrest({ fetchImpl }));
       return;
     }
+    if (hit.dataset.action === "hide-trait" || hit.dataset.action === "show-trait") {
+      const trait = findTrait(state, Number(hit.dataset.trait));
+      await after(
+        trait ? `conduct_${trait.group}` : "conduct_scale",
+        await changeTrait({ traitId: Number(hit.dataset.trait), hidden: hit.dataset.action === "hide-trait", fetchImpl }),
+      );
+      return;
+    }
+    if (hit.dataset.action === "move-up" || hit.dataset.action === "move-down") {
+      const group = hit.dataset.group;
+      const ids = movedOrder(state, group, Number(hit.dataset.trait), hit.dataset.action === "move-up" ? -1 : 1);
+      if (ids) await after(`conduct_${group}`, await saveOrder({ group, traitIds: ids, fetchImpl }));
+      return;
+    }
     if (hit.dataset.action === "make-current") {
       await after(
         "term",
@@ -117,6 +161,25 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   // A department is saved as it is chosen: one select per subject, no button.
   root.addEventListener("change", async (event) => {
     const field = event.target;
+    if (field && field.dataset && field.dataset.switch !== undefined) {
+      const group = field.dataset.switch;
+      await after(`conduct_${group}`, await saveSection({ group, enabled: Boolean(field.checked), fetchImpl }));
+      return;
+    }
+    if (field && field.dataset && field.dataset.traitName !== undefined) {
+      const trait = findTrait(state, Number(field.dataset.traitName));
+      const name = String(field.value || "").trim();
+      if (trait && name === trait.name) return;
+      await after(
+        trait ? `conduct_${trait.group}` : "conduct_scale",
+        await changeTrait({ traitId: Number(field.dataset.traitName), name: field.value, fetchImpl }),
+      );
+      return;
+    }
+    if (field && field.dataset && field.dataset.scale !== undefined) {
+      await after("conduct_scale", await saveScaleLabel({ value: Number(field.dataset.scale), label: field.value, fetchImpl }));
+      return;
+    }
     if (!field || !field.dataset || field.dataset.subject === undefined) return;
     await after(
       "department",
@@ -130,6 +193,11 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (event.preventDefault) event.preventDefault();
 
     const which = form.dataset ? form.dataset.form : undefined;
+    if (which === "add-trait") {
+      const group = form.dataset.group;
+      await after(`conduct_${group}`, await addTrait({ group, name: form.name.value, fetchImpl }));
+      return;
+    }
     if (which === "ministry") {
       const box = form.show_ministry;
       await after("ministry", await saveShowMinistry({ show_ministry: Boolean(box && box.checked), fetchImpl }));

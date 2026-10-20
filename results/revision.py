@@ -184,7 +184,14 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
             supersedes=previous,
             by=actor,
         )
-        ratings.freeze_for_release(locked, frozen)
+        # The conduct section is **carried** from the card this one supersedes,
+        # not re-read from the school's settings: a trait renamed or a section
+        # switched off since the first release must not reach a reissued card.
+        # A child with no earlier card is frozen from the settings as they are.
+        if previous is None:
+            ratings.freeze_for_release(locked, frozen)
+        else:
+            ratings.carry_forward(frozen, previous)
         comments.freeze_for_release(locked, frozen)
         sessions.freeze_for_release(locked, frozen, results)
 

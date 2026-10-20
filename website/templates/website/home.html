@@ -159,6 +159,12 @@ The marks are made-up demo figures on the Ogun split (CA 30, exam 70), not
 Sunrise's database. No grade: the Ogun sheet Classnode prints has no grade
 column. The class position is printed as the Ogun sheet prints it, "2nd of
 10", in its summary.
+
+Under the marks, the Affective and Psychomotor block, compact: the Ogun sheet's
+own six lines for each (`results/ogun.py`), the 1 to 5 scale and its key, and a
+tick per line in the column of its rating. Made-up ratings, like the marks. It
+is drawn complete and not scroll-written: the sheet's timeline is spent on the
+marks, which are what the section is for.
 {% endcomment %}
   <div class="feature-row sheet-row">
     <div class="wrap sheet-stage">
@@ -215,6 +221,39 @@ column. The class position is printed as the Ogun sheet prints it, "2nd of
             </tr>
           </tbody>
         </table>
+        <div class="sheet-conduct">
+          <section class="sheet-traits" aria-label="Affective ratings">
+            <p class="sheet-label">Affective</p>
+            <table class="sheet-trait-grid">
+              <thead><tr><th scope="col">Trait</th><th scope="col" class="n">5</th><th scope="col" class="n">4</th><th scope="col" class="n">3</th><th scope="col" class="n">2</th><th scope="col" class="n">1</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Punctuality</th><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Neatness</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Honesty</th><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Self-Control</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Attentiveness in Class</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Leadership</th><td class="n"></td><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td></tr>
+              </tbody>
+              <tfoot><tr><th scope="row">Total</th><td colspan="5" class="n">25 of 30</td></tr></tfoot>
+            </table>
+          </section>
+          <section class="sheet-traits" aria-label="Psychomotor ratings">
+            <p class="sheet-label">Psychomotor</p>
+            <table class="sheet-trait-grid">
+              <thead><tr><th scope="col">Trait</th><th scope="col" class="n">5</th><th scope="col" class="n">4</th><th scope="col" class="n">3</th><th scope="col" class="n">2</th><th scope="col" class="n">1</th></tr></thead>
+              <tbody>
+                <tr><th scope="row">Handwriting</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Games &amp; Sports</th><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Fluency</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Handling of Tools</th><td class="n"></td><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Drawing &amp; Painting</th><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td><td class="n"></td></tr>
+                <tr><th scope="row">Crafts</th><td class="n"></td><td class="n"></td><td class="n"><span class="tick" aria-label="ticked">&#10003;</span></td><td class="n"></td><td class="n"></td></tr>
+              </tbody>
+              <tfoot><tr><th scope="row">Total</th><td colspan="5" class="n">23 of 30</td></tr></tfoot>
+            </table>
+          </section>
+        </div>
+        <p class="sheet-key"><strong>Rating key:</strong> 5 Excellent, 4 Good, 3 Average, 2 Below Average, 1 Unsatisfactory</p>
         <div class="sheet-foot">
           <dl class="sheet-summary">
             <div><dt>Marks obtainable</dt><dd>300</dd></div>

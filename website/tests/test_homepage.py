@@ -731,3 +731,61 @@ class TheContrastTests(TestCase):
         for tile in ("teal", "amber", "coral", "brand"):
             with self.subTest(tile=tile):
                 self.assertGreaterEqual(contrast(token("card"), token(tile)), 4.5)
+
+
+class TheConductBlockTests(SiteSetUp):
+    """The Affective and Psychomotor block of the sheet: the Ogun lists and scale,
+    made-up ratings, and a total for each that is the ticks' sum."""
+
+    #: Made-up demo ratings for Tolu, by the Ogun sheet's own lines.
+    RATINGS = {
+        "Affective": [5, 4, 5, 4, 4, 3],
+        "Psychomotor": [4, 5, 4, 3, 4, 3],
+    }
+
+    def setUp(self):
+        self.sheet = _sheet(self.get().content.decode())
+        self.groups = dict(
+            re.findall(
+                r'<section class="sheet-traits" aria-label="(\w+) ratings">(.*?)</section>',
+                self.sheet,
+                flags=re.S,
+            )
+        )
+
+    def test_it_has_both_domains_in_the_ogun_sheets_lists_and_order(self):
+        from results import ogun
+
+        self.assertEqual(list(self.groups), ["Affective", "Psychomotor"])
+        for label, lines in (("Affective", ogun.AFFECTIVE), ("Psychomotor", ogun.PSYCHOMOTOR)):
+            with self.subTest(group=label):
+                body = re.findall(r"<tbody>(.*?)</tbody>", self.groups[label], flags=re.S)[0]
+                names = [words(n) for n in re.findall(r'<th scope="row">(.*?)</th>', body, flags=re.S)]
+                self.assertEqual(names, list(lines))
+
+    def test_each_line_has_one_tick_and_the_total_is_their_sum(self):
+        for label, scores in self.RATINGS.items():
+            with self.subTest(group=label):
+                rows = re.findall(r"<tbody>(.*?)</tbody>", self.groups[label], flags=re.S)[0].split("</tr>")[:-1]
+                ticked = []
+                for row in rows:
+                    cells = re.findall(r"<td class=\"n\">(.*?)</td>", row, flags=re.S)
+                    self.assertEqual(len(cells), 5, "the five points of the scale")
+                    marks = [i for i, c in enumerate(cells) if "tick" in c]
+                    self.assertEqual(len(marks), 1)
+                    ticked.append(5 - marks[0])
+                self.assertEqual(ticked, scores)
+                self.assertIn(f"{sum(scores)} of 30", words(self.groups[label]))
+
+    def test_it_uses_the_ogun_scale_five_to_one_and_prints_its_key(self):
+        from results import ogun
+
+        for label in self.RATINGS:
+            heads = re.findall(r'<th scope="col" class="n">(\d)</th>', self.groups[label])
+            self.assertEqual(heads, [str(v) for v, _ in ogun.SCALE])
+        key = ", ".join(f"{value} {word}" for value, word in ogun.SCALE)
+        self.assertIn(f"Rating key: {key}", words(self.sheet))
+
+    def test_it_stays_on_the_sheet_and_is_not_scroll_written(self):
+        self.assertIn('class="sheet-conduct"', self.sheet)
+        self.assertNotIn("ink", self.sheet.split('class="sheet-conduct"', 1)[1].split('class="sheet-foot"', 1)[0])

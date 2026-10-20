@@ -28,9 +28,14 @@ The one rule, and every branch below is a case of it.
   marks are counted, and a mark being entered takes a key-share lock on its
   assessment, so the two cannot interleave: a mark that lands first keeps its
   subject; one that comes after finds the Ogun papers.
-- A trait that has **ever been rated** is never hidden, even when the sheet
-  does not print it: hiding it would take a rating off a card still to be
-  released. It is reported as kept. Traits are renamed to the sheet's spelling
+- **Choosing a template sets the active trait list to the template's.** A line
+  the sheet does not print is hidden, whether or not it has been rated: hiding
+  deletes nothing (`TraitRating.trait` is PROTECT and a hidden trait keeps every
+  rating made against it, which is back on the card if the school shows it
+  again), and a card already released froze its own section and is not touched.
+  Until 2026-10-20 a trait that had ever been rated was kept on the sheet instead,
+  so a school with a rated Standard list got the sheet's twelve lines *and* its
+  own leftovers; that rule is gone. Traits are renamed to the sheet's spelling
   only where they are the same line (`RENAMES`), and a rename never touches a
   rating: the value stays, and a released card keeps its frozen name.
 - The scale's words are labels; the numbers ratings store do not move.
@@ -50,10 +55,10 @@ from gradebook.models import Assessment, Score, Subject
 from . import ratings
 from .models import (
     CardTemplate,
+    ConductSettingChange,
     ReportCardSettings,
     Trait,
     TraitGroup,
-    TraitRating,
 )
 
 #: The sheet's papers, in print order: (name, out of).
@@ -122,9 +127,8 @@ class Applied:
     assessments_kept: list = field(default_factory=list)
     traits_added: list = field(default_factory=list)
     traits_renamed: list = field(default_factory=list)
+    #: Lines the sheet does not print, taken off it. Their ratings are kept.
     traits_hidden: list = field(default_factory=list)
-    #: Traits the sheet does not print and that stay, because they were rated.
-    traits_kept: list = field(default_factory=list)
 
 
 def _row() -> ReportCardSettings:
@@ -186,7 +190,6 @@ def apply_assessments(term, applied: Applied):
 
 
 def apply_traits(applied: Applied):
-    rated = set(TraitRating.objects.values_list("trait_id", flat=True).distinct())
     for group, wanted in TRAITS.items():
         ratings.set_group_enabled(group, True)
         existing = list(Trait.objects.in_group(group))
@@ -216,10 +219,6 @@ def apply_traits(applied: Applied):
         wanted_lower = {n.lower() for n in wanted}
         for trait in Trait.objects.in_group(group).filter(is_hidden=False):
             if trait.name.lower() in wanted_lower:
-                continue
-            if trait.pk in rated:
-                applied.traits_kept.append(trait.name)
-                order.append(trait.pk)
                 continue
             trait.is_hidden = True
             trait.save(update_fields=["is_hidden", "updated_at"])
@@ -275,6 +274,15 @@ def set_template_as(actor, school, template: str):
         fields.append("show_position")
     row.save(update_fields=fields)
     applied = apply_presets() if template == CardTemplate.OGUN else None
+    if applied is not None:
+        # One entry for the whole set-up, so the settings log accounts for the
+        # traits and the scale it changed without a line for each.
+        ratings.record_change(
+            actor,
+            ConductSettingChange.Kind.TEMPLATE_APPLIED,
+            "Chose the Ogun State template: affective and psychomotor traits "
+            "and the rating key set to the sheet's",
+        )
     return row, applied
 
 

@@ -54,6 +54,7 @@ from accounts.students import why_not_a_student_here
 from . import positions
 from .models import (
     LOWEST_RATING,
+    ConductSettingChange,
     RatingScalePoint,
     ReleasedCard,
     ReleasedTraitRating,
@@ -1018,6 +1019,78 @@ def _label_for(score, labels) -> str:
 # ---------------------------------------------------------------------------
 
 
+def frozen_scale() -> list[list]:
+    """The scale as a card keeps it: `[[5, "Excellent"], ..., [1, "Poor"]]`.
+
+    Highest first, the order the key prints in. A point with no row falls back to
+    its number, as `_label_for()` does, so a card never carries an empty word.
+    """
+    labels = scale_labels()
+    return [
+        [value, labels.get(value) or str(value)]
+        for value in range(HIGHEST_RATING, LOWEST_RATING - 1, -1)
+    ]
+
+
+def scale_of_card(card) -> list[dict]:
+    """The rating key this released card was printed with.
+
+    From the card's own frozen scale. A card written before the scale was frozen
+    has none, so each point takes the word its own frozen ratings carry and only
+    a point nobody was given falls back to the school's current word: the
+    closest a card that old can come to what it printed.
+    """
+    if card.rating_scale:
+        return [{"value": value, "label": label} for value, label in card.rating_scale]
+    printed = {
+        score: label
+        for score, label in ReleasedTraitRating.objects.filter(
+            card=card, score__isnull=False
+        )
+        .exclude(score_label="")
+        .values_list("score", "score_label")
+        .distinct()
+    }
+    live = scale_labels()
+    return [
+        {"value": value, "label": printed.get(value) or live.get(value) or str(value)}
+        for value in range(HIGHEST_RATING, LOWEST_RATING - 1, -1)
+    ]
+
+
+def carry_forward(card_by_student, previous) -> int:
+    """A revised card keeps the conduct section its predecessor was sent with.
+
+    `freeze_for_release()` reads the school's configuration as it is *now*. For
+    the first card that is the point; for a reissue it would reach backwards: a
+    trait renamed or a section switched off since December would change the
+    section a parent reads in March, when the correction was to a name. So a
+    revision copies the section of the card it supersedes, rows and all, and
+    only a child with no earlier card is frozen from live configuration.
+
+    Returns the rows written.
+    """
+    rows = []
+    for student_id, card in card_by_student.items():
+        for old in ReleasedTraitRating.objects.filter(card=previous):
+            rows.append(
+                ReleasedTraitRating(
+                    sheet=card.sheet,
+                    card=card,
+                    student_membership_id=student_id,
+                    trait_id=old.trait_id,
+                    group=old.group,
+                    trait_name=old.trait_name,
+                    position=old.position,
+                    score=old.score,
+                    score_label=old.score_label,
+                )
+            )
+    ReleasedTraitRating.objects.bulk_create(rows)
+    return len(rows)
+
+
+
 def freeze_for_release(sheet, card_by_student) -> int:
     """Copy this class's conduct sections as they read now. Returns rows written.
 
@@ -1174,34 +1247,134 @@ def clear_rating_as(actor, term, trait, membership) -> bool:
     return clear_rating(term, trait, membership, placement=placement)
 
 
+def _name_of(actor) -> str:
+    return (getattr(actor, "full_name", "") or str(actor))[:255]
+
+
+def record_change(actor, kind, summary, *, group="") -> ConductSettingChange:
+    """Write down that `actor` changed what the conduct sections print.
+
+    Who and when, as the sentence they would be told: the row is a record for
+    the principal to read, not a diff to replay. `actor` may be `None` for a
+    change with no person behind it.
+    """
+    return ConductSettingChange.objects.create(
+        kind=kind,
+        group=group,
+        summary=summary[:255],
+        by_id=getattr(actor, "pk", None),
+        by_name=_name_of(actor) if actor is not None else "",
+    )
+
+
+def changes(limit=20):
+    """The latest changes to the conduct settings, newest first."""
+    return ConductSettingChange.objects.all()[:limit]
+
+
+def _section_name(group) -> str:
+    return TraitGroup(group).label
+
+
 def set_group_enabled_as(actor, group, on: bool) -> ReportCardSettings:
+    """Switch a section on or off, and log it if that changed anything.
+
+    Off hides the rating grid and the section on cards released from now on.
+    **Nothing is deleted:** the ratings already entered stay, and are back on the
+    grid if the section is switched on again. A card already released froze its
+    own section and is not touched either way.
+    """
     _require_configuring_authority(actor)
-    return set_group_enabled(group, on)
+    group = _group(group)
+    with transaction.atomic():
+        before = is_enabled(group)
+        row = set_group_enabled(group, on)
+        if before != bool(on):
+            record_change(
+                actor,
+                ConductSettingChange.Kind.SECTION_ON
+                if on
+                else ConductSettingChange.Kind.SECTION_OFF,
+                f"Switched {_section_name(group)} {'on' if on else 'off'}",
+                group=group,
+            )
+    return row
 
 
 def add_trait_as(actor, group, name, *, position=None) -> Trait:
     _require_configuring_authority(actor)
-    return add_trait(group, name, position=position)
+    with transaction.atomic():
+        trait = add_trait(group, name, position=position)
+        record_change(
+            actor,
+            ConductSettingChange.Kind.TRAIT_ADDED,
+            f"Added {trait.name} to {_section_name(trait.group)}",
+            group=trait.group,
+        )
+    return trait
 
 
 def rename_trait_as(actor, trait, name) -> Trait:
     _require_configuring_authority(actor)
-    return rename_trait(trait, name)
+    with transaction.atomic():
+        before = _the_trait_row(trait).name
+        trait = rename_trait(trait, name)
+        if trait.name != before:
+            record_change(
+                actor,
+                ConductSettingChange.Kind.TRAIT_RENAMED,
+                f"Renamed {before} to {trait.name} in {_section_name(trait.group)}",
+                group=trait.group,
+            )
+    return trait
 
 
 def set_trait_hidden_as(actor, trait, hidden: bool = True) -> Trait:
     _require_configuring_authority(actor)
-    return set_trait_hidden(trait, hidden)
+    with transaction.atomic():
+        before = _the_trait_row(trait).is_hidden
+        trait = set_trait_hidden(trait, hidden)
+        if trait.is_hidden != before:
+            record_change(
+                actor,
+                ConductSettingChange.Kind.TRAIT_HIDDEN
+                if trait.is_hidden
+                else ConductSettingChange.Kind.TRAIT_SHOWN,
+                f"{'Hid' if trait.is_hidden else 'Showed'} {trait.name} "
+                f"in {_section_name(trait.group)}",
+                group=trait.group,
+            )
+    return trait
 
 
 def reorder_as(actor, group, trait_ids) -> int:
     _require_configuring_authority(actor)
-    return reorder(group, trait_ids)
+    group = _group(group)
+    with transaction.atomic():
+        moved = reorder(group, trait_ids)
+        if moved:
+            record_change(
+                actor,
+                ConductSettingChange.Kind.TRAITS_REORDERED,
+                f"Reordered the traits of {_section_name(group)}",
+                group=group,
+            )
+    return moved
 
 
 def set_scale_label_as(actor, value, label) -> RatingScalePoint:
     _require_configuring_authority(actor)
-    return set_scale_label(value, label)
+    with transaction.atomic():
+        before = scale_labels().get(value)
+        point = set_scale_label(value, label)
+        if point.label != before:
+            record_change(
+                actor,
+                ConductSettingChange.Kind.SCALE_LABEL,
+                f"Renamed {value} on the rating scale from "
+                f"{before or 'nothing'} to {point.label}",
+            )
+    return point
 
 
 __all__ = [
@@ -1222,8 +1395,13 @@ __all__ = [
     "card_sections",
     "clear_rating",
     "clear_rating_as",
+    "changes",
+    "carry_forward",
     "enabled_groups",
     "freeze_for_release",
+    "frozen_scale",
+    "record_change",
+    "scale_of_card",
     "is_enabled",
     "rate",
     "rate_as",

@@ -17,7 +17,7 @@ import { emptyState, esc, numberOrBlank } from "../web/html.js";
  */
 export function shape({
   terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "",
-  lga = "", lga_choices = [], school_code = "", subjects = [], departments = [], notes = {},
+  lga = "", lga_choices = [], school_code = "", subjects = [], departments = [], conduct = null, notes = {},
 } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
@@ -42,6 +42,8 @@ export function shape({
     newClassForm(notes.class),
 
     card ? cardLook(card, notes) : "",
+
+    conduct ? conductSettings(conduct, notes) : "",
 
     localGovernment(lga, lga_choices, notes, school_code),
     card && card.template === "ogun" ? subjectDepartments(subjects, departments, notes) : "",
@@ -277,6 +279,117 @@ function cardLook(card, notes) {
 }
 
 /**
+ * The affective and psychomotor sections: a switch, a trait list and the 1 to 5
+ * scale's words. The principal's and the administrator's, and only theirs: the
+ * server sends this block to nobody else.
+ *
+ * **Off hides, it does not delete.** The switch's sentence says so, because the
+ * question a principal has is whether the ratings are gone. And every sentence
+ * about a card already sent says it keeps what it showed: that is the promise
+ * the whole section is built on, and the screen is where it is made.
+ *
+ * A trait is never deleted, only hidden: a hidden one stays in the list, muted,
+ * with a button to show it again, because ratings and released cards still name it.
+ */
+function conductSettings(conduct, notes) {
+  return [
+    '<h2 id="conduct">Affective and psychomotor</h2>',
+    '<p class="hint">The conduct and skills lines under the marks. Teachers rate each child ',
+    "from 1 to 5. Changes apply to cards released from now on; a card already sent home ",
+    "keeps the lines, ratings and words it was sent with.</p>",
+    ...conduct.sections.map((section) => conductSection(section, notes)),
+    scaleForm(conduct.scale, notes.conduct_scale),
+    changeLog(conduct.changes),
+  ].join("");
+}
+
+function conductSection(section, notes) {
+  const note = notes[`conduct_${section.group}`];
+  const id = `conduct-${esc(section.group)}`;
+  return [
+    `<section class="conduct-section${section.enabled ? " on" : ""}" data-group="${esc(section.group)}" aria-labelledby="${id}">`,
+    `<label class="switch"><input type="checkbox" role="switch" data-switch="${esc(section.group)}"` +
+      `${section.enabled ? " checked" : ""}>` +
+      `<span class="track" aria-hidden="true"></span>` +
+      `<span class="switch-text"><strong id="${id}">${esc(section.label)}</strong>` +
+      `<span class="hint">${
+        section.enabled
+          ? "On. Teachers rate it and new cards print it."
+          : "Off. No rating grid for teachers and no section on new cards. Ratings already entered are kept."
+      }</span></span></label>`,
+    section.traits.length
+      ? `<ol class="trait-list">${section.traits.map((t, i) => traitRow(section, t, i)).join("")}</ol>`
+      : '<p class="blank">No traits yet.</p>',
+    `<form class="trait-add" data-form="add-trait" data-group="${esc(section.group)}">`,
+    `<label for="new-${esc(section.group)}">Add a trait</label>`,
+    `<span class="row"><input id="new-${esc(section.group)}" name="name" maxlength="64" autocomplete="off" placeholder="Respect for school property">`,
+    '<button type="submit">Add</button></span>',
+    "</form>",
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</section>",
+  ].join("");
+}
+
+function traitRow(section, t, index) {
+  const last = index === section.traits.length - 1;
+  const g = esc(section.group);
+  return [
+    `<li class="trait${t.is_hidden ? " hidden" : ""}">`,
+    `<input class="trait-name" aria-label="Name of trait ${index + 1}" value="${esc(t.name)}" maxlength="64" ` +
+      `data-trait-name="${esc(t.trait_id)}" autocomplete="off">`,
+    '<span class="trait-actions">',
+    `<button type="button" class="icon-btn" data-action="move-up" data-group="${g}" data-trait="${esc(t.trait_id)}" aria-label="Move ${esc(t.name)} up"${index === 0 ? " disabled" : ""}>&uarr;</button>`,
+    `<button type="button" class="icon-btn" data-action="move-down" data-group="${g}" data-trait="${esc(t.trait_id)}" aria-label="Move ${esc(t.name)} down"${last ? " disabled" : ""}>&darr;</button>`,
+    t.is_hidden
+      ? `<button type="button" data-action="show-trait" data-trait="${esc(t.trait_id)}">Show</button>`
+      : `<button type="button" data-action="hide-trait" data-trait="${esc(t.trait_id)}">Hide</button>`,
+    "</span>",
+    t.is_hidden ? '<span class="hint">Hidden. Off new cards; its ratings are kept.</span>' : "",
+    "</li>",
+  ].join("");
+}
+
+/** Five words for five fixed numbers. The numbers are not editable: ratings are stored as them. */
+function scaleForm(scale, note) {
+  return [
+    '<section class="conduct-scale" aria-labelledby="conduct-scale">',
+    '<h3 id="conduct-scale">Rating scale</h3>',
+    '<p class="hint">Always 1 to 5. You can change the words, not the numbers.</p>',
+    '<ul class="scale-list">',
+    scale
+      .map(
+        (p) =>
+          `<li><label for="scale-${esc(p.value)}"><span class="num">${esc(p.value)}</span></label>` +
+          `<input id="scale-${esc(p.value)}" value="${esc(p.label)}" maxlength="32" data-scale="${esc(p.value)}" autocomplete="off"></li>`,
+      )
+      .join(""),
+    "</ul>",
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</section>",
+  ].join("");
+}
+
+/** Who changed what, and when: the latest few, folded away until asked for. */
+function changeLog(changes) {
+  if (!changes || !changes.length) return "";
+  return [
+    '<details class="change-log"><summary>Recent changes</summary><ul>',
+    changes
+      .map((c) => `<li><span class="when">${esc(whenText(c.at))}</span> ${esc(c.summary)} <span class="hint">by ${esc(c.by)}</span></li>`)
+      .join(""),
+    "</ul></details>",
+  ].join("");
+}
+
+/** "2026-10-20 14:05" from an ISO time, in the reader's own zone. */
+export function whenText(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
  * Which card the school prints. Choosing the Ogun State card sets up its
  * papers, traits and scale on the server; the sentence under the choice says
  * what it did, and what it left alone because marks or ratings were in.
@@ -351,9 +464,8 @@ function applied(a) {
   }
   if (a.traits_added.length) lines.push(`<li>Traits added: ${list(a.traits_added)}.</li>`);
   if (a.traits_renamed.length) lines.push(`<li>Traits renamed: ${list(a.traits_renamed)}.</li>`);
-  if (a.traits_hidden.length) lines.push(`<li>Traits taken off the sheet: ${list(a.traits_hidden)}.</li>`);
-  if (a.traits_kept.length) {
-    lines.push(`<li>Kept on the sheet, because they have been rated: ${list(a.traits_kept)}.</li>`);
+  if (a.traits_hidden.length) {
+    lines.push(`<li>Traits the sheet does not print, hidden (any ratings are kept): ${list(a.traits_hidden)}.</li>`);
   }
   lines.push("</ul></div>");
   return lines.join("");

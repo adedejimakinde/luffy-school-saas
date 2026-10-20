@@ -7,8 +7,8 @@ person who taught the child all term.
 
 `results/ratings.py` holds all of it: what a school prints, who may say so, who
 may rate, and what a released card keeps saying afterwards. `results/models.py`
-holds the five tables. There is deliberately no HTTP here — see
-[Nothing to call yet](#nothing-to-call-yet).
+holds the tables. This module has no HTTP of its own: the settings page's routes
+are in `results/conduct_api.py` — see [The settings page](#the-settings-page).
 
 ## Off by default, and off means *absent*
 
@@ -403,16 +403,57 @@ id. Three `PositiveBigIntegerField`s on one row, two id spaces, and both are
 small dense integers: a "who rated this child?" panel that resolves the wrong
 one does not fail, it names somebody else.
 
-## Nothing to call yet
+## The settings page
 
-No endpoint, no serializer, no template. `results/api.py` still publishes only
-the broadsheet, and `card_sections()` is what the report card will render from
-when task 3 builds it — the section list is already in the right shape for it,
-frozen or live, and the caller does not have to know which.
+`results/conduct_api.py` is the door, and the setup page (`/setup/`, the "Affective
+and psychomotor" block under the report card's look) is the screen. Two switches,
+**Affective (conduct)** and **Psychomotor (skills)**, each over its own trait list,
+and one scale of five points. For each section the principal or an administrator
+can rename, add, hide and show, and reorder traits, and edit the five words; the
+numbers 1 to 5 are not editable, for the reason under "The numbers are fixed".
+Every route is `CONFIGURING_ROLES` alone, asked before any lookup, so the status
+of a refusal never says which trait ids exist, and reading the block is as narrow
+as writing it because the change list names people. The block rides on
+`GET /api/academics/setup/` (`conduct`), so the page costs no extra request; the
+writes are `PUT/POST /api/results/report-card/conduct/...`.
 
-That is also why `academics.services` has no `api.py` and this module has none:
-the rules have to hold for an import too, and a rule that lives in a view only
-holds for the view.
+### Off hides and keeps
+
+Switching a section off takes the rating grid away from class teachers
+(`comments_api` builds it from `enabled_groups()`) and the section off every card
+released from then on (`freeze_for_release()` freezes enabled groups only). It
+deletes nothing: `TraitRating` rows stay, and switching the section on again
+brings every rating back onto the grid. Rating into a section that is off is
+refused (`SectionNotEnabled`, a 422 over HTTP).
+
+### A card already released does not move
+
+Two things reached a released card through live settings, and both are closed:
+
+- **The Ogun sheet's rating key** was read from the live scale on every render,
+  so relabelling "Good" would have reworded a card in a parent's hand. The key is
+  now copied onto the card at release (`ReleasedCard.rating_scale`,
+  `ratings.frozen_scale()`), and `scale_of_card()` reads it. A card written before
+  this has none, and reads each word back from its own frozen ratings.
+- **A revision re-froze from live settings.** A reissued card is a new version,
+  and the highest version is the card, so a trait renamed or a section switched
+  off since the first release would have changed the section a parent read. A
+  revision now **carries** the superseding card's section and key
+  (`ratings.carry_forward()`); only a child with no earlier card is frozen from
+  settings as they are.
+
+`results/tests/test_conduct_settings.py` changes everything a school can change after a
+release and asserts the card payload, the stored rows, the Ogun key and a reissued
+version are identical.
+
+### Every change is logged: who, what, when
+
+`ConductSettingChange` is one append-only row per change (trigger in migration
+`0034`): the sentence ("Renamed Neatness to Tidiness in Affective (conduct)"), the
+person's name as it was, their `User` id and the time. A call that changes nothing
+(switching on what is on, renaming to the same name) writes nothing. Choosing the
+Ogun template writes one entry for the whole set-up. The latest twenty are on the
+page under "Recent changes".
 
 ## Every refusal is this module's own
 

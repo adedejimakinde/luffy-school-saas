@@ -2372,6 +2372,14 @@ class ReleasedCard(models.Model):
     #: From a **shared** schema. A name corrected in `accounts` next year must
     #: not rewrite the card a parent is holding.
     student_name = models.CharField(max_length=255)
+    #: The words the school gave the five points of the rating scale when this
+    #: card was written: `[[5, "Excellent"], ..., [1, "Unsatisfactory"]]`, highest
+    #: first. The Ogun sheet prints them as its rating key, and a school may
+    #: relabel a point next term, so the key is copied here like everything else
+    #: the card prints. Null on a card written before the scale was frozen; the
+    #: key is then read back from the labels its own frozen ratings carry
+    #: (`ratings.scale_of_card()`).
+    rating_scale = models.JSONField(null=True, blank=True)
 
     # -- the child's own numbers ---------------------------------------------
 
@@ -3217,3 +3225,63 @@ class OgseraMapping(models.Model):
 
     def __str__(self):
         return f"OGSERA mapping: {len(self.columns)} columns"
+
+
+class ConductSettingChange(models.Model):
+    """One change to what the conduct and skills sections print. Written once.
+
+    The log behind the report card settings page: who changed it and when.
+    `docs/operating-rules.md` rule 8 says a decision that leaves an artefact
+    needs no log and one that leaves only an edited row does. Turning a section
+    off, hiding a trait, renaming one or relabelling a point of the scale leaves
+    exactly that: a changed row, with the previous value gone. So the change is
+    a row of its own.
+
+    ## The words are copied, not joined (rule 2)
+
+    `summary` is a sentence written at the time ("Renamed Neatness to Tidiness"),
+    and `by_name` is the person's name as it stood then. A trait is renamed
+    again next term and a person's name is corrected; neither may reach back
+    into this record. `by_id` is a bare `User` id, nullable, on
+    `docs/tenancy.md`'s policy: a change can come from the Ogun template's
+    setup, which has the school's choice behind it and no further person.
+
+    ## Append-only
+
+    `save()` refuses an edit and a trigger (migration `0034`) refuses what never
+    calls it.
+    """
+
+    class Kind(models.TextChoices):
+        SECTION_ON = "section_on", "Section switched on"
+        SECTION_OFF = "section_off", "Section switched off"
+        TRAIT_ADDED = "trait_added", "Trait added"
+        TRAIT_RENAMED = "trait_renamed", "Trait renamed"
+        TRAIT_HIDDEN = "trait_hidden", "Trait hidden"
+        TRAIT_SHOWN = "trait_shown", "Trait shown"
+        TRAITS_REORDERED = "traits_reordered", "Traits reordered"
+        SCALE_LABEL = "scale_label", "Scale label changed"
+        TEMPLATE_APPLIED = "template_applied", "Ogun State template applied"
+
+    kind = models.CharField(max_length=24, choices=Kind)
+    #: A `TraitGroup` value, or blank for a change that is not about one section.
+    group = models.CharField(max_length=16, blank=True)
+    summary = models.CharField(max_length=255)
+
+    by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    by_name = models.CharField(max_length=255, blank=True)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise ValueError("A settings change is written once and never edited.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("A settings change is a record and is never deleted.")
+
+    def __str__(self):
+        return f"{self.at:%Y-%m-%d %H:%M} {self.summary}"

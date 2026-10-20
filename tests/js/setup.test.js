@@ -366,7 +366,7 @@ test("the template choice says which card the school prints", () => {
   assert.match(html, /Nothing already marked or rated is changed/);
 });
 
-test("choosing Ogun sends it and says what was set up and what was kept", async () => {
+test("choosing Ogun sends it and says what was set up, what was kept and what was hidden", async () => {
   forgetToken();
   const sent = [];
   const root = fakeRoot({});
@@ -383,8 +383,7 @@ test("choosing Ogun sends it and says what was set up and what was kept", async 
               assessments_kept: ["Mathematics, First term 2025/2026"],
               traits_added: ["Self-Control"],
               traits_renamed: [],
-              traits_hidden: ["Attendance"],
-              traits_kept: ["Politeness"],
+              traits_hidden: ["Attendance", "Politeness"],
             },
           },
         };
@@ -399,7 +398,7 @@ test("choosing Ogun sends it and says what was set up and what was kept", async 
   assert.match(root.innerHTML, /Report cards use the Ogun State template/);
   assert.match(root.innerHTML, /Papers set for English, First term 2025\/2026/);
   assert.match(root.innerHTML, /because marks are in: Mathematics, First term 2025\/2026/);
-  assert.match(root.innerHTML, /because they have been rated: Politeness/);
+  assert.match(root.innerHTML, /hidden \(any ratings are kept\): Attendance, Politeness/);
 });
 
 test("a refused choice keeps the form with the server's sentence", async () => {
