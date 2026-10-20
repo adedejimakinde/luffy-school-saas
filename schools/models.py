@@ -168,6 +168,19 @@ class School(TenantMixin):
     def __str__(self):
         return self.name
 
+    def save(self, *args, **kwargs):
+        """Refuse a demo school's name on a server that is not allowed one.
+
+        Before `TenantMixin.save()`, which would build and migrate a schema:
+        the refusal must come ahead of the DDL, not after it. See
+        `schools.demo_slugs`, which also says why start-up asks the same
+        question of rows this method never sees.
+        """
+        from .demo_slugs import refuse_creating
+
+        refuse_creating(self.slug, self.schema_name)
+        super().save(*args, **kwargs)
+
 
 class Domain(DomainMixin):
     """Hostname a school is reached on, e.g. stmarys.luffy.school."""

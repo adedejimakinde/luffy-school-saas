@@ -39,6 +39,7 @@ from django.db import transaction
 
 from accounts.models import Role
 from schools import invitations
+from schools.demo_slugs import creating_message, demo_schools_allowed, is_demo_name
 from schools.delivery import DeliveryNotConfigured, get_channel
 from schools.models import Domain, Invitation, School
 
@@ -185,6 +186,8 @@ def create_school(*, slug, name, operator, admin_email=None, admin_phone=None, a
     if label in RESERVED or label == portal_label:
         raise OnboardingError(f"{label!r} is reserved for the platform itself.")
     schema_name = label.replace("-", "_")
+    if not demo_schools_allowed() and is_demo_name(label):
+        raise OnboardingError(creating_message(label))
     if schema_name.startswith("pg_"):
         raise OnboardingError(f"{label!r} would make a schema name Postgres reserves.")
     if School.objects.filter(slug=label).exists() or School.objects.filter(
