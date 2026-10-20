@@ -89,9 +89,10 @@ export function fakeRoot(dataset = {}) {
      * for it without capture, and a stub that fired one as the other would
      * exercise a listener the browser would not call.
      */
-    async change(attributes = {}, value = "") {
+    async change(attributes = {}, value = "", extra = {}) {
       const target = fakeTarget(attributes);
       target.value = value;
+      Object.assign(target, extra);
       for (const handler of listeners.change || []) await handler({ target });
     },
     async click(attributes = { "data-action": "sign-out" }) {
@@ -113,8 +114,9 @@ export function fakeRoot(dataset = {}) {
       target.value = value;
       for (const handler of listeners.blur || []) await handler({ target });
     },
-    async submit(formFields = {}) {
+    async submit(formFields = {}, dataset = undefined) {
       const form = {};
+      if (dataset) form.dataset = dataset;
       // A string is a typed value; an object is the field itself, for the
       // fields a string cannot stand in for (a file input's `files`).
       for (const [name, value] of Object.entries(formFields)) {

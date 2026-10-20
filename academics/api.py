@@ -212,6 +212,9 @@ class SetUpOut(Schema):
     #: Each subject and its department, for the Ogun State senior card.
     subjects: List[dict] = []
     departments: List[dict] = []
+    #: The affective and psychomotor sections, their traits and the scale, with
+    #: the latest changes (`results.conduct_api`). Edited through that router.
+    conduct: Optional[dict] = None
 
 
 class NewTermIn(Schema):
@@ -261,6 +264,15 @@ def _refuse_outsiders(request, school):
     return None
 
 
+def _conduct_settings(actor, school):
+    """The conduct sections' settings, for whoever may change them."""
+    from results import conduct_api, ratings
+
+    if not ratings.can_configure_ratings(actor, school):
+        return None
+    return conduct_api.settings_payload().dict()
+
+
 @router.get("/setup/", response={200: SetUpOut, 403: MessageOut})
 def setup(request):
     """Every term and every class group, in the order each declares.
@@ -289,6 +301,7 @@ def setup(request):
             for s in Subject.objects.filter(is_active=True).order_by("name")
         ],
         departments=[{"value": d.value, "label": d.label} for d in Department],
+        conduct=_conduct_settings(request.user, school),
     )
 
 

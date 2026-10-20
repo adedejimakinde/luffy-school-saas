@@ -109,7 +109,7 @@ def _refuse_outsiders(request, school):
     return None
 
 
-def _payload() -> ConductOut:
+def settings_payload() -> ConductOut:
     from .models import TraitRating
 
     rated = set(TraitRating.objects.values_list("trait_id", flat=True).distinct())
@@ -157,7 +157,7 @@ def _guarded(request, act):
         return 403, MessageOut(detail=_MAY_NOT)
     except ratings.RatingsError as exc:
         return 422, MessageOut(detail=str(exc))
-    return 200, _payload()
+    return 200, settings_payload()
 
 
 def _trait(trait_id: int) -> Trait:
@@ -174,7 +174,7 @@ def conduct_settings(request):
     refused = _refuse_outsiders(request, school)
     if refused is not None:
         return refused
-    return 200, _payload()
+    return 200, settings_payload()
 
 
 @router.put("/report-card/conduct/{group}/enabled/", response=_RESPONSES)

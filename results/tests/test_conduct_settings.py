@@ -464,3 +464,24 @@ class TheOgunKeyTests(ConductSetUp):
             self.assertEqual(
                 ConductSettingChange.objects.filter(kind="template_applied").count(), 1
             )
+
+
+class TheSetupPageCarriesItTests(ConductSetUp):
+    def setup_of(self, user, host=HOST):
+        return self.send("get", "/api/academics/setup/", user, host=host)
+
+    def test_the_setup_answer_carries_the_block_for_the_office_and_each_school_its_own(self):
+        self.send("post", f"{URL}{AFFECTIVE}/traits/", self.principal, {"name": "Kindness"})
+
+        mine = self.setup_of(self.principal).json()["conduct"]
+        theirs = self.setup_of(self.their_principal, THEIR_HOST).json()["conduct"]
+
+        self.assertEqual(mine, self.send("get", URL, self.principal).json())
+        self.assertIn("Kindness", [t["name"] for t in mine["sections"][0]["traits"]])
+        self.assertNotIn("Kindness", [t["name"] for t in theirs["sections"][0]["traits"]])
+        self.assertEqual([s["group"] for s in mine["sections"]], [AFFECTIVE, PSYCHOMOTOR])
+
+    def test_a_teacher_gets_no_setup_page_and_so_no_block(self):
+        response = self.setup_of(self.teacher)
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("conduct", response.json())

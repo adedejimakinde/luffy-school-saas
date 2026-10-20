@@ -316,3 +316,45 @@ export async function saveDepartment({ subjectId, department, fetchImpl = fetch 
   }
   return classify(answer, 200);
 }
+
+export function conductUrl(path = "") {
+  return `/api/results/report-card/conduct/${path}`;
+}
+
+/** Switch the affective or the psychomotor section on or off. */
+export async function saveSection({ group, enabled, fetchImpl = fetch }) {
+  return conductWrite(putJson, conductUrl(`${encodeURIComponent(group)}/enabled/`), { enabled }, fetchImpl);
+}
+
+/** A new line at the end of a section. */
+export async function addTrait({ group, name, fetchImpl = fetch }) {
+  return conductWrite(postJson, conductUrl(`${encodeURIComponent(group)}/traits/`), { name }, fetchImpl);
+}
+
+/** Rename a trait, or hide or show it: either or both. Never deletes. */
+export async function changeTrait({ traitId, name, hidden, fetchImpl = fetch }) {
+  const body = {};
+  if (name !== undefined) body.name = name;
+  if (hidden !== undefined) body.hidden = hidden;
+  return conductWrite(putJson, conductUrl(`traits/${encodeURIComponent(traitId)}/`), body, fetchImpl);
+}
+
+/** Put a section's traits in this order. */
+export async function saveOrder({ group, traitIds, fetchImpl = fetch }) {
+  return conductWrite(putJson, conductUrl(`${encodeURIComponent(group)}/order/`), { trait_ids: traitIds }, fetchImpl);
+}
+
+/** Rename one point of the 1 to 5 scale. The number does not move. */
+export async function saveScaleLabel({ value, label, fetchImpl = fetch }) {
+  return conductWrite(putJson, conductUrl(`scale/${encodeURIComponent(value)}/`), { label }, fetchImpl);
+}
+
+async function conductWrite(send, url, body, fetchImpl) {
+  let answer;
+  try {
+    answer = await send(url, body, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return classify(answer, 200);
+}
