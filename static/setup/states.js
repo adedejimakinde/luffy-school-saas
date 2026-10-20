@@ -464,9 +464,8 @@ function applied(a) {
   }
   if (a.traits_added.length) lines.push(`<li>Traits added: ${list(a.traits_added)}.</li>`);
   if (a.traits_renamed.length) lines.push(`<li>Traits renamed: ${list(a.traits_renamed)}.</li>`);
-  if (a.traits_hidden.length) lines.push(`<li>Traits taken off the sheet: ${list(a.traits_hidden)}.</li>`);
-  if (a.traits_kept.length) {
-    lines.push(`<li>Kept on the sheet, because they have been rated: ${list(a.traits_kept)}.</li>`);
+  if (a.traits_hidden.length) {
+    lines.push(`<li>Traits the sheet does not print, hidden (any ratings are kept): ${list(a.traits_hidden)}.</li>`);
   }
   lines.push("</ul></div>");
   return lines.join("");

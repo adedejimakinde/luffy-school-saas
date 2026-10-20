@@ -679,7 +679,6 @@ class AppliedOut(Schema):
     traits_added: List[str]
     traits_renamed: List[str]
     traits_hidden: List[str]
-    traits_kept: List[str]
 
 
 class TemplateOut(Schema):
