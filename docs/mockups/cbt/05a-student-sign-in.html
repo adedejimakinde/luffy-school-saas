@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sit a test</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="cbt.css">
+<body class="exam">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-brand-mark-light" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--card)"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--brand)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--brand)"/><circle cx="17" cy="8" r="2.1" fill="var(--brand)"/><circle cx="12" cy="17" r="2.1" fill="var(--brand)"/>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+</svg>
+<p class="mock-note">Mockup. sunrise-demo.classnode.co/sit/, on a school computer. Recommended sign-in: the test code the teacher reads out, the admission number, and the exam PIN from the student's slip. The session opens this one test and nothing else.</p>
+<div class="door"><form class="door-card" onsubmit="return false">
+  <span class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</span>
+  <p class="school"><span class="crest" aria-hidden="true">SD</span>Sunrise Demo Academy</p>
+  <div><h1>Sit a test</h1><p class="sub">Your teacher gives you the test code when the test starts.</p></div>
+  <label class="field">Test code<input class="code" type="text" value="K7QM2P" autocomplete="off" autocapitalize="characters"></label>
+  <label class="field">Admission number<input type="text" value="SDA/2020/0087" autocomplete="off"></label>
+  <label class="field">Exam PIN<input type="password" value="12345678" inputmode="numeric" autocomplete="off"><span class="hint">The 8 digits on your exam slip for this term.</span></label>
+  <button type="submit">Continue</button>
+  <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>For use on school computers. Nothing is kept on this computer after you submit.</p>
+</form></div>
+</body>
+</html>

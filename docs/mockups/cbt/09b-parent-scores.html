@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test scores</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="cbt.css">
+<body class="family">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-brand-mark-light" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--card)"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--brand)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--brand)"/><circle cx="17" cy="8" r="2.1" fill="var(--brand)"/><circle cx="12" cy="17" r="2.1" fill="var(--brand)"/>
+  </symbol>
+  <symbol id="i-child" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3.5"/><path d="M5 21c0-4 3-7 7-7s7 3 7 7"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+</svg>
+<p class="mock-note">Mockup. A parent signed in with their code (the guardian door), on their own phone. Their own child's released scores only: no questions, no answers, no other child, no class average.</p>
+<header class="family-top"><div class="family-top-in">
+  <span class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</span>
+  <span class="spacer"></span>
+  <span class="quiet" style="font-size:var(--t-3)">Mrs Ngozi Obi</span>
+  <details class="account"><summary class="icon-button" aria-label="Your account"><span class="avatar">NO</span></summary></details>
+</div></header>
+<main class="family-main"><div class="cbt">
+  <div class="head"><div><p class="eyebrow">Amaka Obi, SS&nbsp;2A</p><h1>Test scores</h1><p>Tests on the computer at school, once the teacher releases them.</p></div><div class="actions"><a class="btn" href="#"><svg class="icon" aria-hidden="true"><use href="#i-child"/></svg>Change child</a></div></div>
+  <section class="panel">
+    <ul class="test-list">
+      <li class="test-row"><div><strong>Second CA test: algebra, indices and logs</strong><br><span class="quiet">Mathematics, released 23 Oct</span></div><span class="score">18/20<small>90%</small></span></li>
+      <li class="test-row"><div><strong>Comprehension check: unit 3</strong><br><span class="quiet">English Language, released 9 Oct</span></div><span class="score">12/15<small>80%</small></span></li>
+      <li class="test-row"><div><strong>First CA test: number bases</strong><br><span class="quiet">Mathematics, released 2 Oct</span></div><span class="score">15/20<small>75%</small></span></li>
+      <li class="test-row"><div><strong>Practical test: titration</strong><br><span class="quiet">Chemistry, released 25 Sep</span></div><span class="score">8/10<small>80%</small></span></li>
+    </ul>
+  </section>
+  <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>A test score is not the report card. Teachers may count a test towards CA; the report card shows the term's results when the school releases them.</p>
+  <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>A test that has not been released does not show here. Amaka has 1 test waiting for release.</p>
+</div></main>
+</body>
+</html>

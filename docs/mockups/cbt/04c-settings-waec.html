@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test settings: WAEC objectives</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="cbt.css">
+<body class="has-shell has-tabbar">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-brand-mark-light" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--card)"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--brand)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--brand)"/><circle cx="17" cy="8" r="2.1" fill="var(--brand)"/><circle cx="12" cy="17" r="2.1" fill="var(--brand)"/>
+  </symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h13v15H6a2 2 0 00-2 2z"/><path d="M4 20a2 2 0 002 2h13v-4"/><path d="M8 7h7M8 11h5"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-comments" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 3.5M12 16.5v.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-marks" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-register" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M9 13l2 2 4-4"/></symbol>
+  <symbol id="i-results" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6M3 20h18"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+  <symbol id="i-signout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></symbol>
+  <symbol id="i-test" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M8.5 11h7M8.5 15h4"/></symbol>
+</svg>
+<p class="mock-note">Mockup. /tests/53/settings/, a teacher, WAEC objectives. Question counts and minutes are settings per subject, never fixed in code. Mathematics 50 in 90 minutes is the commonly published format; the others are school defaults to check.</p>
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <div class="nav nav-links"><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>Home</a><p class="nav-heading">Teaching</p><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg>Register</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-marks"/></svg>Marks</a><a href="#" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg>Tests</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-bank"/></svg>Question bank</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-comments"/></svg>Remarks</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>Timetable</a><p class="nav-heading">Results</p><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-results"/></svg>Results</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-sheet"/></svg>Broadsheets</a></div>
+    <div class="nav nav-end">
+      <a href="#"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>Help and next steps</a>
+      <button type="button" class="nav-button"><svg class="icon" aria-hidden="true"><use href="#i-signout"/></svg>Sign out</button>
+    </div>
+  </nav>
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <a class="logo topbar-logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <span class="topbar-school">Sunrise Demo Academy</span>
+    <span class="spacer"></span>
+    <details class="account">
+      <summary class="icon-button" aria-label="Your account"><span class="avatar">CO</span></summary>
+      <div class="account-menu"><p class="account-who"><strong>Chidi Okonkwo</strong><span>Teacher</span></p></div>
+    </details>
+  </header>
+  <div class="content">
+    <main class="cbt">
+
+<a class="crumb" href="03-create-test.html"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Set a test</a>
+<div class="head"><div><p class="eyebrow">Settings</p><h1>WAEC objectives practice: Mathematics</h1><p>SS&nbsp;3A and SS&nbsp;3B. One subject, its own timer.</p></div></div>
+<div class="modes" role="list"><a class="mode" href="04a-settings-custom.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WAEC objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
+<div class="cols">
+  <div style="display:grid;gap:16px">
+    <section class="panel form">
+      <h2>This paper</h2>
+      <div class="form-row three">
+        <label class="field">Subject<select><option>Mathematics</option></select></label>
+        <label class="field">Questions<input class="num-input" type="number" value="50"></label>
+        <label class="field">Minutes<input class="num-input" type="number" value="90"></label>
+      </div>
+      <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>Options A to D. Taken from Mathematics, SS&nbsp;3: 180 questions with A to D.</p>
+    </section>
+    <section class="panel flush">
+      <div class="panel-head"><div><h2>Paper settings by subject</h2><p>Used each time anyone sets a WAEC paper in that subject. WAEC's own paper for the year decides; check it and change these.</p></div></div>
+      <div style="padding:0 16px 16px">
+      <table class="stack settings-table">
+        <thead><tr><th>Subject</th><th>Paper</th><th class="num">Questions</th><th class="num">Minutes</th></tr></thead>
+        <tbody><tr><td class="stack-head">Mathematics <span class="chip chip-brand">This paper</span></td><td data-label="Paper">Paper 1: Objectives</td><td class="num" data-label="Questions"><input class="num-input" type="number" value="50" aria-label="Questions in Mathematics"></td><td class="num" data-label="Minutes"><input class="num-input" type="number" value="90" aria-label="Minutes for Mathematics"></td></tr><tr><td class="stack-head">English Language</td><td data-label="Paper">Objectives</td><td class="num" data-label="Questions"><input class="num-input" type="number" value="50" aria-label="Questions in English Language"></td><td class="num" data-label="Minutes"><input class="num-input" type="number" value="60" aria-label="Minutes for English Language"></td></tr><tr><td class="stack-head">Biology</td><td data-label="Paper">Paper 1: Objectives</td><td class="num" data-label="Questions"><input class="num-input" type="number" value="50" aria-label="Questions in Biology"></td><td class="num" data-label="Minutes"><input class="num-input" type="number" value="60" aria-label="Minutes for Biology"></td></tr><tr><td class="stack-head">Economics</td><td data-label="Paper">Paper 1: Objectives</td><td class="num" data-label="Questions"><input class="num-input" type="number" value="50" aria-label="Questions in Economics"></td><td class="num" data-label="Minutes"><input class="num-input" type="number" value="60" aria-label="Minutes for Economics"></td></tr></tbody>
+      </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Fair for every student</h2>
+      <ul class="switch-list" style="margin-top:12px">
+        <li class="switch-row"><div><strong>Shuffle question order</strong><span class="quiet">Each student gets the questions in their own order.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+        <li class="switch-row"><div><strong>Shuffle option order</strong><span class="quiet">A for one student may be C for the next. Marking follows the option, not the letter.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+        <li class="switch-row"><div><strong>One attempt</strong><span class="quiet">A second attempt only for a student you name, with a reason. It is logged.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+        <li class="switch-row"><div><strong>Question number grid and flag for review</strong><span class="quiet"></span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li><li class="switch-row"><div><strong>Calculator on screen</strong><span class="quiet"></span></div><label class="toggle"><input type="checkbox"><span></span></label></li>
+      </ul>
+    </section>
+    <section class="panel">
+      <h2>Signing in to sit it</h2>
+      <ul class="switch-list" style="margin-top:12px">
+        <li class="switch-row"><div><strong>Test code</strong><span class="quiet">Six letters you read out or write on the board when the sitting starts. You can change it at any time.</span></div><label class="toggle"><input type="checkbox" checked disabled><span></span></label></li>
+        <li class="switch-row"><div><strong>Exam PIN from the student's slip</strong><span class="quiet">Proves the student is who the admission number says. Recommended for anything that goes to CA.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+      </ul>
+      <p class="note-line" style="margin-top:8px"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg>This does not lock the browser. Supervise the room; the log shows when each student started, dropped off and submitted.</p>
+    </section>
+  </div>
+  <aside class="aside" style="display:grid;gap:16px">
+    <section class="panel">
+      <div class="panel-head"><h2>Who can see this test</h2><a class="btn" href="#">Change</a></div>
+      <div class="chips"><span class="chip chip-brand">SS&nbsp;3A, 21 students</span><span class="chip chip-brand">SS&nbsp;3B, 19 students</span></div>
+      <p class="note-line" style="margin-top:12px"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Once it is published, changing classes asks you to confirm, and the change is logged with your name.</p>
+    </section>
+    <section class="panel">
+      <h2>After the test</h2>
+      <ul class="switch-list" style="margin-top:12px">
+        <li class="switch-row"><div><strong>Scores are released by you</strong><span class="quiet">Nobody sees a score until you release it: students their own, parents their own child's.</span></div><span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Always</span></li>
+        <li class="switch-row"><div><strong>Corrections with released scores</strong><span class="quiet">Each student sees their own answers, the right answer and your explanation.</span></div><label class="toggle"><input type="checkbox" checked><span></span></label></li>
+      </ul>
+    </section>
+  </aside>
+  <div class="summary-bar" style="grid-column:1/-1">
+    <div class="totals"><span><strong>50</strong> questions</span><span><strong>90</strong> min</span><span><strong>40</strong> students</span></div>
+    <div class="actions"><a class="btn" href="#"><svg class="icon" aria-hidden="true"><use href="#i-eye"/></svg>Try it as a student</a><a class="btn btn-primary" href="#">Publish</a></div>
+  </div>
+</div>
+    </main>
+  </div>
+  <nav class="tabbar" aria-label="Main"><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Home</span></a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg><span class="tab-label">Register</span></a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-marks"/></svg><span class="tab-label">Marks</span></a><a href="#" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg><span class="tab-label">Tests</span></a></nav>
+</div>
+
+</body>
+</html>
