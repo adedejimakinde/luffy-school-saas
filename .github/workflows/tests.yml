@@ -389,7 +389,11 @@ jobs:
       CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:candidate-${{ github.sha }}
       POSTGRES_IMAGE: ghcr.io/${{ github.repository }}/postgres:candidate-${{ github.sha }}
     steps:
+      # The whole history, for `scripts/caddy-image.sh`: it asks which commit
+      # last changed `deploy/caddy`.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Build the application image
         run: docker build -t "$APP_IMAGE" .
@@ -410,8 +414,16 @@ jobs:
           -e POSTGRES_PASSWORD=unused
           "$APP_IMAGE" python manage.py check --deploy --fail-level WARNING
 
-      - name: Build the Caddy image
-        run: docker build -t "$CADDY_IMAGE" deploy/caddy
+      # Reuses the image published for the commit that last changed
+      # `deploy/caddy` and builds only when there is none, so the build's
+      # downloads from the Go proxy and sum.golang.org are not a way for an
+      # unrelated commit to fail (run 525 on main). The script says why. The
+      # login is only for the pull: without it the pull fails and the image is
+      # built, as before.
+      - name: Caddy image, reused if it is published and built if not
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
+          scripts/caddy-image.sh "ghcr.io/${{ github.repository }}/caddy" "$CADDY_IMAGE"
 
       # Placeholders: `validate` parses the file and provisions its modules,
       # including the Cloudflare DNS one, without asking Cloudflare or Let's

@@ -87,6 +87,16 @@ Before pushing, the job renders a PDF inside the application image, runs
 validates the compose file. It pushes from `main` only, and nothing deploys a
 `candidate-` tag.
 
+**Caddy is built only when `deploy/caddy` changed** (`scripts/caddy-image.sh`).
+The build downloads about two hundred Go modules and checks them against
+sum.golang.org, and run 525 on `main` failed there (a reset from the checksum
+server) on a commit that touched nothing under `deploy/`. For every other commit
+the job pulls the `caddy:<sha>` published for the last commit that changed
+`deploy/caddy`, which is built from exactly the files now in the directory, and
+renames it. A commit that changes `deploy/caddy` has no such image and is built,
+so a Dockerfile change is still built on its pull request. There is no retry: a
+build that fails fails the job.
+
 ## Deploying
 
 1. Pick the commit: a full SHA on `main` whose CI passed.

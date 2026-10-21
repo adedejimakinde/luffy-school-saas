@@ -45,6 +45,12 @@ openpyxl>=3.1
 # with no OK or FAILED line. One real failure became several unrelated ones.
 tblib>=3.0
 
+# Only for tests/test_workflows.py, which parses every file in
+# .github/workflows/. GitHub runs nothing from a workflow file it cannot parse
+# and says nothing on the pull request (PR #281's first push), and no other
+# test or tool in the repository reads YAML.
+PyYAML>=6.0
+
 # What serves the application in production (`deploy/compose.yml`). Sync
 # workers: every request is short except the bulk import, and a process per
 # worker keeps a connection per request — the only topology issue #115 allows.

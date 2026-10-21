@@ -36,6 +36,7 @@ the child's account are demo rows with made-up numbers; nothing asks Paystack.
 Students get no password: nobody signs in as one.
 """
 
+import math
 import random
 from datetime import timedelta
 
@@ -173,6 +174,30 @@ def make(password, suffix, write=print):
     return logins
 
 
+def _away_on(children, star, days):
+    """`child pk -> the days that child is away`: one or two each, the star never.
+
+    Dealt round so every day is about 94% in: child `i` is away on day
+    `i * stride`, and on a second day thirteen on for four in five of them. The
+    stride has to share no factor with the number of days. It was 7, and a
+    Wednesday has 28 days to deal over (a Monday five weeks back to today, 5 x 5
+    weekdays and three more): 7 divides 28, so nobody's first absence ever fell
+    on today, the second ones fell together on a quarter of the children, and the
+    showcase's registers for today were 80% in instead of 94% and
+    `test_a_school_having_a_full_ordinary_day` failed every Wednesday (it
+    passed on the day it was written, a Tuesday). Another stride is used only
+    where 7 would share a factor, so every other day's showcase is exactly what
+    it was.
+    """
+    stride = 7 if math.gcd(7, len(days)) == 1 else 11
+    return {
+        c.pk: {days[(i * stride) % len(days)]}
+        | ({days[(i * stride + 13) % len(days)]} if i % 5 else set())
+        for i, c in enumerate(children)
+        if c is not star
+    }
+
+
 def _term(school, staff, children, star, rng):
     from academics import details
     from results import ogun
@@ -205,10 +230,7 @@ def _term(school, staff, children, star, rng):
     # school day so far and today, whatever day today is. Each child is away on
     # one or two days, dealt round so every day is about 94%; the star never.
     days = sorted(set(_weekdays(starts, today)) | {today})
-    away_on = {
-        c.pk: {days[(i * 7) % len(days)]} | ({days[(i * 7 + 13) % len(days)]} if i % 5 else set())
-        for i, c in enumerate(children) if c is not star
-    }
+    away_on = _away_on(children, star, days)
     for group, members in placed.items():
         for day in days:
             if group.name == TODAYS_OPEN_REGISTER and day == today:
