@@ -146,6 +146,26 @@ reader that acts on the rule acts without asking the flag first, and
 `AReleasedCardIsNeverChangedTests` freezes a card the old way and reads it with
 the new code. A *revision* of an old card is a new card and follows the rule.
 
+### Controls for the rule above
+
+`results/tests/test_whole_subjects.py` (two schools in every class; St Mary's on
+the Ogun card, Grace on the Standard one), `tests/js/card_render.test.js`,
+`card_ogun.test.js` and `broadsheet.test.js`. Each break below was made, the
+module run, the reds seen, and the break restored.
+
+| broken | what went red |
+| --- | --- |
+| 3: `class_results()` counts every subject as whole | 20 tests: both cards, both PDFs, the frozen line, the broadsheet |
+| 3: `_subject_line()` writes every line `is_complete=True`, graded | 8: the card payloads, the PDFs, the released broadsheet |
+| 3 (JS): the total prints a null; the summary note removed; `incomplete` never printed | `card_render` (1), (2), `broadsheet` (1) |
+| 4: everybody with an average is ranked | 10: the places, the frozen position, the subject ranks, the broadsheet |
+| 4: `roster_size` is the roster, not the ranked | 5: "of N" on both cards and the frozen count |
+| 4 (JS): the position cell ignores `is_complete` | `broadsheet` (1) |
+| 5: "not ranked" printed on a card that never had the rule | `test_a_card_with_no_marks_prints_no_position_not_not_ranked` |
+| 5: the Ogun CA dash applied to a card that never had the rule | `test_an_ogun_card_keeps_its_partial_continuous_assessment` |
+| 5: completeness worked out again from the cells when a card is read | the Standard card test and the old-term broadsheet test |
+| 5: the broadsheet ignores `whole_subjects_only` | stays green, and is not a bug: an old card has no line with `is_complete` false, so the flag changes nothing for it. The test that catches the real regression (completeness re-derived from cells) is the row above. |
+
 ## Two averages, and they are different questions
 
 **The child's own average** is the mean of their subject percentages. It is what
