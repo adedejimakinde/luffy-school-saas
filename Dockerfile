@@ -6,7 +6,11 @@
 # The devcontainer's image (`.devcontainer/Dockerfile`) is a development
 # environment and is never deployed.
 
-FROM python:3.11-slim-bookworm
+# Pinned to the exact patch release and to the digest of that tag's multi-arch
+# index, so a rebuild cannot pick up a different interpreter or OS layer than the
+# one that passed CI. Moving it is a deliberate edit: look up the new digest,
+# change both together. `scripts/check_pins.py` (CI) refuses a floating tag.
+FROM python:3.11.17-slim-bookworm@sha256:f06d01d4ba3f8ad5af45a3ec87df19c1d317d8e8961edc0fabda61811af6f7cf
 
 # Links the package to this repository on GHCR, so a private repository's workflow
 # token may push it and the repository's access rules apply to it.
@@ -34,8 +38,10 @@ RUN apt-get update \
 
 WORKDIR /app
 
+# `requirements.txt` is the hashed lock generated from `requirements.in`;
+# --require-hashes makes pip refuse any file whose hash is not in it.
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --require-hashes -r requirements.txt
 
 COPY . .
 

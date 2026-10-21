@@ -1,0 +1,90 @@
+# The project's direct dependencies, with the reason for each. This is the file
+# to edit; `requirements.txt` is generated from it and is what every build
+# installs (the Dockerfile, CI, the devcontainer and docker-compose), pinned to
+# exact versions with the hash of every file, transitive dependencies included.
+#
+# To change a dependency, edit it here and, under Python 3.11 on Linux (the
+# production image's), run:
+#
+#     pip install pip-tools
+#     pip-compile --generate-hashes --strip-extras --no-annotate --no-header \
+#         --allow-unsafe --output-file=requirements.txt requirements.in
+#
+# To upgrade one package: add `--upgrade-package <name>`. Commit both files.
+# `scripts/check_pins.py` (run by CI) fails if the lock is not exact and hashed.
+
+Django>=5.0
+psycopg2-binary>=2.9
+django-tenants>=3.6
+phonenumbers>=8.13
+django-ninja>=1.6
+
+# The report card page's own assets — its ES modules and stylesheets — are
+# served by the application process, because this platform has no CDN and no
+# web server in front of Django. WhiteNoise is what makes that defensible
+# rather than a development shortcut: hashed filenames, pre-compressed bytes and
+# a far-future cache header, from one process, with no extra moving part to
+# deploy. settings.py says why the hashing is off under DEBUG.
+whitenoise>=6.6
+
+# Background work. A report card PDF is minutes of rendering for a class of
+# forty-five, which is not a thing to do inside a request: Celery moves it off
+# the web process, Redis is the broker it hands the job to (settings.py says why
+# there is no result backend), and WeasyPrint is what turns the card's HTML into
+# the file a parent keeps. See docs/background.md.
+#
+# WeasyPrint is not pure Python — its text layout is Pango's, so it needs Pango,
+# HarfBuzz and a font family from the operating system. It installs from a wheel
+# perfectly happily without them and fails at the first import. Both places that
+# build an environment for this project install them explicitly:
+# .devcontainer/Dockerfile and .github/workflows/tests.yml.
+celery>=5.4
+redis>=5.0
+weasyprint>=62
+
+# A school's crest is re-drawn as a square PNG on upload (results/look.py), never
+# kept as sent. WeasyPrint already brings Pillow in; it is named here because
+# this project now imports it itself.
+Pillow>=10.0
+
+# The roll import reads an Excel workbook as well as a CSV, and hands the office
+# a workbook template to fill in (accounts/bulk.py). Read-only, values only:
+# a formula is read as the value Excel saved, never evaluated.
+openpyxl>=3.1
+
+# How a failing test reaches the parent of a parallel run (issue #193). Django's
+# parallel runner pickles each failure to send it back; a traceback cannot be
+# pickled without tblib, so the worker re-raises inside the test. That skips
+# the test's cleanups and its class's, leaves an override_settings or a
+# database guard in place for every later test in that worker, and ends the run
+# with no OK or FAILED line. One real failure became several unrelated ones.
+tblib>=3.0
+
+# Only for tests/test_workflows.py, which parses every file in
+# .github/workflows/. GitHub runs nothing from a workflow file it cannot parse
+# and says nothing on the pull request (PR #281's first push), and no other
+# test or tool in the repository reads YAML.
+PyYAML>=6.0
+
+# What serves the application in production (`deploy/compose.yml`). Sync
+# workers: every request is short except the bulk import, and a process per
+# worker keeps a connection per request — the only topology issue #115 allows.
+gunicorn>=22.0
+
+# Error reports (decided 2026-09-23: Sentry, EU region, personal data off).
+# Inert unless SENTRY_DSN is set — settings.py and schools/errors.py.
+sentry-sdk[django,celery]>=2.0
+
+# A sign-in or verification code crosses the Celery broker on its way to a
+# provider, and a code is never to be at rest in the clear (docs/messaging.md
+# D6): Redis may write its messages to disk. Fernet seals it — authenticated,
+# and dead when the code is — rather than a cipher written here.
+cryptography>=42
+
+# Classnode's blog (`blog/`, `docs/blog.md`): a post is written in Markdown and
+# drawn as HTML on classnode.co. Python-Markdown turns one into the other, and
+# nh3 (the Rust `ammonia` sanitiser) keeps only an allowlist of tags and
+# attributes, so no script, frame or event handler a writer types reaches the
+# page.
+markdown>=3.6
+nh3>=0.2.17
