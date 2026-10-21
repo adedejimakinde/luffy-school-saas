@@ -8,10 +8,12 @@
 set -euo pipefail
 
 args=(-c wal_level=replica)
-if [ -n "${WALG_S3_PREFIX:-}" ]; then
+# (WALG_FILE_PREFIX, a directory in place of the bucket, is for CI's backup test:
+# deploy/postgres/test-backup.sh.)
+if [ -n "${WALG_S3_PREFIX:-}${WALG_FILE_PREFIX:-}" ]; then
   # 60 seconds: at most a minute of marks is ever unarchived.
   args+=(-c archive_mode=on -c "archive_command=wal-g wal-push %p" -c archive_timeout=60)
-  echo "classnode-postgres: archiving WAL to ${WALG_S3_PREFIX}" >&2
+  echo "classnode-postgres: archiving WAL to ${WALG_S3_PREFIX:-${WALG_FILE_PREFIX}}" >&2
 else
   args+=(-c archive_mode=off)
   echo "classnode-postgres: WALG_S3_PREFIX is not set; WAL is NOT being archived" >&2

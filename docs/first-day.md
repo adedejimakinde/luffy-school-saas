@@ -798,10 +798,18 @@ nano /etc/classnode/backup.env
 
 Replace every `CHANGE_ME`: `WALG_S3_PREFIX=s3://YOUR-BUCKET/classnode`; the key ID
 and the key from step 23; `AWS_ENDPOINT=https://s3.us-west-004.backblazeb2.com`
-(with your region); `AWS_REGION=us-west-004`. If you have no Sentry check-in URL,
-leave the last line commented. **Copy `WALG_LIBSODIUM_KEY` to your password manager now.**
+(with your region); `AWS_REGION=us-west-004`. **Copy `WALG_LIBSODIUM_KEY` to your password manager now.**
 The backups are encrypted with it. Without it they are unreadable noise, and
 this key exists nowhere else.
+
+Then fill in the last line, `BACKUP_HEARTBEAT_URL`. **Do not leave it commented.** It is
+the only way a backup that fails, or that never runs, reaches a person: without it the
+only record is `/var/log/classnode-backup.log`, which nobody is watching at 00:30. In Sentry,
+under Crons, add a monitor with the slug `nightly-backup`, the schedule `30 0 * * *`
+in UTC, a check-in margin of 30 minutes and a failure threshold of 1, and send its
+alerts to the same two people as step 21. Paste the monitor's HTTP check-in URL
+(it ends `/cron/nightly-backup/` and a key) after `BACKUP_HEARTBEAT_URL=`. I have not
+clicked through Sentry's current screens, so the names may differ a little.
 
 **Confirm.** `/opt/classnode/deploy/init-env.sh --check` prints `All the files that exist are ready.`
 
@@ -833,15 +841,34 @@ it failing: `df -h /` shows free space.
 ## 26. Take the first backup
 
 **What it does.** A full copy now, on top of the continuous change log. The cron job
-does this every night at 00:30 UTC; this proves it works.
+does this every night at 00:30 UTC with the same command, so this proves that command
+works, and then proves the alarm rings when it does not.
 
 ```bash
 docker compose exec -T db classnode-backup
 docker compose exec -T db wal-g backup-list
 ```
 
+Type it exactly like that, with no `-u`, no `PGUSER` and no `PGDATABASE`. `docker
+compose exec` enters the container as root, which has no database role; `classnode-backup`
+switches to the `postgres` user and finds the database from the container's own
+settings itself. If it says `FATAL: role "root" does not exist`, the server is running an
+image older than that fix: deploy the latest commit (step 16) and run it again.
+
 **Confirm.** The first ends `classnode-backup: done`. The second lists one backup. In
-the Backblaze website the bucket now has files under `classnode/`.
+the Backblaze website the bucket now has files under `classnode/`. In Sentry, the
+`nightly-backup` monitor shows a green check-in.
+
+**Prove the alarm.** Aim one backup at a bucket that does not exist. It must fail, and
+the two people from step 21 must get Sentry's alert:
+
+```bash
+docker compose exec -T -e WALG_S3_PREFIX=s3://no-such-bucket/classnode db classnode-backup
+echo "exit code $?"
+```
+
+The exit code is not 0, and the monitor shows a failed check-in. Then run the first
+command above again, so the monitor is green and the real backup is the latest one.
 
 **Undo.** Backups only add. Delete them in Backblaze if you must.
 

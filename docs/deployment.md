@@ -201,7 +201,17 @@ Postgres 15 (Debian) with WAL-G pinned by version and checksum.
   the archiver has started failing, then pushes a base backup and applies
   retention — 7 nightly, 4 weekly, 12 monthly (`deploy/postgres/retention.py`,
   tested in `tests/test_backup_retention.py`). It checks in to the
-  `nightly-backup` heartbeat either way.
+  `nightly-backup` heartbeat either way. Cron runs it as plain
+  `docker compose exec -T db classnode-backup`, as root, and the script hands itself
+  to the `postgres` user; CI runs exactly that against a real Postgres container
+  (`deploy/postgres/test-backup.sh`).
+- **A failed or missing backup is reported by the heartbeat and by nothing else**:
+  cron mails nobody and the log file is read by nobody. So `BACKUP_HEARTBEAT_URL`
+  is set in practice, with the Sentry monitor's schedule (`30 0 * * *` UTC) and its
+  alert going to two people (`docs/first-day.md`, steps 24 and 26). A run that
+  fails inside the script checks in `error`; one that never reaches the script (the
+  container is down, the tag file is wrong) checks in nothing, and the monitor alerts
+  on the missed check-in.
 - **Encrypted before upload** with `WALG_LIBSODIUM_KEY`. Keep that key in a
   password manager as well as on the server: without it the backups are noise.
 
