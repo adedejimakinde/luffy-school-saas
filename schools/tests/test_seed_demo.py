@@ -12,7 +12,7 @@ from unittest import mock
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django_tenants.utils import schema_context
 
 from academics.models import ClassPlacement, Term
@@ -464,3 +464,68 @@ class ShowcaseTests(TestCase):
 
         with self.assertRaisesMessage(CommandError, "already here"):
             self.load()
+
+
+class TheShowcaseRegistersAreAboutNinetyFourPercentOnEveryDayTests(SimpleTestCase):
+    """`showcase._away_on()`, for every day of the week and across month ends.
+
+    `ShowcaseTests` seeds the showcase on the day it runs and asserts that today's
+    registers are about 94% in. The dealing of absences depends on how many days
+    there are to deal over, which depends on the weekday: on a Wednesday there are
+    28, 7 divides 28, and the registers were 80% in, so that test failed every
+    Wednesday and passed every other day. It passed on Tuesday the 20th and failed
+    on Wednesday the 21st of October 2026, in the same commit. A date-dependent
+    result is only caught by running on every date, so this does: the dealing is
+    a pure function of the children and the days, and runs here for 28 dates.
+    """
+
+    CHILDREN = 612
+
+    def deal(self, today):
+        from datetime import timedelta
+        from types import SimpleNamespace
+
+        from schools import showcase
+
+        starts = today - timedelta(days=today.weekday()) - timedelta(weeks=5)
+        days = sorted(set(showcase._weekdays(starts, today)) | {today})
+        children = [SimpleNamespace(pk=i + 1) for i in range(self.CHILDREN)]
+        star = children[0]
+        return days, children, star, showcase._away_on(children, star, days)
+
+    def dates(self):
+        from datetime import date, timedelta
+
+        # Four whole weeks, so every weekday four times, straddling a month end.
+        return [date(2026, 10, 19) + timedelta(days=n) for n in range(28)]
+
+    def test_about_94_percent_are_in_on_every_date(self):
+        for today in self.dates():
+            with self.subTest(today=str(today), weekday=today.strftime("%A")):
+                days, children, star, away = self.deal(today)
+                absent_today = sum(1 for pks in away.values() if today in pks)
+                share_in = 1 - absent_today / (len(children) - 1)
+                self.assertAlmostEqual(share_in, 0.94, delta=0.015)
+
+    def test_every_other_child_is_away_once_or_twice_and_the_star_never(self):
+        for today in self.dates():
+            with self.subTest(today=str(today)):
+                days, children, star, away = self.deal(today)
+                self.assertNotIn(star.pk, away)
+                self.assertEqual(len(away), len(children) - 1)
+                self.assertTrue(all(1 <= len(pks) <= 2 for pks in away.values()))
+                self.assertTrue(all(pks <= set(days) for pks in away.values()))
+
+    def test_a_day_the_old_stride_worked_on_is_dealt_exactly_as_before(self):
+        from math import gcd
+
+        for today in self.dates():
+            days, children, star, away = self.deal(today)
+            if gcd(7, len(days)) != 1:
+                continue
+            with self.subTest(today=str(today)):
+                old = {
+                    c.pk: {days[(i * 7) % len(days)]} | ({days[(i * 7 + 13) % len(days)]} if i % 5 else set())
+                    for i, c in enumerate(children) if c is not star
+                }
+                self.assertEqual(away, old)
