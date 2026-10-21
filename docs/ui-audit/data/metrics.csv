@@ -1,0 +1,95 @@
+screen,who,path,status,wire_kb_375,decoded_kb_375,requests_375,axe_violations_375,axe_rules_375,tab_stops_375,focus_no_ring_375,focus_covered_375,text200_overflow_px_375,reflow320_overflow_px,doc_compat_mode
+site-terms,visitor,/terms/,200,50.2,112.5,5,0,,30,0,0,0,,CSS1Compat
+blog-post,visitor,/blog/ogun-report-sheet/,200,128.3,192.8,10,0,,18,0,0,0,,CSS1Compat
+staff-sign-in,staff,/staff-sign-in/,200,53.8,98.8,10,2,region,4,0,0,0,,CSS1Compat
+app-404,anyone,/no-such-page/,404,2.1,10.4,1,0,,0,0,0,522,,CSS1Compat
+signed-out-staff-page,signed-out staff,/home/,200,39.9,73.3,5,1,html-has-lang,2,0,0,0,,BackCompat
+checker-wrong,student / family,/check/,200,63.3,117.2,15,2,html-has-lang region,4,0,0,36,,BackCompat
+principal-results,principal,/results/,200,57.1,111.0,11,2,html-has-lang label-content-name-mismatch,18,0,1,101,,BackCompat
+principal-fees,principal,/fees/,200,60.7,130.2,13,2,html-has-lang label-content-name-mismatch,14,0,0,0,,BackCompat
+principal-help,principal,/help/,200,43.8,86.3,6,2,html-has-lang label-content-name-mismatch,9,0,0,1,,BackCompat
+vp-results,vice principal,/results/,200,57.0,110.3,11,2,html-has-lang label-content-name-mismatch,14,0,0,101,,BackCompat
+vp-fees,vice principal,/fees/,200,60.6,129.5,13,2,html-has-lang label-content-name-mismatch,14,0,0,0,,BackCompat
+admin-start-step,administrator,/start/school-details/,200,44.3,90.8,6,2,html-has-lang label-content-name-mismatch,14,0,1,130,,BackCompat
+admin-teaching,administrator,/teaching/,200,51.2,95.5,11,2,html-has-lang label-content-name-mismatch,21,0,2,130,,BackCompat
+admin-roll-import,administrator,/roll/import/,200,52.4,94.7,11,2,html-has-lang label-content-name-mismatch,12,0,1,130,,BackCompat
+admin-ogsera,administrator,/ogsera/,200,50.0,88.8,11,2,html-has-lang label-content-name-mismatch,12,0,0,130,,BackCompat
+teacher-register,class teacher,/register/,200,74.0,148.5,17,1,html-has-lang,4,0,0,0,,BackCompat
+teacher-timetable,class teacher,/timetable/,200,52.0,95.1,12,3,html-has-lang label-content-name-mismatch scrollable-region-focusable,10,0,0,0,,BackCompat
+subject-register,subject teacher,/register/,200,74.0,148.5,17,1,html-has-lang,4,0,0,0,,BackCompat
+subject-timetable,subject teacher,/timetable/,200,52.0,95.1,12,3,html-has-lang label-content-name-mismatch scrollable-region-focusable,10,0,0,0,,BackCompat
+bursar-bank,bursar,/bank/,200,51.1,91.2,12,2,html-has-lang label-content-name-mismatch,7,0,0,0,,BackCompat
+parent-home-refused,parent,/home/,403,40.6,74.1,5,2,html-has-lang label-content-name-mismatch,2,0,0,0,,BackCompat
+fresh-setup,administrator (new school),/setup/,200,59.6,123.5,12,2,html-has-lang label-content-name-mismatch,7,0,0,130,,BackCompat
+fresh-staff,administrator (new school),/staff/,200,49.0,83.6,11,2,html-has-lang label-content-name-mismatch,14,0,0,130,,BackCompat
+fresh-bank,administrator (new school),/bank/,200,51.4,92.7,12,2,html-has-lang label-content-name-mismatch,9,0,0,130,,BackCompat
+fresh-absences,administrator (new school),/absences/,200,49.2,84.6,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+fresh-comments,administrator (new school),/comments/,200,53.9,100.4,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+platform-home,platform operator,/platform/,200,48.7,81.7,12,2,html-has-lang region,10,0,0,306,,BackCompat
+platform-admin-users,platform operator,/admin/accounts/user/,404,1.9,5.5,1,0,,0,0,0,536,,CSS1Compat
+write-posts-writer,writer,/write/,200,41.9,79.5,5,1,label-content-name-mismatch,12,0,0,11,,CSS1Compat
+write-posts-editor,editor,/write/,200,41.9,80.7,5,1,label-content-name-mismatch,16,0,0,11,,CSS1Compat
+write-view-published,editor,/write/posts/1/view/,200,58.6,100.1,7,1,label-content-name-mismatch,5,0,0,11,,CSS1Compat
+site-privacy,visitor,/privacy/,200,51.4,116.4,5,0,,29,0,0,0,,CSS1Compat
+blog-index,visitor,/blog/,200,127.7,191.2,10,0,,17,0,0,0,,CSS1Compat
+sign-in,parent / student,/sign-in/,200,51.0,89.8,10,2,html-has-lang region,3,0,0,0,,BackCompat
+app-root,anyone,/,404,1.8,5.7,1,0,,0,0,0,681,,CSS1Compat
+school-404,anyone,/no-such-page/,404,1.8,7.0,1,0,,0,0,0,522,,CSS1Compat
+checker-result,student / family,/check/,200,64.6,123.1,15,3,html-has-lang region scrollable-region-focusable,2,0,0,170,,BackCompat
+principal-home,principal,/home/,200,42.6,85.2,5,2,html-has-lang label-content-name-mismatch,15,0,1,121,,BackCompat
+principal-absences,principal,/absences/,200,49.5,85.9,11,2,html-has-lang label-content-name-mismatch,11,0,0,0,,BackCompat
+principal-timetable,principal,/timetable/,200,52.2,95.9,12,3,html-has-lang label-content-name-mismatch scrollable-region-focusable,10,0,0,0,,BackCompat
+vp-home,vice principal,/home/,200,42.3,82.7,5,2,html-has-lang label-content-name-mismatch,12,0,1,121,,BackCompat
+vp-absences,vice principal,/absences/,200,49.3,85.2,11,2,html-has-lang label-content-name-mismatch,8,0,0,0,,BackCompat
+admin-start,administrator,/start/,200,44.4,91.3,6,2,html-has-lang label-content-name-mismatch,18,0,3,130,,BackCompat
+admin-setup,administrator,/setup/,200,60.1,125.3,12,2,html-has-lang label-content-name-mismatch,9,0,1,130,,BackCompat
+admin-roll,administrator,/roll/,200,57.5,121.5,11,2,html-has-lang label-content-name-mismatch,80,0,15,130,,BackCompat
+admin-notices,administrator,/notices/settings/,200,48.3,82.4,11,2,html-has-lang label-content-name-mismatch,19,0,2,130,,BackCompat
+teacher-home,class teacher,/home/,200,42.0,82.3,5,2,html-has-lang label-content-name-mismatch,12,0,1,107,,BackCompat
+teacher-comments,class teacher,/comments/,200,53.8,99.8,11,2,html-has-lang label-content-name-mismatch,14,0,0,0,,BackCompat
+subject-home,subject teacher,/home/,200,41.4,78.5,5,2,html-has-lang label-content-name-mismatch,9,0,0,107,,BackCompat
+subject-comments,subject teacher,/comments/,200,53.8,99.9,11,2,html-has-lang label-content-name-mismatch,14,0,0,0,,BackCompat
+bursar-fees,bursar,/fees/,200,60.5,128.9,13,2,html-has-lang label-content-name-mismatch,13,0,0,0,,BackCompat
+parent-cards,parent,/cards/,200,52.1,87.7,12,2,html-has-lang region,4,0,0,0,,BackCompat
+fresh-start,administrator (new school),/start/,200,44.4,91.0,6,2,html-has-lang label-content-name-mismatch,18,0,3,130,,BackCompat
+fresh-roll,administrator (new school),/roll/,200,56.6,114.2,11,2,html-has-lang label-content-name-mismatch,14,0,1,130,,BackCompat
+fresh-fees,administrator (new school),/fees/,200,60.7,129.8,13,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+fresh-broadsheet,administrator (new school),/broadsheet/,200,50.0,87.6,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+fresh-marking,administrator (new school),/marking/,200,73.4,150.1,15,1,html-has-lang,7,0,0,0,,BackCompat
+fresh-notices,administrator (new school),/notices/settings/,200,48.2,81.7,11,2,html-has-lang label-content-name-mismatch,13,0,0,130,,BackCompat
+platform-admin,platform operator,/admin/,200,18.5,56.6,11,0,,13,0,0,0,,CSS1Compat
+write-sign-in,writer,/write/sign-in/,200,41.0,76.7,5,0,,1,0,0,0,,CSS1Compat
+write-preview,writer,/write/posts/5/preview/,405,0.6,0.0,1,4,document-title html-has-lang landmark-one-main page-has-heading-one,0,0,0,0,,BackCompat
+write-editor-review,editor,/write/posts/6/,200,64.7,117.5,9,2,label-content-name-mismatch page-has-heading-one,16,0,0,11,,CSS1Compat
+site-home,visitor,/,200,98.5,180.0,9,0,,33,0,0,45,,CSS1Compat
+site-404,visitor,/no-such-page/,404,1.5,3.6,1,0,,0,0,0,216,,CSS1Compat
+blog-post-404,visitor,/blog/no-such-post/,404,1.6,3.6,1,0,,0,0,0,285,,CSS1Compat
+invitation-bad,invitee,/invitations/not-a-token/,200,44.9,72.0,11,1,html-has-lang,0,0,0,0,,BackCompat
+school-site,visitor,/,200,35.9,56.6,5,0,,3,0,0,0,,CSS1Compat
+checker,student / family,/check/,200,62.7,117.1,14,2,html-has-lang region,4,0,0,36,,BackCompat
+refused-403,wrong school,/register/,403,1.1,0.8,1,1,html-has-lang,0,0,0,0,,BackCompat
+principal-broadsheet,principal,/broadsheet/,200,50.9,88.5,12,2,html-has-lang label-content-name-mismatch,15,0,1,0,,BackCompat
+principal-comments,principal,/comments/,200,53.9,100.6,11,2,html-has-lang label-content-name-mismatch,14,0,0,0,,BackCompat
+principal-cards,principal,/cards/,200,51.9,87.2,12,2,html-has-lang region,1,0,0,0,,BackCompat
+vp-broadsheet,vice principal,/broadsheet/,200,50.8,87.8,12,2,html-has-lang label-content-name-mismatch,15,0,1,0,,BackCompat
+admin-home,administrator,/home/,200,42.9,86.1,5,2,html-has-lang label-content-name-mismatch,17,0,0,130,,BackCompat
+admin-start-locked,administrator,/start/report-card/,200,44.3,90.8,6,2,html-has-lang label-content-name-mismatch,14,0,0,130,,BackCompat
+admin-promotion,administrator,/promotion/,200,49.3,86.0,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+admin-staff,administrator,/staff/,200,48.9,83.4,11,2,html-has-lang label-content-name-mismatch,12,0,0,130,,BackCompat
+admin-help,administrator,/help/,200,44.0,87.4,6,2,html-has-lang label-content-name-mismatch,12,0,0,130,,BackCompat
+teacher-marking,class teacher,/marking/,200,73.5,150.6,15,1,html-has-lang,26,0,2,0,,BackCompat
+teacher-help,class teacher,/help/,200,43.6,85.6,6,2,html-has-lang label-content-name-mismatch,9,0,0,1,,BackCompat
+subject-marking,subject teacher,/marking/,200,73.5,150.6,15,1,html-has-lang,26,0,2,0,,BackCompat
+bursar-home,bursar,/home/,200,41.9,80.9,5,2,html-has-lang label-content-name-mismatch,9,0,0,121,,BackCompat
+bursar-help,bursar,/help/,200,43.6,85.0,6,2,html-has-lang label-content-name-mismatch,8,0,0,1,,BackCompat
+fresh-home,administrator (new school),/home/,200,41.7,79.5,5,2,html-has-lang label-content-name-mismatch,11,0,0,130,,BackCompat
+fresh-teaching,administrator (new school),/teaching/,200,50.9,93.6,11,2,html-has-lang label-content-name-mismatch,11,0,0,130,,BackCompat
+fresh-promotion,administrator (new school),/promotion/,200,49.3,85.9,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+fresh-results,administrator (new school),/results/,200,56.9,108.6,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+fresh-register,administrator (new school),/register/,200,74.0,148.6,16,1,html-has-lang,7,0,0,0,,BackCompat
+fresh-timetable,administrator (new school),/timetable/,200,51.0,91.2,11,2,html-has-lang label-content-name-mismatch,8,0,0,130,,BackCompat
+platform-handover,platform operator,/platform/handover/,200,38.8,66.4,6,2,html-has-lang region,5,0,0,0,,BackCompat
+platform-not-staff,school staff on /platform/,/platform/,200,47.9,81.3,11,2,html-has-lang region,0,0,0,0,,BackCompat
+write-editor-draft,writer,/write/posts/5/,200,50.3,103.1,8,2,label-content-name-mismatch page-has-heading-one,16,0,0,11,,CSS1Compat
+write-review,editor,/write/review/,200,41.7,78.7,5,1,label-content-name-mismatch,9,0,0,11,,CSS1Compat
+write-404,editor,/write/posts/999/,404,1.8,4.6,1,0,,0,0,0,456,,CSS1Compat
