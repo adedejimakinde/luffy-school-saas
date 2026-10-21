@@ -228,6 +228,24 @@ jobs:
       - name: Run tests
         run: scripts/run-tests.sh --verbosity 2 --parallel auto $SHARD_LABELS
 
+  # Builds are reproducible only while every Python dependency is pinned to an
+  # exact version with a hash, and the image's base is an exact tag with a
+  # digest. `scripts/check_pins.py` fails on a range, an unhashed requirement, a
+  # floating base tag or a `pip install` without `--require-hashes`. Standard
+  # library only, so there is nothing to install and it answers in seconds.
+  pins:
+    name: pins
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Every dependency is pinned and hashed
+        run: python scripts/check_pins.py
+
   # One check named `test`, green only when all four jobs are. `deploy.yml` and
   # the merge gate ask GitHub about a check-run of this name on a commit, and it
   # keeps meaning what it meant when it was one job: the whole suite passed.
@@ -236,14 +254,15 @@ jobs:
   # skipping it: a skipped check is easy to read as one that did not matter.
   test:
     name: test
-    needs: [shard, screens]
+    needs: [shard, screens, pins]
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - name: All four jobs and the screens passed
+      - name: All four jobs, the screens and the pins passed
         env:
           SHARDS: ${{ needs.shard.result }}
           SCREENS: ${{ needs.screens.result }}
+          PINS: ${{ needs.pins.result }}
         run: |
           if [ "$SHARDS" != success ]; then
             echo "::error::The suite's jobs finished '$SHARDS', not 'success'."
@@ -251,6 +270,10 @@ jobs:
           fi
           if [ "$SCREENS" != success ]; then
             echo "::error::The screens job finished '$SCREENS', not 'success'."
+            exit 1
+          fi
+          if [ "$PINS" != success ]; then
+            echo "::error::The pins job finished '$PINS', not 'success'."
             exit 1
           fi
 
