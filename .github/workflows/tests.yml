@@ -476,6 +476,15 @@ jobs:
           docker run --rm --entrypoint python3 "$POSTGRES_IMAGE" -c \
             'import ast; ast.parse(open("/usr/local/lib/classnode/retention.py").read())'
 
+      # The nightly backup, run the way cron runs it: as root, no `-u`, no
+      # PGUSER, in a real Postgres from the image just built, WAL-G writing to a
+      # local directory in place of B2. It failed on the server with
+      # `role "root" does not exist` for want of exactly this. It also asks that
+      # a failed backup exits non-zero and checks in `error` (the script says
+      # how, and what it needs).
+      - name: The nightly backup works as root, and a failed one is reported
+        run: deploy/postgres/test-backup.sh "$POSTGRES_IMAGE"
+
       - name: The compose file is valid
         run: |
           mkdir -p "$RUNNER_TEMP/etc"

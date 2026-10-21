@@ -97,3 +97,78 @@ class TheBackupCommandsInTheDocsAreRealTests(SimpleTestCase):
 
         self.assertIn("/etc/classnode/backup.env", section_7())
         self.assertIn("backup.env", compose)
+
+
+class TheNightlyBackupRunsAsPostgresWhoeverCallsItTests(SimpleTestCase):
+    """`docker compose exec -T db classnode-backup` enters the container as root,
+    and root has no Postgres role: `FATAL: role "root" does not exist`, every
+    night. The command has to work as it is typed in cron, so the script itself
+    switches user and picks its database.
+
+    The behaviour is held by `deploy/postgres/test-backup.sh`, which CI runs
+    against a real Postgres container; these hold what that cannot see from the
+    inside: that CI runs it, and that nothing tells a person to work around it.
+    """
+
+    def setUp(self):
+        self.script = (BASE_DIR / "deploy/postgres/backup.sh").read_text()
+        # The commands, without the comments that talk about them.
+        self.code = "\n".join(l for l in self.script.splitlines() if not l.lstrip().startswith("#"))
+
+    def test_a_root_caller_is_handed_to_the_postgres_user(self):
+        """CONTROL 18: deleting the `gosu` hand-over makes this red."""
+        self.assertRegex(self.script, r'if \[ "\$\(id -u\)" = 0 \]; then\n\s+exec gosu postgres "\$0" "\$@"')
+
+    def test_the_connection_comes_from_the_containers_own_environment(self):
+        self.assertIn('export PGUSER="${PGUSER:-${POSTGRES_USER:-}}"', self.script)
+        self.assertIn('export PGDATABASE="${PGDATABASE:-${POSTGRES_DB:-}}"', self.script)
+        # No psql names a role of its own: PGUSER and PGDATABASE say it once.
+        self.assertNotRegex(self.code, r"psql\s+-[Ud]")
+
+    def test_the_switch_comes_before_anything_that_connects(self):
+        switch = self.code.index("exec gosu postgres")
+
+        self.assertLess(switch, self.code.index("psql -tAc"))
+        self.assertLess(switch, self.code.index("wal-g backup-push"))
+
+    def test_a_missing_setting_is_reported_like_any_other_failure(self):
+        """The error check-in is armed before the settings are checked. A
+        `: "${VAR:?}"` guard ends the shell without running an ERR trap, which
+        is how a backup with nowhere to go used to fail in silence."""
+        self.assertLess(self.code.index("trap 'beat error' ERR"), self.code.index("nowhere to back up to"))
+        self.assertNotIn(":?", self.code)
+
+    def test_ci_runs_it_against_the_image_it_builds(self):
+        workflow = (BASE_DIR / ".github/workflows/tests.yml").read_text()
+        step = workflow[workflow.index("deploy/postgres/test-backup.sh") :]
+
+        self.assertTrue(step.startswith('deploy/postgres/test-backup.sh "$POSTGRES_IMAGE"'))
+        self.assertLess(workflow.index("Build the database image"), workflow.index("deploy/postgres/test-backup.sh"))
+
+    def test_the_ci_script_runs_the_command_as_root_and_asks_for_the_failure_check_in(self):
+        import os
+        import subprocess
+
+        path = BASE_DIR / "deploy/postgres/test-backup.sh"
+        text = path.read_text()
+
+        self.assertTrue(os.access(path, os.X_OK))
+        subprocess.run(["bash", "-n", str(path)], check=True)
+        # Root, as cron enters: no `-u`, and no PGUSER or PGDATABASE passed in.
+        self.assertIn('docker exec "$name" classnode-backup', text)
+        self.assertNotRegex(text, r'docker exec[^\n]*-e PG(USER|DATABASE)')
+        self.assertIn("status=error", text)
+
+    def test_every_backup_command_a_person_types_is_the_plain_one(self):
+        """The workaround (`-u postgres`, PGUSER and PGDATABASE on the command
+        line) is what the script now does itself. A runbook that still types it
+        teaches the next person the command that fails without it."""
+        for name in ("docs/first-day.md", "docs/demo-server.md", "docs/deployment.md", "deploy/cron/classnode"):
+            lines = [l for l in (BASE_DIR / name).read_text().splitlines() if "classnode-backup" in l]
+            for line in lines:
+                with self.subTest(file=name, line=line.strip()):
+                    self.assertNotIn("-u postgres", line)
+                    self.assertNotIn("PGUSER", line)
+                    self.assertNotIn("PGDATABASE", line)
+        cron = (BASE_DIR / "deploy/cron/classnode").read_text()
+        self.assertIn("docker compose exec -T db classnode-backup >>", cron)
