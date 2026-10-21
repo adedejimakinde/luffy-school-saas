@@ -104,6 +104,21 @@ PAPERS = {
     "harbour-demo": (("First CA", 20), ("Exam", 60)),
 }
 
+#: The report card template each demo school prints. Sunrise prints the Ogun
+#: State sheet, so its cards carry that sheet's traits and rating key (set when
+#: the template is chosen, before anything is rated) and its children carry the
+#: learner's ID, sex and date of birth the sheet asks for. Harbour stays on the
+#: Standard card.
+TEMPLATES = {"sunrise-demo": "ogun", "harbour-demo": "standard"}
+
+#: Made up, like every name here: what the sheet's "Sex" box says for each first name.
+SEX = {
+    "Ada": "female", "Bayo": "male", "Chidi": "male", "Dayo": "male", "Efe": "female",
+    "Funmi": "female", "Gbenga": "male", "Halima": "female", "Ife": "female", "Jide": "male",
+    "Kemi": "female", "Lola": "female", "Musa": "male", "Ngozi": "female", "Obi": "male",
+    "Pelumi": "female", "Rukky": "female", "Segun": "male", "Tolu": "female", "Uche": "male",
+}
+
 SUBJECTS = (("Mathematics", "MTH"), ("English Language", "ENG"), ("Basic Science", "BSC"))
 TUITION = 150_000 * KOBO_PER_NAIRA
 LEVY = 15_000 * KOBO_PER_NAIRA
@@ -235,10 +250,10 @@ class Command(BaseCommand):
         logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[10].name})"))
 
         with schema_context(school.schema_name), transaction.atomic():
-            self._term_data(staff, teachers, children, rng, PAPERS[slug])
+            self._term_data(school, staff, teachers, children, rng, PAPERS[slug], TEMPLATES[slug])
         return logins
 
-    def _term_data(self, staff, teachers, children, rng, paper_scheme):
+    def _term_data(self, school, staff, teachers, children, rng, paper_scheme, template):
         today = timezone.localdate()
         # The term is the one running today, so every "current term" screen has
         # something to show; the previous one exists so a copy has a source.
@@ -287,6 +302,13 @@ class Command(BaseCommand):
                 low, high = round(paper.max_score * 0.37), round(paper.max_score * 0.97)
                 for child in placed[groups[1]]:
                     gradebook.set_score(paper, child, rng.randint(low, high), by=staff["teacher"].user)
+
+        if template == "ogun":
+            # Chosen as a school chooses it, before anything is rated or released,
+            # so the cards below freeze the sheet's traits and rating key and are
+            # released in the Ogun layout.
+            ogun.set_template_as(staff["principal"].user, school, template)
+            self._learners(children, rng, staff["admin"].user)
 
         self._timetable(term, groups, subjects, staff, teachers)
         self._release(term, groups[1], placed[groups[1]], staff, rng)
@@ -398,6 +420,19 @@ class Command(BaseCommand):
         notices_service.set_offered_as(principal, result_notices=True)
         now = datetime.combine(term.starts_on, time(9, 0), tzinfo=LAGOS)
         notices_service.tell_families(sheet, actor=principal, now=now)
+
+    def _learners(self, children, rng, by):
+        """The learner's ID, sex and date of birth the Ogun sheet prints. Made up."""
+        from academics import details
+
+        today = timezone.localdate()
+        for number, child in enumerate(children, start=1):
+            first = child.user.full_name.split()[0]
+            born = today.replace(year=today.year - 12 - rng.randint(0, 2), month=rng.randint(1, 12), day=rng.randint(1, 28))
+            details.record(
+                child.pk, learner_id=f"SUN-{today.year - 1}-{number:04d}", sex=SEX[first],
+                date_of_birth=born, by=by,
+            )
 
     def _remarks_begun(self, term, group, members, staff):
         """JSS 1A's sheet opened and left in draft, four remarks in.

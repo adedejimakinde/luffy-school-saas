@@ -57,6 +57,36 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
 
         self.assertFalse(School.objects.filter(slug__in=SLUGS).exists())
 
+    def the_cards_match_the_template(self, slug):
+        """Sunrise prints the Ogun sheet and its cards say so; Harbour is Standard.
+
+        What a card froze is what it prints: the Ogun layout, the sheet's twelve
+        trait lines and its rating key, and the child's learner's ID, sex and date
+        of birth (made up) filled in. Harbour's carry the Standard card's.
+        """
+        from academics.models import StudentDetails
+        from results import ogun
+        from results.models import ReleasedCard, ReleasedTraitRating, ReportCardSettings
+
+        cards = ReleasedCard.objects.all()
+        self.assertEqual(cards.count(), 10, "JSS 1B was released, JSS 1A was not")
+        if slug == "sunrise-demo":
+            self.assertEqual(ReportCardSettings.objects.get().template, "ogun")
+            self.assertEqual({c.template for c in cards}, {"ogun"})
+            for card in cards:
+                names = list(ReleasedTraitRating.objects.filter(card=card).order_by("group", "position").values_list("trait_name", flat=True))
+                self.assertEqual(names, [*ogun.AFFECTIVE, *ogun.PSYCHOMOTOR], card.student_name)
+                self.assertEqual([tuple(p) for p in card.rating_scale], [(v, label) for v, label in ogun.SCALE])
+            details = StudentDetails.objects.all()
+            self.assertEqual(details.count(), 20, "every Sunrise child has details")
+            for row in details:
+                self.assertTrue(row.learner_id and row.sex and row.date_of_birth, row.student_membership_id)
+            self.assertEqual(len({row.learner_id for row in details}), 20)
+        else:
+            self.assertEqual(ReportCardSettings.objects.get().template, "standard")
+            self.assertEqual({c.template for c in cards}, {"standard"})
+            self.assertFalse(StudentDetails.objects.exists())
+
     @override_settings(DEBUG=True)
     def test_two_schools_each_with_a_term_of_data_and_a_login_per_role(self):
         out = self.seed()
@@ -101,6 +131,7 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                         self.assertEqual(papers, [("First CA", 20), ("Exam", 60)])
                         self.assertEqual(Score.objects.count(), 90)
                     self.assertEqual(Register.objects.count(), 20)
+                    self.the_cards_match_the_template(slug)
                     # The card's "Next term begins" line has something to
                     # read, and it does not fall after the term it follows.
                     self.assertTrue(term.next_term_starts_on)
@@ -166,7 +197,8 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                         )
                     self.assertEqual(
                         TraitRating.objects.filter(term=term, student_membership_id__in=jss1b_ids).count(),
-                        10 * 11,
+                        # Sunrise prints the Ogun sheet's twelve lines, Harbour the seeded eleven.
+                        10 * (12 if slug == "sunrise-demo" else 11),
                         "not every child rated on every trait",
                     )
 
