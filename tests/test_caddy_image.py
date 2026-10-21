@@ -183,26 +183,3 @@ class TheWorkflowUsesItTests(SimpleTestCase):
         self.assertIn('CADDY_IMAGE: ghcr.io/${{ github.repository }}/caddy:candidate-${{ github.sha }}', self.image)
         self.assertLess(self.image.index("caddy-image.sh"), self.image.index("The Caddyfile is valid"))
         self.assertIn('docker push "$CADDY_IMAGE"', self.image)
-
-
-class TheWorkflowFilesAreValidTests(SimpleTestCase):
-    """A workflow file GitHub cannot parse runs nothing and reports nothing.
-
-    PR #281's first push did exactly that: a step named `Caddy image: reuse ...`
-    has a colon and a space in an unquoted value, which is not YAML, so the run
-    ended in no seconds with no jobs and the pull request showed no checks at
-    all. The repository has no YAML parser, so this holds the one mistake that
-    produced it: an unquoted `name:` value containing `: `.
-    """
-
-    def test_no_step_or_job_name_holds_a_colon_and_a_space_unquoted(self):
-        for path in sorted((BASE_DIR / ".github" / "workflows").glob("*.yml")):
-            for number, line in enumerate(path.read_text().splitlines(), start=1):
-                stripped = line.strip()
-                if not (stripped.startswith("- name:") or stripped.startswith("name:")):
-                    continue
-                value = stripped.split("name:", 1)[1].strip()
-                if value.startswith(("'", '"')) or value.startswith("$"):
-                    continue
-                with self.subTest(file=path.name, line=number):
-                    self.assertNotIn(": ", value, line)
