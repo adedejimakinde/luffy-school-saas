@@ -156,6 +156,25 @@ every choice at St Mary's), and the template tests in `tests/js/setup.test.js`.
 | `apply_traits()` made to keep a rated line on the sheet again | `ChoosingATemplateSetsTheTraitListTests` (two) and `test_a_rated_trait_the_sheet_does_not_print_is_hidden_and_its_rating_kept` |
 | `set_template_as()`'s authority check removed | `test_the_service_refuses_a_teacher_without_the_route` |
 
+### Schools that chose the template before 2026-10-20
+
+The old rule left a rated Standard line showing beside the sheet's twelve, and
+choosing the template again now hides it (nothing is deleted). To list the
+schools that have it, read-only, on the server as `deploy`:
+
+```bash
+cd /opt/classnode/deploy && export CLASSNODE_TAG=$(cat deployed-sha)
+docker compose run --rm -T web python manage.py shell < /opt/classnode/scripts/ogun_leftover_traits.py
+```
+
+It prints one line per school (its card, how many of the sheet's twelve lines
+show, and each other line showing with whether it was ever rated), flags
+**AFFECTED** where all twelve show with something else beside them, and ends
+with `Affected: <slugs>`. Every school is read in a `READ ONLY` transaction, so
+Postgres would refuse a write from it, and it prints nothing about a child.
+Fixing a school is the Ogun choice pressed again on its setup page.
+`LeftoverTraitsReportTests` runs the script over two schools.
+
 ## Part 3: physical development and health
 
 `results.HealthRecord`, one row per child per term, in the school's own schema:

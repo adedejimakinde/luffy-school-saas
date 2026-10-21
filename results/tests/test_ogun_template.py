@@ -335,3 +335,93 @@ class ChoosingATemplateSetsTheTraitListTests(OgunSetUp):
                 [line.name for s in sections for line in s.lines],
                 [row[1] for row in before],
             )
+
+
+class LeftoverTraitsReportTests(OgunSetUp):
+    """`scripts/ogun_leftover_traits.py`: the read-only list of schools that got
+    the sheet's twelve lines plus their own leftovers (before #280).
+
+    Two schools. St Mary's applied the presets and then shows a rated Standard
+    line again, which is exactly what the old rule left behind; Grace never chose
+    the template and keeps the seeded list.
+    """
+
+    SCRIPT = "scripts/ogun_leftover_traits.py"
+
+    def report(self):
+        import contextlib
+        import io
+        import pathlib
+
+        out = io.StringIO()
+        source = pathlib.Path(__file__).resolve().parents[2].joinpath(self.SCRIPT).read_text()
+        with contextlib.redirect_stdout(out):
+            exec(compile(source, self.SCRIPT, "exec"), {"__name__": "__main__"})
+        return out.getvalue()
+
+    def leave_a_rated_standard_line_showing(self):
+        self.choose(self.head)
+        with connected_to(self.stmarys):
+            politeness = Trait.objects.get(name="Politeness")
+            TraitRating.objects.create(
+                term=Term.objects.get(is_current=True),
+                trait=politeness,
+                student_membership_id=self.children["ada"].pk,
+                score=4,
+            )
+            Trait.objects.filter(pk=politeness.pk).update(is_hidden=False)
+
+    def test_a_school_with_the_sheet_and_a_leftover_is_listed_and_the_other_is_not(self):
+        self.leave_a_rated_standard_line_showing()
+
+        out = self.report()
+
+        stmarys = next(line for line in out.splitlines() if line.startswith("st-marys"))
+        grace = next(line for line in out.splitlines() if line.startswith("grace"))
+        self.assertIn("AFFECTED", stmarys)
+        self.assertIn("Politeness [affective, rated]", stmarys)
+        self.assertNotIn("AFFECTED", grace, "a school that never chose the template is not affected")
+        self.assertIn("own list", grace)
+        self.assertTrue(out.rstrip().endswith("Affected: st-marys"), out)
+
+    def test_a_school_whose_list_is_just_the_sheet_is_not_listed(self):
+        self.choose(self.head)
+
+        out = self.report()
+
+        self.assertTrue(out.rstrip().endswith("Affected: none"), out)
+
+    def test_it_changes_nothing_in_either_school(self):
+        self.leave_a_rated_standard_line_showing()
+
+        def state():
+            rows = {}
+            for school in (self.stmarys, self.grace):
+                with connected_to(school):
+                    rows[school.slug] = (
+                        list(Trait.objects.order_by("pk").values_list("pk", "name", "is_hidden", "updated_at")),
+                        TraitRating.objects.count(),
+                        list(ReportCardSettings.objects.values_list("template", "updated_at")),
+                    )
+            return rows
+
+        before = state()
+        self.report()
+        self.assertEqual(state(), before)
+
+    def test_a_write_inside_its_reads_is_refused_by_the_database(self):
+        """The reads run in a READ ONLY transaction, so a write in there fails."""
+        from unittest import mock
+
+        from django.db.utils import InternalError, NotSupportedError, OperationalError, ProgrammingError
+
+        real = ReportCardSettings.objects
+
+        class WriteThenRead:
+            def filter(self, *args, **kwargs):
+                Trait.objects.all().update(is_hidden=True)
+                return real.filter(*args, **kwargs)
+
+        with mock.patch.object(ReportCardSettings, "objects", WriteThenRead()):
+            with self.assertRaises((InternalError, NotSupportedError, OperationalError, ProgrammingError)):
+                self.report()
