@@ -146,6 +146,22 @@ reader that acts on the rule acts without asking the flag first, and
 `AReleasedCardIsNeverChangedTests` freezes a card the old way and reads it with
 the new code. A *revision* of an old card is a new card and follows the rule.
 
+### A card released before the rule reads as it did (checked against the old code)
+
+Beyond the unit tests, this was run end to end against real pre-#283 code
+(2026-10-21): a checkout of `f0b89d8` seeded the demo, switched Harbour to the Ogun
+template, left one paper unmarked in each school's JSS 1A and released it, and
+dumped every card, broadsheet and PDF page. The same database was then migrated to
+the new code (`0035` applied to the 40 existing cards with no UPDATE: all
+`whole_subjects_only` false, all lines `is_complete` true) and dumped again. The
+40 card payloads and 4 broadsheets are identical but for the added fields
+(`is_complete` on lines and rows, `left_out`, `ranked`), and the 40 PDF pages are
+byte-identical but for the checkout path in the font URL. Ada's old card still
+says "9th of 10", a total of 112 of 180, and its eleven frozen traits.
+`results/tests/test_whole_subjects.py`, `AReleasedCardIsNeverChangedTests`, holds
+the same claim in the suite with every number written out, over the pre-rule
+`_card_for()` and `_subject_line()`.
+
 ### Controls for the rule above
 
 `results/tests/test_whole_subjects.py` (two schools in every class; St Mary's on
