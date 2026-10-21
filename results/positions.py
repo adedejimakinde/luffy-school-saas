@@ -47,6 +47,29 @@ Ranking them last would be a specific lie: it says the school assessed them and
 they scored nothing. A child off sick for the term, or one who joined in week
 ten, would be printed bottom of the class on a card that goes home.
 
+## A subject with a paper unmarked has no total, and its child is not ranked
+
+`gradebook` keeps "not marked" apart from nought by having no row, and a
+subject has as many papers as it has `Assessment`s for the term. A child is
+**whole in a subject** when every one of those papers has a mark for them. A
+paper still unmarked is the teacher's work not yet done, not a child who sat
+the paper and scored nothing, so:
+
+- the subject has **no total on the card a family reads**, and is left out of
+  the card's summary (marks obtained, percentage) and its average. The marks that
+  are in stay on the staff broadsheet, marked incomplete;
+- the child is **ranked in a subject** only where they are whole in it, and
+  **ranked in the class** only when they are whole in every subject the class
+  was marked in. Ranking a child on the papers marked so far puts them above or
+  below children who have been marked on more, which is the one number a parent
+  would take to the school.
+
+Everyone ranked is ranked as before: dense, on the average as printed. "Out of
+N" is the number ranked, not the roster. A child who is not ranked has no
+position, and is not last. `ClassResults.averages` is untouched, and so is
+everything built on it (the year's last line, the class average): the new
+fields below are additions.
+
 ## The overall average is the child's own, across their subjects
 
 Settled for this phase, and worth stating because there are two defensible
@@ -79,10 +102,10 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Context, Decimal, localcontext
 from typing import Mapping
 
-from django.db.models import Sum
+from django.db.models import Count, OuterRef, Subquery, Sum
 
 from academics.models import ClassGroup, ClassPlacement, Term
-from gradebook.models import Score
+from gradebook.models import Assessment, Score
 
 #: Two decimal places, which is what a report card prints. Ranking compares the
 #: quantised value, so what decides a tie is the number a parent can see.
@@ -206,8 +229,14 @@ def roster(class_group, term) -> dict[int, ClassPlacement]:
     }
 
 
-def _subject_totals(term, student_ids) -> dict[tuple[int, int], tuple[int, int]]:
-    """`(student, subject) -> (scored, available)`, in one query.
+def _subject_totals(term, student_ids) -> dict[tuple[int, int], tuple[int, int, int, int]]:
+    """`(student, subject) -> (scored, available, papers marked, papers there are)`, in one query.
+
+    The last two are what "whole" is made of: a child is whole in a subject when
+    they have a mark for every paper the subject has this term. The count of
+    papers is a subquery of the same statement and not a second read, so a paper
+    added while this runs cannot make the two disagree, and the page is still two
+    reads (the roster, then the marks).
 
     `.order_by()` is load-bearing and is not a leftover. `Score.Meta.ordering`
     is `["assessment", "student_membership_id"]`, and Django appends ordering
@@ -218,18 +247,32 @@ def _subject_totals(term, student_ids) -> dict[tuple[int, int], tuple[int, int]]
     """
     if not student_ids:
         return {}
+    papers = (
+        Assessment.objects.filter(term=term, subject_id=OuterRef("assessment__subject_id"))
+        .order_by()
+        .values("subject_id")
+        .annotate(n=Count("pk"))
+        .values("n")
+    )
     grouped = (
         Score.objects.filter(
             assessment__term=term, student_membership_id__in=student_ids
         )
         .values("student_membership_id", "assessment__subject_id")
-        .annotate(scored=Sum("value"), available=Sum("assessment__max_score"))
+        .annotate(
+            scored=Sum("value"),
+            available=Sum("assessment__max_score"),
+            marked=Count("pk"),
+            papers=Subquery(papers),
+        )
         .order_by()
     )
     return {
         (row["student_membership_id"], row["assessment__subject_id"]): (
             row["scored"] or 0,
             row["available"] or 0,
+            row["marked"],
+            row["papers"],
         )
         for row in grouped
     }
@@ -294,11 +337,30 @@ class ClassResults:
     #: denominator, and their percentage is over what they sat. See
     #: `_subject_totals()`.
     totals: dict[tuple[int, int], tuple[int, int]]
+    #: Over what was marked, whole subject or not: the staff's figure, and what
+    #: the broadsheet shows beside "incomplete".
     percentages: dict[tuple[int, int], Decimal]
+    #: Only where the child is whole in the subject (`whole`).
     subject_positions: dict[tuple[int, int], int]
+    #: The child's average over **every subject they have a mark in**, partial
+    #: ones included. Unchanged, and what the year's last line and the class
+    #: average are built on. It is not the figure a family reads: that is
+    #: `card_averages`.
     averages: dict[int, Decimal]
+    #: Only the children whole in every subject, dense on `averages`. Everyone
+    #: else is absent, which is "not ranked", not last.
     positions: dict[int, int]
     class_average: Decimal | None
+    #: `(student, subject)` pairs where every paper of the subject has a mark.
+    whole: frozenset[tuple[int, int]]
+    #: The children whole in every subject the class was marked in — the ones
+    #: `positions` ranks. Empty when the class was marked in nothing.
+    whole_students: frozenset[int]
+    #: What the card a family reads is built from: totals and average over the
+    #: whole subjects only. For a child whole in everything these are the same
+    #: numbers as `totals` and `averages`.
+    card_totals: dict[int, tuple[int, int]]
+    card_averages: dict[int, Decimal]
 
     def scored_and_available(self, student_id, subject_id) -> tuple[int, int]:
         """`(0, 0)` for a subject this child has no mark in, which prints blank."""
@@ -309,6 +371,14 @@ class ClassResults:
 
     def subject_position(self, student_id, subject_id) -> int | None:
         return self.subject_positions.get((student_id, subject_id))
+
+    def is_whole(self, student_id, subject_id) -> bool:
+        """Every paper of this subject has a mark for this child."""
+        return (student_id, subject_id) in self.whole
+
+    def card_total(self, student_id) -> tuple[int, int]:
+        """`(scored, available)` over the child's whole subjects; `(0, 0)` with none."""
+        return self.card_totals.get(student_id, (0, 0))
 
 
 def class_results(class_group, term) -> ClassResults:
@@ -325,13 +395,15 @@ def class_results(class_group, term) -> ClassResults:
     """
     placements = roster(class_group, term)
     students = list(placements)
-    totals = _subject_totals(term, students)
+    counted = _subject_totals(term, students)
+    totals = {key: (scored, available) for key, (scored, available, _, _) in counted.items()}
 
     percentages: dict[tuple[int, int], Decimal] = {}
     per_student: dict[int, list[Decimal]] = {student: [] for student in students}
     subject_ids: list[int] = []
+    whole: set[tuple[int, int]] = set()
 
-    for (student_id, subject_id), (scored, available) in totals.items():
+    for (student_id, subject_id), (scored, available, marked, papers) in counted.items():
         percentage = _percentage(scored, available)
         if percentage is None:
             continue
@@ -339,6 +411,8 @@ def class_results(class_group, term) -> ClassResults:
         per_student[student_id].append(percentage)
         if subject_id not in subject_ids:
             subject_ids.append(subject_id)
+        if marked >= papers:
+            whole.add((student_id, subject_id))
 
     averages = {
         student_id: mean_percentage(marks)
@@ -346,15 +420,35 @@ def class_results(class_group, term) -> ClassResults:
         if marks
     }
 
+    # Whole in every subject the class was marked in: a subject the child has
+    # no mark in at all counts against them, because from the teacher's side it
+    # is a paper not yet entered. `subject_ids` is a list of the subjects with a
+    # percentage for somebody, so this is the class's own subject list.
+    whole_students = frozenset(
+        student_id
+        for student_id in students
+        if subject_ids and all((student_id, subject_id) in whole for subject_id in subject_ids)
+    )
+
     subject_positions: dict[tuple[int, int], int] = {}
     for subject_id in subject_ids:
         in_subject = {
             student_id: value
             for (student_id, other), value in percentages.items()
-            if other == subject_id
+            if other == subject_id and (student_id, other) in whole
         }
         for student_id, position in dense_positions(in_subject).items():
             subject_positions[(student_id, subject_id)] = position
+
+    card_totals: dict[int, tuple[int, int]] = {}
+    card_marks: dict[int, list[Decimal]] = {}
+    for (student_id, subject_id) in whole:
+        scored, available = totals[(student_id, subject_id)]
+        so_far = card_totals.get(student_id, (0, 0))
+        card_totals[student_id] = (so_far[0] + scored, so_far[1] + available)
+        if (student_id, subject_id) in percentages:
+            card_marks.setdefault(student_id, []).append(percentages[(student_id, subject_id)])
+    card_averages = {student: mean_percentage(marks) for student, marks in card_marks.items()}
 
     return ClassResults(
         student_ids=students,
@@ -366,10 +460,16 @@ def class_results(class_group, term) -> ClassResults:
         percentages=percentages,
         subject_positions=subject_positions,
         averages=averages,
-        positions=dense_positions(averages),
+        positions=dense_positions(
+            {student: averages[student] for student in whole_students if student in averages}
+        ),
         class_average=(
             mean_percentage(averages.values()) if averages else None
         ),
+        whole=frozenset(whole),
+        whole_students=whole_students,
+        card_totals=card_totals,
+        card_averages=card_averages,
     )
 
 

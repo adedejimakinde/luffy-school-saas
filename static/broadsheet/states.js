@@ -9,6 +9,11 @@
  * **No marks is "—", never 0.** A null average means the child has no marks,
  * and a zero would claim they sat every exam and scored nothing.
  *
+ * **A figure over papers not all marked says so.** A subject with a paper
+ * unmarked, and the average built on it, print as they are beside "incomplete",
+ * and a child with any such subject has no position: "not ranked", which is not
+ * last. The server decides which (`is_complete`); this page only says it.
+ *
  * **Which figures these are is said on the page.** A released term is served
  * from the frozen cards and an unreleased one from live marks
  * (`from_snapshot`); a reader comparing two sheets needs to know which
@@ -103,7 +108,23 @@ export function overview({ terms = [], overview: body = {} } = {}) {
   ].join("");
 }
 
-/** Rows in the server's rank order; the unranked (no marks) last, by name. */
+const INCOMPLETE = " <small>incomplete</small>";
+
+/** A figure, with "incomplete" beside it when the server says it is over unmarked papers. */
+function partial(value, isComplete) {
+  const shown = figure(value);
+  return value !== null && value !== undefined && value !== "" && isComplete === false
+    ? shown + INCOMPLETE
+    : shown;
+}
+
+/** The position cell: the rank, "not ranked" for a child with a subject unfinished, else a dash. */
+function placing(row, counts) {
+  if (row.is_complete === false) return '<span class="not-ranked">not ranked</span>';
+  return rankLabel(row.current_rank, counts);
+}
+
+/** Rows in the server's rank order; the unranked (no marks, or not whole) last, by name. */
 export function ordered(rows) {
   return [...rows].sort((a, b) => {
     const ra = a.current_rank ?? Infinity;
@@ -115,7 +136,7 @@ export function ordered(rows) {
 
 /** One class's broadsheet. */
 export function sheet({ broadsheet: body = {} } = {}) {
-  const { class_group = "", term = "", class_average = null, from_snapshot = false, rows = [] } = body;
+  const { class_group = "", term = "", class_average = null, from_snapshot = false, ranked = null, rows = [] } = body;
   const subjects = rows.length ? rows[0].subjects.map((s) => [s.subject_id, s.subject]) : [];
   const counts = countsOf(rows.map((r) => r.current_rank));
   const subjectCounts = new Map(
@@ -130,6 +151,13 @@ export function sheet({ broadsheet: body = {} } = {}) {
     `<h1>${esc(class_group)}</h1>`,
     `<p class="term">${esc(term)}</p>`,
     banner(from_snapshot),
+    rows.length && ranked !== null
+      ? `<p class="ranked-count" data-ranked="${esc(ranked)}">${esc(ranked)} of ${esc(rows.length)} ranked.` +
+        (rows.some((r) => r.is_complete === false)
+          ? " A child with a paper not yet marked is not ranked."
+          : "") +
+        "</p>"
+      : "",
     rows.length
       ? [
           // One of the three tables that scroll sideways on a phone: its
@@ -144,7 +172,7 @@ export function sheet({ broadsheet: body = {} } = {}) {
               const cells = subjects.map(([id]) => {
                 const s = r.subjects.find((x) => x.subject_id === id) || {};
                 return (
-                  `<td class="num">${figure(s.percentage)}` +
+                  `<td class="num">${partial(s.percentage, s.is_complete)}` +
                   (s.current_subject_rank == null
                     ? ""
                     : ` <small>(${rankLabel(s.current_subject_rank, subjectCounts.get(id))})</small>`) +
@@ -153,10 +181,10 @@ export function sheet({ broadsheet: body = {} } = {}) {
               });
               return (
                 "<tr>" +
-                `<td class="num rank">${rankLabel(r.current_rank, counts)}</td>` +
+                `<td class="num rank">${placing(r, counts)}</td>` +
                 `<td>${esc(r.student)}</td>` +
                 cells.join("") +
-                `<td class="num">${figure(r.average)}</td>` +
+                `<td class="num">${partial(r.average, r.is_complete)}</td>` +
                 "</tr>"
               );
             })

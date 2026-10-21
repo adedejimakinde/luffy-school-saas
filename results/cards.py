@@ -507,13 +507,11 @@ def _card_for(
     admin gap, which must never print as a child being away. The renderer tells
     them apart and `docs/attendance.md` D13 is the table.
     """
-    scored = available = 0
-    for subject_id in results.subject_ids:
-        subject_scored, subject_available = results.scored_and_available(
-            student_id, subject_id
-        )
-        scored += subject_scored
-        available += subject_available
+    # The card a family reads counts whole subjects only: a subject with a paper
+    # unmarked has no total and is left out of the summary and the average
+    # (`positions`, "A subject with a paper unmarked"). The staff's figures for
+    # that subject are kept on its line, marked incomplete.
+    scored, available = results.card_total(student_id)
 
     return ReleasedCard(
         sheet=sheet,
@@ -526,11 +524,14 @@ def _card_for(
         class_group_name=str(sheet.class_group),
         school_name=school_name,
         student_name=names.get(student_id, ""),
+        whole_subjects_only=True,
         total_scored=scored,
         total_available=available,
-        own_average=results.averages.get(student_id),
+        own_average=results.card_averages.get(student_id),
         position=results.positions.get(student_id),
-        roster_size=len(results.student_ids),
+        # Out of the children ranked, not the roster: "4th of 30" is a statement
+        # about thirty children who were compared with each other.
+        roster_size=len(results.positions),
         position_printed=position_printed,
         rating_scale=rating_scale,
         days_present=attendance.present if attendance else None,
@@ -543,7 +544,10 @@ def _card_for(
 def _subject_line(card, subject, position, results, student_id, bands):
     scored, available = results.scored_and_available(student_id, subject.pk)
     percentage = results.percentage(student_id, subject.pk)
-    band = grades.grade_for(percentage, bands=bands)
+    complete = results.is_whole(student_id, subject.pk)
+    # No grade on a subject that is not whole: a letter for a total that is not
+    # one would be the card saying what the subject came to.
+    band = grades.grade_for(percentage, bands=bands) if complete else None
 
     return ReleasedSubjectResult(
         card=card,
@@ -554,6 +558,7 @@ def _subject_line(card, subject, position, results, student_id, bands):
         total_scored=scored,
         total_available=available,
         percentage=percentage,
+        is_complete=complete,
         grade_letter=band.letter if band else "",
         grade_remark=band.remark if band else "",
         subject_position=results.subject_position(student_id, subject.pk),

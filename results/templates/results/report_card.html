@@ -215,7 +215,7 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
         {% else %}<span class="blank">-</span>{% endif %}
       </td></tr>
   <tr><td class="label">Marks</td>
-      <td>{% if card.percentage %}{{ card.total_scored }} of {{ card.total_available }} obtainable &middot; {{ card.percentage }}%{% else %}<span class="blank">-</span>{% endif %}</td>
+      <td>{% if card.percentage %}{{ card.total_scored }} of {{ card.total_available }} obtainable &middot; {{ card.percentage }}%{% else %}<span class="blank">-</span>{% endif %}{% if card.left_out %} <span class="blank">({{ card.left_out }} subject{{ card.left_out|pluralize }} not counted: a paper is not marked)</span>{% endif %}</td>
       {% if card.place_in_class %}<td class="label">Position</td><td>{{ card.place_in_class.label }}</td>{% else %}<td></td><td></td>{% endif %}</tr>
 </table>
 
@@ -234,7 +234,7 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
       {% for cell in row.cells %}
         <td class="n">{% if cell is None %}<span class="blank">&middot;</span>{% elif cell.score is None %}<span class="blank">-</span>{% else %}{{ cell.score }}{% endif %}</td>
       {% endfor %}
-      <td class="n">{{ row.line.total_scored }}<span class="max">/{{ row.line.total_available }}</span></td>
+      <td class="n">{% if row.line.total_scored is None %}<span class="blank">-</span>{% else %}{{ row.line.total_scored }}<span class="max">/{{ row.line.total_available }}</span>{% endif %}</td>
       <td class="n">{% if row.line.percentage %}{{ row.line.percentage }}{% else %}<span class="blank">-</span>{% endif %}</td>
       <td class="n">{{ row.line.grade_letter }}</td>
       <td>{{ row.line.grade_remark }}</td>

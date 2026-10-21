@@ -246,6 +246,16 @@ unless the card was released printing it. With it off, the payload carries no
 rank and no word "position" at all, as before: the existing raw-bytes tests in
 `test_card_api.py` still hold, and `test_card_position.py` adds its own.
 
+**A subject with a paper unmarked, on both cards** (2026-10-21,
+`docs/positions.md`). The subject's total is "-" and the subject is left out of
+the summary (marks obtained, percentage) and the average; the Ogun sheet also
+dashes the half with the paper missing (a CA over two of three tests is not the
+CA score) and says "Not counted: n subject(s) with a paper not yet marked". A
+child is ranked only when every subject is whole: the others print "not ranked"
+where the position goes, and "No. in class" counts the ranked. A card released
+before this keeps what it printed (`ReleasedCard.whole_subjects_only` is False on
+it).
+
 ### Tests and controls
 
 `results/tests/test_card_position.py` (13 tests, two schools), the position box in

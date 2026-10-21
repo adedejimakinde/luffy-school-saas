@@ -165,3 +165,24 @@ test("a summary with nothing left out says nothing about it", () => {
   const html = card({ ...PAYLOAD, ogun: { ...OGUN, summary: { obtainable: 200, obtained: 140, percentage: "70", left_out: 0 } } });
   assert.doesNotMatch(html, /Not counted/);
 });
+
+test("a subject with a paper unmarked is dashes across, and the summary says it was left out", () => {
+  const html = card({
+    ...PAYLOAD,
+    place_in_class: { place: null, out_of: 30, label: "not ranked" },
+    ogun: {
+      ...OGUN,
+      groups: [
+        {
+          label: "",
+          subjects: [subject("Mathematics", { ca: null, weighted: null }), subject("English Studies")],
+        },
+      ],
+      summary: { obtainable: 100, obtained: 82, percentage: "82", left_out: 1 },
+    },
+  });
+
+  assert.match(html, /<th scope="row">Mathematics<\/th><td class="n">-<\/td><td class="n">58<\/td><td class="n strong">-<\/td>/);
+  assert.match(html, /Not counted: 1 subject with a paper not yet marked/);
+  assert.match(html, /<dt>Class position<\/dt><dd>not ranked<\/dd>/);
+});

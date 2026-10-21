@@ -505,3 +505,78 @@ test("no grade yet is just the percentage, not a grade beside a blank", () => {
   assert.match(html, /<span class="grade-pct"><span class="blank">-<\/span><\/span>/);
   assert.doesNotMatch(html, /&middot; <span class="blank">/, "no separator in front of nothing");
 });
+
+// -- a subject with a paper not yet marked ------------------------------------
+
+/** Mathematics with its Mid-term unmarked: the server sends no total, no percentage, no grade. */
+function withAPaperMissing(overrides = {}) {
+  const base = payload();
+  const [english, maths] = base.subjects;
+  return payload({
+    total_scored: 89,
+    total_available: 120,
+    percentage: "74.17",
+    own_average: "74.17",
+    left_out: 1,
+    subjects: [
+      english,
+      {
+        ...maths,
+        is_complete: false,
+        total_scored: null,
+        total_available: null,
+        percentage: null,
+        grade_letter: "",
+        grade_remark: "",
+      },
+    ],
+    ...overrides,
+  });
+}
+
+test("a subject with a paper unmarked prints a dash for its total, its percentage and its grade", () => {
+  const html = withAPaperMissing() && card(withAPaperMissing());
+  const row = html.match(/<tr>(<td class="stack-head"><span class="subject">Mathematics.*?)<\/tr>/)[1];
+
+  assert.match(row, /<td class="n total" data-label="Total"><span class="blank">-<\/span><\/td>/);
+  assert.match(row, /<td class="n pct" data-label="%"><span class="blank">-<\/span><\/td>/);
+  assert.doesNotMatch(row, /127|140|90\.71/, "no partial total or percentage reaches the page");
+  assert.match(row, /Total <span class="blank">-<\/span>/, "the phone's line too");
+});
+
+test("the papers that are marked still show beside the dash, the unmarked one as a dash of its own", () => {
+  const row = card(withAPaperMissing()).match(/<tr>(<td class="stack-head"><span class="subject">Mathematics.*?)<\/tr>/)[1];
+  const cells = [...row.matchAll(/<td class="n paper"[^>]*>(.*?)<\/td>/g)].map((m) => m[1]);
+
+  assert.match(cells[0], /^17$/);
+  assert.match(cells[2], /<span class="blank">-<\/span>/);
+});
+
+test("the summary says how many subjects it leaves out, and is silent when none", () => {
+  assert.match(card(withAPaperMissing()), /89 of 120 obtainable &middot; 74\.17%.*1 subject not counted: a paper is not marked/);
+  assert.match(card(withAPaperMissing({ left_out: 2 })), /2 subjects not counted/);
+  assert.doesNotMatch(card(payload()), /not counted/);
+  assert.doesNotMatch(card(payload({ left_out: 0 })), /not counted/);
+});
+
+test("with every subject left out the summary is a dash and still says why", () => {
+  const html = card(withAPaperMissing({ percentage: null, total_scored: 0, total_available: 0, left_out: 2 }));
+
+  assert.match(html, /<th scope="row">Marks<\/th><td><span class="blank">-<\/span> <span class="blank">\(2 subjects not counted/);
+});
+
+test("a position of 'not ranked' is printed as the server said it", () => {
+  const html = card(
+    withAPaperMissing({ place_in_class: { place: null, out_of: 30, label: "not ranked" } }),
+  );
+
+  assert.match(html, /<th scope="row">Position<\/th><td>not ranked<\/td>/);
+});
+
+test("a card from before the rule, with a total on every line, prints exactly as it did", () => {
+  const html = card(payload());
+
+  assert.match(html, /<td class="n total" data-label="Total">89<span class="max">\/120<\/span><\/td>/);
+  assert.match(html, /<td class="n total" data-label="Total">127<span class="max">\/140<\/span><\/td>/);
+  assert.doesNotMatch(html, /not counted/);
+});

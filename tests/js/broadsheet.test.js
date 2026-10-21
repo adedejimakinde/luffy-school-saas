@@ -221,3 +221,67 @@ test("choosing a term reads that term's overview", async () => {
 
   assert.match(root.innerHTML, /<h2>2025\/2026 Second term<\/h2>/);
 });
+
+// -- a child with a paper not yet marked ---------------------------------------
+
+const PARTIAL_SHEET = {
+  ...SHEET,
+  ranked: 2,
+  rows: [
+    { student_membership_id: 1, student: "Ada A", average: "88.00", current_rank: 1, is_complete: true, subjects: subjects("88.00", 1, "88.00", 1).map((s) => ({ ...s, is_complete: true })) },
+    { student_membership_id: 2, student: "Bisi B", average: "70.00", current_rank: 2, is_complete: true, subjects: subjects("70.00", 2, "70.00", 2).map((s) => ({ ...s, is_complete: true })) },
+    {
+      student_membership_id: 3, student: "Chike C", average: "92.28", current_rank: null, is_complete: false,
+      subjects: [
+        { subject_id: 1, subject: "English", percentage: "90.00", current_subject_rank: 1, is_complete: true },
+        { subject_id: 2, subject: "Mathematics", percentage: "94.55", current_subject_rank: null, is_complete: false },
+      ],
+    },
+  ],
+};
+
+test("a child with a paper unmarked has no position, only 'not ranked', and is not last of the ranked", () => {
+  const html = states.sheet({ broadsheet: PARTIAL_SHEET });
+  const names = [...html.matchAll(/<td>([A-Z][a-z]+ [A-Z])<\/td>/g)].map((m) => m[1]);
+  const chike = html.slice(html.indexOf("Chike C") - 80);
+
+  assert.deepEqual(names, ["Ada A", "Bisi B", "Chike C"], "the unranked after the ranked");
+  assert.match(chike, /<td class="num rank"><span class="not-ranked">not ranked<\/span><\/td>/);
+  assert.match(html, /<td class="num rank">1<\/td>/);
+  assert.match(html, /<td class="num rank">2<\/td>/);
+});
+
+test("the partial figures print beside 'incomplete', and a whole figure does not", () => {
+  const html = states.sheet({ broadsheet: PARTIAL_SHEET });
+  const chike = html.slice(html.indexOf("Chike C"), html.indexOf("</tr>", html.indexOf("Chike C")));
+  const ada = html.slice(html.indexOf("Ada A"), html.indexOf("</tr>", html.indexOf("Ada A")));
+
+  assert.match(chike, /94\.55 <small>incomplete<\/small>/, "the unfinished subject");
+  assert.match(chike, /92\.28 <small>incomplete<\/small>/, "and the average built on it");
+  assert.doesNotMatch(chike.replace(/90\.00 <small>\(1\)<\/small>/, ""), /90\.00 <small>incomplete/, "a whole subject is not marked");
+  assert.doesNotMatch(ada, /incomplete/);
+});
+
+test("a child with no marks at all is a dash, not 'incomplete' with nothing to show", () => {
+  const sheet = {
+    ...PARTIAL_SHEET,
+    rows: [{ student_membership_id: 4, student: "Dayo D", average: null, current_rank: null, is_complete: false, subjects: subjects(null, null, null, null).map((s) => ({ ...s, is_complete: false })) }],
+  };
+  const row = states.sheet({ broadsheet: sheet }).match(/Dayo D.*?<\/tr>/)[0];
+
+  assert.doesNotMatch(row, /incomplete/);
+  assert.match(row, /<td class="num">-<\/td><\/tr>$/);
+});
+
+test("the page says how many are ranked, and why the others are not", () => {
+  const html = states.sheet({ broadsheet: PARTIAL_SHEET });
+
+  assert.match(html, /<p class="ranked-count" data-ranked="2">2 of 3 ranked\. A child with a paper not yet marked is not ranked\.<\/p>/);
+});
+
+test("a sheet from before the rule says nothing of incomplete, and keeps every rank", () => {
+  const html = states.sheet({ broadsheet: { ...SHEET, ranked: 3 } });
+
+  assert.doesNotMatch(html, /incomplete|not ranked<|A child with a paper/);
+  assert.match(html, /3 of 4 ranked\.<\/p>/);
+});
