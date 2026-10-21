@@ -420,7 +420,7 @@ jobs:
       # unrelated commit to fail (run 525 on main). The script says why. The
       # login is only for the pull: without it the pull fails and the image is
       # built, as before.
-      - name: Caddy image: reuse the published one, or build it
+      - name: Caddy image, reused if it is published and built if not
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin || true
           scripts/caddy-image.sh "ghcr.io/${{ github.repository }}/caddy" "$CADDY_IMAGE"
