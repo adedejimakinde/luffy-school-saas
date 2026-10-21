@@ -78,6 +78,18 @@ def is_ogun() -> bool:
     return bool(row and row.template == CardTemplate.OGUN)
 
 
+def prints_ogun(card) -> bool:
+    """Whether this card prints on the Ogun State sheet.
+
+    The layout it was released under, once the card carries one
+    (`ReleasedCard.template`); a card released before that follows the school's
+    current template, as it always did.
+    """
+    if card.template:
+        return card.template == CardTemplate.OGUN
+    return is_ogun()
+
+
 def is_senior(class_name: str) -> bool:
     """"SSS 2A", "SS1 Gold", "S.S.S. 3" are senior; "JSS 1A" is not."""
     return bool(_SENIOR.match(class_name or ""))
@@ -229,7 +241,7 @@ def _shows_ministry() -> bool:
 
 def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     """The Ogun sheet's extra content for one card, or None for a Standard school."""
-    if not is_ogun():
+    if not prints_ogun(card):
         return None
     from . import look, ratings
 
@@ -345,4 +357,4 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     }
 
 
-__all__ = ["MINISTRY", "is_ogun", "is_senior", "sheet_for"]
+__all__ = ["MINISTRY", "is_ogun", "is_senior", "prints_ogun", "sheet_for"]

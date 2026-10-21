@@ -2381,6 +2381,15 @@ class ReleasedCard(models.Model):
     #: (`ratings.scale_of_card()`).
     rating_scale = models.JSONField(null=True, blank=True)
 
+    #: The layout this card prints in, as the school's template stood when it was
+    #: released (`CardTemplate`): the page and the PDF both follow it, so a school
+    #: switching to the Ogun State sheet next term does not redraw a card already
+    #: in a family's hands. **Blank on every card released before it was frozen**,
+    #: which keeps following the school's current template, as it always did.
+    template = models.CharField(
+        max_length=16, choices=CardTemplate, blank=True, default="", db_default=""
+    )
+
     #: Whether this card was frozen under the rule that a subject with a paper
     #: unmarked has no total and is left out of the card's summary, and that only
     #: a child whole in every subject is ranked (`positions`, "A subject with a

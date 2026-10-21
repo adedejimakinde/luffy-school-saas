@@ -208,6 +208,19 @@ and ranked everyone with an average; both migration columns default to the old
 meaning, so no existing card is touched (`0035`, no `UPDATE`, so the append-only
 trigger is not involved). Controls and tests: `results/tests/test_whole_subjects.py`.
 
+## The layout is frozen with the card (2026-10-21)
+
+`ReleasedCard.template` records the template the school had chosen when the card
+was released, and `ogun_card.prints_ogun(card)` is the one place that decides
+which sheet a card prints on, for the family's page (it draws the Ogun sheet when
+the payload carries one) and the PDF alike (`tasks.render_card_pdf`'s health copy
+asks it too). Switching the school's template next term redraws nothing already
+released. A card from before this is blank and follows the school's current
+template, as it always did (migration `0036`, no UPDATE). A revision carries its
+predecessor's layout; a revision of a card with none freezes the school's now.
+`results/tests/test_card_layout.py`: both directions, a term released after the
+switch, a revision, an old card, and the other school each time.
+
 ## What is *not* frozen
 
 **The class average**, computed on demand:
