@@ -90,7 +90,7 @@ def render_card_pdf(schema_name, card_id):
     from . import pdf
 
     from .models import HealthRecord
-    from .ogun_card import is_ogun
+    from .ogun_card import prints_ogun
 
     card = ReleasedCard.objects.get(pk=card_id)
     content = pdf.render(card)
@@ -98,7 +98,7 @@ def render_card_pdf(schema_name, card_id):
     # only where the class teacher recorded something for the term.
     record = (
         HealthRecord.objects.filter(student_membership_id=card.student_membership_id, term_id=card.term_id).first()
-        if is_ogun()
+        if prints_ogun(card)
         else None
     )
     health_content = pdf.render(card, health=record) if record is not None else None

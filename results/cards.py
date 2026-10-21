@@ -301,6 +301,10 @@ def freeze_a_revision(
         attendance=_carried_forward(supersedes, student_id),
         by=by,
         rating_scale=_LIVE_SCALE if supersedes is None else supersedes.rating_scale,
+        # Its predecessor's layout where that has one. A predecessor from before
+        # layouts were frozen has none to carry, and the revision, a new card,
+        # freezes the school's template as it now stands.
+        layout=supersedes.template if supersedes is not None and supersedes.template else _LIVE_LAYOUT,
     )
 
 
@@ -388,10 +392,12 @@ def _carried_forward(supersedes, student_id) -> dict:
 
 #: `_freeze()`'s default for the rating key: read the school's scale as it is now.
 _LIVE_SCALE = object()
+#: And for the layout: the school's template as it is now.
+_LIVE_LAYOUT = object()
 
 
 def _freeze(
-    sheet, results, whose, *, versions, attendance=None, by, rating_scale=_LIVE_SCALE
+    sheet, results, whose, *, versions, attendance=None, by, rating_scale=_LIVE_SCALE, layout=_LIVE_LAYOUT
 ) -> dict[int, ReleasedCard]:
     """The card rows and their two content tables, for `whose`.
 
@@ -416,6 +422,11 @@ def _freeze(
     from .look import settings as card_settings
 
     position_printed = card_settings().show_position
+    # The layout, read once for the same reason: one class's cards print in one
+    # template. A revision hands in its predecessor's, so reissuing a card never
+    # redraws it in a template the school has chosen since.
+    if layout is _LIVE_LAYOUT:
+        layout = card_settings().template
     # The key to the rating scale, read once for the reason the bands are: one
     # class's cards agree about what a 4 is called. A revision hands in the
     # predecessor's own key instead, so reissuing a card never rewords it.
@@ -436,6 +447,7 @@ def _freeze(
             (attendance or {}).get(student_id),
             position_printed=position_printed,
             rating_scale=rating_scale,
+            layout=layout,
         )
         for student_id in whose
     ]
@@ -497,6 +509,7 @@ def _card_for(
     *,
     position_printed=False,
     rating_scale=None,
+    layout="",
 ) -> ReleasedCard:
     """One child's card row. **Never conditional** — see the module docstring.
 
@@ -524,6 +537,7 @@ def _card_for(
         class_group_name=str(sheet.class_group),
         school_name=school_name,
         student_name=names.get(student_id, ""),
+        template=layout,
         whole_subjects_only=True,
         total_scored=scored,
         total_available=available,

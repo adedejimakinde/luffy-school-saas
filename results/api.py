@@ -152,7 +152,8 @@ class PlacingOut(Schema):
 class BroadsheetOut(Schema):
     class_group: str
     term: str
-    #: Computed on demand and never stored — see `positions.class_average()`.
+    #: The mean over the **ranked** children only ("Class average (ranked
+    #: students)"), computed on demand and never stored — see `positions.class_average()`.
     #: Staff-only, like `current_rank`, and for the same reason. For a released
     #: term it is the mean of the frozen cards' `own_average` values, so it and
     #: the ranks on this page come from the same rows.
@@ -280,6 +281,20 @@ def _frozen_averages(released) -> dict:
     return {child: average for child, average in averages.items() if average is not None}
 
 
+def _ranked_averages(released) -> dict:
+    """`child -> the staff's average` over the released cards whose child is ranked.
+
+    What the class average is the mean of, and what the ranks are dense over: the
+    same children, so the page's average counts exactly the children it ranks.
+    """
+    averages = _frozen_averages(released)
+    return {
+        card.student_membership_id: averages[card.student_membership_id]
+        for card in released
+        if _is_ranked(card)
+    }
+
+
 def _mean_or_none(averages):
     """The class average of these averages, or None when there are none —
     the dash rather than a zero that would claim the class sat and scored
@@ -291,7 +306,7 @@ def _mean_or_none(averages):
 
 
 def _class_figures(class_group, term):
-    """`(class_average, children with an average, from_snapshot)` for one class.
+    """`(class_average, children ranked, from_snapshot)` for one class.
 
     The same question the broadsheet answers, asked the same way: a released
     term from the frozen cards, an unreleased one from live marks. The
@@ -300,10 +315,10 @@ def _class_figures(class_group, term):
     """
     sheet = services.sheet_for(class_group, term)
     if sheet is not None and sheet.is_released:  # the frozen cards
-        averages = _frozen_averages(released_cards.cards_on(sheet))
-        return _mean_or_none(averages.values()), len(averages), True
+        ranked = _ranked_averages(released_cards.cards_on(sheet))
+        return _mean_or_none(ranked.values()), len(ranked), True
     results = positions.class_results(class_group, term)
-    return results.class_average, len(results.averages), False
+    return results.class_average, len(results.positions), False
 
 
 class TermChoiceOut(Schema):
@@ -326,7 +341,8 @@ class ClassFiguresOut(Schema):
     class_group: str
     #: Staff-only, like the page's; null when nobody in the class has a mark.
     class_average: Optional[str]
-    children_with_an_average: int
+    #: How many children the average is over: the ranked ones.
+    children_ranked: int
     from_snapshot: bool
 
 
@@ -380,7 +396,7 @@ def overview(request, term_id: int):
                 class_group_id=group.pk,
                 class_group=str(group),
                 class_average=_as_text(average),
-                children_with_an_average=counted,
+                children_ranked=counted,
                 from_snapshot=frozen,
             )
         )
@@ -493,9 +509,9 @@ def _from_the_snapshot(class_group, term, sheet):
        two children at the same rank on one page.
        `TheRevisedChildTests.test_the_page_never_repeats_a_rank` asserts exactly
        that: the frozen pair is `[1, 1]` where this derivation says `[1, 2]`.
-    3. `class_average` is `mean_percentage()` over those same averages, still
-       never stored, and now provably the mean of the numbers displayed beside
-       it.
+    3. `class_average` is `mean_percentage()` over the **ranked** children's
+       averages, still never stored, and so the mean of the numbers displayed
+       beside it for exactly the children the page ranks.
 
     A child with no card is absent from this page, which is the honest answer:
     she was not in what went home. The revision path is what gives her one
@@ -506,11 +522,7 @@ def _from_the_snapshot(class_group, term, sheet):
     averages = _frozen_averages(released)
     # Only the children whole in every subject are ranked, and the ranks are
     # among them alone: the rule `positions` states, read off the frozen cards.
-    ranked = {
-        card.student_membership_id: averages[card.student_membership_id]
-        for card in released
-        if _is_ranked(card)
-    }
+    ranked = _ranked_averages(released)
     ranks = positions.dense_positions(ranked)
 
     # Columns in the order the cards froze them — `ReleasedSubjectResult.position`
@@ -575,7 +587,7 @@ def _from_the_snapshot(class_group, term, sheet):
     return BroadsheetOut(
         class_group=str(class_group),
         term=str(term),
-        class_average=_as_text(_mean_or_none(averages.values())),
+        class_average=_as_text(_mean_or_none(ranked.values())),
         ranked=len(ranks),
         rows=rows,
         from_snapshot=True,

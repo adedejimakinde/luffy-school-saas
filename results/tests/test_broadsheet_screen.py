@@ -95,14 +95,14 @@ class TheOverviewTests(BroadsheetScreenSetUp):
         row = self.jss1a(self.overview(self.principal).json())
 
         self.assertEqual(row["class_average"], "74.50")
-        self.assertEqual(row["children_with_an_average"], 2)
+        self.assertEqual(row["children_ranked"], 2)
         self.assertFalse(row["from_snapshot"])
 
     def test_no_names_and_no_ranks(self):
         """It compares classes. Whoever wants children opens the class."""
         response = self.overview(self.principal)
 
-        for absent in (b"Ada A", b"Bisi B", b"rank", b"position", b"student"):
+        for absent in (b"Ada A", b"Bisi B", b"current_rank", b"position", b"student"):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, response.content)
 
@@ -138,7 +138,7 @@ class TheOverviewTests(BroadsheetScreenSetUp):
         self.assertTrue(page["from_snapshot"])
         self.assertEqual(page["class_average"], "74.50")
         self.assertEqual(row["class_average"], page["class_average"])
-        self.assertEqual(row["children_with_an_average"], 2)
+        self.assertEqual(row["children_ranked"], 2)
         self.assertTrue(row["from_snapshot"])
 
     def test_a_class_with_no_marks_is_a_dash_not_a_zero(self):
@@ -151,7 +151,7 @@ class TheOverviewTests(BroadsheetScreenSetUp):
         )
 
         self.assertIsNone(row["class_average"])
-        self.assertEqual(row["children_with_an_average"], 0)
+        self.assertEqual(row["children_ranked"], 0)
 
     def test_a_class_retired_after_release_keeps_its_row_for_that_term(self):
         self.release_the_term()
@@ -212,7 +212,7 @@ class TheOverviewTests(BroadsheetScreenSetUp):
             self.mark(self.stmarys, self.term_id, self.maths_id, child, 50 + n)
         response, larger = queries_for_the_overview()
 
-        self.assertEqual(self.jss1a(response.json())["children_with_an_average"], 5)
+        self.assertEqual(self.jss1a(response.json())["children_ranked"], 5)
         self.assertEqual(larger, small, "the overview costs more per child")
 
 

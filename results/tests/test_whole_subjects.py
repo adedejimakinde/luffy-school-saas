@@ -23,8 +23,8 @@ from unittest import mock
 from academics.models import TermName
 from accounts.models import Role
 from gradebook.models import Assessment, Score
-from results import cards, grades, look, pdf, positions
-from results.models import CardsAreFrozenAtRelease, ReleasedCard, ReleasedSubjectResult
+from results import cards, grades, look, ogun, pdf, positions, ratings
+from results.models import CardsAreFrozenAtRelease, ReleasedCard, ReleasedSubjectResult, TraitGroup
 from results.tests.test_card_api import HOST, THEIR_HOST, ReportCardApiSetUp
 from results.tests.test_ogun_card import OgunCardSetUp
 from schools.tests.tenants import connected_to
@@ -359,58 +359,201 @@ class TheBroadsheetShowsThePartialFiguresAsIncompleteTests(TwoSchoolsOneMissingP
         self.assertEqual([maths[c.pk]["current_subject_rank"] for c in (self.ada, self.bola)], [1, 2])
         self.assertIsNone(maths[self.dayo.pk]["current_subject_rank"])
 
-    def test_the_overview_still_counts_every_child_with_an_average(self):
+    def test_the_overview_counts_the_children_who_are_ranked(self):
         self.client.force_login(self.principal)
         term = self.terms_of(self.stmarys)[FIRST]
         body = self.client.get(f"/api/results/overview/?term_id={term}", HTTP_HOST=HOST).json()
         ours = next(c for c in body["classes"] if c["class_group"] == "JSS 1A")
-        self.assertEqual(ours["children_with_an_average"], 3)
+        self.assertEqual(ours["children_ranked"], 2)
+
+
+class _OldRulesResults:
+    """A `positions.ClassResults` as it answered before the whole-subjects rule.
+
+    `cards._card_for()` and `_subject_line()` below are the pre-rule functions
+    verbatim; what they ask of `results` used to mean "everyone with an average
+    is ranked" and "ranked in a subject among everyone marked in it", so this
+    answers that way, over the same marks.
+    """
+
+    def __init__(self, results):
+        self._r = results
+        self.student_ids = results.student_ids
+        self.subject_ids = results.subject_ids
+        self.averages = results.averages
+        self.positions = positions.dense_positions(results.averages)
+
+    def scored_and_available(self, student_id, subject_id):
+        return self._r.scored_and_available(student_id, subject_id)
+
+    def percentage(self, student_id, subject_id):
+        return self._r.percentage(student_id, subject_id)
+
+    def subject_position(self, student_id, subject_id):
+        return positions.dense_positions(
+            {s: v for (s, sub), v in self._r.percentages.items() if sub == subject_id}
+        ).get(student_id)
+
+
+def _old_card_for(
+    sheet, term, school_name, names, results, student_id, released_by_id,
+    version=1, attendance=None, *, position_printed=False, rating_scale=None, layout="",
+):
+    """`results.cards._card_for` at f0b89d8 (before #283), verbatim.
+
+    It takes `layout` only so the freeze can call it: a card from before layouts
+    were frozen has none, and this writes none.
+    """
+    results = _OldRulesResults(results)
+    scored = available = 0
+    for subject_id in results.subject_ids:
+        subject_scored, subject_available = results.scored_and_available(student_id, subject_id)
+        scored += subject_scored
+        available += subject_available
+
+    return ReleasedCard(
+        sheet=sheet,
+        student_membership_id=student_id,
+        term=term,
+        version=version,
+        session=term.session,
+        term_name=term.name,
+        class_group=sheet.class_group,
+        class_group_name=str(sheet.class_group),
+        school_name=school_name,
+        student_name=names.get(student_id, ""),
+        total_scored=scored,
+        total_available=available,
+        own_average=results.averages.get(student_id),
+        position=results.positions.get(student_id),
+        roster_size=len(results.student_ids),
+        position_printed=position_printed,
+        rating_scale=rating_scale,
+        days_present=attendance.present if attendance else None,
+        days_absent=attendance.absent if attendance else None,
+        days_open=attendance.open if attendance else None,
+        released_by_id=released_by_id,
+    )
+
+
+def _old_subject_line(card, subject, position, results, student_id, bands):
+    """`results.cards._subject_line` at f0b89d8 (before #283), verbatim."""
+    results = _OldRulesResults(results)
+    scored, available = results.scored_and_available(student_id, subject.pk)
+    percentage = results.percentage(student_id, subject.pk)
+    band = grades.grade_for(percentage, bands=bands)
+
+    return ReleasedSubjectResult(
+        card=card,
+        subject=subject,
+        subject_name=subject.name,
+        subject_code=subject.code,
+        position=position,
+        total_scored=scored,
+        total_available=available,
+        percentage=percentage,
+        grade_letter=band.letter if band else "",
+        grade_remark=band.remark if band else "",
+        subject_position=results.subject_position(student_id, subject.pk),
+    )
+
+
+def _old_freeze():
+    """Release with the writers as they were before the whole-subjects rule."""
+    return mock.patch.multiple(cards, _card_for=_old_card_for, _subject_line=_old_subject_line)
 
 
 class AReleasedCardIsNeverChangedTests(TwoSchoolsOneMissingPaper):
     """Rule 5. A card released before the rule keeps exactly what it printed.
 
-    Written by freezing a card the way `cards` did before the rule (no
-    whole-subjects marker, totals and average over everything marked, ranked on
-    that, out of the roster, graded on a partial), then reading it with the code
-    as it is now.
+    Written by freezing a card with the pre-rule `_card_for()` and
+    `_subject_line()` (above), then reading it with the code as it is now. The
+    same claim was also checked end to end, outside the suite, against real
+    pre-#283 code: cards released by a checkout of f0b89d8 in two schools (one
+    Standard, one Ogun, each with a paper unmarked), the same database migrated to
+    this code, and all 40 cards, 4 broadsheets and 40 PDF pages read back: every
+    one identical to what the old code served, but for the added fields.
     """
 
     def old_freeze(self, school):
-        """`cards._card_for` and `_subject_line` as they were, written over the new ones."""
-        real_card, real_line = cards._card_for, cards._subject_line
-
-        def old_card(sheet, term, school_name, names, results, student_id, *args, **kwargs):
-            card = real_card(sheet, term, school_name, names, results, student_id, *args, **kwargs)
-            scored = available = 0
-            for subject_id in results.subject_ids:
-                s, a = results.scored_and_available(student_id, subject_id)
-                scored, available = scored + s, available + a
-            card.whole_subjects_only = False
-            card.total_scored, card.total_available = scored, available
-            card.own_average = results.averages.get(student_id)
-            card.position = positions.dense_positions(results.averages).get(student_id)
-            card.roster_size = len(results.student_ids)
-            return card
-
-        def old_line(card, subject, position, results, student_id, bands):
-            line = real_line(card, subject, position, results, student_id, bands)
-            percentage = results.percentage(student_id, subject.pk)
-            band = grades.grade_for(percentage, bands=bands)
-            line.is_complete = True
-            line.grade_letter = band.letter if band else ""
-            line.grade_remark = band.remark if band else ""
-            ranked = positions.dense_positions(
-                {s: v for (s, sub), v in results.percentages.items() if sub == subject.pk}
-            )
-            line.subject_position = ranked.get(student_id)
-            return line
-
-        return mock.patch.multiple(cards, _card_for=old_card, _subject_line=old_line)
+        return _old_freeze()
 
     def release_the_old_way(self, school):
         with self.old_freeze(school):
             self.release(school)
+
+    def rate_every_trait(self, school, child, score):
+        teacher = self.staff_of(school)[Role.TEACHER]
+        with connected_to(school):
+            term = self.term_of(school, FIRST)
+            for group in TraitGroup:
+                ratings.set_group_enabled(group.value, True)
+                for trait in ratings.traits(group.value):
+                    ratings.rate(term, trait, child, score, by=teacher)
+
+    def test_a_card_released_before_reads_exactly_as_it_was_frozen_totals_place_traits_and_key(self):
+        """Both schools, every number written out. Nothing here is the new rule's."""
+        self.rate_every_trait(self.stmarys, self.dayo, 4)
+        self.rate_every_trait(self.grace, self.femi, 4)
+        self.release_the_old_way(self.stmarys)
+        self.release_the_old_way(self.grace)
+
+        dayo = self.card_of(self.stmarys, self.dayo)
+        femi = self.card_of(self.grace, self.femi)
+
+        # St Mary's, the Ogun layout. Mathematics 9 + 95 of 10 + 100 (2nd Test unmarked), English 9 + 90.
+        self.assertEqual((dayo["total_scored"], dayo["total_available"], dayo["percentage"]), (203, 220, "92.27"))
+        self.assertEqual((dayo["own_average"], dayo["place_in_class"]["label"]), ("92.28", "1st of 3"))
+        self.assertEqual(
+            [(s["subject_name"], s["total_scored"], s["total_available"], s["percentage"]) for s in dayo["subjects"]],
+            [("English", 99, 110, "90.00"), ("Mathematics", 104, 110, "94.55")],
+        )
+        self.assertEqual(
+            [(sec["group"], [(t["trait_name"], t["score"]) for t in sec["traits"]]) for sec in dayo["sections"]],
+            [
+                ("affective", [(n, 4) for n in ogun.AFFECTIVE]),
+                ("psychomotor", [(n, 4) for n in ogun.PSYCHOMOTOR]),
+            ],
+        )
+        self.assertEqual(
+            [(k["value"], k["label"]) for k in dayo["ogun"]["key"]],
+            [(5, "Excellent"), (4, "Good"), (3, "Average"), (2, "Below Average"), (1, "Unsatisfactory")],
+        )
+        maths = next(s for g in dayo["ogun"]["groups"] for s in g["subjects"] if s["name"] == "Mathematics")
+        self.assertEqual((maths["ca"], maths["exam"], maths["weighted"]), (9, 95, None))
+        self.assertEqual(
+            {k: dayo["ogun"]["summary"][k] for k in ("obtainable", "obtained", "percentage", "left_out")},
+            {"obtainable": 110, "obtained": 99, "percentage": "90", "left_out": 1},
+        )
+
+        # Grace, the Standard layout. Mathematics 9 + 99 of 10 + 100, English 9 + 92.
+        self.assertEqual((femi["total_scored"], femi["total_available"], femi["percentage"]), (209, 220, "95.00"))
+        self.assertEqual((femi["own_average"], femi["place_in_class"]["label"]), ("95.00", "1st of 3"))
+        self.assertEqual(
+            [(s["subject_name"], s["total_scored"], s["percentage"], s["grade_letter"]) for s in femi["subjects"]],
+            [("English", 101, "91.82", "A1"), ("Mathematics", 108, "98.18", "A1")],
+        )
+        self.assertEqual(
+            [(sec["group"], len(sec["traits"]), {t["score"] for t in sec["traits"]}) for sec in femi["sections"]],
+            [("affective", 7, {4}), ("psychomotor", 4, {4})],
+        )
+        self.assertEqual(femi["left_out"], 0)
+        self.assertIsNone(femi["ogun"])
+
+    def test_the_settings_changing_after_release_still_leaves_that_card_as_it_was(self):
+        """The template, the trait list and the scale all move; the card does not."""
+        self.rate_every_trait(self.grace, self.femi, 4)
+        self.release_the_old_way(self.grace)
+        before = self.card_of(self.grace, self.femi)
+
+        with connected_to(self.grace):
+            ogun.set_template_as(self.their_principal, self.grace, "ogun")
+            ratings.set_scale_label(4, "Splendid")
+
+        after = self.card_of(self.grace, self.femi)
+        for key in ("total_scored", "total_available", "own_average", "percentage", "place_in_class", "sections", "subjects"):
+            self.assertEqual(after[key], before[key], key)
+        self.assertEqual({t["score_label"] for sec in after["sections"] for t in sec["traits"]}, {"Very Good"})
 
     def test_the_control_the_old_freeze_really_writes_an_unmarked_card(self):
         self.release_the_old_way(self.stmarys)
@@ -485,3 +628,88 @@ class TheYearsLastLineIsNotMovedTests(TwoSchoolsOneMissingPaper):
             self.assertEqual(positions.overall_percentages(self.group_of(self.stmarys), self.term_of(self.stmarys, FIRST)), results.averages)
         self.assertEqual(results.averages[self.dayo.pk], Decimal("92.28"))
         self.assertEqual(results.card_averages[self.dayo.pk], Decimal("90.00"))
+
+
+class TheClassAverageIsOverTheRankedTests(TwoSchoolsOneMissingPaper):
+    """The class average counts the children the ranking beside it counts.
+
+    St Mary's: Ada 81.03 and Bola 57.28 are ranked (mean 69.16, from 69.155 up);
+    Dayo, with a paper unmarked, is not. Over everybody it would be 76.86.
+    Grace: Ngozi 79.59 and Kemi 53.30 are ranked (66.45); Femi is not.
+    """
+
+    EXPECTED = {"st-marys": "69.16", "grace": "66.45"}
+    OVER_EVERYBODY = {"st-marys": "76.86"}
+
+    def sheet(self, school):
+        return self.broadsheet(school)
+
+    def test_the_control_a_child_not_ranked_would_have_moved_it(self):
+        with connected_to(self.stmarys):
+            results = positions.class_results(self.group_of(self.stmarys), self.term_of(self.stmarys, FIRST))
+        everybody = positions.mean_percentage(list(results.averages.values()))
+        self.assertEqual(str(everybody), self.OVER_EVERYBODY["st-marys"])
+        self.assertNotEqual(str(results.class_average), str(everybody))
+
+    def test_live_in_both_schools(self):
+        for school in (self.stmarys, self.grace):
+            with self.subTest(school=school.slug):
+                sheet = self.sheet(school)
+                self.assertFalse(sheet["from_snapshot"])
+                self.assertEqual(sheet["class_average"], self.EXPECTED[school.slug])
+                self.assertEqual(sheet["ranked"], 2)
+
+    def test_released_it_is_the_same_number_from_the_cards(self):
+        self.release_both()
+        for school in (self.stmarys, self.grace):
+            with self.subTest(school=school.slug):
+                sheet = self.sheet(school)
+                self.assertTrue(sheet["from_snapshot"])
+                self.assertEqual(sheet["class_average"], self.EXPECTED[school.slug])
+
+    def test_the_overview_gives_the_same_average_and_how_many_it_is_over(self):
+        for released in (False, True):
+            if released:
+                self.release_both()
+            for school, host in ((self.stmarys, HOST), (self.grace, THEIR_HOST)):
+                with self.subTest(school=school.slug, released=released):
+                    self.client.force_login(self.principal if school == self.stmarys else self.their_principal)
+                    term = self.terms_of(school)[FIRST]
+                    body = self.client.get(f"/api/results/overview/?term_id={term}", HTTP_HOST=host).json()
+                    ours = next(c for c in body["classes"] if c["class_group"] == "JSS 1A")
+                    self.assertEqual(ours["class_average"], self.EXPECTED[school.slug])
+                    self.assertEqual(ours["children_ranked"], 2)
+                    self.assertNotIn("children_with_an_average", ours)
+
+    def test_one_school_finishing_its_marks_does_not_move_the_others_average(self):
+        # Femi's missing paper is marked: Grace now ranks three. St Mary's stays as it was.
+        self.put(self.grace, self.femi, "maths", "2nd Test", 9)
+
+        grace, stmarys = self.sheet(self.grace), self.sheet(self.stmarys)
+
+        self.assertEqual(grace["ranked"], 3)
+        self.assertNotEqual(grace["class_average"], self.EXPECTED["grace"])
+        self.assertEqual((stmarys["class_average"], stmarys["ranked"]), (self.EXPECTED["st-marys"], 2))
+
+    def test_nobody_ranked_is_a_dash_not_a_zero(self):
+        with connected_to(self.grace):
+            Assessment.objects.create(
+                term=self.term_of(self.grace, FIRST),
+                subject_id=self.subjects_of(self.grace)["maths"],
+                name="Project",
+                max_score=20,
+            )
+
+        sheet = self.sheet(self.grace)
+
+        self.assertEqual((sheet["ranked"], sheet["class_average"]), (0, None))
+
+    def test_a_card_released_before_keeps_the_class_average_it_had(self):
+        """Old cards: everyone with an average counted, as it was."""
+        with _old_freeze():
+            self.release(self.stmarys)
+
+        sheet = self.sheet(self.stmarys)
+
+        self.assertEqual(sheet["class_average"], self.OVER_EVERYBODY["st-marys"])
+        self.assertEqual(sheet["ranked"], 3)

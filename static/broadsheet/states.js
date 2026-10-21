@@ -87,16 +87,16 @@ export function overview({ terms = [], overview: body = {} } = {}) {
     classes.length
       ? [
           '<div class="scroll"><table class="overview stack">',
-          "<thead><tr><th>Class</th><th>Class average</th>",
-          "<th>Children with an average</th><th>Figures</th></tr></thead><tbody>",
+          "<thead><tr><th>Class</th><th>Class average (ranked students)</th>",
+          "<th>Children ranked</th><th>Figures</th></tr></thead><tbody>",
           classes
             .map(
               (c) =>
                 "<tr>" +
                 `<td class="stack-head"><button type="button" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
                 `${esc(c.class_group)}</button></td>` +
-                `<td class="num" data-label="Class average">${figure(c.class_average)}</td>` +
-                `<td class="num" data-label="Children with an average">${esc(c.children_with_an_average)}</td>` +
+                `<td class="num" data-label="Class average (ranked students)">${figure(c.class_average)}</td>` +
+                `<td class="num" data-label="Children ranked">${esc(c.children_ranked)}</td>` +
                 `<td data-label="Figures">${c.from_snapshot ? "Released" : "Live"}</td>` +
                 "</tr>",
             )
@@ -190,7 +190,7 @@ export function sheet({ broadsheet: body = {} } = {}) {
             })
             .join(""),
           "</tbody>",
-          `<tfoot><tr><th colspan="${subjects.length + 2}">Class average</th>` +
+          `<tfoot><tr><th colspan="${subjects.length + 2}">Class average (ranked students)</th>` +
             `<td class="num">${figure(class_average)}</td></tr></tfoot>`,
           "</table></div>",
         ].join("")
