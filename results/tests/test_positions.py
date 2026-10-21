@@ -470,7 +470,9 @@ class RoundingIsStatedNotInheritedTests(PositionSetUp):
             self.stmarys, username, full_name, self.group_id, self.term_id
         )
         self.mark(self.stmarys, self.term_id, self.maths_id, child, 88)
-        self.mark(self.stmarys, self.term_id, self.english_id, child, 61)
+        # On the same paper as the other child's English (out of 10000): a child with
+        # a paper unmarked is not ranked, and so is not in the class average.
+        self.mark(self.stmarys, self.term_id, self.english_id, child, 6100, out_of=10000)
         return child
 
     def test_a_small_ambient_precision_cannot_break_the_page(self):

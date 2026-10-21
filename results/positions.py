@@ -65,10 +65,12 @@ the paper and scored nothing, so:
   would take to the school.
 
 Everyone ranked is ranked as before: dense, on the average as printed. "Out of
-N" is the number ranked, not the roster. A child who is not ranked has no
+N" is the number ranked, not the roster, and **the class average is the mean of
+those children's averages** (labelled "Class average (ranked students)"): it
+counts the children the ranking beside it counts. A child who is not ranked has no
 position, and is not last. `ClassResults.averages` is untouched, and so is
-everything built on it (the year's last line, the class average): the new
-fields below are additions.
+everything built on it (the year's last line): the new fields below are
+additions.
 
 ## The overall average is the child's own, across their subjects
 
@@ -350,6 +352,8 @@ class ClassResults:
     #: Only the children whole in every subject, dense on `averages`. Everyone
     #: else is absent, which is "not ranked", not last.
     positions: dict[int, int]
+    #: The mean of the ranked children's averages, so of the same children
+    #: `positions` ranks. Null when nobody is ranked.
     class_average: Decimal | None
     #: `(student, subject)` pairs where every paper of the subject has a mark.
     whole: frozenset[tuple[int, int]]
@@ -463,8 +467,13 @@ def class_results(class_group, term) -> ClassResults:
         positions=dense_positions(
             {student: averages[student] for student in whole_students if student in averages}
         ),
+        # Over the children who are ranked and nobody else: a class average that
+        # counted a child's average over the papers marked so far would move when
+        # the rest were marked, and say less than the ranking beside it.
         class_average=(
-            mean_percentage(averages.values()) if averages else None
+            mean_percentage([averages[s] for s in whole_students if s in averages])
+            if any(s in averages for s in whole_students)
+            else None
         ),
         whole=frozenset(whole),
         whole_students=whole_students,

@@ -146,6 +146,24 @@ reader that acts on the rule acts without asking the flag first, and
 `AReleasedCardIsNeverChangedTests` freezes a card the old way and reads it with
 the new code. A *revision* of an old card is a new card and follows the rule.
 
+### The class average is over the ranked children (2026-10-21)
+
+"Class average (ranked students)" is the mean of the averages of the children who
+are ranked, and nobody else: the average over every child with a mark would count
+a child on the papers marked so far, and move when the rest were marked. The
+broadsheet's foot, the overview and the live and released pages all say so, and
+the overview's second column is "Children ranked" (`children_ranked`, was
+`children_with_an_average`). A class where nobody is ranked has no average (a
+dash). A term released before the whole-subjects rule counts everybody with an
+average, as it did: its cards have no unmarked paper to leave out. The year's
+last line is built on `averages` and is unchanged.
+Tests: `TheClassAverageIsOverTheRankedTests` (St Mary's 69.16 from 69.155, not
+76.86; Grace 66.45; live, released and the overview in both schools; marking in
+one school moves nothing in the other; an old released term unchanged). Controls,
+each broken, seen red and restored: live over every average (6 red), released
+over every card (2), the overview's released and live counts (2 each), and in JS
+the foot's label and the overview's column heading.
+
 ### A card released before the rule reads as it did (checked against the old code)
 
 Beyond the unit tests, this was run end to end against real pre-#283 code

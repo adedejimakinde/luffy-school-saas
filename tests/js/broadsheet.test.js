@@ -48,8 +48,8 @@ const OVERVIEW = {
   term_id: 7,
   term: "2025/2026 First term",
   classes: [
-    { class_group_id: 11, class_group: "JSS 1A", class_average: "74.50", children_with_an_average: 3, from_snapshot: true },
-    { class_group_id: 12, class_group: "JSS 1B", class_average: null, children_with_an_average: 0, from_snapshot: false },
+    { class_group_id: 11, class_group: "JSS 1A", class_average: "74.50", children_ranked: 3, from_snapshot: true },
+    { class_group_id: 12, class_group: "JSS 1B", class_average: null, children_ranked: 0, from_snapshot: false },
   ],
 };
 
@@ -98,10 +98,10 @@ test("a subject rank is the server's too, with its tie marked", () => {
 });
 
 test("the class average is at the foot, and a dash when nobody has one", () => {
-  assert.match(states.sheet({ broadsheet: SHEET }), /Class average<\/th><td class="num">74\.50<\/td>/);
+  assert.match(states.sheet({ broadsheet: SHEET }), /Class average \(ranked students\)<\/th><td class="num">74\.50<\/td>/);
   assert.match(
     states.sheet({ broadsheet: { ...SHEET, class_average: null } }),
-    /Class average<\/th><td class="num">-<\/td>/,
+    /Class average \(ranked students\)<\/th><td class="num">-<\/td>/,
   );
 });
 
@@ -131,10 +131,14 @@ test("the overview is classes and their averages, released or live, and nobody's
 
   assert.match(html, /JSS 1A/);
   assert.match(html, /74\.50/);
-  assert.match(html, /<td class="num" data-label="Class average">-<\/td>/);
+  // What the average is over, in the headings and in the cell a phone's card labels.
+  assert.match(html, /<th>Class average \(ranked students\)<\/th><th>Children ranked<\/th>/);
+  assert.match(html, /<td class="num" data-label="Children ranked">3<\/td>/);
+  assert.doesNotMatch(html, /Children with an average/);
+  assert.match(html, /<td class="num" data-label="Class average \(ranked students\)">-<\/td>/);
   assert.match(html, /Released/);
   assert.match(html, /Live/);
-  assert.doesNotMatch(html, /Ada A|rank|Pos\./);
+  assert.doesNotMatch(html, /Ada A|current_rank|Pos\.|\branks?\b/);
   assert.match(html, /<option value="7" selected>2025\/2026 First term \(current\)<\/option>/);
 });
 

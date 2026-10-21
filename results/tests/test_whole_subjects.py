@@ -359,12 +359,12 @@ class TheBroadsheetShowsThePartialFiguresAsIncompleteTests(TwoSchoolsOneMissingP
         self.assertEqual([maths[c.pk]["current_subject_rank"] for c in (self.ada, self.bola)], [1, 2])
         self.assertIsNone(maths[self.dayo.pk]["current_subject_rank"])
 
-    def test_the_overview_still_counts_every_child_with_an_average(self):
+    def test_the_overview_counts_the_children_who_are_ranked(self):
         self.client.force_login(self.principal)
         term = self.terms_of(self.stmarys)[FIRST]
         body = self.client.get(f"/api/results/overview/?term_id={term}", HTTP_HOST=HOST).json()
         ours = next(c for c in body["classes"] if c["class_group"] == "JSS 1A")
-        self.assertEqual(ours["children_with_an_average"], 3)
+        self.assertEqual(ours["children_ranked"], 2)
 
 
 class _OldRulesResults:
@@ -397,9 +397,13 @@ class _OldRulesResults:
 
 def _old_card_for(
     sheet, term, school_name, names, results, student_id, released_by_id,
-    version=1, attendance=None, *, position_printed=False, rating_scale=None,
+    version=1, attendance=None, *, position_printed=False, rating_scale=None, layout="",
 ):
-    """`results.cards._card_for` at f0b89d8 (before #283), verbatim."""
+    """`results.cards._card_for` at f0b89d8 (before #283), verbatim.
+
+    It takes `layout` only so the freeze can call it: a card from before layouts
+    were frozen has none, and this writes none.
+    """
     results = _OldRulesResults(results)
     scored = available = 0
     for subject_id in results.subject_ids:
@@ -454,6 +458,11 @@ def _old_subject_line(card, subject, position, results, student_id, bands):
     )
 
 
+def _old_freeze():
+    """Release with the writers as they were before the whole-subjects rule."""
+    return mock.patch.multiple(cards, _card_for=_old_card_for, _subject_line=_old_subject_line)
+
+
 class AReleasedCardIsNeverChangedTests(TwoSchoolsOneMissingPaper):
     """Rule 5. A card released before the rule keeps exactly what it printed.
 
@@ -467,7 +476,7 @@ class AReleasedCardIsNeverChangedTests(TwoSchoolsOneMissingPaper):
     """
 
     def old_freeze(self, school):
-        return mock.patch.multiple(cards, _card_for=_old_card_for, _subject_line=_old_subject_line)
+        return _old_freeze()
 
     def release_the_old_way(self, school):
         with self.old_freeze(school):
@@ -619,3 +628,88 @@ class TheYearsLastLineIsNotMovedTests(TwoSchoolsOneMissingPaper):
             self.assertEqual(positions.overall_percentages(self.group_of(self.stmarys), self.term_of(self.stmarys, FIRST)), results.averages)
         self.assertEqual(results.averages[self.dayo.pk], Decimal("92.28"))
         self.assertEqual(results.card_averages[self.dayo.pk], Decimal("90.00"))
+
+
+class TheClassAverageIsOverTheRankedTests(TwoSchoolsOneMissingPaper):
+    """The class average counts the children the ranking beside it counts.
+
+    St Mary's: Ada 81.03 and Bola 57.28 are ranked (mean 69.16, from 69.155 up);
+    Dayo, with a paper unmarked, is not. Over everybody it would be 76.86.
+    Grace: Ngozi 79.59 and Kemi 53.30 are ranked (66.45); Femi is not.
+    """
+
+    EXPECTED = {"st-marys": "69.16", "grace": "66.45"}
+    OVER_EVERYBODY = {"st-marys": "76.86"}
+
+    def sheet(self, school):
+        return self.broadsheet(school)
+
+    def test_the_control_a_child_not_ranked_would_have_moved_it(self):
+        with connected_to(self.stmarys):
+            results = positions.class_results(self.group_of(self.stmarys), self.term_of(self.stmarys, FIRST))
+        everybody = positions.mean_percentage(list(results.averages.values()))
+        self.assertEqual(str(everybody), self.OVER_EVERYBODY["st-marys"])
+        self.assertNotEqual(str(results.class_average), str(everybody))
+
+    def test_live_in_both_schools(self):
+        for school in (self.stmarys, self.grace):
+            with self.subTest(school=school.slug):
+                sheet = self.sheet(school)
+                self.assertFalse(sheet["from_snapshot"])
+                self.assertEqual(sheet["class_average"], self.EXPECTED[school.slug])
+                self.assertEqual(sheet["ranked"], 2)
+
+    def test_released_it_is_the_same_number_from_the_cards(self):
+        self.release_both()
+        for school in (self.stmarys, self.grace):
+            with self.subTest(school=school.slug):
+                sheet = self.sheet(school)
+                self.assertTrue(sheet["from_snapshot"])
+                self.assertEqual(sheet["class_average"], self.EXPECTED[school.slug])
+
+    def test_the_overview_gives_the_same_average_and_how_many_it_is_over(self):
+        for released in (False, True):
+            if released:
+                self.release_both()
+            for school, host in ((self.stmarys, HOST), (self.grace, THEIR_HOST)):
+                with self.subTest(school=school.slug, released=released):
+                    self.client.force_login(self.principal if school == self.stmarys else self.their_principal)
+                    term = self.terms_of(school)[FIRST]
+                    body = self.client.get(f"/api/results/overview/?term_id={term}", HTTP_HOST=host).json()
+                    ours = next(c for c in body["classes"] if c["class_group"] == "JSS 1A")
+                    self.assertEqual(ours["class_average"], self.EXPECTED[school.slug])
+                    self.assertEqual(ours["children_ranked"], 2)
+                    self.assertNotIn("children_with_an_average", ours)
+
+    def test_one_school_finishing_its_marks_does_not_move_the_others_average(self):
+        # Femi's missing paper is marked: Grace now ranks three. St Mary's stays as it was.
+        self.put(self.grace, self.femi, "maths", "2nd Test", 9)
+
+        grace, stmarys = self.sheet(self.grace), self.sheet(self.stmarys)
+
+        self.assertEqual(grace["ranked"], 3)
+        self.assertNotEqual(grace["class_average"], self.EXPECTED["grace"])
+        self.assertEqual((stmarys["class_average"], stmarys["ranked"]), (self.EXPECTED["st-marys"], 2))
+
+    def test_nobody_ranked_is_a_dash_not_a_zero(self):
+        with connected_to(self.grace):
+            Assessment.objects.create(
+                term=self.term_of(self.grace, FIRST),
+                subject_id=self.subjects_of(self.grace)["maths"],
+                name="Project",
+                max_score=20,
+            )
+
+        sheet = self.sheet(self.grace)
+
+        self.assertEqual((sheet["ranked"], sheet["class_average"]), (0, None))
+
+    def test_a_card_released_before_keeps_the_class_average_it_had(self):
+        """Old cards: everyone with an average counted, as it was."""
+        with _old_freeze():
+            self.release(self.stmarys)
+
+        sheet = self.sheet(self.stmarys)
+
+        self.assertEqual(sheet["class_average"], self.OVER_EVERYBODY["st-marys"])
+        self.assertEqual(sheet["ranked"], 3)
