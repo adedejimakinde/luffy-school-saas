@@ -76,7 +76,7 @@ export const WIDTHS = [360, 768, 1280];
 // named rather than "the first", because the other files in `tests/ui/` add
 // classes and papers of their own while this one runs (`manage.py seed_ui`).
 const OWN_CLASS = "JSS 1A";
-const OWN_PAPER = "Basic Science · First CA";
+const OWN_PAPER = "Basic Science · 1st Test";
 const OPEN_CLASS = `[data-action="open"]:has-text("${OWN_CLASS}")`;
 const PICK_PAPER = `[data-action="pick-assessment"]:has-text("${OWN_PAPER}")`;
 const PICK_CLASS = `[data-action="pick-class"]:has-text("${OWN_CLASS}")`;

@@ -101,7 +101,7 @@ after(async () => {
 
 /** This file's own class (`manage.py seed_ui`), and the paper it marks there. */
 const CLASS = "UI Offline";
-const PAPER = "Mathematics · First CA";
+const PAPER = "Mathematics · 1st Test";
 const openClass = (tab) => tab.locator('[data-action="open"]', { hasText: CLASS }).click();
 
 async function openSheet() {
@@ -146,7 +146,7 @@ describe("the marking page with no connection", () => {
   test("offline, a mark is queued in IndexedDB with the version the copy showed", async () => {
     const cell = page.locator("ul.roster input").first();
     // Never the number already there: a box left as it was drawn sends nothing.
-    typed = (Number(shown.value) + 1) % 20;
+    typed = (Number(shown.value) + 1) % 10;
     await cell.fill(String(typed));
     await cell.blur();
     await page.waitForSelector("text=Not sent yet");

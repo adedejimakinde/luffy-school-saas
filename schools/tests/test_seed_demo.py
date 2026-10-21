@@ -19,7 +19,7 @@ from academics.models import ClassPlacement, Term
 from accounts.models import GuardianContact, Membership, MembershipStatus, Role, User
 from attendance.models import Register
 from fees.models import FeeConcession, FeeEntryKind, FeeLedgerEntry, FeeSchedule
-from gradebook.models import Score
+from gradebook.models import Assessment, Score
 from messaging.tests.fake import SendsThroughTheFake
 from notices.models import Notice
 from schools.models import Domain, School
@@ -87,11 +87,19 @@ class SeedDemoTests(SendsThroughTheFake, TestCase):
                 with schema_context(school.schema_name):
                     term = Term.objects.get(is_current=True)
                     self.assertEqual(ClassPlacement.objects.filter(term=term).count(), 20)
-                    # A first CA in every subject for everybody (60), and an
-                    # exam for JSS 1B alone (10 children x 3 subjects) —
-                    # released, so a released card with every exam a dash
-                    # would be a card that lied about the term it printed.
-                    self.assertEqual(Score.objects.count(), 90)
+                    # The first paper in every subject for everybody (60), and
+                    # the rest for JSS 1B alone (10 children x 3 subjects x 3
+                    # papers at Sunrise, which sets four; x 1 at Harbour, which
+                    # sets two) — released, so a released card with a paper a
+                    # dash would be a card that lied about the term it printed.
+                    papers = [(a.name, a.max_score) for a in Assessment.objects.filter(subject__name="Mathematics", term=term).order_by("position")]
+                    if slug == "sunrise-demo":
+                        # The Ogun sheet's papers, so the headings are its own.
+                        self.assertEqual(papers, [("1st Test", 10), ("2nd Test", 10), ("Assignment", 10), ("Exam", 70)])
+                        self.assertEqual(Score.objects.count(), 150)
+                    else:
+                        self.assertEqual(papers, [("First CA", 20), ("Exam", 60)])
+                        self.assertEqual(Score.objects.count(), 90)
                     self.assertEqual(Register.objects.count(), 20)
                     # The card's "Next term begins" line has something to
                     # read, and it does not fall after the term it follows.
