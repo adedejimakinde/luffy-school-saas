@@ -2381,6 +2381,17 @@ class ReleasedCard(models.Model):
     #: (`ratings.scale_of_card()`).
     rating_scale = models.JSONField(null=True, blank=True)
 
+    #: Whether this card was frozen under the rule that a subject with a paper
+    #: unmarked has no total and is left out of the card's summary, and that only
+    #: a child whole in every subject is ranked (`positions`, "A subject with a
+    #: paper unmarked"). **False on every card released before the rule**, which
+    #: is how those cards keep printing exactly what they did: every reader that
+    #: acts on the rule asks this first. On a card with it True, `total_scored`,
+    #: `total_available` and `own_average` below are over the whole subjects
+    #: only, `position` is null for a child who is not ranked, and
+    #: `roster_size` is the number ranked.
+    whole_subjects_only = models.BooleanField(default=False, db_default=False)
+
     # -- the child's own numbers ---------------------------------------------
 
     total_scored = models.PositiveIntegerField(default=0)
@@ -2570,6 +2581,15 @@ class ReleasedSubjectResult(models.Model):
     percentage = models.DecimalField(
         max_digits=5, decimal_places=2, null=True, blank=True
     )
+
+    #: Whether every paper of this subject had a mark for this child when the
+    #: card was frozen. When it is False the line above is what **staff** see on
+    #: the broadsheet, marked incomplete: the marks that were in, over what they
+    #: were out of. A family's card shows "-" for the total, the percentage and
+    #: the grade (`card_api`), the grade below is blank, there is no
+    #: `subject_position`, and the card's own totals leave the line out. True on
+    #: every line written before the rule, which printed what it printed.
+    is_complete = models.BooleanField(default=True, db_default=True)
 
     #: Copied from the scale in force at release. Blank beside a present
     #: percentage means no band covered that mark.

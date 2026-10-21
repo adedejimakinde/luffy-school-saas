@@ -90,13 +90,20 @@ def _text(value) -> Optional[str]:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
-def _split(line) -> dict:
-    """CA and exam for one subject line, each with what it is out of."""
+def _split(line, whole_only=False) -> dict:
+    """CA and exam for one subject line, each with what it is out of.
+
+    On a card frozen under the whole-subjects rule (`whole_only`), a half with a
+    paper unmarked is a dash: a continuous assessment total over two of its three
+    tests is not the child's CA score. An earlier card keeps its partial sum.
+    """
     exam = [c for c in line.assessments if c.assessment_name.strip().lower() == "exam"]
     rest = [c for c in line.assessments if c not in exam]
 
     def total(cells):
         scores = [c.score for c in cells if c.score is not None]
+        if whole_only and len(scores) < len(cells):
+            return None, sum(c.max_score for c in cells)
         return (sum(scores) if scores else None), sum(c.max_score for c in cells)
 
     ca, ca_max = total(rest)
@@ -117,7 +124,12 @@ def _is_complete(line) -> bool:
     """
     cells = line.assessments
     exam = [c for c in cells if c.assessment_name.strip().lower() == "exam"]
-    return bool(exam) and len(exam) < len(cells) and all(c.score is not None for c in cells)
+    return (
+        bool(exam)
+        and len(exam) < len(cells)
+        and all(c.score is not None for c in cells)
+        and line.is_complete
+    )
 
 
 def _summary(subjects, whole) -> dict:
@@ -149,8 +161,11 @@ def _other_terms(card) -> dict:
         other = cards.card_for(card.student_membership_id, term)
         if other is None:
             continue
+        # A subject with a paper unmarked that term has no score for it.
         found[name.value] = dict(
-            ReleasedSubjectResult.objects.filter(card=other).values_list("subject_id", "percentage")
+            ReleasedSubjectResult.objects.filter(card=other, is_complete=True).values_list(
+                "subject_id", "percentage"
+            )
         )
     return found
 
@@ -235,7 +250,7 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     whole = set()
     for line in payload.subjects:
         sid = subject_of.get(line.subject_name)
-        split = _split(line)
+        split = _split(line, card.whole_subjects_only)
         complete = _is_complete(line)
         # A total over some of the papers must not look final: with a paper
         # still unmarked the weighted average is a dash, and the annual score

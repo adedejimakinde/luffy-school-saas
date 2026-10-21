@@ -108,6 +108,64 @@ would be printed bottom of the class on a card that goes home.
 The control run for this is in the table below and is worth reading: the naive
 "treat missing as zero" fix moves a class average from 80.00 to 40.00.
 
+## A subject with a paper unmarked has no total, and its child is not ranked
+
+Added 2026-10-21. A subject has as many papers as it has `Assessment`s for the
+term; a child is **whole in it** when every one of those papers has a mark for
+them (`positions.ClassResults.whole`, from `_papers_in()` and the mark count the
+aggregate already makes). A paper with no mark is the teacher's work not done,
+which is not a child who sat it and scored nought.
+
+| | whole in every subject | a paper unmarked in a subject |
+| --- | --- | --- |
+| the family's card: that subject's total, percentage, grade | printed | "-" |
+| the card's summary (marks obtained, percentage) and Average | counts it | leaves it out, and says how many (`left_out`) |
+| rank in that subject | yes | no |
+| position in class | yes, dense as before | "not ranked" |
+| "of N" | N is the number ranked | |
+| the staff broadsheet | | the figure over what is in, beside "incomplete" |
+
+A subject the child has **no mark in at all** counts against them too, because
+from the teacher's side it is a paper not yet entered. The class's subject list
+is the one `subject_ids` gives; there is no per-child subject enrolment in
+Classnode, so a child who does not take a subject the rest of the class was marked
+in is not ranked either. That is the rule as asked, and the first thing to look at
+if a school with optional subjects reports nobody ranked.
+
+What did **not** move: `ClassResults.averages` (every subject a child has a mark
+in, partial ones included) and everything built on it, which is the year's last
+line and the class average. The new fields are additions (`whole`,
+`whole_students`, `card_totals`, `card_averages`); `positions` and
+`subject_positions` now hold the ranked only.
+
+**Frozen cards.** A card written after this carries `ReleasedCard.whole_subjects_only`
+and its lines carry `is_complete`. Every card released before is False and True
+respectively, which is how it keeps printing what it printed: totals over
+everything marked, a place for everyone with an average, out of the roster. No
+reader that acts on the rule acts without asking the flag first, and
+`AReleasedCardIsNeverChangedTests` freezes a card the old way and reads it with
+the new code. A *revision* of an old card is a new card and follows the rule.
+
+### Controls for the rule above
+
+`results/tests/test_whole_subjects.py` (two schools in every class; St Mary's on
+the Ogun card, Grace on the Standard one), `tests/js/card_render.test.js`,
+`card_ogun.test.js` and `broadsheet.test.js`. Each break below was made, the
+module run, the reds seen, and the break restored.
+
+| broken | what went red |
+| --- | --- |
+| 3: `class_results()` counts every subject as whole | 20 tests: both cards, both PDFs, the frozen line, the broadsheet |
+| 3: `_subject_line()` writes every line `is_complete=True`, graded | 8: the card payloads, the PDFs, the released broadsheet |
+| 3 (JS): the total prints a null; the summary note removed; `incomplete` never printed | `card_render` (1), (2), `broadsheet` (1) |
+| 4: everybody with an average is ranked | 10: the places, the frozen position, the subject ranks, the broadsheet |
+| 4: `roster_size` is the roster, not the ranked | 5: "of N" on both cards and the frozen count |
+| 4 (JS): the position cell ignores `is_complete` | `broadsheet` (1) |
+| 5: "not ranked" printed on a card that never had the rule | `test_a_card_with_no_marks_prints_no_position_not_not_ranked` |
+| 5: the Ogun CA dash applied to a card that never had the rule | `test_an_ogun_card_keeps_its_partial_continuous_assessment` |
+| 5: completeness worked out again from the cells when a card is read | the Standard card test and the old-term broadsheet test |
+| 5: the broadsheet ignores `whole_subjects_only` | stays green, and is not a bug: an old card has no line with `is_complete` false, so the flag changes nothing for it. The test that catches the real regression (completeness re-derived from cells) is the row above. |
+
 ## Two averages, and they are different questions
 
 **The child's own average** is the mean of their subject percentages. It is what

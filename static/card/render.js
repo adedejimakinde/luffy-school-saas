@@ -130,8 +130,19 @@ function who(payload) {
 }
 
 function marksSummary(payload) {
-  if (!payload.percentage) return '<span class="blank">-</span>';
-  return `${esc(payload.total_scored)} of ${esc(payload.total_available)} obtainable &middot; ${esc(payload.percentage)}%`;
+  // Subjects with a paper not yet marked are left out of the figures, and the
+  // card says how many, so the total never reads as the whole term's.
+  const left = payload.left_out
+    ? ` <span class="blank">(${esc(payload.left_out)} subject${payload.left_out === 1 ? "" : "s"} not counted: a paper is not marked)</span>`
+    : "";
+  if (!payload.percentage) return `<span class="blank">-</span>${left}`;
+  return `${esc(payload.total_scored)} of ${esc(payload.total_available)} obtainable &middot; ${esc(payload.percentage)}%${left}`;
+}
+
+/** "58/70", or a dash for a subject with a paper not yet marked (`total_scored` is null). */
+function total(line) {
+  if (line.total_scored === null || line.total_scored === undefined) return '<span class="blank">-</span>';
+  return `${esc(line.total_scored)}<span class="max">/${esc(line.total_available)}</span>`;
 }
 
 /**
@@ -207,9 +218,7 @@ function row(line, columns) {
       scorebar(line.percentage) +
       "</td>",
     cells,
-    `<td class="n total" data-label="Total">${esc(line.total_scored)}<span class="max">/${esc(
-      line.total_available,
-    )}</span></td>`,
+    `<td class="n total" data-label="Total">${total(line)}</td>`,
     `<td class="n pct" data-label="%">${percentage(line.percentage)}</td>`,
     `<td class="n grade" data-label="Grade">${esc(line.grade_letter)}</td>`,
     `<td class="remark" data-label="Remark">${esc(line.grade_remark)}</td>`,
@@ -243,9 +252,7 @@ function summaryLine(line, columns) {
       return `${name} ${mark(cell)}`;
     })
     .filter((part) => part !== null);
-  papers.push(
-    `Total ${esc(line.total_scored)}<span class="max">/${esc(line.total_available)}</span>`,
-  );
+  papers.push(`Total ${total(line)}`);
   return papers.join(" &middot; ");
 }
 

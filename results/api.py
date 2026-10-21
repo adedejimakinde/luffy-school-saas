@@ -102,15 +102,23 @@ class SubjectPlacingOut(Schema):
     #: copy of `ReleasedSubjectResult.subject_position`, which records what was
     #: true at that card's own freeze.
     current_subject_rank: Optional[int]
+    #: Every paper of this subject has a mark for this child. When it is false
+    #: `percentage` is over the papers that are in, the page says "incomplete"
+    #: beside it, and there is no rank. True on a card released before the
+    #: whole-subjects rule, whose figures are what they were.
+    is_complete: bool = True
 
 
 class PlacingOut(Schema):
     """One child's row on the broadsheet.
 
-    `average` and `current_rank` are `Optional` together and are null together:
-    that pair is how "this child has no marks" reaches the screen, rather than a
-    zero that would claim they sat exams and scored nothing. `gradebook.ScoreOut`
-    keeps the same distinction for the same reason.
+    `average` is null where the child has no marks, which reaches the screen as
+    a dash rather than a zero that would claim they sat exams and scored
+    nothing. `gradebook.ScoreOut` keeps the same distinction for the same
+    reason. `current_rank` is null for that child too, and also for a child who
+    **has** marks but is not whole in every subject: their `average` is over the
+    papers that are in and `is_complete` is false, so the page prints it with
+    "incomplete" and the rank as "not ranked".
 
     ## `current_rank` is not `ReleasedCard.position`
 
@@ -136,6 +144,9 @@ class PlacingOut(Schema):
     average: Optional[str]
     current_rank: Optional[int]
     subjects: List[SubjectPlacingOut]
+    #: Whole in every subject on the page, which is who is ranked. True on a
+    #: card released before the whole-subjects rule that has an average.
+    is_complete: bool = True
 
 
 class BroadsheetOut(Schema):
@@ -149,6 +160,9 @@ class BroadsheetOut(Schema):
     #: Whether these rows are the frozen cards rather than live marks. A reader
     #: comparing two broadsheets needs to know which question each answered.
     from_snapshot: bool = False
+    #: How many children are ranked: the "N" the positions are out of. The
+    #: rest of the rows are not ranked, and the page says so.
+    ranked: int = 0
     rows: List[PlacingOut]
 
 
@@ -220,13 +234,50 @@ def _as_text(value) -> Optional[str]:
     return None if value is None else str(value)
 
 
+def _staff_average(card):
+    """The child's average over every subject they have a mark in, whole or not.
+
+    That is `positions`' `averages`, and what the live broadsheet shows. On a
+    card frozen under the whole-subjects rule `own_average` is the family's
+    figure, over whole subjects only, so the staff's is read back off the lines
+    (which keep the marks that were in). An earlier card's `own_average` already
+    is this figure.
+    """
+    if not card.whole_subjects_only:
+        return card.own_average
+    marks = [line.percentage for line in card.subject_results.all() if line.percentage is not None]
+    return positions.mean_percentage(marks) if marks else None
+
+
+def _is_ranked(card) -> bool:
+    """Whether this card's child was whole in every subject, and so is ranked.
+
+    An earlier card has no such rule: everyone with an average was ranked.
+    """
+    if card.own_average is None:
+        return False
+    if not card.whole_subjects_only:
+        return True
+    lines = list(card.subject_results.all())
+    return bool(lines) and all(line.is_complete for line in lines)
+
+
+def _row_is_whole(card) -> bool:
+    """The row's `is_complete`: not ranked because a subject is not whole.
+
+    A card without the rule, and a child with no marks on one, print as they
+    always did (no rank, no word about it), so they are not "incomplete".
+    """
+    if not card.whole_subjects_only:
+        return True
+    lines = list(card.subject_results.all())
+    return bool(lines) and all(line.is_complete for line in lines)
+
+
 def _frozen_averages(released) -> dict:
-    """`child -> own_average` over the released cards, skipping the unmarked."""
-    return {
-        card.student_membership_id: card.own_average
-        for card in released
-        if card.own_average is not None
-    }
+    """`child -> the staff's average` over the released cards, skipping the unmarked."""
+    averages = {card.student_membership_id: _staff_average(card) for card in released}
+    return {child: average for child, average in averages.items() if average is not None}
 
 
 def _mean_or_none(averages):
@@ -397,6 +448,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
                 student=names.get(student_id, "-"),
                 average=_as_text(results.averages.get(student_id)),
                 current_rank=results.positions.get(student_id),
+                is_complete=student_id in results.whole_students,
                 subjects=[
                     SubjectPlacingOut(
                         subject_id=subject.pk,
@@ -407,6 +459,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
                         current_subject_rank=results.subject_position(
                             student_id, subject.pk
                         ),
+                        is_complete=results.is_whole(student_id, subject.pk),
                     )
                     for subject in subjects
                 ],
@@ -417,6 +470,7 @@ def broadsheet(request, class_group_id: int, term_id: int):
         class_group=str(class_group),
         term=str(term),
         class_average=_as_text(results.class_average),
+        ranked=len(results.positions),
         rows=rows,
     )
 
@@ -450,7 +504,14 @@ def _from_the_snapshot(class_group, term, sheet):
     released = released_cards.cards_on(sheet)
 
     averages = _frozen_averages(released)
-    ranks = positions.dense_positions(averages)
+    # Only the children whole in every subject are ranked, and the ranks are
+    # among them alone: the rule `positions` states, read off the frozen cards.
+    ranked = {
+        card.student_membership_id: averages[card.student_membership_id]
+        for card in released
+        if _is_ranked(card)
+    }
+    ranks = positions.dense_positions(ranked)
 
     # Columns in the order the cards froze them — `ReleasedSubjectResult.position`
     # is *print order*, not a rank. Taken from the cards rather than from
@@ -468,7 +529,7 @@ def _from_the_snapshot(class_group, term, sheet):
     per_subject = {}  # subject_id -> {student_id: frozen percentage}
     for card in released:
         for line in card.subject_results.all():
-            if line.percentage is not None:
+            if line.percentage is not None and line.is_complete:
                 per_subject.setdefault(line.subject_id, {})[
                     card.student_membership_id
                 ] = line.percentage
@@ -487,8 +548,9 @@ def _from_the_snapshot(class_group, term, sheet):
                 # saying what the card said, including whose card it was.
                 student_membership_id=student_id,
                 student=card.student_name,
-                average=_as_text(card.own_average),
+                average=_as_text(averages.get(student_id)),
                 current_rank=ranks.get(student_id),
+                is_complete=_row_is_whole(card),
                 subjects=[
                     SubjectPlacingOut(
                         subject_id=subject_id,
@@ -501,6 +563,9 @@ def _from_the_snapshot(class_group, term, sheet):
                         current_subject_rank=subject_ranks.get(subject_id, {}).get(
                             student_id
                         ),
+                        is_complete=(
+                            lines[subject_id].is_complete if subject_id in lines else True
+                        ),
                     )
                     for subject_id, (_, name) in ordered_subjects
                 ],
@@ -511,6 +576,7 @@ def _from_the_snapshot(class_group, term, sheet):
         class_group=str(class_group),
         term=str(term),
         class_average=_as_text(_mean_or_none(averages.values())),
+        ranked=len(ranks),
         rows=rows,
         from_snapshot=True,
     )

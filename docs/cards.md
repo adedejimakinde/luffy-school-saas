@@ -195,6 +195,19 @@ renderer that re-derived and happened to agree would pass the first.
 The scale is read **once per release**, not once per child, so a class's cards
 agree with each other.
 
+## A subject with a paper unmarked (2026-10-21)
+
+`_card_for()` freezes the family's totals and average over the subjects the child
+is whole in (`positions.ClassResults.card_totals`, `card_averages`), the position
+only for a child whole in every subject, and `roster_size` as the number ranked.
+`_subject_line()` keeps the staff's figures on a line that is not whole, writes
+`is_complete=False` and no grade and no `subject_position`, and `card_api` shows a
+family "-" for it. `ReleasedCard.whole_subjects_only` is how a reader tells a card
+frozen under this from one before it, which printed totals over everything marked
+and ranked everyone with an average; both migration columns default to the old
+meaning, so no existing card is touched (`0035`, no `UPDATE`, so the append-only
+trigger is not involved). Controls and tests: `results/tests/test_whole_subjects.py`.
+
 ## What is *not* frozen
 
 **The class average**, computed on demand:

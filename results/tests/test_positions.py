@@ -166,17 +166,22 @@ class DenseRankingTests(PositionSetUp):
 
 class TiesAreDecidedOnThePrintedNumberTests(PositionSetUp):
     def test_two_children_printing_the_same_percentage_share_a_position(self):
-        """45/60 and 15/20 are both 75.00, by different arithmetic.
+        """45 + 15 and 40 + 20, out of 60 + 20, are both 75.00, by different arithmetic.
 
         The failure this guards is specific: rank on an unrounded value, print a
         rounded one, and two children show identical percentages with different
-        positions — which no teacher can explain to a parent.
+        positions — which no teacher can explain to a parent. Both papers are
+        marked for both children: a child with a paper unmarked is not ranked
+        (`positions`, "A subject with a paper unmarked"), which is not what this
+        is about.
         """
         ada = self.enrol(self.stmarys, "ada", "Ada A", self.group_id, self.term_id)
         bola = self.enrol(self.stmarys, "bola", "Bola B", self.group_id, self.term_id)
 
         self.mark(self.stmarys, self.term_id, self.maths_id, ada, 45, out_of=60)
-        self.mark(self.stmarys, self.term_id, self.maths_id, bola, 15, out_of=20)
+        self.mark(self.stmarys, self.term_id, self.maths_id, ada, 15, out_of=20)
+        self.mark(self.stmarys, self.term_id, self.maths_id, bola, 40, out_of=60)
+        self.mark(self.stmarys, self.term_id, self.maths_id, bola, 20, out_of=20)
 
         with connected_to(self.stmarys):
             group, term = self.group_and_term(self.group_id, self.term_id)

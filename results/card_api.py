@@ -237,11 +237,17 @@ class SubjectLineOut(Schema):
 
     subject_name: str
     subject_code: str
-    total_scored: int
-    total_available: int
+    #: Null, with `percentage` and the grade, on a subject with a paper not yet
+    #: marked (`is_complete` false): the card prints "-" for the subject's total
+    #: and leaves the subject out of its summary. The papers that are marked
+    #: still show in `assessments`. Only a card frozen under that rule has such
+    #: a line; every earlier card's lines are complete and print as they did.
+    total_scored: Optional[int]
+    total_available: Optional[int]
     percentage: Optional[str]
     grade_letter: str
     grade_remark: str
+    is_complete: bool = True
 
     #: This subject's own cells, in its own print order. **Unchanged**: the PDF
     #: renderer reads this field through `card_rows()` and nothing about it
@@ -570,16 +576,20 @@ class OgunSheetOut(Schema):
 
 
 class PlaceOut(Schema):
-    """Where the child came in the class: "4th of 45".
+    """Where the child came in the class: "4th of 45", or "not ranked".
 
     Present **only** on a card released while the school printed it
     (`ReleasedCard.position_printed`). Otherwise the field is null and the rank
     stays staff-only, as it always has been. Named for what it is on the card
     rather than for the column, so the payload of a school that never asked for
     it carries no word of it at all.
+
+    A child with a subject not yet marked all the way through is not ranked
+    (`positions`): `place` is null and the label says so. `out_of` is the number
+    of children who were ranked.
     """
 
-    place: int
+    place: Optional[int]
     out_of: int
     label: str
 
@@ -667,6 +677,11 @@ class ReportCardOut(Schema):
 
     #: See `PlaceOut`. Null unless the card was released printing it.
     place_in_class: Optional[PlaceOut] = None
+
+    #: How many subjects the totals above leave out because a paper is not yet
+    #: marked. Zero on a card without that rule, and the page says so only when
+    #: it is not zero.
+    left_out: int = 0
 
     #: The Ogun State sheet's own content, or null for a Standard school.
     ogun: Optional[OgunSheetOut] = None
@@ -1125,11 +1140,13 @@ def _subject_lines(card) -> tuple[List[SubjectLineOut], List[ColumnOut]]:
         SubjectLineOut(
             subject_name=line.subject_name,
             subject_code=line.subject_code,
-            total_scored=line.total_scored,
-            total_available=line.total_available,
-            percentage=_as_text(line.percentage),
-            grade_letter=line.grade_letter,
-            grade_remark=line.grade_remark,
+            # What a family reads has no total for a subject with a paper unmarked.
+            total_scored=line.total_scored if line.is_complete else None,
+            total_available=line.total_available if line.is_complete else None,
+            percentage=_as_text(line.percentage) if line.is_complete else None,
+            grade_letter=line.grade_letter if line.is_complete else "",
+            grade_remark=line.grade_remark if line.is_complete else "",
+            is_complete=line.is_complete,
             assessments=cells,
             cells=row["cells"],
         )
@@ -1210,8 +1227,15 @@ def ordinal(n: int) -> str:
 
 def _place_in_class(card) -> Optional[PlaceOut]:
     """The rank, only where this card was released printing it."""
-    if not card.position_printed or card.position is None:
+    if not card.position_printed:
         return None
+    if card.position is None:
+        # A card frozen under the whole-subjects rule that has no position is a
+        # child who was not ranked. An earlier card with none is a child with no
+        # marks at all, and printed nothing.
+        if not card.whole_subjects_only:
+            return None
+        return PlaceOut(place=None, out_of=card.roster_size, label="not ranked")
     return PlaceOut(
         place=card.position,
         out_of=card.roster_size,
@@ -1438,6 +1462,7 @@ def card_payload(card) -> ReportCardOut:
         own_average=_as_text(card.own_average),
         percentage=_percentage_of(card),
         place_in_class=_place_in_class(card),
+        left_out=sum(1 for line in subjects if not line.is_complete),
         days_present=card.days_present,
         days_absent=card.days_absent,
         days_open=card.days_open,

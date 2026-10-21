@@ -64,6 +64,7 @@ from gradebook import services as gradebook
 from gradebook.models import Assessment, Subject
 from messaging.fake import FakeProvider
 from messaging.providers import provider_for
+from results import ogun
 from schools.models import Domain, School
 from timetable import services as timetable
 from timetable.models import Weekday
@@ -94,6 +95,14 @@ FIRST_NAMES = (
     "Kemi", "Lola", "Musa", "Ngozi", "Obi", "Pelumi", "Rukky", "Segun", "Tolu", "Uche",
 )
 SURNAMES = ("Adeyemi", "Bello", "Chukwu", "Danjuma", "Eze", "Falana", "Garba", "Hassan", "Ibe", "Johnson")
+
+#: The papers each demo school sets. Sunrise sits the Ogun sheet's, so a card
+#: printed from it carries that sheet's headings; Harbour keeps a plain two, so
+#: the two schools differ and a cross-school mistake shows.
+PAPERS = {
+    "sunrise-demo": ogun.ASSESSMENTS,
+    "harbour-demo": (("First CA", 20), ("Exam", 60)),
+}
 
 SUBJECTS = (("Mathematics", "MTH"), ("English Language", "ENG"), ("Basic Science", "BSC"))
 TUITION = 150_000 * KOBO_PER_NAIRA
@@ -226,10 +235,10 @@ class Command(BaseCommand):
         logins.append((name, parent.username, f"Parent (of {children[0].name}, {children[10].name})"))
 
         with schema_context(school.schema_name), transaction.atomic():
-            self._term_data(staff, teachers, children, rng)
+            self._term_data(staff, teachers, children, rng, PAPERS[slug])
         return logins
 
-    def _term_data(self, staff, teachers, children, rng):
+    def _term_data(self, staff, teachers, children, rng, paper_scheme):
         today = timezone.localdate()
         # The term is the one running today, so every "current term" screen has
         # something to show; the previous one exists so a copy has a source.
@@ -258,19 +267,26 @@ class Command(BaseCommand):
                 academics.place_student(group, term, child)
         academics.assign_class_teacher(groups[0], term, staff["teacher"])
 
-        # Marks: a first CA in every subject for everybody, and an exam only
-        # JSS 1B has sat, because JSS 1B is the class released below and a
-        # released card with every exam a dash is not what a family sees.
+        # Marks: the first paper in every subject for everybody, and the rest
+        # only for JSS 1B, because JSS 1B is the class released below and a
+        # released card with a paper a dash is not what a family sees.
         subjects = []
-        for position, (subject_name, code) in enumerate(SUBJECTS):
+        for subject_name, code in SUBJECTS:
             subject = Subject.objects.create(name=subject_name, code=code)
             subjects.append(subject)
-            ca = Assessment.objects.create(term=term, subject=subject, name="First CA", max_score=20, position=0)
-            exam = Assessment.objects.create(term=term, subject=subject, name="Exam", max_score=60, position=1)
+            papers = [
+                Assessment.objects.create(term=term, subject=subject, name=name, max_score=out_of, position=position)
+                for position, (name, out_of) in enumerate(paper_scheme)
+            ]
             for child in children:
-                gradebook.set_score(ca, child, rng.randint(6, 20), by=staff["teacher"].user)
-            for child in placed[groups[1]]:
-                gradebook.set_score(exam, child, rng.randint(22, 58), by=staff["teacher"].user)
+                gradebook.set_score(
+                    papers[0], child, rng.randint(round(papers[0].max_score * 0.3), papers[0].max_score),
+                    by=staff["teacher"].user,
+                )
+            for paper in papers[1:]:
+                low, high = round(paper.max_score * 0.37), round(paper.max_score * 0.97)
+                for child in placed[groups[1]]:
+                    gradebook.set_score(paper, child, rng.randint(low, high), by=staff["teacher"].user)
 
         self._timetable(term, groups, subjects, staff, teachers)
         self._release(term, groups[1], placed[groups[1]], staff, rng)
