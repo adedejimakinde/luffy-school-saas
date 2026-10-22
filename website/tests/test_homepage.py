@@ -179,8 +179,9 @@ class TheSiteHostTests(SiteSetUp):
                 self.assertEqual(self.get(path).status_code, 404)
 
     def test_every_other_host_is_unchanged(self):
-        """The portal still has no root, and a host nobody owns is still 404."""
-        self.assertEqual(self.get("/", host=PORTAL).status_code, 404)
+        """The portal's root is the staff door, and a host nobody owns is still 404."""
+        root = self.get("/", host=PORTAL)
+        self.assertEqual((root.status_code, root["Location"]), (302, "/staff-sign-in/"))
         self.assertEqual(self.get("/sign-in/", host=PORTAL).status_code, 200)
         self.assertEqual(self.get("/", host="nobody.classnode.testserver").status_code, 404)
 

@@ -294,6 +294,21 @@ def refused(request, exception=None):
     )
 
 
+def csrf_failed(request, reason=""):
+    """The page Django shows when a form's CSRF check fails (`CSRF_FAILURE_VIEW`).
+
+    Django's own is a bare "Forbidden (403) CSRF verification failed" with a
+    paragraph about cookies. In practice it is an expired page: a form left open
+    past the session, or a browser that will not keep the cookie. So it says that
+    in one sentence and offers the page again, which is a plain link to the path
+    that was posted to: a GET, never a repeat of the POST. `reason` is for the
+    log, and Django has already logged it; it is not shown.
+    """
+    return render(
+        request, "csrf_failure.html", {"retry_path": request.path}, status=403
+    )
+
+
 __all__ = [
     "sign_in_page",
     "staff_sign_in_page",
@@ -301,6 +316,7 @@ __all__ = [
     "staff_page",
     "invitation_page",
     "refused",
+    "csrf_failed",
     "ROLL_MODULES",
     "STAFF_PAGE_MODULES",
     "INVITE_MODULES",

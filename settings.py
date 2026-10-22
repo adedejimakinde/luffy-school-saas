@@ -447,6 +447,10 @@ SESSION_COOKIE_DOMAIN = os.environ.get("SESSION_COOKIE_DOMAIN") or (
 # The CSRF cookie has to travel exactly as far as the session it protects.
 CSRF_COOKIE_DOMAIN = SESSION_COOKIE_DOMAIN
 
+# The page a failed CSRF check shows: Classnode's own, with a way back, not Django's
+# bare one (`accounts.views.csrf_failed`).
+CSRF_FAILURE_VIEW = "accounts.views.csrf_failed"
+
 # A session cookie is a credential from the moment `/api/login/` can mint one,
 # so it should never cross a plain-HTTP hop. Tied to DEBUG rather than given its
 # own switch: a deployment with DEBUG on has a larger problem than this setting.

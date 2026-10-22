@@ -118,6 +118,9 @@ class Menu:
     groups: tuple
     tabs: tuple
     current: str
+    #: Classnode's own staff on the portal, whose pages are not a school's: no
+    #: Help and next steps (that is a school's page), no tab bar.
+    platform: bool = False
 
     @property
     def links(self):
@@ -128,6 +131,21 @@ class Menu:
         """Where the logo goes: the first tab, else the first link, else nowhere."""
         first = self.tabs or self.links
         return first[0].href if first else None
+
+
+#: The platform operator's pages, on the portal. A platform login has no roles
+#: at any school for `menu_for()` to read, and these pages answer to
+#: `user.is_platform_staff` instead (`schools.platform_api`, `onboarding.handover`),
+#: so the menu is not built from roles at all.
+PLATFORM_LINKS = (
+    Link("platform", "/platform/", "i-people", "Schools", frozenset(), "Platform"),
+    Link("handover", "/platform/handover/", "i-flag", "New school handover", frozenset(), "Platform"),
+    Link("admin", "/admin/", "i-settings", "Admin", frozenset(), "Platform"),
+)
+
+
+def platform_menu(current: str) -> Menu:
+    return Menu(groups=(Group("Platform", PLATFORM_LINKS),), tabs=(), current=current, platform=True)
 
 
 def menu_for(roles, current: str) -> Menu:
@@ -161,8 +179,21 @@ def menu_for(roles, current: str) -> Menu:
 register = template.Library()
 
 
+def _is_platform_page(request) -> bool:
+    """Classnode's own staff, on the portal: no school here, so no roles to read."""
+    user = getattr(request, "user", None)
+    return bool(
+        user is not None
+        and user.is_authenticated
+        and user.is_platform_staff
+        and getattr(request, "school", None) is None
+    )
+
+
 def _menu(context, current):
     request = context.get("request")
+    if _is_platform_page(request):
+        return platform_menu(current)
     return menu_for(getattr(request, "school_roles", frozenset()), current)
 
 
@@ -218,7 +249,11 @@ def shell_open(context, current):
         "school_name": school.name if school is not None and getattr(request, "school_roles", None) else "",
         "user_name": name,
         "user_initials": initials(name) if name else "",
-        "role_names": _role_names(getattr(request, "school_roles", ())) if personal else "",
+        "role_names": (
+            "Platform staff"
+            if personal and _is_platform_page(request)
+            else _role_names(getattr(request, "school_roles", ())) if personal else ""
+        ),
         "setup_chip": setup_chip,
     }
 
@@ -229,4 +264,4 @@ def shell_close(context, current):
     return {"menu": _menu(context, current)}
 
 
-__all__ = ["LINKS", "Link", "Menu", "TABS", "initials", "menu_for", "register"]
+__all__ = ["LINKS", "Link", "Menu", "PLATFORM_LINKS", "TABS", "initials", "menu_for", "platform_menu", "register"]

@@ -67,6 +67,12 @@ NOT_ON_THE_DESIGN = {
     # Inline and asset-free on purpose (the file says why). Its colours are
     # still held to the palette below.
     "accounts/templates/403.html",
+    # The rest of the error pages, which are the same: one frame, inline, so a
+    # 500 does not depend on an asset (`errors/base.html` says why).
+    "accounts/templates/errors/base.html",
+    "accounts/templates/404.html",
+    "accounts/templates/500.html",
+    "accounts/templates/csrf_failure.html",
     # The report card PDF and the result-checker slips are WeasyPrint documents,
     # not pages. They are restyled last, in their own change, around the
     # school's own crest and colour.
@@ -146,13 +152,20 @@ class OnePaletteInOneFileTests(SimpleTestCase):
             with self.subTest(template=name):
                 self.assertEqual(colours_in(style_blocks(html)), set())
 
-    def test_the_403_pages_inline_colours_are_the_palettes(self):
-        """The one page with a copy, because it may not load an asset."""
-        html = (ROOT / "accounts/templates/403.html").read_text()
+    def test_the_error_pages_inline_colours_are_the_palettes(self):
+        """The one frame with a copy, because it may not load an asset."""
+        html = (ROOT / "accounts/templates/errors/base.html").read_text()
         used = colours_in(style_blocks(html))
 
-        self.assertTrue(used, "the 403 page is styled at all")
+        self.assertTrue(used, "the error pages are styled at all")
         self.assertLessEqual(used, PALETTE)
+
+    def test_every_error_page_wears_that_frame(self):
+        for name in ("403", "404", "500", "csrf_failure"):
+            with self.subTest(page=name):
+                html = (ROOT / f"accounts/templates/{name}.html").read_text()
+                self.assertIn('{% extends "errors/base.html" %}', html)
+                self.assertEqual(colours_in(style_blocks(html)), set())
 
     def test_no_gradients_but_the_named_ones(self):
         found = set()

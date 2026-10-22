@@ -369,6 +369,14 @@ class TheHandoverPageIsThePlatformsAloneTests(TwoSchools):
         self.assertIn("Sunrise College", html)
         self.assertIn("Harbour College", html)
 
+    def test_the_page_has_the_platforms_menu_and_a_sign_out(self):
+        """It was a logo and a card: an operator on a shared computer could not end the session."""
+        html = self.get(self.ops, "/platform/handover/", host=PORTAL).content.decode()
+
+        for href in ("/platform/", "/platform/handover/", "/admin/"):
+            self.assertIn(f'href="{href}"', html)
+        self.assertIn('action="/sign-out/"', html)
+
     def test_a_schools_own_staff_and_strangers_are_refused(self):
         for member in (self.admin_a, self.teacher_a, self.bursar_a, self.principal_a, self.parent_a, None):
             with self.subTest(member=getattr(member, "role", "signed out")):

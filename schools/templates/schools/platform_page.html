@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 {% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,8 +18,10 @@ page that refused first would be a second place deciding who is platform staff.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'platform/app.js' %}"></script>
 
-{% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+{% comment %}
+The platform's own menu and account menu (`menu.platform_menu`), with Sign out.
+{% endcomment %}
+{% shell_open "platform" %}
 <main id="platform">
   <noscript>
     <h1>Schools</h1>
@@ -28,3 +30,4 @@ page that refused first would be a second place deciding who is platform staff.
   </noscript>
   <p class="state state-loading">Loading&hellip;</p>
 </main>
+{% shell_close "platform" %}

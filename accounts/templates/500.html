@@ -1,0 +1,13 @@
+{% extends "errors/base.html" %}
+{% comment %}
+Rendered by Django's own `server_error` with **no context at all**, so nothing
+in this file may read a variable, a tag that needs the request, or the database:
+the fault being reported may be any of them.
+{% endcomment %}
+{% block title %}Something went wrong{% endblock %}
+{% block heading %}Something went wrong on our side{% endblock %}
+{% block body %}
+<p>This was our mistake, not yours, and it has been reported. Please try again in
+a few minutes. Nothing you had already saved has been lost.</p>
+<p class="quiet">If it keeps happening, tell your school office.</p>
+{% endblock %}

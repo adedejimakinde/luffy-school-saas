@@ -1,9 +1,4 @@
-{% include "design/doc_open.html" %}
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex, nofollow">
-<title>Not allowed</title>
-
+{% extends "errors/base.html" %}
 {% comment %}
 Every comment in this file is a `{% comment %}` block rather than a `{#` one.
 A `{#` comment is single-line only: spanning lines it is not a comment at all
@@ -17,12 +12,10 @@ Django's default handler rendered `ERROR_PAGE_TEMPLATE` with empty `details`
 and discarded it. A reader saw "403 Forbidden" and learned neither what had
 happened nor whether anything would fix it.
 
-## No stylesheet, no modules, no `{% load static %}`
+## No stylesheet
 
-Deliberately. This is the page that has to render when something is already
-wrong, and every asset it depended on would be another thing that can be
-missing at exactly the moment it is needed. The styling below is inline and
-small enough to read.
+`errors/base.html` says why: this page has to render when something is already
+wrong, so it carries its own inline style.
 
 ## The link, and why it carries a hostname
 
@@ -43,28 +36,10 @@ wrong in development.
 and then there is no link at all, only the sentence. A dead link is worse than
 being told to go back the way you came.
 {% endcomment %}
-
-{% comment %}
-Inline and self-contained for the reason above, so it carries its own copy of
-the few values it uses from `static/web/design.css` — the only page that does,
-and `tests/test_design.py` holds every one of them to that file's palette. No
-web font: the system stack is design.css's own fallback, and a font file is an
-asset.
-{% endcomment %}
-<style>
-  body { font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-         margin: 0; padding: 16px; color: #0E1726; background: #F5F6F8; }
-  main { max-width: 34rem; margin: 0 auto; padding: 24px 20px; background: #FFFFFF;
-         border: 1px solid #E3E6EB; border-radius: 12px; }
-  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 1rem; }
-  p { margin: 0 0 1rem; }
-  .quiet { color: #5B6475; }
-  a { color: #143D8C; }
-</style>
-
-<main>
-  <h1>You cannot open this page</h1>
-
+{% block title %}Not allowed{% endblock %}
+{% block heading %}You cannot open this page{% endblock %}
+{% block body %}
+  
   {% comment %}
   The sentence the middleware wrote, which until now reached nobody. Printed
   only for the refusals `accounts.refusals` defines — `accounts.views.refused()`
@@ -91,4 +66,4 @@ asset.
     <p class="quiet">If you think you should have access here, your school
     office is who can arrange it.</p>
   {% endif %}
-</main>
+{% endblock %}

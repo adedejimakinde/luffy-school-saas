@@ -117,7 +117,11 @@ class ThePageTests(SiteSetUp):
                 self.assertTrue(url.startswith(("/static/", "data:")), url)
 
     def test_the_portal_has_no_school_page(self):
-        self.assertEqual(self.page(PORTAL).status_code, 404)
+        """Its root is the staff door now (`urls_public.py`), not a school's page, and not a 404."""
+        response = self.page(PORTAL)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/staff-sign-in/")
 
     def test_with_a_crest_it_stays_far_under_150_kb_even_for_a_crest_of_pure_noise(self):
         noise = Image.frombytes("RGBA", (256, 256), os.urandom(256 * 256 * 4))

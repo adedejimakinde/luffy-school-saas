@@ -14,6 +14,7 @@ cannot go missing here.
 from django.conf import settings
 from django.contrib import admin
 from django.urls import path, re_path
+from django.views.generic import RedirectView
 
 from accounts.views import invitation_page, sign_in_page, staff_sign_in_page
 from blog import write_views as write
@@ -62,6 +63,12 @@ urlpatterns = [
     path("write/posts/<int:pk>/view/", write.view, name="write-view"),
     re_path(r"^write/images/(?P<key>[0-9a-f]{32})\.webp$", write.portal_image, name="write-image"),
     re_path(r"^write/images/(?P<key>[0-9a-f]{32})-small\.webp$", write.portal_image_small, name="write-image-small"),
+    # The portal has no front page of its own: `app.<domain>/` used to fall
+    # through to the school's page below, which is not a school here, and answered
+    # "Not Found". Everybody who types the portal's name wants a door, and the
+    # staff door has the link to the parent one. Temporary, so it can become a
+    # page of its own later.
+    path("", RedirectView.as_view(pattern_name="staff-sign-in", permanent=False), name="portal-root"),
     *tenant_urlpatterns,
 ]
 

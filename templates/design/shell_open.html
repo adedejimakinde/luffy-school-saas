@@ -18,7 +18,7 @@ bar, built from the signed-in login's roles at this school. Closed by
       {% endfor %}
     </div>
     {% endif %}
-    {% if menu.groups %}
+    {% if menu.groups and not menu.platform %}
     {% comment %}
     Help and next steps, for every member of staff, at the foot of the sidebar
     where it never scrolls away. The page reads where you came from.
