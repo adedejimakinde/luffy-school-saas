@@ -876,6 +876,82 @@ describe("keyboard focus and large text on a phone", () => {
   }
 });
 
+describe("the top bar is one row", () => {
+  // The phone's top bar never wraps: the menu button, the logo and the account
+  // menu share one row at every width from 320, and at the reader's own text
+  // size doubled too, with the account menu at its right-hand end. A setup chip
+  // shrinks to "4 of 8" first, then the wordmark goes and the mark stays. Every
+  // role is measured as it is served, and again with the administrator's chip
+  // put in (the demo's school may have finished its setup, which takes it away).
+  const CHIP =
+    '<a class="setup-chip" href="/start/" aria-label="Setup: 4 of 8 steps done. Open Start here"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span class="chip-full">Setup 4 of 8</span><span class="chip-short" aria-hidden="true">4 of 8</span></a>';
+  const ROLES = [
+    ["the administrator", "sunrise.admin"],
+    ["the principal", "sunrise.principal"],
+    ["the bursar", "sunrise.bursar"],
+    ["the teacher", "sunrise.teacher"],
+  ];
+  for (const [role, as] of ROLES) {
+    for (const withChip of [false, true]) {
+      test(`${role}'s top bar is one row at 320 to 414px and at 200% text${withChip ? ", with the setup chip" : ""}`, async () => {
+        const context = await signedIn(as);
+        const page = await context.newPage();
+        try {
+          await page.setViewportSize({ width: 360, height: 700 });
+          await page.goto(`${SUNRISE}/home/`);
+          await settle(page);
+          if (withChip) {
+            await page.evaluate((chip) => {
+              if (document.querySelector(".topbar .setup-chip")) return;
+              document.querySelector(".topbar .account").insertAdjacentHTML("beforebegin", chip);
+            }, CHIP);
+          }
+          for (const large of [false, true]) {
+            await page.addStyleTag({ content: `html { font-size: ${large ? "200%" : "100%"} !important; }` });
+            for (const width of [320, 360, 375, 390, 414]) {
+              await page.setViewportSize({ width, height: 700 });
+              const found = await page.evaluate(() => {
+                const bar = document.querySelector(".topbar").getBoundingClientRect();
+                const shown = [...document.querySelectorAll(".topbar > *")]
+                  .filter((el) => el.getClientRects().length)
+                  .map((el) => ({ cls: String(el.className), ...el.getBoundingClientRect().toJSON() }));
+                const account = shown.find((box) => box.cls.includes("account"));
+                const logo = document.querySelector(".topbar-logo");
+                return {
+                  barHeight: bar.height,
+                  boxes: shown.map((box) => [box.cls, Math.round(box.top), Math.round(box.bottom)]),
+                  accountRight: account ? account.right : null,
+                  viewport: document.documentElement.clientWidth,
+                  over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                  chip: [...document.querySelectorAll(".setup-chip span")].find((el) => el.getClientRects().length)?.textContent ?? null,
+                  wordmark: logo ? getComputedStyle(logo).fontSize !== "0px" : false,
+                };
+              });
+              const where = `${role} at ${width}px${large ? " and 200% text" : ""}${withChip ? " with the chip" : ""}`;
+              const boxes = JSON.stringify(found.boxes);
+              assert.ok(found.barHeight <= 72, `${where}: the top bar is ${found.barHeight}px tall ${boxes}`);
+              const rowTop = Math.min(...found.boxes.map((box) => box[1]));
+              for (const [cls, top] of found.boxes) assert.ok(top < rowTop + 20, `${where}: ${cls} is on a second row ${boxes}`);
+              assert.ok(found.accountRight !== null, `${where}: no account menu`);
+              assert.ok(found.accountRight <= found.viewport + 0.5, `${where}: the account menu is off the screen`);
+              assert.ok(found.accountRight >= found.viewport - 40, `${where}: the account menu is not at the right end`);
+              assert.ok(found.over <= 0, `${where}: the page scrolls ${found.over}px sideways`);
+              if (withChip && !large) {
+                if (width <= 375) assert.equal(found.chip, "4 of 8", `${where}: the chip shrinks first`);
+                if (width >= 390) assert.equal(found.chip, "Setup 4 of 8", `${where}: the chip has room`);
+                if (width >= 360) assert.ok(found.wordmark, `${where}: the wordmark stays until the chip has shrunk`);
+              }
+              if (width === 320 || large) assert.ok(!found.wordmark, `${where}: only the mark is left`);
+            }
+          }
+        } finally {
+          await page.close();
+        }
+      });
+    }
+  }
+});
+
 describe("the roll import's preview", () => {
   // A file is chosen, not tapped, so the drill-down above cannot reach the
   // preview. One good row and one with three problems, checked and never

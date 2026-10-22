@@ -48,7 +48,7 @@ bar, built from the signed-in login's roles at this school. Closed by
     </button>
     <a class="logo topbar-logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
     {% if school_name %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
-    <span class="spacer"></span>{% if setup_chip %}<a class="setup-chip" href="/start/" aria-label="Setup: {{ setup_chip.done }} of {{ setup_chip.total }} steps done. Open Start here"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg>Setup {{ setup_chip.done }} of {{ setup_chip.total }}</a>{% endif %}{% if signed_in %}{% comment %}
+    <span class="spacer"></span>{% if setup_chip %}<a class="setup-chip" href="/start/" aria-label="Setup: {{ setup_chip.done }} of {{ setup_chip.total }} steps done. Open Start here"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span class="chip-full">Setup {{ setup_chip.done }} of {{ setup_chip.total }}</span><span class="chip-short" aria-hidden="true">{{ setup_chip.done }} of {{ setup_chip.total }}</span></a>{% endif %}{% if signed_in %}{% comment %}
     The account menu: who is signed in, as what, and Sign out. A `<details>`,
     so it opens and closes with no script, from a keyboard as from a finger.
     Its Sign out submits the sidebar's form (`form="sign-out"`), so the token
