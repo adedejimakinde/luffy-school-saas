@@ -89,13 +89,19 @@ export function afterSignOut(state, answer) {
 /**
  * Where a successful sign-in goes by itself, or null to stay on the landing.
  *
- * Only an administrator whose school has never finished setup is sent on,
- * to Start here, and only when that is the one school this login reaches:
- * with several, the landing lists Start here first and lets them choose.
+ * Platform staff go to `/platform/`. Otherwise only an administrator whose
+ * school has never finished setup is sent on, to Start here, and only when that
+ * is the one school this login reaches: with several, the landing lists Start
+ * here first and lets them choose.
  * Everybody else keeps the landing. `start_here` is the server's answer
  * (`api._schools_of()`), so this never guesses from a role.
  */
 export function landingRedirect(state) {
+  // Platform staff go to the platform's own page, whether or not they also
+  // belong to a school: "No school on this account yet" is not true of them.
+  if (state.body && state.body.is_platform_staff && (state.step === "landed" || state.step === "nowhere")) {
+    return "/platform/";
+  }
   if (state.step !== "landed") return null;
   const schools = (state.body && state.body.schools) || [];
   if (schools.length !== 1 || !schools[0].start_here) return null;

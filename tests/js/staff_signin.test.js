@@ -16,6 +16,7 @@ import {
   afterSignOut,
   htmlFor,
   initialState,
+  landingRedirect,
   mount,
 } from "../../static/staff-signin/app.js";
 import * as steps from "../../static/staff-signin/states.js";
@@ -490,4 +491,19 @@ test("outside the demo the landing still links by host", async () => {
     schools: [{ name: "Sunrise", host: "sunrise.example.ng", may_take_a_register: true }],
   });
   assert.match(html, /href="\/\/sunrise\.example\.ng\/register\/"/);
+});
+
+test("platform staff go to the platform page, with a school or without one", () => {
+  const nowhere = advance(initialState(), { status: 200, body: { full_name: "Ops", schools: [], is_platform_staff: true } });
+  assert.equal(nowhere.step, "nowhere");
+  assert.equal(landingRedirect(nowhere), "/platform/");
+
+  const landed = advance(initialState(), { ...TWO_SCHOOLS, body: { ...TWO_SCHOOLS.body, is_platform_staff: true } });
+  assert.equal(landingRedirect(landed), "/platform/");
+});
+
+test("somebody with no school who is not platform staff stays on the sentence about invitations", () => {
+  const state = advance(initialState(), { status: 200, body: { full_name: "Nobody", schools: [], is_platform_staff: false } });
+  assert.equal(landingRedirect(state), null);
+  assert.match(htmlFor(state), /No school on this account yet/);
 });

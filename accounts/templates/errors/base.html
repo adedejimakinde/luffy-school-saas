@@ -1,0 +1,63 @@
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}{% endblock %}</title>
+
+{% comment %}
+Every comment in this file is a `{% comment %}` block rather than a `{#` one.
+A `{#` comment is single-line only: spanning lines it is not a comment at all
+and every word renders on the page. This project has shipped that bug before.
+
+## The one frame every error page wears
+
+404, 500, 403 and the CSRF refusal were each Django's own page, or in the 403's
+case a page of its own that shared nothing: serif, black on white, no mark, no
+way out. They extend this file, so they look like Classnode and each carries a
+link back to `/`, which is the right place on every host: the portal sends it to
+the staff sign-in, a school's host to the school's own page, and the bare domain
+to the homepage. A link to `/` needs no query, which matters because the 500
+page is rendered by Django with no context at all, while the database may be
+the thing that is down.
+
+## No stylesheet, no modules, no `{% load static %}`
+
+Deliberately, and the reason the 403 page already gave: this is the page that has
+to render when something is already wrong, and every asset it depended on would
+be another thing that can be missing at exactly that moment. The styling below
+is inline and small enough to read. It carries its own copy of the few values it
+uses from `static/web/design.css`, the only pages that do, and
+`tests/test_design.py` holds every one of them to that file's palette. No web
+font: the system stack is design.css's own fallback.
+
+The mark is the shell's `i-brand-mark` written out, because a `<symbol>` sprite
+is a template include too many here.
+{% endcomment %}
+<style>
+  body { font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+         margin: 0; padding: 16px; color: #0E1726; background: #F5F6F8; }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 10px;
+           margin: 24px 0 16px; color: #143D8C; font-size: 1.25rem; font-weight: 700; }
+  .brand svg { width: 28px; height: 28px; }
+  main { max-width: 34rem; margin: 0 auto; padding: 24px 20px; background: #FFFFFF;
+         border: 1px solid #E3E6EB; border-radius: 12px; }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 1rem; }
+  p { margin: 0 0 1rem; }
+  .quiet { color: #5B6475; }
+  a { color: #143D8C; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 1.5rem 0 0; }
+  .button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px;
+            padding: 0 20px; color: #FFFFFF; background: #143D8C; border-radius: 10px;
+            font-weight: 700; text-decoration: none; }
+  :focus-visible { outline: 2px solid #143D8C; outline-offset: 2px; }
+</style>
+
+<div class="brand">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#143D8C"/><path d="M7 8L17 8L12 17Z" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/><circle cx="7" cy="8" r="2.1" fill="#FFFFFF"/><circle cx="17" cy="8" r="2.1" fill="#FFFFFF"/><circle cx="12" cy="17" r="2.1" fill="#FFFFFF"/></svg>
+  classnode
+</div>
+<main>
+  <h1>{% block heading %}{% endblock %}</h1>
+  {% block body %}{% endblock %}
+  <p class="actions">{% block actions %}<a class="button" href="/">Go to the home page</a>{% endblock %}</p>
+</main>

@@ -343,6 +343,9 @@ class SignedInOut(Schema):
     full_name: str
     schools: list[SchoolOut]
     csrf_token: str
+    #: Classnode's own staff. Their home is `/platform/`, not a school, and a
+    #: sign-in page that told them they had no school was wrong about them.
+    is_platform_staff: bool = False
 
 
 class RefusedOut(Schema):
@@ -607,6 +610,7 @@ def sign_in(request, payload: SignInIn):
         full_name=user.full_name,
         schools=_schools_of(user),
         csrf_token=get_token(request),
+        is_platform_staff=bool(user.is_platform_staff),
     )
 
 

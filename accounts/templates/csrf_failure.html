@@ -1,0 +1,10 @@
+{% extends "errors/base.html" %}
+{% block title %}This page expired{% endblock %}
+{% block heading %}This page expired{% endblock %}
+{% block body %}
+<p>The page was open for too long, or your browser would not keep the cookie it
+needs to tell this form is yours. Nothing was saved.</p>
+<p class="quiet">Open the page again and send the form once more. If it keeps
+happening, check that your browser allows cookies for this site.</p>
+{% endblock %}
+{% block actions %}<a class="button" href="{{ retry_path }}">Open the page again</a><a href="/">Go to the home page</a>{% endblock %}

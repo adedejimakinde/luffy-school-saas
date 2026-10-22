@@ -1,4 +1,4 @@
-{% load static %}{% include "design/doc_open.html" %}
+{% load static shell %}{% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>New school handover</title>
@@ -12,9 +12,15 @@ title names no school and no person, since a refusal is served from here too.
 {% include "design/head.html" %}
 <link rel="stylesheet" href="{% static 'platform/platform.css' %}">
 
-{% include "design/icons.html" %}
+{% comment %}
+The platform's own menu and account menu (`menu.platform_menu`), with Sign out:
+this page used to be a logo and a card, and an operator on a shared computer
+had nowhere to end the session. Signed out or not platform staff, the shell
+still draws and offers no links but Sign out, which a signed-in person always
+has (`menu.shell_open`).
+{% endcomment %}
+{% shell_open "handover" %}
 {% include "onboarding/parts/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
 <main class="handover-page" data-state="{{ state }}">
   {% if state == "handover" %}
   <div class="page-head">
@@ -73,3 +79,4 @@ title names no school and no person, since a refusal is served from here too.
   <p>This page is for the platform's own staff.</p>
   {% endif %}
 </main>
+{% shell_close "handover" %}

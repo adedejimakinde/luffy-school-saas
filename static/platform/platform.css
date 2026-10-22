@@ -3,7 +3,7 @@
  *
  * Colours, type and controls are `web/design.css`'s; this is the layout.
  */
-main { max-width: 44rem; }
+#platform { max-width: 44rem; }
 label { display: block; margin: 12px 0 6px; font-weight: 700; }
 label small { font-weight: 400; color: var(--muted); }
 input { width: 100%; }
