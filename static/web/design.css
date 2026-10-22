@@ -93,8 +93,11 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+/* WCAG 2.4.11: focus clear of the bars. */
+html:has(.topbar) { scroll-padding-top: var(--topbar); }
+@media (max-width: 639.98px) { html:has(.tabbar) { scroll-padding-bottom: calc(var(--tabbar) + 16px); } }
 
-/* What quirks mode supplied and the look still wants (doc_open.html). `:where()` keeps them weak. */
+/* Quirks-mode defaults kept (doc_open.html). */
 :where(html.was-quirks) form { margin-block-end: 1em; }
 :where(html.was-quirks) table { font-weight: normal; font-style: normal; font-variant: normal; font-size: medium; line-height: normal; white-space: normal; text-align: start; }
 
@@ -732,6 +735,7 @@ body.has-shell { padding: 0; }
   top: 0;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-height: var(--topbar);
@@ -760,6 +764,8 @@ body.has-shell { padding: 0; }
 .topbar-logo { min-height: var(--control); padding: 0 4px; font-size: 1.125rem; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
+/* Mark only at 320px: the account menu stays on screen. */
+@media (max-width: 359.98px) { .topbar-logo { font-size: 0; } }
 
 @media (min-width: 1024px) {
   .topbar-logo { display: none; }
@@ -912,30 +918,18 @@ body.has-shell { padding: 0; }
     align-items: center;
     justify-content: center;
     gap: 2px;
+    min-width: 0;
     min-height: calc(var(--tabbar) - 1px);
     color: var(--muted);
     text-decoration: none;
   }
 
   .tabbar a[aria-current="page"] { color: var(--brand); }
-  .tabbar .tab-label { font-size: 0.8125rem; font-weight: 700; }
+  .tabbar .tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 700; }
 
   /* The bar's own height, safe area included: the last control clears it. */
   body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px)); }
 }
-
-/* A save button that stays in reach on a long list: the register on a phone. */
-.sticky-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  margin: 16px -16px -20px;
-  padding: 12px 16px;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-}
-
-.sticky-actions button { width: 100%; }
 
 /* ------------------------------------------------------------------------ */
 /* Paper                                                                     */
@@ -944,7 +938,7 @@ body.has-shell { padding: 0; }
 @media print {
   body, body.has-shell { padding: 0; background: var(--card); }
   body > main, .content > main { max-width: none; padding: 0; border: 0; }
-  .sidebar, .topbar, .tabbar, .sticky-actions, .brand-bar { display: none; }
+  .sidebar, .topbar, .tabbar, .brand-bar { display: none; }
   .shell { display: block; }
   .scroll, .grid-scroll, .table-scroll { overflow: visible; }
   .scroll :is(th, td):first-child,
