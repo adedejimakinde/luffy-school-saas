@@ -728,6 +728,7 @@ body.has-shell { padding: 0; }
 .setup-chip::after { content: ""; position: absolute; inset: -4px 0; }
 .setup-chip:hover { color: var(--brand-strong); border-color: var(--brand); }
 .setup-chip .icon { width: 16px; height: 16px; }
+.setup-chip .chip-short { display: none; }
 @media (max-width: 639.98px) { .setup-chip .icon { display: none; } }
 
 .topbar {
@@ -735,9 +736,9 @@ body.has-shell { padding: 0; }
   top: 0;
   z-index: 10;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  container-type: inline-size;
   min-height: var(--topbar);
   padding: 8px 16px;
   background: var(--card);
@@ -764,8 +765,8 @@ body.has-shell { padding: 0; }
 .topbar-logo { min-height: var(--control); padding: 0 4px; font-size: 1.125rem; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
-/* Mark only at 320px: the account menu stays on screen. */
-@media (max-width: 359.98px) { .topbar-logo { font-size: 0; } }
+@container (max-width: 21.8em) { .setup-chip .chip-full { display: none; } .setup-chip .chip-short { display: inline; } }
+@container (max-width: 19em) { .topbar-logo { font-size: 0; } }
 
 @media (min-width: 1024px) {
   .topbar-logo { display: none; }
