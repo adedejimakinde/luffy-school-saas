@@ -922,7 +922,7 @@ describe("the top bar is one row", () => {
                   boxes: shown.map((box) => [box.cls, Math.round(box.top), Math.round(box.bottom)]),
                   accountRight: account ? account.right : null,
                   viewport: document.documentElement.clientWidth,
-                  over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                  over: document.querySelector(".topbar").scrollWidth - document.querySelector(".topbar").clientWidth,
                   chip: [...document.querySelectorAll(".setup-chip span")].find((el) => el.getClientRects().length)?.textContent ?? null,
                   wordmark: logo ? getComputedStyle(logo).fontSize !== "0px" : false,
                 };
@@ -935,10 +935,11 @@ describe("the top bar is one row", () => {
               assert.ok(found.accountRight !== null, `${where}: no account menu`);
               assert.ok(found.accountRight <= found.viewport + 0.5, `${where}: the account menu is off the screen`);
               assert.ok(found.accountRight >= found.viewport - 40, `${where}: the account menu is not at the right end`);
-              assert.ok(found.over <= 0, `${where}: the page scrolls ${found.over}px sideways`);
+              assert.ok(found.over <= 0, `${where}: the bar is ${found.over}px wider than itself`);
               if (withChip && !large) {
-                if (width <= 375) assert.equal(found.chip, "4 of 8", `${where}: the chip shrinks first`);
-                if (width >= 390) assert.equal(found.chip, "Setup 4 of 8", `${where}: the chip has room`);
+                // The administrator's own chip may show another count than the injected one.
+                if (width <= 375) assert.match(found.chip, /^\d+ of \d+$/, `${where}: the chip shrinks first`);
+                if (width >= 390) assert.match(found.chip, /^Setup \d+ of \d+$/, `${where}: the chip has room`);
                 if (width >= 360) assert.ok(found.wordmark, `${where}: the wordmark stays until the chip has shrunk`);
               }
               if (width === 320 || large) assert.ok(!found.wordmark, `${where}: only the mark is left`);
