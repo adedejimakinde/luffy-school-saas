@@ -151,6 +151,7 @@
 .dash-date { display: none; }
 
 .dash-term { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
+.dash-term .chip { max-width: 100%; white-space: normal; }
 .dash-term-phone { display: none; }
 
 @media (max-width: 639.98px) {
@@ -174,6 +175,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--s-1);
+}
+
+/* On a phone the tiles are as many across as fit at the reader's own text size
+   (rem, so it counts): two at 100%, one when the text is doubled. */
+@media (max-width: 639.98px) {
+  .kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); }
 }
 
 @media (min-width: 640px) { .kpis { gap: var(--s-2); } }
@@ -350,6 +357,9 @@ a.kpi:hover {
   border-top: 1px solid var(--divider);
 }
 
+@media (max-width: 639.98px) {
+  .fee-split { grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr)); }
+}
 .fee-split div { display: grid; gap: var(--s-half); min-width: 0; }
 .fee-split dt { color: var(--muted); font-size: var(--t-1); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .fee-split dd { margin: 0; font-weight: 700; white-space: nowrap; }
