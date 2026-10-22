@@ -36,7 +36,9 @@ export function ask({ error = "", value = "" } = {}) {
     problem(error),
     '<label for="value">Phone number or email</label>',
     `<input id="value" name="value" type="text" autocomplete="username" `,
-    `inputmode="tel" required value="${esc(value)}">`,
+    // `email`, not `tel`: the field takes either, and a dial pad has no letters
+    // and no @, so a parent registered by email could not type theirs.
+    `inputmode="email" autocapitalize="none" spellcheck="false" required value="${esc(value)}">`,
     '<button type="submit">Send me a code</button>',
     staffLink(),
     "</form>",
