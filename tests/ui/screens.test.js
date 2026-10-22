@@ -913,7 +913,7 @@ describe("the top bar is one row", () => {
               const found = await page.evaluate(() => {
                 const bar = document.querySelector(".topbar").getBoundingClientRect();
                 const shown = [...document.querySelectorAll(".topbar > *")]
-                  .filter((el) => el.getClientRects().length)
+                  .filter((el) => el.getClientRects().length && el.getBoundingClientRect().height > 0)
                   .map((el) => ({ cls: String(el.className), ...el.getBoundingClientRect().toJSON() }));
                 const account = shown.find((box) => box.cls.includes("account"));
                 const logo = document.querySelector(".topbar-logo");
