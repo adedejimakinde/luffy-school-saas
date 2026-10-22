@@ -736,7 +736,6 @@ body.has-shell { padding: 0; }
   top: 0;
   z-index: 10;
   display: flex;
-  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   container-type: inline-size;
@@ -766,16 +765,7 @@ body.has-shell { padding: 0; }
 .topbar-logo { min-height: var(--control); padding: 0 4px; font-size: 1.125rem; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
-.topbar-logo { flex: none; }
-.topbar > .menu-button, .topbar > .account { flex: none; }
-/* The bar is one row at every width and every text size, the account menu at
-   its right end. Measured in the bar's own em (its content box, inside the 16px gutters), so a reader's larger text
-   narrows the bar as a narrower screen does: the setup chip shrinks to
-   "4 of 8" first, then the wordmark goes and the mark stays. */
-@container (max-width: 21.8em) {
-  .setup-chip .chip-full { display: none; }
-  .setup-chip .chip-short { display: inline; }
-}
+@container (max-width: 21.8em) { .setup-chip .chip-full { display: none; } .setup-chip .chip-short { display: inline; } }
 @container (max-width: 19em) { .topbar-logo { font-size: 0; } }
 
 @media (min-width: 1024px) {

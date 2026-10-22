@@ -42,6 +42,11 @@ bar, built from the signed-in login's roles at this school. Closed by
     {% endif %}
   </nav>
 
+  {% comment %}
+  One row at every width and text size (`design.css`, container queries in the
+  bar's own em): the setup chip shrinks to its `chip-short` text first, then the
+  wordmark goes and the mark stays. `tests/ui/screens.test.js` holds it.
+  {% endcomment %}
   <header class="topbar">
     <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
       <svg class="icon"><use href="#i-menu"/></svg>
