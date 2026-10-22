@@ -22,7 +22,8 @@
  * and why — issue #75. Nothing about a concession is ever edited.
  */
 
-import { emptyState, esc } from "../web/html.js";
+import { emptyState, esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 import { balanceWords, naira, signed } from "./money.js";
 
 function termOptions(terms, chosen) {
@@ -98,7 +99,7 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
   } = body;
   return [
     '<section class="state state-class" data-state="class">',
-    '<p class="back"><button type="button" data-action="back-to-books">All classes</button></p>',
+    '<p class="back"><button type="button" data-up="1" data-action="back-to-books">All classes</button></p>',
     `<h1>${esc(class_group)}</h1>`,
     `<p class="quiet">${esc(term)}. Each balance is the whole account, every term.</p>`,
     children.length
@@ -383,7 +384,7 @@ export function account({
   const current = termId ?? ((body.terms || []).find((t) => t.is_current) || (body.terms || [])[0] || {}).term_id;
   return [
     '<section class="state state-account" data-state="account">',
-    '<p class="back"><button type="button" data-action="back-to-class">Back</button></p>',
+    '<p class="back"><button type="button" data-up="2" data-action="back-to-class">Back</button></p>',
     `<h1>${esc(student)}</h1>`,
     reference ? `<p class="quiet">Admission no. ${esc(reference)}</p>` : "",
     `<p class="standing">${balance(balance_kobo)}</p>`,
@@ -551,7 +552,7 @@ export function receipt({ receipt: body = {} } = {}) {
   const r = body;
   return [
     '<section class="state state-receipt" data-state="receipt">',
-    '<p class="back"><button type="button" data-action="back-to-account">Back</button> ',
+    '<p class="back"><button type="button" data-up="3" data-action="back-to-account">Back</button> ',
     '<button type="button" data-action="print">Print</button></p>',
     '<article class="receipt">',
     `<header><h1>${esc(r.school)}</h1><p>Receipt <strong>${esc(r.receipt_number)}</strong></p></header>`,
@@ -623,11 +624,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }

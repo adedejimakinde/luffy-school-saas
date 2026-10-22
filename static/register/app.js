@@ -60,6 +60,7 @@ import {
   useMine,
 } from "./outbox.js";
 import * as states from "./states.js";
+import { followBack } from "../web/trail.js";
 
 /**
  * The zone a school's day is counted in, when the page does not say.
@@ -238,8 +239,10 @@ export async function mount(
   let freshToken = false;
   const answers = {};
 
+  const follow = followBack(root);
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal, timeZone, now, entries, notTheAuthor, held });
+    follow();
   };
 
   const change = async (update) => {

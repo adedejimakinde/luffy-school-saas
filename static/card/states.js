@@ -8,11 +8,12 @@
  * by definition the path nobody demos.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState, skeleton } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /** Before the answer arrives. Replaced by whatever comes back. */
 export function loading() {
-  return '<p class="state state-loading">Fetching this report card&hellip;</p>';
+  return skeleton("Fetching this report card");
 }
 
 /**
@@ -139,11 +140,5 @@ function wayBack(portal, label) {
  * makes about keeping the exception out of the body.
  */
 export function broken() {
-  return [
-    '<section class="state state-broken">',
-    "<h1>This page could not load the card</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell the school office if it keeps happening.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell the school office if it keeps happening", { title: "This page could not load the card", attrs: "class=\"state state-broken\"" });
 }

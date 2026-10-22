@@ -9,7 +9,8 @@
  * existed has nothing to show, and says "-" rather than borrowing a name.
  */
 
-import { emptyState, esc } from "../web/html.js";
+import { emptyState, esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /** What each status means to the person reading the list. */
 const STANDING = {
@@ -125,11 +126,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }

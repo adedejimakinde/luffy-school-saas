@@ -91,3 +91,23 @@ export function emptyState({ key = "", icon = "", title = "", text = "", action 
     "</section>"
   );
 }
+
+/** The grey-bars stand-in for a page that is loading (`design/skeleton.html` is its server-side twin). */
+export const skeleton = (what = "Loading") =>
+  `<div class="skeleton state-loading" role="status"><span class="sr">${esc(what)}&hellip;</span><i></i><i></i><i></i><i></i></div>`;
+
+/**
+ * A page that could not draw, in one voice. `dropped` is `connectionDropped()`
+ * (http.js); `tell` is who to tell when it keeps happening. Try again reloads.
+ */
+export function brokenState(dropped, tell = "", { title = "This page is not working", extra = "", attrs = 'class="state state-broken" data-state="broken"', button = "" } = {}) {
+  return [
+    `<section ${attrs}${dropped ? ' data-cause="connection"' : ""}>`,
+    dropped ? "<h1>Your connection dropped</h1>" : `<h1>${title}</h1>`,
+    dropped
+      ? "<p>This phone lost its signal, so the page could not load. Nothing you saved has been lost. Check the connection, then try again.</p>"
+      : `<p>Something went wrong on our side. ${extra}Please try again in a few minutes${tell ? `, and ${tell}` : ""}.</p>`,
+    button || '<p><button type="button" data-action="reload">Try again</button></p>',
+    "</section>",
+  ].join("");
+}

@@ -18,6 +18,7 @@ import {
   setClassTeacher,
 } from "./api.js";
 import * as states from "./states.js";
+import { followBack } from "../web/trail.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "" } = {}) {
@@ -48,8 +49,10 @@ export function fromOverview(answer, kept = {}) {
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   let state = fromOverview(await fetchOverview({ fetchImpl }));
+  const follow = followBack(root);
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
+    follow();
   };
   draw();
 

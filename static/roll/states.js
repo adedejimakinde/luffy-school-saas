@@ -12,7 +12,27 @@
  * panel's own boolean: ADMIN alone links and removes, and a principal reads.
  */
 
-import { emptyState, esc } from "../web/html.js";
+import { emptyState, esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
+
+/** Children to a page, and how many make the search and the class filter worth showing. */
+export const PAGE_SIZE = 25;
+const SEARCH_FROM = 10;
+
+/**
+ * The children a search and a class filter leave, in roll order. Every word of
+ * the search has to be somewhere in the child's name, handle, admission number,
+ * learner ID or class; a class filter is a class's id, or "none" for a child not
+ * yet placed.
+ */
+export function matching(children, { query = "", cls = "" } = {}) {
+  const words = String(query).toLowerCase().split(/\s+/).filter(Boolean);
+  return children.filter((c) => {
+    if (cls === "none" ? c.class_group_id != null : cls !== "" && String(c.class_group_id) !== cls) return false;
+    const text = [c.student, c.username, c.reference, c.learner_id, c.class_group].join(" ").toLowerCase();
+    return words.every((w) => text.includes(w));
+  });
+}
 
 /** The roll: every child, where they sit, and what may be done about it. */
 export function roll({
@@ -24,6 +44,7 @@ export function roll({
   notes = {},
   panel = null,
   details = null,
+  view = {},
 } = {}) {
   return [
     '<section class="state state-roll" data-state="roll">',
@@ -37,13 +58,60 @@ export function roll({
     panel ? guardiansPanel(panel) : "",
     details ? detailsPanel(details) : "",
     children.length
-      ? `<ul class="children stack-list">${children
-          .map((c) => childRow(c, { classes, may_place }))
-          .join("")}</ul>`
+      ? [searchTools({ children, classes, view }), `<div data-list>${rollList({ children, classes, may_place, view })}</div>`].join("")
       : emptyRoll({ classes, may_admit, may_place }),
     may_admit ? admitForm(classes, notes.admit) : notTheAdmissionsOffice(),
     notes.place ? `<p class="note" role="alert">${esc(notes.place.detail)}</p>` : "",
     "</section>",
+  ].join("");
+}
+
+/**
+ * Find a child, or one class's children: only on a roll long enough to need it.
+ * Neither control carries `data-child`, which is how a class change on a row is
+ * told from a filter, and neither is in a form, so Enter submits nothing.
+ */
+function searchTools({ children, classes, view = {} }) {
+  if (children.length <= SEARCH_FROM) return "";
+  const cls = view.cls || "";
+  const option = (value, label) => `<option value="${esc(value)}"${cls === value ? " selected" : ""}>${esc(label)}</option>`;
+  return [
+    '<div class="roll-tools" role="search">',
+    '<div><label for="roll-search">Find a child</label>',
+    `<input id="roll-search" type="search" data-search autocomplete="off" value="${esc(view.query || "")}"></div>`,
+    '<div><label for="roll-class">Class</label>',
+    `<select id="roll-class" data-filter="class">${option("", "Every class")}${classes
+      .map((g) => option(String(g.class_group_id), g.name))
+      .join("")}${option("none", "Not in a class yet")}</select></div>`,
+    "</div>",
+  ].join("");
+}
+
+/**
+ * The children for the page asked for, how many there are, and a way to the
+ * next page and the last. The count is a status line, so a screen reader hears
+ * "Showing 26 to 50 of 62" when a search or a page changes it.
+ */
+export function rollList({ children = [], classes = [], may_place = false, view = {} } = {}) {
+  const shown = matching(children, view);
+  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
+  const page = Math.min(Math.max(1, Number(view.page) || 1), pages);
+  const first = (page - 1) * PAGE_SIZE;
+  const rows = shown.slice(first, first + PAGE_SIZE);
+  const count = !shown.length
+    ? "No child matches"
+    : children.length <= SEARCH_FROM
+      ? ""
+      : shown.length <= PAGE_SIZE
+        ? `${shown.length} of ${children.length} children`
+        : `Showing ${first + 1} to ${first + rows.length} of ${shown.length}${shown.length < children.length ? ` (of ${children.length})` : ""}`;
+  const go = (label, to, off) => `<button type="button" data-action="page" data-to="${to}"${off ? " disabled" : ""}>${label}</button>`;
+  return [
+    count ? `<p class="roll-count" tabindex="-1" role="status">${esc(count)}${shown.length ? "" : ' <button type="button" data-action="clear-search">Show everyone</button>'}</p>` : "",
+    rows.length ? `<ul class="children stack-list">${rows.map((c) => childRow(c, { classes, may_place })).join("")}</ul>` : "",
+    pages > 1
+      ? `<p class="pager">${go("Previous", page - 1, page === 1)}<span>Page ${page} of ${pages}</span>${go("Next", page + 1, page === pages)}</p>`
+      : "",
   ].join("");
 }
 
@@ -470,11 +538,5 @@ function wayBack(portal) {
 
 /** Anything the page cannot explain. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }

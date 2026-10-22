@@ -13,6 +13,7 @@ authenticated and a tab title outlives the page in history and bookmarks.
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'index/index.css' %}">
 
 <script type="importmap">{{ import_map|safe }}</script>
@@ -29,5 +30,5 @@ sentence without a link.
 {% include "design/icons.html" %}
 <div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
 <main id="index" data-portal="{{ portal_host }}">
-  <p class="state state-loading">Fetching your cards&hellip;</p>
+  {% include "design/skeleton.html" with what="Fetching your cards" %}
 </main>

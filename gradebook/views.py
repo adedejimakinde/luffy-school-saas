@@ -39,6 +39,7 @@ from schools.hosts import portal_host
 #: hashes filenames and does not rewrite `import` statements.
 MARKING_MODULES = (
     "web/html.js",
+    "web/trail.js",
     "web/http.js",
     "web/snapshots.js",
     "web/offline.js",
@@ -66,6 +67,7 @@ def marking_page(request):
 #: The teaching setup page's modules, entry point last.
 TEACHING_MODULES = (
     "web/html.js",
+    "web/trail.js",
     "web/http.js",
     "teaching/api.js",
     "teaching/states.js",

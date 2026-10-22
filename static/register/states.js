@@ -11,7 +11,8 @@
  * and was not.
  */
 
-import { emptyState, esc } from "../web/html.js";
+import { emptyState, esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 import { heldNote } from "../web/offline.js";
 import { asOfText, copyNote } from "../web/snapshots.js";
 
@@ -157,7 +158,7 @@ export function marking({
     "</ul>",
     `<p class="tally">${tapped.size} marked absent of ${rows.length}</p>`,
     '<button type="button" class="submit" data-action="submit">Submit register</button>',
-    '<button type="button" class="back" data-action="back">Another class</button>',
+    '<button type="button" class="back" data-up="1" data-action="back">Another class</button>',
     "</section>",
   ].join("");
 }
@@ -192,7 +193,7 @@ export function done({
       ? '<p class="warn">Marked absent but no longer in this class, so nothing ' +
         `was recorded for them: ${not_on_the_roster.map(nameOf).join(", ")}.</p>`
       : "",
-    '<button type="button" class="again" data-action="back">Another class</button>',
+    '<button type="button" class="again" data-up="1" data-action="back">Another class</button>',
     "</section>",
   ].join("");
 }
@@ -208,7 +209,7 @@ export function kept({ class_group = "", taken_on = "" } = {}) {
     "<h1>Kept on this phone</h1>",
     `<p>${esc(class_group)}, ${esc(taken_on)}. It has not been sent yet: it will be `,
     "sent when you are connected, and this page will say if anything needs your answer.</p>",
-    '<button type="button" class="again" data-action="back">Another class</button>',
+    '<button type="button" class="again" data-up="1" data-action="back">Another class</button>',
     "</section>",
   ].join("");
 }
@@ -285,7 +286,7 @@ export function refused({ detail = "" } = {}) {
     '<section class="state state-refused" data-state="refused">',
     "<h1>That register was not taken</h1>",
     `<p>${esc(detail) || "The school's records disagree with this register."}</p>`,
-    '<button type="button" class="again" data-action="back">Another class</button>',
+    '<button type="button" class="again" data-up="1" data-action="back">Another class</button>',
     // A 409 or a 422 came back to a caller `session_auth` had already
     // identified, so this state stops with a live session on the page — which
     // is the platform's rule for where the button goes.
@@ -362,11 +363,5 @@ function wayBack(portal) {
 
 /** Anything the page cannot explain: a 500, a dead transport, an unreadable body. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell your school if it keeps happening.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell your school if it keeps happening");
 }

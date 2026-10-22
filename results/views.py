@@ -215,6 +215,7 @@ def chain_page(request):
 #: The broadsheet page's own modules.
 BROADSHEET_MODULES = (
     "web/html.js",
+    "web/trail.js",
     "web/http.js",
     "broadsheet/api.js",
     "broadsheet/states.js",
@@ -251,6 +252,7 @@ def broadsheet_page(request):
 #: would be a second answer to what a card looks like.
 CHECKER_MODULES = (
     "web/html.js",
+    "web/http.js",
     "card/ogun.js",
     "card/render.js",
     "card/states.js",

@@ -15,6 +15,7 @@ The only script on these pages is the editor's (`static/write/app.js`),
 named by `editor.html` and nowhere else.
 {% endcomment %}
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 {% if prose %}<link rel="stylesheet" href="{% static 'blog/blog.css' %}">
 {% endif %}<link rel="stylesheet" href="{% static 'write/write.css' %}">
 <body class="writer{% if editor_page %} editing{% endif %}">

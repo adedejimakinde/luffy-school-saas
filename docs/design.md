@@ -91,6 +91,15 @@ Mobile first, checked at 360, 768 and 1280.
   left out rather than a label beside nothing. A table clipped at "Full name"
   with the rest in a sideways scroller is a table nobody on a phone reads to the
   end, which is why this exists.
+- **Table styles are their own file**, `static/web/tables.css`, linked by
+  `{% include "design/tables.html" %}` on the pages that draw a table, a
+  `.stack-list` or a `.scroll`. The register and marks draw none, and sit at the
+  edge of the 150 KB budget.
+- **While a page loads it shows grey bars, not a line of words**
+  (`design/skeleton.html`, `skeleton()` in `web/html.js`), and when it cannot draw
+  it says whether the connection dropped or the fault was ours, with Try again
+  (`brokenState()`). A view opened in place (a class, an account) is one step in
+  the browser's history, so Back goes up a view (`web/trail.js`).
 - **Three tables keep scrolling sideways on a phone**, because their columns
   are the point: the broadsheet, the timetable and the marking sheet. They sit
   in a `.wide` scroller with the first column fixed (the broadsheet fixes the

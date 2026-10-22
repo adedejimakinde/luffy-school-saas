@@ -10,7 +10,8 @@
  * not.
  */
 
-import { emptyState, esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, numberOrBlank, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 import { heldNote } from "../web/offline.js";
 import { copyNote } from "../web/snapshots.js";
 
@@ -157,7 +158,7 @@ export function sheet({
       )
       .join(""),
     "</ul>",
-    '<button type="button" class="back" data-action="back">Another paper</button>',
+    '<button type="button" class="back" data-up="1" data-action="back">Another paper</button>',
     "</section>",
   ].join("");
 }
@@ -286,11 +287,5 @@ function wayBack(portal) {
 
 /** Anything the page cannot explain: a 500, a dead transport, an unreadable body. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell your school if it keeps happening.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell your school if it keeps happening");
 }

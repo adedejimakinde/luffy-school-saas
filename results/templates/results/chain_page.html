@@ -14,6 +14,7 @@ opens the URL — there is no `login_required`, for the oracle reason
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'results/results.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'results/app.js' %}"></script>
@@ -32,6 +33,6 @@ link — `schools.hosts.portal_host()` states the rule.
         <p>This page needs JavaScript to load your classes. Please turn it on, or
         ask your school office for help.</p>
       </noscript>
-      <p class="state state-loading">Finding your classes&hellip;</p>
+      {% include "design/skeleton.html" with what="Finding your classes" %}
     </main>
 {% shell_close "results" %}

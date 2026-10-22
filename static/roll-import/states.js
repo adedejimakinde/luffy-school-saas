@@ -9,7 +9,8 @@
  * against the spreadsheet by hand to learn which children landed.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 import { TEMPLATE_URL } from "./api.js";
 
 /** The heading each column has in the template, for the preview's header. */
@@ -345,11 +346,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 
 /** Anything the page cannot explain. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Nothing from this page was saved. ",
-    "Please try again in a few minutes, and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school", { extra: "Nothing from this page was saved. " });
 }

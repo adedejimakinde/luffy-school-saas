@@ -51,6 +51,7 @@ from schools.hosts import portal_host
 #: `collectstatic` hashes filenames and does not rewrite `import` statements.
 REGISTER_MODULES = (
     "web/html.js",
+    "web/trail.js",
     "web/http.js",
     "web/snapshots.js",
     "web/offline.js",

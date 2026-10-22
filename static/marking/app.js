@@ -38,6 +38,7 @@ import {
   retryDelay,
 } from "./outbox.js";
 import * as states from "./states.js";
+import { followBack } from "../web/trail.js";
 import { heldElsewhere, indexedDbStore, memoryStore, othersOf, rememberWho } from "../web/store.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -414,6 +415,7 @@ export async function mount(
   let leaving = false;
 
   let drawing = false;
+  const follow = followBack(root);
   const draw = () => {
     // The box the teacher is in is theirs: a redraw lands while they move from one box to the
     // next (the blur's own), and replacing it would drop the keyboard and what they have typed.
@@ -425,6 +427,7 @@ export async function mount(
     drawing = true;
     root.innerHTML = htmlFor(state, { portal, timeZone, now: new Date(now()), held });
     drawing = false;
+    follow();
     const back = kept && doc.getElementById(kept.id);
     if (back) {
       back.value = kept.value;

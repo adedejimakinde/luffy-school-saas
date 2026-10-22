@@ -14,6 +14,7 @@ opens the URL — there is no `login_required`, for the oracle reason
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'roll/roll.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'roll/app.js' %}"></script>
@@ -25,6 +26,6 @@ opens the URL — there is no `login_required`, for the oracle reason
         <p>This page needs JavaScript. Please turn it on, or ask whoever set
         up this system for you.</p>
       </noscript>
-      <p class="state state-loading">Loading the roll&hellip;</p>
+      {% include "design/skeleton.html" with what="Loading the roll" %}
     </main>
 {% shell_close "roll" %}

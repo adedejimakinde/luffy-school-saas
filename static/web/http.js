@@ -22,11 +22,37 @@
  */
 
 /** Remembered for the life of the page; `null` until first asked for. */
+/**
+ * Whether the last request died on the way (the phone lost its signal): `fetch`
+ * rejects only for that, and every answer, even a 500, resolves. `brokenState()`
+ * (`html.js`) says "your connection dropped" for the one and "our side" for the other.
+ */
+let dropped = false;
+export const connectionDropped = () => dropped;
+
+async function reach(fetchImpl, ...args) {
+  try {
+    const response = await fetchImpl(...args);
+    dropped = false;
+    return response;
+  } catch (error) {
+    dropped = true;
+    throw error;
+  }
+}
+
+// "Try again" on a page that could not draw (`brokenState()`): load it again.
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (event) => {
+    if (event.target.closest && event.target.closest('[data-action="reload"]')) location.reload();
+  });
+}
+
 let token = null;
 
 export async function csrfToken({ fetchImpl = fetch, refresh = false } = {}) {
   if (token !== null && !refresh) return token;
-  const response = await fetchImpl("/api/csrf/", {
+  const response = await reach(fetchImpl, "/api/csrf/", {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
   });
@@ -45,7 +71,7 @@ export function forgetToken() {
  * does — an HTTP refusal is an answer the caller has something to say about.
  */
 export async function getJson(url, { fetchImpl = fetch } = {}) {
-  const response = await fetchImpl(url, {
+  const response = await reach(fetchImpl, url, {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
   });
@@ -99,7 +125,7 @@ export async function deleteJson(url, options = {}) {
 
 async function sendJson(method, url, payload, { fetchImpl = fetch } = {}) {
   const send = async (csrf) =>
-    fetchImpl(url, {
+    reach(fetchImpl, url, {
       method,
       headers: {
         "Content-Type": "application/json",

@@ -8,7 +8,8 @@
  * everybody who signs in lives.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /** At least what `AUTH_PASSWORD_VALIDATORS` asks, said before they type. */
 export const MIN_PASSWORD = 10;
@@ -76,11 +77,5 @@ export function dead() {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Your invitation has not been used. ",
-    "Please try again in a few minutes.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "", { extra: "Your invitation has not been used. " });
 }

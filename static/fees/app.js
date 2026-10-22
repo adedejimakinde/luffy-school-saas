@@ -42,6 +42,7 @@ import {
   removeBillLine,
 } from "./api.js";
 import * as states from "./states.js";
+import { followBack } from "../web/trail.js";
 
 /**
  * What one press of "Create accounts for this class" did, in words: how many were made,
@@ -116,8 +117,10 @@ export async function mount(
   //: discount and a concession sent under one key would be refused as a
   //: reused form.
   const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
+  const follow = followBack(root);
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
+    follow();
   };
   const land = (answer, next) => {
     state = answer.ok ? next(answer.body) : { step: answer.refusal };

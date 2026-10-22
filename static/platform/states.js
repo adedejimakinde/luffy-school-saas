@@ -2,7 +2,8 @@
  * Every screen the platform page can show, as a pure function of an API body.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 function addForm(values = {}, note = null) {
   const v = (name) => esc(values[name] || "");
@@ -130,10 +131,5 @@ export function signedOut({ expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "");
 }

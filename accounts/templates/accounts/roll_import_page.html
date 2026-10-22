@@ -13,6 +13,7 @@ Under the roll in the menu: importing is part of keeping the roll.
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'roll-import/roll-import.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'roll-import/app.js' %}"></script>
@@ -24,6 +25,6 @@ Under the roll in the menu: importing is part of keeping the roll.
         <p>This page needs JavaScript. Please turn it on, or ask whoever set
         up this system for you.</p>
       </noscript>
-      <p class="state state-loading">Loading&hellip;</p>
+      {% include "design/skeleton.html" with what="Loading" %}
     </main>
 {% shell_close "roll" %}

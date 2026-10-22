@@ -25,6 +25,6 @@ the API answers the refusal, and `data-on-school` says which host this is.
         <p>This page needs JavaScript. Please turn it on, or ask whoever set
         up this system for you.</p>
       </noscript>
-      <p class="state state-loading">Loading&hellip;</p>
+      {% include "design/skeleton.html" with what="Loading" %}
     </main>
 {% shell_close "promotion" %}

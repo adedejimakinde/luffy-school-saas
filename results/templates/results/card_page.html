@@ -18,6 +18,7 @@ bug before.
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'card/card.css' %}">
 <link rel="stylesheet" href="{% static 'card/print.css' %}" media="print">
 
@@ -62,5 +63,5 @@ domain, and the states then render their sentence without a link.
   rather than by the client: if the script never loads, this is the page, and it
   says something true.
   {% endcomment %}
-  <p class="state-loading">Fetching this report card&hellip;</p>
+  {% include "design/skeleton.html" with what="Fetching this report card" %}
 </main>

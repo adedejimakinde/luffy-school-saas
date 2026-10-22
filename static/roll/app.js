@@ -123,9 +123,23 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const load = async (notes = {}) => {
     const panel = state.panel || null;
     const details = state.details || null;
+    const view = state.view || {};
     state = fromRoll(await fetchRoll({ fetchImpl }));
-    if (state.step === "roll") state = { ...state, notes, panel, details };
+    if (state.step === "roll") state = { ...state, notes, panel, details, view };
     draw();
+  };
+
+  // Search, class filter and page redraw only the list, so the box being typed in keeps focus.
+  const drawList = (focus = false) => {
+    const holder = root.querySelector && root.querySelector("[data-list]");
+    if (!holder) return draw();
+    holder.innerHTML = states.rollList(state);
+    if (focus && holder.querySelector(".roll-count")) holder.querySelector(".roll-count").focus();
+    return undefined;
+  };
+  const look = (change) => {
+    state = { ...state, view: { ...(state.view || {}), page: 1, ...change } };
+    drawList();
   };
 
   await load();
@@ -142,6 +156,17 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (!hit) return;
     const action = hit.dataset.action;
     const panel = state.panel;
+
+    if (action === "page") {
+      state = { ...state, view: { ...(state.view || {}), page: Number(hit.dataset.to) } };
+      drawList(true);
+      return;
+    }
+    if (action === "clear-search") {
+      state = { ...state, view: {} };
+      draw();
+      return;
+    }
 
     if (action === "guardians") {
       const childId = Number(hit.dataset.child);
@@ -301,8 +326,13 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     await after("admit", await admit({ child, fetchImpl }));
   });
 
+  root.addEventListener("input", (event) => {
+    if (event.target && event.target.dataset && event.target.dataset.search !== undefined) look({ query: event.target.value });
+  });
+
   root.addEventListener("change", async (event) => {
     const field = event.target;
+    if (field && field.dataset && field.dataset.filter === "class") return look({ cls: field.value });
     if (!field || !field.dataset || field.dataset.child === undefined) return;
     if (state.step !== "roll") return;
     const chosen = String(field.value).trim();

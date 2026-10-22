@@ -16,6 +16,7 @@ from schools.hosts import portal_host
 #: each has to be listed.
 FEES_MODULES = (
     "web/html.js",
+    "web/trail.js",
     "web/http.js",
     "fees/money.js",
     "fees/api.js",

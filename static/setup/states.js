@@ -5,7 +5,8 @@
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  */
 
-import { emptyState, esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, numberOrBlank, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /**
  * The school's shape: its terms and its class groups.
@@ -518,11 +519,5 @@ function wayBack(portal) {
 
 /** Anything the page cannot explain. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }

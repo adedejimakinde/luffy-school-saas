@@ -18,6 +18,7 @@ bug before.
 {% endcomment %}
 
 {% include "design/head.html" %}
+{% include "design/tables.html" %}
 <link rel="stylesheet" href="{% static 'card/card.css' %}">
 <link rel="stylesheet" href="{% static 'card/print.css' %}" media="print">
 <link rel="stylesheet" href="{% static 'checker/checker.css' %}">
@@ -44,5 +45,5 @@ than drawing a dead link.
   What a reader sees before the module runs, and the only state written in HTML
   rather than by the client: if the script never loads, this is the page.
   {% endcomment %}
-  <p class="state state-loading">Loading the result checker&hellip;</p>
+  {% include "design/skeleton.html" with what="Loading the result checker" %}
 </main>

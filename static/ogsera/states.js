@@ -6,7 +6,8 @@
  * Download is offered only when every row is matched to a child of the class.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 function head() {
   return [
@@ -130,5 +131,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return '<section class="state" data-state="broken"><h1>This page is not working</h1><p>Please try again in a few minutes.</p></section>';
+  return brokenState(connectionDropped(), "");
 }

@@ -9,6 +9,7 @@
 
 import { REFUSAL, fetchBroadsheet, fetchOverview, fetchTerms } from "./api.js";
 import * as states from "./states.js";
+import { followBack } from "../web/trail.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
@@ -42,8 +43,10 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
   const portal = root.dataset.portal || "";
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
+  const follow = followBack(root);
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
+    follow();
   };
   const refused = (answer) => {
     state = { step: answer.refusal };

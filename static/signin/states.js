@@ -16,7 +16,8 @@
  * half-way in, holding a spent code.
  */
 
-import { esc, hostHref, waitInWords } from "../web/html.js";
+import { esc, hostHref, waitInWords, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 import { button as signOutButton } from "../web/signout.js";
 
 /**
@@ -200,14 +201,7 @@ export function throttled({ detail = "", retry_after = null } = {}) {
 
 /** Anything the flow cannot explain: a 500, a transport failure, a bad body. */
 export function broken() {
-  return [
-    '<section class="step step-broken" data-step="broken">',
-    "<h1>Sign-in is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell your school if it keeps happening.</p>",
-    '<button type="button" class="again" data-action="restart">Start again</button>',
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell your school if it keeps happening", { title: "Sign-in is not working", attrs: "class=\"step step-broken\" data-step=\"broken\"", button: "<button type=\"button\" class=\"again\" data-action=\"restart\">Start again</button>" });
 }
 
 /**

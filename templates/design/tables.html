@@ -1,0 +1,5 @@
+{% load static %}{% comment %}
+The table styles (`static/web/tables.css`), for the pages that draw a table, a
+`.stack-list` or a `.scroll`. After `design/head.html` and before the page's own
+stylesheet, so the page's rules still narrow them.
+{% endcomment %}<link rel="stylesheet" href="{% static 'web/tables.css' %}">

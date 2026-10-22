@@ -1,0 +1,7 @@
+{% comment %}
+What a page that draws from the API shows while it waits: the shape of a page in
+grey bars instead of one line of words. `what` is read to a screen reader ("Loading
+your school"). The bars are `.skeleton` in `design.css`; they pulse, and stand
+still for a reader who asked for less motion. Replaced wholesale when the page's
+module draws, like the line of text it stands in for.
+{% endcomment %}<div class="skeleton state-loading" role="status"><span class="sr">{{ what|default:"Loading" }}&hellip;</span><i></i><i></i><i></i><i></i></div>

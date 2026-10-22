@@ -7,7 +7,8 @@
  * else (the server does the masking; this only draws what it was given).
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 const SAYS_SO =
   "Fees paid by families go straight to this account through Paystack. Classnode never holds the money, and the school pays Paystack's fees.";
@@ -219,10 +220,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "");
 }

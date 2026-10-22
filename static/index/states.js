@@ -7,7 +7,8 @@
  * only about children the caller already stands for.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /**
  * Signed in, and nothing to show.
@@ -109,11 +110,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 
 /** A 500, a transport failure, a body that would not parse. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page could not load your cards</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell the school office if it keeps happening.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell the school office if it keeps happening", { title: "This page could not load your cards" });
 }

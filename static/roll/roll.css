@@ -12,10 +12,20 @@ h2 { font-size: 1.1rem; margin: 28px 0 8px; }
 .children { list-style: none; margin: 0; padding: 0; }
 .child { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider); }
 .child .name { font-weight: 700; flex: 1 1 12rem; }
+/* Find a child, one class, and the page: only on a roll long enough to need them. */
+.roll-tools { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px 16px; margin: 0 0 8px; }
+.roll-tools label { display: block; margin: 0 0 6px; }
+.roll-tools input, .roll-tools select { width: 100%; min-width: 0; }
+@media (max-width: 639.98px) { .roll-tools { grid-template-columns: minmax(0, 1fr); } }
+.roll-count { margin: 8px 0; color: var(--muted); }
+.roll-count:focus { outline: none; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; }
 .handle, .reference, .learner-id { color: var(--muted); font-size: var(--small); }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .child.unplaced { border-left: 4px solid var(--warn); background: var(--warn-bg); padding-left: 10px; }
 .child .standing { color: var(--muted); }
+.child, .class-line { min-width: 0; }
+.class-line select { width: 100%; min-width: 0; }
 form { display: grid; gap: 6px; max-width: 26rem; margin: 8px 0 0; }
 label { font-weight: 700; margin-top: 6px; }
 form input, form select { width: 100%; }

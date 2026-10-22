@@ -22,7 +22,7 @@
  */
 
 import { getJson } from "../web/http.js";
-import { esc } from "../web/html.js";
+import { esc, skeleton } from "../web/html.js";
 import { button as signOutButton, failureNote, sessionEnded, signOut } from "../web/signout.js";
 import * as states from "./states.js";
 
@@ -165,7 +165,7 @@ function card(record, entry) {
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
-  root.innerHTML = '<p class="state state-loading">Fetching your cards&hellip;</p>';
+  root.innerHTML = skeleton("Fetching your cards");
   let answer;
   try {
     answer = await getJson(INDEX_URL, { fetchImpl });

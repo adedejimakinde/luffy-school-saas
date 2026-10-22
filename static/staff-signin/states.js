@@ -24,7 +24,8 @@
  * named without a link are not the same on both.
  */
 
-import { esc, hostHref, waitInWords } from "../web/html.js";
+import { esc, hostHref, waitInWords, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /**
  * Step one, and the only one. Identifier and password, the refusal under them.
@@ -274,14 +275,7 @@ export function signedOut() {
  * Unexpected token <` learns nothing they can act on.
  */
 export function broken() {
-  return [
-    '<section class="step step-broken" data-step="broken">',
-    "<h1>Sign-in is not working</h1>",
-    '<p class="lede">Something went wrong on our side. Please try again in a few minutes, ',
-    "and tell your school if it keeps happening.</p>",
-    '<button type="button" class="again quiet-button" data-action="restart">Start again</button>',
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell your school if it keeps happening", { title: "Sign-in is not working", attrs: "class=\"step step-broken\" data-step=\"broken\"", button: "<button type=\"button\" class=\"again quiet-button\" data-action=\"restart\">Start again</button>" });
 }
 
 /**

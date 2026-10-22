@@ -11,7 +11,8 @@
  * opinion, and the day it disagreed the wrong one would be the one on screen.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 /**
  * The steps, in the order the chain takes them, with what to call them.
@@ -356,11 +357,5 @@ function wayBack(portal) {
 
 /** Anything the page cannot explain: a 500, a dead transport, an unreadable body. */
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell your school if it keeps happening.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell your school if it keeps happening");
 }

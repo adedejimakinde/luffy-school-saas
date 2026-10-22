@@ -359,146 +359,6 @@ legend { padding: 0 6px; font-weight: 700; }
 .card-head h2 { margin: 0; }
 
 /* ------------------------------------------------------------------------ */
-/* Tables                                                                    */
-/* ------------------------------------------------------------------------ */
-
-table {
-  border-collapse: collapse;
-  min-width: 100%;
-  font-variant-numeric: tabular-nums;
-}
-
-th, td {
-  padding: 10px 12px;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--divider);
-}
-
-thead th {
-  color: var(--muted);
-  font-size: var(--small);
-  white-space: nowrap;
-  border-bottom-color: var(--border);
-}
-
-.num, td.num, th.num {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-td small { color: var(--muted); }
-
-/*
- * A table wider than its card scrolls sideways **inside** it; the page never
- * does. The first column — the child, the class, the day — stays put while the
- * numbers move under it, so a row can still be read at 360px.
- */
-.scroll, .grid-scroll, .table-scroll {
-  max-width: 100%;
-  overflow-x: auto;
-  margin: 12px 0;
-  -webkit-overflow-scrolling: touch;
-}
-
-.scroll :is(th, td):first-child,
-.grid-scroll :is(th, td):first-child,
-.table-scroll :is(th, td):first-child {
-  position: sticky;
-  left: 0;
-  z-index: 1;
-  background: var(--card);
-  box-shadow: inset -1px 0 0 var(--border);
-}
-
-/*
- * Below 640px a list table (`table.stack`) is a stack of cards, one per row,
- * each cell a "label  value" line from its `data-label`; `.stack-list` is the
- * same for a `ul`. `stack-head` heads the card, `stack-full` is a block under
- * it, `stack-hide` is left out. Only `.wide` tables scroll sideways. The whole
- * rule, and why, is `docs/design.md`'s ("Widths").
- */
-.swipe-cue { display: none; }
-
-@media (max-width: 639.98px) {
-  table.stack, table.stack tbody, table.stack tfoot { display: block; min-width: 0; }
-  table.stack thead { display: none; }
-  table.stack tr {
-    display: flex;
-    flex-direction: column;
-    margin: 0 0 12px;
-    padding: 4px 14px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-  }
-  table.stack td, table.stack tfoot th {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    align-items: baseline;
-    /* No gap between the parts of a value ("13" and "/20"); the label keeps
-       its distance with its own padding. */
-    gap: 2px 0;
-    padding: 8px 0;
-    text-align: right;
-    white-space: normal;
-    border: 0;
-    border-top: 1px solid var(--divider);
-  }
-  table.stack td[data-label]::before {
-    content: attr(data-label);
-    flex: 0 1 auto;
-    margin-right: auto;
-    padding-right: 12px;
-    color: var(--muted);
-    text-align: left;
-    font-weight: 400;
-    text-decoration: none;
-  }
-  table.stack td.stack-head {
-    order: -1;
-    border-top: 0;
-    align-items: center;
-    padding: 10px 0;
-    text-align: left;
-    font-weight: 700;
-  }
-  table.stack td.stack-full { display: block; text-align: left; }
-  /* A value's second line (a term under a charge, a teller number under a
-     method) stays a second line, under the first. */
-  table.stack td > small { flex: 1 1 100%; }
-  table.stack td.stack-full[data-label]::before { display: block; margin: 0 0 4px; }
-  table.stack td.stack-hide, table.stack td[data-label]:empty, table.stack td.stack-full:empty { display: none; }
-  /* A row with no head (a form opened under the row it acts on) starts clean. */
-  table.stack tr > td:only-child { border-top: 0; }
-  /* A total is one line: what it totals, and the figure. */
-  table.stack tfoot tr { flex-direction: row; justify-content: space-between; font-weight: 700; }
-  table.stack tfoot :is(th, td) { display: block; padding: 10px 0; border: 0; }
-  table.stack tfoot :is(th, td):empty { display: none; }
-  /* Out of the scroller's sticky column: a card has no column to pin. */
-  table.stack :is(th, td):first-child {
-    position: static;
-    background: none;
-    box-shadow: none;
-  }
-
-  .stack-list { display: grid; gap: 12px; margin: 12px 0; padding: 0; list-style: none; }
-  .stack-list > li {
-    margin: 0;
-    padding: 12px 14px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-card);
-  }
-  .stack-list [data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; flex: 1 1 100%; }
-  .stack-list [data-label]::before { content: attr(data-label); color: var(--muted); }
-
-  .swipe-cue { display: block; margin: 4px 0 0; color: var(--muted); font-size: var(--small); text-align: right; }
-}
-
-/* ------------------------------------------------------------------------ */
 /* Messages and empty states                                                 */
 /* ------------------------------------------------------------------------ */
 
@@ -556,6 +416,14 @@ td small { color: var(--muted); }
 .empty-card p { max-width: 30rem; margin: 0 0 8px; color: var(--muted); }
 .empty-card .btn-primary { width: 100%; }
 @media (min-width: 640px) { .empty-card .btn-primary { width: auto; min-width: 220px; } }
+
+/* The placeholder a data page shows while it loads (design/skeleton.html). */
+.skeleton i { display: block; height: 20px; margin: 0 0 12px; background: var(--border); border-radius: 6px; animation: pulse 1s ease-in-out infinite alternate; }
+.skeleton i:first-of-type { width: 40%; height: 28px; margin-bottom: 20px; }
+.skeleton i:nth-of-type(3) { width: 80%; }
+.skeleton i:last-of-type { width: 60%; }
+@keyframes pulse { to { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .skeleton i { animation: none; } }
 
 /* A score out of 100 on a subject row. */
 .scorebar {

@@ -20,7 +20,8 @@
  * question each answered.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 const DASH = "-";
 
@@ -147,7 +148,7 @@ export function sheet({ broadsheet: body = {} } = {}) {
   );
   return [
     '<section class="state state-sheet" data-state="sheet">',
-    '<p class="back"><button type="button" data-action="back">All classes</button></p>',
+    '<p class="back"><button type="button" data-up="1" data-action="back">All classes</button></p>',
     `<h1>${esc(class_group)}</h1>`,
     `<p class="term">${esc(term)}</p>`,
     banner(from_snapshot),
@@ -249,11 +250,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-broken" data-state="broken">',
-    "<h1>This page is not working</h1>",
-    "<p>Something went wrong on our side. Please try again in a few minutes, ",
-    "and tell whoever runs this system for your school.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }

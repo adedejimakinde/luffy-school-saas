@@ -5,7 +5,8 @@
  * and a string can be asserted in `node --test` with no browser.
  */
 
-import { esc } from "../web/html.js";
+import { esc, brokenState } from "../web/html.js";
+import { connectionDropped } from "../web/http.js";
 
 const note = (n) => (n ? `<p class="note" role="alert">${esc(n.detail)}</p>` : "");
 const formClass = (base, n) => `${base}${n ? ` ${esc(n.kind)}` : ""}`;
@@ -76,7 +77,7 @@ function subjectRow(s) {
 export function subject(s, { editing = null, confirming = null, notes = {} } = {}) {
   return [
     '<section class="state state-subject" data-state="subject">',
-    '<button type="button" class="again" data-action="back">All subjects</button>',
+    '<button type="button" class="again" data-up="1" data-action="back">All subjects</button>',
     `<h1>${esc(s.name)}</h1>`,
     `<form class="${formClass("edit-subject", notes.subject)}" data-form="subject-edit" data-subject="${esc(s.subject_id)}">`,
     '<label for="name">Name</label>',
@@ -188,10 +189,5 @@ export function signedOut({ portal = "", expired = false } = {}) {
 }
 
 export function broken() {
-  return [
-    '<section class="state state-refused" role="alert">',
-    "<h1>Something went wrong</h1>",
-    "<p>This page could not be loaded. Please try again in a moment.</p>",
-    "</section>",
-  ].join("");
+  return brokenState(connectionDropped(), "tell whoever runs this system for your school");
 }
