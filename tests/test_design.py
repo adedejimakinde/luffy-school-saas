@@ -75,6 +75,14 @@ NOT_ON_THE_DESIGN = {
     "results/templates/results/checker_slips.html",
 }
 
+#: Documents WeasyPrint draws, which are not pages a browser opens: they have no
+#: head to put a doctype in front of, and no quirks mode to leave.
+WEASYPRINT_DOCUMENTS = {
+    "results/templates/results/report_card.html",
+    "results/templates/results/report_card_ogun.html",
+    "results/templates/results/checker_slips.html",
+}
+
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
 FUNCTIONAL = re.compile(r"\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(", re.I)
 NAMED = re.compile(
@@ -242,6 +250,21 @@ class EveryPageDrawsFromTheDesignTests(SimpleTestCase):
                 continue
             with self.subTest(template=name):
                 self.assertIn('{% include "design/head.html" %}', own_head(name, html))
+
+    def test_every_page_opens_with_a_doctype_and_a_language(self):
+        """`design/doc_open.html`, or the same two lines written out in a layout.
+
+        A page that starts at `<meta charset>` is laid out in quirks mode and has
+        no language for a screen reader (WCAG 3.1.1).
+        """
+        for name, html in page_templates():
+            if name in WEASYPRINT_DOCUMENTS or is_a_part(name):
+                continue
+            with self.subTest(template=name):
+                head = own_head(name, html)
+                shared = '{% include "design/doc_open.html" %}' in head
+                written = re.search(r"<!doctype html>\s*<html lang=\"en\">", head, re.I)
+                self.assertTrue(shared or written, "no doctype and lang")
 
     def test_a_part_draws_no_head_and_a_layout_is_followed(self):
         """The control for the two allowances above: each is used, and narrowly."""

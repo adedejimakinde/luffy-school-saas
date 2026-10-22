@@ -1,0 +1,29 @@
+{% comment %}
+The first thing every page says: `<!doctype html>` and the language. Included
+as a page's first line (after any `{% load %}`), so there is one place that says
+so and a page that forgets it fails `tests/test_design.py`.
+
+Without a doctype a browser lays the page out in quirks mode: tables stop
+inheriting the page's font, percentage heights and inline images size by the
+old rules, and a few elements change their box model. The staff pages ran in it
+by accident (their templates began at `<meta charset>`), so adding this changes
+the page's rules, not only its markup. `tests/test_design.py` fails a page
+template that does not open this way, and `tests/ui/screens.test.js` checks
+`document.compatMode` and `lang` on every screen it opens.
+
+**`class="was-quirks"` keeps the look.** Quirks mode quietly gave a `form` a 1em
+margin below it and made a `table` start over (the browser's own type and line
+height, not the page's 1.5). The pages' spacing was drawn by eye with both, so
+`design.css` says them out loud for `html.was-quirks`, as weakly as the browser
+did (`:where()`), and the staff pages look as they did. Before and after
+photographs of every screen are in the pull request that added this.
+
+`lang="en"` is WCAG 3.1.1 (level A): a screen reader, the browser's own
+translation and its hyphenation and spell-check all start from it. English is
+the only language Classnode is written in; when there is another, it is this
+file that learns it.
+
+`<html>` is opened and never closed, like every other tag a page leaves for the
+parser to close at the end of the document.
+{% endcomment %}<!doctype html>
+<html lang="en" class="was-quirks">
