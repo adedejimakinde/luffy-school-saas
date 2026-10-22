@@ -5,6 +5,7 @@
  * screen, which no amount of asserting on markup can. For each page and each of
  * 360, 768 and 1280 pixels it fails when:
  *
+ * - **the page has no doctype or no `lang`** (`design/doc_open.html`);
  * - **the page scrolls sideways.** A wide table scrolls inside its own box;
  *   the page itself never does, at any width;
  * - **something a finger has to hit is under 44px tall**: a button, a field,
@@ -249,6 +250,10 @@ export const SCREENS = [
 function measure({ smallOnPurpose, phone, wide, wideTables }) {
   const problems = [];
   const root = document.documentElement;
+  // `design/doc_open.html`: a page without a doctype is laid out in quirks
+  // mode, and without a language a screen reader has nothing to go on.
+  if (document.compatMode !== "CSS1Compat") problems.push(`quirks mode: no doctype (${document.compatMode})`);
+  if (!root.lang) problems.push("no lang on <html>");
   if (root.scrollWidth > root.clientWidth) {
     problems.push(`scrolls sideways: ${root.scrollWidth}px of content in ${root.clientWidth}px`);
   }

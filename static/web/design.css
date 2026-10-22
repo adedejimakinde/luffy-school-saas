@@ -94,6 +94,10 @@
 
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
+/* What quirks mode supplied and the look still wants (doc_open.html). `:where()` keeps them weak. */
+:where(html.was-quirks) form { margin-block-end: 1em; }
+:where(html.was-quirks) table { font-weight: normal; font-style: normal; font-variant: normal; font-size: medium; line-height: normal; white-space: normal; text-align: start; }
+
 body {
   margin: 0;
   padding: 16px;
