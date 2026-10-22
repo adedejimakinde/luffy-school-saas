@@ -799,6 +799,83 @@ describe("a phone's 390px", () => {
   });
 });
 
+describe("keyboard focus and large text on a phone", () => {
+  // WCAG 2.4.11: tabbing scrolls a control into view, and the fixed tab bar and
+  // the sticky top bar must not be what is in front of it. `html`'s
+  // `scroll-padding` is what keeps them clear.
+  for (const [who, path] of [
+    ["sunrise.admin", "/teaching/"],
+    ["sunrise.admin", "/roll/"],
+    ["sunrise.principal", "/home/"],
+    ["sunrise.teacher", "/marking/"],
+  ]) {
+    test(`${path} as ${who}: no focused control is under the tab bar or the top bar`, async () => {
+      const context = await signedIn(who);
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width: 375, height: 640 });
+        await page.goto(`${SUNRISE}${path}`);
+        await settle(page);
+        const hidden = [];
+        for (let i = 0; i < 40; i++) {
+          await page.keyboard.press("Tab");
+          const found = await page.evaluate(() => {
+            const el = document.activeElement;
+            if (!el || el === document.body) return null;
+            const box = el.getBoundingClientRect();
+            const tabs = document.querySelector(".tabbar");
+            const top = document.querySelector(".topbar");
+            // The bars' own controls (Menu, the account menu, a tab) are in front by design.
+            if ((tabs && tabs.contains(el)) || (top && top.contains(el)) || el.closest("#sidebar")) return null;
+            return {
+              text: (el.innerText || el.getAttribute("aria-label") || el.tagName).trim().slice(0, 30),
+              under: tabs && box.bottom > tabs.getBoundingClientRect().top + 0.5 ? "the tab bar" : top && box.top < top.getBoundingClientRect().bottom - 0.5 && box.bottom > 0 ? "the top bar" : "",
+            };
+          });
+          if (found && found.under) hidden.push(`${found.text} (under ${found.under})`);
+        }
+        assert.deepEqual(hidden, []);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+
+  // WCAG 1.4.4 and 1.4.10: a phone set to its largest text (the root font
+  // doubled), and a 320px screen, must not make the page scroll sideways, and
+  // the account menu has to stay reachable in the top bar.
+  for (const [name, as, url, width, large] of [
+    ["the principal's home", "sunrise.principal", `${SUNRISE}/home/`, 375, true],
+    ["the bursar's home", "sunrise.bursar", `${SUNRISE}/home/`, 375, true],
+    ["the teacher's home", "sunrise.teacher", `${SUNRISE}/home/`, 375, true],
+    ["results", "sunrise.principal", `${SUNRISE}/results/`, 375, true],
+    ["the result checker", null, `${SUNRISE}/check/`, 375, true],
+    ["the administrator's setup", "sunrise.admin", `${SUNRISE}/setup/`, 375, true],
+    ["the administrator's home", "sunrise.admin", `${SUNRISE}/home/`, 320, false],
+    ["the administrator's roll", "sunrise.admin", `${SUNRISE}/roll/`, 320, false],
+  ]) {
+    test(`${name} at ${large ? "200% text" : "a 320px screen"} does not scroll sideways`, async () => {
+      const context = await signedIn(as);
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height: 700 });
+        await page.goto(url);
+        await settle(page);
+        if (large) await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+        const found = await page.evaluate(() => {
+          const root = document.documentElement;
+          const account = document.querySelector(".account > summary");
+          return { over: root.scrollWidth - root.clientWidth, account: account ? account.getBoundingClientRect().right - root.clientWidth : 0 };
+        });
+        assert.ok(found.over <= 0, `${found.over}px past the screen`);
+        assert.ok(found.account <= 0.5, `the account menu is ${found.account}px off the screen`);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});
+
 describe("the roll import's preview", () => {
   // A file is chosen, not tapped, so the drill-down above cannot reach the
   // preview. One good row and one with three problems, checked and never

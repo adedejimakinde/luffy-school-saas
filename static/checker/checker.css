@@ -5,12 +5,14 @@
 
 .checker-form {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
   max-width: 24rem;
   margin: 16px 0;
 }
 
 .checker-form label { font-weight: 700; margin-top: 8px; }
+.checker-form input { min-width: 0; }
 
 #pin { letter-spacing: 1px; }
 

@@ -323,3 +323,10 @@ test("outside the demo a guardian is still sent to the school's host", async () 
   const one = { step: "leaving", body: { schools: [{ name: "Sunrise", host: "sunrise.example.ng" }] } };
   assert.equal(destination(one), "//sunrise.example.ng/cards/");
 });
+
+test("the number-or-email field gets a keyboard with letters and an @, not a dial pad", () => {
+  const html = htmlFor(initialState());
+  assert.match(html, /id="value"[^>]*inputmode="email"/);
+  assert.doesNotMatch(html, /inputmode="tel"/);
+  assert.match(html, /autocapitalize="none"/);
+});
