@@ -63,3 +63,17 @@ Broken, seen red, restored, each run over the whole of `test_subject_teachers.py
 
 | the claim | the break | what failed |
 | --- | --- | --- |
+| A teacher cannot save or clear a mark outside their pairs (server) | drop `_require_assigned()` from `set_score_as()` and `clear_score_as()` | 7: both "refused and nothing is written" tests, the clear, the teacher given nothing, the other school's newcomer, taking the last one away, and the released card (Kemi's write reached 423 instead of 403) |
+| A teacher cannot open a sheet outside their pairs | skip the `may_mark()` check in `marking_sheet()` | 3: another subject, another class (two subtests), and the teacher given nothing |
+| Until the term has an assignment, nothing changes | narrow with none: `in_force()` answers true for any term | 9 (8 failures, 1 error): every test in `UntilTheTermHasAnAssignmentNothingChanges`, the paper judged by its own term, the other school not narrowing this one, both prompt tests, and the Python rule |
+| The principal is never narrowed | take the principal out of `UNNARROWED_ROLES` | 3 (2 failures, 1 error): the principal marking everything, the child with no class, and the principal's own write in the clear test |
+| Only the principal changes assignments | add the administrator to `ASSIGNING_ROLES` | 8: the administrator's write and removal, its `may_change`, the same-refusal (oracle) test for both ids, and the Home prompt shown to the administrator |
+| A removal is logged | skip the `SubjectTeacherChange` row in `unassign_as()` | 2 (1 failure, 1 error): who and when for both, and the page's newest-first list |
+| The log cannot be edited or deleted | never create the trigger (`RunSQL` noop) | 1: `test_the_record_cannot_be_edited_or_deleted` |
+| A teacher holds only their own pairs | `pairs_of()` reads every teacher's rows | 3: the teacher given nothing, the other school's newcomer, and the released card |
+| Another school's teacher cannot be given a subject here | the API's `school=` filter and the service's school check, both dropped | **green, 0.** A third guard held: `accounts.staff.why_not_a_teacher_here()` refuses a membership from another schema. Rerun with all three dropped (below) |
+| (all three) | also skip `why_not_a_teacher_here()` | 1: `test_the_principal_cannot_give_a_subject_to_the_other_schools_teacher`, `200 != 422` |
+| A teacher at one school cannot see or mark the other | `can_enter_marks()` reads roles at any school | **green, 0.** `SchoolAccessMiddleware` refuses a login with no membership at the host's school before any view runs. Rerun with both broken (below) |
+| (both) | also let the middleware pass a non-member | 1: `test_a_teacher_at_one_school_cannot_see_or_mark_the_other`, `200 != 403` (the other school's `/where/` answered) |
+
+Every control was restored with `git checkout` and the module passes again (42 tests).
