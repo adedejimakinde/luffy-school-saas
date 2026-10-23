@@ -158,7 +158,10 @@ class MarkableAssessmentOut(Schema):
     name: str
     subject: str
     max_score: int
-    subject_id: int
+    #: Set only for a narrowed teacher, who is sent one entry per paper and class
+    #: they hold, and no class list: picking the paper picks the class too.
+    class_group_id: Optional[int] = None
+    class_group: Optional[str] = None
 
 
 class PairOut(Schema):
@@ -189,10 +192,12 @@ class WhereToMarkOut(Schema):
     saying it was a guess.
 
     **Every subject and every class, until the term has subject assignments.**
-    Then a teacher is sent only the papers and classes of the pairs they hold
-    (`pairs`, with `narrowed` true), and the sheet and both writes refuse the rest
-    on the server (`assignments.may_mark()`), so the shorter list is a scope the
-    platform enforces, not one it only draws. The principal, the vice principal
+    Then a teacher is `narrowed`: `assessments` holds one entry per paper and class
+    they hold, each naming its class, `classes` is empty, and `pairs` says what
+    they hold. A paper picked from one list and a class from another could make a
+    pair that is not theirs, so there is only the one list. The sheet and both
+    writes refuse the rest on the server (`assignments.may_mark()`), so the
+    shorter list is a scope the platform enforces, not one it only draws. The principal, the vice principal
     and the administrator are never narrowed. Which students take which subject
     is still not modelled (issue #127), so a sheet is a whole class.
     """
@@ -455,21 +460,31 @@ def where_to_mark(request):
     narrowed = assignments.narrowed(request.user, school, term)
     pairs = assignments.pairs_of(request.user, school, term) if narrowed else set()
     if narrowed:
-        papers = papers.filter(subject_id__in={subject for subject, _ in pairs})
-        groups = groups.filter(pk__in={group for _, group in pairs})
-    return WhereToMarkOut(
-        term_id=term.pk if term else None,
-        term=str(term) if term else None,
-        assessments=[
+        markable = [
             MarkableAssessmentOut(
                 id=a.pk,
                 name=a.name,
                 subject=a.subject.name,
                 max_score=a.max_score,
-                subject_id=a.subject_id,
+                class_group_id=g.pk,
+                class_group=g.name,
+            )
+            for g in groups.filter(pk__in={group for _, group in pairs})
+            for a in papers
+            if (a.subject_id, g.pk) in pairs
+        ]
+        groups = groups.none()
+    else:
+        markable = [
+            MarkableAssessmentOut(
+                id=a.pk, name=a.name, subject=a.subject.name, max_score=a.max_score
             )
             for a in papers
-        ],
+        ]
+    return WhereToMarkOut(
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        assessments=markable,
         classes=[MarkableGroupOut(id=g.pk, name=g.name, level=g.level) for g in groups],
         user_id=request.user.pk,
         full_name=request.user.full_name,

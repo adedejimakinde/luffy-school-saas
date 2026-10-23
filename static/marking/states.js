@@ -5,10 +5,9 @@
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  *
  * What is **not** here is any authority question. Who may mark is
- * `can_enter_marks()`'s answer, and which subjects and classes a teacher may
- * mark is `assignments.may_mark()`'s, both asked by every route this page
- * calls; a second opinion rendered in a browser would be a rule that looked
- * enforced and was not. The page draws the shorter list the school sends.
+ * `can_enter_marks()`'s answer, asked by every route this page calls; a second
+ * opinion rendered in a browser would be a rule that looked enforced and was
+ * not.
  */
 
 import { emptyState, esc, numberOrBlank } from "../web/html.js";
@@ -18,28 +17,26 @@ import { copyNote } from "../web/snapshots.js";
 /**
  * Which assessment, and which class.
  *
- * **Every subject and every class the school has**, until the term has subject
- * assignments. Then a teacher is `narrowed`: the school sends only their
- * `pairs`, and the screen lists one button per paper and class they may mark,
- * because a paper picked first and a class picked second could make a pair
- * that is not theirs. The server refuses such a pair either way.
+ * Every paper and class, until the term has subject assignments. Then a
+ * `narrowed` teacher is sent one paper per class they hold, each naming its
+ * class, and no class list (`docs/subject-teachers.md`).
  */
 export function choose({
-  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false,
-  narrowed = false, pairs = [],
+  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false, narrowed,
 } = {}) {
-  if (narrowed) return chooseOwn({ term, assessments, classes, asOf, timeZone, now, held, pairs });
   // Only from a live answer: never from a failed fetch or the phone's copy.
-  if ((!assessments.length || !classes.length) && !asOf) {
+  if ((!assessments.length || !(narrowed || classes.length)) && !asOf) {
     const none = !classes.length;
     return (
       '<section class="state state-choose" data-state="choose"><h1>Enter marks</h1>' +
       emptyState({
         key: "marks",
         icon: "i-marks",
-        title: none ? "No classes yet" : "No papers to mark yet",
-        text: `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
-        action: may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
+        title: narrowed ? "Nothing to mark yet" : none ? "No classes yet" : "No papers to mark yet",
+        text: narrowed
+          ? "You mark this term's papers in the subjects and classes the principal gives you."
+          : `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
+        action: !narrowed && may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
         who: "The school office adds these.",
       }) +
       "</section>"
@@ -57,66 +54,19 @@ export function choose({
       .map(
         (a) =>
           `<li><button type="button" data-action="pick-assessment" ` +
-          `data-assessment="${esc(a.id)}">${esc(a.subject)} &middot; ` +
-          `${esc(a.name)} <span class="quiet">out of ${esc(a.max_score)}</span>` +
+          `data-assessment="${esc(a.id)}"${a.class_group_id ? ` data-class="${esc(a.class_group_id)}"` : ""}>` +
+          `${esc(a.subject)} &middot; ${esc(a.name)}${a.class_group ? `, ${esc(a.class_group)}` : ""} <span class="quiet">out of ${esc(a.max_score)}</span>` +
           `</button></li>`,
       )
       .join(""),
     "</ul>",
-    "<p>Which class?</p>",
+    narrowed ? "" : "<p>Which class?</p>",
     '<ul class="classes">',
     classes
       .map(
         (g) =>
           `<li><button type="button" data-action="pick-class" ` +
           `data-class="${esc(g.id)}">${esc(g.name)}</button></li>`,
-      )
-      .join(""),
-    "</ul>",
-    "</section>",
-  ].join("");
-}
-
-/** A narrowed teacher's own papers and classes, one button for each pair. */
-function chooseOwn({ term, assessments, classes, asOf, timeZone, now, held, pairs }) {
-  const named = new Map(classes.map((g) => [g.id, g]));
-  const sheets = [];
-  for (const pair of pairs) {
-    const group = named.get(pair.class_group_id);
-    if (!group) continue;
-    for (const a of assessments) if (a.subject_id === pair.subject_id) sheets.push({ a, group });
-  }
-  if (!sheets.length && !asOf) {
-    const nothingGiven = !pairs.length;
-    return (
-      '<section class="state state-choose" data-state="choose"><h1>Enter marks</h1>' +
-      emptyState({
-        key: "marks",
-        icon: "i-marks",
-        title: nothingGiven ? "No subjects given to you yet" : "No papers to mark yet",
-        text: nothingGiven
-          ? "Your school says who teaches what, and you mark the subjects and classes given to you."
-          : "Once this term's papers for your subjects are added, they show here.",
-        who: nothingGiven ? "The principal gives teachers their subjects." : "The school office adds these.",
-      }) +
-      "</section>"
-    );
-  }
-  return [
-    '<section class="state state-choose" data-state="choose">',
-    "<h1>Enter marks</h1>",
-    copyNote(asOf, { timeZone, now }),
-    heldNote(held),
-    `<p class="term">${esc(term)}</p>`,
-    "<p>Your subjects and classes</p>",
-    '<ul class="assessments own">',
-    sheets
-      .map(
-        ({ a, group }) =>
-          `<li><button type="button" data-action="pick-sheet" ` +
-          `data-assessment="${esc(a.id)}" data-class="${esc(group.id)}">` +
-          `${esc(a.subject)} &middot; ${esc(a.name)}, ${esc(group.name)} ` +
-          `<span class="quiet">out of ${esc(a.max_score)}</span></button></li>`,
       )
       .join(""),
     "</ul>",

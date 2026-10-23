@@ -127,6 +127,7 @@ class UntilTheTermHasAnAssignmentNothingChangesTests(SubjectTeachersSetUp):
         self.assertFalse(body["narrowed"])
         self.assertEqual(body["pairs"], [])
         self.assertEqual(sorted(a["id"] for a in body["assessments"]), sorted([self.first_ca_id, self.english_ca_id]))
+        self.assertTrue(all(a["class_group_id"] is None for a in body["assessments"]))
         self.assertEqual(sorted(g["id"] for g in body["classes"]), sorted([self.jss1a_id, self.jss1b_id]))
 
     def test_a_teacher_opens_and_marks_any_subject_in_any_class(self):
@@ -166,8 +167,12 @@ class ATeacherMarksOnlyTheirOwnPairsTests(SubjectTeachersSetUp):
 
         self.assertTrue(body["narrowed"])
         self.assertEqual(body["pairs"], [{"subject_id": self.maths_id, "class_group_id": self.jss1a_id}])
-        self.assertEqual([a["id"] for a in body["assessments"]], [self.first_ca_id])
-        self.assertEqual([g["id"] for g in body["classes"]], [self.jss1a_id])
+        # One entry per paper and class, naming the class, and no class list to mix it with.
+        self.assertEqual(
+            [(a["id"], a["class_group_id"], a["class_group"]) for a in body["assessments"]],
+            [(self.first_ca_id, self.jss1a_id, "JSS 1A")],
+        )
+        self.assertEqual(body["classes"], [])
 
     def test_their_own_sheet_opens(self):
         self.assertEqual(self.sheet(self.teacher, self.first_ca_id, self.jss1a_id).status_code, 200)
@@ -222,11 +227,16 @@ class ATeacherMarksOnlyTheirOwnPairsTests(SubjectTeachersSetUp):
     def test_a_teacher_can_have_many_pairs(self):
         self.assign(self.head, self.jss1b_id, self.english_id, self.teacher)
 
-        pairs = self.where(self.teacher).json()["pairs"]
+        body = self.where(self.teacher).json()
 
         self.assertEqual(
-            sorted((p["subject_id"], p["class_group_id"]) for p in pairs),
+            sorted((p["subject_id"], p["class_group_id"]) for p in body["pairs"]),
             sorted([(self.maths_id, self.jss1a_id), (self.english_id, self.jss1b_id)]),
+        )
+        # Maths in JSS 1A and English in JSS 1B, never Maths in JSS 1B.
+        self.assertEqual(
+            sorted((a["id"], a["class_group_id"]) for a in body["assessments"]),
+            sorted([(self.first_ca_id, self.jss1a_id), (self.english_ca_id, self.jss1b_id)]),
         )
         self.assertEqual(self.save(self.teacher, self.english_ca_id, self.bimpe).status_code, 200)
 

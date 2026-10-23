@@ -29,9 +29,11 @@ On the server, on every path to a mark:
   assignments and the child's class in that term, with the paper's subject, is not one of
   the actor's pairs. A child in no class that term cannot be marked by a narrowed teacher.
 - `api.marking_sheet()` answers 403 for a pair that is not theirs.
-- `api.where_to_mark()` sends a narrowed teacher only their papers, classes and `pairs`,
-  and the page draws one button per paper and class they hold. The list is a courtesy; the
-  two points above are the rule.
+- `api.where_to_mark()` sends a narrowed teacher one entry per paper and class they hold,
+  each naming its class, and no class list, so the page cannot offer a paper from one pair
+  with the class of another. The list is a courtesy; the two points above are the rule.
+  (The page is within a few dozen bytes of its 150 KB budget, `tests/test_budget.py`, which
+  is why the server builds that list rather than the page.)
 
 A queued write in a teacher's outbox that is refused this way is held as final, like any
 403 (`docs/offline.md` D6).

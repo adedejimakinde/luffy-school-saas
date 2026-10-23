@@ -533,48 +533,38 @@ test("a school name typed into the admin cannot execute in a teacher's browser",
 
 const NARROWED = {
   ...WHERE,
-  assessments: [
-    { id: 3, name: "First CA", subject: "Mathematics", max_score: 20, subject_id: 1 },
-    { id: 4, name: "First CA", subject: "English", max_score: 20, subject_id: 2 },
-  ],
-  classes: [
-    { id: 11, name: "JSS 1A", level: 1 },
-    { id: 12, name: "JSS 1B", level: 1 },
-  ],
   narrowed: true,
-  pairs: [
-    { subject_id: 1, class_group_id: 11 },
-    { subject_id: 2, class_group_id: 12 },
+  classes: [],
+  assessments: [
+    { id: 3, name: "First CA", subject: "Mathematics", max_score: 20, class_group_id: 11, class_group: "JSS 1A" },
+    { id: 4, name: "First CA", subject: "English", max_score: 20, class_group_id: 12, class_group: "JSS 1B" },
   ],
 };
 
-test("a narrowed teacher is offered their own paper and class pairs, never a mix of them", () => {
+test("a narrowed teacher is offered each paper with its class, and no class to mix it with", () => {
   const html = states.choose(NARROWED);
 
-  assert.match(html, /data-action="pick-sheet" data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS 1A/);
-  assert.match(html, /data-action="pick-sheet" data-assessment="4" data-class="12">English &middot; First CA, JSS 1B/);
-  assert.doesNotMatch(html, /data-assessment="3" data-class="12"/);
-  assert.doesNotMatch(html, /data-assessment="4" data-class="11"/);
-  assert.doesNotMatch(html, /pick-class/);
+  assert.match(html, /data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS 1A /);
+  assert.match(html, /data-assessment="4" data-class="12">English &middot; First CA, JSS 1B /);
+  assert.doesNotMatch(html, /pick-class|Which class/);
 });
 
-test("a narrowed teacher given nothing is told who gives subjects", () => {
-  const html = states.choose({ ...NARROWED, assessments: [], classes: [], pairs: [] });
+test("a narrowed teacher with nothing to mark is told who gives subjects", () => {
+  const html = states.choose({ ...NARROWED, assessments: [] });
 
-  assert.match(html, /No subjects given to you yet/);
-  assert.match(html, /The principal gives teachers their subjects\./);
-  assert.doesNotMatch(html, /No classes yet/);
+  assert.match(html, /Nothing to mark yet/);
+  assert.match(html, /the principal gives you\./);
+  assert.doesNotMatch(html, /No classes yet|Add your classes/);
 });
 
 test("until the term has assignments the page is the two lists it always was", () => {
-  const html = states.choose({ ...WHERE, narrowed: false, pairs: [] });
+  const html = states.choose(WHERE);
 
-  assert.match(html, /data-action="pick-assessment"/);
-  assert.match(html, /data-action="pick-class"/);
-  assert.doesNotMatch(html, /pick-sheet/);
+  assert.match(html, /data-action="pick-assessment" data-assessment="3">Mathematics &middot; First CA </);
+  assert.match(html, /Which class\?.*data-action="pick-class"/s);
 });
 
-test("one tap on a pair opens that sheet", async () => {
+test("one tap on a narrowed teacher's paper opens that class's sheet", async () => {
   forgetToken();
   const asked = [];
   const root = fakeRoot({ portal: "portal.example.test" });
@@ -589,7 +579,7 @@ test("one tap on a pair opens that sheet", async () => {
     },
   });
 
-  await root.click({ "data-action": "pick-sheet", "data-assessment": "3", "data-class": "11" });
+  await root.click({ "data-action": "pick-assessment", "data-assessment": "3", "data-class": "11" });
 
   assert.deepEqual(asked, ["/api/gradebook/assessments/3/sheet/?class_group_id=11"]);
   assert.match(root.innerHTML, /data-state="sheet"/);

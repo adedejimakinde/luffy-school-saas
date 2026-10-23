@@ -678,16 +678,12 @@ export async function mount(
     }
     if (action === "pick-assessment") {
       picked = { ...picked, assessmentId: Number(hit.dataset.assessment) };
+      if (hit.dataset.class) picked.classGroupId = Number(hit.dataset.class);
       await openSheet();
       return;
     }
     if (action === "pick-class") {
       picked = { ...picked, classGroupId: Number(hit.dataset.class) };
-      await openSheet();
-      return;
-    }
-    if (action === "pick-sheet") {
-      picked = { assessmentId: Number(hit.dataset.assessment), classGroupId: Number(hit.dataset.class) };
       await openSheet();
       return;
     }
