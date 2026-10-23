@@ -7,9 +7,9 @@ a read on the wrong connection. A single-school fixture cannot fail for any of
 them, which is the argument `attendance.tests.fixtures` makes at length and the
 reason this module subclasses its fixture rather than building a third one.
 
-The scope here is a **view** scope, not an authority narrowing.
-`can_enter_marks()` is untouched and still school-wide; who may mark is issue
-#128. And a sheet cannot be scoped by *subject* at all — issue #127, because
+The scope here is the class group's roster. Who may mark which subject in which
+class is `gradebook.assignments`', tested in `test_subject_teachers.py`. And a
+sheet cannot be scoped to the students who take a subject — issue #127, because
 nothing models which students take which subject.
 """
 

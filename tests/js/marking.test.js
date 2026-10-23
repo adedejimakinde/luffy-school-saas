@@ -528,3 +528,59 @@ test("a school name typed into the admin cannot execute in a teacher's browser",
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
 });
+
+// -- once the term has subject assignments -----------------------------------
+
+const NARROWED = {
+  ...WHERE,
+  narrowed: true,
+  classes: [],
+  assessments: [
+    { id: 3, name: "First CA", subject: "Mathematics", max_score: 20, class_group_id: 11, class_group: "JSS 1A" },
+    { id: 4, name: "First CA", subject: "English", max_score: 20, class_group_id: 12, class_group: "JSS 1B" },
+  ],
+};
+
+test("a narrowed teacher is offered each paper with its class, and no class to mix it with", () => {
+  const html = states.choose(NARROWED);
+
+  assert.match(html, /data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS 1A /);
+  assert.match(html, /data-assessment="4" data-class="12">English &middot; First CA, JSS 1B /);
+  assert.doesNotMatch(html, /pick-class|Which class/);
+});
+
+test("a narrowed teacher with nothing to mark is told who gives subjects", () => {
+  const html = states.choose({ ...NARROWED, assessments: [] });
+
+  assert.match(html, /No papers to mark yet/);
+  assert.match(html, /the principal gives you\./);
+  assert.doesNotMatch(html, /No classes yet|Add your classes/);
+});
+
+test("until the term has assignments the page is the two lists it always was", () => {
+  const html = states.choose(WHERE);
+
+  assert.match(html, /data-action="pick-assessment" data-assessment="3">Mathematics &middot; First CA </);
+  assert.match(html, /Which class\?.*data-action="pick-class"/s);
+});
+
+test("one tap on a narrowed teacher's paper opens that class's sheet", async () => {
+  forgetToken();
+  const asked = [];
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    schedule: () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/sheet/")) asked.push(url);
+      return serve([
+        ["/api/gradebook/where/", { status: 200, body: NARROWED }],
+        ["/sheet/", { status: 200, body: SHEET }],
+      ])(url, options);
+    },
+  });
+
+  await root.click({ "data-action": "pick-assessment", "data-assessment": "3", "data-class": "11" });
+
+  assert.deepEqual(asked, ["/api/gradebook/assessments/3/sheet/?class_group_id=11"]);
+  assert.match(root.innerHTML, /data-state="sheet"/);
+});

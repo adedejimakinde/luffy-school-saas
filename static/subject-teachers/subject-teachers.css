@@ -1,0 +1,16 @@
+/*
+ * Who teaches what: the layout `setup/setup.css` does not already give.
+ *
+ * One row per class, and under its name the subjects it is taught with who teaches
+ * each. Every row wraps rather than squeezes, so a 320px phone and text at 200% keep
+ * the subject, the teacher and the Remove button readable on their own lines.
+ */
+.class-teachers { display: grid; gap: 6px; }
+.taught { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.taught li { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-width: 0; }
+.taught .what { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.taught .who { display: block; color: var(--muted); }
+.taught button { margin: 0; min-height: var(--control); }
+.taught .note { flex-basis: 100%; }
+form.assign { margin-top: 16px; }
+form.assign h2 { margin: 0 0 4px; }

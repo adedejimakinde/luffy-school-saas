@@ -42,7 +42,7 @@ from schools.views import PLATFORM_MODULES
 from blog.write_views import EDITOR_MODULES as BLOG_EDITOR_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import BANK_MODULES, FEES_MODULES
-from gradebook.views import MARKING_MODULES, TEACHING_MODULES
+from gradebook.views import MARKING_MODULES, SUBJECT_TEACHERS_MODULES, TEACHING_MODULES
 from results.views import (
     BROADSHEET_MODULES,
     CARD_MODULES,
@@ -86,6 +86,7 @@ PAGES = {
     "notices-settings": SETTINGS_MODULES,
     "ogsera": OGSERA_MODULES,
     "teaching": TEACHING_MODULES,
+    "subject-teachers": SUBJECT_TEACHERS_MODULES,
     "blog-editor": BLOG_EDITOR_MODULES,
 }
 

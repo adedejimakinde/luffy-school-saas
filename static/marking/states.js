@@ -17,27 +17,24 @@ import { copyNote } from "../web/snapshots.js";
 /**
  * Which assessment, and which class.
  *
- * **Every subject and every class the school has.** `can_enter_marks()` is
- * school-wide and carries no reference to either, so a shorter list would be a
- * scope the platform does not enforce, drawn as though it did — issue #128.
- * And a sheet cannot be scoped by subject even in principle: nothing models
- * which students take which subject, which is issue #127 and why SSS electives
- * cannot be expressed at all.
+ * A `narrowed` teacher gets one paper per class they hold, and no class list.
  */
 export function choose({
-  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false,
+  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false, narrowed,
 } = {}) {
   // Only from a live answer: never from a failed fetch or the phone's copy.
-  if ((!assessments.length || !classes.length) && !asOf) {
+  if ((!assessments.length || !(narrowed || classes.length)) && !asOf) {
     const none = !classes.length;
     return (
       '<section class="state state-choose" data-state="choose"><h1>Enter marks</h1>' +
       emptyState({
         key: "marks",
         icon: "i-marks",
-        title: none ? "No classes yet" : "No papers to mark yet",
-        text: `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
-        action: may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
+        title: none && !narrowed ? "No classes yet" : "No papers to mark yet",
+        text: narrowed
+          ? "You mark the subjects and classes the principal gives you."
+          : `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
+        action: !narrowed && may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
         who: "The school office adds these.",
       }) +
       "</section>"
@@ -55,13 +52,13 @@ export function choose({
       .map(
         (a) =>
           `<li><button type="button" data-action="pick-assessment" ` +
-          `data-assessment="${esc(a.id)}">${esc(a.subject)} &middot; ` +
-          `${esc(a.name)} <span class="quiet">out of ${esc(a.max_score)}</span>` +
+          `data-assessment="${esc(a.id)}"${a.class_group_id ? ` data-class="${esc(a.class_group_id)}"` : ""}>` +
+          `${esc(a.subject)} &middot; ${esc(a.name)}${a.class_group ? `, ${esc(a.class_group)}` : ""} <span class="quiet">out of ${esc(a.max_score)}</span>` +
           `</button></li>`,
       )
       .join(""),
     "</ul>",
-    "<p>Which class?</p>",
+    narrowed ? "" : "<p>Which class?</p>",
     '<ul class="classes">',
     classes
       .map(

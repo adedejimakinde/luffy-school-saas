@@ -96,9 +96,13 @@ imported from the modules that gate those pages, never written out again.
 | Activity: staff joined | | | yes | | |
 
 **A teacher's class** is the class they are class teacher of this term
-(`ClassTeacher`). Teachers are not assigned to subjects (`docs/teaching.md`),
-so there is no narrower "classes and subjects they teach" to read. A teacher
-who also holds a school-wide role sees the school.
+(`ClassTeacher`). Subject assignments (`docs/subject-teachers.md`) narrow a
+teacher's marking and not this page, so it still reads the class they
+form-teach. A teacher who also holds a school-wide role sees the school.
+
+**The principal's prompt to say who teaches what** is a card on Home while the
+current term has no subject assignment, read live rather than from the cached
+facts so it goes with the first one (`gradebook.assignments.prompt_for()`).
 
 **Papers half marked** are papers where some children in a class have a mark
 and some do not. A paper nobody has started is not flagged, because nothing

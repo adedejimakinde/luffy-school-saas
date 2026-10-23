@@ -29,7 +29,7 @@ from accounts.views import (
 )
 from attendance.views import absences_page, register_page
 from fees.views import bank_page, fees_page
-from gradebook.views import marking_page, teaching_page
+from gradebook.views import marking_page, subject_teachers_page, teaching_page
 from home.views import home_page
 from onboarding.views import help_page, start_here, step_page
 from notices.views import settings_page
@@ -93,6 +93,8 @@ urlpatterns = [
     path("setup/", setup_page, name="school-setup"),
     # Subjects, this term's papers and the class teachers: the office's, beside setup.
     path("teaching/", teaching_page, name="teaching"),
+    # Who teaches which subject to which class: the principal's, read by the office too.
+    path("subject-teachers/", subject_teachers_page, name="subject-teachers"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),
