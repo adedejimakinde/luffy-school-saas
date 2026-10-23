@@ -14,3 +14,9 @@
 .taught .note { flex-basis: 100%; }
 form.assign { margin-top: 16px; }
 form.assign h2 { margin: 0 0 4px; }
+/* The switch sits on its own line under the standing, and its confirm wraps the same way. */
+.msg > button { margin: 0; min-height: var(--control); }
+.msg > .confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.msg > .confirm p { flex-basis: 100%; margin: 0; }
+.msg > .confirm button { margin: 0; min-height: var(--control); }
+.msg > .note { flex-basis: 100%; }

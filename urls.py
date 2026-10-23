@@ -29,7 +29,7 @@ from accounts.views import (
 )
 from attendance.views import absences_page, register_page
 from fees.views import bank_page, fees_page
-from gradebook.views import marking_page, subject_teachers_page, teaching_page
+from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
 from onboarding.views import help_page, start_here, step_page
 from notices.views import settings_page
@@ -95,6 +95,8 @@ urlpatterns = [
     path("teaching/", teaching_page, name="teaching"),
     # Who teaches which subject to which class: the principal's, read by the office too.
     path("subject-teachers/", subject_teachers_page, name="subject-teachers"),
+    # Home's Dismiss on "Assignments copied from last term".
+    path("subject-teachers/seen/", subject_teachers_seen, name="subject-teachers-seen"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),

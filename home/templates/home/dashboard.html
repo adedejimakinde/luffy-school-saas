@@ -28,6 +28,7 @@ served, for the oracle reason `home/views.py` gives.
       {% endif %}
       {% if first %}{% include "home/parts/first.html" %}{% endif %}
       {% if assign %}{% include "home/parts/assign.html" %}{% endif %}
+      {% if carried %}{% include "home/parts/carried.html" %}{% endif %}
       {% if dash.setup %}
         {% include "home/parts/setup.html" %}
       {% elif dash.waiting %}

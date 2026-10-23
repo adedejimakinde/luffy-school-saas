@@ -1,8 +1,10 @@
 # Who teaches what (`/subject-teachers/`)
 
 The principal says which teacher teaches which subject to which class, per term. Once a
-term has any of these, a teacher's marking is narrowed to the pairs they hold. Phase 2,
-step 1 of the CBT plan (`docs/cbt.md` on PR #278), and nothing else from that plan.
+term has had any of these, a teacher's marking is narrowed to the pairs they hold, until
+the principal deliberately opens it again. A new term starts with the last one's
+assignments copied in. Phase 2, step 1 of the CBT plan (`docs/cbt.md` on PR #278), and
+its follow-up; nothing else from that plan.
 
 ## Decisions
 
@@ -11,10 +13,16 @@ step 1 of the CBT plan (`docs/cbt.md` on PR #278), and nothing else from that pl
 | Who changes them | The principal alone (`gradebook.assignments.ASSIGNING_ROLES`). |
 | Who reads them | The principal, the vice principal and the administrator (`VIEWING_ROLES`). The administrator cannot change them. |
 | Shape | Many to many. One teacher teaches many pairs, and one pair can have more than one teacher, so `SubjectTeacher` is unique on (term, class, subject, teacher). `docs/cbt.md` drew it unique on the pair; the decision of 23 October 2026 widened it. |
-| When marking narrows | While the paper's own term has at least one assignment. Before the first, any teacher marks any paper, exactly as before. Taking the last one away opens marking again. |
+| When marking narrows | From the paper's own term's first assignment. Before the first, any teacher marks any paper, exactly as before. **Taking the last one away opens nothing** (decided 23 October 2026): the term stays restricted, and a teacher holding nothing marks nothing and is told to ask the principal. |
+| Opening it again | Only by the principal's switch on `/subject-teachers/`, "Open marking to all teachers", which first says what will happen and does it on the second tap. "Restrict marking again" is the same switch the other way. While open, adding an assignment does not restrict it again: neither direction happens silently. The vice principal and the administrator see where the switch stands and cannot turn it. Before a term's first assignment there is nothing to switch (422). |
+| Where a term stands | A fold over the log, never a column (`assignments.marking_in()`, `docs/operating-rules.md` rule 4): the principal's latest switch row if there is one, else restricted once the term has had an `added` row, else "not yet". |
+| A new term | When the current term moves on to a later one (`PUT /api/academics/terms/{id}/current/`), the term that was current until then has its assignments copied in, in the same transaction (`assignments.carry_forward()`). Only into a term that has never had an assignment of its own, and only forward, so switching back and forth copies nothing twice. If the last term had none, nothing at all is written and the new term marks exactly as today. If the principal had opened the last term, the new one starts open too, so a new term never quietly narrows what the principal opened. |
+| What is not copied | A teacher who has left or no longer has teacher access here (an ended or suspended membership, or no TEACHER membership at this school), a subject no longer taught and a closed class, the same rules `assign_as()` keeps. Each is written down as `skipped` with its reason (rule 8: a skip leaves nothing else behind). |
+| The copy's record | Every copied row writes an `added` change naming nobody (`by_id` empty: the system) and the term it came from (`from_term`, and its name as it read then). A constraint allows an empty `by_id` only on such a row. |
+| The review card | After a copy, the principal's Home shows "Assignments copied from last term, review them" (`home/parts/carried.html`), saying how many were copied and how many were not. It goes when the principal opens `/subject-teachers/` in that term (the overview read marks `SubjectTeacherCarry.seen_at`) or presses Dismiss (`POST /subject-teachers/seen/`, the principal's alone). The vice principal or the administrator opening the page does not count. |
 | Who is never narrowed | The principal, the vice principal and the administrator (`UNNARROWED_ROLES`). The principal and the administrator mark as before. The vice principal still has no marking role of their own (decided 23 October 2026: no new access in this change), so this matters only to one who also teaches. |
-| The prompt | The principal's Home shows "Say who teaches what" while the current term has no assignment, read live, so it goes with the first one. |
-| The log | Every add and every removal writes a `SubjectTeacherChange` (who, when, and the names as they read then) in the same transaction. A trigger refuses UPDATE and DELETE on it. |
+| The prompt | The principal's Home shows "Say who teaches what" while the current term has never had an assignment, read live, so it goes with the first one and does not come back when the last is taken away. |
+| The log | Every add, every removal, every copy and every turn of the switch writes a `SubjectTeacherChange` (who, when, and the names as they read then) in the same transaction. A trigger refuses UPDATE and DELETE on it. |
 | Released results | Untouched. Nothing here reads or writes a released row, and a released card refuses a mark whoever is assigned. |
 
 Placed in `gradebook`, not `academics` as `docs/cbt.md` has it, because the row names a
@@ -25,15 +33,24 @@ Placed in `gradebook`, not `academics` as `docs/cbt.md` has it, because the row 
 On the server, on every path to a mark:
 
 - `services.set_score_as()` and `services.clear_score_as()` call `_require_assigned()`,
-  which raises `NotAssignedToMark` (a `NotAllowedToMark`, so a 403) when the term has
-  assignments and the child's class in that term, with the paper's subject, is not one of
-  the actor's pairs. A child in no class that term cannot be marked by a narrowed teacher.
+  which raises `NotAssignedToMark` (a `NotAllowedToMark`, so a 403) when the term is
+  restricted and the child's class in that term, with the paper's subject, is not one of
+  the actor's pairs. A teacher holding no pair holds none of them. A child in no class
+  that term cannot be marked by a narrowed teacher.
 - `api.marking_sheet()` answers 403 for a pair that is not theirs.
 - `api.where_to_mark()` sends a narrowed teacher one entry per paper and class they hold,
   each naming its class, and no class list, so the page cannot offer a paper from one pair
   with the class of another. The list is a courtesy; the two points above are the rule.
+  A narrowed teacher holding nothing gets an empty list and "No subjects for you yet. Ask
+  the principal to give you your subjects and classes." (`static/marking/states.js`).
   (The page is within a few dozen bytes of its 150 KB budget, `tests/test_budget.py`, which
-  is why the server builds that list rather than the page.)
+  is why the server builds that list rather than the page. After this change it weighs
+  153,583 bytes of 153,600.)
+- The switch: `assignments_api.set_marking()` (`PUT /api/subject-teachers/marking/`) asks
+  `can_assign()` before anything else, and `assignments.set_open_as()` asks it again.
+- The copy: `academics.api.set_current_term()`, behind `SETUP_ROLES` as before, calls
+  `carry_forward()` with the request's school; the copy reads teachers from that school's
+  memberships alone, so a row naming anybody else is skipped, never copied.
 
 A queued write in a teacher's outbox that is refused this way is held as final, like any
 403 (`docs/offline.md` D6).
@@ -44,15 +61,18 @@ A queued write in a teacher's outbox that is refused this way is held as final, 
 `gradebook/assignments_api.py` under `/api/subject-teachers/`. One overview read; every
 write answers with the whole overview. Every route asks who is asking before it looks
 anything up. The principal gets a three-select form (teacher, subject, class) and a
-Remove button per row that asks twice; the vice principal and the administrator get the
-same list with neither. Recent changes, newest first, sit at the foot. It reuses
+Remove button per row that asks twice, and the switch under the sentence saying where
+marking stands, which also asks twice; the vice principal and the administrator get the
+same list and the same sentence with none of them. A term that began with a copy says
+so, and from which term. Recent changes, newest first, sit at the foot, the copied and the
+not-copied lines among them. It reuses
 `setup/setup.css`, with a few layout lines in `subject-teachers.css`, and is checked at
 320 px and with text at 200% in `tests/ui/screens.test.js`.
 
 ## Tests
 
 `gradebook/tests/test_subject_teachers.py` (two schools on their own hosts, whose first
-paper, subject and class share an id), `tests/js/subject_teachers.test.js`, the narrowed
+paper, subject and class share an id; the carry-forward tests move both to a second term), `tests/js/subject_teachers.test.js`, the narrowed
 cases in `tests/js/marking.test.js`, the page in `tests/test_menu.py`, `tests/test_pages.py`,
 `tests/test_budget.py` and `tests/ui/screens.test.js`.
 

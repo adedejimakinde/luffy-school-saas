@@ -7,6 +7,12 @@ The claims, each with a control in the doc:
   every paper and class, as before.
 - **From the first one, a teacher marks only their own pairs**, and the server refuses
   the rest: the sheet, a save and a clear, not only the list on the page.
+- **And it stays that way.** Taking the last one away opens nothing; only the
+  principal's switch opens the term to every teacher, and the switch is the principal's
+  alone, written down with who and when.
+- **A new term starts with the last one's assignments**, copied by the system from this
+  school's own rows only, leaving out a teacher who has gone. With none to copy, nothing
+  changes.
 - **The principal, the vice principal and the administrator are never narrowed.**
 - **Only the principal changes assignments**; the vice principal and the administrator
   read them; nobody else opens them. A refused write changes nothing.
@@ -18,11 +24,20 @@ The claims, each with a control in the doc:
 
 from django.db import connection, transaction
 
+from academics import services as academics
 from academics.models import Term, TermName
-from accounts.models import Role, User
+from accounts.models import Membership, MembershipStatus, Role, User
 from accounts.services import grant_membership
+from attendance.tests.fixtures import a_term
 from gradebook import assignments
-from gradebook.models import Assessment, Score, Subject, SubjectTeacher, SubjectTeacherChange
+from gradebook.models import (
+    Assessment,
+    Score,
+    Subject,
+    SubjectTeacher,
+    SubjectTeacherCarry,
+    SubjectTeacherChange,
+)
 from gradebook.services import set_score
 from results import services as chain
 from results.models import ReleasedAssessmentScore, ReleasedCard
@@ -75,6 +90,16 @@ class SubjectTeachersSetUp(ChainSetUp):
 
     def unassign(self, who, row_id, host=HOST):
         return self.as_(who).delete(f"{BASE}{row_id}/", HTTP_HOST=host)
+
+    def switch(self, who, open_to_all, host=HOST):
+        return self.as_(who).put(
+            f"{BASE}marking/", data={"open": open_to_all}, content_type="application/json", HTTP_HOST=host
+        )
+
+    def make_current(self, who, term_id, host=HOST):
+        response = self.as_(who).put(f"/api/academics/terms/{term_id}/current/", HTTP_HOST=host)
+        connection.set_schema_to_public()
+        return response
 
     def where(self, who, host=HOST):
         return self.as_(who).get("/api/gradebook/where/", HTTP_HOST=host)
@@ -147,14 +172,6 @@ class UntilTheTermHasAnAssignmentNothingChangesTests(SubjectTeachersSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(self.score(self.english_ca_id, self.bimpe))
 
-    def test_taking_the_last_one_away_opens_marking_again(self):
-        body = self.give_kemi_maths_in_jss1a()
-        self.assertEqual(self.save(self.teacher, self.english_ca_id, self.children["ada"]).status_code, 403)
-
-        self.unassign(self.head, body["assignments"][0]["id"])
-
-        self.assertFalse(self.where(self.teacher).json()["narrowed"])
-        self.assertEqual(self.save(self.teacher, self.english_ca_id, self.children["ada"]).status_code, 200)
 
 
 class ATeacherMarksOnlyTheirOwnPairsTests(SubjectTeachersSetUp):
@@ -511,3 +528,425 @@ class TheRulesInPythonTests(SubjectTeachersSetUp):
             term = Term.objects.get(pk=self.term_id)
             self.assertFalse(assignments.may_mark(self.teacher.user, self.stmarys, term, self.maths_id, None))
             self.assertTrue(assignments.may_mark(self.head.user, self.stmarys, term, self.maths_id, None))
+
+
+class ATermThatHasHadOneStaysRestrictedTests(SubjectTeachersSetUp):
+    """Taking the last assignment away does not open marking to every teacher."""
+
+    def setUp(self):
+        super().setUp()
+        body = self.give_kemi_maths_in_jss1a()
+        # A mark Kemi made while she held the pair, for the clear below.
+        self.mark = self.save(self.teacher, self.first_ca_id, self.children["ada"]).json()
+        self.unassign(self.head, body["assignments"][0]["id"])
+
+    def test_the_term_says_restricted_with_nobody_left_in_it(self):
+        body = self.overview(self.head).json()
+
+        self.assertEqual((body["marking"], body["in_force"], body["assignments"]), ("restricted", True, []))
+
+    def test_a_teacher_with_nothing_is_sent_nothing_to_mark(self):
+        for who in (self.teacher, self.tayo):
+            with self.subTest(who=who.user.username):
+                body = self.where(who).json()
+                self.assertTrue(body["narrowed"])
+                self.assertEqual((body["assessments"], body["classes"], body["pairs"]), ([], [], []))
+
+    def test_and_is_refused_on_the_server_open_save_and_clear(self):
+        ada = self.children["ada"]
+        for who in (self.teacher, self.tayo):
+            with self.subTest(who=who.user.username):
+                self.assertEqual(self.sheet(who, self.first_ca_id, self.jss1a_id).status_code, 403)
+                self.assertEqual(self.sheet(who, self.english_ca_id, self.jss1b_id).status_code, 403)
+                self.assertEqual(self.save(who, self.english_ca_id, ada).status_code, 403)
+                self.assertEqual(self.save(who, self.first_ca_id, ada, 3, expected_version=self.mark["version"]).status_code, 403)
+                self.assertEqual(self.clear(who, self.first_ca_id, ada, self.mark["version"]).status_code, 403)
+        self.assertIsNone(self.score(self.english_ca_id, ada))
+        self.assertEqual(self.score(self.first_ca_id, ada).value, 15)
+
+    def test_the_principal_and_the_administrator_still_mark(self):
+        for who in (self.head, self.admin):
+            with self.subTest(who=who.user.username):
+                self.assertEqual(self.sheet(who, self.english_ca_id, self.jss1b_id).status_code, 200)
+
+    def test_home_does_not_ask_again_as_though_nothing_had_been_given(self):
+        html = self.as_(self.head).get("/home/", HTTP_HOST=HOST).content.decode()
+
+        self.assertNotIn('data-prompt="subject-teachers"', html)
+
+    def test_the_paper_is_judged_by_its_own_term_still(self):
+        """The second term has never had one, so its paper is open to anybody."""
+        with connected_to(self.stmarys):
+            second = Term.objects.get(name=TermName.SECOND)
+            later = Assessment.objects.create(term=second, subject=self.english, name="Second CA", max_score=20)
+            academics.place_student(self.jss1a, second, self.children["ada"])
+
+        self.assertEqual(self.save(self.tayo, later.pk, self.children["ada"]).status_code, 200)
+
+
+class ThePrincipalsSwitchTests(RefusalAssertions, SubjectTeachersSetUp):
+    """The one way a restricted term opens to every teacher, and back."""
+
+    def setUp(self):
+        super().setUp()
+        self.give_kemi_maths_in_jss1a()
+
+    def switches(self, school=None):
+        return [c for c in self.changes(school) if c.kind in SubjectTeacherChange.SWITCH]
+
+    def test_opening_lets_every_teacher_mark_everything(self):
+        response = self.switch(self.head, True)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual((response.json()["marking"], response.json()["in_force"]), ("open", False))
+        self.assertFalse(self.where(self.tayo).json()["narrowed"])
+        self.assertEqual(self.sheet(self.tayo, self.english_ca_id, self.jss1b_id).status_code, 200)
+        self.assertEqual(self.save(self.tayo, self.english_ca_id, self.bimpe).status_code, 200)
+
+    def test_restricting_again_narrows_it_again(self):
+        self.switch(self.head, True)
+
+        response = self.switch(self.head, False)
+
+        self.assertEqual(response.json()["marking"], "restricted")
+        self.assertEqual(self.save(self.tayo, self.english_ca_id, self.bimpe).status_code, 403)
+        self.assertIsNone(self.score(self.english_ca_id, self.bimpe))
+
+    def test_each_turn_is_written_down_with_who_and_when(self):
+        self.switch(self.head, True)
+        self.switch(self.head, False)
+
+        opened, restricted = self.switches()
+        self.assertEqual([opened.kind, restricted.kind], ["opened", "restricted"])
+        for change in (opened, restricted):
+            with self.subTest(kind=change.kind):
+                self.assertEqual((change.by_id, change.by_name), (self.head.user.pk, "Ngozi Eze"))
+                self.assertIsNotNone(change.at)
+        body = self.overview(self.head).json()
+        self.assertEqual([c["kind"] for c in body["changes"][:2]], ["restricted", "opened"])
+
+    def test_saying_what_it_already_is_writes_nothing(self):
+        self.switch(self.head, False)
+        self.switch(self.head, True)
+        self.switch(self.head, True)
+
+        self.assertEqual([c.kind for c in self.switches()], ["opened"])
+
+    def test_adding_one_while_open_keeps_it_open(self):
+        """The mirror of the rule: nothing narrows a term the principal opened, either."""
+        self.switch(self.head, True)
+
+        self.assign(self.head, self.jss1b_id, self.english_id, self.teacher)
+
+        self.assertEqual(self.overview(self.head).json()["marking"], "open")
+        self.assertEqual(self.save(self.tayo, self.first_ca_id, self.bimpe).status_code, 200)
+
+    def test_before_the_first_assignment_there_is_nothing_to_switch(self):
+        self.assertEqual(self.switch(self.their_head, False, host=THEIR_HOST).status_code, 422)
+        self.assertEqual(self.switch(self.their_head, True, host=THEIR_HOST).status_code, 422)
+        self.assertEqual(self.changes(self.grace), [])
+
+    def test_only_the_principal_turns_it(self):
+        for who in (self.vp, self.admin, self.teacher, self.tayo, self.bursar, self.children["ada"]):
+            with self.subTest(who=who.user.username):
+                response = self.switch(who, True)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json(), {"detail": "Who teaches what is set by the principal."})
+                self.assertEqual(self.switches(), [])
+                self.assertEqual(self.save(self.tayo, self.english_ca_id, self.bimpe).status_code, 403)
+
+    def test_the_vice_principal_and_the_administrator_see_where_it_stands(self):
+        self.switch(self.head, True)
+
+        for who in (self.vp, self.admin):
+            with self.subTest(who=who.user.username):
+                body = self.overview(who).json()
+                self.assertEqual((body["marking"], body["may_change"]), ("open", False))
+
+    def test_one_schools_switch_is_not_the_others(self):
+        self.assign(self.their_head, self.grace_group_id, self.grace_maths_id, self.grace_teacher, host=THEIR_HOST)
+        newcomer = grant_membership(User.objects.create_user("obi", PASSWORD, full_name="Obi Grace"), self.grace, Role.TEACHER)
+
+        self.assertEqual(self.switch(self.head, True).status_code, 200)
+        # St Mary's principal is nobody at Grace, so cannot turn Grace's.
+        self.assertEqual(self.switch(self.head, True, host=THEIR_HOST).status_code, 403)
+
+        self.assertEqual(self.overview(self.their_head, host=THEIR_HOST).json()["marking"], "restricted")
+        self.assertEqual(self.save(newcomer, self.grace_ca_id, self.grace_child, host=THEIR_HOST).status_code, 403)
+        self.assertEqual(self.switches(self.grace), [])
+
+    def test_opening_marking_never_opens_a_released_card(self):
+        ada = self.children["ada"]
+        with connected_to(self.stmarys):
+            set_score(self.first_ca, ada, 17, by=self.teacher.user)
+            term = Term.objects.get(pk=self.term_id)
+            sheet = chain.open_sheet(self.jss1a, term, self.head.user)
+            chain.submit(sheet, self.teacher.user)
+            chain.check(sheet, self.vp.user)
+            chain.approve(sheet, self.head.user)
+            chain.release(sheet, self.head.user)
+            frozen = sorted(ReleasedAssessmentScore.objects.values_list("id", "score"))
+        mark = self.score(self.first_ca_id, ada)
+
+        self.switch(self.head, True)
+
+        refused = self.save(self.tayo, self.first_ca_id, ada, 3, expected_version=mark.version)
+        self.assertEqual(refused.status_code, 423, refused.content)
+        with connected_to(self.stmarys):
+            self.assertEqual(sorted(ReleasedAssessmentScore.objects.values_list("id", "score")), frozen)
+        self.assertEqual(self.score(self.first_ca_id, ada).value, 17)
+
+
+class ANewTermCarriesTheLastOnesTeachersTests(SubjectTeachersSetUp):
+    """Moving on to the next term copies this school's assignments into it."""
+
+    def setUp(self):
+        super().setUp()
+        self.second_id = self.second_term.pk
+
+    def held_in(self, term_id, school=None):
+        with connected_to(school or self.stmarys):
+            return sorted(
+                SubjectTeacher.objects.filter(term_id=term_id).values_list(
+                    "class_group_id", "subject_id", "teacher_membership_id"
+                )
+            )
+
+    def changes_in(self, term_id, school=None):
+        with connected_to(school or self.stmarys):
+            return list(SubjectTeacherChange.objects.filter(term_id=term_id).order_by("id"))
+
+    def carry(self, term_id, school=None):
+        with connected_to(school or self.stmarys):
+            return SubjectTeacherCarry.objects.filter(term_id=term_id).first()
+
+    def home(self, who, host=HOST):
+        return self.as_(who).get("/home/", HTTP_HOST=host).content.decode()
+
+    def give_both(self):
+        self.give_kemi_maths_in_jss1a()
+        self.assertEqual(self.assign(self.head, self.jss1b_id, self.english_id, self.tayo).status_code, 200)
+
+    def test_the_new_term_starts_with_the_last_ones_assignments(self):
+        self.give_both()
+
+        self.assertEqual(self.make_current(self.head, self.second_id).status_code, 200)
+
+        self.assertEqual(self.held_in(self.second_id), self.held_in(self.term_id))
+        self.assertEqual(len(self.held_in(self.second_id)), 2)
+        body = self.overview(self.head).json()
+        self.assertEqual((body["marking"], body["carried"]["copied"], body["carried"]["skipped"]), ("restricted", 2, 0))
+
+    def test_and_is_restricted_from_its_first_day(self):
+        self.give_both()
+        with connected_to(self.stmarys):
+            later = Assessment.objects.create(term=self.second_term, subject=self.english, name="Second CA", max_score=20)
+            academics.place_student(self.jss1a, self.second_term, self.children["ada"])
+
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual(self.where(self.teacher).json()["pairs"], [{"subject_id": self.maths_id, "class_group_id": self.jss1a_id}])
+        self.assertEqual(self.save(self.teacher, later.pk, self.children["ada"]).status_code, 403)
+        self.assertIsNone(self.score(later.pk, self.children["ada"]))
+
+    def test_each_copy_is_written_down_as_the_systems_naming_where_it_came_from(self):
+        self.give_both()
+
+        self.make_current(self.head, self.second_id)
+
+        copies = self.changes_in(self.second_id)
+        self.assertEqual(len(copies), 2)
+        with connected_to(self.stmarys):
+            from_name = str(Term.objects.get(pk=self.term_id))
+        for change in copies:
+            with self.subTest(teacher=change.teacher_name):
+                self.assertEqual(change.kind, "added")
+                self.assertEqual((change.by_id, change.by_name), (None, ""))
+                self.assertEqual((change.from_term_id, change.from_term_name), (self.term_id, from_name))
+                self.assertIsNotNone(change.at)
+        self.assertEqual(sorted(c.teacher_name for c in copies), ["Kemi Bello", "Tayo Ojo"])
+
+    def test_a_teacher_who_has_left_or_lost_teacher_access_is_not_copied(self):
+        self.give_both()
+        sade = grant_membership(User.objects.create_user("sade", PASSWORD, full_name="Sade Ola"), self.stmarys, Role.TEACHER)
+        self.assertEqual(self.assign(self.head, self.jss1a_id, self.english_id, sade).status_code, 200)
+        Membership.objects.filter(pk=self.tayo.pk).update(status=MembershipStatus.ENDED)
+        Membership.objects.filter(pk=sade.pk).update(status=MembershipStatus.SUSPENDED)
+
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual(self.held_in(self.second_id), [(self.jss1a_id, self.maths_id, self.teacher.pk)])
+        skipped = [c for c in self.changes_in(self.second_id) if c.kind == "skipped"]
+        self.assertEqual(sorted(c.teacher_name for c in skipped), ["Sade Ola", "Tayo Ojo"])
+        self.assertEqual({c.reason for c in skipped}, {"no longer a teacher here"})
+        self.assertEqual((self.carry(self.second_id).copied, self.carry(self.second_id).skipped), (1, 2))
+        self.assertEqual(self.save(self.tayo, self.first_ca_id, self.bimpe).status_code, 403)
+
+    def test_a_subject_no_longer_taught_is_not_copied(self):
+        self.give_both()
+        with connected_to(self.stmarys):
+            Subject.objects.filter(pk=self.english_id).update(is_active=False)
+
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual(self.held_in(self.second_id), [(self.jss1a_id, self.maths_id, self.teacher.pk)])
+        self.assertEqual([c.reason for c in self.changes_in(self.second_id) if c.kind == "skipped"], ["the subject is no longer taught"])
+
+    def test_with_none_last_term_nothing_at_all_changes(self):
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual((self.held_in(self.second_id), self.changes_in(self.second_id)), ([], []))
+        self.assertIsNone(self.carry(self.second_id))
+        self.assertFalse(self.where(self.tayo).json()["narrowed"])
+        self.assertEqual(self.overview(self.head).json()["marking"], "not-yet")
+        html = self.home(self.head)
+        self.assertIn('data-prompt="subject-teachers"', html)
+        self.assertNotIn('data-prompt="subject-teachers-carried"', html)
+
+    def test_going_back_and_forward_again_copies_nothing_twice(self):
+        self.give_both()
+        self.make_current(self.head, self.second_id)
+        self.make_current(self.head, self.term_id)
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual(len(self.held_in(self.second_id)), 2)
+        self.assertEqual(len(self.changes_in(self.second_id)), 2)
+        # And going back put nothing into the first term.
+        self.assertEqual(len(self.changes_in(self.term_id)), 2)
+
+    def test_going_back_to_an_earlier_term_copies_nothing_into_it(self):
+        self.make_current(self.head, self.second_id)
+        self.give_both()
+
+        self.make_current(self.head, self.term_id)
+
+        self.assertEqual((self.held_in(self.term_id), self.changes_in(self.term_id)), ([], []))
+        self.assertEqual(self.overview(self.head).json()["marking"], "not-yet")
+
+    def test_a_term_the_principal_had_opened_starts_open(self):
+        self.give_both()
+        self.switch(self.head, True)
+
+        self.make_current(self.head, self.second_id)
+
+        self.assertEqual(self.overview(self.head).json()["marking"], "open")
+        self.assertFalse(self.where(self.tayo).json()["narrowed"])
+        opened = [c for c in self.changes_in(self.second_id) if c.kind == "opened"]
+        self.assertEqual([(c.by_id, c.from_term_id) for c in opened], [(None, self.term_id)])
+
+    def test_only_who_may_set_the_term_starts_one(self):
+        self.give_both()
+        for who in (self.teacher, self.vp):
+            with self.subTest(who=who.user.username):
+                self.assertEqual(self.make_current(who, self.second_id).status_code, 403)
+                self.assertEqual(self.held_in(self.second_id), [])
+        # The administrator may set the term, and the copy is still the system's.
+        self.assertEqual(self.make_current(self.admin, self.second_id).status_code, 200)
+        self.assertEqual({c.by_id for c in self.changes_in(self.second_id)}, {None})
+
+
+class TheCarryForwardNeverCrossesSchoolsTests(SubjectTeachersSetUp):
+    """Two schools whose rows share their ids, each moving on to its next term."""
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.grace):
+            self.grace_second_id = a_term(
+                name=TermName.SECOND, starts=self.second_term.starts_on, ends=self.second_term.ends_on
+            ).pk
+        self.give_kemi_maths_in_jss1a()
+        response = self.assign(self.their_head, self.grace_group_id, self.grace_maths_id, self.grace_teacher, host=THEIR_HOST)
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def held_in(self, term_id, school):
+        with connected_to(school):
+            return sorted(SubjectTeacher.objects.filter(term_id=term_id).values_list("teacher_membership_id", flat=True))
+
+    def test_each_school_copies_only_its_own(self):
+        self.make_current(self.head, self.second_term.pk)
+
+        self.assertEqual(self.held_in(self.second_term.pk, self.stmarys), [self.teacher.pk])
+        self.assertEqual(self.held_in(self.grace_second_id, self.grace), [])
+        with connected_to(self.grace):
+            self.assertFalse(SubjectTeacherCarry.objects.exists())
+
+        self.make_current(self.their_head, self.grace_second_id, host=THEIR_HOST)
+
+        self.assertEqual(self.held_in(self.grace_second_id, self.grace), [self.grace_teacher.pk])
+        self.assertEqual(self.held_in(self.second_term.pk, self.stmarys), [self.teacher.pk])
+
+    def test_a_row_naming_another_schools_teacher_is_never_copied(self):
+        """Written past every guard, as a bad import might: the copy looks the teacher
+        up among this school's own memberships, so it is left out and said so."""
+        with connected_to(self.stmarys):
+            SubjectTeacher.objects.create(
+                term_id=self.term_id, class_group_id=self.jss1b_id, subject_id=self.maths_id,
+                teacher_membership_id=self.grace_teacher.pk,
+            )
+
+        self.make_current(self.head, self.second_term.pk)
+
+        self.assertEqual(self.held_in(self.second_term.pk, self.stmarys), [self.teacher.pk])
+        with connected_to(self.stmarys):
+            skipped = SubjectTeacherChange.objects.get(term_id=self.second_term.pk, kind="skipped")
+        # Not even the other school's teacher's name is copied into this school's log.
+        self.assertEqual((skipped.teacher_membership_id, skipped.teacher_name), (self.grace_teacher.pk, ""))
+        self.assertEqual(self.save(self.grace_teacher, self.first_ca_id, self.bimpe).status_code, 403)
+
+    def test_the_other_schools_principal_never_sees_this_schools_card(self):
+        self.make_current(self.head, self.second_term.pk)
+
+        theirs = self.as_(self.their_head).get("/home/", HTTP_HOST=THEIR_HOST).content.decode()
+
+        self.assertNotIn('data-prompt="subject-teachers-carried"', theirs)
+
+
+class ThePrincipalIsAskedToReviewTheCopyTests(SubjectTeachersSetUp):
+    CARD = 'data-prompt="subject-teachers-carried"'
+
+    def setUp(self):
+        super().setUp()
+        self.give_kemi_maths_in_jss1a()
+        self.make_current(self.head, self.second_term.pk)
+
+    def home(self, who, host=HOST):
+        return self.as_(who).get("/home/", HTTP_HOST=host).content.decode()
+
+    def dismiss(self, who, host=HOST):
+        return self.as_(who).post("/subject-teachers/seen/", HTTP_HOST=host)
+
+    def test_the_principal_sees_the_card(self):
+        html = self.home(self.head)
+
+        self.assertIn(self.CARD, html)
+        self.assertIn("Assignments copied from last term, review them", html)
+        self.assertIn("1 copied from", html)
+
+    def test_nobody_else_does(self):
+        for who in (self.vp, self.admin, self.teacher, self.bursar):
+            with self.subTest(who=who.user.username):
+                self.assertNotIn(self.CARD, self.home(who))
+
+    def test_it_goes_when_the_principal_opens_the_page(self):
+        self.overview(self.head)
+
+        self.assertNotIn(self.CARD, self.home(self.head))
+
+    def test_the_vice_principal_or_the_administrator_opening_it_does_not_count(self):
+        self.overview(self.vp)
+        self.overview(self.admin)
+
+        self.assertIn(self.CARD, self.home(self.head))
+
+    def test_it_goes_when_the_principal_dismisses_it(self):
+        response = self.dismiss(self.head)
+
+        self.assertEqual((response.status_code, response["Location"]), (302, "/home/"))
+        self.assertNotIn(self.CARD, self.home(self.head))
+
+    def test_only_the_principal_dismisses_it(self):
+        for who in (self.vp, self.admin, self.teacher):
+            with self.subTest(who=who.user.username):
+                self.assertEqual(self.dismiss(who).status_code, 403)
+        self.assertEqual(self.dismiss(self.their_head, host=HOST).status_code, 403)
+        self.assertIn(self.CARD, self.home(self.head))

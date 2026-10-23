@@ -4,10 +4,8 @@
  * Strings rather than DOM, for `card/states.js`' reason: a refusal is the path
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  *
- * What is **not** here is any authority question. Who may mark is
- * `can_enter_marks()`'s answer, asked by every route this page calls; a second
- * opinion rendered in a browser would be a rule that looked enforced and was
- * not.
+ * No authority question is asked here. Who may mark what is the server's
+ * answer on every route this page calls, never the browser's.
  */
 
 import { emptyState, esc, numberOrBlank } from "../web/html.js";
@@ -17,25 +15,26 @@ import { copyNote } from "../web/snapshots.js";
 /**
  * Which assessment, and which class.
  *
- * A `narrowed` teacher gets one paper per class they hold, and no class list.
+ * A `narrowed` teacher gets one paper per class they hold, and no class list;
+ * holding none, they are told to ask the principal.
  */
 export function choose({
-  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false, narrowed,
+  term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false, narrowed, pairs = [],
 } = {}) {
   // Only from a live answer: never from a failed fetch or the phone's copy.
   if ((!assessments.length || !(narrowed || classes.length)) && !asOf) {
-    const none = !classes.length;
+    const none = !narrowed && !classes.length, idle = narrowed && !pairs.length;
     return (
       '<section class="state state-choose" data-state="choose"><h1>Enter marks</h1>' +
       emptyState({
         key: "marks",
         icon: "i-marks",
-        title: none && !narrowed ? "No classes yet" : "No papers to mark yet",
-        text: narrowed
-          ? "You mark the subjects and classes the principal gives you."
+        title: idle ? "No subjects for you yet" : none ? "No classes yet" : "No papers to mark yet",
+        text: idle
+          ? "Ask the principal to give you your subjects and classes."
           : `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
         action: !narrowed && may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
-        who: "The school office adds these.",
+        who: !idle && "The school office adds these.",
       }) +
       "</section>"
     );

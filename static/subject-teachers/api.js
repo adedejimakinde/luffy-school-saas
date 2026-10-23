@@ -1,11 +1,12 @@
 /**
- * The fetches the subject teachers screen makes: the overview, give one, take one away.
+ * The fetches the subject teachers screen makes: the overview, give one, take one away,
+ * and the principal's switch that opens the term's marking to every teacher.
  *
  * Every write answers with the whole overview, so the page redraws from the school's own
  * answer. A 422 carries a sentence the school wrote, which the page prints under the form.
  */
 
-import { deleteJson, getJson, postJson } from "../web/http.js";
+import { deleteJson, getJson, postJson, putJson } from "../web/http.js";
 
 /** The states the whole page can be in, other than holding the overview. */
 export const REFUSAL = {
@@ -54,3 +55,7 @@ export const assign = ({ classGroupId, subjectId, membershipId, fetchImpl = fetc
 
 export const unassign = ({ id, fetchImpl = fetch }) =>
   send(() => deleteJson(`${BASE}${encodeURIComponent(id)}/`, { fetchImpl }));
+
+/** The switch: `open` true lets every teacher mark everything this term; false restricts it again. */
+export const setMarking = ({ open, fetchImpl = fetch }) =>
+  send(() => putJson(`${BASE}marking/`, { open }, { fetchImpl }));

@@ -1,4 +1,5 @@
-"""HTTP for "who teaches what": read the term's subject teachers, add one, take one away.
+"""HTTP for "who teaches what": read the term's subject teachers, add one, take one away,
+and the principal's switch that opens the term's marking to every teacher.
 
 The screen at `/subject-teachers/` and nothing else reads these. Tenant-host only, with
 no school slug in any path, for the reason `gradebook/api.py` gives. **Every route asks
@@ -21,7 +22,7 @@ from accounts.models import Membership, Role
 from accounts.session import session_auth
 
 from . import assignments, curriculum
-from .models import Subject, SubjectTeacher, SubjectTeacherChange
+from .models import Subject, SubjectTeacher, SubjectTeacherCarry, SubjectTeacherChange
 
 router = Router(auth=session_auth)
 
@@ -52,22 +53,40 @@ class AssignmentOut(Schema):
 
 
 class ChangeOut(Schema):
+    #: added, removed, skipped (not copied), opened or restricted.
     kind: str
+    #: Blank for the switch, which names no teacher or pair.
     teacher: str
     subject: str
     class_group: str
+    #: Blank for the system's own rows, which name `from_term` instead.
     by: str
+    from_term: str = ""
+    #: Why a carry-forward left this one out.
+    reason: str = ""
     #: In the school's time, already worded: "23 Oct 2026, 10:04".
     at: str
+
+
+class CarriedOut(Schema):
+    """This term's assignments were copied from the last one as it began."""
+
+    from_term: str
+    copied: int
+    skipped: int
 
 
 class OverviewOut(Schema):
     term_id: Optional[int] = None
     term: Optional[str] = None
-    #: Is this login the principal, who may change these?
+    #: Is this login the principal, who may change these and work the switch?
     may_change: bool
-    #: Has the term any assignment, so that teachers' marking is narrowed?
+    #: Is teachers' marking narrowed to the pairs here this term?
     in_force: bool
+    #: Where the term's marking stands: "not-yet" (never had an assignment, so open as
+    #: always), "restricted", or "open" (the principal opened it to every teacher).
+    marking: str
+    carried: Optional[CarriedOut] = None
     classes: List[NamedOut]
     #: Subjects still taught, which are the ones that can be given to somebody.
     subjects: List[NamedOut]
@@ -80,6 +99,11 @@ class AssignIn(Schema):
     class_group_id: int
     subject_id: int
     membership_id: int
+
+
+class MarkingIn(Schema):
+    #: True opens the term's marking to every teacher; False restricts it again.
+    open: bool
 
 
 def _school_of(request):
@@ -110,11 +134,21 @@ def _overview(request, school):
     changes = (
         SubjectTeacherChange.objects.filter(term=term)[:CHANGES_SHOWN] if term is not None else []
     )
+    marking = assignments.marking_in(term)
+    carry = SubjectTeacherCarry.objects.filter(term=term).first() if term is not None else None
     return OverviewOut(
         term_id=term.pk if term else None,
         term=str(term) if term else None,
         may_change=assignments.can_assign(request.user, school),
-        in_force=bool(rows),
+        in_force=marking == assignments.RESTRICTED,
+        marking=marking,
+        carried=(
+            CarriedOut(
+                from_term=str(carry.from_term), copied=carry.copied, skipped=carry.skipped
+            )
+            if carry
+            else None
+        ),
         classes=[NamedOut(id=g.pk, name=g.name) for g in ClassGroup.objects.filter(is_active=True)],
         subjects=[NamedOut(id=s.pk, name=s.name) for s in Subject.objects.filter(is_active=True).order_by("name")],
         teachers=[NamedOut(id=m.pk, name=name) for m, name in curriculum.teachers_of(school)],
@@ -137,6 +171,8 @@ def _overview(request, school):
                 subject=c.subject_name,
                 class_group=c.class_group_name,
                 by=c.by_name,
+                from_term=c.from_term_name,
+                reason=c.reason,
                 at=_worded(c.at),
             )
             for c in changes
@@ -152,6 +188,8 @@ def overview(request):
     school = _school_of(request)
     if not assignments.can_view(request.user, school):
         return 403, MessageOut(detail=_MAY_NOT_READ)
+    # The principal opening the page is what Home's "copied from last term" waits for.
+    assignments.seen_as(request.user, school, curriculum.current_term())
     return 200, _overview(request, school)
 
 
@@ -190,6 +228,21 @@ def unassign(request, assignment_id: int):
     except assignments.NotAllowedToAssign:
         return 403, MessageOut(detail=_MAY_NOT_CHANGE)
     # Already gone is the end state asked for, so the answer is the overview either way.
+    return 200, _overview(request, school)
+
+
+@router.put("/marking/", response=_WRITE)
+def set_marking(request, payload: MarkingIn):
+    """The principal's switch. The page asks first and says what will happen."""
+    school = _school_of(request)
+    if not assignments.can_assign(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_CHANGE)
+    try:
+        assignments.set_open_as(request.user, school, curriculum.current_term(), payload.open)
+    except assignments.NotAllowedToAssign:
+        return 403, MessageOut(detail=_MAY_NOT_CHANGE)
+    except assignments.AssignmentRefused as exc:
+        return 422, MessageOut(detail=str(exc))
     return 200, _overview(request, school)
 
 

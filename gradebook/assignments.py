@@ -11,8 +11,17 @@ exactly as before, and the principal's Home says so (`home/views.py`). From the 
 row in a term, a teacher marks only the pairs they hold that term: their marking page
 lists those (`gradebook.api.where_to_mark()`), and the sheet and both writes refuse the
 rest on the server (`may_mark()`, asked by `services.set_score_as()`,
-`services.clear_score_as()` and `api.marking_sheet()`). Remove every row and the term
-is back where it started: the rule is "while the term has one", not "once it ever had".
+`services.clear_score_as()` and `api.marking_sheet()`).
+
+**And it stays that way.** The rule is "once the term has had one", not "while it has
+one": taking the last row away leaves marking restricted, and a teacher holding nothing
+marks nothing. Only the principal's switch opens the term to every teacher again
+(`set_open_as()`), and only it restricts it again; both are written to the log. Where
+a term stands is read from that log (`marking_in()`), never from a column.
+
+**A new term starts with the last one's assignments** (`carry_forward()`), copied by
+the system as the term is made current, so it is restricted from its first day if the
+last one was. If the last term had none, nothing is copied and nothing changes.
 
 **The principal, the vice principal and the administrator are never narrowed**
 (`UNNARROWED_ROLES`). The administrator and the principal mark as before; the vice
@@ -28,11 +37,12 @@ whoever is assigned.
 """
 
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 
 from accounts.models import Membership, Role
 from accounts.staff import why_not_a_teacher_here
 
-from .models import SubjectTeacher, SubjectTeacherChange
+from .models import SubjectTeacher, SubjectTeacherCarry, SubjectTeacherChange
 
 #: Who changes the assignments: the principal alone (decided 23 October 2026).
 ASSIGNING_ROLES = frozenset({Role.PRINCIPAL.value})
@@ -85,9 +95,40 @@ def _require_assigning_authority(actor, school):
 # -- the narrowing ------------------------------------------------------------------
 
 
+#: Where a term's marking stands (`marking_in()`).
+NOT_YET = "not-yet"
+RESTRICTED = "restricted"
+OPEN = "open"
+
+_Kind = SubjectTeacherChange.Kind
+
+
+def marking_in(term) -> str:
+    """`NOT_YET`, `RESTRICTED` or `OPEN`: a fold over the term's log.
+
+    The principal's last switch, if there is one. Otherwise `RESTRICTED` once the term
+    has had any assignment, and `NOT_YET` before: the term marks as it always did. A
+    removal is not a switch, so taking the last row away changes nothing here.
+    """
+    if term is None:
+        return NOT_YET
+    changes = SubjectTeacherChange.objects.filter(term=term)
+    switch = (
+        changes.filter(kind__in=SubjectTeacherChange.SWITCH)
+        .order_by("-id")
+        .values_list("kind", flat=True)
+        .first()
+    )
+    if switch is not None:
+        return OPEN if switch == _Kind.OPENED else RESTRICTED
+    if changes.filter(kind=_Kind.ADDED).exists() or SubjectTeacher.objects.filter(term=term).exists():
+        return RESTRICTED
+    return NOT_YET
+
+
 def in_force(term) -> bool:
-    """Has this term any assignment? Until it has, marking is not narrowed."""
-    return term is not None and SubjectTeacher.objects.filter(term=term).exists()
+    """Is marking in this term restricted to the teachers given each pair?"""
+    return marking_in(term) == RESTRICTED
 
 
 def _teacher_ids(actor, school) -> list:
@@ -132,18 +173,51 @@ def may_mark(actor, school, term, subject_id, class_group_id) -> bool:
     return (subject_id, class_group_id) in pairs_of(actor, school, term)
 
 
+def _current_term():
+    from academics.models import Term
+
+    return Term.objects.filter(is_current=True).first()
+
+
 def prompt_for(roles) -> bool:
     """Should Home ask this login to say who teaches what?
 
-    The principal's, while the current term has no assignment. Nothing is read for
-    anybody else.
+    The principal's, while the current term has never had an assignment. Nothing is
+    read for anybody else.
     """
     if not set(roles) & ASSIGNING_ROLES:
         return False
-    from academics.models import Term
+    term = _current_term()
+    return term is not None and marking_in(term) == NOT_YET
 
-    term = Term.objects.filter(is_current=True).first()
-    return term is not None and not in_force(term)
+
+def carried_for(roles):
+    """The current term's carry-forward, while the principal has not looked at it.
+
+    For Home's "Assignments copied from last term". `None` for anybody else, and once
+    the principal has opened `/subject-teachers/` in this term or dismissed the card.
+    """
+    if not set(roles) & ASSIGNING_ROLES:
+        return None
+    term = _current_term()
+    if term is None:
+        return None
+    return (
+        SubjectTeacherCarry.objects.filter(term=term, seen_at__isnull=True)
+        .select_related("from_term")
+        .first()
+    )
+
+
+def seen_as(actor, school, term) -> bool:
+    """The principal has looked at this term's carry-forward. True if one was waiting."""
+    if term is None or not can_assign(actor, school):
+        return False
+    return bool(
+        SubjectTeacherCarry.objects.filter(term=term, seen_at__isnull=True).update(
+            seen_at=timezone.now(), seen_by_id=actor.pk
+        )
+    )
 
 
 # -- the principal's writes ---------------------------------------------------------
@@ -199,6 +273,120 @@ def assign_as(actor, school, term, class_group, subject, membership):
     return row
 
 
+def set_open_as(actor, school, term, open_to_all: bool) -> bool:
+    """The principal's switch: open this term's marking to every teacher, or not.
+
+    Only for a term that has had an assignment: before that it is open already, and
+    restricting it would leave every teacher with nothing. Saying what it already is
+    writes nothing and answers False; a change writes an `OPENED` or a `RESTRICTED`
+    row, naming who, and answers True.
+    """
+    _require_assigning_authority(actor, school)
+    if term is None:
+        raise AssignmentRefused("No term is open. Set the current term on the Setup page first.")
+    with transaction.atomic():
+        # One switch at a time, so two taps cannot both find it the other way.
+        type(term).objects.select_for_update().filter(pk=term.pk).first()
+        now = marking_in(term)
+        if now == NOT_YET:
+            raise AssignmentRefused(
+                "Nobody has been given a subject this term, so marking is already open to every teacher."
+            )
+        if (now == OPEN) == bool(open_to_all):
+            return False
+        SubjectTeacherChange.objects.create(
+            term=term,
+            kind=_Kind.OPENED if open_to_all else _Kind.RESTRICTED,
+            by_id=actor.pk,
+            by_name=_name_of_user(actor),
+        )
+    return True
+
+
+# -- the new term -------------------------------------------------------------------
+
+
+def _why_not_copied(row, teacher) -> str:
+    if teacher is None or why_not_a_teacher_here(teacher, subject="a subject teacher", holder="gradebook"):
+        return "no longer a teacher here"
+    if not row.subject.is_active:
+        return "the subject is no longer taught"
+    if not row.class_group.is_active:
+        return "the class is closed"
+    return ""
+
+
+def carry_forward(school, previous, term):
+    """Copy `previous`'s assignments into `term`, which has just been made current.
+
+    Called by `academics.api.set_current_term()` in the transaction that makes `term`
+    current, with the term that was current until then. Copies only going forward
+    (`term` starts after `previous`) and only into a term that has never had an
+    assignment of its own, so switching back and forth copies nothing twice. Returns
+    the `SubjectTeacherCarry`, or `None` when there was nothing to copy: if `previous`
+    had no assignments, nothing at all is written and the new term marks as today.
+
+    Each row is copied only if it could be given today (`assign_as()`'s rules): a
+    teacher who has left this school or no longer has teacher access, a subject no
+    longer taught and a closed class are left out, each written down as `SKIPPED`
+    with why. A teacher is looked up among **this** school's memberships, so a row
+    that named anybody else is never copied. If the principal had opened `previous` to
+    every teacher, `term` is opened too, so a new term never quietly narrows marking
+    the principal had opened. Every row names `previous` and nobody: the system did it.
+    """
+    if previous is None or term is None or previous.pk == term.pk:
+        return None
+    if previous.starts_on >= term.starts_on or marking_in(term) != NOT_YET:
+        return None
+    rows = list(
+        SubjectTeacher.objects.filter(term=previous).select_related("class_group", "subject")
+    )
+    if not rows:
+        return None
+    # This school's memberships only, whatever the rows say; the names of any, so that
+    # a teacher who has left is still named in the line that says so.
+    members = Membership.objects.filter(
+        pk__in={r.teacher_membership_id for r in rows}, school=school
+    ).select_related("user", "school")
+    names = {m.pk: _name_of_membership(m) for m in members}
+    teachers = {m.pk: m for m in members.with_access().filter(role=Role.TEACHER)}
+    from_name = str(previous)
+    copied = skipped = 0
+    for row in rows:
+        teacher = teachers.get(row.teacher_membership_id)
+        why = _why_not_copied(row, teacher)
+        if not why:
+            SubjectTeacher.objects.create(
+                term=term,
+                class_group_id=row.class_group_id,
+                subject_id=row.subject_id,
+                teacher_membership_id=row.teacher_membership_id,
+            )
+            copied += 1
+        else:
+            skipped += 1
+        SubjectTeacherChange.objects.create(
+            term=term,
+            kind=_Kind.SKIPPED if why else _Kind.ADDED,
+            class_group_id=row.class_group_id,
+            subject_id=row.subject_id,
+            teacher_membership_id=row.teacher_membership_id,
+            class_group_name=row.class_group.name,
+            subject_name=row.subject.name,
+            teacher_name=names.get(row.teacher_membership_id, ""),
+            from_term=previous,
+            from_term_name=from_name,
+            reason=why,
+        )
+    if copied and marking_in(previous) == OPEN:
+        SubjectTeacherChange.objects.create(
+            term=term, kind=_Kind.OPENED, from_term=previous, from_term_name=from_name
+        )
+    return SubjectTeacherCarry.objects.create(
+        term=term, from_term=previous, copied=copied, skipped=skipped
+    )
+
+
 def unassign_as(actor, school, row_id) -> bool:
     """Take one assignment away. False if it was already gone."""
     _require_assigning_authority(actor, school)
@@ -232,16 +420,24 @@ __all__ = [
     "ASSIGNING_ROLES",
     "AssignmentError",
     "AssignmentRefused",
+    "NOT_YET",
     "NotAllowedToAssign",
+    "OPEN",
+    "RESTRICTED",
     "UNNARROWED_ROLES",
     "VIEWING_ROLES",
     "assign_as",
     "can_assign",
     "can_view",
+    "carried_for",
+    "carry_forward",
     "in_force",
+    "marking_in",
     "may_mark",
     "narrowed",
     "pairs_of",
     "prompt_for",
+    "seen_as",
+    "set_open_as",
     "unassign_as",
 ]

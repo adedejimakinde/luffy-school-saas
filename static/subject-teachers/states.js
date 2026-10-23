@@ -21,7 +21,9 @@ const options = (rows, blank) =>
 export function overview({
   term = null,
   may_change = false,
-  in_force = false,
+  marking = "not-yet",
+  carried = null,
+  switching = false,
   classes = [],
   subjects = [],
   teachers = [],
@@ -36,7 +38,8 @@ export function overview({
     term
       ? `<p class="hint">For the current term: ${esc(term)}.</p>`
       : '<p class="note" role="alert">No term is open. The current term is set on the Setup page.</p>',
-    standing(in_force, may_change),
+    carriedNote(carried),
+    standing(marking, may_change, switching, notes.switch),
     term && may_change ? form({ classes, subjects, teachers, n: notes.assign }) : "",
     may_change ? "" : '<p class="hint">Only the principal changes these.</p>',
     '<h2 id="by-class">By class</h2>',
@@ -48,13 +51,56 @@ export function overview({
   ].join("");
 }
 
-/** What the assignments are doing to marking right now, in one sentence. */
-function standing(inForce, mayChange) {
-  if (inForce) {
+/** This term began with last term's assignments, copied in by the system. */
+function carriedNote(carried) {
+  if (!carried) return "";
+  return (
+    '<div class="msg" data-carried><span class="label label-brand">Copied</span>' +
+    `<p>This term began with ${esc(carried.copied)} copied from ${esc(carried.from_term)}` +
+    (carried.skipped
+      ? `, and ${esc(carried.skipped)} not copied because the teacher, subject or class is gone (under Recent changes)`
+      : "") +
+    ". Check each class below.</p></div>"
+  );
+}
+
+/** The switch, and the second tap that says what it will do before it does it. */
+function switchFor(opening, switching, n) {
+  if (!switching) {
+    return (
+      `<button type="button" data-action="ask-switch">${opening ? "Open marking to all teachers" : "Restrict marking again"}</button>` +
+      note(n)
+    );
+  }
+  const what = opening
+    ? "Every teacher will be able to mark every subject in every class this term, whoever is given it here. The list stays, and you can restrict marking again here."
+    : "Each teacher will mark only the subjects and classes given to them here. A teacher given none will mark nothing.";
+  return (
+    `<div class="confirm" data-confirm="switch"><p>${what}</p>` +
+    `<button type="button" class="submit" data-action="switch" data-open="${opening}">${opening ? "Open marking to all" : "Restrict marking"}</button>` +
+    `<button type="button" class="again" data-action="keep">${opening ? "Keep it restricted" : "Keep it open"}</button></div>`
+  );
+}
+
+/** What the assignments are doing to marking right now, in one sentence, and the switch. */
+function standing(marking, mayChange, switching, n) {
+  const sw = (opening) => (mayChange ? switchFor(opening, switching, n) : "");
+  if (marking === "restricted") {
     return (
       '<div class="msg" data-standing="in-force"><span class="label label-ok">In use</span>' +
-      "<p>Each teacher marks only the subjects and classes given to them here. The principal " +
-      "and the administrator can still mark any.</p></div>"
+      "<p>Each teacher marks only the subjects and classes given to them here, and a teacher " +
+      "given none marks nothing. The principal and the administrator can still mark any.</p>" +
+      sw(true) +
+      "</div>"
+    );
+  }
+  if (marking === "open") {
+    return (
+      '<div class="msg" data-standing="open"><span class="label label-brand">Open to all</span>' +
+      "<p>The principal has opened marking to every teacher this term, so any teacher can mark " +
+      "any subject in any class, whoever is given it here.</p>" +
+      sw(false) +
+      "</div>"
     );
   }
   return (
@@ -112,12 +158,31 @@ function assignmentRow(a, mayChange, confirming, n) {
   ].join("");
 }
 
+/** One line of the log. The system's own lines name the term they came from instead of a person. */
+function changeLine(c) {
+  const pair = `${esc(c.subject)} in ${esc(c.class_group)}`;
+  const from = esc(c.from_term);
+  switch (c.kind) {
+    case "added":
+      return c.from_term
+        ? `Copied from ${from}: ${esc(c.teacher)}, ${pair}`
+        : `${esc(c.by)} gave ${esc(c.teacher)} ${pair}`;
+    case "removed":
+      return `${esc(c.by)} took ${pair} from ${esc(c.teacher)}`;
+    case "skipped":
+      return `Not copied from ${from}: ${esc(c.teacher) || "a former teacher"}, ${pair} (${esc(c.reason)})`;
+    case "opened":
+      return c.from_term
+        ? `Marking stayed open to all teachers, as it was in ${from}`
+        : `${esc(c.by)} opened marking to all teachers`;
+    default:
+      return `${esc(c.by)} restricted marking to the teachers given each subject`;
+  }
+}
+
 function changeLog(changes) {
   if (!changes.length) return "";
-  const line = (c) =>
-    c.kind === "added"
-      ? `${esc(c.by)} gave ${esc(c.teacher)} ${esc(c.subject)} in ${esc(c.class_group)}`
-      : `${esc(c.by)} took ${esc(c.subject)} in ${esc(c.class_group)} from ${esc(c.teacher)}`;
+  const line = changeLine;
   return [
     '<details class="change-log">',
     "<summary>Recent changes</summary>",

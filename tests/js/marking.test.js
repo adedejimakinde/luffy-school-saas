@@ -535,6 +535,7 @@ const NARROWED = {
   ...WHERE,
   narrowed: true,
   classes: [],
+  pairs: [{ subject_id: 1, class_group_id: 11 }, { subject_id: 2, class_group_id: 12 }],
   assessments: [
     { id: 3, name: "First CA", subject: "Mathematics", max_score: 20, class_group_id: 11, class_group: "JSS 1A" },
     { id: 4, name: "First CA", subject: "English", max_score: 20, class_group_id: 12, class_group: "JSS 1B" },
@@ -549,12 +550,20 @@ test("a narrowed teacher is offered each paper with its class, and no class to m
   assert.doesNotMatch(html, /pick-class|Which class/);
 });
 
-test("a narrowed teacher with nothing to mark is told who gives subjects", () => {
-  const html = states.choose({ ...NARROWED, assessments: [] });
+test("a narrowed teacher given nothing is told to ask the principal", () => {
+  const html = states.choose({ ...NARROWED, assessments: [], pairs: [], may_set_up: true });
+
+  assert.match(html, /No subjects for you yet/);
+  assert.match(html, /Ask the principal to give you your subjects and classes\./);
+  assert.doesNotMatch(html, /No classes yet|Add your classes|school office/);
+});
+
+test("a narrowed teacher with subjects and no papers yet is told the papers come later", () => {
+  const html = states.choose({ ...NARROWED, assessments: [], pairs: [{ subject_id: 1, class_group_id: 11 }] });
 
   assert.match(html, /No papers to mark yet/);
-  assert.match(html, /the principal gives you\./);
-  assert.doesNotMatch(html, /No classes yet|Add your classes/);
+  assert.match(html, /Once this term&#39;s papers are added|Once this term's papers are added/);
+  assert.doesNotMatch(html, /No classes yet|Ask the principal/);
 });
 
 test("until the term has assignments the page is the two lists it always was", () => {

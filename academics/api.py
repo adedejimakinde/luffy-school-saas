@@ -357,6 +357,9 @@ def set_current_term(request, term_id: int):
     a unique constraint on `is_current` where true, so setting a second without
     clearing the first is refused by the database. The service does both, so a
     school never has to know that and never gets half of it.
+
+    Moving on to a later term also carries the subject teachers forward
+    (`gradebook.assignments.carry_forward()`), in the same transaction.
     """
     school = _school_of(request)
     refused = _refuse_outsiders(request, school)
@@ -364,8 +367,15 @@ def set_current_term(request, term_id: int):
         return refused
 
     term = get_object_or_404(Term, pk=term_id)
+    from gradebook import assignments
+
     try:
-        term = services.set_current_term_as(request.user, term, school=school)
+        with transaction.atomic():
+            was = Term.objects.filter(is_current=True).first()
+            term = services.set_current_term_as(request.user, term, school=school)
+            # A new term starts with the last one's subject teachers, copied in the
+            # same transaction (`docs/subject-teachers.md`). Nothing, if it had none.
+            assignments.carry_forward(school, was, term)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
 

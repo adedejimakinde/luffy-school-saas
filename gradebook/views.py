@@ -29,7 +29,9 @@ The page has a state for that answer.
 """
 
 from django.conf import settings
+from django.http import HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import render
+from django.views.decorators.http import require_POST
 
 import pages
 from schools.hosts import portal_host
@@ -115,10 +117,27 @@ def subject_teachers_page(request):
     )
 
 
+@require_POST
+def subject_teachers_seen(request):
+    """Home's Dismiss on "Assignments copied from last term": the principal's alone.
+
+    A plain form post, CSRF-checked by Django's middleware, because Home runs no
+    script. Anybody else is refused with the same 403 whatever the term holds.
+    """
+    from . import assignments, curriculum
+
+    school = getattr(request, "school", None)
+    if school is None or not assignments.can_assign(request.user, school):
+        return HttpResponseForbidden("Who teaches what is set by the principal.")
+    assignments.seen_as(request.user, school, curriculum.current_term())
+    return HttpResponseRedirect("/home/")
+
+
 __all__ = [
     "marking_page",
     "MARKING_MODULES",
     "subject_teachers_page",
+    "subject_teachers_seen",
     "SUBJECT_TEACHERS_MODULES",
     "teaching_page",
     "TEACHING_MODULES",
