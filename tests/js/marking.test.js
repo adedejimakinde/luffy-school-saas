@@ -552,7 +552,7 @@ test("a narrowed teacher is offered each paper with its class, and no class to m
 test("a narrowed teacher with nothing to mark is told who gives subjects", () => {
   const html = states.choose({ ...NARROWED, assessments: [] });
 
-  assert.match(html, /Nothing to mark yet/);
+  assert.match(html, /No papers to mark yet/);
   assert.match(html, /the principal gives you\./);
   assert.doesNotMatch(html, /No classes yet|Add your classes/);
 });

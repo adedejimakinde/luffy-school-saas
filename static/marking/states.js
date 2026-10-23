@@ -17,9 +17,7 @@ import { copyNote } from "../web/snapshots.js";
 /**
  * Which assessment, and which class.
  *
- * Every paper and class, until the term has subject assignments. Then a
- * `narrowed` teacher is sent one paper per class they hold, each naming its
- * class, and no class list (`docs/subject-teachers.md`).
+ * A `narrowed` teacher gets one paper per class they hold, and no class list.
  */
 export function choose({
   term = "", assessments = [], classes = [], asOf = null, timeZone, now, held = [], may_set_up = false, narrowed,
@@ -32,9 +30,9 @@ export function choose({
       emptyState({
         key: "marks",
         icon: "i-marks",
-        title: narrowed ? "Nothing to mark yet" : none ? "No classes yet" : "No papers to mark yet",
+        title: none && !narrowed ? "No classes yet" : "No papers to mark yet",
         text: narrowed
-          ? "You mark this term's papers in the subjects and classes the principal gives you."
+          ? "You mark the subjects and classes the principal gives you."
           : `Marks are entered for ${none ? "a class" : "a paper, such as First CA"}. Once ${none ? "the classes are" : "this term's papers are"} added, they show here.`,
         action: !narrowed && may_set_up && { href: none ? "/setup/#classes" : "/teaching/#papers", label: none ? "Add your classes" : "Add this term's papers" },
         who: "The school office adds these.",
