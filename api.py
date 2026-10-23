@@ -59,6 +59,7 @@ from fees.bank_api import router as fees_bank_router
 from fees.virtual_api import router as fees_virtual_router
 from fees.authority import READING_ROLES as FEES_READING_ROLES
 from gradebook.api import MessageOut, router as gradebook_router
+from gradebook.assignments_api import router as subject_teachers_router
 from gradebook.teaching_api import router as teaching_router
 from home.api import router as home_router
 from notices.api import router as notices_router
@@ -96,6 +97,9 @@ api.add_router("/gradebook/", gradebook_router, tags=["gradebook"])
 
 # The office's subjects, papers and class teachers: `/teaching/`. Tenant-host only, like the rest.
 api.add_router("/teaching/", teaching_router, tags=["teaching"])
+
+# Who teaches which subject to which class: `/subject-teachers/`. Tenant-host only.
+api.add_router("/subject-teachers/", subject_teachers_router, tags=["subject-teachers"])
 
 # Tenant-host only in practice — `_school_of()` in that module answers 404 on the
 # portal, where `attendance_register` does not exist at all rather than existing

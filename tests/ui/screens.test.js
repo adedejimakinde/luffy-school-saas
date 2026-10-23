@@ -214,6 +214,9 @@ export const SCREENS = [
     url: `${SUNRISE}/teaching/`,
     steps: [["teaching-subject", '[data-action="open-subject"]']],
   },
+  // Who teaches what: the principal's, with the form; the administrator reads it.
+  { name: "subject-teachers", as: "sunrise.principal", url: `${SUNRISE}/subject-teachers/` },
+  { name: "subject-teachers-read", as: "sunrise.admin", url: `${SUNRISE}/subject-teachers/` },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
   // The OGSERA filler. The demo school prints the Standard card, so this is
   // the page telling the office where the Ogun template is chosen.
@@ -805,6 +808,7 @@ describe("keyboard focus and large text on a phone", () => {
   // `scroll-padding` is what keeps them clear.
   for (const [who, path] of [
     ["sunrise.admin", "/teaching/"],
+    ["sunrise.principal", "/subject-teachers/"],
     ["sunrise.admin", "/roll/"],
     ["sunrise.principal", "/home/"],
     ["sunrise.teacher", "/marking/"],
@@ -853,6 +857,8 @@ describe("keyboard focus and large text on a phone", () => {
     ["the administrator's setup", "sunrise.admin", `${SUNRISE}/setup/`, 375, true],
     ["the administrator's home", "sunrise.admin", `${SUNRISE}/home/`, 320, false],
     ["the administrator's roll", "sunrise.admin", `${SUNRISE}/roll/`, 320, false],
+    ["who teaches what", "sunrise.principal", `${SUNRISE}/subject-teachers/`, 375, true],
+    ["who teaches what", "sunrise.principal", `${SUNRISE}/subject-teachers/`, 320, false],
   ]) {
     test(`${name} at ${large ? "200% text" : "a 320px screen"} does not scroll sideways`, async () => {
       const context = await signedIn(as);

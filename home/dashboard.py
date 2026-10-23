@@ -12,9 +12,10 @@ on who may do what would drift from the first.
 
 A teacher's attendance, scores, attention items and activity cover the
 classes they are class teacher of this term (`ClassTeacher`), not the school.
-Teachers are not assigned to subjects (`docs/teaching.md`), so "the classes a
-teacher teaches" is the class they form-teach. A teacher who also holds a
-school-wide role (a principal who teaches) sees the school.
+Subject assignments (`docs/subject-teachers.md`) narrow a teacher's marking,
+not this page, so "the classes a teacher teaches" here is still the class they
+form-teach. A teacher who also holds a school-wide role (a principal who
+teaches) sees the school.
 
 A teacher never sees a fee figure, a payment or a payer's name: those are
 `fees.authority.READING_ROLES`', and a teacher is not in it.

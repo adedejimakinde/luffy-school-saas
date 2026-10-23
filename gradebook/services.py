@@ -25,7 +25,9 @@ A fourth question — **may this person mark at all?** — is asked only by the
 set: the plain functions are primitives an import or a data migration can use,
 and anything with a request behind it goes through `set_score_as()`. Authority
 is the one rule that cannot live in the primitive, because a management command
-has no actor to check.
+has no actor to check. So is its narrowing: once a term has subject assignments,
+a teacher marks only the subjects and classes given to them (`assignments.py`,
+`_require_assigned()` below).
 
 Still no screens and no HTTP here, for the same reason `fees.services` has
 none: the other three rules have to hold for an import too, and a rule that
@@ -41,6 +43,7 @@ from academics.services import placement_of
 from accounts.models import Role
 from accounts.students import why_not_a_student_here
 
+from . import assignments
 from .models import Score
 
 
@@ -665,6 +668,37 @@ def _require_marking_authority(actor, school):
         )
 
 
+class NotAssignedToMark(NotAllowedToMark):
+    """The term has subject assignments, and this pair is not one of the actor's.
+
+    A `NotAllowedToMark`, so every caller that turns that into a 403 already does the
+    same with this, and a queued write in a teacher's outbox is held as final
+    (`docs/offline.md` D6) rather than sent for ever.
+    """
+
+
+def _require_assigned(actor, assessment, membership):
+    """Once the paper's term has assignments, a teacher marks only their own pairs.
+
+    The class is where the child sits in the paper's term, the same join
+    `_require_the_sheet_is_open()` makes, and a child in no class that term cannot be
+    marked by a narrowed teacher. `assignments.may_mark()` is the same rule for a caller
+    that already knows the class; this is where it is asked on the way to the table, so
+    no screen can walk past it.
+    """
+    school = membership.school
+    term = assessment.term
+    if not assignments.narrowed(actor, school, term):
+        return
+    placement = placement_of(membership.pk, term)
+    held = assignments.pairs_of(actor, school, term)
+    if placement is None or (assessment.subject_id, placement.class_group_id) not in held:
+        raise NotAssignedToMark(
+            f"You are not down to teach {assessment.subject.name} to this child's class "
+            f"this term, so you cannot mark it. The principal says who teaches what."
+        )
+
+
 def set_score_as(
     actor, assessment, membership, value, *, expected_version=None, by=None
 ):
@@ -680,6 +714,7 @@ def set_score_as(
     and repeating them at every call site is how they eventually disagree.
     """
     _require_marking_authority(actor, membership.school)
+    _require_assigned(actor, assessment, membership)
     return set_score(
         assessment,
         membership,
@@ -692,6 +727,7 @@ def set_score_as(
 def clear_score_as(actor, assessment, membership, *, expected_version, by=None):
     """`clear_score()` for a caller with a request behind it."""
     _require_marking_authority(actor, membership.school)
+    _require_assigned(actor, assessment, membership)
     return clear_score(
         assessment,
         membership,
@@ -707,6 +743,7 @@ __all__ = [
     "InvalidScore",
     "MarksLocked",
     "NotAllowedToMark",
+    "NotAssignedToMark",
     "NotThisSchoolsStudent",
     "ScoreChangedMeanwhile",
     "can_enter_marks",

@@ -68,7 +68,7 @@ from accounts.models import Membership, Role
 from accounts.session import session_auth
 from results import services as results_services
 
-from . import services
+from . import assignments, services
 from .models import Assessment, Score
 
 #: Auth on the router rather than on each operation, unlike the invitation
@@ -158,6 +158,14 @@ class MarkableAssessmentOut(Schema):
     name: str
     subject: str
     max_score: int
+    subject_id: int
+
+
+class PairOut(Schema):
+    """A subject and a class a narrowed teacher may mark (`assignments.pairs_of()`)."""
+
+    subject_id: int
+    class_group_id: int
 
 
 class MarkableGroupOut(Schema):
@@ -180,13 +188,13 @@ class WhereToMarkOut(Schema):
     term runs late, and a mark filed against the wrong one carries nothing
     saying it was a guess.
 
-    **Every subject and every class, not a subset.** `can_enter_marks()` is
-    school-wide and carries no reference to a subject or a class group, so a
-    narrower list would be a scope the platform does not enforce, drawn as
-    though it did. That gap is issue #128, alongside #125 and #25; the reason a
-    sheet cannot be scoped by subject even in principle is issue #127 —
-    nothing models which students take which subject, so SSS electives cannot
-    be expressed at all.
+    **Every subject and every class, until the term has subject assignments.**
+    Then a teacher is sent only the papers and classes of the pairs they hold
+    (`pairs`, with `narrowed` true), and the sheet and both writes refuse the rest
+    on the server (`assignments.may_mark()`), so the shorter list is a scope the
+    platform enforces, not one it only draws. The principal, the vice principal
+    and the administrator are never narrowed. Which students take which subject
+    is still not modelled (issue #127), so a sheet is a whole class.
     """
 
     term_id: Optional[int]
@@ -204,6 +212,10 @@ class WhereToMarkOut(Schema):
     #: May this login add classes and papers here (`academics.services.SETUP_ROLES`)?
     #: The empty state then offers the way to do it; otherwise it says who does.
     may_set_up: bool = False
+    #: True when this login marks only the pairs below (`docs/subject-teachers.md`).
+    narrowed: bool = False
+    #: The subject and class pairs a narrowed login may mark. Empty when not narrowed.
+    pairs: List[PairOut] = []
 
 
 class SaveIn(Schema):
@@ -364,6 +376,13 @@ _MAY_NOT_MARK = (
 )
 
 
+#: What a narrowed teacher is told when a sheet is not one of their pairs.
+_NOT_ASSIGNED = (
+    "You are not down to teach this subject to this class this term. The "
+    "principal says who teaches what."
+)
+
+
 def _refuse_non_markers(request, school):
     """The authority check, before either lookup. Returns a response or None.
 
@@ -427,27 +446,39 @@ def where_to_mark(request):
         return refused
 
     term = Term.objects.filter(is_current=True).first()
-    assessments = (
-        []
+    papers = (
+        Assessment.objects.none()
         if term is None
-        else [
-            MarkableAssessmentOut(
-                id=a.pk, name=a.name, subject=a.subject.name, max_score=a.max_score
-            )
-            for a in Assessment.objects.filter(term=term).select_related("subject")
-        ]
+        else Assessment.objects.filter(term=term).select_related("subject")
     )
+    groups = ClassGroup.objects.filter(is_active=True)
+    narrowed = assignments.narrowed(request.user, school, term)
+    pairs = assignments.pairs_of(request.user, school, term) if narrowed else set()
+    if narrowed:
+        papers = papers.filter(subject_id__in={subject for subject, _ in pairs})
+        groups = groups.filter(pk__in={group for _, group in pairs})
     return WhereToMarkOut(
         term_id=term.pk if term else None,
         term=str(term) if term else None,
-        assessments=assessments,
-        classes=[
-            MarkableGroupOut(id=g.pk, name=g.name, level=g.level)
-            for g in ClassGroup.objects.filter(is_active=True)
+        assessments=[
+            MarkableAssessmentOut(
+                id=a.pk,
+                name=a.name,
+                subject=a.subject.name,
+                max_score=a.max_score,
+                subject_id=a.subject_id,
+            )
+            for a in papers
         ],
+        classes=[MarkableGroupOut(id=g.pk, name=g.name, level=g.level) for g in groups],
         user_id=request.user.pk,
         full_name=request.user.full_name,
         may_set_up=bool(getattr(request, "school_roles", frozenset()) & SETUP_ROLES),
+        narrowed=narrowed,
+        pairs=[
+            PairOut(subject_id=subject, class_group_id=group)
+            for subject, group in sorted(pairs)
+        ],
     )
 
 
@@ -485,10 +516,11 @@ def marking_sheet(
     oracle `_refuse_non_markers()` is written to close, arriving one layer
     above it. So the host answers first, then authority, then the field.
 
-    This is a **view scope, not an authority narrowing**. `can_enter_marks()`
-    is unchanged and still school-wide; who may mark is issue #128. Narrowing
-    the list here while the write stays open would be a restriction that looked
-    enforced and was not.
+    **Once the term has subject assignments, a teacher's sheet is their own
+    pairs only** (`assignments.may_mark()`), a 403 after both lookups: a teacher
+    at this school is entitled to know a paper exists, and the writes refuse the
+    same pairs in `services`, so the sheet is not the only thing standing in the
+    way.
 
     Relationship-scoped through `ClassPlacement`, so a suspended student still
     appears: a teacher marks from the roll the office keeps, and silently
@@ -515,6 +547,10 @@ def marking_sheet(
         Assessment.objects.select_related("subject", "term"), pk=assessment_id
     )
     group = get_object_or_404(ClassGroup, pk=class_group_id)
+    if not assignments.may_mark(
+        request.user, school, assessment.term, assessment.subject_id, group.pk
+    ):
+        return 403, MessageOut(detail=_NOT_ASSIGNED)
 
     roster = ClassPlacement.objects.student_ids(group, assessment.term)
     students = {

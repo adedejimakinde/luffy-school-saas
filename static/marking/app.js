@@ -686,6 +686,11 @@ export async function mount(
       await openSheet();
       return;
     }
+    if (action === "pick-sheet") {
+      picked = { assessmentId: Number(hit.dataset.assessment), classGroupId: Number(hit.dataset.class) };
+      await openSheet();
+      return;
+    }
     if (action === "dismiss" && state.step === "sheet") {
       const id = Number(hit.dataset.child);
       const cell = cellOf(picked.assessmentId, id);

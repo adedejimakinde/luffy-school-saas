@@ -14,6 +14,7 @@ says the dashboard lives on the school's own address.
 
 from django.shortcuts import render
 
+from gradebook import assignments
 from onboarding import first as first_days
 from onboarding import progress as onboarding
 from schools.hosts import portal_host
@@ -50,6 +51,9 @@ def home_page(request):
         "setup": setup,
         "leads_setup": onboarding.is_onboarding(roles),
         "first": first_days.card_for(request, school, user, roles),
+        # The principal's prompt to say who teaches what, read live rather than from
+        # the cached facts so it goes the moment the first assignment is made.
+        "assign": not (dash["setup"] or dash["waiting"]) and assignments.prompt_for(roles),
     })
 
 

@@ -528,3 +528,69 @@ test("a school name typed into the admin cannot execute in a teacher's browser",
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
 });
+
+// -- once the term has subject assignments -----------------------------------
+
+const NARROWED = {
+  ...WHERE,
+  assessments: [
+    { id: 3, name: "First CA", subject: "Mathematics", max_score: 20, subject_id: 1 },
+    { id: 4, name: "First CA", subject: "English", max_score: 20, subject_id: 2 },
+  ],
+  classes: [
+    { id: 11, name: "JSS 1A", level: 1 },
+    { id: 12, name: "JSS 1B", level: 1 },
+  ],
+  narrowed: true,
+  pairs: [
+    { subject_id: 1, class_group_id: 11 },
+    { subject_id: 2, class_group_id: 12 },
+  ],
+};
+
+test("a narrowed teacher is offered their own paper and class pairs, never a mix of them", () => {
+  const html = states.choose(NARROWED);
+
+  assert.match(html, /data-action="pick-sheet" data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS 1A/);
+  assert.match(html, /data-action="pick-sheet" data-assessment="4" data-class="12">English &middot; First CA, JSS 1B/);
+  assert.doesNotMatch(html, /data-assessment="3" data-class="12"/);
+  assert.doesNotMatch(html, /data-assessment="4" data-class="11"/);
+  assert.doesNotMatch(html, /pick-class/);
+});
+
+test("a narrowed teacher given nothing is told who gives subjects", () => {
+  const html = states.choose({ ...NARROWED, assessments: [], classes: [], pairs: [] });
+
+  assert.match(html, /No subjects given to you yet/);
+  assert.match(html, /The principal gives teachers their subjects\./);
+  assert.doesNotMatch(html, /No classes yet/);
+});
+
+test("until the term has assignments the page is the two lists it always was", () => {
+  const html = states.choose({ ...WHERE, narrowed: false, pairs: [] });
+
+  assert.match(html, /data-action="pick-assessment"/);
+  assert.match(html, /data-action="pick-class"/);
+  assert.doesNotMatch(html, /pick-sheet/);
+});
+
+test("one tap on a pair opens that sheet", async () => {
+  forgetToken();
+  const asked = [];
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    schedule: () => {},
+    fetchImpl: async (url, options = {}) => {
+      if (url.includes("/sheet/")) asked.push(url);
+      return serve([
+        ["/api/gradebook/where/", { status: 200, body: NARROWED }],
+        ["/sheet/", { status: 200, body: SHEET }],
+      ])(url, options);
+    },
+  });
+
+  await root.click({ "data-action": "pick-sheet", "data-assessment": "3", "data-class": "11" });
+
+  assert.deepEqual(asked, ["/api/gradebook/assessments/3/sheet/?class_group_id=11"]);
+  assert.match(root.innerHTML, /data-state="sheet"/);
+});

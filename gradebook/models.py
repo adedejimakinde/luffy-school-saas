@@ -296,3 +296,101 @@ class Score(models.Model):
                     )
                 }
             )
+
+
+class SubjectTeacher(models.Model):
+    """One teacher teaches one subject to one class, this term.
+
+    The principal's answer to "who teaches what" (`docs/subject-teachers.md`). Once a
+    term has any of these, a teacher marks only the subject and class pairs they hold
+    (`services.may_mark()`); until then any teacher marks any paper, as before.
+
+    **Many to many on purpose.** A teacher teaches several pairs, and a pair can have
+    two teachers (a shared class, a teacher covering a leave). So the row is unique on
+    all four columns, not on the pair: `docs/cbt.md` drew it unique on the pair, and the
+    decision of 23 October 2026 widened it.
+
+    Per term, like `academics.ClassTeacher`, for that model's reason: who teaches a
+    class changes between terms, and a term-free row would have to be edited to say so.
+
+    In `gradebook` rather than `academics`, where `docs/cbt.md` put it, because it names
+    a `Subject` and `gradebook` already depends on `academics`, not the other way round.
+
+    A plain row that is added and removed. What makes that safe is
+    `SubjectTeacherChange`, written beside every add and every removal in the same
+    transaction (`assignments.py`): a removal leaves nothing here, so the record of it
+    has to be somewhere that cannot be removed (`docs/operating-rules.md` rule 8).
+    """
+
+    term = models.ForeignKey(
+        "academics.Term", related_name="subject_teachers", on_delete=models.PROTECT
+    )
+    class_group = models.ForeignKey(
+        "academics.ClassGroup", related_name="subject_teachers", on_delete=models.PROTECT
+    )
+    subject = models.ForeignKey(
+        Subject, related_name="subject_teachers", on_delete=models.PROTECT
+    )
+    # A bare id, not a ForeignKey: the teacher's TEACHER membership lives in the shared
+    # `accounts` app (docs/tenancy.md), as `ClassTeacher.teacher_membership_id` does.
+    # `assignments.assign_as()` checks it names a teacher of this school.
+    teacher_membership_id = models.PositiveBigIntegerField(db_index=True)
+    assigned_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        # Local columns only, for `ClassTeacher.Meta`'s reason: an ordering through a
+        # relation turns every read into a join.
+        ordering = ["term_id", "class_group_id", "subject_id", "teacher_membership_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["term", "class_group", "subject", "teacher_membership_id"],
+                name="one_subject_teacher_row_per_pair_and_teacher",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"membership {self.teacher_membership_id} teaches {self.subject_id} "
+            f"to {self.class_group_id} ({self.term_id})"
+        )
+
+
+class SubjectTeacherChange(models.Model):
+    """Who added or removed a subject teacher, and when. Append-only.
+
+    A trigger refuses UPDATE and DELETE
+    (`gradebook/migrations/0005_who_teaches_what_and_every_change_to_it_is_kept`). Names are copied at
+    write time (`docs/operating-rules.md` rule 2), so the log still reads correctly
+    after a subject, a class or a person is renamed.
+    """
+
+    class Kind(models.TextChoices):
+        ADDED = "added", "Added"
+        REMOVED = "removed", "Removed"
+
+    term = models.ForeignKey(
+        "academics.Term", related_name="subject_teacher_changes", on_delete=models.PROTECT
+    )
+    kind = models.CharField(max_length=8, choices=Kind)
+    class_group_id = models.PositiveBigIntegerField()
+    subject_id = models.PositiveBigIntegerField()
+    teacher_membership_id = models.PositiveBigIntegerField()
+    class_group_name = models.CharField(max_length=64)
+    subject_name = models.CharField(max_length=100)
+    teacher_name = models.CharField(max_length=255)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(kind__in=["added", "removed"]),
+                name="a_subject_teacher_change_is_added_or_removed",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.kind} {self.teacher_name}: {self.subject_name}, {self.class_group_name}"

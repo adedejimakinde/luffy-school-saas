@@ -38,6 +38,7 @@ from academics.services import PLACEMENT_ROLES, SETUP_ROLES
 from attendance.absences import VIEWING_ROLES as ABSENCE_ROLES
 from attendance.services import MARKING_ROLES as REGISTER_ROLES
 from fees.authority import READING_ROLES as FEES_ROLES
+from gradebook.assignments import VIEWING_ROLES as SUBJECT_TEACHER_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
 from home.dashboard import HOME_ROLES
 from notices.services import SETTINGS_ROLES as NOTICES_ROLES
@@ -73,6 +74,7 @@ LINKS = (
     Link("bank", "/bank/", "i-bank", "Bank", FEES_ROLES, "Office"),
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
     Link("teaching", "/teaching/", "i-book", "Subjects", SETUP_ROLES, "Office"),
+    Link("subject-teachers", "/subject-teachers/", "i-staff", "Who teaches what", SUBJECT_TEACHER_ROLES, "Office"),
     Link("promotion", "/promotion/", "i-promote", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.

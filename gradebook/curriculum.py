@@ -16,8 +16,10 @@ child's total is out of.
   the name it printed, `docs/operating-rules.md` rule 2). What it is **out of** is the
   denominator of every percentage built on it, so that changes only while nobody has a mark
   in it, and it is removed only then too.
-- Teachers do not teach subjects here: any teacher may mark any paper (`gradebook.services`).
-  The one assignment is the class teacher, per class and term, who submits the class's results.
+- Who teaches which subject to which class is not set here but on its own page, by the
+  principal (`gradebook.assignments`); until a term has one, any teacher may mark any paper.
+  The assignment made here is the class teacher, per class and term, who submits the class's
+  results.
 """
 
 from django.core.exceptions import ValidationError
