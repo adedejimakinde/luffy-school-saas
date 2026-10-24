@@ -101,7 +101,9 @@ the school's own host, with a cookie scoped to `/sit/` and its own small service
 worker. That design is on draft PR #278 and has not merged. Open PR #298 (CBT
 step 2) adds `/exam-slips/` and nothing at `/sit/`. Today `/sit/` is a 404 that
 nothing protects. This note reserves it (§6, PR 1) so that no public page, news
-slug or album slug can ever take it.
+slug or album slug can ever take it. *(Done in PR 1: `schools.paths.RESERVED`
+holds `/sit/`, `/website/` and `/applicants/`, each a noindex 404 at the name
+and everywhere under it until its work is built.)*
 
 The existing offline worker (`/sw.js`, `sync/worker.js`) is registered with
 scope `/` on every school host. It only intercepts navigations to `/marking/`
@@ -749,7 +751,13 @@ rule). Every access-control test uses **two schools**, never one.
 
 ### PR 1: Reserve the paths, and make indexing per route (small)
 
-No visible change except `robots.txt`.
+No visible change except `robots.txt`. **Built.**
+
+- `schools/paths.py` sorts every first segment into `PUBLIC_SITE`, `PORTAL` and `RESERVED`.
+- The held names route to `schools.views.reserved`, which is a 404.
+- `website.crawlers` lets a response on a school host escape noindex only when all three hold: its view sets `response.indexable = True`, its path is the website's, and the host is not the portal.
+- A school host's `robots.txt` names `NEVER_INDEXED` ahead of the closing `Disallow: /`.
+- The tests are in `schools/tests/test_paths.py`. When PR 3 opens the website, it drops that last line and marks the website's views. It does not touch the lists.
 
 - The reserved-path list, including `sit/`, and the test that every `urls.py` route is a public page or reserved.
 - `CrawlerMiddleware` indexes only responses marked as public-site responses. Nothing is marked yet, so every school host stays `noindex`.

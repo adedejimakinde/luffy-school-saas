@@ -272,10 +272,16 @@ The site is the only thing on the platform a search engine is asked to index.
   school's host, demo schools and test schools alike, and a host nobody owns.
   `templates/design/head.html` writes the same meta tag unless the view sets
   `indexable`, which only `website.views.site_page` does; the 403 page carries
-  it itself. `/healthz/` answers above all of this and marks itself.
+  it itself. `/healthz/` answers above all of this and marks itself. A school's
+  own website (`docs/school-sites.md`) will be the one exception: on a school's
+  host the header is left off only a response its view marks, on one of the
+  website's paths (`schools.paths.PUBLIC_SITE`), and never on the portal. No
+  view marks one yet.
 - **robots.txt** is answered on every host by the same middleware: on the site
-  it allows everything and names `/sitemap.xml`; on every other host it
-  disallows everything but the icons below.
+  it allows everything and names `/sitemap.xml`; on the portal it disallows
+  everything but the icons below; on every other host it says the same, and
+  first names each path a school's host never lets in (`schools.paths.NEVER_INDEXED`:
+  `/sit/`, `/check/`, the sign-in pages and every portal page).
 - **The icon beside a search result** (Google showed a grey globe before, 18
   October 2026) is the header's mark, white nodes on a One Blue rounded
   square, drawn by `scripts/favicons.py` into `webroot/`: `/favicon.ico` (16,
