@@ -66,6 +66,17 @@ STAFF_ROLES = frozenset(
         Role.BURSAR.value,
     }
 )
+#: What each staff role does here, one line under its name where a role is
+#: chosen (the staff invite's picker). Each line is a claim about the role's
+#: authority, and `accounts.tests.test_role_descriptions` holds it to the role
+#: sets that grant it: change what a role may do and that test names the line.
+ROLE_DESCRIPTIONS = {
+    Role.ADMIN.value: "Runs day-to-day school records",
+    Role.BURSAR.value: "Records fees and payments",
+    Role.PRINCIPAL.value: "Approves and releases results, assigns subject teachers",
+    Role.TEACHER.value: "Takes registers, enters marks and writes remarks",
+    Role.VICE_PRINCIPAL_ACADEMIC.value: "Oversees results and teaching",
+}
 FAMILY_ROLES = frozenset({Role.PARENT.value, Role.STUDENT.value})
 # Every role except STUDENT may be held at several schools at once.
 SINGLE_SCHOOL_ROLES = frozenset({Role.STUDENT.value})

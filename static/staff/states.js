@@ -18,7 +18,7 @@ const STANDING = {
   revoked: "Cancelled. Nobody can use that link now.",
 };
 
-export function list({ invitations = [], roles = [], role_labels = {}, note = null, typed = null, has_teachers = true } = {}) {
+export function list({ invitations = [], roles = [], role_labels = {}, role_descriptions = {}, note = null, typed = null, has_teachers = true } = {}) {
   // No teacher yet and nobody invited: the empty state comes first, and its
   // one button goes to the form under it.
   const empty = !invitations.length && !has_teachers;
@@ -34,7 +34,7 @@ export function list({ invitations = [], roles = [], role_labels = {}, note = nu
           action: { href: "#address", label: "Invite your first teacher" },
         })
       : "",
-    inviteForm(roles, role_labels, note, typed),
+    inviteForm(roles, role_labels, role_descriptions, note, typed),
     invitations.length
       ? `<ul class="invitations stack-list">${invitations.map(row).join("")}</ul>`
       : empty
@@ -63,9 +63,10 @@ function row(inv) {
 /**
  * Inviting somebody. **A refused invite keeps what was typed.** Each role is
  * submitted as its stored value and shown by its label (`role_labels`), so the
- * office reads "Vice principal (academic)", never "vp_academic".
+ * office reads "Vice principal (academic)", never "vp_academic". The picker
+ * draws each role's `data-description` under its name.
  */
-function inviteForm(roles, labels, note, typed) {
+function inviteForm(roles, labels, descriptions, note, typed) {
   const t = typed || {};
   return [
     `<form class="invite${note ? " rejected" : ""}" data-form="invite">`,
@@ -79,7 +80,7 @@ function inviteForm(roles, labels, note, typed) {
     roles
       .map(
         (r) =>
-          `<option value="${esc(r)}"${r === t.role ? " selected" : ""}>${esc(
+          `<option value="${esc(r)}"${(descriptions || {})[r] ? ` data-description="${esc(descriptions[r])}"` : ""}${r === t.role ? " selected" : ""}>${esc(
             (labels || {})[r] || r.replace(/_/g, " "),
           )}</option>`,
       )

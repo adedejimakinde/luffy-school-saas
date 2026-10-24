@@ -171,3 +171,15 @@ test("the role picker shows each role's name and submits its stored value", () =
   assert.match(html, /<option value="vp_academic">Vice principal \(academic\)<\/option>/);
   assert.doesNotMatch(html, />vp academic</);
 });
+
+test("each role carries its description for the picker, escaped", () => {
+  const html = states.list({
+    ...LIST,
+    roles: ["bursar", "teacher"],
+    role_labels: { bursar: "Bursar", teacher: "Teacher" },
+    role_descriptions: { bursar: "Records fees & payments", teacher: "" },
+  });
+
+  assert.match(html, /<option value="bursar" data-description="Records fees &amp; payments">Bursar<\/option>/);
+  assert.match(html, /<option value="teacher">Teacher<\/option>/, "no empty description");
+});

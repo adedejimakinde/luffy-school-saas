@@ -9,7 +9,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { GROUP_ABOVE, classOptions } from "../../static/web/classes.js";
-import { SEARCH_ABOVE, filterRows, fold, nextMatch, rowsOf } from "../../static/web/picker.js";
+import { SEARCH_ABOVE, SHORT_UP_TO, filterRows, fold, nextMatch, rowsOf } from "../../static/web/picker.js";
 
 /** Just enough of a `<select>` for `rowsOf()`: options, some in an optgroup. */
 function fakeSelect(spec) {
@@ -26,6 +26,7 @@ const rows = (labels) => rowsOf(fakeSelect(labels.map((label) => ({ label }))));
 test("a long list is more than eight, and a list long enough to search is grouped", () => {
   assert.equal(SEARCH_ABOVE, 8);
   assert.equal(GROUP_ABOVE, SEARCH_ABOVE);
+  assert.equal(SHORT_UP_TO, 6, "six or fewer open as a menu under the field on a phone");
 });
 
 test("rows keep each option's index, its group and whether it can be chosen, and leave hidden ones out", () => {
@@ -48,6 +49,13 @@ test("rows keep each option's index, its group and whether it can be chosen, and
       [4, "SS 1A", "SS 1", true],
     ],
   );
+});
+
+test("an option's data-description is the line under it", () => {
+  const select = fakeSelect([{ label: "Teacher" }, { label: "Bursar" }]);
+  select.options[0].getAttribute = (name) => (name === "data-description" ? "  Takes registers " : null);
+
+  assert.deepEqual(rowsOf(select).map((r) => [r.label, r.hint]), [["Teacher", "Takes registers"], ["Bursar", ""]]);
 });
 
 test("a search ignores case, accents, spaces and punctuation, and wants every word", () => {

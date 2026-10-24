@@ -105,14 +105,26 @@ Mobile first, checked at 360, 768 and 1280.
 Every `<select>` in the portal opens one picker (`static/web/picker.js`,
 `static/web/picker.css`), never the phone's grey system menu.
 
-- **On a phone** (below 640px) it is a sheet from the foot of the screen: white,
-  16px top corners, a drag handle, the field's label as its title, a Close
-  button, rows 52px tall, a blue check and bold text on the chosen row, over
-  the text colour thinned to 35%. It slides up in 220ms; a swipe down on its
-  head, Close, the backdrop, Escape or the back gesture closes it.
-- **On a desk** it is a popover under the field, the field's width or 240px,
-  over the field when the field is near the foot of the screen, with the
-  lifted shadow, 120ms.
+- **On a desk every list, and on a phone a short one (six options or fewer),
+  opens as a menu against the field**, the field's width or 240px: a white
+  card, 12px corners, the lifted shadow,
+  rows 44px on a desk and 48px under a finger, a blue check and bold text on
+  the chosen row, 120ms. It opens under the field, or over it when its rows fit
+  there and not under it, so every row shows without scrolling where the screen
+  has room. The field's own label names it.
+- **On a phone a longer list is a sheet** from the foot of the screen: white,
+  16px top corners, a drag handle, the field's label as a 16px title, a Close
+  button, 48px rows of 16px text, over the text colour thinned to 20%. It is as
+  tall as its rows and never taller than 70% of the screen, with nothing under
+  the last row but the phone's own safe area. It slides up in 220ms. A swipe
+  down on its head, Close, the backdrop, Escape or the back gesture closes it.
+- **A row can carry a line under it**, from its option's `data-description`:
+  15px, muted, regular weight. The option is named by its label and described
+  by the line, so a screen reader says "Teacher" and then what a teacher does.
+  The staff invite uses it for roles (`accounts.models.ROLE_DESCRIPTIONS`,
+  each line held to the role sets that grant it by
+  `accounts/tests/test_role_descriptions.py`). The system menu shows labels
+  only.
 - **More than eight options gets a search box** that filters as you type,
   ignoring case, accents and extra spaces, and says how many match. On a desk
   it takes the keys at once; on a phone it waits to be tapped, so the keyboard
