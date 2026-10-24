@@ -17,6 +17,7 @@ from schools.hosts import portal_host
 FEES_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "fees/money.js",
     "fees/api.js",
     "fees/states.js",
@@ -28,6 +29,7 @@ FEES_MODULES = (
 BANK_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "bank/api.js",
     "bank/states.js",
     "bank/app.js",

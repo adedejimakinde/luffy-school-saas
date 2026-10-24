@@ -14,6 +14,7 @@ the API answers the refusal, and `data-on-school` says which host this is.
 {% endcomment %}
 
 {% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'web/picker.css' %}">
 <link rel="stylesheet" href="{% static 'bank/bank.css' %}">
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'bank/app.js' %}"></script>

@@ -268,5 +268,9 @@ if (typeof document !== "undefined") {
   // `?class=` is the home page's "Remarks missing" link: open that class's
   // list rather than the chooser. Anything that is not a class id is ignored.
   const asked = Number(new URLSearchParams(window.location.search).get("class"));
-  if (root) mount(root, { classGroupId: Number.isInteger(asked) && asked > 0 ? asked : null });
+  if (root) {
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
+    mount(root, { classGroupId: Number.isInteger(asked) && asked > 0 ? asked : null });
+  }
 }

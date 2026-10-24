@@ -78,6 +78,16 @@ class InvitationListTests(TestCase):
         self.assertEqual(rows[0]["status"], "pending")
         self.assertEqual(rows[0]["role"], Role.TEACHER.value)
 
+    def test_the_form_is_offered_every_staff_role_by_its_name(self):
+        """The role picker shows names and submits values; stored values are untouched."""
+        body = self.listed(self.admin).json()
+
+        self.assertEqual(body["roles"], ["admin", "bursar", "principal", "teacher", "vp_academic"])
+        self.assertEqual(
+            [body["role_labels"][r] for r in body["roles"]],
+            ["Administrator", "Bursar", "Principal", "Teacher", "Vice principal (academic)"],
+        )
+
     # -- the other school ------------------------------------------------------
 
     def test_each_school_lists_only_its_own(self):

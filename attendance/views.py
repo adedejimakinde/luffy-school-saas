@@ -90,6 +90,7 @@ def register_page(request):
 ABSENCE_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "absences/api.js",
     "absences/states.js",
     "absences/app.js",

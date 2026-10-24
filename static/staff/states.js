@@ -18,7 +18,7 @@ const STANDING = {
   revoked: "Cancelled. Nobody can use that link now.",
 };
 
-export function list({ invitations = [], roles = [], note = null, typed = null, has_teachers = true } = {}) {
+export function list({ invitations = [], roles = [], role_labels = {}, note = null, typed = null, has_teachers = true } = {}) {
   // No teacher yet and nobody invited: the empty state comes first, and its
   // one button goes to the form under it.
   const empty = !invitations.length && !has_teachers;
@@ -34,7 +34,7 @@ export function list({ invitations = [], roles = [], note = null, typed = null, 
           action: { href: "#address", label: "Invite your first teacher" },
         })
       : "",
-    inviteForm(roles, note, typed),
+    inviteForm(roles, role_labels, note, typed),
     invitations.length
       ? `<ul class="invitations stack-list">${invitations.map(row).join("")}</ul>`
       : empty
@@ -60,8 +60,12 @@ function row(inv) {
   ].join("");
 }
 
-/** Inviting somebody. **A refused invite keeps what was typed.** */
-function inviteForm(roles, note, typed) {
+/**
+ * Inviting somebody. **A refused invite keeps what was typed.** Each role is
+ * submitted as its stored value and shown by its label (`role_labels`), so the
+ * office reads "Vice principal (academic)", never "vp_academic".
+ */
+function inviteForm(roles, labels, note, typed) {
   const t = typed || {};
   return [
     `<form class="invite${note ? " rejected" : ""}" data-form="invite">`,
@@ -76,7 +80,7 @@ function inviteForm(roles, note, typed) {
       .map(
         (r) =>
           `<option value="${esc(r)}"${r === t.role ? " selected" : ""}>${esc(
-            r.replace(/_/g, " "),
+            (labels || {})[r] || r.replace(/_/g, " "),
           )}</option>`,
       )
       .join(""),

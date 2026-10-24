@@ -213,6 +213,19 @@ class EveryPageIsUnderBudgetTests(SpeedBudgetSetUp):
                     weight, BUDGET, f"{path} weighs {weight} bytes: {', '.join(assets)}"
                 )
 
+    def test_the_picker_comes_whole_or_not_at_all(self):
+        """`web/picker.js` draws with `web/picker.css`'s rules, and that stylesheet
+        draws every select: a page with one and not the other shows a picker
+        with no styles, or a select styled for a picker that never opens."""
+        carried = 0
+        for host, path, user in self.pages():
+            response = self.open(host, path, user)
+            assets = self.assets_of(response.content.decode())
+            with self.subTest(host=host, page=path):
+                self.assertEqual("web/picker.js" in assets, "web/picker.css" in assets, assets)
+                carried += "web/picker.js" in assets
+        self.assertTrue(carried, "no page carries the picker")
+
     def test_the_budget_counts_the_fonts_and_the_modules(self):
         """The control for the one above: an asset list that came back empty
         would pass any budget."""

@@ -153,3 +153,21 @@ test("resend and cancel post to their own row", async () => {
     "/api/schools/st-marys/invitations/9/revoke/",
   ]);
 });
+
+test("the role picker shows each role's name and submits its stored value", () => {
+  const html = states.list({
+    ...LIST,
+    roles: ["admin", "bursar", "principal", "teacher", "vp_academic"],
+    role_labels: {
+      admin: "Administrator",
+      bursar: "Bursar",
+      principal: "Principal",
+      teacher: "Teacher",
+      vp_academic: "Vice principal (academic)",
+    },
+  });
+
+  assert.match(html, /<option value="admin">Administrator<\/option>/);
+  assert.match(html, /<option value="vp_academic">Vice principal \(academic\)<\/option>/);
+  assert.doesNotMatch(html, />vp academic</);
+});

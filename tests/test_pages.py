@@ -94,9 +94,10 @@ PAGES = {
 #: (`test_a_page_that_draws_no_markup_imports_no_escaping` says what holds them).
 DRAWS_NO_MARKUP = {"blog-editor"}
 
-#: `from "./x.js"` and `from "../web/x.js"` — the only import shape these
-#: modules use, and the only one a browser resolves without a map entry.
-_IMPORT = re.compile(r'from\s+"(\.[^"]+)"')
+#: `from "./x.js"` and `from "../web/x.js"`, and `import("../web/x.js")` for
+#: the one module a page loads only if it can (`web/picker.js`): a dynamic
+#: import resolves through the map like any other.
+_IMPORT = re.compile(r'(?:from\s+|\bimport\(\s*)"(\.[^"]+)"')
 
 
 def imports_of(served_path: str) -> set[str]:
@@ -195,3 +196,36 @@ class EveryPagesMapCoversItsWholeGraphTests(SimpleTestCase):
                 for module in PAGES[page]:
                     source = (STATIC / module).read_text()
                     self.assertNotRegex(source, r"innerHTML\s*=\s*`|insertAdjacentHTML|outerHTML")
+
+
+class EverySelectOpensThePickerTests(SimpleTestCase):
+    """A page that draws a `<select>` opens `web/picker.js`'s sheet, not the
+    phone's own menu (`docs/design.md`, "The picker"): its map carries the
+    module and its entry point starts it on the page's root. A new page with a
+    select that forgot either would draw the grey system menu again."""
+
+    def test_a_page_that_draws_a_select_starts_the_picker(self):
+        drawing = []
+        for page, modules in PAGES.items():
+            if not any("<select" in (STATIC / module).read_text() for module in modules):
+                continue
+            drawing.append(page)
+            with self.subTest(page=page):
+                self.assertIn("web/picker.js", modules)
+                entry = (STATIC / modules[-1]).read_text()
+                # Loaded as an enhancement, so a picker that fails to load
+                # leaves the page and its system menus working.
+                self.assertRegex(
+                    entry,
+                    r'import\("\.\./web/picker\.js"\)\.then\(\(picker\) => picker\.enhanceSelects\(root\), \(\) => \{\}\);\s*\n\s*mount\(root',
+                )
+                self.assertNotRegex(entry, r'from "\.\./web/picker\.js"')
+        self.assertGreaterEqual(len(drawing), 13, "the pattern finds the selects at all")
+
+    def test_only_a_page_with_a_select_carries_it(self):
+        """The picker is weight on a phone's data bundle: no page pays for it unused."""
+        for page, modules in PAGES.items():
+            if "web/picker.js" not in modules:
+                continue
+            with self.subTest(page=page):
+                self.assertTrue(any("<select" in (STATIC / module).read_text() for module in modules))

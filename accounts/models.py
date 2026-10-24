@@ -34,7 +34,7 @@ from .identifiers import canonical_username, normalize_email, normalize_phone, t
 class Role(models.TextChoices):
     """Every role that gets a login. There is no flat "staff" role."""
 
-    ADMIN = "admin", "School administrator"
+    ADMIN = "admin", "Administrator"
     PRINCIPAL = "principal", "Principal"
     #: The academic checker between the class teacher and the principal in the
     #: results approval chain. Named for the scope that exists: the chain runs
@@ -43,8 +43,9 @@ class Role(models.TextChoices):
     #:
     #: The stored value is short because `Membership.role` is `max_length=16`
     #: and "vice_principal_academic" is 23 characters. The value is an internal
-    #: key like "admin" and "bursar"; the label is what anybody actually reads.
-    VICE_PRINCIPAL_ACADEMIC = "vp_academic", "Vice Principal (Academic)"
+    #: key like "admin" and "bursar"; the label is what anybody actually reads,
+    #: in sentence case like the rest of the page's labels.
+    VICE_PRINCIPAL_ACADEMIC = "vp_academic", "Vice principal (academic)"
     TEACHER = "teacher", "Teacher"
     BURSAR = "bursar", "Bursar"
     PARENT = "parent", "Parent or guardian"

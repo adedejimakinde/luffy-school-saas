@@ -315,6 +315,13 @@ class TheTopBarTests(ChainSetUp):
         self.assertIn(self.teacher.user.full_name, bar)
         self.assertIn('<span class="avatar">', bar)
 
+    def test_the_account_menu_names_the_role_as_people_say_it(self):
+        """`Role`'s labels, not its stored values: "Vice principal (academic)"."""
+        bar = self.page("/results/", self.vp)
+
+        self.assertIn("<span>Vice principal (academic)</span>", bar)
+        self.assertNotIn("vp_academic", bar)
+
     def test_the_pages_kept_offline_name_nobody(self):
         from sync.views import PAGES
 

@@ -297,9 +297,10 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
                   "marking_focus.test.js": "UI Marking Focus", "roll_import_gap.test.js": "UI Import",
                   "teaching.test.js": "UI Teaching", "screens.test.js": "JSS 1A"}
         # Files that write no school's data at all, so have no class to own:
-        # the blog's, which writes only the blog (`docs/blog.md`). Each must
-        # name no class, which is what keeps it out of the others' way.
-        classless = {"blog.test.js"}
+        # the blog's, which writes only the blog (`docs/blog.md`), and the
+        # picker's, which refuses every write in the browser. Each must name
+        # no class, which is what keeps it out of the others' way.
+        classless = {"blog.test.js", "picker.test.js"}
         self.assertEqual(set(owners) | classless, set(files), "a browser test file with no class of its own")
         for file in classless:
             with self.subTest(file=file):

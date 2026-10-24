@@ -90,6 +90,9 @@ class EnrolledChildOut(Schema):
 class ClassChoiceOut(Schema):
     class_group_id: int
     name: str
+    #: The school's own order (`ClassGroup.level`): the picker groups a long
+    #: list of classes by it.
+    level: int = 0
 
 
 class RollOut(Schema):
@@ -244,7 +247,7 @@ def roll(request):
         term=str(term) if term else None,
         children=children,
         classes=[
-            ClassChoiceOut(class_group_id=g.pk, name=g.name)
+            ClassChoiceOut(class_group_id=g.pk, name=g.name, level=g.level)
             for g in groups
             if g.is_active
         ],

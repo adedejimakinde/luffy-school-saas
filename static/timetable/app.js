@@ -187,5 +187,9 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("timetable");
-  if (root) mount(root, { search: window.location.search });
+  if (root) {
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
+    mount(root, { search: window.location.search });
+  }
 }

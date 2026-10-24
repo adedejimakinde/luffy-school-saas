@@ -216,7 +216,8 @@ function newClassForm(note) {
     `<form class="new-class${note ? ` ${esc(note.kind)}` : ""}" data-form="class">`,
     "<h3>Open a class group</h3>",
     '<label for="class_name">Name</label>',
-    '<input id="class_name" name="name" placeholder="JSS 1A" required>',
+    '<p class="hint" id="class_name_hint">The level and the arm, for example JSS 1A or SS 2B.</p>',
+    '<input id="class_name" name="name" placeholder="JSS 1A" aria-describedby="class_name_hint" required>',
     // Not derived from the name: "JSS 1A" sorts before "JSS 10A" as text, and
     // no string rule survives a school running Nursery, Primary and Senior.
     '<label for="level">Where it sits in your order</label>',
