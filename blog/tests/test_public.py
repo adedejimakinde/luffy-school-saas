@@ -2,9 +2,12 @@
 
 import json
 import re
+from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
+from django.utils import timezone
 
 from blog import workflow
 from blog.models import Status
@@ -56,8 +59,16 @@ class DraftsAreNeverPublicTests(BlogSetUp):
         sitemap = self.site("/sitemap.xml").content.decode()
         listed = re.findall(r"<loc>https://classnode\.testserver/blog/([^<]+)/</loc>", sitemap)
         self.assertEqual(listed, [live.slug])
-        self.assertIn(f"<lastmod>{live.updated_at:%Y-%m-%d}</lastmod>", sitemap)
+        self.assertIn(f"<lastmod>{timezone.localtime(live.updated_at):%Y-%m-%d}</lastmod>", sitemap)
         self.assertIn("<loc>https://classnode.testserver/blog/</loc>", sitemap)
+
+    def test_the_sitemap_lastmod_is_the_site_date_late_in_the_utc_evening(self):
+        """23:30 UTC is already tomorrow in Africa/Lagos, and the sitemap says so."""
+        with mock.patch("django.utils.timezone.now", return_value=datetime(2026, 10, 23, 23, 30, tzinfo=dt_timezone.utc)):
+            live = self.published(slug="late")
+        sitemap = self.site("/sitemap.xml").content.decode()
+        self.assertIn("<lastmod>2026-10-24</lastmod>", sitemap)
+        self.assertIn(f"<lastmod>{timezone.localtime(live.updated_at):%Y-%m-%d}</lastmod>", sitemap)
 
     def test_unpublished_is_off_the_site_list_and_sitemap(self):
         post = self.published(slug="for-now")
