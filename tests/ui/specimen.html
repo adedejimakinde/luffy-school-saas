@@ -18,6 +18,12 @@
 <title>Design specimen</title>
 <link rel="preload" href="/static/web/fonts/hanken-grotesk-400.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/static/web/design.css">
+<link rel="stylesheet" href="/static/web/picker.css">
+<script type="module">
+  // What every page with a select does (`web/picker.js`), here on the whole page.
+  import { enhanceSelects } from "/static/web/picker.js";
+  enhanceSelects(document.body);
+</script>
 <style>
   .specimen-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 16px; }
   .today-list { list-style: none; margin: 0; padding: 0; }
@@ -26,7 +32,7 @@
   .today-list time { color: var(--muted); min-width: 3.5rem; font-variant-numeric: tabular-nums; }
   .waiting td:last-child { text-align: right; }
   .stack { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
-  .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+  .fields { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); align-items: start; }
 
   /*
    * "Waiting for you" is a table on a desktop and a stack of cards below
@@ -180,7 +186,10 @@
           <h2>Fields</h2>
           <div class="fields">
             <label class="field">Pupil's name <input value="Ada Adeyemi"></label>
-            <label class="field">Class <select><option>JSS 1A</option><option>JSS 1B</option></select></label>
+            <label class="field">Class <select id="specimen-class" name="class"><optgroup label="JSS 1"><option>JSS 1A</option><option>JSS 1B</option><option>JSS 1C</option></optgroup><optgroup label="JSS 2"><option>JSS 2A</option><option selected>JSS 2B</option><option>JSS 2C</option></optgroup><optgroup label="JSS 3"><option>JSS 3A</option><option>JSS 3B</option></optgroup><optgroup label="SS 1"><option>SS 1A</option><option>SS 1B</option><option>SS 1C</option></optgroup><optgroup label="SS 2"><option>SS 2A</option><option>SS 2B</option></optgroup><optgroup label="SS 3"><option>SS 3A</option><option>SS 3B</option></optgroup></select></label>
+            <label class="field">Term <select id="specimen-term" name="term"><option>First term</option><option>Second term</option><option disabled>Third term (not open yet)</option></select></label>
+            <label class="field">Subject (no subjects yet) <select id="specimen-subject" disabled><option>Choose a subject</option></select></label>
+            <label class="field">Method <select id="specimen-method" aria-invalid="true" aria-describedby="specimen-method-error" required><option value="">Choose one</option><option value="cash">Cash</option><option value="transfer">Bank transfer</option></select><span class="hint" id="specimen-method-error">Choose how it was paid.</span></label>
             <label class="field">Amount (&#8358;) <input inputmode="decimal" value="150,000.00"><span class="hint">Whole term, before any discount</span></label>
           </div>
         </section>

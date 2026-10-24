@@ -1,6 +1,8 @@
 /* Every select and its picker (`web/picker.js`), for the pages with one. `docs/design.md`. */
 
+/* `min-width: 0` lets a select in a flex row shrink below its longest option. */
 select {
+  min-width: 0;
   padding-right: 40px;
   appearance: none;
   background: var(--card) url("chevron.svg") no-repeat right 12px center / 20px;

@@ -10,9 +10,9 @@ export const SEARCH_ABOVE = 8;
 const PHONE = "(max-width: 639.98px)";
 const OPENERS = new Set([" ", "Enter", "ArrowDown", "ArrowUp", "F4", "Home", "End", "PageUp", "PageDown"]);
 
-/** "  Ìfé " is "ife". */
+/** "  Ìfé (SS 2)" is "ife ss 2": no case, accents or punctuation. */
 export function fold(text) {
-  return String(text ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+  return String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 export function rowsOf(select) {
@@ -28,9 +28,10 @@ export function rowsOf(select) {
   return rows;
 }
 
+/** Each typed word starts a word of the row or its group: "ss 2" is not JSS 2A. */
 export function filterRows(rows, query) {
   const words = fold(query).split(" ").filter(Boolean);
-  return rows.filter((row) => words.every((word) => row.hay.includes(word)));
+  return rows.filter((row) => words.every((word) => row.hay.split(" ").some((part) => part.startsWith(word))));
 }
 
 /** Type to jump: the next enabled row after `from` starting with `typed`; a letter again moves on. */
@@ -103,7 +104,8 @@ function build() {
     event.preventDefault();
     close();
   });
-  dialog.addEventListener("close", () => close());
+  // Queued by `dialog.close()`: stale if the picker has opened again since.
+  dialog.addEventListener("close", () => dialog.open || close());
   // The backdrop.
   dialog.addEventListener("click", (event) => event.target === dialog && close());
   shut.addEventListener("click", () => close());

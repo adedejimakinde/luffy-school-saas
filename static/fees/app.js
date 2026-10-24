@@ -42,7 +42,6 @@ import {
   removeBillLine,
 } from "./api.js";
 import * as states from "./states.js";
-import { enhanceSelects } from "../web/picker.js";
 
 /**
  * What one press of "Create accounts for this class" did, in words: how many were made,
@@ -555,7 +554,8 @@ export async function mount(
 if (typeof document !== "undefined") {
   const root = document.getElementById("fees");
   if (root) {
-    enhanceSelects(root);
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root, { search: window.location.search });
   }
 }

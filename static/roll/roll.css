@@ -13,6 +13,8 @@ h2 { font-size: 1.1rem; margin: 28px 0 8px; }
 .child { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--divider); }
 .child .name { font-weight: 700; flex: 1 1 12rem; }
 .handle, .reference, .learner-id { color: var(--muted); font-size: var(--small); }
+/* A handle is one long word ("sunrise.uioff01"): it breaks rather than widen the page. */
+.handle { overflow-wrap: anywhere; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .child.unplaced { border-left: 4px solid var(--warn); background: var(--warn-bg); padding-left: 10px; }
 .child .standing { color: var(--muted); }
@@ -55,6 +57,9 @@ form.link-guardian.rejected, form.link-guardian.not-allowed { background: var(--
    handle, then "Admission no." and "Class" as labelled lines, then Guardians. */
 .class-line { display: contents; }
 @media (max-width: 639.98px) {
+  /* Narrower than their longest class name at 320px with the text doubled,
+     rather than wider than the screen. */
+  .children > .child, .child .class-line { min-width: 0; }
   .child .class-line { display: flex; align-items: center; }
   .child .reference, .child .learner-id { font-size: inherit; color: var(--text); }
   .child select { flex: 1 1 10rem; max-width: 14rem; }

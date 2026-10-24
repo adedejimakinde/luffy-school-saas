@@ -22,7 +22,6 @@ import {
   removePeriod,
 } from "./api.js";
 import * as states from "./states.js";
-import { enhanceSelects } from "../web/picker.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
@@ -189,7 +188,8 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
 if (typeof document !== "undefined") {
   const root = document.getElementById("timetable");
   if (root) {
-    enhanceSelects(root);
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root, { search: window.location.search });
   }
 }

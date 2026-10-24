@@ -5,7 +5,10 @@
  */
 
 import { esc } from "./html.js";
-import { SEARCH_ABOVE } from "./picker.js";
+
+/** `web/picker.js`'s `SEARCH_ABOVE`: a list it searches is a list grouped. Not
+ * imported, so a page still draws if the picker fails to load. */
+export const GROUP_ABOVE = 8;
 
 /**
  * `<option>`s for classes (`{ class_group_id, name, level }`, in level order).
@@ -21,6 +24,6 @@ export function classOptions(classes, selected = "") {
     const shared = new Set(arms.map((c) => (/^(.*\d)\s*[A-Za-z]?$/.exec(String(c.name).trim()) || [])[1]));
     return shared.size === 1 && !shared.has(undefined) ? [...shared][0] : null;
   });
-  if (classes.length <= SEARCH_ABOVE || levels.size < 2 || stems.includes(null)) return classes.map(option).join("");
+  if (classes.length <= GROUP_ABOVE || levels.size < 2 || stems.includes(null)) return classes.map(option).join("");
   return [...levels.values()].map((arms, i) => `<optgroup label="${esc(stems[i])}">${arms.map(option).join("")}</optgroup>`).join("");
 }

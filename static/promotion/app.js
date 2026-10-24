@@ -10,7 +10,6 @@
 
 import { REFUSAL, confirmPlan, fetchReview } from "./api.js";
 import * as states from "./states.js";
-import { enhanceSelects } from "../web/picker.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
@@ -158,7 +157,8 @@ function applyChoices(classes, plan) {
 if (typeof document !== "undefined") {
   const root = document.getElementById("promotion");
   if (root) {
-    enhanceSelects(root);
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root);
   }
 }

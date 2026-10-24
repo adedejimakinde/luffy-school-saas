@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { classOptions } from "../../static/web/classes.js";
+import { GROUP_ABOVE, classOptions } from "../../static/web/classes.js";
 import { SEARCH_ABOVE, filterRows, fold, nextMatch, rowsOf } from "../../static/web/picker.js";
 
 /** Just enough of a `<select>` for `rowsOf()`: options, some in an optgroup. */
@@ -23,8 +23,9 @@ function fakeSelect(spec) {
 
 const rows = (labels) => rowsOf(fakeSelect(labels.map((label) => ({ label }))));
 
-test("a long list is more than eight", () => {
+test("a long list is more than eight, and a list long enough to search is grouped", () => {
   assert.equal(SEARCH_ABOVE, 8);
+  assert.equal(GROUP_ABOVE, SEARCH_ABOVE);
 });
 
 test("rows keep each option's index, its group and whether it can be chosen, and leave hidden ones out", () => {
@@ -49,15 +50,25 @@ test("rows keep each option's index, its group and whether it can be chosen, and
   );
 });
 
-test("a search ignores case, accents and spaces, and wants every word", () => {
-  const listed = rows(["Ìfé Bello", "Ife Adeyemi", "Kemi Bello", "JSS 1A", "JSS 10A"]);
+test("a search ignores case, accents, spaces and punctuation, and wants every word", () => {
+  const listed = rows(["Ìfé Bello", "Ife Adeyemi", "Kemi Bello", "JSS 1A", "JSS 10A", "SS 1A", "Vice principal (academic)"]);
 
   assert.deepEqual(filterRows(listed, "  IFE ").map((r) => r.label), ["Ìfé Bello", "Ife Adeyemi"]);
   assert.deepEqual(filterRows(listed, "bello ife").map((r) => r.label), ["Ìfé Bello"]);
   assert.deepEqual(filterRows(listed, "jss 1").map((r) => r.label), ["JSS 1A", "JSS 10A"]);
+  assert.deepEqual(filterRows(listed, "academic").map((r) => r.label), ["Vice principal (academic)"]);
   assert.deepEqual(filterRows(listed, "nobody"), []);
-  assert.equal(filterRows(listed, "").length, 5);
+  assert.equal(filterRows(listed, "").length, 7);
   assert.equal(fold("  Ìfé   Bello "), "ife bello");
+  assert.equal(fold("St Mary's (JSS 1)"), "st mary s jss 1");
+});
+
+test("a word is found from its start, so a level is not found inside another", () => {
+  const listed = rows(["JSS 2A", "SS 2A", "SS 2B", "Adeyemi"]);
+
+  assert.deepEqual(filterRows(listed, "ss 2").map((r) => r.label), ["SS 2A", "SS 2B"]);
+  assert.deepEqual(filterRows(listed, "2a").map((r) => r.label), ["JSS 2A", "SS 2A"]);
+  assert.deepEqual(filterRows(listed, "yemi"), []);
 });
 
 test("a search finds a row by its group's name too", () => {

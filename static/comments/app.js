@@ -41,7 +41,6 @@ import {
   saveRemark,
 } from "./api.js";
 import * as states from "./states.js";
-import { enhanceSelects } from "../web/picker.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "" } = {}) {
@@ -270,7 +269,8 @@ if (typeof document !== "undefined") {
   // list rather than the chooser. Anything that is not a class id is ignored.
   const asked = Number(new URLSearchParams(window.location.search).get("class"));
   if (root) {
-    enhanceSelects(root);
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root, { classGroupId: Number.isInteger(asked) && asked > 0 ? asked : null });
   }
 }

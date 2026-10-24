@@ -136,6 +136,9 @@ Every `<select>` in the portal opens one picker (`static/web/picker.js`,
   `picker.css` draws the select itself (white, a rule, a chevron, red when it
   is invalid, grey when it is disabled), so a page with no script, or whose
   script failed, shows the same field opening the system menu.
+- **It is an enhancement.** Each page loads it with `import()` beside its own
+  module, so a picker that fails to load leaves the page drawn and each select
+  opening the system menu, and `web/classes.js` does not import it.
 - **Only the pages that draw a select carry it.** `tests/test_pages.py` fails a
   page whose modules draw a `<select` and do not start the picker on its root,
   and `tests/test_budget.py` a page that loads the module without its
