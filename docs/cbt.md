@@ -383,7 +383,7 @@ by the clock: that is a retake.
 | Parent | Never | Never | Their own child's released scores; no questions, no answers, no class average |
 | Vice principal | All banks (read) | All tests (read) | All attempts and results (read); not release, not send to CA |
 | Principal | All | All | All; release and restore; sets cross-subject practice; names exam officers |
-| Exam officer (a teacher or the vice principal the principal names) | Their own, as a teacher | Cross-subject practice and, for extra time, PIN slips and retakes, any test in the school | No scores beyond what their role already shows |
+| Exam officer (a teacher, the vice principal or the administrator, named by the principal) | Their own, as a teacher | Cross-subject practice and, for extra time, PIN slips and retakes, any test in the school | No scores beyond what their role already shows |
 | Administrator | **None** | Title, class, window, size and code state; never the questions before the test opens. Opens and closes sittings, changes the code | The sitting log from the start; **scores only after release**. Prints PIN slips; gives extra time |
 | Platform staff | None of a school's content (as `gradebook` excludes them) | None | None; they run provider removal |
 
@@ -515,8 +515,9 @@ administrator").
 - "Restore control" for a release is read as a principal-only **restore action with a
   reason** (`TestReleaseRestore`), not as the build's break-and-restore test
   procedure. Say if it meant something else.
-- An exam officer is a permission held by a teacher or the vice principal, not a new
-  role, so a membership keeps one role per school.
+- An exam officer is a permission held by a teacher, the vice principal or the
+  administrator, not a new role, so a membership keeps one role per school. Built so
+  in step 2.
 - Retakes: the test's teacher or an exam officer, with a reason, as extra time. The
   administrator gives extra time but is not listed for retakes unless named an exam
   officer.
@@ -541,3 +542,110 @@ administrator").
 - Every question shown was written for the mockups. Names and numbers are invented.
 - Built at 375 and 1280 px; the test screen moves Previous, Flag and Next to a bar at
   the foot of a phone.
+
+## Built
+
+### Step 0, demo slug guard (#279)
+
+A demo slug cannot be created unless `DEBUG` is on or `DEMO_SERVER=1`, and a production
+server refuses to start while one exists. `docs/demo-server.md`.
+
+### Step 1, subject-teacher assignment (#292, #293)
+
+`docs/subject-teachers.md`, with its controls. Summarised under "Who teaches what" above.
+
+### Step 2, exam officers, exam PINs and slips
+
+Nothing from step 3 onward: no bank, question, test, `/sit/` door, throttle or sitting.
+No question bank connector and no question is seeded; `cbt` has no question table, and
+its migration writes no rows (a test says so).
+
+**Where it lives.** A new tenant app, `cbt`:
+
+| | |
+| --- | --- |
+| `cbt/models.py` | `ExamOfficerGrant`, `PinSlipPrint`, `ExamPin` |
+| `cbt/migrations/0001_exam_officers_exam_pins_and_every_slip_print_are_kept.py` | the tables, and three triggers: `cbt_exam_officer_grants_are_append_only`, `cbt_slip_prints_are_append_only`, `cbt_an_exam_pin_is_only_ever_cancelled` |
+| `cbt/access.py` | every role set and question: `can_print()`, `can_name()`, `is_exam_officer()`, `can_read_banks()`, `menu_keys()` |
+| `cbt/officers.py` | `name_as()`, `end_as()` |
+| `cbt/pins.py` | `print_class_as()`, `print_student_as()`, `check()`, `digest()` |
+| `cbt/pdf.py`, `cbt/templates/cbt/exam_slips.html` | the slips, by WeasyPrint, as the checker's are |
+| `cbt/api.py` | `/api/cbt/`: `GET slips/`, `GET slips/classes/{id}/`, `POST slips/classes/{id}/print/`, `POST slips/classes/{id}/students/{id}/print/`, `POST officers/`, `POST officers/{id}/end/` |
+| `cbt/views.py`, `static/exam-slips/` | the `/exam-slips/` page |
+
+**Who does what, on the server.** Every route asks who is asking before it looks
+anything up, and the services ask again.
+
+| | print slips | name or end exam officers | see the page |
+| --- | --- | --- | --- |
+| Principal | any class | yes | yes |
+| Administrator | any class | no | yes; sees who the officers are |
+| Exam officer (teacher, vice principal or administrator, named) | any class | no | yes |
+| Vice principal, teacher, not named | no, whatever subjects and classes they are assigned | no | no (403) |
+| Bursar, parent, student | no | no | no (403) |
+
+A teacher's subject-teacher assignments give no slip rights: printing slips is not a
+teacher's job in this note, and an exam officer prints for any class (decided 24
+October 2026). Step 3 is where the assignments start to decide what a teacher sees
+(`assignments.pairs_of()`).
+
+**The administrator and banks.** `access.can_read_banks()` holds the rule step 3 will
+ask: never a login holding the administrator role, named exam officer or not. Step 2
+serves no bank, question or test to anybody, and a test asserts both, and that no route
+the administrator can open says anything about a question, a bank or an answer.
+
+**Exam officers.** The principal names a teacher, the vice principal or the
+administrator of this school (a membership with access, looked up in this school's
+memberships only, row-locked so two taps cannot both name), with an optional note, and
+ends it the same way. Naming somebody already named, or ending somebody not named, is
+refused with a sentence. The latest `ExamOfficerGrant` row decides; a membership that
+is suspended or ended is no officer while it is so. The page lists the officers, and
+the principal gets the form and an End button that asks twice.
+
+**Printing.** Per class, for the current term: every student placed in the class this
+term who can act here gets a slip with a new eight-digit PIN, and every live PIN this
+term of those students is cancelled, wherever it was printed, in the same transaction
+(the class row is locked first). A student with no admission number gets no PIN and is
+named at the end of the PDF. A lost slip is one student's, and cancels only theirs.
+Each press writes one `PinSlipPrint`: class, term, kind, how many slips, how many PINs
+it cancelled, how many students had no number, who and when; each cancelled PIN names
+it. The page asks twice before printing, saying how many slips already given out will
+stop working. A slip prints the school's host and `/sit/`.
+
+**Storage.** A PIN is kept only as `digest()`: HMAC-SHA256 under
+`settings.EXAM_PIN_KEY` over the PIN bound to the school, the student and the term.
+`EXAM_PIN_KEY` comes from the server's environment (`deploy/env/secrets.env.example`
+makes one); a server whose `secrets.env` predates it derives one from `SECRET_KEY`.
+Neither is in the database. Changing it stops every printed slip from working, and the
+remedy is printing again. The PDF is rendered in the request, inside the transaction
+that mints its PINs (a render that fails mints and cancels nothing), sent with
+`Cache-Control: no-store, private` and `Pragma: no-cache`, and written nowhere. The page
+hands it to the browser to save and keeps no copy.
+
+**The check, for step 4.** `pins.check(school, term, admission_number, pin)` answers
+with the student or `None`, for every failure alike (unknown number, wrong PIN,
+cancelled PIN, another student's, another term's, another school's, a student who has
+left), and writes nothing, so step 4 can wrap it in its throttle and one sentence. It
+reads only the schema the connection is on and refuses to answer for any other school.
+No route calls it yet.
+
+**The menu.** "Exam slips" sits under Office for the principal and the administrator,
+by role, and for an exam officer by permission (`menu_for(also=...)`,
+`cbt.access.menu_keys()`). That costs a teacher or a vice principal one statement per
+page (two with its search path, `tests/test_budget.py`); nobody else is asked. Students
+and parents have no staff menu and never see it.
+
+**The page.** Phone first, on the design system's tokens, reusing `setup/setup.css`,
+with a few wrapping rows in `exam-slips.css`. Checked in a real browser at 360, 768 and
+1280 px, at 320 px, with text at 200%, and for keyboard focus clear of the bars
+(`tests/ui/screens.test.js`); every frame is under the 150 KB budget
+(`tests/test_budget.py`).
+
+**Tests.** `cbt/tests/test_exam_slips.py` (two schools on their own hosts, whose first
+class, term and child share ids and whose first children share an admission number),
+`tests/js/exam_slips.test.js`, the officer cases in `tests/test_menu.py`, and the page in
+`tests/test_pages.py`, `tests/test_budget.py` and `tests/ui/screens.test.js`.
+
+#### Controls
+
+CONTROLS-TABLE

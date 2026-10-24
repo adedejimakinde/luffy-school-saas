@@ -3,7 +3,7 @@
 The principal says which teacher teaches which subject to which class, per term. Once a
 term has had any of these, a teacher's marking is narrowed to the pairs they hold, until
 the principal deliberately opens it again. A new term starts with the last one's
-assignments copied in. Phase 2, step 1 of the CBT plan (`docs/cbt.md` on PR #278), and
+assignments copied in. Phase 2, step 1 of the CBT plan (`docs/cbt.md`), and
 its follow-up; nothing else from that plan.
 
 ## Decisions
@@ -12,7 +12,7 @@ its follow-up; nothing else from that plan.
 | --- | --- |
 | Who changes them | The principal alone (`gradebook.assignments.ASSIGNING_ROLES`). |
 | Who reads them | The principal, the vice principal and the administrator (`VIEWING_ROLES`). The administrator cannot change them. |
-| Shape | Many to many. One teacher teaches many pairs, and one pair can have more than one teacher, so `SubjectTeacher` is unique on (term, class, subject, teacher). `docs/cbt.md` drew it unique on the pair; the decision of 23 October 2026 widened it. |
+| Shape | Many to many. One teacher teaches many pairs, and one pair can have more than one teacher, so `SubjectTeacher` is unique on (term, class, subject, teacher). `docs/cbt.md` first drew it unique on the pair; the decision of 23 October 2026 widened it, and the note now says so. |
 | When marking narrows | From the paper's own term's first assignment. Before the first, any teacher marks any paper, exactly as before. **Taking the last one away opens nothing** (decided 23 October 2026): the term stays restricted, and a teacher holding nothing marks nothing and is told to ask the principal. |
 | Opening it again | Only by the principal's switch on `/subject-teachers/`, "Open marking to all teachers", which first says what will happen and does it on the second tap. "Restrict marking again" is the same switch the other way. While open, adding an assignment does not restrict it again: neither direction happens silently. The vice principal and the administrator see where the switch stands and cannot turn it. Before a term's first assignment there is nothing to switch (422). |
 | Where a term stands | A fold over the log, never a column (`assignments.marking_in()`, `docs/operating-rules.md` rule 4): the principal's latest switch row if there is one, else restricted once the term has had an `added` row, else "not yet". |
@@ -25,7 +25,7 @@ its follow-up; nothing else from that plan.
 | The log | Every add, every removal, every copy and every turn of the switch writes a `SubjectTeacherChange` (who, when, and the names as they read then) in the same transaction. A trigger refuses UPDATE and DELETE on it. |
 | Released results | Untouched. Nothing here reads or writes a released row, and a released card refuses a mark whoever is assigned. |
 
-Placed in `gradebook`, not `academics` as `docs/cbt.md` has it, because the row names a
+Placed in `gradebook`, not `academics` as `docs/cbt.md` first had it, because the row names a
 `Subject` and `gradebook` already depends on `academics`.
 
 ## Where it is enforced
