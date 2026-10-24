@@ -10,6 +10,9 @@ because several of the decisions below exist only because of a setting that is
 already there. The visual design of the themes is **not** decided here. It has
 its own section saying what a separate design round must settle.
 
+The owner answered the note's open questions on 2026-10-24. The answers are
+written into the sections they change, and §13 lists them in one place.
+
 Two goals pull against each other: premium Nigerian schools want a site that
 looks expensive, and parents open it on a mid-range Android phone over a slow
 mobile network. Neither goal is allowed to give way. The engine must not cap
@@ -118,7 +121,7 @@ through. The public site registers no worker of its own.
 
 - One generic SMTP path. `messaging.smtp.SmtpProvider` (selected by `MESSAGING_EMAIL_PROVIDER`) and the staff-invitation `schools.delivery.EmailChannel` both read `EMAIL_HOST/PORT/HOST_USER/HOST_PASSWORD/USE_TLS`.
 - **From is always `DEFAULT_FROM_EMAIL`** (`no-reply@classnode.co`). **Reply-To** is the school's `contact_email` (`messaging` D16).
-- **Brevo is not named anywhere in the repository.** `deploy/env/secrets.env.example` lists the SMTP lines as commented "added later", and `docs/messaging.md` still has OPEN-5 ("which provider, under what contract") open. Brevo's SMTP relay plugs into the existing settings with no code change (`smtp-relay.brevo.com:587`, the account login, an SMTP key). Sending **as the school's own domain** needs new work (§8).
+- **Brevo is not named anywhere in the repository.** `deploy/env/secrets.env.example` lists the SMTP lines as commented "added later", and `docs/messaging.md` still has OPEN-5 ("which provider, under what contract") open. **The server, though, already sends through Brevo** (owner, 2026-10-24): the repository is generic SMTP, and the server's `secrets.env` points it at Brevo's relay. Sending **as the school's own domain** needs new work (§8).
 
 ### What the new forms can copy
 
@@ -194,7 +197,7 @@ written at publish time, not the current state of a table.**
 
 - **Draft.** One editable draft per school: settings, pages, sections, the theme and its options. Saving writes the draft only. Two editors at once: last write wins per section, with an `updated_at` check that refuses a stale save and tells the person to reload. No silent overwrite.
 - **Preview.** `/website/preview/<page>` on the school's classnode host, for whoever may edit. It renders the draft through exactly the same templates as the live site, under a fixed "Preview: not published" bar. It is `noindex`, `Cache-Control: no-store`, and never cached server-side. It can preview the draft **in another theme** without saving the switch.
-- **Publish.** One button. It writes an immutable `SiteRevision` row: a JSON snapshot of the whole draft plus the theme, with `published_by`, `published_at`, and a short optional note ("Admissions open for 2027/28"). The public site reads only the latest revision. That is one indexed row, which is also the cache key (§4.4).
+- **Publish.** One button, the principal's alone (§2.4). It writes an immutable `SiteRevision` row: a JSON snapshot of the whole draft plus the theme, with `published_by`, `published_at`, and a short optional note ("Admissions open for 2027/28"). The public site reads only the latest revision. That is one indexed row, which is also the cache key (§4.4).
 - **Log.** Revisions are never deleted, so the publish log is the revision table: who, when, the note, and a diff summary (sections added, removed or changed). The settings page shows the last 20. **Roll back** republishes an older snapshot as a new revision, logged as a rollback by whoever did it.
 - **News posts and gallery albums** publish one item at a time (`NewsPost`, `Album`, each with draft/published state and `published_by`/`published_at`), because a school posts news weekly and should not have to republish the whole site to do it. Every publish or unpublish of an item writes a `SitePublishEvent` row (who, when, what, which item), so the single log the principal reads covers both kinds.
 - Images referenced by any revision are `PROTECT`ed: an old revision can always be rolled back to with its pictures.
@@ -203,14 +206,15 @@ written at publish time, not the current state of a table.**
 
 | Act | Principal | Administrator, not delegated | Administrator, delegated | Platform staff |
 |---|---|---|---|---|
-| Edit draft, preview | yes | no | yes | no |
-| Publish, roll back, publish news and albums | yes | no | yes (see open question 1) | no |
+| Edit draft, preview, mark a draft "Ready for the principal" | yes | no | yes | no |
+| Publish, roll back, publish news and albums | yes | no | **no** | no |
 | Switch theme, change theme options | yes | no | no | no |
 | Turn delegation on or off | yes | no | no | no |
 | Connect a custom domain or sender domain | yes | no | no | no |
 | Read the publish log | yes | yes | yes | yes, on the handover page |
 | Suspend the public site (takedown, §10.3) | no | no | no | yes, logged |
 
+- **Only the principal publishes** (decided 2026-10-24: large schools guard their brand). Delegation lets the administrator edit drafts of pages, news and albums, never publish them. When the administrator marks a draft "Ready for the principal", the principal is emailed a link to its preview. Publishing still takes the principal's own click.
 - **Delegation** is a per-school setting that only the principal can change, and every change is logged (`SiteDelegationEvent`: who, when, on/off). Turning it off takes effect on the administrator's next request. It is checked at every write through `roles_at()`, which already scopes to `ACCESS_STATUSES`, never cached in the session.
 - A school with no principal membership can edit nothing. The principal must be invited first. This is deliberate: the site speaks for the school.
 - Teachers, bursars, the vice principal (academic), parents and students have no access.
@@ -355,7 +359,7 @@ Nothing here is a limit on what a theme may look like, only on how it gets there
 - **HTML.** A published page is rendered once per `(schema, revision id, host, path)` and kept in Redis. A new publish is a new key, so there is nothing to invalidate. Response headers: `Cache-Control: public, max-age=60, stale-while-revalidate=600`, plus `ETag`. **Public responses set no cookie and do not read the session.** That needs care: `SchoolAccessMiddleware` touches `request.user` on school hosts, which adds `Vary: Cookie`. PR 3 measures this and lets public site routes through without reading the session.
 - **Images.** URLs carry a content hash, so they are served `public, max-age=31536000, immutable`.
 - **Static files.** Already hashed and pre-compressed by WhiteNoise. Caddy keeps `encode zstd gzip`.
-- **No CDN at launch.** This matches the "no CDN" rule in `test_budget.py`. Cloudflare's proxy in front of `*.classnode.co` would put a cache in Lagos and remove most of the RTT problem, but it changes the `trusted_proxies` reasoning in the Caddyfile and does not cover custom domains cheaply. That decision is left to the owner (open question 5).
+- **No CDN at launch** (decided 2026-10-24). This matches the "no CDN" rule in `test_budget.py`. Cloudflare's proxy in front of `*.classnode.co` would put a cache in Lagos and remove most of the RTT problem. But it changes the `trusted_proxies` reasoning in the Caddyfile, and it complicates certificates for custom domains. **The question is reopened at the load test after CBT**, with that test's numbers in hand.
 
 ---
 
@@ -368,7 +372,10 @@ script and in Opera Mini:
 
 - **Enquiry** (`/admissions/enquire/`): parent or guardian name, phone (required), email (optional), class sought (from the school's own class levels, JSS 1 to SSS 3 or whatever it has set up), session, preferred contact time, message (up to 1,000 characters).
 - **Application** (`/admissions/apply/`): everything in the enquiry, plus the child's full name, date of birth, current school, last class completed, day or boarding (if the school offers both), and the parent's address.
-- **Not collected in v1**: photos of the child, documents (birth certificate, past results), medical, religious or ethnic information, NIN. This is data minimisation: each of these can be asked for at interview, on paper, by the school. Uploads are open question 8.
+- **Not collected in v1**: photos of the child, documents (birth certificate, past results), medical, religious or ethnic information, NIN. This is data minimisation: each of these can be asked for at interview, on paper, by the school.
+- **Later, not in v1** (decided 2026-10-24):
+  - **Document uploads** (birth certificate, last result) come in a later PR, through the same decode-and-redraw path as photos (§9.1). They are kept only as long as the application's retention period, and the consent wording gains a line for them.
+  - **An application fee** through Paystack comes only after Paystack verification, when the platform can take live payments (Paystack is in test mode only today, `docs/paystack.md`).
 
 The school can turn each form on or off. While admissions are closed, the forms
 show the closing message and accept nothing.
@@ -381,8 +388,8 @@ show the closing message and accept nothing.
   - `submitted_host`, the submitting address (for the rate limit), `created_at`;
   - status: new, contacted, invited to the entrance exam, offered, admitted, declined, withdrawn.
 - Every status change is an `ApplicantEvent` row (who, when, from, to, note).
-- **The portal page is `/applicants/`** on the school's classnode host, for the principal and the administrator (open question 10 asks whether a narrower admissions-officer role is wanted). It shows a list filtered by session, class and status, a detail view, and status changes. A CSV export is logged as an event with the row count.
-- **Notification**: an email to the school's admissions inbox (open question 9), sent after commit, and **batched: at most one email per 15 minutes per school**, listing what came in. A flood of submissions never becomes a flood of email.
+- **The portal page is `/applicants/`** on the school's classnode host, for the principal and the administrator. There is no admissions-officer role for now (decided 2026-10-24); it is added if schools ask for it. It shows a list filtered by session, class and status, a detail view, and status changes. A CSV export is logged as an event with the row count.
+- **Notification**: an email to the school's `contact_email` by default, or to a separate admissions address if the school sets one on the site settings (decided 2026-10-24). It is sent after commit, and **batched: at most one email per 15 minutes per school**, listing what came in. A flood of submissions never becomes a flood of email.
 - **No automatic reply to the address typed into the form.** Otherwise the form could be used to send our mail to anyone. The person sees an on-screen reference number ("ADM-2027-0042") and the school's phone number.
 - **Retention**: applicants not admitted are deleted a fixed time after the session starts (the lawyer sets the period; the proposal is 12 months), by a nightly cron job beside the others in `deploy/cron/classnode`. "Admitted" does not create a student in v1. It only marks the row; turning an applicant into an enrolment is a later PR.
 
@@ -444,6 +451,16 @@ No third-party captcha at launch: no outside script, and no extra page weight on
 
 ### 7.1 What the school does
 
+**A premium add-on** (decided 2026-10-24). The website on the school's classnode
+address is included in every plan. A custom domain, and sending email as the
+school's own domain (§8), are a paid add-on. Billing is not built. Platform staff
+switch the add-on on for a school on the handover page (`School.site_premium`,
+public schema, logged with who and when). Without it, `/website/domain/` and
+`/website/email/` explain the add-on and accept nothing. The services refuse too,
+not just the pages. If the add-on is switched off for a school that has a
+domain, the domain moves to **lapsed** (§7.2) and mail falls back to the
+platform `From`.
+
 The principal enters the domain (say `stmarys.edu.ng`) on `/website/domain/`. The
 page shows exactly three records to add, with copy buttons:
 
@@ -453,7 +470,7 @@ page shows exactly three records to add, with copy buttons:
 | CNAME | `www.stmarys.edu.ng` | `sites.classnode.co` | routing; `sites.classnode.co` is ours and points at the VPS |
 | A (and AAAA if the VPS has IPv6) | `stmarys.edu.ng` (apex) | the VPS address | an apex cannot be a CNAME; providers that support ALIAS/ANAME to `sites.classnode.co` should use that instead |
 
-**`www` is the canonical host. The apex only redirects to it.** The reason: a
+**`www` is the canonical host. The apex only redirects to it** (decided 2026-10-24). The reason: a
 CNAME follows us if the VPS address ever changes, while an apex A record is a
 number every school would have to change by hand. Schools whose DNS provider
 supports ALIAS can make both follow us.
@@ -543,7 +560,7 @@ https:// {
 
 ### 8.1 Sending
 
-- **Platform:** one Brevo account, used through its SMTP relay with the existing `EMAIL_*` settings (`smtp-relay.brevo.com`, port 587, TLS, SMTP key in `secrets.env`). Brevo's API is used only to register and check sender domains. This closes the provider half of OPEN-5 for email, if the owner agrees (open question 7).
+- **Platform:** one Brevo account, used through its SMTP relay with the existing `EMAIL_*` settings (`smtp-relay.brevo.com`, port 587, TLS, SMTP key in `secrets.env`). Brevo's API is used only to register and check sender domains. Brevo is confirmed as the email provider (owner, 2026-10-24, already live on the server), which closes the email half of OPEN-5.
 - **Per message, a `From` chosen per school.** `Outbound` gains a `from_address`, and `SmtpProvider` stops reading `DEFAULT_FROM_EMAIL` directly:
   - the school has a **verified** sender domain: `"St Mary's College" <results@stmarys.edu.ng>`, with Reply-To the school's `contact_email` as today;
   - otherwise: `"St Mary's College via Classnode" <no-reply@classnode.co>`, as today.
@@ -552,7 +569,7 @@ https:// {
 
 ### 8.2 The records the school adds
 
-On `/website/email/`, next to the domain page. The values come from Brevo's API
+On `/website/email/`, next to the domain page, behind the same premium add-on as custom domains (§7.1). The values come from Brevo's API
 for that domain and are shown exactly as Brevo returns them:
 
 | Record | Name | Value |
@@ -565,7 +582,7 @@ for that domain and are shown exactly as Brevo returns them:
 - DMARC alignment comes from DKIM signing as the school's domain. Gmail's and Yahoo's sender rules (since 2024) require SPF or DKIM plus a DMARC record, which this meets.
 - The bounce (Return-Path) domain stays Brevo's.
 - Verification is the same state machine as §7.2: pending, verified, failing, lapsed. A failing sender domain falls back to the platform `From` straight away; there is no grace period for mail.
-- Whether one Brevo account can hold one sender domain per school at our scale, and on which plan, must be confirmed before PR 11 (open question 7).
+- **Checked before PR 11a starts**, with the answers written into this note: the current Brevo plan's daily sending limit, measured against a results day (every school's result notices on the same afternoon), and whether the plan supports one authenticated sender domain per school, and how many.
 
 ### 8.3 Mailboxes: not built
 
@@ -596,9 +613,11 @@ Classnode sends mail; it does not host inboxes. The page carries a short guide:
 
 **Storage.** This is the first feature for which Postgres `BinaryField` is the
 wrong home: a gallery school could hold several hundred megabytes, and backups
-and the weekly restore test grow with it. Proposal (open question 2):
+and the weekly restore test grow with it. **Decided 2026-10-24: the VPS disk for the pilot, backed up nightly to B2. Move to B2 object storage when space or load calls for it.**
 
-- Files on the VPS data volume under `/srv/classnode/media/<schema>/<2-hex>/<content hash>-<width>.<fmt>`, backed up to B2 with the database.
+- Files on the VPS data volume under `/srv/classnode/media/<schema>/<2-hex>/<content hash>-<width>.<fmt>`.
+- **A nightly backup** to B2 runs from `deploy/cron/classnode` beside the database backup. It copies only new files, since names are content hashes and never change. It reports failure the way `deploy/postgres/backup.sh` does, and the weekly restore test checks that a sample of files comes back.
+- **When to move to B2**: when the media volume passes 70% full, or when serving media becomes a noticeable share of the server's bandwidth or CPU at the post-CBT load test. Because Django already decides and Caddy only sends, the move changes only where Caddy fetches from. The URLs, the tenant check and the tests stay the same.
 - Postgres holds only the rows (`SiteImage`: key, hash, size, focal point, alt text, consent flag, uploader).
 - Served by **Django deciding and Caddy sending**:
   1. `/media/<key>-<w>.<fmt>` reaches Django;
@@ -620,14 +639,14 @@ and the weekly restore test grow with it. Proposal (open question 2):
   - the `<video>` gets its `src` only after the `load` event, and only when the screen is ≥ 768 px wide or the theme opts phones in, `navigator.connection.saveData` is not set, and `prefers-reduced-motion` is not `reduce`;
   - otherwise the poster stays.
   - There is always a visible pause control.
-- Videos with sound, such as a principal's address or a school tour, are **not hosted**. They are a link to YouTube or Vimeo, drawn as a "click to play" poster, and the player loads only on tap, from `youtube-nocookie.com`. Open question 3.
+- Videos with sound, such as a principal's address or a school tour, are **not hosted**. They are a link to YouTube or Vimeo, drawn as a "click to play" poster, and the player loads only on tap, from `youtube-nocookie.com`. (Decided 2026-10-24.)
 
 ### 9.3 Maps
 
 `contact_map` shows the address and an **Open in Maps** link built from a
 latitude/longitude. An embedded Google map (an iframe and roughly half a megabyte
-of script) loads **only when tapped**, behind a static placeholder. Open
-question 4.
+of script) loads **only when tapped**, behind a static placeholder. (Decided
+2026-10-24.)
 
 ---
 
@@ -744,12 +763,14 @@ Access tests:
 ### PR 2: Engine content model, draft, publish, log, delegation (service layer only)
 
 - Models in the tenant schema: `SiteSettings`, `Page`, `Section` (with per-kind validation), `SiteRevision`, `SitePublishEvent`, `SiteDelegationEvent`.
-- Services: `save_draft_as`, `publish_as`, `rollback_as`, `set_delegation_as`.
+- Services: `save_draft_as`, `mark_ready_as`, `publish_as` (principal only), `rollback_as` (principal only), `set_delegation_as`.
 - No page and no public change.
 
 Access tests:
 - the principal at A can publish at A and gets `NotAllowed` at B;
-- an administrator is refused at A until A's principal delegates, then allowed, then refused again after revocation, without signing out;
+- an administrator is refused draft edits at A until A's principal delegates, then allowed, then refused again after revocation, without signing out;
+- a delegated administrator is refused publish and rollback;
+- "Ready for the principal" emails only A's principal;
 - delegation at A gives nothing at B;
 - a teacher, bursar, VP academic, parent or student is refused every write;
 - a suspended or invited principal is refused;
@@ -772,18 +793,18 @@ Access tests:
 
 ### PR 4: The editor and preview in the portal
 
-- `/website/` on the school's classnode host: page list, section editor, theme options, delegation switch, and the publish log.
+- `/website/` on the school's classnode host: page list, section editor, theme options, delegation switch, the "Ready for the principal" button, and the publish log.
 - `/website/preview/…`.
 
 Access tests:
 - every `/website/` route refuses non-editors with 403 and refuses B's staff on A's host;
 - preview is `noindex` and `no-store` and is refused when signed out;
 - previewing another theme does not change the draft;
-- the delegation switch is refused to the administrator.
+- the delegation switch and the Publish button are refused to the administrator, delegated or not.
 
 ### PR 5: Images and the gallery
 
-- The upload pipeline (§9.1), renditions on their own Celery queue, the media volume, `/media/` behind Django with Caddy's `X-Accel-Redirect` handling, and quotas.
+- The upload pipeline (§9.1), renditions on their own Celery queue, the media volume with its nightly B2 backup and restore check, `/media/` behind Django with Caddy's `X-Accel-Redirect` handling, and quotas.
 - Alt text and focal points, the consent confirmation, and the `gallery` section with albums.
 
 Access tests:
@@ -798,7 +819,7 @@ Access tests:
 `NewsPost` with publish-per-item, the `news` section, `/news/` and `/news/<slug>/`.
 
 Access tests:
-- the same matrix as PR 2 for posts;
+- the same matrix as PR 2 for posts (a delegated administrator drafts, only the principal publishes);
 - a draft post is 404 publicly;
 - a slug that clashes with a reserved path is refused.
 
@@ -829,20 +850,24 @@ Access tests:
 
 ### PR 9b: The applicant list in the portal
 
-`/applicants/`, status changes with events, CSV export logged, the batched notification email, and the retention job.
+`/applicants/`, status changes with events, CSV export logged, the batched notification email (to the admissions address if set, otherwise `contact_email`), and the retention job.
 
 Access tests:
 - principal and administrator only;
 - B's staff get 403 on A's host;
 - a teacher or bursar gets 403;
 - an export writes an event;
+- A's alert goes to A's admissions address or contact email, never B's;
 - the retention job deletes only past-period, non-admitted rows, in each school separately.
 
 ### PR 10a: Custom domains: claim, verify, state machine (no TLS yet)
 
-`CustomDomain` in the public schema, `/website/domain/`, DNS checks through public resolvers, `check_custom_domains` on cron, and the emails to the principal.
+`CustomDomain` in the public schema, the premium add-on switch (`School.site_premium`, set by platform staff on the handover page and logged), `/website/domain/`, DNS checks through public resolvers, `check_custom_domains` on cron, and the emails to the principal.
 
 Access tests:
+- a school without the add-on is refused a claim by the service, not only by the page;
+- only platform staff can switch the add-on, and every switch is logged;
+- switching it off at A lapses A's domain and nobody else's;
 - only A's principal can claim for A;
 - B cannot claim a hostname A holds;
 - a claim needs its own token (an old TXT record from a lapsed claim does not verify a new one);
@@ -871,7 +896,8 @@ Access tests:
 
 ### PR 11a: Brevo SMTP, and a per-message From
 
-- Configuration only on the server.
+- Before it starts: the Brevo plan's daily limit and multi-domain support (§8.2), answered in this note.
+- Configuration is already live on the server (Brevo).
 - `Outbound.from_address`; `SmtpProvider` sends it.
 - The platform `From` reads "{School} via Classnode".
 
@@ -884,6 +910,8 @@ Access tests:
 `SenderDomain`, the Brevo domain API calls, the records page with SPF merge, verification and fallback.
 
 Access tests:
+- a school without the premium add-on is refused by the service;
+- switching the add-on off at A makes A's very next send use the platform `From`, and leaves B's alone;
 - only A's principal adds A's sender domain;
 - A's mail never uses B's verified domain;
 - a failing domain falls back on the very next send;
@@ -891,17 +919,28 @@ Access tests:
 
 ---
 
-## 13. Open questions
+## 13. Decisions, 2026-10-24
 
-1. May a **delegated administrator publish**, or only edit drafts for the principal to publish?
-2. **Storage** for photos and video: the VPS volume with a B2 backup (proposed), or B2 object storage from the start?
-3. **Video**: self-hosted short muted hero loops only, with any video that has sound linked from YouTube or Vimeo behind tap-to-play. Agreed?
-4. **Maps**: address plus "Open in Maps", with the Google map only on tap. Agreed?
-5. **CDN**: launch with no CDN (VPS only), or put Cloudflare's proxy in front of `*.classnode.co` now?
-6. **Custom domains**: `www` canonical and the apex redirecting. Agreed?
-7. **Brevo**: confirm it as the email provider (OPEN-5), the plan, and that it allows one sender domain per school at our scale.
-8. **Admissions uploads** (birth certificate, last result) and an **application fee** through Paystack: later, or never?
-9. Where do **admissions notifications** go: `contact_email` or a separate admissions address?
-10. Is a narrower **admissions officer** role wanted, or are principal and administrator enough?
-11. Are the website, custom domain and sender domain **included in the plan, or a paid add-on**? This decides what is gated, and where.
-12. **Several campuses** under one school: one site with a campus picker, or out of scope?
+The owner's answers to the open questions in the first version of this note.
+Each is written into the section it changes.
+
+| # | Question | Decision | Where |
+|---|---|---|---|
+| 1 | May a delegated administrator publish? | **No.** Drafts only, plus "Ready for the principal". The principal publishes, because large schools guard their brand. | §2.3, §2.4, PRs 2, 4, 6 |
+| 2 | Storage for photos and video | **VPS disk with a nightly B2 backup** for the pilot. Move to B2 when space or load calls for it. | §9.1, PR 5 |
+| 3 | Video | **Self-host only short, muted hero loops.** Video with sound comes from YouTube or Vimeo, loaded on tap. | §9.2, PR 8 |
+| 4 | Maps | **Address plus "Open in Maps"**, with the map loading only on tap. | §9.3 |
+| 5 | CDN now? | **Not yet.** Decided at the load test after CBT. Cloudflare's proxy complicates custom-domain certificates. | §4.4 |
+| 6 | `www` as the main address | **Yes.** The apex redirects to it. | §7.1 |
+| 7 | Brevo | **Yes, already live on the server.** Check the plan's daily limit and multi-domain support before PR 11a. | §1, §8, PR 11a |
+| 8 | Admissions uploads and fee | **Uploads later. The fee only after Paystack verification.** | §5.1 |
+| 9 | Admissions alerts | **The school's `contact_email` by default**, with an optional separate admissions address. | §5.2, PR 9b |
+| 10 | Admissions officer role | **Not now.** Principal and administrator only; added if schools ask. | §5.2 |
+| 11 | Included or add-on | **The website on the classnode address is included.** A custom domain and school-domain email are a **paid premium add-on**. | §7.1, §8.2, PRs 10a, 11b |
+| 12 | Several campuses | **Out of scope for now**, added later. | — |
+
+**Still to settle before the PR that needs it:**
+- the Brevo plan check (before PR 11a);
+- Paystack verification (before any application fee);
+- the add-on's price, which is a commercial decision and outside this note;
+- the visual design round (before PRs 7 and 8).
