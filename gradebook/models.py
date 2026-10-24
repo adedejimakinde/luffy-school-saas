@@ -302,8 +302,9 @@ class SubjectTeacher(models.Model):
     """One teacher teaches one subject to one class, this term.
 
     The principal's answer to "who teaches what" (`docs/subject-teachers.md`). Once a
-    term has any of these, a teacher marks only the subject and class pairs they hold
-    (`services.may_mark()`); until then any teacher marks any paper, as before.
+    term has had any of these, a teacher marks only the subject and class pairs they hold
+    (`assignments.may_mark()`), until the principal opens the term to every teacher;
+    before the first, any teacher marks any paper, as before.
 
     **Many to many on purpose.** A teacher teaches several pairs, and a pair can have
     two teachers (a shared class, a teacher covering a leave). So the row is unique on
@@ -357,40 +358,118 @@ class SubjectTeacher(models.Model):
 
 
 class SubjectTeacherChange(models.Model):
-    """Who added or removed a subject teacher, and when. Append-only.
+    """Who changed who teaches what, or whether marking is restricted, and when.
+    Append-only.
 
     A trigger refuses UPDATE and DELETE
     (`gradebook/migrations/0005_who_teaches_what_and_every_change_to_it_is_kept`). Names are copied at
     write time (`docs/operating-rules.md` rule 2), so the log still reads correctly
     after a subject, a class or a person is renamed.
+
+    **It is also where a term's marking stands** (`assignments.marking_in()`), so that
+    the answer is a fold over rows nobody can edit rather than a column somebody
+    could (rule 4). A term restricts with its first `ADDED` row, and from then on
+    only an `OPENED` or a `RESTRICTED` row, which is the principal's switch, changes
+    that. Taking the last assignment away writes a `REMOVED` row and opens nothing.
+
+    A row the new term's carry-forward wrote (`assignments.carry_forward()`) names the
+    term it came from and nobody (`by_id` empty): it was the system's, not a person's.
+    `SKIPPED` is a row it did not copy, with the reason, because a copy that leaves
+    somebody out leaves nothing else behind (rule 8).
     """
 
     class Kind(models.TextChoices):
         ADDED = "added", "Added"
         REMOVED = "removed", "Removed"
+        SKIPPED = "skipped", "Not copied"
+        OPENED = "opened", "Opened to all"
+        RESTRICTED = "restricted", "Restricted"
+
+    #: The principal's switch. These rows name no pair and no teacher.
+    SWITCH = (Kind.OPENED, Kind.RESTRICTED)
 
     term = models.ForeignKey(
         "academics.Term", related_name="subject_teacher_changes", on_delete=models.PROTECT
     )
-    kind = models.CharField(max_length=8, choices=Kind)
-    class_group_id = models.PositiveBigIntegerField()
-    subject_id = models.PositiveBigIntegerField()
-    teacher_membership_id = models.PositiveBigIntegerField()
-    class_group_name = models.CharField(max_length=64)
-    subject_name = models.CharField(max_length=100)
-    teacher_name = models.CharField(max_length=255)
-    by_id = models.PositiveBigIntegerField()
-    by_name = models.CharField(max_length=255)
+    kind = models.CharField(max_length=10, choices=Kind)
+    class_group_id = models.PositiveBigIntegerField(null=True, blank=True)
+    subject_id = models.PositiveBigIntegerField(null=True, blank=True)
+    teacher_membership_id = models.PositiveBigIntegerField(null=True, blank=True)
+    class_group_name = models.CharField(max_length=64, blank=True)
+    subject_name = models.CharField(max_length=100, blank=True)
+    teacher_name = models.CharField(max_length=255, blank=True)
+    #: Empty for the system's own rows: a carry-forward, which `from_term` names.
+    by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    by_name = models.CharField(max_length=255, blank=True)
+    #: The term a carry-forward copied this from, and its name as it read then.
+    from_term = models.ForeignKey(
+        "academics.Term",
+        related_name="+",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+    )
+    from_term_name = models.CharField(max_length=64, blank=True, default="")
+    #: Why a carry-forward left this one out (`SKIPPED` only).
+    reason = models.CharField(max_length=100, blank=True, default="")
     at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-at", "-id"]
         constraints = [
             models.CheckConstraint(
-                condition=Q(kind__in=["added", "removed"]),
-                name="a_subject_teacher_change_is_added_or_removed",
+                condition=Q(kind__in=["added", "removed", "skipped", "opened", "restricted"]),
+                name="a_subject_teacher_change_is_one_of_five",
+            ),
+            # Every kind but the switch is about one teacher and one pair.
+            models.CheckConstraint(
+                condition=Q(kind__in=["opened", "restricted"])
+                | Q(
+                    class_group_id__isnull=False,
+                    subject_id__isnull=False,
+                    teacher_membership_id__isnull=False,
+                ),
+                name="a_subject_teacher_change_names_its_pair",
+            ),
+            # Nobody's row is the carry-forward's, and only that.
+            models.CheckConstraint(
+                condition=Q(by_id__isnull=False) | Q(from_term__isnull=False),
+                name="a_subject_teacher_change_is_by_somebody_or_carried",
+            ),
+            models.CheckConstraint(
+                condition=~Q(kind="skipped") | Q(from_term__isnull=False),
+                name="only_a_carry_forward_skips",
             ),
         ]
 
     def __str__(self):
+        if self.kind in self.SWITCH:
+            return f"{self.kind} ({self.term_id})"
         return f"{self.kind} {self.teacher_name}: {self.subject_name}, {self.class_group_name}"
+
+
+class SubjectTeacherCarry(models.Model):
+    """A term whose assignments were copied from the one before it, as it began.
+
+    One row per term at most, written by `assignments.carry_forward()` in the same
+    transaction as the copies. What it adds to the log is whether the principal has
+    looked yet: Home shows "Assignments copied from last term" until `seen_at` is
+    set, by the principal opening `/subject-teachers/` in that term or dismissing the
+    card. A plain row, because that is a reminder and not a record; the record of
+    what was copied is the log's.
+    """
+
+    term = models.OneToOneField(
+        "academics.Term", related_name="subject_teacher_carry", on_delete=models.PROTECT
+    )
+    from_term = models.ForeignKey(
+        "academics.Term", related_name="+", on_delete=models.PROTECT
+    )
+    copied = models.PositiveIntegerField()
+    skipped = models.PositiveIntegerField()
+    at = models.DateTimeField(auto_now_add=True)
+    seen_at = models.DateTimeField(null=True, blank=True)
+    seen_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.term_id} from {self.from_term_id}: {self.copied} copied"

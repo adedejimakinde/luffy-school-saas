@@ -1,0 +1,23 @@
+{% comment %}
+The principal's card after a new term began with last term's subject teachers
+copied into it (`gradebook.assignments.carried_for()`). Gone once the principal
+opens Who teaches what in this term, or dismisses it here.
+{% endcomment %}<section class="panel first-card" aria-labelledby="carried-title" data-prompt="subject-teachers-carried">
+  <div>
+    <p class="eyebrow">Marking</p>
+    <h2 id="carried-title">Assignments copied from last term, review them</h2>
+  </div>
+  <ul class="first-actions">
+    <li>
+      <a class="first-action" href="/subject-teachers/">
+        <span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#i-staff"/></svg></span>
+        <span class="todo-text"><strong>Review who teaches what</strong><span>{{ carried.copied }} copied from {{ carried.from_term }}{% if carried.skipped %}, {{ carried.skipped }} not copied because the teacher, subject or class is gone{% endif %}. Until you change them, each teacher marks only these.</span></span>
+        <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+      </a>
+    </li>
+  </ul>
+  <form method="post" action="/subject-teachers/seen/">
+    {% csrf_token %}
+    <button type="submit" class="btn-quiet">Dismiss</button>
+  </form>
+</section>

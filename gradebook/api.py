@@ -191,10 +191,12 @@ class WhereToMarkOut(Schema):
     term runs late, and a mark filed against the wrong one carries nothing
     saying it was a guess.
 
-    **Every subject and every class, until the term has subject assignments.**
+    **Every subject and every class, until the term has had a subject assignment**
+    (and again if the principal opens it to every teacher, `assignments.marking_in()`).
     Then a teacher is `narrowed`: `assessments` holds one entry per paper and class
     they hold, each naming its class, `classes` is empty, and `pairs` says what
-    they hold. A paper picked from one list and a class from another could make a
+    they hold, which may be nothing: a term stays narrowed after its last assignment
+    is taken away, and the page then tells the teacher to ask the principal. A paper picked from one list and a class from another could make a
     pair that is not theirs, so there is only the one list. The sheet and both
     writes refuse the rest on the server (`assignments.may_mark()`), so the
     shorter list is a scope the platform enforces, not one it only draws. The principal, the vice principal

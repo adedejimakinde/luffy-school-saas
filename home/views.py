@@ -54,6 +54,8 @@ def home_page(request):
         # The principal's prompt to say who teaches what, read live rather than from
         # the cached facts so it goes the moment the first assignment is made.
         "assign": not (dash["setup"] or dash["waiting"]) and assignments.prompt_for(roles),
+        # Last term's subject teachers copied into this one, until the principal looks.
+        "carried": not (dash["setup"] or dash["waiting"]) and assignments.carried_for(roles),
     })
 
 

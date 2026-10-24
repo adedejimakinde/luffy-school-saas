@@ -3,10 +3,11 @@
  *
  * Every write answers with the whole overview and the page redraws from it. A refusal
  * keeps the form open with the school's sentence under it. Taking one away asks twice:
- * the first tap names what will go.
+ * the first tap names what will go. So does the switch: the first tap says what opening
+ * or restricting marking will do, and only the second does it.
  */
 
-import { REFUSAL, assign, fetchOverview, unassign } from "./api.js";
+import { REFUSAL, assign, fetchOverview, setMarking, unassign } from "./api.js";
 import * as states from "./states.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
@@ -29,7 +30,7 @@ export function htmlFor(state, { portal = "" } = {}) {
 
 export function fromOverview(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
-  return { confirming: null, ...answer.body, step: "subject-teachers", notes: {} };
+  return { confirming: null, switching: false, ...answer.body, step: "subject-teachers", notes: {} };
 }
 
 export async function mount(root, { fetchImpl = fetch } = {}) {
@@ -44,7 +45,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const after = (key, result) => {
     if (result.ok) state = fromOverview(result);
     else if (result.refusal) state = { step: result.refusal, ...result.body };
-    else state = { ...state, confirming: null, notes: { [key]: { kind: "rejected", detail: result.body.detail } } };
+    else state = { ...state, confirming: null, switching: false, notes: { [key]: { kind: "rejected", detail: result.body.detail } } };
     draw();
   };
 
@@ -53,8 +54,11 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (!hit) return;
     const { action, assignment } = hit.dataset;
     if (action === "ask-unassign") state = { ...state, confirming: Number(assignment), notes: {} };
-    else if (action === "keep") state = { ...state, confirming: null };
-    else if (action === "unassign") {
+    else if (action === "keep") state = { ...state, confirming: null, switching: false };
+    else if (action === "ask-switch") state = { ...state, switching: true, notes: {} };
+    else if (action === "switch") {
+      return after("switch", await setMarking({ open: hit.dataset.open === "true", fetchImpl }));
+    } else if (action === "unassign") {
       return after("remove" + assignment, await unassign({ id: Number(assignment), fetchImpl }));
     } else return;
     draw();

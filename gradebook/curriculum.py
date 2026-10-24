@@ -17,7 +17,7 @@ child's total is out of.
   denominator of every percentage built on it, so that changes only while nobody has a mark
   in it, and it is removed only then too.
 - Who teaches which subject to which class is not set here but on its own page, by the
-  principal (`gradebook.assignments`); until a term has one, any teacher may mark any paper.
+  principal (`gradebook.assignments`); until a term has had one, any teacher may mark any paper.
   The assignment made here is the class teacher, per class and term, who submits the class's
   results.
 """

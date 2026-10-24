@@ -6,6 +6,7 @@
  * the page is not for, a 404 off a school's host, and a 401 that is two states.
  *
  * **Taking one away asks twice.** The first tap names what will go; nothing is sent until the second.
+ * So does the switch that opens a term's marking to every teacher: the first tap says what it will do.
  */
 
 import { test } from "node:test";
@@ -22,6 +23,7 @@ const OVERVIEW = {
   term: "2026/2027 First term",
   may_change: true,
   in_force: true,
+  marking: "restricted",
   classes: [
     { id: 3, name: "JSS 1A" },
     { id: 4, name: "JSS 1B" },
@@ -94,10 +96,79 @@ test("the principal gets the form and the Remove buttons; anybody else neither",
 
 test("the page says whether marking is narrowed yet", () => {
   assert.match(states.overview({ ...OVERVIEW, notes: {} }), /data-standing="in-force".*marks only the subjects and classes given to them/s);
-  const none = states.overview({ ...OVERVIEW, in_force: false, assignments: [], notes: {} });
+  const none = states.overview({ ...OVERVIEW, in_force: false, marking: "not-yet", assignments: [], notes: {} });
   assert.match(none, /data-standing="not-yet".*any teacher can mark any subject\. Once you give the first one/s);
-  const read = states.overview({ ...OVERVIEW, in_force: false, may_change: false, assignments: [], notes: {} });
+  assert.doesNotMatch(none, /ask-switch/, "before the first assignment there is nothing to switch");
+  const read = states.overview({ ...OVERVIEW, in_force: false, marking: "not-yet", may_change: false, assignments: [], notes: {} });
   assert.match(read, /Once the principal gives the first one/);
+});
+
+test("with every assignment taken away the term still says marking is restricted", () => {
+  const html = states.overview({ ...OVERVIEW, assignments: [], notes: {} });
+
+  assert.match(html, /data-standing="in-force".*a teacher given none marks nothing/s);
+  assert.match(html, /data-action="ask-switch">Open marking to all teachers</);
+});
+
+test("the vice principal and the administrator see where the switch stands, and no switch", () => {
+  for (const marking of ["restricted", "open"]) {
+    const html = states.overview({ ...OVERVIEW, marking, may_change: false, notes: {} });
+    assert.match(html, marking === "open" ? /data-standing="open".*opened marking to every teacher/s : /data-standing="in-force"/s);
+    assert.doesNotMatch(html, /data-action=/);
+  }
+});
+
+test("the switch says what will happen, and only the second tap sends", async () => {
+  const sent = [];
+  const root = await opened([
+    ["/api/subject-teachers/marking/", {
+      method: "PUT",
+      reply: (options) => {
+        sent.push(JSON.parse(options.body));
+        return { status: 200, body: { ...OVERVIEW, marking: "open", in_force: false } };
+      },
+    }],
+  ]);
+
+  await root.click({ "data-action": "ask-switch" });
+  assert.deepEqual(sent, [], "asking sends nothing");
+  assert.match(root.innerHTML, /data-confirm="switch"><p>Every teacher will be able to mark every subject in every class this term/);
+  await root.click({ "data-action": "keep" });
+  assert.doesNotMatch(root.innerHTML, /data-confirm="switch"/);
+
+  await root.click({ "data-action": "ask-switch" });
+  await root.click({ "data-action": "switch", "data-open": "true" });
+
+  assert.deepEqual(sent, [{ open: true }]);
+  assert.match(root.innerHTML, /data-standing="open"/);
+  assert.match(root.innerHTML, /data-action="ask-switch">Restrict marking again</);
+});
+
+test("restricting again says a teacher given none will mark nothing", () => {
+  const html = states.overview({ ...OVERVIEW, marking: "open", switching: true, notes: {} });
+
+  assert.match(html, /A teacher given none will mark nothing\..*data-action="switch" data-open="false">Restrict marking</s);
+});
+
+test("a term that began with last term's assignments says so, and what was left out", () => {
+  const html = states.overview({
+    ...OVERVIEW,
+    carried: { from_term: "Third term 2025/2026", copied: 2, skipped: 1 },
+    changes: [
+      { kind: "added", teacher: "Kemi Bello", subject: "Mathematics", class_group: "JSS 1A", by: "", from_term: "Third term 2025/2026", reason: "", at: "1 Jan 2027, 08:00" },
+      { kind: "skipped", teacher: "Sade Ola", subject: "English", class_group: "JSS 1B", by: "", from_term: "Third term 2025/2026", reason: "no longer a teacher here", at: "1 Jan 2027, 08:00" },
+      { kind: "opened", teacher: "", subject: "", class_group: "", by: "Ngozi Eze", from_term: "", reason: "", at: "2 Jan 2027, 08:00" },
+      { kind: "restricted", teacher: "", subject: "", class_group: "", by: "Ngozi Eze", from_term: "", reason: "", at: "3 Jan 2027, 08:00" },
+    ],
+    notes: {},
+  });
+
+  assert.match(html, /data-carried>.*This term began with 2 copied from Third term 2025\/2026, and 1 not copied/s);
+  assert.match(html, /Copied from Third term 2025\/2026: Kemi Bello, Mathematics in JSS 1A/);
+  assert.match(html, /Not copied from Third term 2025\/2026: Sade Ola, English in JSS 1B \(no longer a teacher here\)/);
+  assert.match(html, /Ngozi Eze opened marking to all teachers/);
+  assert.match(html, /Ngozi Eze restricted marking/);
+  assert.doesNotMatch(states.overview({ ...OVERVIEW, notes: {} }), /data-carried/);
 });
 
 test("with no term open there is no form, and the page says where the term is set", () => {

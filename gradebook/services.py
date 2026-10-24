@@ -669,7 +669,7 @@ def _require_marking_authority(actor, school):
 
 
 class NotAssignedToMark(NotAllowedToMark):
-    """The term has subject assignments, and this pair is not one of the actor's.
+    """The term's marking is restricted, and this pair is not one of the actor's.
 
     A `NotAllowedToMark`, so every caller that turns that into a 403 already does the
     same with this, and a queued write in a teacher's outbox is held as final
@@ -678,7 +678,7 @@ class NotAssignedToMark(NotAllowedToMark):
 
 
 def _require_assigned(actor, assessment, membership):
-    """Once the paper's term has assignments, a teacher marks only their own pairs.
+    """Once the paper's term is restricted, a teacher marks only their own pairs, if any.
 
     The class is where the child sits in the paper's term, the same join
     `_require_the_sheet_is_open()` makes, and a child in no class that term cannot be

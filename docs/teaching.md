@@ -34,8 +34,8 @@ school's answer. It reuses `setup/setup.css`; there is no new design.
 - **No current term:** papers and class teachers cannot be added, and the page says where to set it.
 - **Removing asks twice.**
 - Who teaches which subject to which class is set by the principal on its own page,
-  `/subject-teachers/` (`docs/subject-teachers.md`). Until a term has one, any teacher may mark
-  any paper (`gradebook.services.can_enter_marks`). The assignment made here is the class
+  `/subject-teachers/` (`docs/subject-teachers.md`). Until a term has had one, any teacher may
+  mark any paper (`gradebook.services.can_enter_marks`). The assignment made here is the class
   teacher, who submits the class's results.
 
 ## Tests
