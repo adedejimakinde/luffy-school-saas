@@ -50,11 +50,12 @@ from results.models import (
 )
 from results.tests.test_positions import PASSWORD, make_school
 from schools.tests.tenants import connected_to
+from tests.refusals import RefusalAssertions
 
 SESSION = "2025/2026"
 
 
-class SessionSetUp(TestCase):
+class SessionSetUp(RefusalAssertions, TestCase):
     """Two schools, each with a whole 2025/2026 session and a child in it.
 
     Both schools get a full set of signatures, because the approval chain wants
@@ -484,7 +485,7 @@ class ConfiguringTheSessionTests(SessionSetUp):
     def test_the_database_refuses_one_too(self):
         """The import and the psql session, which never reach the service."""
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("weights_sum_to_one_hundred"):
                 with transaction.atomic():
                     SessionSettings.objects.filter(pk=1).update(
                         averaging=SessionAveraging.WEIGHTED,
@@ -495,7 +496,7 @@ class ConfiguringTheSessionTests(SessionSetUp):
 
     def test_the_database_refuses_a_weighting_with_no_weights(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("weights_sum_to_one_hundred"):
                 with transaction.atomic():
                     SessionSettings.objects.filter(pk=1).update(
                         averaging=SessionAveraging.WEIGHTED
@@ -747,7 +748,9 @@ class TheFreezeTests(SessionSetUp):
         with connected_to(self.stmarys):
             self.release_the_third_term()
 
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                "results_releasedsessionresult is append-only; UPDATE is not allowed"
+            ):
                 with transaction.atomic():
                     ReleasedSessionResult.objects.filter(
                         student_membership_id=self.ada.pk
@@ -918,7 +921,9 @@ class ThePromotionDecisionTests(SessionSetUp):
             sessions.decide(
                 self.ada, SESSION, PromotionStatus.PROMOTED, by=self.principal
             )
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy(
+                "results_promotiondecision is append-only; UPDATE is not allowed"
+            ):
                 with transaction.atomic():
                     PromotionDecision.objects.filter(
                         student_membership_id=self.ada.pk
