@@ -102,6 +102,8 @@ def staff_sign_in_page(request):
 ROLL_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
+    "web/classes.js",
     "roll/api.js",
     "roll/states.js",
     "roll/app.js",
@@ -157,6 +159,7 @@ def roll_import_page(request):
 STAFF_PAGE_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "staff/api.js",
     "staff/states.js",
     "staff/app.js",

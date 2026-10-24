@@ -27,6 +27,7 @@ import {
   setClass,
 } from "./api.js";
 import * as states from "./states.js";
+import { enhanceSelects } from "../web/picker.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "" } = {}) {
@@ -327,5 +328,8 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("roll");
-  if (root) mount(root);
+  if (root) {
+    enhanceSelects(root);
+    mount(root);
+  }
 }

@@ -261,3 +261,16 @@ test("a child's name typed into the office cannot execute in the next reader's b
   assert.doesNotMatch(html, /<img/);
   assert.match(html, /&lt;img/);
 });
+
+test("a long list of classes is grouped by level in both class pickers", () => {
+  const classes = ["JSS 1A", "JSS 1B", "JSS 2A", "JSS 2B", "JSS 3A", "JSS 3B", "SS 1A", "SS 1B", "SS 2A"].map((name, i) => ({
+    class_group_id: i + 1,
+    name,
+    level: Math.floor(i / 2) + 1,
+  }));
+  const html = states.roll({ ...ROLL, classes });
+
+  const admit = html.slice(html.indexOf('id="class_group_id"'));
+  assert.match(admit, /^id="class_group_id" name="class_group_id">\s*<option value="">Not yet<\/option><optgroup label="JSS 1">/);
+  assert.equal((html.match(/<optgroup label="SS 2">/g) || []).length, 1 + ROLL.children.length);
+});

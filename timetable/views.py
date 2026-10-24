@@ -17,6 +17,7 @@ from schools.hosts import portal_host
 TIMETABLE_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "timetable/api.js",
     "timetable/states.js",
     "timetable/app.js",

@@ -69,6 +69,7 @@ def marking_page(request):
 TEACHING_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "teaching/api.js",
     "teaching/states.js",
     "teaching/app.js",
@@ -95,6 +96,7 @@ def teaching_page(request):
 SUBJECT_TEACHERS_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "subject-teachers/api.js",
     "subject-teachers/states.js",
     "subject-teachers/app.js",

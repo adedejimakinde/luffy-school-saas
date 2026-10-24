@@ -9,6 +9,7 @@
 
 import { REFUSAL, fetchAbsences, saveThreshold } from "./api.js";
 import * as states from "./states.js";
+import { enhanceSelects } from "../web/picker.js";
 
 export function htmlFor(state, { portal = "" } = {}) {
   switch (state.step) {
@@ -94,5 +95,8 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("absences");
-  if (root) mount(root, { search: window.location.search });
+  if (root) {
+    enhanceSelects(root);
+    mount(root, { search: window.location.search });
+  }
 }

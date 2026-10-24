@@ -1,0 +1,98 @@
+/* Every select and its picker (`web/picker.js`), for the pages with one. `docs/design.md`. */
+
+select {
+  padding-right: 40px;
+  appearance: none;
+  background: var(--card) url("chevron.svg") no-repeat right 12px center / 20px;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+select:has(> option[value=""]:checked) { color: var(--muted); }
+select option { color: var(--text); }
+select:disabled { background-color: var(--bg); cursor: not-allowed; }
+select:user-invalid, select[aria-invalid="true"] { border-color: var(--stop); }
+select:user-invalid:focus-visible { border-color: var(--stop); outline-color: var(--stop); }
+@media (forced-colors: active) { select { padding-right: 12px; appearance: auto; background-image: none; } }
+
+/* A desk: a popover under the field. */
+dialog.picker {
+  position: fixed;
+  inset: auto;
+  left: var(--left, 8px);
+  width: var(--width, 280px);
+  max-width: calc(100vw - 16px);
+  max-height: var(--room, 360px);
+  margin: 0;
+  padding: 0;
+  color: var(--text);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease, transform 120ms ease, overlay 120ms allow-discrete, display 120ms allow-discrete;
+}
+dialog.picker[open] { display: flex; flex-direction: column; opacity: 1; transform: none; }
+@starting-style { dialog.picker[open] { opacity: 0; transform: translateY(-4px); } }
+dialog.picker::backdrop { background: transparent; }
+
+.picker-head { display: none; }
+.picker-search { position: relative; flex: none; padding: 8px 8px 4px; }
+.picker-search[hidden], .picker-group[hidden], .picker-option[hidden], .picker-empty[hidden] { display: none; }
+.picker-search .icon { position: absolute; top: 50%; left: 20px; margin-top: -8px; color: var(--muted); pointer-events: none; }
+.picker-search input { width: 100%; padding-left: 40px; }
+.picker-list { flex: 1 1 auto; min-height: 0; padding: 4px; overflow-y: auto; overscroll-behavior: contain; outline: none; }
+.picker-group-label { padding: 12px 12px 4px; color: var(--muted); font-size: var(--small); font-weight: 700; }
+.picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--control);
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.picker-option .icon { margin-left: auto; color: var(--brand); visibility: hidden; }
+.picker-option.is-active { background: var(--bg); }
+.picker-keys .picker-option.is-active { outline: 2px solid var(--brand); outline-offset: -2px; }
+.picker-option[aria-selected="true"] { color: var(--brand); font-weight: 700; }
+.picker-option[aria-selected="true"] .icon { visibility: visible; }
+.picker-option[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
+.picker-empty { margin: 0; padding: 12px 16px 16px; color: var(--muted); }
+
+/* A phone: a sheet from the foot, clear of the on-screen keyboard. */
+dialog.picker-sheet {
+  right: 0;
+  bottom: var(--keyboard, 0px);
+  left: 0;
+  width: 100%;
+  max-width: none;
+  max-height: min(85dvh, calc(100dvh - var(--keyboard, 0px) - 24px));
+  border: 0;
+  border-radius: 16px 16px 0 0;
+  opacity: 1;
+  transform: translateY(100%);
+  transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), overlay 220ms allow-discrete, display 220ms allow-discrete;
+}
+dialog.picker-sheet[open] { transform: none; }
+@starting-style { dialog.picker-sheet[open] { transform: translateY(100%); } }
+dialog.picker-sheet::backdrop {
+  background: color-mix(in srgb, var(--text) 35%, transparent);
+  transition: background-color 220ms ease, overlay 220ms allow-discrete, display 220ms allow-discrete;
+}
+@starting-style { dialog.picker-sheet[open]::backdrop { background: transparent; } }
+dialog.picker-sheet.is-dragging { transition: none; }
+html:has(dialog.picker-sheet[open]) { overflow: hidden; }
+.picker-sheet .picker-head { display: grid; flex: none; grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding: 0 8px 8px 20px; touch-action: none; }
+.picker-handle { grid-column: 1 / -1; justify-self: center; width: 40px; height: 4px; margin: 8px 0 4px; background: var(--border); border-radius: 999px; }
+.picker-title { margin: 0; font-size: 1.125rem; }
+.picker-sheet .picker-search { padding: 0 16px 8px; }
+.picker-sheet .picker-search .icon { left: 28px; margin-top: -12px; }
+.picker-sheet .picker-list { padding: 0 8px calc(12px + env(safe-area-inset-bottom, 0px)); }
+.picker-sheet .picker-option { min-height: 52px; padding: 12px; }
+
+@media (prefers-reduced-motion: reduce) { dialog.picker, dialog.picker::backdrop { transition: none; } }
+@media (forced-colors: active) { .picker-option.is-active { outline: 2px solid Highlight; outline-offset: -2px; } }

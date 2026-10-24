@@ -142,6 +142,7 @@ def card_index_page(request):
 COMMENTS_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "comments/api.js",
     "comments/states.js",
     "comments/app.js",
@@ -152,6 +153,7 @@ COMMENTS_MODULES = (
 OGSERA_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "ogsera/api.js",
     "ogsera/states.js",
     "ogsera/app.js",
@@ -216,6 +218,7 @@ def chain_page(request):
 BROADSHEET_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "broadsheet/api.js",
     "broadsheet/states.js",
     "broadsheet/app.js",

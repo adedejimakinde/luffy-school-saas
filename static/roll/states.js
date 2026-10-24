@@ -13,6 +13,7 @@
  */
 
 import { emptyState, esc } from "../web/html.js";
+import { classOptions } from "../web/classes.js";
 
 /** The roll: every child, where they sit, and what may be done about it. */
 export function roll({
@@ -126,14 +127,7 @@ function classChooser(c, classes) {
     `<select data-child="${esc(c.student_membership_id)}" `,
     `aria-label="Class for ${esc(c.student)}">`,
     `<option value=""${current === "" ? " selected" : ""}>Not in a class yet</option>`,
-    classes
-      .map(
-        (g) =>
-          `<option value="${esc(g.class_group_id)}"${
-            current === String(g.class_group_id) ? " selected" : ""
-          }>${esc(g.name)}</option>`,
-      )
-      .join(""),
+    classOptions(classes, current),
     "</select>",
   ].join("");
 }
@@ -158,9 +152,7 @@ function admitForm(classes, note) {
     '<label for="class_group_id">Class (optional)</label>',
     '<select id="class_group_id" name="class_group_id">',
     '<option value="">Not yet</option>',
-    classes
-      .map((g) => `<option value="${esc(g.class_group_id)}">${esc(g.name)}</option>`)
-      .join(""),
+    classOptions(classes),
     "</select>",
     '<button type="submit">Admit</button>',
     note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",

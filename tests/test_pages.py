@@ -195,3 +195,31 @@ class EveryPagesMapCoversItsWholeGraphTests(SimpleTestCase):
                 for module in PAGES[page]:
                     source = (STATIC / module).read_text()
                     self.assertNotRegex(source, r"innerHTML\s*=\s*`|insertAdjacentHTML|outerHTML")
+
+
+class EverySelectOpensThePickerTests(SimpleTestCase):
+    """A page that draws a `<select>` opens `web/picker.js`'s sheet, not the
+    phone's own menu (`docs/design.md`, "The picker"): its map carries the
+    module and its entry point starts it on the page's root. A new page with a
+    select that forgot either would draw the grey system menu again."""
+
+    def test_a_page_that_draws_a_select_starts_the_picker(self):
+        drawing = []
+        for page, modules in PAGES.items():
+            if not any("<select" in (STATIC / module).read_text() for module in modules):
+                continue
+            drawing.append(page)
+            with self.subTest(page=page):
+                self.assertIn("web/picker.js", modules)
+                entry = (STATIC / modules[-1]).read_text()
+                self.assertIn('import { enhanceSelects } from "../web/picker.js";', entry)
+                self.assertRegex(entry, r"enhanceSelects\(root\);\s*\n\s*mount\(root")
+        self.assertGreaterEqual(len(drawing), 13, "the pattern finds the selects at all")
+
+    def test_only_a_page_with_a_select_carries_it(self):
+        """The picker is weight on a phone's data bundle: no page pays for it unused."""
+        for page, modules in PAGES.items():
+            if "web/picker.js" not in modules:
+                continue
+            with self.subTest(page=page):
+                self.assertTrue(any("<select" in (STATIC / module).read_text() for module in modules))

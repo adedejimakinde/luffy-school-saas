@@ -100,6 +100,53 @@ Mobile first, checked at 360, 768 and 1280.
 - Forms and side panels (`.split`) stack into one column on a phone.
 - Touch targets are at least 44px. Body text on a phone is never under 15px.
 
+## The picker
+
+Every `<select>` in the portal opens one picker (`static/web/picker.js`,
+`static/web/picker.css`), never the phone's grey system menu.
+
+- **On a phone** (below 640px) it is a sheet from the foot of the screen: white,
+  16px top corners, a drag handle, the field's label as its title, a Close
+  button, rows 52px tall, a blue check and bold text on the chosen row, over
+  the text colour thinned to 35%. It slides up in 220ms; a swipe down on its
+  head, Close, the backdrop, Escape or the back gesture closes it.
+- **On a desk** it is a popover under the field, the field's width or 240px,
+  over the field when the field is near the foot of the screen, with the
+  lifted shadow, 120ms.
+- **More than eight options gets a search box** that filters as you type,
+  ignoring case, accents and extra spaces, and says how many match. On a desk
+  it takes the keys at once; on a phone it waits to be tapped, so the keyboard
+  does not cover the list before anybody asked for it.
+- **Groups** are the select's own `<optgroup>`s, drawn as headings.
+  `classOptions()` in `web/classes.js` groups a long list of classes by level
+  (the roll's two class pickers).
+- **The keys** are a select's: Enter, Space, the arrows or a letter open it;
+  the arrows, Page Up and Down, Home and End move; a letter jumps to the next
+  row starting with it; Enter or Space chooses; Escape and Tab close without
+  choosing. Focus goes back to the field, and the row the keys are on carries a
+  2px One Blue ring.
+- **Screen readers** hear a listbox named by the field's label, with
+  `aria-activedescendant` on whichever of the list and the search box has
+  focus, options marked selected or unavailable, and groups named by their
+  heading.
+- **The `<select>` stays the field.** It is what its label names, what the
+  form submits, what a required field's message points at and what a disabled
+  field is; the picker only takes over its opening, writes the choice back,
+  and fires `input` and `change`, so a page's own listeners are unchanged.
+  `picker.css` draws the select itself (white, a rule, a chevron, red when it
+  is invalid, grey when it is disabled), so a page with no script, or whose
+  script failed, shows the same field opening the system menu.
+- **Only the pages that draw a select carry it.** `tests/test_pages.py` fails a
+  page whose modules draw a `<select` and do not start the picker on its root,
+  and `tests/test_budget.py` a page that loads the module without its
+  stylesheet. The chevron is `web/chevron.svg`, in `--muted`.
+- There is no dark mode in this design; under `forced-colors` the select is
+  the system's own and the picker's ring is `Highlight`.
+
+`tests/ui/picker.test.js` opens it on a phone and a desk, photographs it, walks
+its keys, and checks that every page with a select still sends what was
+chosen, at two schools.
+
 ## What holds it
 
 - `tests/test_design.py`: the palette is the whole palette and lives in one

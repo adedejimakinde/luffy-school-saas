@@ -22,6 +22,7 @@ from schools.hosts import portal_host
 SETUP_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "setup/api.js",
     "setup/states.js",
     "setup/app.js",
@@ -44,6 +45,7 @@ def setup_page(request):
 PROMOTION_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "promotion/api.js",
     "promotion/states.js",
     "promotion/app.js",

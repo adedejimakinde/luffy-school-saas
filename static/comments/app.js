@@ -41,6 +41,7 @@ import {
   saveRemark,
 } from "./api.js";
 import * as states from "./states.js";
+import { enhanceSelects } from "../web/picker.js";
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "" } = {}) {
@@ -268,5 +269,8 @@ if (typeof document !== "undefined") {
   // `?class=` is the home page's "Remarks missing" link: open that class's
   // list rather than the chooser. Anything that is not a class id is ignored.
   const asked = Number(new URLSearchParams(window.location.search).get("class"));
-  if (root) mount(root, { classGroupId: Number.isInteger(asked) && asked > 0 ? asked : null });
+  if (root) {
+    enhanceSelects(root);
+    mount(root, { classGroupId: Number.isInteger(asked) && asked > 0 ? asked : null });
+  }
 }
