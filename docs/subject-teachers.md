@@ -97,3 +97,29 @@ Broken, seen red, restored, each run over the whole of `test_subject_teachers.py
 | (both) | also let the middleware pass a non-member | 1: `test_a_teacher_at_one_school_cannot_see_or_mark_the_other`, `200 != 403` (the other school's `/where/` answered) |
 
 Every control was restored with `git checkout` and the module passes again (42 tests).
+
+### The follow-up: carry-forward, the switch, no silent opening
+
+The same method, run over the whole of `test_subject_teachers.py` (76 tests) with the
+break applied in a separate worktree and restored with `git checkout` after each run.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| Taking the last assignment away does not open marking | `marking_in()` reads only today's rows, not the log ("while it has one") | 6: every test in `ATermThatHasHadOneStaysRestrictedTests` that asks the term, the teacher's page, the server (open, save, clear) and the Home prompt |
+| Only the principal turns the switch | the route asks `can_view()` instead of `can_assign()` | **green, 0.** `set_open_as()` asks again and refused. Rerun with both (below) |
+| (both) | also drop `_require_assigning_authority()` from `set_open_as()` | 6 (subtests of `test_only_the_principal_turns_it`): the vice principal and the administrator opened marking |
+| Each turn of the switch is written down | `set_open_as()` writes no row | 8 (7 failures, 1 error): every switch test, because the row is the state (`marking_in()`), so an unwritten turn is also a turn that did not happen |
+| The carry-forward never copies across schools | read the rows' teachers from every school's memberships, not this one's | 1: `test_a_row_naming_another_schools_teacher_is_never_copied`. The schema check in `why_not_a_teacher_here()` still kept the row out; what failed is the other school's teacher's name written into this school's log |
+| (both) | also skip `why_not_a_teacher_here()` in `_why_not_copied()` | 1: the same test, now because the other school's teacher was copied into this school's new term |
+| A teacher who has left or lost teacher access is not copied | drop `with_access()` from the copy's teacher lookup | 1: `test_a_teacher_who_has_left_or_lost_teacher_access_is_not_copied` |
+| A teacher holding nothing in a restricted term is refused a save and a clear (server) | `_require_assigned()` lets a teacher who holds no pair through | 14: the teacher given nothing, the restricted term's open/save/clear, the switch tests that restrict again, the other school's newcomer, and both released-card tests |
+| A teacher holding nothing is refused the sheet (server) | `may_mark()` answers true for a teacher who holds no pair | 3: the teacher given nothing, and the restricted term's open/save/clear (two subtests) |
+| If the last term had none, nothing changes | `carry_forward()` goes on with no rows | 1: `test_with_none_last_term_nothing_at_all_changes` (a carry row and its card appeared) |
+| A term the principal opened starts the next one open | never carry the switch | 1: `test_a_term_the_principal_had_opened_starts_open` |
+| Only the principal dismisses the card | the dismiss view asks nothing but the host | 3 (subtests of `test_only_the_principal_dismisses_it`) |
+| Only the principal's look clears the card | `seen_as()` asks nothing | 1: `test_the_vice_principal_or_the_administrator_opening_it_does_not_count` |
+| The copy runs forward, once | drop the forward and never-had-one checks | 2 (1 failure, 1 error): going back copies into the earlier term, and going forward again copies twice (the unique constraint refuses it) |
+| Opening marking never opens a released card | `set_score()` skips both of its release guards | 2 errors: both released-card tests, where the database's own trigger (`gradebook/0002_a_released_mark_stays_released`) refused the write instead of a 423 |
+
+Every control was restored with `git checkout`, the tree was checked clean after each,
+and the module passes again (76 tests).
