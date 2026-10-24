@@ -648,4 +648,39 @@ class, term and child share ids and whose first children share an admission numb
 
 #### Controls
 
-CONTROLS-TABLE
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied
+in a separate worktree and run over the whole of `cbt` (43 tests), and over
+`tests/test_menu.py` as well where the menu is involved (74). Each was restored with
+`git checkout` and the tree checked clean. Counts are Django's, subtests included.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| Only the principal, the administrator and an exam officer print | `can_print()` lets every teacher and vice principal through | 11: everybody else refused (7 subtests), the assigned teacher, the officer whose naming ended, the officer at the other school, and the menu for a teacher (four "exam-slips opens for this login and the menu hides it") |
+| Every route asks who is asking | the `can_print()` check removed from every route | 7: `test_nobody_else_reads_or_prints...` (the overview and the class list answered 200), the ended officer, the suspended officer. The print routes still refused, because the service asks again (next row) |
+| (both layers) | also skip `_require_printing_authority()` in `pins` | 9: the same, plus the prints themselves, the assigned teacher and the other school's officer |
+| Only the principal names and ends exam officers | add the administrator to `NAMING_ROLES` | 3: the administrator's naming and ending (`200 != 403`), the log grew (`2 != 1`), and `may_name` shown to the office |
+| Only this school's staff can be named | look the membership up by id alone | **green, 0.** The schema check (`membership.school.schema_name`) refused. Rerun with both dropped (below) |
+| (both) | also drop the schema check | 4: the other school's teacher and administrator were named (`200 != 422`), `test_a_principal_cannot_name_the_other_schools_staff_even_by_id` |
+| Only a teacher, the vice principal or the administrator can be named | drop the role check | 4: the bursar, a student and the principal were named |
+| The officer log cannot be edited or deleted | never create `cbt_exam_officer_grants_are_append_only` | 1: `test_the_record_cannot_be_edited_or_deleted` |
+| The print log cannot be edited or deleted | never create `cbt_slip_prints_are_append_only` | 1: `test_the_print_log_cannot_be_edited_or_deleted` |
+| A PIN is only ever cancelled, once, never deleted or rewritten | never create `cbt_an_exam_pin_is_only_ever_cancelled` | 1: `test_a_pin_is_only_ever_cancelled_once_and_never_deleted_or_rewritten` |
+| Printing again cancels the old PINs | skip the cancel | 3 errors: the class reprint, the lost slip and the moved student, each refused by `one_live_exam_pin_per_student_per_term` |
+| (and the old PIN then fails) | skip the cancel and widen that index so it no longer holds | 4: the old PIN opened (`82 is not None`) in the reprint, the lost slip and the moved student, and `test_at_most_one_live_pin_per_student_per_term` |
+| A lost slip cancels only that student's; a reprint reaches a student who moved in | cancel the class's PINs instead of the students' | 2: the lost slip stopped the rest of the class (`None != 81`), and the moved student's old PIN was left live (the index refused the new one) |
+| A PIN is kept only as a keyed digest | a plain unkeyed SHA-256 of the PIN | 5: the digest equalled `sha256(pin)` (three subtests), the digest is not bound to school, student and term (`1 != 4`), and another server's key still opened a PIN |
+| The digest is bound to the school | drop the school from the HMAC message | 1: `test_the_digest_is_bound_to_the_school_the_student_and_the_term` (`3 != 4`) |
+| One school's PIN opens nothing at the other | `check()` without its schema guard | **green, 0.** The school filter on the admission number held. Rerun with more dropped (below) |
+| (two layers) | also drop the school filter | **green, 0.** The school bound into the digest held: the other school's PIN does not match a digest made for this school |
+| (all three) | also drop the school from the digest | 2: Grace's student opened at St Mary's while the connection was on Grace (`Chidi Eze ... is not None`), and the binding test |
+| A render that fails mints and cancels nothing | render outside the transaction | 1: `test_a_render_that_fails_mints_and_cancels_nothing` (a second print row was kept, `2 != 1`) |
+| The PDF is not cached | drop `Cache-Control: no-store` | 1 error: `test_the_pdf_is_sent_once_and_stored_nowhere` (`KeyError: 'cache-control'`) |
+| The administrator never reads banks, named exam officer or not | let the administrator into `BANK_ROLES` and drop the exclusion | 1: `test_the_administrator_never_reads_banks_even_as_an_exam_officer` |
+| An officer at one school is nothing at the other | read the officer's memberships at every school, and drop the same-school check | **green, 0.** The grants live in each school's own schema, so the other school has no grant naming them. Rerun reading every school's grants (below) |
+| (and the grants) | also read the grants from every school's schema | 1: `test_an_officer_at_one_school_is_nothing_at_the_other` (`200 != 403`) |
+| The menu shows Exam slips only to who can open it | `menu_keys()` offers it to every teacher and vice principal | 7: "the menu links exam-slips, and it refuses this login", for the teacher, the vice principal, the two-schools teacher and the officer whose naming ended |
+| A suspended officer prints nothing | count officer memberships without `with_access()` | 1: `test_an_exam_officer_whose_teaching_place_is_suspended_cannot_print` |
+| An ended officer prints nothing | count any grant, named or ended | 2: the ended officer still printed (`200 != 403`), and kept the menu link |
+
+The three green runs are layered guards, each rerun with the next layer broken until it
+went red. The module passes again after every restore (43 tests, and 74 with the menu).
