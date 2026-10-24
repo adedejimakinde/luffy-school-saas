@@ -79,6 +79,8 @@ NOT_ON_THE_DESIGN = {
     "results/templates/results/report_card.html",
     "results/templates/results/report_card_ogun.html",
     "results/templates/results/checker_slips.html",
+    # The exam slips are the checker slips' twin (`cbt/pdf.py`), printed the same way.
+    "cbt/templates/cbt/exam_slips.html",
 }
 
 #: Documents WeasyPrint draws, which are not pages a browser opens: they have no
@@ -87,6 +89,7 @@ WEASYPRINT_DOCUMENTS = {
     "results/templates/results/report_card.html",
     "results/templates/results/report_card_ogun.html",
     "results/templates/results/checker_slips.html",
+    "cbt/templates/cbt/exam_slips.html",
 }
 
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
