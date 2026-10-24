@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 import os
 from pathlib import Path
 
@@ -38,6 +40,20 @@ if not SECRET_KEY:
         "signs every session cookie and CSRF token on the platform. Set it, or "
         "set DJANGO_DEBUG=1 for local development."
     )
+
+#: **The key a student's exam PIN is hashed with** (`cbt.pins.digest()`), an
+#: HMAC key that lives in the server's environment and never in the database, so
+#: a copy of the database alone cannot be searched for PINs: eight digits are a
+#: hundred million guesses, which an unkeyed hash gives up in seconds.
+#:
+#: Its own secret, made by `deploy/init-env.sh`, so that rotating the session
+#: key does not cancel every printed slip. A server whose `secrets.env` predates
+#: it falls back to a key derived from `SECRET_KEY`, which is still a server
+#: secret and still not in the database. Changing either stops every exam PIN
+#: from working, and the remedy is printing the slips again.
+EXAM_PIN_KEY = os.environ.get("EXAM_PIN_KEY", "").strip() or hmac.new(
+    SECRET_KEY.encode(), b"classnode.cbt.exam-pin-key", hashlib.sha256
+).hexdigest()
 
 #: **The parent domain every host on the platform lives under** — the portal
 #: and each school's `<slug>.<domain>` alike. One setting, and the three things
@@ -218,6 +234,11 @@ TENANT_APPS = [
     # Start here, the step pages and Help and next steps: no tables of its
     # own either. What is done is read from the tables above every time.
     "onboarding",
+    # Computer-based tests (`docs/cbt.md`). Its own app because it reads the
+    # terms and classes `academics` owns and, later, the gradebook's subjects,
+    # and neither of those may depend on it. Phase 2 step 2 holds only exam
+    # officers and the students' exam PINs.
+    "cbt",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

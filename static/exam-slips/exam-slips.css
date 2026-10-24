@@ -1,0 +1,22 @@
+/*
+ * Exam slips: the layout `setup/setup.css` does not already give.
+ *
+ * One row per class: its name, how many students and slips, and its buttons, which
+ * wrap under the name rather than squeeze beside it. The students of an open class and
+ * the exam officers are the same wrapping rows, so a 320px phone and text at 200% keep
+ * every name, number and button readable on its own line.
+ */
+.class-slips { display: grid; gap: 6px; }
+.class-slips .level { overflow-wrap: anywhere; }
+.class-slips .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.class-slips button, .students button, .officers button { margin: 0; min-height: var(--control); }
+.students, .officers { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.students li, .officers li { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; min-width: 0; padding: 6px 0; border-bottom: 1px solid var(--divider); }
+.students .what, .officers .what { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+.students .who, .officers .who { display: block; color: var(--muted); font-size: var(--small); }
+.students .note, .officers .note, .students .done { flex-basis: 100%; }
+.confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.confirm p { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
+.confirm button { margin: 0; min-height: var(--control); }
+form.name-officer { margin-top: 16px; }
+form.name-officer h3 { margin: 0 0 4px; }

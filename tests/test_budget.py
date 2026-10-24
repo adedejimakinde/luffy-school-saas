@@ -75,6 +75,7 @@ SCHOOL_PAGES = (
     "/ogsera/",
     "/teaching/",
     "/subject-teachers/",
+    "/exam-slips/",
     "/help/",
     "/",
 )
@@ -108,6 +109,14 @@ QUERIES["/home/"] += 2
 #: Help and next steps draws tips and support, and reads nothing of its own;
 #: like Home it does not ask for the portal's hostname.
 QUERIES["/help/"] = 14
+#: These logins are teachers, whom the principal may have named exam officer, so
+#: the menu asks whether they are one (`cbt.access.menu_keys()`): one statement and
+#: its search path, once per page. The principal, the administrator, a bursar and a
+#: parent are never asked, and cost what they did; nor are the pages with no staff
+#: menu (the public page, the cards and the result checker).
+for _path in SCHOOL_PAGES:
+    if _path not in ("/", "/cards/", "/cards/1/1/", "/check/"):
+        QUERIES[_path] += 2
 
 _ASSET = re.compile(r'<(?:link|script|img|iframe|source|video|audio)\b[^>]*?\b(?:src|href)="([^"]*)"', re.I)
 _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)

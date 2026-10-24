@@ -54,6 +54,7 @@ from academics.promotion_api import router as promotion_router
 from attendance.api import router as attendance_router
 from attendance.absences import VIEWING_ROLES as ABSENCE_VIEWING_ROLES
 from attendance.services import MARKING_ROLES
+from cbt.api import router as cbt_router
 from fees.api import router as fees_router
 from fees.bank_api import router as fees_bank_router
 from fees.virtual_api import router as fees_virtual_router
@@ -100,6 +101,9 @@ api.add_router("/teaching/", teaching_router, tags=["teaching"])
 
 # Who teaches which subject to which class: `/subject-teachers/`. Tenant-host only.
 api.add_router("/subject-teachers/", subject_teachers_router, tags=["subject-teachers"])
+
+# Computer-based tests: exam slips and exam officers, `/exam-slips/`. Tenant-host only.
+api.add_router("/cbt/", cbt_router, tags=["cbt"])
 
 # Tenant-host only in practice — `_school_of()` in that module answers 404 on the
 # portal, where `attendance_register` does not exist at all rather than existing

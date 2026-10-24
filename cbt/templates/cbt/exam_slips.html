@@ -1,0 +1,59 @@
+{% comment %}
+Exam slips for one class, or one student, one slip each. Rendered by
+`cbt.pdf.render_slips()` in the request that mints the PINs, and stored nowhere:
+this document is the only place the raw PINs ever exist (`cbt.pins`, `docs/cbt.md`).
+
+No marks and no questions. A slip lets a student sign in to sit a test this term,
+behind the test code their teacher reads out when the test starts.
+
+Eight slips to an A4 page, each a box that does not break across pages, so the
+school can cut along the borders. The same layout as the result checker's slips.
+{% endcomment %}
+<meta charset="utf-8">
+<title>Exam slips: {{ school_name }}</title>
+<style>
+  @page { size: A4; margin: 10mm; }
+  body { font: 10pt "DejaVu Sans", sans-serif; color: #111; margin: 0; }
+  .slip {
+    border: 1px dashed #666; padding: 4mm 6mm; margin-bottom: 3mm;
+    height: 28mm; page-break-inside: avoid;
+  }
+  .slip h1 { font-size: 11pt; margin: 0 0 1.5mm; font-weight: 600; }
+  .slip .who { margin-bottom: 1.5mm; }
+  .slip .label { color: #555; }
+  .slip .pin { font: 600 15pt "DejaVu Sans Mono", monospace; letter-spacing: 1px; }
+  .slip .how { font-size: 8.5pt; color: #333; margin-top: 1.5mm; }
+  .unprinted h1 { font-size: 12pt; }
+  .after-slips { page-break-before: always; }
+</style>
+
+{% for slip in slips %}
+<div class="slip">
+  <h1>{{ school_name }}: exam slip</h1>
+  <div class="who">
+    {{ slip.student_name }}, {{ class_group_name }}. {{ term_label }}, {{ session }}.
+  </div>
+  <div><span class="label">Admission number:</span> {{ slip.admission_number }}
+    &nbsp; <span class="label">Exam PIN:</span> <span class="pin">{{ slip.printed_pin }}</span></div>
+  <div class="how">
+    To sit a test, go to {{ sit_address }} and type the test code your teacher gives
+    you, your admission number and this PIN. It works for this term only. Keep it to
+    yourself: anyone who has it can sit your tests. If it is lost, ask for a new slip,
+    and this PIN will stop working.
+  </div>
+</div>
+{% endfor %}
+
+{% if without_a_number %}
+<div class="unprinted{% if slips %} after-slips{% endif %}">
+  <h1>No slip was printed for {{ without_a_number|length }} student{{ without_a_number|length|pluralize }}</h1>
+  <p>
+    A student signs in with their admission number, and
+    {% if without_a_number|length == 1 %}this student has{% else %}these students have{% endif %}
+    none on the roll. Add one, then print a slip for each of them.
+  </p>
+  <ul>
+    {% for name in without_a_number %}<li>{{ name }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
