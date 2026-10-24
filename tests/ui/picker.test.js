@@ -161,6 +161,19 @@ async function open(page, url) {
 const picker = (page) => page.locator("dialog.picker[open]");
 
 /**
+ * The picker open and at rest: its slide or fade in finished, so what is
+ * measured is where it stays. Measured mid-slide a menu under the field sits
+ * up to 4px higher (its `translateY(-4px)` start), over the field's edge:
+ * main's run 567 failed that way.
+ */
+async function opened(page) {
+  const sheet = picker(page);
+  await sheet.waitFor();
+  await sheet.evaluate((el) => Promise.all(el.getAnimations().map((animation) => animation.finished)));
+  return sheet;
+}
+
+/**
  * Chooses a row through the picker, the way a person does: press the field,
  * press the row. `label` names the row; without it, the first row that is not
  * the field's current value nor its "nothing chosen" one. Returns the value
@@ -169,8 +182,7 @@ const picker = (page) => page.locator("dialog.picker[open]");
 async function choose(page, field, { label } = {}) {
   await field.scrollIntoViewIfNeeded();
   await field.click();
-  const sheet = picker(page);
-  await sheet.waitFor();
+  const sheet = await opened(page);
   const rows = sheet.getByRole("option");
   let row;
   if (label !== undefined) row = sheet.getByRole("option", { name: label, exact: true });
@@ -197,8 +209,7 @@ async function choose(page, field, { label } = {}) {
 async function rowsOf(page, field) {
   await field.scrollIntoViewIfNeeded();
   await field.click();
-  const sheet = picker(page);
-  await sheet.waitFor();
+  const sheet = await opened(page);
   const rows = await sheet.getByRole("option").evaluateAll((all) => all.map((o) => (o.getAttribute("aria-label") || o.textContent).trim()));
   await page.keyboard.press("Escape");
   await sheet.waitFor({ state: "hidden" });
@@ -249,9 +260,7 @@ describe("the picker, open", () => {
       await open(page, `${SUNRISE}/staff/`);
       const field = page.locator("#role");
       await field.tap();
-      const menu = picker(page);
-      await menu.waitFor();
-      await page.waitForTimeout(200);
+      const menu = await opened(page);
       await shoot(page, 360, "short-list");
 
       assert.equal(await menu.getAttribute("class"), "picker picker-pop", "a menu, not a sheet");
@@ -307,8 +316,7 @@ describe("the picker, open", () => {
       await field.scrollIntoViewIfNeeded();
       const was = await field.inputValue();
       await field.tap();
-      const menu = picker(page);
-      await menu.waitFor();
+      const menu = await opened(page);
       const f = await field.boundingBox();
       const m = await menu.boundingBox();
       assert.ok(m.y >= f.y + f.height && m.y <= f.y + f.height + 8, "under the field, where three rows fit");
@@ -329,9 +337,7 @@ describe("the picker, open", () => {
       await field.scrollIntoViewIfNeeded();
       assert.ok((await field.evaluate((s) => s.options.length)) > 6, "the control: a list longer than six");
       await field.tap();
-      const sheet = picker(page);
-      await sheet.waitFor();
-      await page.waitForTimeout(300); // the slide up
+      const sheet = await opened(page);
 
       assert.equal(await sheet.getAttribute("class"), "picker picker-sheet");
       const box = await sheet.boundingBox();
@@ -387,9 +393,7 @@ describe("the picker, open", () => {
       assert.equal(await field.inputValue(), was);
 
       await field.tap();
-      const sheet = picker(page);
-      await sheet.waitFor();
-      await page.waitForTimeout(300);
+      const sheet = await opened(page);
       const handle = await sheet.locator(".picker-head").boundingBox();
       const cdp = await page.context().newCDPSession(page);
       const at = (y) => [{ x: handle.x + handle.width / 2, y }];
@@ -410,9 +414,7 @@ describe("the picker, open", () => {
       await open(page, `${SUNRISE}/staff/`);
       const field = page.locator("#role");
       await field.click();
-      const sheet = picker(page);
-      await sheet.waitFor();
-      await page.waitForTimeout(200);
+      const sheet = await opened(page);
       await shoot(page, 1280, "staff-role");
 
       const f = await field.boundingBox();
@@ -439,8 +441,7 @@ describe("the picker, open", () => {
         await field.scrollIntoViewIfNeeded();
         if (device === PHONE) await field.tap();
         else await field.click();
-        await picker(page).waitFor();
-        await page.waitForTimeout(300);
+        await opened(page);
         await shoot(page, width, "roll-class");
         assert.equal(await picker(page).locator(".picker-title").textContent(), "Class (optional)");
         assert.deepEqual(await picker(page).getByRole("option").allTextContents(), await optionsOf(field));
@@ -460,9 +461,7 @@ describe("the picker, open", () => {
         await field.scrollIntoViewIfNeeded();
         if (device === PHONE) await field.tap();
         else await field.click();
-        const sheet = picker(page);
-        await sheet.waitFor();
-        await page.waitForTimeout(300);
+        const sheet = await opened(page);
         const search = sheet.getByRole("combobox", { name: "Search Class" });
         assert.ok(await search.isVisible(), "a search box over more than eight rows");
         const groups = sheet.getByRole("group");
@@ -511,9 +510,7 @@ describe("the picker, open", () => {
       const field = page.locator("#class_group_id");
       await field.scrollIntoViewIfNeeded();
       await field.tap();
-      const sheet = picker(page);
-      await sheet.waitFor();
-      await page.waitForTimeout(300);
+      const sheet = await opened(page);
       await shoot(page, 320, "roll-class-large-text");
       const fits = await sheet.evaluate((el) => {
         const list = el.querySelector(".picker-list");
@@ -549,8 +546,7 @@ describe("the picker, with a keyboard and a screen reader", () => {
 
       // Open, and the listbox has the keys, on the chosen row.
       await page.keyboard.press("ArrowDown");
-      const sheet = picker(page);
-      await sheet.waitFor();
+      const sheet = await opened(page);
       const list = page.getByRole("listbox", { name: "Role" });
       assert.ok(await list.evaluate((el) => el === document.activeElement));
       const active = () =>
@@ -634,8 +630,7 @@ describe("the picker, with a keyboard and a screen reader", () => {
       const term = page.locator("#specimen-term");
       await term.focus();
       await page.keyboard.press("ArrowDown");
-      const sheet = picker(page);
-      await sheet.waitFor();
+      const sheet = await opened(page);
       const row = sheet.getByRole("option", { name: "Third term (not open yet)" });
       assert.equal(await row.getAttribute("aria-disabled"), "true");
       await page.keyboard.press("ArrowDown");
@@ -819,8 +814,7 @@ const PAGES = [
       await settle(page);
       const field = page.locator('select[name="bank_code"]');
       await field.click();
-      const sheet = picker(page);
-      await sheet.waitFor();
+      const sheet = await opened(page);
       await page.keyboard.type("zen");
       assert.deepEqual(await sheet.getByRole("option").filter({ visible: true }).allTextContents(), ["Zenith Bank"]);
       await page.keyboard.press("Enter");
