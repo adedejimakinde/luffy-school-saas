@@ -37,6 +37,7 @@ from accounts.models import MEMBERSHIP_GRANTING_ROLES, Role
 from academics.services import PLACEMENT_ROLES, SETUP_ROLES
 from attendance.absences import VIEWING_ROLES as ABSENCE_ROLES
 from attendance.services import MARKING_ROLES as REGISTER_ROLES
+from cbt.access import PRINTING_ROLES as EXAM_SLIP_ROLES
 from fees.authority import READING_ROLES as FEES_ROLES
 from gradebook.assignments import VIEWING_ROLES as SUBJECT_TEACHER_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
@@ -75,6 +76,9 @@ LINKS = (
     Link("setup", "/setup/", "i-settings", "Setup", SETUP_ROLES, "Office"),
     Link("teaching", "/teaching/", "i-book", "Subjects", SETUP_ROLES, "Office"),
     Link("subject-teachers", "/subject-teachers/", "i-staff", "Who teaches what", SUBJECT_TEACHER_ROLES, "Office"),
+    # The principal and the administrator by role; an exam officer by the principal's
+    # naming, which `cbt.access.menu_keys()` reads (`menu_for()`'s `also`).
+    Link("exam-slips", "/exam-slips/", "i-flag", "Exam slips", EXAM_SLIP_ROLES, "Office"),
     Link("promotion", "/promotion/", "i-promote", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.
@@ -150,9 +154,11 @@ def platform_menu(current: str) -> Menu:
     return Menu(groups=(Group("Platform", PLATFORM_LINKS),), tabs=(), current=current, platform=True)
 
 
-def menu_for(roles, current: str) -> Menu:
+def menu_for(roles, current: str, also=frozenset()) -> Menu:
+    """`also` names links this login holds by a permission rather than a role: an exam
+    officer's exam slips page (`cbt.access.menu_keys()`)."""
     roles = set(roles)
-    shown = [link for link in LINKS if link.roles & roles]
+    shown = [link for link in LINKS if link.roles & roles or link.key in also]
 
     groups, seen = [], {}
     for link in shown:
@@ -196,7 +202,16 @@ def _menu(context, current):
     request = context.get("request")
     if _is_platform_page(request):
         return platform_menu(current)
-    return menu_for(getattr(request, "school_roles", frozenset()), current)
+    roles = getattr(request, "school_roles", frozenset())
+    also = frozenset()
+    if roles:
+        # Asked once per request: `shell_open` and `shell_close` both build the menu.
+        also = getattr(request, "_menu_also", None)
+        if also is None:
+            from cbt.access import menu_keys
+
+            also = request._menu_also = menu_keys(roles, request.user, request.school)
+    return menu_for(roles, current, also)
 
 
 def initials(name: str) -> str:

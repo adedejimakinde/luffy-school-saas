@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set a test</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="cbt.css">
+<body class="has-shell has-tabbar">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-brand-mark-light" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--card)"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--brand)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--brand)"/><circle cx="17" cy="8" r="2.1" fill="var(--brand)"/><circle cx="12" cy="17" r="2.1" fill="var(--brand)"/>
+  </symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-bank" viewBox="0 0 24 24"><path d="M4 5a2 2 0 012-2h13v15H6a2 2 0 00-2 2z"/><path d="M4 20a2 2 0 002 2h13v-4"/><path d="M8 7h7M8 11h5"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-comments" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><rect x="14" y="14" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.5-2.5 2-2.5 3.5M12 16.5v.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></symbol>
+  <symbol id="i-marks" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13 7l4 4"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
+  <symbol id="i-register" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M9 13l2 2 4-4"/></symbol>
+  <symbol id="i-results" viewBox="0 0 24 24"><path d="M5 20V11M12 20V5M19 20v-6M3 20h18"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+  <symbol id="i-signout" viewBox="0 0 24 24"><path d="M14 4h4a2 2 0 012 2v12a2 2 0 01-2 2h-4"/><path d="M10 8l-4 4 4 4"/><path d="M6 12h10"/></symbol>
+  <symbol id="i-test" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 3h6v3H9z"/><path d="M8.5 11h7M8.5 15h4"/></symbol>
+</svg>
+<p class="mock-note">Mockup. /tests/new/, a teacher. Classes and subjects are only the teacher's own (a new subject-teacher assignment; see the design note). Phone: one column, the totals stay at the foot.</p>
+<div class="shell">
+  <nav id="sidebar" class="sidebar" popover aria-label="Main">
+    <a class="logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <div class="nav nav-links"><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>Home</a><p class="nav-heading">Teaching</p><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg>Register</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-marks"/></svg>Marks</a><a href="#" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg>Tests</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-bank"/></svg>Question bank</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-comments"/></svg>Remarks</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>Timetable</a><p class="nav-heading">Results</p><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-results"/></svg>Results</a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-sheet"/></svg>Broadsheets</a></div>
+    <div class="nav nav-end">
+      <a href="#"><svg class="icon" aria-hidden="true"><use href="#i-help"/></svg>Help and next steps</a>
+      <button type="button" class="nav-button"><svg class="icon" aria-hidden="true"><use href="#i-signout"/></svg>Sign out</button>
+    </div>
+  </nav>
+  <header class="topbar">
+    <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu"><svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg></button>
+    <a class="logo topbar-logo" href="#"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    <span class="topbar-school">Sunrise Demo Academy</span>
+    <span class="spacer"></span>
+    <details class="account">
+      <summary class="icon-button" aria-label="Your account"><span class="avatar">CO</span></summary>
+      <div class="account-menu"><p class="account-who"><strong>Chidi Okonkwo</strong><span>Teacher</span></p></div>
+    </details>
+  </header>
+  <div class="content">
+    <main class="cbt">
+
+<a class="crumb" href="#"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Tests</a>
+<div class="head"><div><p class="eyebrow">New test</p><h1>Set a test</h1><p>Questions come from your bank. Nothing is shown to students until you publish.</p></div></div>
+<div class="cols">
+  <div style="display:grid;gap:16px">
+    <section class="panel form">
+      <h2>1. What and who</h2>
+      <label class="field">Title<input type="text" value="Second CA test: algebra, indices and logs"></label>
+      <div class="form-row">
+        <label class="field">Subject<select><option>Mathematics</option><option>Further Mathematics</option></select><span class="hint">Only subjects you teach.</span></label>
+        <label class="field">Term<select><option>First term 2026/2027</option></select></label>
+      </div>
+      <div class="field"><span class="field-label">Classes</span>
+        <div class="checks">
+          <label class="check-pill"><input type="checkbox" checked>SS&nbsp;2A</label>
+          <label class="check-pill"><input type="checkbox" checked>SS&nbsp;2B</label>
+          <label class="check-pill"><input type="checkbox" disabled>SS&nbsp;2C</label>
+        </div>
+        <span class="hint">SS&nbsp;2C's Mathematics is taught by Mrs Bello, so it is not yours to set.</span>
+      </div>
+    </section>
+    <section class="panel form">
+      <h2>2. Kind of test</h2>
+      <div class="modes" role="list"><a class="mode" href="04a-settings-custom.html" aria-current="page"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg></span><strong>Class test</strong><span class="quiet">Your questions, your timing. For CA tests and quizzes.</span></a><a class="mode" href="04b-settings-utme.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-grid"/></svg></span><strong>UTME-style practice</strong><span class="quiet">English and three subjects, one timer, the CBT centre screen.</span></a><a class="mode" href="04c-settings-waec.html"><span class="mode-icon"><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg></span><strong>WASSCE-style objectives</strong><span class="quiet">One subject per paper, its own timer, options A to D.</span></a></div>
+    </section>
+    <section class="panel form">
+      <div class="panel-head" style="margin:0"><h2>3. Questions</h2><div class="seg"><label><input type="radio" name="pick" checked>Draw by topic</label><label><input type="radio" name="pick">Pick by hand</label></div></div>
+      <p class="quiet" style="font-size:var(--t-3)">Each student gets the same questions in a different order. They are drawn and copied into the test when you publish.</p>
+      <table class="stack">
+        <thead><tr><th>Topic</th><th class="num">In the bank</th><th class="num">Questions in this test</th></tr></thead>
+        <tbody><tr><td class="stack-head">Algebra</td><td class="num" data-label="In the bank">32</td><td class="num" data-label="Questions in this test"><input class="num-input" type="number" value="10" aria-label="Questions from Algebra"></td></tr><tr><td class="stack-head">Indices</td><td class="num" data-label="In the bank">18</td><td class="num" data-label="Questions in this test"><input class="num-input" type="number" value="5" aria-label="Questions from Indices"></td></tr><tr><td class="stack-head">Logarithms</td><td class="num" data-label="In the bank">12</td><td class="num" data-label="Questions in this test"><input class="num-input" type="number" value="5" aria-label="Questions from Logarithms"></td></tr><tr><td class="stack-head">Geometry</td><td class="num" data-label="In the bank">21</td><td class="num" data-label="Questions in this test"><input class="num-input" type="number" value="0" aria-label="Questions from Geometry"></td></tr></tbody>
+        <tfoot><tr><th>Total</th><td></td><td class="num">20</td></tr></tfoot>
+      </table>
+    </section>
+    <section class="panel form">
+      <h2>4. When</h2>
+      <div class="form-row three">
+        <label class="field">Opens<input type="text" value="Wed 21 Oct, 08:00"></label>
+        <label class="field">Closes<input type="text" value="Wed 21 Oct, 12:00"></label>
+        <label class="field">Time for each student<span style="display:flex;gap:8px;align-items:center"><input class="num-input" type="number" value="30"> minutes</span></label>
+      </div>
+      <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>The clock is the school's, not the device's. A student who starts at 11:50 still gets 30 minutes, up to the time it closes.</p>
+    </section>
+  </div>
+  <aside class="aside" style="display:grid;gap:16px">
+    <section class="panel">
+      <h2>This test</h2>
+      <dl class="kv" style="margin-top:8px">
+        <div><dt>Questions</dt><dd>20</dd></div>
+        <div><dt>Marks</dt><dd>20</dd></div>
+        <div><dt>Time</dt><dd>30 min</dd></div>
+        <div><dt>Students</dt><dd>76</dd></div>
+        <div><dt>Attempts each</dt><dd>1</dd></div>
+      </dl>
+    </section>
+    <p class="note-line"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Scores go to students, parents and the CA column only when you say so, from the results page.</p>
+  </aside>
+  <div class="summary-bar" style="grid-column:1/-1">
+    <div class="totals"><span><strong>20</strong> questions</span><span><strong>30</strong> minutes</span><span><strong>76</strong> students in 2 classes</span></div>
+    <div class="actions"><a class="btn" href="#">Save draft</a><a class="btn btn-primary" href="04a-settings-custom.html">Next: settings<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></div>
+  </div>
+</div>
+    </main>
+  </div>
+  <nav class="tabbar" aria-label="Main"><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="tab-label">Home</span></a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-register"/></svg><span class="tab-label">Register</span></a><a href="#"><svg class="icon" aria-hidden="true"><use href="#i-marks"/></svg><span class="tab-label">Marks</span></a><a href="#" aria-current="page"><svg class="icon" aria-hidden="true"><use href="#i-test"/></svg><span class="tab-label">Tests</span></a></nav>
+</div>
+
+</body>
+</html>

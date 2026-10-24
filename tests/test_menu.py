@@ -43,13 +43,14 @@ FIRST_FETCH = {
     "notices-settings": "/api/notices/settings/",
     "teaching": "/api/teaching/",
     "subject-teachers": "/api/subject-teachers/",
+    "exam-slips": "/api/cbt/slips/",
 }
 
 TEACHER = {"home", "register", "marking", "comments", "timetable", "results", "broadsheet"}
 PRINCIPAL = {
     "home", "register", "marking", "comments", "timetable",
-    "results", "broadsheet", "absences", "fees", "bank", "setup", "teaching", "subject-teachers", "promotion", "roll",
-    "notices-settings",
+    "results", "broadsheet", "absences", "fees", "bank", "setup", "teaching", "subject-teachers", "exam-slips",
+    "promotion", "roll", "notices-settings",
 }
 
 _SIDEBAR = re.compile(r'<nav id="sidebar".*?</nav>', re.S)
@@ -118,6 +119,12 @@ class TheRulesTests(SimpleTestCase):
         for role in (Role.ADMIN, Role.PRINCIPAL, Role.VICE_PRINCIPAL_ACADEMIC, Role.TEACHER, Role.BURSAR):
             with self.subTest(role=role):
                 self.assertEqual(menu.menu_for({role.value}, "home").home, "/home/")
+
+    def test_a_link_held_by_permission_is_shown_only_to_who_holds_it(self):
+        """An exam officer's exam slips page: `also`, from `cbt.access.menu_keys()`."""
+        self.assertNotIn("exam-slips", self.keys({Role.TEACHER.value}))
+        named = {link.key for link in menu.menu_for({Role.TEACHER.value}, "home", frozenset({"exam-slips"})).links}
+        self.assertEqual(named, TEACHER | {"exam-slips"})
 
     def test_the_principal_leads_when_one_person_holds_both(self):
         tabs = [link.key for link in menu.menu_for({Role.TEACHER.value, Role.PRINCIPAL.value}, "home").tabs]
@@ -190,6 +197,25 @@ class EveryLinkOpensTests(ChainSetUp):
     def test_every_other_role_too(self):
         for member in (self.teacher, self.vp, self.bursar, self.admin):
             self.assert_menu_is_exactly_what_opens(member)
+
+    def test_an_exam_officer_gets_exam_slips_and_loses_it_when_it_ends(self):
+        """A permission, not a role: the principal's naming is what the menu reads, here
+        and not at the other school."""
+        from cbt import officers
+        from schools.tests.tenants import connected_to
+
+        with connected_to(self.stmarys):
+            officers.name_as(self.head.user, self.stmarys, self.two_schools_teacher.pk)
+            officers.name_as(self.head.user, self.stmarys, self.vp.pk)
+        here = self.assert_menu_is_exactly_what_opens(self.two_schools_teacher)
+        self.assertEqual(here, TEACHER | {"exam-slips"})
+        self.assertIn("exam-slips", self.assert_menu_is_exactly_what_opens(self.vp))
+        there = self.assert_menu_is_exactly_what_opens(self.two_schools_principal, host=THEIR_HOST, slug="grace")
+        self.assertEqual(there, PRINCIPAL)
+
+        with connected_to(self.stmarys):
+            officers.end_as(self.head.user, self.stmarys, self.two_schools_teacher.pk)
+        self.assertEqual(self.assert_menu_is_exactly_what_opens(self.two_schools_teacher), TEACHER)
 
     def test_a_bursar_gets_three_tabs(self):
         sidebar, tabs = self.shown(self.bursar)

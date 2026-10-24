@@ -22,6 +22,7 @@ from django.test import Client, SimpleTestCase, TestCase, override_settings
 from accounts.models import Role, User
 from accounts.services import grant_membership
 from schools.models import Domain
+from schools.tests.tenants import make_school as make_school_with_schema
 from schools.tests.test_invitations import make_school
 from tests.test_deployment import BASE_DIR, production_environment
 
@@ -40,9 +41,11 @@ class ForwardedSetUp(TestCase):
         # A portal row named `localhost`: what turned every link into
         # `http://localhost/...` in the Codespace.
         Domain.objects.create(tenant=portal, domain="localhost", is_primary=True)
-        self.sunrise = make_school("Sunrise", "sunrise", "sunrise")
+        # Real schemas: a teacher's page reads the school's own tables (the menu asks
+        # `cbt` whether they are an exam officer), as it would on any real school.
+        self.sunrise = make_school_with_schema("Sunrise", "sunrise", "sunrise")
         Domain.objects.create(tenant=self.sunrise, domain=SUNRISE, is_primary=True)
-        self.harbour = make_school("Harbour", "harbour", "harbour")
+        self.harbour = make_school_with_schema("Harbour", "harbour", "harbour")
         Domain.objects.create(tenant=self.harbour, domain=HARBOUR, is_primary=True)
         for username, school in (("sunrise.teacher", self.sunrise), ("harbour.teacher", self.harbour)):
             grant_membership(User.objects.create_user(username, PASSWORD, full_name=username), school, Role.TEACHER)

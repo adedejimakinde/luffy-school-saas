@@ -217,6 +217,15 @@ export const SCREENS = [
   // Who teaches what: the principal's, with the form; the administrator reads it.
   { name: "subject-teachers", as: "sunrise.principal", url: `${SUNRISE}/subject-teachers/` },
   { name: "subject-teachers-read", as: "sunrise.admin", url: `${SUNRISE}/subject-teachers/` },
+  // Exam slips: the principal's, with the officer form and a print's second tap; the
+  // administrator prints too and names nobody.
+  {
+    name: "exam-slips",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/exam-slips/`,
+    steps: [["exam-slips-confirm", '[data-action="ask-print-class"]']],
+  },
+  { name: "exam-slips-office", as: "sunrise.admin", url: `${SUNRISE}/exam-slips/` },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
   // The OGSERA filler. The demo school prints the Standard card, so this is
   // the page telling the office where the Ogun template is chosen.
@@ -809,6 +818,7 @@ describe("keyboard focus and large text on a phone", () => {
   for (const [who, path] of [
     ["sunrise.admin", "/teaching/"],
     ["sunrise.principal", "/subject-teachers/"],
+    ["sunrise.principal", "/exam-slips/"],
     ["sunrise.admin", "/roll/"],
     ["sunrise.principal", "/home/"],
     ["sunrise.teacher", "/marking/"],
@@ -859,6 +869,8 @@ describe("keyboard focus and large text on a phone", () => {
     ["the administrator's roll", "sunrise.admin", `${SUNRISE}/roll/`, 320, false],
     ["who teaches what", "sunrise.principal", `${SUNRISE}/subject-teachers/`, 375, true],
     ["who teaches what", "sunrise.principal", `${SUNRISE}/subject-teachers/`, 320, false],
+    ["exam slips", "sunrise.principal", `${SUNRISE}/exam-slips/`, 375, true],
+    ["exam slips", "sunrise.principal", `${SUNRISE}/exam-slips/`, 320, false],
   ]) {
     test(`${name} at ${large ? "200% text" : "a 320px screen"} does not scroll sideways`, async () => {
       const context = await signedIn(as);

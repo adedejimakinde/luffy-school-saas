@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your test scores</title>
+<link rel="stylesheet" href="../../../static/web/design.css">
+<link rel="stylesheet" href="cbt.css">
+<body class="family">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-brand-mark" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="currentColor"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--card)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--card)"/><circle cx="17" cy="8" r="2.1" fill="var(--card)"/><circle cx="12" cy="17" r="2.1" fill="var(--card)"/>
+  </symbol>
+  <symbol id="i-brand-mark-light" viewBox="0 0 24 24">
+    <rect x="1" y="1" width="22" height="22" rx="6" fill="var(--card)"/>
+    <path d="M7 8L17 8L12 17Z" fill="none" stroke="var(--brand)" stroke-width="1.3" stroke-linejoin="round"/>
+    <circle cx="7" cy="8" r="2.1" fill="var(--brand)"/><circle cx="17" cy="8" r="2.1" fill="var(--brand)"/><circle cx="12" cy="17" r="2.1" fill="var(--brand)"/>
+  </symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+</svg>
+<p class="mock-note">Mockup. A student's released scores, opened on a school computer with a review code from the teacher, the admission number and the exam PIN. Only their own; nothing before the teacher releases. Letters are the ones this student saw.</p>
+<header class="family-top"><div class="family-top-in">
+  <span class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</span>
+  <span class="spacer"></span>
+  <span class="quiet" style="font-size:var(--t-3)">Amaka Obi, SS&nbsp;2A</span>
+  <details class="account"><summary class="icon-button" aria-label="Your account"><span class="avatar">AO</span></summary></details>
+</div></header>
+<main class="family-main"><div class="cbt">
+  <div class="head"><div><p class="eyebrow">Your test scores</p><h1>Second CA test: algebra, indices and logs</h1><p>Mathematics. Released by Mr Okonkwo on Fri 23 Oct.</p></div></div>
+  <section class="panel">
+    <div class="score-head"><div class="score-big"><span class="fig">18</span><span>out of 20</span></div><div class="chips"><span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>18 right</span><span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>2 not right</span></div></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><h2>The 2 you did not get right</h2><a class="btn btn-quiet" href="#">Show all 20</a></div>
+    <article class="corr">
+  <div class="corr-head"><p class="eyebrow">Your question 9</p><span class="chip chip-stop"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>Not right</span></div>
+  <p class="qtext">Evaluate log<sub>10</sub> 0.001.</p>
+  <div class="corr-ans"><div class="wrong"><span class="letter">D</span><span>Your answer: &minus;1</span></div><div class="right"><span class="letter">B</span><span>Right answer: &minus;3</span></div></div>
+  <p class="explain"><strong>Why</strong>0.001 = 10<sup>&minus;3</sup>, so log<sub>10</sub> 0.001 = &minus;3.</p>
+</article><article class="corr">
+  <div class="corr-head"><p class="eyebrow">Your question 14</p><span class="chip chip-stop"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>Not right</span></div>
+  <p class="qtext">Simplify (2a<sup>2</sup>b)<sup>3</sup>.</p>
+  <div class="corr-ans"><div class="wrong"><span class="letter">A</span><span>Your answer: 6a<sup>6</sup>b<sup>3</sup></span></div><div class="right"><span class="letter">C</span><span>Right answer: 8a<sup>6</sup>b<sup>3</sup></span></div></div>
+  <p class="explain"><strong>Why</strong>Cube each part: 2<sup>3</sup> = 8, (a<sup>2</sup>)<sup>3</sup> = a<sup>6</sup>, b<sup>3</sup>.</p>
+</article>
+  </section>
+  <section class="panel">
+    <h2>Earlier tests</h2>
+    <ul class="test-list" style="margin-top:12px">
+      <li class="test-row"><div><strong>First CA test: number bases</strong><br><span class="quiet">Mathematics, released 2 Oct</span></div><span class="score">15/20<small>75%</small></span></li>
+      <li class="test-row"><div><strong>Practical test: titration</strong><br><span class="quiet">Chemistry, released 25 Sep</span></div><span class="score">8/10<small>80%</small></span></li>
+    </ul>
+  </section>
+</div></main>
+</body>
+</html>
