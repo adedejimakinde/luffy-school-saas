@@ -123,13 +123,36 @@ async function answer(page, pattern, body) {
   );
 }
 
+/**
+ * Counts the page's API requests in flight. `waitForLoadState("networkidle")`
+ * answers at once on a page that was idle once, so a redraw after a choice
+ * (the timetable reads the class's week) is waited for by this instead.
+ */
+function track(page) {
+  if (page.inflight !== undefined) return;
+  page.inflight = 0;
+  page.quietSince = Date.now();
+  const api = (request) => request.url().includes("/api/");
+  const done = (request) => {
+    if (!api(request)) return;
+    page.inflight -= 1;
+    page.quietSince = Date.now();
+  };
+  page.on("request", (request) => api(request) && (page.inflight += 1));
+  page.on("requestfinished", done);
+  page.on("requestfailed", done);
+}
+
+/** The page drawn: loaded, no API request in flight for 300ms, its fonts in, a frame passed. */
 async function settle(page) {
   await page.waitForLoadState("networkidle");
+  for (let i = 0; i < 200 && (page.inflight > 0 || Date.now() - page.quietSince < 300); i++) await page.waitForTimeout(50);
   await page.evaluate(() => document.fonts.ready);
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 50))));
 }
 
 async function open(page, url) {
+  track(page);
   const response = await page.goto(url);
   assert.equal(response.status(), 200, url);
   await settle(page);
