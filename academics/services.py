@@ -517,8 +517,12 @@ def create_class_group(name, level=0, **fields):
     "JSS 1A" sorts before "JSS 10A" as text, and no string rule survives a
     school running Nursery, Primary and Senior in one place. The model says so
     at length; this is the writer that respects it.
+
+    The name is kept as typed but for its spaces: none at either end and one
+    between words, so " JSS  1A " is "JSS 1A" and cannot sit beside it as a
+    second class that only looks the same.
     """
-    group = ClassGroup(name=name, level=level, **fields)
+    group = ClassGroup(name=" ".join(str(name).split()), level=level, **fields)
     group.full_clean()
     group.save()
     return group

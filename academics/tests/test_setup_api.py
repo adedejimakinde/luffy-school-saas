@@ -229,6 +229,26 @@ class TheSetUpScreenTests(ChainSetUp):
         self.assertEqual(response.status_code, 422)
         self.assertTrue(response.json()["detail"])
 
+    def test_a_class_name_loses_its_extra_spaces(self):
+        body = self.new_class(self.head, name="  JSS   2B ", level=2).json()
+
+        self.assertEqual(body["name"], "JSS 2B")
+        with connected_to(self.stmarys):
+            self.assertEqual(ClassGroup.objects.get(pk=body["class_group_id"]).name, "JSS 2B")
+
+    def test_a_name_that_differs_from_one_only_in_spaces_is_the_same_class(self):
+        """St Mary's has a JSS 1A: " JSS  1A" is refused as that one, not opened as a twin."""
+        response = self.new_class(self.head, name=" JSS  1A")
+
+        self.assertEqual(response.status_code, 422)
+        with connected_to(self.stmarys):
+            self.assertEqual(ClassGroup.objects.filter(name__contains="JSS").filter(name__contains="1A").count(), 1)
+
+    def test_a_name_of_only_spaces_is_refused(self):
+        response = self.new_class(self.head, name="   ")
+
+        self.assertEqual(response.status_code, 422)
+
     def test_the_same_class_name_is_free_at_the_other_school(self):
         """Per-schema uniqueness. St Mary's having a JSS 1A does not stop Grace
         having one — which it already does, so this asserts the isolation that
