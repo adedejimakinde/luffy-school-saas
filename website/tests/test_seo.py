@@ -25,7 +25,7 @@ from PIL import Image
 from schools.models import Domain
 from schools.tests.tenants import make_school
 from tests.test_budget import STATIC, served_files
-from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX
+from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX, SCHOOL_ROBOTS
 from website.tests.test_homepage import PORTAL, SITE, SiteSetUp, words
 from website.views import FAQ, LEGAL_PAGES, LOGO, PAGES
 
@@ -109,11 +109,18 @@ class NoindexOffThePublicSiteTests(SchoolSetUp):
                 self.assertEqual(ROBOTS_META.findall(response.content.decode()), [])
 
     def test_robots_txt_closes_every_host_but_the_site(self):
-        for host in (PORTAL, SCHOOL, "nobody.classnode.testserver"):
+        # The portal's, word for word as it always was; a school's names the
+        # paths it never lets in before the same closing line (and so does a
+        # host with no school, which the middleware cannot tell from one).
+        for host, expected in (
+            (PORTAL, CLOSED_ROBOTS),
+            (SCHOOL, SCHOOL_ROBOTS),
+            ("nobody.classnode.testserver", SCHOOL_ROBOTS),
+        ):
             with self.subTest(host=host):
                 response = self.get("/robots.txt", host=host)
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.content.decode(), CLOSED_ROBOTS)
+                self.assertEqual(response.content.decode(), expected)
                 robots = self.robots(host)
                 for path in ("/", "/sign-in/", "/staff-sign-in/", "/register/", "/favicon"):
                     self.assertFalse(robots.can_fetch("Googlebot", f"https://{host}{path}"), path)

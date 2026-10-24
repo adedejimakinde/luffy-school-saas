@@ -32,6 +32,16 @@ def platform_page(request):
     )
 
 
+def reserved(request, rest=""):
+    """A name held for work not yet built (`schools.paths.RESERVED`): a 404.
+
+    Routed so that nothing else can take the name and nothing is served there
+    by accident. The same answer for every method, every school and every caller,
+    signed in or not, and `website.crawlers` keeps it out of search engines.
+    """
+    raise Http404("Nothing is here yet.")
+
+
 def school_site(request):
     """A school's public page, on its own address: who it is and where to go.
 

@@ -35,7 +35,8 @@ from home.views import home_page
 from onboarding.views import help_page, start_here, step_page
 from notices.views import settings_page
 from schools.demo import only_in_the_single_host_demo
-from schools.views import school_site
+from schools.paths import RESERVED
+from schools.views import reserved, school_site
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -131,6 +132,16 @@ urlpatterns = [
     # The result checker: a family with no account opens a card with the
     # admission number and the PIN from a slip (docs/messaging.md D11).
     path("check/", checker_page, name="result-checker"),
+    # Names held for work not yet built (`schools.paths.RESERVED`), `/sit/` among
+    # them: a 404 at the name and everywhere under it until the work is routed here.
+    *(
+        pattern
+        for name in RESERVED
+        for pattern in (
+            path(f"{name}/", reserved, name=f"reserved-{name}"),
+            path(f"{name}/<path:rest>", reserved),
+        )
+    ),
 ]
 
 #: The 403 page, named here so **a school's host** has one — which is the host
