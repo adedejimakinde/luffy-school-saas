@@ -33,7 +33,7 @@ two conventions in one file would invite a route that mixes them. That module's
 docstring has the argument in full.
 """
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from django.contrib.auth import logout as end_session
 from django.db.models import Q
@@ -912,6 +912,9 @@ class InvitationListOut(Schema):
     invitations: List[InvitationRowOut]
     #: The roles the form may offer: `invite_staff()` refuses anything else.
     roles: List[str]
+    #: What each of `roles` is called on the page (`Role`'s labels); the form
+    #: submits the value and shows this.
+    role_labels: Dict[str, str] = {}
     #: Has the school a teacher yet, invited or signed in? With none and no
     #: invitation waiting, the page shows its empty state.
     has_teachers: bool = False
@@ -973,7 +976,12 @@ def list_invitations(request, slug: str):
     has_teachers = Membership.objects.filter(
         school=school, role=Role.TEACHER, status__in=(MembershipStatus.ACTIVE, MembershipStatus.INVITED)
     ).exists()
-    return InvitationListOut(invitations=rows, roles=sorted(STAFF_ROLES), has_teachers=has_teachers)
+    return InvitationListOut(
+        invitations=rows,
+        roles=sorted(STAFF_ROLES),
+        role_labels={role: Role(role).label for role in STAFF_ROLES},
+        has_teachers=has_teachers,
+    )
 
 
 @api.post(
