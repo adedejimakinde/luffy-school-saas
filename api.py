@@ -46,7 +46,7 @@ from ninja.utils import check_csrf
 
 from accounts import guardian_signin, signin
 from accounts.enrolment_api import router as enrolment_router
-from accounts.models import STAFF_ROLES, Membership, MembershipStatus, Role
+from accounts.models import ROLE_DESCRIPTIONS, STAFF_ROLES, Membership, MembershipStatus, Role
 from accounts.services import NotPermitted, can_grant_memberships
 from accounts.session import SESSION_EXPIRED, session_auth, why_unauthenticated
 from academics.api import router as academics_router
@@ -915,6 +915,8 @@ class InvitationListOut(Schema):
     #: What each of `roles` is called on the page (`Role`'s labels); the form
     #: submits the value and shows this.
     role_labels: Dict[str, str] = {}
+    #: A line under each label: what the role does (`ROLE_DESCRIPTIONS`).
+    role_descriptions: Dict[str, str] = {}
     #: Has the school a teacher yet, invited or signed in? With none and no
     #: invitation waiting, the page shows its empty state.
     has_teachers: bool = False
@@ -980,6 +982,7 @@ def list_invitations(request, slug: str):
         invitations=rows,
         roles=sorted(STAFF_ROLES),
         role_labels={role: Role(role).label for role in STAFF_ROLES},
+        role_descriptions={role: ROLE_DESCRIPTIONS[role] for role in STAFF_ROLES},
         has_teachers=has_teachers,
     )
 

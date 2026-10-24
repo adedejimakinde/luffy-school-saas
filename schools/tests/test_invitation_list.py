@@ -87,6 +87,8 @@ class InvitationListTests(TestCase):
             [body["role_labels"][r] for r in body["roles"]],
             ["Administrator", "Bursar", "Principal", "Teacher", "Vice principal (academic)"],
         )
+        self.assertEqual(body["role_descriptions"]["teacher"], "Takes registers, enters marks and writes remarks")
+        self.assertEqual(set(body["role_descriptions"]), set(body["roles"]))
 
     # -- the other school ------------------------------------------------------
 

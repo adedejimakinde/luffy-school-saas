@@ -180,7 +180,7 @@ async function choose(page, field, { label } = {}) {
     assert.ok(at >= 0, "a row to choose");
     row = rows.nth(at);
   }
-  const text = (await row.textContent()).trim();
+  const text = (await row.evaluate((el) => el.getAttribute("aria-label") || el.textContent)).trim();
   const value = await field.evaluate((s, text) => [...s.options].find((o) => o.textContent.trim() === text).value, text);
   await page.evaluate(() => {
     window.__picked = null;
@@ -199,7 +199,7 @@ async function rowsOf(page, field) {
   await field.click();
   const sheet = picker(page);
   await sheet.waitFor();
-  const rows = (await sheet.getByRole("option").allTextContents()).map((t) => t.trim());
+  const rows = await sheet.getByRole("option").evaluateAll((all) => all.map((o) => (o.getAttribute("aria-label") || o.textContent).trim()));
   await page.keyboard.press("Escape");
   await sheet.waitFor({ state: "hidden" });
   return rows;
@@ -243,50 +243,142 @@ after(async () => {
 });
 
 describe("the picker, open", () => {
-  test("on a phone it is a sheet from the foot, titled by the field, with the chosen row checked", async () => {
+  test("on a phone a short list opens as a menu under the field, each role with what it does", async () => {
     const page = await (await signedIn("sunrise.admin", PHONE)).newPage();
     try {
       await open(page, `${SUNRISE}/staff/`);
-      await page.locator("#role").tap();
-      const sheet = picker(page);
-      await sheet.waitFor();
-      await page.waitForTimeout(300); // the slide up
-      await shoot(page, 360, "staff-role");
+      const field = page.locator("#role");
+      await field.tap();
+      const menu = picker(page);
+      await menu.waitFor();
+      await page.waitForTimeout(200);
+      await shoot(page, 360, "short-list");
 
-      const box = await sheet.boundingBox();
-      assert.equal(Math.round(box.x), 0);
-      assert.equal(Math.round(box.width), 360);
-      assert.equal(Math.round(box.y + box.height), 740, "flush with the foot of the screen");
-      assert.equal(await sheet.locator(".picker-title").textContent(), "Role");
-      assert.ok(await sheet.locator(".picker-handle").isVisible(), "a drag handle");
-      assert.equal(await page.getByRole("listbox", { name: "Role" }).count(), 1);
-      const chosen = sheet.locator('[role="option"][aria-selected="true"]');
+      assert.equal(await menu.getAttribute("class"), "picker picker-pop", "a menu, not a sheet");
+      const f = await field.boundingBox();
+      const m = await menu.boundingBox();
+      const under = m.y >= f.y + f.height && m.y <= f.y + f.height + 8;
+      const over = m.y + m.height <= f.y && m.y + m.height >= f.y - 8;
+      assert.ok(under || over, "against the field: under it, or over it where its rows fit better");
+      assert.ok(m.y >= 0 && m.y + m.height <= 740, "all on the screen");
+      assert.equal(await menu.locator(".picker-list").evaluate((el) => el.scrollHeight > el.clientHeight + 1), false, "every role shows, nothing to scroll");
+      assert.ok(Math.abs(m.x - f.x) <= 1 && Math.abs(m.width - f.width) <= 1, "lined up with it");
+      assert.equal(await menu.locator(".picker-handle").isVisible(), false, "no handle, no title: the field's label names it");
+      const look = await menu.evaluate((el) => ({ radius: getComputedStyle(el).borderRadius, shadow: getComputedStyle(el).boxShadow }));
+      assert.equal(look.radius, "12px", "a rounded card");
+      assert.notEqual(look.shadow, "none", "a soft shadow");
+      assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflow), "visible", "the page is not locked behind a menu");
+
+      const roles = await page.getByRole("listbox", { name: "Role" }).getByRole("option").evaluateAll((all) =>
+        all.map((o) => [o.getAttribute("aria-label"), document.getElementById(o.getAttribute("aria-describedby")).textContent]),
+      );
+      assert.deepEqual(roles, [
+        ["Administrator", "Runs day-to-day school records"],
+        ["Bursar", "Records fees and payments"],
+        ["Principal", "Approves and releases results, assigns subject teachers"],
+        ["Teacher", "Takes registers, enters marks and writes remarks"],
+        ["Vice principal (academic)", "Oversees results and teaching"],
+      ]);
+      const hint = menu.locator(".picker-hint").first();
+      assert.deepEqual(
+        await hint.evaluate((el) => [getComputedStyle(el).color, getComputedStyle(el).fontSize, getComputedStyle(el).fontWeight]),
+        ["rgb(91, 100, 117)", "15px", "400"],
+        "small, muted, under the name",
+      );
+      const chosen = menu.locator('[role="option"][aria-selected="true"]');
       assert.equal(await chosen.count(), 1);
       assert.ok(await chosen.locator("svg").isVisible(), "a check on the chosen row");
-      for (const row of await sheet.getByRole("option").all()) {
-        const r = await row.boundingBox();
-        assert.ok(r.height >= 52, `a row ${r.height}px tall`);
-        assert.ok(parseFloat(await row.evaluate((el) => getComputedStyle(el).fontSize)) >= 15);
-      }
-      // The page behind is still, under a soft backdrop.
-      const backdrop = await sheet.evaluate((el) => getComputedStyle(el, "::backdrop").backgroundColor);
-      assert.notEqual(backdrop, "rgba(0, 0, 0, 0)");
-      assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflow), "hidden");
+      for (const row of await menu.getByRole("option").all()) assert.ok((await row.boundingBox()).height >= 48);
 
-      await sheet.getByRole("option", { name: "Teacher", exact: true }).tap();
-      await sheet.waitFor({ state: "hidden" });
-      assert.equal(await page.locator("#role").inputValue(), "teacher");
+      await menu.getByRole("option", { name: "Teacher", exact: true }).tap();
+      await menu.waitFor({ state: "hidden" });
+      assert.equal(await field.inputValue(), "teacher");
       assert.equal(await page.evaluate(() => document.activeElement.id), "role", "focus is back on the field");
     } finally {
       await page.close();
     }
   });
 
-  test("on a phone the backdrop and a swipe down close it and change nothing", async () => {
+  test("on a phone a short list's rows are 48px, and a tap elsewhere closes it", async () => {
+    const page = await (await signedIn(null, PHONE)).newPage();
+    try {
+      await open(page, SPECIMEN);
+      const field = page.locator("#specimen-term");
+      await field.scrollIntoViewIfNeeded();
+      const was = await field.inputValue();
+      await field.tap();
+      const menu = picker(page);
+      await menu.waitFor();
+      const f = await field.boundingBox();
+      const m = await menu.boundingBox();
+      assert.ok(m.y >= f.y + f.height && m.y <= f.y + f.height + 8, "under the field, where three rows fit");
+      for (const row of await menu.getByRole("option").all()) assert.equal(Math.round((await row.boundingBox()).height), 48);
+      await page.touchscreen.tap(180, 20);
+      await menu.waitFor({ state: "hidden" });
+      assert.equal(await field.inputValue(), was);
+    } finally {
+      await page.close();
+    }
+  });
+
+  test("on a phone a longer list is a sheet that hugs its rows, 48px each, under a light backdrop", async () => {
     const page = await (await signedIn("sunrise.admin", PHONE)).newPage();
     try {
-      await open(page, `${SUNRISE}/staff/`);
-      const field = page.locator("#role");
+      await open(page, `${SUNRISE}/roll/`);
+      const field = page.locator("#class_group_id");
+      await field.scrollIntoViewIfNeeded();
+      assert.ok((await field.evaluate((s) => s.options.length)) > 6, "the control: a list longer than six");
+      await field.tap();
+      const sheet = picker(page);
+      await sheet.waitFor();
+      await page.waitForTimeout(300); // the slide up
+
+      assert.equal(await sheet.getAttribute("class"), "picker picker-sheet");
+      const box = await sheet.boundingBox();
+      assert.equal(Math.round(box.x), 0);
+      assert.equal(Math.round(box.width), 360);
+      assert.equal(Math.round(box.y + box.height), 740, "flush with the foot of the screen");
+      assert.ok(box.height <= 740 * 0.7 + 1, `${box.height}px tall, over 70% of the screen`);
+      assert.equal(await sheet.locator(".picker-title").textContent(), "Class (optional)");
+      assert.equal(await sheet.locator(".picker-title").evaluate((el) => getComputedStyle(el).fontSize), "16px", "a smaller title");
+      assert.ok(await sheet.locator(".picker-handle").isVisible(), "a drag handle");
+      for (const row of await sheet.getByRole("option").all()) {
+        assert.equal(Math.round((await row.boundingBox()).height), 48);
+        assert.equal(await row.evaluate((el) => getComputedStyle(el).fontSize), "16px");
+      }
+      const fit = await sheet.evaluate((el) => {
+        const list = el.querySelector(".picker-list");
+        const rows = el.querySelectorAll('[role="option"]');
+        return {
+          scrolls: list.scrollHeight > list.clientHeight + 1,
+          gap: el.getBoundingClientRect().bottom - rows[rows.length - 1].getBoundingClientRect().bottom,
+        };
+      });
+      assert.equal(fit.scrolls, false, "every row shows: the sheet is as tall as they are");
+      assert.ok(fit.gap <= 8, `an empty strip of ${fit.gap}px under the last row`);
+      const backdrop = await sheet.evaluate((el) => getComputedStyle(el, "::backdrop").backgroundColor);
+      const alpha = Number((/([\d.]+)\)$/.exec(backdrop) || [])[1]);
+      assert.ok(alpha > 0 && alpha <= 0.2 + 1e-6, `a light backdrop: ${backdrop}`);
+      assert.equal(await page.evaluate(() => getComputedStyle(document.documentElement).overflow), "hidden");
+      const chosen = sheet.locator('[role="option"][aria-selected="true"]');
+      assert.ok(await chosen.locator("svg").isVisible(), "a check on the chosen row");
+
+      const value = await field.evaluate((s) => s.options[2].value);
+      await sheet.getByRole("option").nth(2).tap();
+      await sheet.waitFor({ state: "hidden" });
+      assert.equal(await field.inputValue(), value);
+      assert.equal(await page.evaluate(() => document.activeElement.id), "class_group_id", "focus is back on the field");
+    } finally {
+      await page.close();
+    }
+  });
+
+  test("on a phone the sheet's backdrop and a swipe down close it and change nothing", async () => {
+    const page = await (await signedIn("sunrise.admin", PHONE)).newPage();
+    try {
+      await open(page, `${SUNRISE}/roll/`);
+      const field = page.locator("#class_group_id");
+      await field.scrollIntoViewIfNeeded();
       const was = await field.inputValue();
       await field.tap();
       await picker(page).waitFor();
@@ -326,7 +418,10 @@ describe("the picker, open", () => {
       const f = await field.boundingBox();
       const s = await sheet.boundingBox();
       assert.ok(Math.abs(s.x - f.x) <= 1 && Math.abs(s.width - f.width) <= 1, "lined up with the field");
-      assert.ok(s.y >= f.y + f.height && s.y <= f.y + f.height + 8, "just under it");
+      const under = s.y >= f.y + f.height && s.y <= f.y + f.height + 8;
+      const over = s.y + s.height <= f.y && s.y + s.height >= f.y - 8;
+      assert.ok(under || over, "against it: under, or over where its rows fit better");
+      assert.equal(await sheet.locator(".picker-list").evaluate((el) => el.scrollHeight > el.clientHeight + 1), false, "every role shows");
       assert.equal(await sheet.locator(".picker-head").isVisible(), false, "the field's own label is its title");
       await page.mouse.click(1200, 700); // anywhere else
       await sheet.waitFor({ state: "hidden" });
@@ -378,6 +473,10 @@ describe("the picker, open", () => {
         // On a desk the search box takes the keys; on a phone it waits for a tap.
         assert.equal(await search.evaluate((el) => el === document.activeElement), device === DESK);
         await shoot(page, width, "long-list");
+        if (device === PHONE) {
+          const tall = (await sheet.boundingBox()).height;
+          assert.ok(tall <= 740 * 0.7 + 1 && tall >= 740 * 0.6, `a long list's sheet is about 70% of the screen, not ${tall}px`);
+        }
 
         if (device === PHONE) await search.tap();
         await search.pressSequentially("ss 2");
@@ -454,7 +553,11 @@ describe("the picker, with a keyboard and a screen reader", () => {
       await sheet.waitFor();
       const list = page.getByRole("listbox", { name: "Role" });
       assert.ok(await list.evaluate((el) => el === document.activeElement));
-      const active = () => list.evaluate((el) => document.getElementById(el.getAttribute("aria-activedescendant")).textContent);
+      const active = () =>
+        list.evaluate((el) => {
+          const row = document.getElementById(el.getAttribute("aria-activedescendant"));
+          return row.getAttribute("aria-label") || row.textContent;
+        });
       assert.equal(await active(), "Administrator");
 
       await page.keyboard.press("ArrowDown");
@@ -501,7 +604,7 @@ describe("the picker, with a keyboard and a screen reader", () => {
       await page.locator("#role").click();
       await picker(page).waitFor();
       const roles = await page.getByRole("listbox", { name: "Role" }).getByRole("option").evaluateAll((all) =>
-        all.map((o) => [o.textContent, o.getAttribute("aria-selected")]),
+        all.map((o) => [o.getAttribute("aria-label") || o.textContent, o.getAttribute("aria-selected")]),
       );
       assert.deepEqual(roles, [
         ["Administrator", "true"],

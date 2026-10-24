@@ -1,16 +1,13 @@
-/**
- * What every `<select>` opens: a sheet on a phone, a popover on a desk.
- * **The select stays the field** (label, submit, validation); only its
- * opening is taken over, and a choice is written back with `input` and
- * `change`. `docs/design.md` ("The picker") says the rest.
- */
+/** What every `<select>` opens; the select stays the field. `docs/design.md`, "The picker". */
 
-/** More options than this gets a search box. */
+/** Longer gets a search box. */
 export const SEARCH_ABOVE = 8;
+/** Shorter opens under the field on a phone, not as a sheet. */
+export const SHORT_UP_TO = 6;
 const PHONE = "(max-width: 639.98px)";
 const OPENERS = new Set([" ", "Enter", "ArrowDown", "ArrowUp", "F4", "Home", "End", "PageUp", "PageDown"]);
 
-/** "  Ìfé (SS 2)" is "ife ss 2": no case, accents or punctuation. */
+/** "Ìfé (SS 2)" is "ife ss 2". */
 export function fold(text) {
   return String(text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
@@ -23,18 +20,19 @@ export function rowsOf(select) {
     const label = String(option.label || option.textContent || "").replace(/\s+/g, " ").trim();
     const heading = group ? String(group.label || "") : "";
     const disabled = Boolean(option.disabled || (group && group.disabled));
-    rows.push({ index, label, group: heading, disabled, hay: fold(`${label} ${heading}`) });
+    const hint = String((option.getAttribute && option.getAttribute("data-description")) || "").trim();
+    rows.push({ index, label, hint, group: heading, disabled, hay: fold(`${label} ${heading}`) });
   });
   return rows;
 }
 
-/** Each typed word starts a word of the row or its group: "ss 2" is not JSS 2A. */
+/** Each typed word starts a word: "ss 2" is not JSS 2A. */
 export function filterRows(rows, query) {
   const words = fold(query).split(" ").filter(Boolean);
   return rows.filter((row) => words.every((word) => row.hay.split(" ").some((part) => part.startsWith(word))));
 }
 
-/** Type to jump: the next enabled row after `from` starting with `typed`; a letter again moves on. */
+/** Type to jump; a letter again moves on. */
 export function nextMatch(rows, typed, from = -1) {
   const q = fold(typed);
   if (!q || !rows.length) return -1;
@@ -47,7 +45,6 @@ export function nextMatch(rows, typed, from = -1) {
   return -1;
 }
 
-/** The field's label, less the select's own text; else its aria-label. */
 export function labelOf(select) {
   const label = select.labels && select.labels[0];
   if (label) {
@@ -104,7 +101,7 @@ function build() {
     event.preventDefault();
     close();
   });
-  // Queued by `dialog.close()`: stale if the picker has opened again since.
+  // Stale if the picker has opened again since.
   dialog.addEventListener("close", () => dialog.open || close());
   // The backdrop.
   dialog.addEventListener("click", (event) => event.target === dialog && close());
@@ -135,8 +132,9 @@ function open(select, how, typed) {
   if (state || !rows.length) return;
   ui = ui || build();
   const phone = matchMedia(PHONE).matches;
+  const sheet = phone && rows.length > SHORT_UP_TO;
   const searching = rows.length > SEARCH_ABOVE;
-  state = { select, rows, shown: rows, active: null, keys: how === "keys", searching, phone, typed: "", typedAt: 0 };
+  state = { select, rows, shown: rows, active: null, keys: how === "keys", searching, phone, sheet, typed: "", typedAt: 0 };
 
   ui.title.textContent = labelOf(select);
   ui.input.value = "";
@@ -154,19 +152,25 @@ function open(select, how, typed) {
         : null;
       if (box) ui.list.append(box);
     }
+    const text = el("span", { class: "picker-text" }, el("span", { text: row.label }));
     row.node = el("div", { class: "picker-option", role: "option", id: `picker-o${n}`, "aria-selected": String(row.index === select.selectedIndex), "data-row": n },
-      el("span", { text: row.label }), icon("M5 12.5l4.5 4.5L19 7.5"));
+      text, icon("M5 12.5l4.5 4.5L19 7.5"));
     if (row.disabled) row.node.setAttribute("aria-disabled", "true");
+    if (row.hint) {
+      text.append(el("span", { class: "picker-hint", id: `picker-h${n}`, text: row.hint }));
+      row.node.setAttribute("aria-label", row.label);
+      row.node.setAttribute("aria-describedby", `picker-h${n}`);
+    }
     (box || ui.list).append(row.node);
   });
 
-  ui.dialog.className = `picker ${phone ? "picker-sheet" : "picker-pop"}`;
-  layout();
+  ui.dialog.className = `picker ${sheet ? "picker-sheet" : "picker-pop"}`;
   ui.dialog.showModal();
+  layout(); // drawn, so it can measure its rows
   addEventListener("resize", layout);
   addEventListener("scroll", layout);
   if (window.visualViewport) visualViewport.addEventListener("resize", layout);
-  // A phone's search waits for a tap, so its keyboard does not cover the list.
+  // A phone's search waits for a tap: no keyboard over the list.
   const typing = searching && (how === "keys" || !matchMedia("(pointer: coarse)").matches);
   (typing ? ui.input : ui.list).focus({ preventScroll: true });
   activate(rows.find((row) => row.index === select.selectedIndex && !row.disabled) || rows.find((row) => !row.disabled) || null);
@@ -192,13 +196,12 @@ function close(row = null) {
   }
 }
 
-/** A sheet clear of the keyboard; a popover under the field, or over it near the foot. */
 function layout() {
   if (!state) return;
   if (state.phone !== matchMedia(PHONE).matches || !state.select.isConnected) return close();
   const style = ui.dialog.style;
   const px = (n) => `${Math.round(n)}px`;
-  if (state.phone) {
+  if (state.sheet) {
     const view = window.visualViewport;
     style.setProperty("--keyboard", px(view ? Math.max(0, innerHeight - view.height - view.offsetTop) : 0));
     return;
@@ -207,7 +210,9 @@ function layout() {
   const width = Math.min(Math.max(field.width, 240), innerWidth - 16);
   const below = innerHeight - field.bottom - 12;
   const above = field.top - 12;
-  const up = below < 240 && above > below;
+  // Over the field when its rows fit there better than under it.
+  const need = ui.list.scrollHeight + (state.searching ? ui.search.offsetHeight : 0) + 2;
+  const up = need > below && above > below;
   style.setProperty("--left", px(Math.min(Math.max(field.left, 8), innerWidth - width - 8)));
   style.setProperty("--width", px(width));
   style.setProperty("--room", px(Math.max(Math.min(up ? above : below, 420), 120)));
@@ -283,7 +288,7 @@ function onKey(event) {
 
 /** A swipe down on the sheet's head closes it. */
 function drag(event) {
-  if (!state || !state.phone || event.pointerType === "mouse" || event.target.closest("button")) return;
+  if (!state || !state.sheet || event.pointerType === "mouse" || event.target.closest("button")) return;
   const { dialog } = ui;
   const from = event.clientY;
   const began = event.timeStamp;
@@ -327,7 +332,7 @@ function start(select, how, typed = "") {
   }
 }
 
-/** Every select under `root`, now and after any redraw, opens the picker. */
+/** Every select under `root`, after any redraw too, opens the picker. */
 export function enhanceSelects(root) {
   if (!root || typeof HTMLDialogElement === "undefined" || !HTMLDialogElement.prototype.showModal) return;
   let touch = null;
@@ -337,7 +342,7 @@ export function enhanceSelects(root) {
     event.preventDefault();
     start(select, "pointer");
   });
-  // A tap, not a scroll; cancelled, it opens no system menu.
+  // A tap, not a scroll; cancelled, no system menu.
   root.addEventListener("touchstart", (event) => {
     const t = event.changedTouches[0];
     touch = selectAt(event.target) && t ? [t.clientX, t.clientY] : null;
