@@ -133,6 +133,20 @@ class AfterThePublishTests(PublicSiteSetUp):
         self.assertIn('<a class="button primary" href="/about/">About us</a>', home)
         self.assertIn('"@type":"EducationalOrganization"', home)
 
+    def test_a_change_to_the_draft_after_the_publish_is_not_served_until_published(self):
+        with connected_to(self.stmarys):
+            section = services.draft_as(self.principal, self.stmarys)["pages"][0]["sections"][0]
+            services.save_section_as(self.principal, self.stmarys, section["id"], version=section["version"],
+                                     data={"heading": "Not yet published"})
+            services.save_page_as(self.principal, self.stmarys, "contact",
+                                  version=Page.objects.get(key="contact").version, enabled=True)
+        caches["sites"].clear()
+        home = self.get("/").content.decode()
+        self.assertIn("Welcome to St Mary&#x27;s", home)
+        self.assertNotIn("Not yet published", home)
+        self.assertNotIn('href="/contact/"', home)
+        self.assertEqual(self.get("/contact/").status_code, 404)
+
     def test_a_page_switched_off_is_a_404(self):
         for path in ("/admissions/", "/news/", "/gallery/", "/contact/"):
             with self.subTest(path=path):
