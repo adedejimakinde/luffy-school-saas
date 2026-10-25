@@ -17,6 +17,9 @@ hash and refuses every other inline style and every script.
 {% endif %}<meta property="og:url" content="{{ canonical }}">
 <meta property="og:site_name" content="{{ school.name }}">
 {% include "design/head.html" %}
+{% comment %}The bold weight too: a school's page is mostly headings and buttons, and a
+bold face that arrived after the first paint would move them (§4.1's layout shift).{% endcomment %}
+<link rel="preload" href="{% static 'web/fonts/hanken-grotesk-700.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'schoolsite/starter.css' %}">
 <style>{{ style }}</style>
 {% if structured_data %}<script type="application/ld+json">{{ structured_data }}</script>

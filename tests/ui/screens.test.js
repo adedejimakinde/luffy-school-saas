@@ -130,8 +130,14 @@ export const SCREENS = [
   { name: "staff-sign-in", as: null, url: `${PORTAL}/staff-sign-in/` },
   { name: "invitation", as: null, url: `${PORTAL}/invitations/not-a-token/` },
   { name: "checker", as: null, url: `${SUNRISE}/check/` },
-  // The school's own public page, at its root, open to anyone.
+  // The school's own public page, at its root, open to anyone: Sunrise has not
+  // published its website, so this is today's page.
   { name: "school-site", as: null, url: `${SUNRISE}/` },
+  // Harbour has (`schoolsite.demo`): its website, in the starter theme.
+  { name: "school-website", as: null, url: `${HARBOUR}/` },
+  { name: "school-website-about", as: null, url: `${HARBOUR}/about/` },
+  { name: "school-website-admissions", as: null, url: `${HARBOUR}/admissions/` },
+  { name: "school-website-contact", as: null, url: `${HARBOUR}/contact/` },
   { name: "outbox", as: null, url: `${PORTAL}/dev/outbox/` },
   // Signed in at one school, asking for another's page.
   { name: "not-allowed", as: "sunrise.teacher", url: `${HARBOUR}/register/`, status: 403 },

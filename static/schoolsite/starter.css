@@ -60,12 +60,12 @@ main p { line-height: 1.6; }
 .facts li { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; }
 .figure { display: block; font-size: 1.75rem; line-height: 1.1; color: var(--school); }
 .fact-label { display: block; margin-top: 4px; }
-.facts small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.875rem; }
+.facts small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.9375rem; }
 
 .admissions { background: var(--card); border: 2px solid var(--school); border-radius: var(--radius-card); padding: 20px 16px; }
 .session { font-weight: 700; }
 
-.contact dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+.contact dl { display: grid; grid-template-columns: max-content 1fr; align-items: center; gap: 8px 16px; margin: 0; }
 .contact dt { color: var(--muted); }
 .contact dd { margin: 0; overflow-wrap: anywhere; }
 .contact a { display: inline-flex; align-items: center; min-height: 44px; }
