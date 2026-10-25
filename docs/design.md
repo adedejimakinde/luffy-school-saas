@@ -26,13 +26,32 @@ nothing else: no page declares a colour.
   `.label-stop`): green `#16693F` on `#E7F4EC`, amber `#8A5A00` on `#FDF1DC`,
   red `#B42318` on `#FDECEA`. A message is neutral and carries its label
   (`.msg`).
-- **Hanken Grotesk**, self-hosted in `static/web/fonts/`, Latin only, 400 and
-  700 only, `font-display: swap`, the system stack behind it. It has no naira
-  sign, and the system font draws that one glyph. The files are static
-  instances cut from the family's variable font (SIL OFL 1.1, `OFL.txt`
-  beside them). Its digits are already equal-width, so numbers line up without
-  a feature switch; tables still say `tabular-nums` and right-align them
-  (`.num`).
+- **Hanken Grotesk**, self-hosted in `static/web/fonts/`, 400 and 700 only,
+  `font-display: swap`, the system stack behind it. The files carry Latin and
+  the letters a Nigerian name is written with: Yoruba's ẹ ọ ṣ and Igbo's ị ụ
+  ṅ (both cases), the combining tone marks and underdots, and the naira sign.
+  Hanken has no ṣ and no ₦ of its own, so `scripts/fonts.py` builds them from
+  its own shapes (the s with its own underdot, the N crossed by two bars cut
+  from its equals sign); nothing is borrowed. The files are static instances
+  cut from the family's variable font (SIL OFL 1.1, `OFL.txt` beside them);
+  `python scripts/fonts.py HankenGrotesk.ttf NotoSans.ttf` cuts them again,
+  and refuses any source whose SHA-256 is not the one reviewed.
+- **Noto Sans, for Hausa's hooked letters only** (`noto-sans-hausa-{400,700}.woff2`,
+  1.6 KB each, SIL OFL 1.1, `OFL-noto-sans.txt`): Ɓ ɗ Ɗ Ƙ ƙ Ƴ ƴ and ǹ, which
+  Hanken has no drawing of. Its `@font-face` has a `unicode-range` of those
+  letters, so a page without one never fetches it, and it is scaled
+  (`size-adjust`) and given Hanken's ascent and descent so its letters sit in
+  the line at Hanken's size. The stack is `"Hanken Grotesk", "Noto Sans",
+  system-ui, ...`: a system font draws no letter of a Nigerian name or amount.
+  The report cards load the same faces, with DejaVu Sans last; the slips are
+  DejaVu Sans alone, which has every one of these letters.
+  `tests/glyphs.py` lists the names and amounts, `tests/test_design.py` holds
+  the ranges to the files, `results/tests/test_fonts_in_pdfs.py` reads the
+  fonts out of the PDFs, and `tests/ui/glyphs.test.js` asks Chromium which
+  fonts it drew them with (`CSS.getPlatformFontsForNode`) and photographs them
+  into the `screens` artifact. Its digits are already equal-width, so numbers
+  line up without a feature switch; tables still say `tabular-nums` and
+  right-align them (`.num`).
 - **Two shadows**, `--shadow-1` (resting) and `--shadow-2` (lifted: a card
   under the pointer, the account menu), the text colour thinned. No others.
 - **Radii** 10px on buttons and fields, 12px on cards. The dashboard draws its

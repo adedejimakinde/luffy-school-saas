@@ -117,7 +117,7 @@ through. The public site registers no worker of its own.
   - Crest: PNG/JPEG, at most 1 MB, at most 4096², drawn into a 256 px transparent PNG.
   - Blog image: PNG/JPEG/WebP, at most 10 MB, at most 40 MP, WebP at quality 80, at most 1600 px wide, plus a half-width copy for `srcset`. Served as `image/webp` with `Cache-Control: public, max-age=3600`, and only while its post is published. Keys are random 128-bit hex.
 - Pillow is pinned at 13.0.0.
-- Static files: WhiteNoise with a hashed, pre-compressed manifest. The fonts are Hanken Grotesk 400 and 700, about 13 KB each as woff2.
+- Static files: WhiteNoise with a hashed, pre-compressed manifest. The fonts are Hanken Grotesk 400 and 700, about 12 KB each as woff2, and a 1.6 KB Noto Sans subset for Hausa's hooked letters, fetched only where one is used.
 
 ### Email
 
@@ -753,7 +753,7 @@ The "long" fixture school in the theme contract is built from this list:
 
   Arabic text falls back to a system font, which is acceptable for a short motto.
 
-  **Found in PR 3:** the design system's own font, Hanken Grotesk, is subset to 222 glyphs for the 150 KB budget. It carries none of the letters above but the curly quotes: no dot-below or dot-above letters, no hooked letters, no `₦`. A browser draws each missing letter in a system font, so "Ìmọ̀" reads, but in two typefaces. The starter theme uses that font, so the theme contract names it as a known gap (`KNOWN_GLYPH_GAPS`) and checks that the gap is real. The designed theme's fonts must carry every letter above. The portal draws children's and parents' names in the same font, which is a question for the owner beyond this note.
+  **Found in PR 3, fixed after PR 3:** the design system's font, Hanken Grotesk, was subset with none of the letters above but the curly quotes, so a browser drew each in a system font and "Ìmọ̀" read in two typefaces. The font files are now cut to carry them (ṣ and ₦ built from Hanken's own shapes), with a Noto Sans subset for the Hausa hooks, fetched only on a page that has one (`docs/design.md`, "Fonts"). The starter theme has no exception any more: the theme contract requires the glyph list in `tests/glyphs.py` to be covered by the theme's fonts, and `tests/ui/glyphs.test.js` checks the browser draws them with no system font. The portal, the report cards and the slips use the same faces for children's and parents' names.
 - **Titles and names**: "Rev. Sr. Dr. (Mrs) Ngozi Okafor-Adeyemi", "Alhaji Mallam …", hyphenated double surnames.
 - **School structure**: JSS 1–3 and SSS 1–3 (or Basic 7–12), day and boarding, two-term or three-term sessions written "2026/2027", entrance-exam dates, WAEC, NECO and BECE results as facts with years and sources.
 - **Contact details**: `+234` numbers, WhatsApp as the main contact, addresses with landmarks ("Off Ring Road, opposite the Federal Secretariat"), more than one phone number.
