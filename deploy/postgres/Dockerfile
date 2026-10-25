@@ -32,6 +32,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY entrypoint.sh /usr/local/bin/classnode-postgres
+COPY settings.sh /usr/local/lib/classnode/postgres-settings.sh
 COPY backup.sh /usr/local/bin/classnode-backup
 COPY restore-serve.sh /usr/local/bin/classnode-restore-serve
 COPY retention.py /usr/local/lib/classnode/retention.py

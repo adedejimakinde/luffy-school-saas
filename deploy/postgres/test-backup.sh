@@ -19,6 +19,9 @@
 #   3. a backup that fails — the target cannot be written, or there is none —
 #      exits non-zero and checks in `error`.
 #
+# It also asks the live server for each setting in settings.sh and fails if the
+# image started without it.
+#
 # CI runs it in the `image` job (.github/workflows/tests.yml). It needs Docker
 # and python3, and nothing from B2.
 set -euo pipefail
@@ -113,6 +116,18 @@ esac
 # Something in the database to back up, so the backup is not of an empty one.
 docker exec -u postgres "$name" psql -U classnode -d classnode -qc \
   "CREATE TABLE t AS SELECT generate_series(1, 1000) AS n"
+
+# 0. The server runs with the settings every Postgres here is meant to
+# (settings.sh): asked of the live server, not read from the file, because a
+# setting that is written down and not applied is the failure this guards.
+# Printed, so the CI log shows the value the image started with.
+# shellcheck disable=SC1091
+. "$(dirname "$0")/settings.sh"
+for setting in "${CLASSNODE_PG_SETTINGS[@]}"; do
+  live="$(docker exec "$name" psql -U classnode -d classnode -tAc "SHOW ${setting%%=*}")"
+  echo "production image: ${setting%%=*} = $live (settings.sh asks for ${setting#*=})"
+  [ "$live" = "${setting#*=}" ] || fail "the image started with ${setting%%=*} = $live, not ${setting#*=}"
+done
 
 # 1. The plain command, as root: no -u, no PGUSER, no PGDATABASE.
 [ "$(docker exec "$name" id -u)" = 0 ] || fail "the test is not running as root"
