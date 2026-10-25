@@ -146,12 +146,15 @@ principal, with an opt-in for the administrator (§2.4).
 
 ### 2.1 Pages
 
-A fixed set of pages, each switchable on or off by the school. Their addresses
-are fixed too, so a school can never invent a path.
+Six fixed pages, and custom pages a school makes itself (§2.1.1, decided 25
+October 2026). The school switches any fixed page on or off except Home, which
+is the root and always answers. On every page the school adds, removes and
+reorders sections. Fixed pages have fixed addresses, and custom pages live under
+one prefix, so a school can never take a path the platform needs.
 
 | Page | Path | Notes |
 |---|---|---|
-| Home | `/` | Always on. |
+| Home | `/` | Always on: the root must answer. Its sections are the school's to choose. |
 | About | `/about/` | |
 | Admissions | `/admissions/`, `/admissions/enquire/`, `/admissions/apply/` | §5 |
 | News | `/news/`, `/news/<slug>/` | Slug made by the server from the title, `[a-z0-9-]`, unique within the school. |
@@ -160,6 +163,16 @@ are fixed too, so a school can never invent a path.
 
 Also served: `/sitemap.xml`, the school's own `/robots.txt` (§6), and image
 renditions under `/media/` (§9).
+
+#### 2.1.1 Custom pages
+
+A school can add pages of its own, such as Boarding, Sports, Clubs, Academics and Alumni.
+
+- **Built from the same safe sections.** A custom page is a title and an ordered list of sections, drawn from the fixed kinds a custom page may hold: hero, text, facts, gallery, the principal's message and the admissions panel. There is no free-form HTML, as everywhere else (§2.2).
+- **At most 12 per school, held by Postgres.** Each custom page takes a slot numbered 1 to 12, unique within the school, so a thirteenth cannot be written by any path, however it is written.
+- **At `/pages/<slug>/`.** All custom pages share one prefix, so no custom page can clash with a fixed page, a portal path or `/sit/`. The slug is made from the title when the page is created, uses `[a-z0-9-]`, is at most 40 characters and is unique within the school. Renaming the page later does not move its address.
+- **Draft, preview and publish exactly like the fixed pages.** It goes into the revision snapshot, and the principal alone publishes it.
+- **A menu that updates itself.** The menu is the switched-on pages, fixed and custom, in one order the school sets (`menu_position`), with Home always first. On a phone, links after the fifth go under a "More" menu (a `<details>`, no script). The footer lists them all, and the sitemap includes every switched-on custom page.
 
 ### 2.2 Sections
 
@@ -276,27 +289,31 @@ makes the fourth to tenth themes cheap to add:
 4. Templates contain no `|safe`, no `mark_safe`, no `{% autoescape off %}`, no inline `<script>`, and no reference to another host (§10.2).
 5. The fonts cover the glyph list in §11.2.
 
-**Start with 3 themes that are clearly different from each other.** Ten is a
-ceiling set by CI time and design review, not by the engine. Each extra theme
-adds its screenshots and LCP runs to the screens job, about 3 fixtures × 6 pages
-× 4 widths.
+**Start with one designed theme, with strong options** (decided 25 October
+2026, in place of three themes): colours taken from the crest, a choice of
+header styles, and a choice of font pairings, so two schools on the same theme
+still look clearly their own. The engine stays ready for more: a theme is a
+directory and an entry in `schoolsite.themes.THEMES`, with no migration, and
+every test above runs on each one. Ten is a ceiling set by CI time and design
+review, not by the engine. Each extra theme adds its screenshots and LCP runs to
+the screens job, about 3 fixtures × 6 pages × 4 widths.
 
 ### 3.4 Visual design: to be decided in a separate design round
 
 This note fixes the engine. It does **not** decide how any theme looks. The
 design round must settle:
 
-1. **The three themes' characters**: name, mood, and two or three reference sites each, chosen so they are plainly different (layout rhythm, type, density), not one theme in three colours.
-2. **Type**: per theme, a display face and a text face, licensed for self-hosting (OFL or bought outright, with a licence that allows serving to the public on many domains), covering the glyph list in §11.2, subset to the budget in §4.1.
-3. **How crest colours map onto each theme's roles**, including what happens with a one-colour crest, a crest that is mostly gold or yellow (which fails contrast as text), and a crest with no usable colour.
-4. **Header styles** per theme (2–3 each): how the Sign in button looks and sits, the mobile menu pattern, and the behaviour over a hero image.
+1. **The designed theme's character, and the reach of its options**: name, mood and two or three reference sites. Then how far its colours, header styles and font pairings may move it, so that two schools on it look clearly their own. One theme for now (decided 25 October 2026).
+2. **Type**: for each font pairing the theme offers, a display face and a text face, licensed for self-hosting (OFL or bought outright, with a licence that allows serving to the public on many domains), covering the glyph list in §11.2, subset to the budget in §4.1.
+3. **How crest colours map onto the theme's colour roles**, including what happens with a one-colour crest, a crest that is mostly gold or yellow (which fails contrast as text), and a crest with no usable colour.
+4. **Header styles** (at least three): how the Sign in button looks and sits, the mobile menu pattern, and the behaviour over a hero image.
 5. **Hero treatments**: image, video, split and plain; the scrim rule that keeps text readable over any photograph (§11.1); the crop or focal-point behaviour from 320 to 1920 px.
 6. **Every section's look in every variant**, including empty and sparse states, such as a school with no photos at all.
 7. **Gallery and lightbox**: grid rhythm, captions, what a tap does on a phone.
 8. **The motion language**: what moves, durations and easing, what `prefers-reduced-motion` turns off, all within the limits in §4.3.
 9. **The principal's message**: portrait crop, how long text reads, signature.
 10. **Photography guidance for schools**: which shots, orientation, light, and how to set a focal point. A premium look depends more on the photos than on the theme.
-11. **Mockups of each theme at 320, 360, 768 and 1280 px, and at 200% text**, for two schools: one with professional photos and a short name, one with phone photos and a very long name. Each measured against the §4 budgets before it is approved.
+11. **Mockups of the theme in at least three different option settings, at 320, 360, 768 and 1280 px, and at 200% text**, for two schools: one with professional photos and a short name, one with phone photos and a very long name. Each measured against the §4 budgets before it is approved.
 
 ---
 
@@ -735,6 +752,8 @@ The "long" fixture school in the theme contract is built from this list:
   - curly quotes and `’`.
 
   Arabic text falls back to a system font, which is acceptable for a short motto.
+
+  **Found in PR 3:** the design system's own font, Hanken Grotesk, is subset to 222 glyphs for the 150 KB budget. It carries none of the letters above but the curly quotes: no dot-below or dot-above letters, no hooked letters, no `₦`. A browser draws each missing letter in a system font, so "Ìmọ̀" reads, but in two typefaces. The starter theme uses that font, so the theme contract names it as a known gap (`KNOWN_GLYPH_GAPS`) and checks that the gap is real. The designed theme's fonts must carry every letter above. The portal draws children's and parents' names in the same font, which is a question for the owner beyond this note.
 - **Titles and names**: "Rev. Sr. Dr. (Mrs) Ngozi Okafor-Adeyemi", "Alhaji Mallam …", hyphenated double surnames.
 - **School structure**: JSS 1–3 and SSS 1–3 (or Basic 7–12), day and boarding, two-term or three-term sessions written "2026/2027", entrance-exam dates, WAEC, NECO and BECE results as facts with years and sources.
 - **Contact details**: `+234` numbers, WhatsApp as the main contact, addresses with landmarks ("Off Ring Road, opposite the Federal Secretariat"), more than one phone number.
@@ -795,7 +814,7 @@ Access tests:
 
 ### PR 3: Public rendering, the starter theme, Sign in, caching, CSP
 
-- The engine renders `/` and the fixed pages from the latest revision in a **starter theme**. This is today's `site.html` look, rebuilt on sections, and it is not one of the three designed themes.
+- The engine renders `/` and the fixed pages from the latest revision in a **starter theme**. This is today's `site.html` look, rebuilt on sections, and it is not the designed theme.
 - The "not yet published" fallback, the Sign in menu, indexing switched on for published pages, the sitemap, canonical URLs, CSP, the Redis HTML cache, and no cookies or session reads on public views.
 - The theme contract tests and the frame-budget entries.
 
@@ -807,9 +826,44 @@ Access tests:
 - link fields refuse `javascript:`, `data:` and `//` (one test each);
 - templates pass the no-`safe` grep.
 
+**Built.**
+- `schoolsite.views` and `schoolsite.render` draw the pages with no request in hand. Before a school's first publish, the root is today's page, still noindex, and nothing else of the site answers.
+- The access, blog and session middleware leave a school's public paths alone (`schools.paths.is_public_site_request`). So public pages send no cookie and no `Vary: Cookie`, and a family signed in at another school sees them as anyone would.
+- `website.crawlers` indexes a marked response only when it was served for a school.
+- A published school's `robots.txt` drops the closing `Disallow: /`, keeps the never-indexed paths named, and points to its sitemap.
+- The page cache is its own `sites` alias: Redis database 1 under `SITE_CACHE_URL`, in-process elsewhere. Its key holds the school's schema, revision, what the page shows of the school, the host and the path. A cache that is down gives a slower page, never a broken one.
+- The CSP allows the page's one inline style by its hash, and no script.
+- As agreed:
+  - the hero draws without its picture, and news and gallery draw nothing, until PRs 5 and 6;
+  - the contact panel links out to Maps, and the tap-to-load map comes in PR 5;
+  - the screens job gained the Slow 4G check (`tests/ui/school_site.test.js`). Locally the published pages paint their largest content in about 0.7 s, with no layout shift, moving about 65 KB.
+- `seed_demo` publishes Harbour's site; Sunrise keeps today's page.
+
+### PR 3b: Custom pages and a menu that updates itself
+
+Added on 25 October 2026. Built before PR 4, so the editor is built once, with custom pages in it.
+
+- **The model change.** PR 2's models need an additive change, not a rewrite:
+  - `Page` gains `kind` (fixed or custom), `slug`, `slot` (1 to 12, unique) and `menu_position`;
+  - `key` becomes empty for a custom page;
+  - the constraint `a_page_is_one_of_the_fixed_six` becomes "a fixed page has one of the six keys and no slug or slot; a custom page has a slug and a slot and no key";
+  - the revision snapshot gains `kind`, `slug` and `menu_position` per page;
+  - `sections.ALLOWED_ON` gains the custom page's kinds (§2.1.1).
+
+  No school can have published before the editor exists, so there is nothing to carry over beyond giving the six fixed rows their kind and menu order.
+- **Services:** `create_page_as`, `rename_page_as`, `delete_page_as` (only while the page has never been published, or once it is switched off) and `order_menu_as`.
+- **Rendering:** `/pages/<slug>/`, the self-updating menu with its "More" on a phone, the footer and the sitemap. `pages` is added to `schools.paths.PUBLIC_SITE`.
+- Adding, removing and reordering sections on any page is already built as services in PR 2 (`add_section_as`, `remove_section_as`, `move_sections_as`). PR 4 gives them their screens.
+
+Access tests:
+- only A's editors make, rename, delete or reorder A's pages, and only A's principal publishes them;
+- a thirteenth custom page is refused, by the service and by Postgres;
+- a custom slug cannot clash with a fixed page or a reserved path, and B's custom page never answers on A's host;
+- a custom page switched off, or never published, is a 404, and is in no menu and no sitemap.
+
 ### PR 4: The editor and preview in the portal
 
-- `/website/` on the school's classnode host: page list, section editor, theme options, delegation switch, the "Ready for the principal" button, and the publish log.
+- `/website/` on the school's classnode host: page list (fixed and custom pages, switch on or off, make, rename, order the menu), section editor (add, remove, reorder, edit), theme options, delegation switch, the "Ready for the principal" button, and the publish log.
 - `/website/preview/…`.
 
 Access tests:
@@ -840,9 +894,9 @@ Access tests:
 - a draft post is 404 publicly;
 - a slug that clashes with a reserved path is refused.
 
-### PR 7: Themes 1, 2 and 3 (one PR per theme, after the design round)
+### PR 7: The designed theme (after the design round)
 
-Each is a theme directory plus its fonts, and passes the contract.
+One theme for now (decided 25 October 2026), with its colour roles from the crest, its header styles and its font pairings. It is a theme directory plus its fonts, passes the contract, and carries the Nigerian alphabets (§11.2) with no exception. More themes later are each a PR of this shape.
 
 Access tests: none new. The contract runs the PR 3 isolation and escaping tests against the theme.
 
@@ -955,6 +1009,16 @@ Each is written into the section it changes.
 | 10 | Admissions officer role | **Not now.** Principal and administrator only; added if schools ask. | §5.2 |
 | 11 | Included or add-on | **The website on the classnode address is included.** A custom domain and school-domain email are a **paid premium add-on**. | §7.1, §8.2, PRs 10a, 11b |
 | 12 | Several campuses | **Out of scope for now**, added later. | — |
+
+### Decided 25 October 2026
+
+| Decision | Where |
+|---|---|
+| **The scope widens:** a school switches any fixed page on or off except Home, adds, removes and reorders sections on every page, and makes up to 12 custom pages from the safe section kinds, with a menu that updates itself. | §2.1, §2.1.1, PRs 3b and 4 |
+| **One designed theme, with strong options**, instead of three. The engine stays ready for more. | §3.3, §3.4, PR 7 |
+| PR 3: the hero draws without its picture, and news and gallery draw nothing, until PRs 5 and 6. | PR 3 |
+| PR 3: "Open in Maps" only; the tap-to-load map comes in PR 5. | §9.3, PR 3 |
+| PR 3: the Slow 4G largest-paint check is in the screens job now. | §4.1, PR 3 |
 
 **Still to settle before the PR that needs it:**
 - the Brevo plan check (before PR 11a);
