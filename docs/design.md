@@ -36,8 +36,13 @@ nothing else: no page declares a colour.
   cut from the family's variable font (SIL OFL 1.1, `OFL.txt` beside them);
   `python scripts/fonts.py HankenGrotesk.ttf NotoSans.ttf` cuts them again,
   and refuses any source whose SHA-256 is not the one reviewed.
+  The cut keeps each file's one-line `prep` table: a TrueType font with no
+  instructions at all is auto-hinted by FreeType, which on a machine with
+  medium or full hinting rounds every advance and made bold text 1.6% wider
+  (the Ogun card's health table, 294px at 360px with no width to spare,
+  overflowed by 4px on CI). `tests/test_design.py` holds the files to it.
 - **Noto Sans, for Hausa's hooked letters only** (`noto-sans-hausa-{400,700}.woff2`,
-  1.6 KB each, SIL OFL 1.1, `OFL-noto-sans.txt`): Ɓ ɗ Ɗ Ƙ ƙ Ƴ ƴ and ǹ, which
+  1.5 KB each, SIL OFL 1.1, `OFL-noto-sans.txt`): Ɓ ɗ Ɗ Ƙ ƙ Ƴ ƴ and ǹ, which
   Hanken has no drawing of. Its `@font-face` has a `unicode-range` of those
   letters, so a page without one never fetches it, and it is scaled
   (`size-adjust`) and given Hanken's ascent and descent so its letters sit in

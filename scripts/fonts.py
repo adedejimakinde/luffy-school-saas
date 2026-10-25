@@ -172,6 +172,18 @@ def build_hanken(font):
 
 
 def cut(font, codepoints, *, features):
+    """Subset to `codepoints` and `features`, keeping the font's `prep` table.
+
+    Hanken carries no hinting, only the one-line `prep` that gftools puts in an
+    unhinted font. FreeType takes a TrueType font with no instructions at all (no
+    `prep`, no `fpgm`) to be one it must hint itself and runs the auto-hinter,
+    and with the hinting a Linux desktop or a CI runner often has on (medium or
+    full, no subpixel positioning) that rounds each glyph's advance: bold text
+    came out 1.6% wider, and the Ogun card's 294px health table at 360px, which
+    fits with nothing to spare, overflowed by 4px. `hinting=True` keeps `prep`
+    and, there being no glyph instructions, nothing else. `tests/test_design.py`
+    holds the files to it.
+    """
     from fontTools import subset
 
     options = subset.Options()
@@ -180,7 +192,8 @@ def cut(font, codepoints, *, features):
     options.name_IDs = [0, 1, 2, 3, 4, 5, 6, 13, 14]
     options.name_legacy = True
     options.glyph_names = False
-    options.hinting = False
+    options.hinting = True  # keeps `prep` (see the note on `cut`)
+    options.drop_tables = options.drop_tables + ["STAT"]  # the variable font's style table: no use in a static file
     options.flavor = "woff2"
     subsetter = subset.Subsetter(options)
     subsetter.populate(unicodes=sorted(set(codepoints)))

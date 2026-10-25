@@ -328,6 +328,24 @@ class EveryNigerianLetterHasADrawingTests(SimpleTestCase):
             with self.subTest(character=f"U+{ord(character):04X}"):
                 self.assertEqual(glyphs.covering(character), ["Noto Sans"])
 
+    def test_every_font_file_keeps_its_prep_so_the_platform_does_not_hint_it_itself(self):
+        """What a cut must not drop: the one-line `prep` of an unhinted font.
+
+        A TrueType font with no instructions at all is one FreeType hints with its
+        auto-hinter, and on a machine with medium or full hinting and no subpixel
+        positioning that rounds every glyph's advance. The first cut of these files
+        had no `prep`: bold came out 1.6% wider on CI, and the Ogun card's 294px
+        health table at 360px, which has no width to spare, overflowed by 4px
+        (`tests/ui/screens.test.js`, "cards"). `scripts/fonts.py` keeps it.
+        """
+        from fontTools.ttLib import TTFont
+
+        for face in glyphs.faces():
+            with self.subTest(file=face["file"]):
+                font = TTFont(glyphs.FONTS / face["file"])
+                self.assertIn("prep", font)
+                self.assertEqual(font["maxp"].maxSizeOfInstructions, 0, "glyph programs are not worth their bytes here")
+
 
 #: `{% extends "app/layout.html" %}`: a page drawn inside a layout, which is
 #: where its head is.

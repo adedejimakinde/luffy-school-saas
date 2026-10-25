@@ -631,6 +631,11 @@ async function check(page, width, name, site = false) {
 before(async () => {
   browser = await chromium.launch({
     args: [
+      // The hinting a CI runner has by default and a developer's machine often
+      // does not: whole-pixel advances, which is how a font with no `prep`
+      // came out 1.6% wider and tipped a table with no width to spare
+      // (`tests/test_design.py`, "keeps its prep").
+      "--font-render-hinting=full",
       `--host-resolver-rules=MAP *.${DOMAIN} 127.0.0.1, MAP ${DOMAIN} 127.0.0.1`,
       // The specimen is handed to the browser by this test rather than fetched,
       // so Chromium counts it as a public page asking a loopback server for its

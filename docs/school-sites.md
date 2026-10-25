@@ -117,7 +117,7 @@ through. The public site registers no worker of its own.
   - Crest: PNG/JPEG, at most 1 MB, at most 4096², drawn into a 256 px transparent PNG.
   - Blog image: PNG/JPEG/WebP, at most 10 MB, at most 40 MP, WebP at quality 80, at most 1600 px wide, plus a half-width copy for `srcset`. Served as `image/webp` with `Cache-Control: public, max-age=3600`, and only while its post is published. Keys are random 128-bit hex.
 - Pillow is pinned at 13.0.0.
-- Static files: WhiteNoise with a hashed, pre-compressed manifest. The fonts are Hanken Grotesk 400 and 700, about 12 KB each as woff2, and a 1.6 KB Noto Sans subset for Hausa's hooked letters, fetched only where one is used.
+- Static files: WhiteNoise with a hashed, pre-compressed manifest. The fonts are Hanken Grotesk 400 and 700, about 12 KB each as woff2, and a 1.5 KB Noto Sans subset for Hausa's hooked letters, fetched only where one is used.
 
 ### Email
 
