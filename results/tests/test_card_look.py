@@ -327,11 +327,12 @@ class WhatTheCardSaysTests(LookSetUp):
         html = self.html()
 
         for weight in ("400", "700"):
-            with self.subTest(weight=weight):
-                path = pdf.FONTS / f"hanken-grotesk-{weight}.woff2"
-                self.assertTrue(path.exists())
-                self.assertIn(f'url("{pdf.FONTS.as_uri()}/hanken-grotesk-{weight}.woff2")', html)
-        self.assertIn('font: 9.5pt "Hanken Grotesk"', html)
+            for file in ("hanken-grotesk", "noto-sans-hausa"):
+                with self.subTest(weight=weight, file=file):
+                    path = pdf.FONTS / f"{file}-{weight}.woff2"
+                    self.assertTrue(path.exists())
+                    self.assertIn(f'url("{pdf.FONTS.as_uri()}/{file}-{weight}.woff2")', html)
+        self.assertIn('font: 9.5pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans"', html)
 
 
 class TheGradeKeyTests(SimpleTestCase):

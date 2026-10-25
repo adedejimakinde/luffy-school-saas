@@ -28,8 +28,9 @@ page cannot be read as somebody else's. `string-set` rather than the name
 written into a CSS `content:` string, which would need CSS-escaping a name
 somebody typed.
 
-The font is the design's own Hanken Grotesk, loaded by path (`pdf.FONTS`),
-with DejaVu Sans behind it for any glyph Hanken lacks.
+The font is the design's own Hanken Grotesk, loaded by path (`pdf.FONTS`): it
+carries Yoruba's and Igbo's marked letters, ṣ and ₦ among them. Noto Sans draws
+Hausa's hooked letters, and DejaVu Sans stands behind both for any other glyph.
 {% endcomment %}
 <meta charset="utf-8">
 <title>{{ card.student_name }}: {{ card.term_label }} {{ card.academic_session }}</title>
@@ -44,31 +45,41 @@ with DejaVu Sans behind it for any glyph Hanken lacks.
     font-weight: 700;
     src: url("{{ fonts }}/hanken-grotesk-700.woff2") format("woff2");
   }
+  @font-face {
+    font-family: "Noto Sans";
+    font-weight: 400;
+    src: url("{{ fonts }}/noto-sans-hausa-400.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Noto Sans";
+    font-weight: 700;
+    src: url("{{ fonts }}/noto-sans-hausa-700.woff2") format("woff2");
+  }
 
   @page {
     size: A4;
     margin: 16mm 13mm 16mm 13mm;
     @top-left {
       content: string(runner);
-      font: 7.5pt "Hanken Grotesk", "DejaVu Sans", sans-serif;
+      font: 7.5pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
       color: #555;
     }
     @bottom-center {
       /* A card that goes home on paper and loses page 2 should say so. */
       content: "Page " counter(page) " of " counter(pages);
-      font: 8pt "Hanken Grotesk", "DejaVu Sans", sans-serif;
+      font: 8pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
       color: #667;
     }
     @bottom-right {
       content: "classnode";
-      font: 7pt "Hanken Grotesk", "DejaVu Sans", sans-serif;
+      font: 7pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
       color: #8a8f99;
     }
   }
   /* The first page has the whole header; the running one is for the rest. */
   @page :first { @top-left { content: none; } }
 
-  body { font: 9.5pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #111; }
+  body { font: 9.5pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #111; }
   h1, h2, h3 { margin: 0; font-weight: 700; }
 
   /* Invisible, and not `display: none`, which `string-set` would skip. */

@@ -145,9 +145,38 @@ def served_files():
     }
 
 
-def urls_in_css(relative):
-    """What a stylesheet pulls in, as static paths beside it."""
+_FACE = re.compile(r"@font-face\s*{(.*?)}", re.S)
+_RANGE = re.compile(r"U\+([0-9A-Fa-f]+)(?:-([0-9A-Fa-f]+))?")
+
+
+def _faces_a_page_asks_for(css, text):
+    """`css` without the `@font-face` rules whose `unicode-range` holds no character of `text`.
+
+    A browser fetches a face with a `unicode-range` only for a page that draws a
+    character in it, so a page with none of the Hausa hooks never asks for the
+    Noto Sans that draws them (`docs/design.md`). A face with no range is always asked for.
+    """
+
+    def keep(match):
+        spec = re.search(r"unicode-range:\s*([^;]+);", match.group(1))
+        if spec is None:
+            return match.group(0)
+        ranges = [(int(a, 16), int(b or a, 16)) for a, b in _RANGE.findall(spec.group(1))]
+        wanted = any(low <= ord(c) <= high for c in set(text) for low, high in ranges)
+        return match.group(0) if wanted else ""
+
+    return _FACE.sub(keep, css)
+
+
+def urls_in_css(relative, text=None):
+    """What a stylesheet pulls in, as static paths beside it.
+
+    With `text`, only what a page drawing that text asks for (`_faces_a_page_asks_for`);
+    without it, every `url()`, for the tests that hold them all to the same rules.
+    """
     css = re.sub(r"/\*.*?\*/", "", (STATIC / relative).read_text(), flags=re.S)
+    if text is not None:
+        css = _faces_a_page_asks_for(css, text)
     here = posixpath.dirname(relative)
     return [posixpath.normpath(posixpath.join(here, url)) for url in _URL.findall(css)]
 
@@ -206,7 +235,7 @@ class SpeedBudgetSetUp(TestCase):
                 found.append(self.served[url])
         for path in list(found):
             if path.endswith(".css"):
-                found.extend(urls_in_css(path))
+                found.extend(urls_in_css(path, text=html))
         return sorted(set(found))
 
 
@@ -254,6 +283,32 @@ class EveryPageIsUnderBudgetTests(SpeedBudgetSetUp):
             "web/html.js",
         ):
             self.assertIn(expected, assets)
+
+
+class AFaceWithARangeIsCountedOnlyWhereItIsUsedTests(SpeedBudgetSetUp):
+    """The control for counting the Hausa fallback by use: the count is not just ignoring it."""
+
+    FRAME = '<link rel="stylesheet" href="%s"><body>%s'
+
+    def assets_for(self, body):
+        return self.assets_of(self.FRAME % (static("web/design.css"), body))
+
+    def test_a_page_with_no_hausa_hook_does_not_ask_for_the_noto_faces(self):
+        assets = self.assets_for("<p>Ọláòlúwa Adéṣínà, ṣ ẹ ọ ị ụ ₦125,000</p>")
+        self.assertIn("web/fonts/hanken-grotesk-400.woff2", assets)
+        self.assertIn("web/fonts/hanken-grotesk-700.woff2", assets)
+        self.assertFalse([a for a in assets if "noto-sans" in a], assets)
+
+    def test_a_page_with_one_asks_for_both_weights_of_them(self):
+        for hook in "ɓɗƙƴƁƊƘƳǹǸ":
+            with self.subTest(hook=hook):
+                assets = self.assets_for(f"<p>Ba{hook}a</p>")
+                self.assertIn("web/fonts/noto-sans-hausa-400.woff2", assets)
+                self.assertIn("web/fonts/noto-sans-hausa-700.woff2", assets)
+
+    def test_the_stylesheets_own_urls_are_all_still_counted_where_the_rules_are_held(self):
+        """`urls_in_css()` with no text is every `url()`: the off-host and framework tests read it so."""
+        self.assertIn("web/fonts/noto-sans-hausa-400.woff2", urls_in_css("web/design.css"))
 
 
 class NoCdnAndNoFrameworkTests(SpeedBudgetSetUp):

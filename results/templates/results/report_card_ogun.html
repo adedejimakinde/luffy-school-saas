@@ -20,14 +20,16 @@ names are set sideways.
 <style>
   @font-face { font-family: "Hanken Grotesk"; font-weight: 400; src: url("{{ fonts }}/hanken-grotesk-400.woff2") format("woff2"); }
   @font-face { font-family: "Hanken Grotesk"; font-weight: 700; src: url("{{ fonts }}/hanken-grotesk-700.woff2") format("woff2"); }
+  @font-face { font-family: "Noto Sans"; font-weight: 400; src: url("{{ fonts }}/noto-sans-hausa-400.woff2") format("woff2"); }
+  @font-face { font-family: "Noto Sans"; font-weight: 700; src: url("{{ fonts }}/noto-sans-hausa-700.woff2") format("woff2"); }
 
   @page {
     size: A4;
     margin: 9mm 9mm 11mm 9mm;
-    @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 7pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #667; }
-    @bottom-right { content: "classnode"; font: 6.5pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #8a8f99; }
+    @bottom-center { content: "Page " counter(page) " of " counter(pages); font: 7pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #667; }
+    @bottom-right { content: "classnode"; font: 6.5pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #8a8f99; }
   }
-  body { font: 8pt "Hanken Grotesk", "DejaVu Sans", sans-serif; color: #111; }
+  body { font: 8pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #111; }
   h1, h2, h3, p { margin: 0; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: .6px solid #555; padding: 1.6px 3px; vertical-align: middle; }

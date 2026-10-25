@@ -143,6 +143,8 @@ class TheWorkerKeepsWhatThePagesLoadTests(MarkingSetUp):
             "register/register.css",
             "web/fonts/hanken-grotesk-400.woff2",
             "web/fonts/hanken-grotesk-700.woff2",
+            "web/fonts/noto-sans-hausa-400.woff2",
+            "web/fonts/noto-sans-hausa-700.woff2",
         ):
             with self.subTest(path=path):
                 self.assertIn(static(path), shell)

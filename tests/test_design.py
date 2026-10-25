@@ -11,7 +11,11 @@ shade of grey:
 - **No gradients but the ones named below, no emoji, no icon pack.**
 - **One font, two weights, served from here.** Hanken Grotesk at 400 and 700,
   `font-display: swap`, from files beside the stylesheet; and no stylesheet
-  asks for a weight in between, which the browser would have to fake.
+  asks for a weight in between, which the browser would have to fake. Behind it,
+  Noto Sans at the same two weights, cut to the few Hausa letters Hanken has no
+  drawing of and fetched only by a page that has one; and every Nigerian letter,
+  tone mark and the naira sign is drawn by one of the two, never by whatever
+  font the phone happens to have (`tests/glyphs.py`).
 - **Every page draws from it.** Each page template includes
   `templates/design/head.html`.
 
@@ -24,6 +28,8 @@ from pathlib import Path
 
 from django.conf import settings
 from django.test import SimpleTestCase
+
+from tests import glyphs
 
 ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / "static"
@@ -199,15 +205,22 @@ class OneFontTwoWeightsTests(SimpleTestCase):
     def faces(self):
         return re.findall(r"@font-face\s*{(.*?)}", DESIGN.read_text(), re.S)
 
-    def test_hanken_grotesk_at_400_and_700_and_nothing_else(self):
+    def test_hanken_grotesk_and_the_noto_sans_behind_it_at_400_and_700_and_nothing_else(self):
         faces = self.faces()
-        self.assertEqual(len(faces), 2)
+        self.assertEqual(len(faces), 4)
         for face in faces:
-            self.assertIn('font-family: "Hanken Grotesk"', face)
+            self.assertRegex(face, r'font-family: "(Hanken Grotesk|Noto Sans)"')
             self.assertIn("font-display: swap", face)
-        self.assertEqual(
-            sorted(re.search(r"font-weight:\s*(\d+)", f).group(1) for f in faces), ["400", "700"]
-        )
+        for family in ("Hanken Grotesk", "Noto Sans"):
+            with self.subTest(family=family):
+                self.assertEqual(
+                    sorted(
+                        re.search(r"font-weight:\s*(\d+)", f).group(1)
+                        for f in faces
+                        if f'font-family: "{family}"' in f
+                    ),
+                    ["400", "700"],
+                )
 
     def test_each_face_is_a_file_beside_the_stylesheet(self):
         """Self-hosted: a school's host serves the font, and nobody else is asked."""
@@ -218,10 +231,18 @@ class OneFontTwoWeightsTests(SimpleTestCase):
                 self.assertTrue((DESIGN.parent / source).is_file(), source)
 
         on_disk = sorted(p.name for p in (STATIC / "web" / "fonts").glob("*.woff2"))
-        self.assertEqual(on_disk, ["hanken-grotesk-400.woff2", "hanken-grotesk-700.woff2"])
+        self.assertEqual(
+            on_disk,
+            [
+                "hanken-grotesk-400.woff2",
+                "hanken-grotesk-700.woff2",
+                "noto-sans-hausa-400.woff2",
+                "noto-sans-hausa-700.woff2",
+            ],
+        )
 
-    def test_the_font_falls_back_to_the_systems_own(self):
-        self.assertRegex(DESIGN.read_text(), r'--font:\s*"Hanken Grotesk",\s*system-ui')
+    def test_the_font_falls_back_to_noto_and_then_the_systems_own(self):
+        self.assertRegex(DESIGN.read_text(), r'--font:\s*"Hanken Grotesk",\s*"Noto Sans",\s*system-ui')
 
     def test_no_stylesheet_asks_for_a_weight_that_is_not_there(self):
         for name, css in stylesheets():
@@ -229,11 +250,83 @@ class OneFontTwoWeightsTests(SimpleTestCase):
                 for weight in re.findall(r"font-weight:\s*([^;}\s]+)", css):
                     self.assertIn(weight, {"400", "700", "normal", "bold", "inherit"})
 
-    def test_the_licence_ships_with_the_font(self):
+    def test_the_licences_ship_with_the_fonts(self):
         """SIL Open Font License 1.1: the files may be redistributed with it."""
-        licence = (STATIC / "web" / "fonts" / "OFL.txt").read_text()
-        self.assertIn("SIL Open Font License, Version 1.1", licence)
-        self.assertIn("Hanken Grotesk", licence)
+        for licence, family in (("OFL.txt", "Hanken Grotesk"), ("OFL-noto-sans.txt", "Noto Project")):
+            with self.subTest(licence=licence):
+                text = (STATIC / "web" / "fonts" / licence).read_text()
+                self.assertIn("SIL Open Font License, Version 1.1", text)
+                self.assertIn(family, text)
+
+
+class EveryNigerianLetterHasADrawingTests(SimpleTestCase):
+    """A letter no face draws is drawn in the phone's own font, and nothing says so."""
+
+    def test_every_letter_mark_name_and_amount_is_drawn_by_a_face_of_ours_at_both_weights(self):
+        for weight in (400, 700):
+            for character in glyphs.CHARACTERS:
+                with self.subTest(weight=weight, character=f"U+{ord(character):04X} {character}"):
+                    self.assertTrue(
+                        glyphs.covering(character, weight),
+                        "in no face's range and file: the browser would draw it in a system font",
+                    )
+
+    def test_every_letter_a_file_holds_can_be_asked_of_it(self):
+        """A glyph outside its face's `unicode-range` is never used: dead bytes, and a letter that looks covered."""
+        for face in glyphs.faces():
+            with self.subTest(file=face["file"]):
+                unreachable = sorted(
+                    c for c in glyphs.cmap_of(face["file"])
+                    if c > 0x20 and not glyphs.in_range(face, chr(c))
+                )
+                self.assertEqual([f"U+{c:04X}" for c in unreachable], [])
+
+    def test_noto_is_fetched_only_for_what_hanken_cannot_draw(self):
+        """Disjoint ranges: a page with no Hausa hook never asks for the second face."""
+        hanken = [f for f in glyphs.faces() if f["family"] == "Hanken Grotesk"]
+        noto = [f for f in glyphs.faces() if f["family"] == "Noto Sans"]
+        for face in noto:
+            for other in hanken:
+                for low, high in face["ranges"]:
+                    for point in range(low, high + 1):
+                        self.assertFalse(glyphs.in_range(other, chr(point)), f"U+{point:04X} is in both")
+
+    def test_the_noto_faces_are_sized_and_spaced_to_hanken(self):
+        """A Hausa hook in a line of Hanken is the line's height and the letters' size.
+
+        `size-adjust` scales Noto to Hanken's x-height, and its ascent and descent are
+        Hanken's, divided by that scale because the browser multiplies them by it (the
+        formula Next.js writes its fallback fonts with). Noto's own line gap is nil, so
+        none is overridden. Each number is read from the files, so a recut font that
+        moves them fails here rather than showing as a line that grows.
+        """
+        from fontTools.ttLib import TTFont
+
+        for face in glyphs.faces():
+            if face["family"] != "Noto Sans":
+                continue
+            hanken = TTFont(glyphs.FONTS / f"hanken-grotesk-{face['weight']}.woff2")
+            noto = TTFont(glyphs.FONTS / face["file"])
+            with self.subTest(file=face["file"]):
+                size = float(re.search(r"size-adjust:\s*([\d.]+)%", face["body"]).group(1)) / 100
+                ascent = float(re.search(r"ascent-override:\s*([\d.]+)%", face["body"]).group(1)) / 100
+                descent = float(re.search(r"descent-override:\s*([\d.]+)%", face["body"]).group(1)) / 100
+                x = hanken["glyf"][hanken.getBestCmap()[ord("x")]]
+                x.recalcBounds(hanken["glyf"])
+                self.assertAlmostEqual(size, x.yMax / noto["OS/2"].sxHeight, delta=0.005)
+                self.assertAlmostEqual(ascent * size, hanken["hhea"].ascent / hanken["head"].unitsPerEm, delta=0.005)
+                self.assertAlmostEqual(descent * size, -hanken["hhea"].descent / hanken["head"].unitsPerEm, delta=0.005)
+                self.assertEqual((noto["hhea"].lineGap, noto["OS/2"].sTypoLineGap), (0, 0))
+                self.assertNotIn("line-gap-override", face["body"])
+
+    def test_the_letters_hanken_draws_itself_are_not_left_to_noto(self):
+        """Where Yoruba and Igbo's marked letters and the naira sign come from: Hanken's own drawing."""
+        for character in "ẹọṣẸỌṢịụṅỊỤṄ₦ʼ" + glyphs.MARKS:
+            with self.subTest(character=f"U+{ord(character):04X}"):
+                self.assertEqual(glyphs.covering(character), ["Hanken Grotesk"])
+        for character in "ɓɗƙƴƁƊƘƳǹǸ":
+            with self.subTest(character=f"U+{ord(character):04X}"):
+                self.assertEqual(glyphs.covering(character), ["Noto Sans"])
 
 
 #: `{% extends "app/layout.html" %}`: a page drawn inside a layout, which is
