@@ -1193,7 +1193,7 @@ class AccessRequiresActiveStatusTests(TestCase):
         services.grant_membership(
             self.teacher, self.school, Role.TEACHER, status=MembershipStatus.INVITED
         )
-        request = self.factory.get("/")
+        request = self.factory.get("/home/")
         request.user = self.teacher
         with on_host_of(self.school):
             with self.assertRaises(PermissionDenied):
@@ -1382,10 +1382,20 @@ class SchoolAccessMiddlewareTests(TestCase):
         # does not, and every `has_access_to` below would read False.
         give_verified_channel(self.parent)
 
-    def request_as(self, user):
-        request = self.factory.get("/")
+    def request_as(self, user, path="/home/"):
+        # A staff page: the school's public website (`/` and its pages) asks
+        # nobody who they are, so the door this tests is every other path.
+        request = self.factory.get(path)
         request.user = user
         return request
+
+    def test_the_schools_public_website_asks_nobody_even_a_stranger(self):
+        for path in ("/", "/about/", "/robots.txt"):
+            with self.subTest(path=path), on_host_of(self.grace):
+                request = self.request_as(self.parent, path)
+                self.assertEqual(self.middleware(request), "ok")
+                self.assertEqual(request.school, self.grace)
+                self.assertEqual(request.school_roles, frozenset())
 
     def test_a_member_reaches_their_school(self):
         with on_host_of(self.stmarys):

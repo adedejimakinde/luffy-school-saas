@@ -92,9 +92,12 @@ SCHOOL_PAGES = (
 #: fetch after it draws is the API's cost, and pinning those per page, at two
 #: sizes of school, is the follow-up to this file.
 QUERIES = {path: 16 for path in SCHOOL_PAGES}
-#: The school's public page also reads its crest and colour (one row) and the
-#: portal's hostname, and draws them server-side rather than in a later fetch.
-QUERIES["/"] = 20
+#: The school's public page, before the school has published its website: the
+#: tenant for this hostname, whether there is a published revision, its crest
+#: and colour (the row, read twice by `results.look.for_site`) and the portal's
+#: hostname, each after its search path. No session, user or roles: a page of
+#: the public website reads none of them (`schools.paths.is_public_site_request`).
+QUERIES["/"] = 10
 #: The dashboard draws its figures server-side too (`docs/dashboard.md`), and
 #: does not ask for the portal's hostname, which only its signed-out state
 #: needs. These schools have no students, so it is the set-up checklist: one

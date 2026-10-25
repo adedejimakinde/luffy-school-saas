@@ -11,9 +11,10 @@ carries the same in a meta tag unless its view says it is the public site's.
 **One exception is designed and not yet used: a school's own website**
 (`docs/school-sites.md` §6). On a school's host, a response escapes the header
 only when all three hold: its view marked it (`response.indexable = True`), its
-path is one of the website's (`schools.paths.is_public_site`), and the host is
-not the portal. No view marks a response yet, so every school host is noindex
-exactly as before. No one condition is enough: a marked response on
+path is one of the website's, and it was served for a school, never for the
+portal (`schools.paths.is_public_site_request`). Only a published school
+website's pages are marked (`schoolsite.views`), so a school that has not
+published is noindex exactly as before. No one condition is enough: a marked response on
 `/sit/` or any portal path is still noindex, and so is an unmarked root.
 
 This middleware also answers `/robots.txt` for every host. The site's points to
@@ -22,7 +23,9 @@ are Classnode's mark and nobody's school). Every other host's, a school's or one
 with no school behind it (this runs before the host is looked up), says the
 same, and also names each path that must stay out of a search engine even once
 a school's website is open (`schools.paths.NEVER_INDEXED`), ahead of the
-`Disallow: /` that closes the rest for now. It also sends `www.` on
+`Disallow: /` that closes the rest. A school that has published its website
+answers its own instead (`schoolsite.views.robots`): the same names, no
+closing line, and its sitemap. It also sends `www.` on
 the site host to the bare domain over https in one hop. It sits near the top of
 the stack, under `/healthz/` alone, so it sees every response, the 404 of a
 host nobody owns included, and `schools.health` marks its own answers.
@@ -34,7 +37,7 @@ from django.http import HttpResponse, HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
 
 from schools.hosts import portal_host
-from schools.paths import NEVER_INDEXED, is_public_site, robots_path
+from schools.paths import NEVER_INDEXED, is_public_site_request, robots_path
 
 NOINDEX = "noindex, nofollow"
 
@@ -92,31 +95,36 @@ class CrawlerMiddleware:
 
         if request.path == "/robots.txt":
             if on_site:
-                body = SITE_ROBOTS.format(site_url=site_url())
+                response = _robots(SITE_ROBOTS.format(site_url=site_url()))
             elif host == portal_host():
-                body = CLOSED_ROBOTS
+                response = _robots(CLOSED_ROBOTS)
             else:
-                body = SCHOOL_ROBOTS
-            response = HttpResponse(body, content_type="text/plain; charset=utf-8")
+                # A school's host answers its own (`schoolsite.views.robots`),
+                # open once the school has published; a host with no school
+                # behind it, or one that cannot answer, gets the closed one.
+                response = self.get_response(request)
+                if response.status_code != 200:
+                    response = _robots(SCHOOL_ROBOTS)
         else:
             response = self.get_response(request)
 
-        if not on_site and not _a_school_website_page(request, response, host):
+        if not on_site and not _a_school_website_page(request, response):
             response["X-Robots-Tag"] = NOINDEX
         return response
 
 
-def _a_school_website_page(request, response, host):
+def _robots(body):
+    return HttpResponse(body, content_type="text/plain; charset=utf-8")
+
+
+def _a_school_website_page(request, response):
     """Whether this is a page of a school's own website its view let be indexed.
 
-    The mark first: no view sets it yet, so this is one attribute read per
-    response, and the portal's `Domain` row is read only for a marked one.
+    Asked after the response, when the request has been served for a school or
+    for nobody: a marked response, on one of the website's paths, served for a
+    school (`schools.paths.is_public_site_request`), never for the portal.
     """
-    return (
-        getattr(response, "indexable", False) is True
-        and is_public_site(request.path)
-        and host != portal_host()
-    )
+    return getattr(response, "indexable", False) is True and is_public_site_request(request)
 
 
 __all__ = ["CLOSED_ROBOTS", "ICONS", "SCHOOL_ROBOTS", "CrawlerMiddleware", "NOINDEX", "site_url"]

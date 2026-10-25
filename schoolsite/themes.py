@@ -35,12 +35,22 @@ class Theme:
     name: str
     header_styles: tuple
     font_pairings: tuple
+    #: Its stylesheet and its font files, under `static/`: what the theme
+    #: contract weighs and checks the Nigerian alphabets against (§3.3, §11.2).
+    stylesheet: str
+    fonts: tuple
 
 
 #: The starter theme is the plain design system (PR 3). The design round adds
 #: the others here, each with its own header styles and font pairings.
 THEMES = {
-    "starter": Theme(name="Starter", header_styles=("solid",), font_pairings=("default",)),
+    "starter": Theme(
+        name="Starter",
+        header_styles=("solid",),
+        font_pairings=("default",),
+        stylesheet="schoolsite/starter.css",
+        fonts=("web/fonts/hanken-grotesk-400.woff2", "web/fonts/hanken-grotesk-700.woff2"),
+    ),
 }
 
 DEFAULT_THEME = "starter"

@@ -26,6 +26,7 @@ from django.db import connection
 from django_tenants.utils import get_public_schema_name
 
 from accounts.refusals import BlogAccountOnly
+from schools.paths import is_public_site_request
 
 #: What a blog account may open on the portal. Everything else is refused.
 PORTAL_PATHS = ("/write/", "/api/csrf/", "/api/logout/")
@@ -45,6 +46,9 @@ class BlogAccountMiddleware:
 
     def __call__(self, request):
         if getattr(request, "urlconf", None) == settings.SITE_URLCONF:
+            return self.get_response(request)
+        # A school's public website: as public as classnode.co, and for the same reason.
+        if is_public_site_request(request):
             return self.get_response(request)
 
         user = getattr(request, "user", None)

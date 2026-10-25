@@ -1,0 +1,12 @@
+{% comment %}The address, phone and email are the school's own details; the map opens elsewhere, on tap (PR 5 adds the map itself).{% endcomment %}
+<section class="contact">
+  <h2>Find us</h2>
+  <dl>
+    {% if school.address %}<dt>Address</dt><dd>{{ school.address|linebreaksbr }}</dd>{% endif %}
+    {% if school.phone %}<dt>Phone</dt><dd><a href="tel:{{ school.phone }}">{{ school.phone }}</a></dd>{% endif %}
+    {% if s.whatsapp_link %}<dt>WhatsApp</dt><dd><a href="{{ s.whatsapp_link }}" rel="noopener noreferrer">{{ s.whatsapp }}</a></dd>{% endif %}
+    {% if school.contact_email %}<dt>Email</dt><dd><a href="mailto:{{ school.contact_email }}">{{ school.contact_email }}</a></dd>{% endif %}
+    {% if s.hours %}<dt>Office hours</dt><dd>{{ s.hours|linebreaksbr }}</dd>{% endif %}
+  </dl>
+  {% if s.maps %}<p class="actions"><a class="button" href="{{ s.maps }}" rel="noopener noreferrer">Open in Maps</a></p>{% endif %}
+</section>

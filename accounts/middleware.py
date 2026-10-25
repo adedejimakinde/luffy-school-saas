@@ -1,6 +1,8 @@
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
 
+from schools.paths import is_public_site_request
+
 from .guardian_signin import OPENED_BY_CODE
 from .refusals import CodeSessionCannotEscalate, NoMembershipHere
 
@@ -92,6 +94,13 @@ class SchoolAccessMiddleware:
 
         request.school = None if on_portal else tenant
         request.school_roles = frozenset()
+
+        # A page of the school's public website (`schools.paths.PUBLIC_SITE`)
+        # is the same for everybody: it reads no login, so a family signed in
+        # at another school sees it as anyone would, and nothing here touches
+        # the session it would otherwise read and send back.
+        if is_public_site_request(request):
+            return self.get_response(request)
 
         user = getattr(request, "user", None)
         if not on_portal and user is not None and user.is_authenticated:

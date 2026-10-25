@@ -21,7 +21,7 @@ from accounts.models import Role, User
 from accounts.services import grant_membership
 from schools.models import Domain
 from schools.paths import NEVER_INDEXED, PORTAL, PUBLIC_SITE, RESERVED, first_segment
-from schools.tests.tenants import make_school
+from schools.tests.tenants import connected_to, make_school
 from schools.views import reserved
 from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX, SCHOOL_ROBOTS, CrawlerMiddleware
 from website.tests.test_homepage import PORTAL as PORTAL_HOST
@@ -62,8 +62,11 @@ class EveryRouteIsSortedTests(SiteSetUp):
         self.assertEqual(PORTAL & set(RESERVED), set())
         self.assertEqual(NEVER_INDEXED - segments(urls.urlpatterns), set())
 
-    def test_the_only_website_path_routed_yet_is_the_root(self):
-        self.assertEqual(segments(urls.urlpatterns) & PUBLIC_SITE, {""})
+    def test_the_website_paths_routed_are_the_fixed_pages_and_not_media_yet(self):
+        self.assertEqual(
+            segments(urls.urlpatterns) & PUBLIC_SITE,
+            {"", "about", "admissions", "news", "gallery", "contact", "sitemap.xml", "robots.txt"},
+        )
 
     def test_sit_and_the_other_held_names_are_held_everywhere_under_them(self):
         self.assertEqual(set(RESERVED), {"sit", "website", "applicants"})
@@ -212,11 +215,17 @@ class AMarkedResponseTests(TwoSchoolsSetUp):
     """What a future website view's mark (`response.indexable = True`) can and cannot do."""
 
     def answer(self, host, where, *, indexable):
+        """The middleware's answer, with the connection where serving `host` leaves it."""
         response = HttpResponse("a page")
         if indexable is not None:
             response.indexable = indexable
         request = RequestFactory().get(where, HTTP_HOST=host)
-        return CrawlerMiddleware(lambda request: response)(request)
+        school = {ST_MARYS: self.st_marys, GRACE: self.grace}.get(host)
+        if school is None:
+            connection.set_schema_to_public()
+            return CrawlerMiddleware(lambda request: response)(request)
+        with connected_to(school):
+            return CrawlerMiddleware(lambda request: response)(request)
 
     def test_a_marked_website_page_on_a_school_host_is_the_one_thing_let_in(self):
         for host in SCHOOLS:
