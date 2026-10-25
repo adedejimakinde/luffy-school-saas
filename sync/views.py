@@ -52,6 +52,10 @@ STYLES = (
     "register/register.css",
     "web/fonts/hanken-grotesk-400.woff2",
     "web/fonts/hanken-grotesk-700.woff2",
+    # The Hausa hooks Hanken has no drawing of: a few hundred bytes each, kept so
+    # a child's name draws whole with no connection too.
+    "web/fonts/noto-sans-hausa-400.woff2",
+    "web/fonts/noto-sans-hausa-700.woff2",
 )
 
 

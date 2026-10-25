@@ -16,7 +16,7 @@ HERO = {
 }
 MOTTO = {"motto": "Ìmọ̀ ni agbára", "language": "yo", "translation": "Knowledge is power", "founded": 1987}
 MESSAGE = {
-    "name": "Mrs Adebola Okonkwo-Bello",
+    "name": "Mrs Ọláòlúwa Adéṣínà",
     "title": "Principal",
     "message": (
         "Welcome to Harbour Demo College. For nearly forty years we have taught young people to "
@@ -29,6 +29,7 @@ MESSAGE = {
 FACTS = {"items": [
     {"figure": "98%", "label": "WAEC credit passes in five subjects or more", "source": "WAEC, May/June 2025"},
     {"figure": "1,240", "label": "students, JSS 1 to SSS 3"},
+    {"figure": "₦125,000", "label": "day fees a term, with books and lunch"},
     {"figure": "1987", "label": "the year we opened"},
 ]}
 ADMISSIONS = {

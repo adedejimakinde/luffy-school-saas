@@ -288,8 +288,13 @@ own browser page too, which shows them and a link to this file for the first
 time; see [report-card-page.md](report-card-page.md). Under the marks is a
 one-line grade key from the school's own scale, which is *not* on the
 payload — it is not a fact about one card. The font is the design's Hanken
-Grotesk, loaded from the same self-hosted files the pages serve; WeasyPrint
-subsets it, so a card is about the size it was.
+Grotesk, loaded from the same self-hosted files the pages serve, with the Noto
+Sans subset behind it for Hausa's hooked letters and DejaVu Sans last;
+WeasyPrint subsets each, so a card is about the size it was. A Yoruba or Igbo
+name, with its tone marks and underdots, is drawn by Hanken alone
+(`results/tests/test_fonts_in_pdfs.py` reads the fonts a card embeds). The
+result and exam slips are DejaVu Sans alone, which has every letter, so a name
+on a slip is one typeface by construction.
 
 Both are optional, and both are set on the setup page by whoever may set the
 school up (`academics.api`, `card/colour/` and `card/crest/`). They live on

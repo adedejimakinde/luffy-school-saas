@@ -49,7 +49,12 @@ THEMES = {
         header_styles=("solid",),
         font_pairings=("default",),
         stylesheet="schoolsite/starter.css",
-        fonts=("web/fonts/hanken-grotesk-400.woff2", "web/fonts/hanken-grotesk-700.woff2"),
+        fonts=(
+            "web/fonts/hanken-grotesk-400.woff2",
+            "web/fonts/hanken-grotesk-700.woff2",
+            "web/fonts/noto-sans-hausa-400.woff2",
+            "web/fonts/noto-sans-hausa-700.woff2",
+        ),
     ),
 }
 

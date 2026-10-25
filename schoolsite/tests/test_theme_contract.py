@@ -20,11 +20,13 @@ from django.db import connection
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
+from django.utils.html import escape
 
 from accounts.models import Role, User
 from accounts.services import grant_membership
 from schools.models import Domain, School
 from schools.tests.tenants import connected_to, make_school
+from tests import glyphs
 from tests.test_budget import BUDGET, STATIC, _ASSET, served_files, urls_in_css
 from website.crawlers import ICONS
 
@@ -36,16 +38,6 @@ from schoolsite.themes import THEMES
 THEME_DIR = Path(settings.BASE_DIR) / "schoolsite" / "templates" / "schoolsite" / "themes"
 PORTAL = "app.classnode.testserver"
 HOSTS = ("st-marys.classnode.testserver", "grace.classnode.testserver")
-
-#: Letters and signs a Nigerian school's pages carry (§11.2): Yoruba and Igbo
-#: dot-below and dot-above, Hausa hooked letters, the apostrophe, the naira.
-NIGERIAN_GLYPHS = "ẹọṣẸỌṢịụṅỊỤṄɓɗƙƴƁƊƘƳʼ₦"
-
-#: Themes whose fonts do not carry those letters yet, and why. A browser draws a
-#: missing letter in a system font, so the page reads, in two typefaces. The
-#: starter theme is the platform's own design font, subset to 222 glyphs for the
-#: 150 KB budget; the designed theme's fonts are chosen to carry them (§3.4).
-KNOWN_GLYPH_GAPS = {"starter": "the design system's Hanken Grotesk, subset for the budget"}
 
 #: One valid example of each kind, through `sections.clean` so it is what a school could store.
 EXAMPLES = {
@@ -199,7 +191,7 @@ class UnderTheBudgetTests(ContractSetUp):
         found = [self.served[url] for url in _ASSET.findall(_fetched(html)) if url in self.served]
         for path in list(found):
             if path.endswith(".css"):
-                found.extend(urls_in_css(path))
+                found.extend(urls_in_css(path, text=html))
         return sorted(set(found))
 
     def test_every_page_weighs_under_150_kb_and_asks_nothing_of_another_host(self):
@@ -242,18 +234,27 @@ class UnderTheBudgetTests(ContractSetUp):
 
 
 class TheNigerianAlphabetsTests(ContractSetUp):
-    def test_every_themes_fonts_carry_them_or_the_gap_is_named(self):
+    """No theme is excused: every letter of §11.2 is drawn by the theme's own fonts."""
+
+    def test_every_themes_fonts_carry_every_letter_between_them(self):
         from fontTools.ttLib import TTFont
 
         for key, theme in THEMES.items():
-            missing = set()
+            held = set()
             for font in theme.fonts:
-                cmap = TTFont(STATIC / font).getBestCmap()
-                missing |= {c for c in NIGERIAN_GLYPHS if ord(c) not in cmap}
+                held |= set(TTFont(STATIC / font).getBestCmap())
             with self.subTest(theme=key):
-                if key in KNOWN_GLYPH_GAPS:
-                    # The control: a gap named here is a real one, so it is
-                    # removed from this list the day the fonts carry them.
-                    self.assertTrue(missing, f"{key}'s fonts carry them now; take it off KNOWN_GLYPH_GAPS")
-                else:
-                    self.assertEqual(sorted(missing), [])
+                self.assertEqual(
+                    sorted(f"U+{ord(c):04X}" for c in glyphs.CHARACTERS if ord(c) not in held), []
+                )
+
+    def test_a_page_with_every_letter_draws_with_the_design_stack_and_no_exception(self):
+        """The page's text is in the design's font stack, which names both families."""
+        pages = {PageKey.HOME: [section(SectionKind.TEXT, "default", {"body": "\n".join(glyphs.NAMES)})]}
+        pages[PageKey.ABOUT] = pages[PageKey.HOME]
+        for theme in THEMES:
+            with self.subTest(theme=theme):
+                html = self.draw(theme, pages, PageKey.ABOUT).html
+                for name in glyphs.NAMES:
+                    self.assertIn(escape(name), html)
+        self.assertRegex((STATIC / "web" / "design.css").read_text(), r'--font:\s*"Hanken Grotesk",\s*"Noto Sans"')
