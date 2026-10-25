@@ -23,9 +23,10 @@ name that is both, and on a name here that nothing routes.
   moves from here to `PORTAL` in the same change that routes the real view.
 """
 
-#: `docs/school-sites.md` §2.1. `""` is the root.
+#: `docs/school-sites.md` §2.1. `""` is the root. `robots.txt` is the site's
+#: own file for crawlers, never itself indexed.
 PUBLIC_SITE = frozenset(
-    {"", "about", "admissions", "news", "gallery", "contact", "media", "sitemap.xml"}
+    {"", "about", "admissions", "news", "gallery", "contact", "media", "sitemap.xml", "robots.txt"}
 )
 
 PORTAL = frozenset(
@@ -84,6 +85,23 @@ def is_public_site(path: str) -> bool:
     return segment in PUBLIC_SITE and segment not in NEVER_INDEXED
 
 
+def is_public_site_request(request) -> bool:
+    """Is this a request for a page of a school's public website, on that school's host?
+
+    What every layer that would otherwise read the session asks first
+    (`accounts.middleware`, `blog.middleware`, `schools.sessions`): a public
+    page is the same for everybody, signed in or not, so nothing on its way
+    reads who is asking, refuses a stranger, or writes a cookie back. The
+    portal and Classnode's own site are never a school's host.
+    """
+    from django.db import connection
+    from django_tenants.utils import get_public_schema_name
+
+    tenant = getattr(connection, "tenant", None)
+    on_a_school = tenant is not None and tenant.schema_name != get_public_schema_name()
+    return on_a_school and is_public_site(request.path)
+
+
 def robots_path(segment: str) -> str:
     """The prefix `robots.txt` disallows for a segment: `/sit/`, but `/sw.js`."""
     return f"/{segment}" if "." in segment else f"/{segment}/"
@@ -96,5 +114,6 @@ __all__ = [
     "RESERVED",
     "first_segment",
     "is_public_site",
+    "is_public_site_request",
     "robots_path",
 ]

@@ -36,7 +36,8 @@ from onboarding.views import help_page, start_here, step_page
 from notices.views import settings_page
 from schools.demo import only_in_the_single_host_demo
 from schools.paths import RESERVED
-from schools.views import reserved, school_site
+from schools.views import reserved
+from schoolsite import views as site
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -50,8 +51,17 @@ from sync.views import service_worker
 from timetable.views import timetable_page
 
 urlpatterns = [
-    # A school's public page: its face to a family, on its own address.
-    path("", school_site, name="school-site"),
+    # The school's public website (`schoolsite.views`, `docs/school-sites.md`):
+    # today's page at the root until the school first publishes, then the
+    # pages it switched on. Read by nobody's session (`schools.paths`).
+    path("", site.home, name="school-site"),
+    path("about/", site.about, name="school-site-about"),
+    path("admissions/", site.admissions, name="school-site-admissions"),
+    path("news/", site.news, name="school-site-news"),
+    path("gallery/", site.gallery, name="school-site-gallery"),
+    path("contact/", site.contact, name="school-site-contact"),
+    path("sitemap.xml", site.sitemap, name="school-site-sitemap"),
+    path("robots.txt", site.robots, name="school-site-robots"),
     path("api/", api.urls),
     # The offline worker: the marking and register pages kept for a phone with
     # no connection. At the root because a worker's scope is where it is served

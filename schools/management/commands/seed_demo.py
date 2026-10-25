@@ -66,6 +66,7 @@ from messaging.fake import FakeProvider
 from messaging.providers import provider_for
 from results import ogun
 from schools.models import Domain, School
+from schoolsite.demo import publish_demo_site
 from timetable import services as timetable
 from timetable.models import Weekday
 
@@ -110,6 +111,9 @@ PAPERS = {
 #: learner's ID, sex and date of birth the sheet asks for. Harbour stays on the
 #: Standard card.
 TEMPLATES = {"sunrise-demo": "ogun", "harbour-demo": "standard"}
+
+#: The demo schools whose website is published. Sunrise keeps today's page.
+PUBLISHED_SITES = {"harbour-demo"}
 
 #: Made up, like every name here: what the sheet's "Sex" box says for each first name.
 SEX = {
@@ -251,6 +255,11 @@ class Command(BaseCommand):
 
         with schema_context(school.schema_name), transaction.atomic():
             self._term_data(school, staff, teachers, children, rng, PAPERS[slug], TEMPLATES[slug])
+        if slug in PUBLISHED_SITES:
+            # Its own website, published, so the demo shows one beside a school
+            # that has not published (`schoolsite.demo`).
+            with schema_context(school.schema_name), transaction.atomic():
+                publish_demo_site(staff["principal"].user, school)
         return logins
 
     def _term_data(self, school, staff, teachers, children, rng, paper_scheme, template):

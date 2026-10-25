@@ -1,0 +1,10 @@
+{% comment %}The portrait arrives with images (PR 5).{% endcomment %}
+<section class="message">
+  <h2>From the principal</h2>
+  {{ s.message|linebreaks }}
+  {% if s.name or s.title or s.signature %}<p class="signed">
+    {% if s.signature %}<span>{{ s.signature }}</span>{% endif %}
+    {% if s.name %}<strong>{{ s.name }}</strong>{% endif %}
+    {% if s.title %}<span>{{ s.title }}</span>{% endif %}
+  </p>{% endif %}
+</section>

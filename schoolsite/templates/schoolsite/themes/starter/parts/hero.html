@@ -1,0 +1,8 @@
+{% comment %}The hero, without its picture or video until those arrive (PR 5 and PR 8).{% endcomment %}
+<section class="hero hero-{{ variant }}">
+  <h1>{{ s.heading }}</h1>
+  {% if s.subheading %}<p class="lead">{{ s.subheading }}</p>{% endif %}
+  {% if s.buttons %}<p class="actions">{% for button in s.buttons %}
+    <a class="button{% if forloop.first %} primary{% endif %}" href="{{ button.link }}">{{ button.label }}</a>{% endfor %}
+  </p>{% endif %}
+</section>

@@ -284,7 +284,9 @@ MIDDLEWARE = [
     # django-tenants' own, plus one host it answers that is nobody's: the public
     # site on `SITE_HOST`. See `schools/middleware.py`.
     "schools.middleware.PlatformTenantMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware",
+    # Django's, except that a page of a school's public website sends no
+    # session cookie back (`schools/sessions.py`).
+    "schools.sessions.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -990,6 +992,26 @@ STORAGES = {
             else "whitenoise.storage.CompressedManifestStaticFilesStorage"
         )
     },
+}
+
+# ---------------------------------------------------------------------------
+# Caches
+#
+# `default` is Django's own, in each process, as it always was (`home.facts`
+# keeps the dashboard's figures in it). `sites` holds rendered pages of schools'
+# public websites (`schoolsite.views`): in Redis where a deploy names it, so
+# every web process shares one copy, and in the process otherwise, which is what
+# development and the test suite use. Keys name the school's schema and its
+# published revision, so a new publish is a new key and nothing is invalidated.
+# ---------------------------------------------------------------------------
+SITE_CACHE_URL = os.environ.get("SITE_CACHE_URL", "").strip()
+CACHES = {
+    "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"},
+    "sites": (
+        {"BACKEND": "django.core.cache.backends.redis.RedisCache", "LOCATION": SITE_CACHE_URL}
+        if SITE_CACHE_URL
+        else {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "sites"}
+    ),
 }
 
 # ---------------------------------------------------------------------------

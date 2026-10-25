@@ -1,0 +1,87 @@
+/*
+ * A school's public website, in the starter theme: the plain design system,
+ * phone first, until the designed theme replaces it (`docs/school-sites.md`
+ * §3.4). Colours, type and controls are `web/design.css`'s; the one colour that
+ * varies is `--school`, the school's own, set by the page's one inline style.
+ * No script: the Sign in menu is a <details>.
+ */
+body { margin: 0; background: var(--bg); color: var(--text); }
+
+.skip { position: absolute; left: 8px; top: -64px; z-index: 2; padding: 12px 16px; background: var(--card); color: var(--school); border-radius: var(--radius); }
+.skip:focus { top: 8px; }
+
+.site-header { background: var(--school); color: var(--card); }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 64rem; margin: 0 auto; padding: 10px 16px; }
+.school { display: flex; align-items: center; gap: 10px; min-height: 48px; color: var(--card); text-decoration: none; font-weight: 700; min-width: 0; }
+.school-name { line-height: 1.25; overflow-wrap: anywhere; }
+.crest { flex: none; width: 48px; height: 48px; display: inline-block; border-radius: 50%; background: var(--card); object-fit: contain; }
+.crest.initials { line-height: 48px; text-align: center; font-weight: 700; color: var(--school); }
+.crest.large { width: 96px; height: 96px; }
+.crest.large.initials { line-height: 96px; font-size: 2rem; }
+
+.sign-in { position: relative; flex: none; }
+.sign-in summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border: 2px solid var(--card); border-radius: var(--radius); color: var(--card); font-weight: 700; }
+.sign-in summary::-webkit-details-marker { display: none; }
+.sign-in summary:focus-visible { outline: 3px solid var(--card); outline-offset: 2px; }
+.sign-in ul { position: absolute; right: 0; top: calc(100% + 6px); z-index: 1; min-width: 14rem; margin: 0; padding: 6px; list-style: none; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.sign-in a { display: flex; align-items: center; min-height: 44px; padding: 0 12px; color: var(--text); text-decoration: none; border-radius: var(--radius); }
+.sign-in a:hover, .sign-in a:focus-visible { background: var(--brand-tint); }
+
+.site-header nav { max-width: 64rem; margin: 0 auto; padding: 0 8px 8px; }
+.site-header nav ul { display: flex; flex-wrap: wrap; margin: 0; padding: 0; list-style: none; }
+.site-header nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; color: var(--card); text-decoration: none; border-bottom: 3px solid transparent; }
+.site-header nav a[aria-current="page"] { border-bottom-color: var(--card); font-weight: 700; }
+.site-header nav a:focus-visible { outline: 3px solid var(--card); outline-offset: -3px; }
+
+main { max-width: 40rem; margin: 0 auto; padding: 8px 16px 40px; }
+main section { margin: 28px 0; overflow-wrap: anywhere; }
+.page-title { margin: 28px 0 0; font-size: 1.75rem; line-height: 1.2; color: var(--school); }
+h2 { font-size: 1.2rem; line-height: 1.3; margin: 0 0 10px; color: var(--school); }
+main p { line-height: 1.6; }
+
+.hero { margin-top: 0; padding: 28px 0 8px; }
+.hero h1 { margin: 0; font-size: 2rem; line-height: 1.15; color: var(--school); }
+.hero .lead { font-size: 1.1rem; color: var(--muted); }
+
+.actions { display: grid; gap: 12px; margin: 20px 0 0; }
+.button { display: flex; align-items: center; justify-content: center; text-align: center; padding: 10px 16px; min-height: 44px; box-sizing: border-box; border-radius: var(--radius); border: 2px solid var(--school); color: var(--school); background: var(--card); font-weight: 700; text-decoration: none; }
+.button.primary { background: var(--school); color: var(--card); }
+.button:focus-visible { outline: 3px solid var(--school); outline-offset: 2px; }
+
+.motto { text-align: center; }
+.motto-words { font-size: 1.25rem; font-weight: 700; margin: 12px 0 4px; }
+.translation, .founded { margin: 0; color: var(--muted); }
+
+.message { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 20px 16px; }
+.signed { display: grid; gap: 2px; margin: 16px 0 0; }
+.signed span { color: var(--muted); }
+
+.facts ul { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.facts li { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; }
+.figure { display: block; font-size: 1.75rem; line-height: 1.1; color: var(--school); }
+.fact-label { display: block; margin-top: 4px; }
+.facts small { display: block; margin-top: 4px; color: var(--muted); font-size: 0.875rem; }
+
+.admissions { background: var(--card); border: 2px solid var(--school); border-radius: var(--radius-card); padding: 20px 16px; }
+.session { font-weight: 700; }
+
+.contact dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 16px; margin: 0; }
+.contact dt { color: var(--muted); }
+.contact dd { margin: 0; overflow-wrap: anywhere; }
+.contact a { display: inline-flex; align-items: center; min-height: 44px; }
+
+.checker { margin: 28px 0 0; }
+
+.site-footer { max-width: 40rem; margin: 0 auto; padding: 24px 16px 40px; border-top: 1px solid var(--border); color: var(--muted); }
+.site-footer p { margin: 8px 0; overflow-wrap: anywhere; }
+.site-footer ul { display: flex; flex-wrap: wrap; gap: 0 8px; margin: 8px 0; padding: 0; list-style: none; }
+.site-footer a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; color: var(--muted); }
+
+@media (min-width: 40rem) {
+  .actions { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+  .facts ul { grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+  .hero h1 { font-size: 2.5rem; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .button, .site-header nav a, .sign-in a { transition: background-color 0.15s ease, border-color 0.15s ease; }
+}
