@@ -239,6 +239,8 @@ TENANT_APPS = [
     # and neither of those may depend on it. Phase 2 step 2 holds only exam
     # officers and the students' exam PINs.
     "cbt",
+    # A school's own website: its draft, what it published and who did (`docs/school-sites.md`).
+    "schoolsite",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

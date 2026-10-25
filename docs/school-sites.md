@@ -197,10 +197,10 @@ and nothing else (§10.2).
 Modelled on the released report card: **the published site is an artefact
 written at publish time, not the current state of a table.**
 
-- **Draft.** One editable draft per school: settings, pages, sections, the theme and its options. Saving writes the draft only. Two editors at once: last write wins per section, with an `updated_at` check that refuses a stale save and tells the person to reload. No silent overwrite.
+- **Draft.** One editable draft per school: settings, pages, sections, the theme and its options. Saving writes the draft only. Two editors at once: each part saved (the settings row, a page, a section) carries a version number, a save names the version it was based on, and a stale one is refused with a request to reload. No silent overwrite. *(Built in PR 2 as integers rather than `updated_at`, so two saves in the same instant cannot both look current.)*
 - **Preview.** `/website/preview/<page>` on the school's classnode host, for whoever may edit. It renders the draft through exactly the same templates as the live site, under a fixed "Preview: not published" bar. It is `noindex`, `Cache-Control: no-store`, and never cached server-side. It can preview the draft **in another theme** without saving the switch.
 - **Publish.** One button, the principal's alone (§2.4). It writes an immutable `SiteRevision` row: a JSON snapshot of the whole draft plus the theme, with `published_by`, `published_at`, and a short optional note ("Admissions open for 2027/28"). The public site reads only the latest revision. That is one indexed row, which is also the cache key (§4.4).
-- **Log.** Revisions are never deleted, so the publish log is the revision table: who, when, the note, and a diff summary (sections added, removed or changed). The settings page shows the last 20. **Roll back** republishes an older snapshot as a new revision, logged as a rollback by whoever did it.
+- **Log.** Revisions are never deleted, so the publish log is the revision table: who, when, the note, and a diff summary (sections added, removed or changed). The settings page shows the last 20. **Roll back** republishes an older snapshot as a new revision, logged as a rollback by whoever did it. The draft is left as it is: the fix is made there and published in its turn. A draft nobody has touched yet, the six empty pages every school starts with, is nothing to publish.
 - **News posts and gallery albums** publish one item at a time (`NewsPost`, `Album`, each with draft/published state and `published_by`/`published_at`), because a school posts news weekly and should not have to republish the whole site to do it. Every publish or unpublish of an item writes a `SitePublishEvent` row (who, when, what, which item), so the single log the principal reads covers both kinds.
 - Images referenced by any revision are `PROTECT`ed: an old revision can always be rolled back to with its pictures.
 
@@ -774,15 +774,23 @@ Access tests:
 - Services: `save_draft_as`, `mark_ready_as`, `publish_as` (principal only), `rollback_as` (principal only), `set_delegation_as`.
 - No page and no public change.
 
+**Built.**
+- The app is `schoolsite`, a tenant app.
+- `save_draft_as` became one call per part of the draft: `save_page_as`, `add_section_as`, `save_section_as`, `remove_section_as`, `move_sections_as` and `save_footer_as`. There is also `set_theme_as`, the principal's.
+- Theme options are held to an allow-list (`schoolsite.themes`): a known theme key, that theme's header styles and font pairings, and the five colour roles as six-digit hex. Text on its surface must reach 4.5:1.
+- Revisions and both logs refuse UPDATE and DELETE in the model and by a trigger each.
+- **The "Ready for the principal" email moved to PR 4**, together with the preview page it links to (decided 25 October 2026). PR 2 records the ready state and its log row.
+- News and gallery sections are checked for shape only; whether the post or album exists is checked in PRs 5 and 6.
+
 Access tests:
 - the principal at A can publish at A and gets `NotAllowed` at B;
 - an administrator is refused draft edits at A until A's principal delegates, then allowed, then refused again after revocation, without signing out;
 - a delegated administrator is refused publish and rollback;
-- "Ready for the principal" emails only A's principal;
+- "Ready for the principal" is recorded in A's log only (its email to A's principal is PR 4's);
 - delegation at A gives nothing at B;
 - a teacher, bursar, VP academic, parent or student is refused every write;
 - a suspended or invited principal is refused;
-- a stale `updated_at` is refused;
+- a stale version is refused;
 - every publish and rollback writes exactly one log row naming the actor.
 
 ### PR 3: Public rendering, the starter theme, Sign in, caching, CSP
@@ -808,7 +816,8 @@ Access tests:
 - every `/website/` route refuses non-editors with 403 and refuses B's staff on A's host;
 - preview is `noindex` and `no-store` and is refused when signed out;
 - previewing another theme does not change the draft;
-- the delegation switch and the Publish button are refused to the administrator, delegated or not.
+- the delegation switch and the Publish button are refused to the administrator, delegated or not;
+- "Ready for the principal" emails A's principal, and only A's, a link to the preview (moved here from PR 2).
 
 ### PR 5: Images and the gallery
 
