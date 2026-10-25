@@ -7,7 +7,11 @@
 # /etc/classnode/backup.env), archive_mode stays off and the logs say so.
 set -euo pipefail
 
-args=(-c wal_level=replica)
+# The settings every Postgres here runs with (settings.sh says which, and why).
+# shellcheck disable=SC1091
+. /usr/local/lib/classnode/postgres-settings.sh
+
+args=(-c wal_level=replica "${CLASSNODE_PG_ARGS[@]}")
 # (WALG_FILE_PREFIX, a directory in place of the bucket, is for CI's backup test:
 # deploy/postgres/test-backup.sh.)
 if [ -n "${WALG_S3_PREFIX:-}${WALG_FILE_PREFIX:-}" ]; then

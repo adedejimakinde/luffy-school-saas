@@ -128,6 +128,69 @@ against — dropping or renaming something it reads — ships in two deploys: th
 first stops using the thing, the second removes it. A deploy that breaks that
 rule is recovered by restoring the database (H3), not by rolling back images.
 
+## Postgres settings
+
+`deploy/postgres/settings.sh` is the one place every Postgres in this repository
+takes its server settings from: production's database (`entrypoint.sh`), the
+weekly restore test's (`restore-serve.sh`), the suite's and the screens job's in
+CI (`.github/actions/test-database`), and the development compose file, which
+repeats the number. Today it holds one:
+
+- **`max_locks_per_transaction = 512`** (Postgres's default is 64). Postgres keeps
+  every lock in one pool of `max_locks_per_transaction x (max_connections +
+  max_prepared_transactions)` slots, 6,400 by default. **Making a school is one
+  transaction** that holds a lock on every table and index it creates until it
+  ends: about 1,350 for `School.save()` (CREATE SCHEMA and every migration inside
+  `create_school`'s transaction; 69 tables, 222 indexes), and about 1,700 for the
+  suite's clone of the template. That is a fifth of the default pool for one
+  school in production, and it is what failed CI: four parallel workers each
+  holding a few schools used the pool up and the next lock request anywhere
+  failed with `out of shared memory`. 512 makes the pool 51,200, about thirty
+  schools at once. The cost is some tens of megabytes of shared memory.
+  `schools/tests/test_lock_budget.py` measures the locks a school holds, on
+  whatever database the suite runs against, and fails with the setting to raise
+  when the suite's worst case at once (four workers, three schools each, a
+  quarter to spare) stops fitting: add tables until it does and it says so
+  before CI turns flaky.
+
+**Applying it to production needs a Postgres restart, and the next deploy does it
+with no manual step.** The setting is read when the server starts, so a running
+server cannot take it (`pg_reload_conf()` does not help). It is passed as an
+argument to `postgres` by `entrypoint.sh`, which is part of the `db` image, and
+`compose.yml` names that image by the commit being deployed
+(`postgres:${CLASSNODE_TAG}`), so `docker compose up -d db` in `deploy.sh` step 2
+recreates the container, and the new one starts with the argument. The database
+is unavailable for the few seconds that takes, before step 2's migration runs and
+while the old `web` is still serving, so deploy after school hours, as above.
+Existing data is untouched: the setting lives in the command line, not in the
+data directory.
+
+After the first deploy that carries it, check, on the server, in
+`/opt/classnode/deploy`:
+
+```
+docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SHOW max_locks_per_transaction"'
+```
+
+It must print `512`. If it prints `64` the container was not recreated; run
+`docker compose up -d --force-recreate db` (the same few seconds, out of hours)
+and ask again. Do not set it with `ALTER SYSTEM` or by editing `postgresql.conf`
+in the data directory: the argument overrides both, and a second place to
+change is how the two come to disagree.
+
+**A backup is restored with at least the limit of the server that made it.**
+Postgres refuses to recover WAL written by a server that had a higher limit than
+the recovering one. `restore-serve.sh` takes the same settings for that reason;
+a restore by hand onto another Postgres must start it with the same
+`max_locks_per_transaction` (backups made under 64 restore under 512 without
+change).
+
+CI proves it at three points, all by asking the running server and not the file:
+the `test-database` action prints the live values (and puts them in the run's
+summary) and fails the job if one differs; the `image` job's
+`deploy/postgres/test-backup.sh` starts the production image and fails if it did
+not start with them; and the suite checks the database it runs on.
+
 ## Migration order
 
 The order of everything that changes the schema, so it is never reasoned out at a

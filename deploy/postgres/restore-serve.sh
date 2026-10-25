@@ -6,6 +6,8 @@
 # volume: its data directory is a throwaway volume, it archives nothing, and it
 # listens only on the compose network.
 set -euo pipefail
+# shellcheck disable=SC1091
+. /usr/local/lib/classnode/postgres-settings.sh
 : "${WALG_S3_PREFIX:?WALG_S3_PREFIX is not set; there is nothing to restore from}"
 
 export PGDATA=/var/lib/postgresql/restore
@@ -18,8 +20,11 @@ gosu postgres wal-g backup-fetch "$PGDATA" LATEST
 gosu postgres touch "$PGDATA/recovery.signal"
 
 # Replay every archived segment, then become a normal read-write server so the
-# check can connect and ask its questions.
+# check can connect and ask its questions. With the live server's settings, not
+# the defaults: recovery refuses to run with a lower max_locks_per_transaction
+# than the server that wrote the WAL had (settings.sh).
 exec gosu postgres postgres \
+  "${CLASSNODE_PG_ARGS[@]}" \
   -c archive_mode=off \
   -c "restore_command=wal-g wal-fetch %f %p" \
   -c recovery_target_action=promote

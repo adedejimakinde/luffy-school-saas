@@ -49,26 +49,6 @@ jobs:
     # pg_get_triggerdef and the rest — which nothing but Postgres has. SQLite
     # or a mocked backend would turn the isolation proof into a tautology.
     services:
-      postgres:
-        # Matched to docker-compose.yml and to the production database image
-        # (deploy/postgres/Dockerfile), which is Debian because WAL-G ships
-        # glibc builds only. Text sorts by the C library's collation, so the
-        # tests run against the same one production does.
-        image: postgres:15-bookworm
-        env:
-          POSTGRES_DB: luffy_db
-          POSTGRES_USER: luffy_admin
-          POSTGRES_PASSWORD: changeme
-        ports:
-          - 5432:5432
-        # Without this the first migration can land before Postgres is
-        # accepting connections, which fails as a confusing OperationalError.
-        options: >-
-          --health-cmd "pg_isready -U luffy_admin -d luffy_db"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       # The Celery broker. Here for one test — the one that opens a connection
       # to the configured broker and pings it. Everything else about the queue
       # can be asserted from configuration alone, but "the URL in settings.py
@@ -109,6 +89,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # Postgres, started by a step and not as a service container, so that the
+      # settings in deploy/postgres/settings.sh reach the server as arguments
+      # (the action says why), and so the log and the run's summary show the
+      # values it is actually running with.
+      - uses: ./.github/actions/test-database
+
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
@@ -122,8 +108,8 @@ jobs:
       # The same WeasyPrint list as .devcontainer/Dockerfile, which says more
       # about why. That file installs `postgresql-client` alongside these and
       # this one deliberately does not: the client is for reaching the database
-      # by hand from a devcontainer shell, and CI talks to the `postgres`
-      # service through psycopg2. Everything WeasyPrint needs is in both.
+      # by hand from a devcontainer shell, and CI talks to the test database
+      # through psycopg2. Everything WeasyPrint needs is in both.
       - name: WeasyPrint system libraries
         run: |
           sudo apt-get update
@@ -295,20 +281,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    services:
-      postgres:
-        image: postgres:15-bookworm
-        env:
-          POSTGRES_DB: luffy_db
-          POSTGRES_USER: luffy_admin
-          POSTGRES_PASSWORD: changeme
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U luffy_admin -d luffy_db"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     env:
       POSTGRES_DB: luffy_db
       POSTGRES_USER: luffy_admin
@@ -322,6 +294,12 @@ jobs:
       SCREENS_OUT: screens
     steps:
       - uses: actions/checkout@v5
+
+      # Postgres, started by a step and not as a service container, so that the
+      # settings in deploy/postgres/settings.sh reach the server as arguments
+      # (the action says why), and so the log and the run's summary show the
+      # values it is actually running with.
+      - uses: ./.github/actions/test-database
 
       - uses: actions/setup-python@v6
         with:

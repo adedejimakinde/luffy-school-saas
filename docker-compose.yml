@@ -86,6 +86,9 @@ services:
     # A volume first created under the old Alpine image should be recreated
     # (development data is disposable) or reindexed: `REINDEX DATABASE`.
     image: postgres:15-bookworm
+    # The same settings as production and CI (deploy/postgres/settings.sh, which
+    # says why this one matters): the suite runs against this database too.
+    command: ["postgres", "-c", "max_locks_per_transaction=512"]
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data

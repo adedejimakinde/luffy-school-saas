@@ -1,0 +1,69 @@
+name: The test database
+description: >-
+  Postgres 15 for the suite and the screens job, started with the settings in
+  deploy/postgres/settings.sh as arguments to the server, and asked for their
+  live values before anything runs.
+
+# Why this is a step and not a `services:` block. A service container takes
+# `options` for `docker create`, which cannot carry arguments to the server in
+# the image, and Postgres reads `max_locks_per_transaction` only at start. So the
+# suite's overlapping school-making (a lock on every table and index, held to the
+# end of the transaction) used the default pool of 6,400 locks up, and CI failed
+# with `out of shared memory` in whichever tests were unlucky. A `docker run` can
+# carry them, and the same file starts production's database (`entrypoint.sh`),
+# so the suite runs against the settings production does.
+#
+# Run it after `actions/checkout`: it reads the file from the checkout.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        . deploy/postgres/settings.sh
+        docker run -d --name test-postgres -p 5432:5432 \
+          -e POSTGRES_DB=luffy_db \
+          -e POSTGRES_USER=luffy_admin \
+          -e POSTGRES_PASSWORD=changeme \
+          postgres:15-bookworm postgres "${CLASSNODE_PG_ARGS[@]}"
+
+        # `-h 127.0.0.1`: while the image initialises the cluster, a first server
+        # listens on the socket only, and answers a bare `pg_isready`. The TCP
+        # port is the real one.
+        ready=0
+        for _ in $(seq 60); do
+          if docker exec test-postgres pg_isready -h 127.0.0.1 -U luffy_admin -d luffy_db -q; then
+            ready=1
+            break
+          fi
+          sleep 1
+        done
+        if [ "$ready" != 1 ]; then
+          docker logs test-postgres || true
+          echo "::error::Postgres did not become ready"
+          exit 1
+        fi
+
+        # The live values, from the server and not from the file: what is
+        # written down and not applied is what this exists to catch.
+        {
+          echo "### The test database"
+          echo
+          echo "| setting | live value | asked for |"
+          echo "|---|---|---|"
+        } >> "$GITHUB_STEP_SUMMARY"
+        failed=0
+        for setting in "${CLASSNODE_PG_SETTINGS[@]}"; do
+          name="${setting%%=*}"
+          want="${setting#*=}"
+          live="$(docker exec test-postgres psql -U luffy_admin -d luffy_db -tAc "SHOW $name")"
+          echo "test database: $name = $live (settings.sh asks for $want)"
+          echo "| \`$name\` | $live | $want |" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$live" != "$want" ]; then
+            echo "::error::the test database started with $name = $live, not $want"
+            failed=1
+          fi
+        done
+        for name in max_connections max_prepared_transactions; do
+          echo "test database: $name = $(docker exec test-postgres psql -U luffy_admin -d luffy_db -tAc "SHOW $name")"
+        done
+        [ "$failed" = 0 ] || exit 1
