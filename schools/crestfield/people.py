@@ -1,10 +1,9 @@
 """Crestfield's made-up people: staff, 300 students and their guardians.
 
-Every name is invented from common Yorùbá, Igbo and Hausa names, written the
-way each language writes them: Yorùbá with its tone marks and under-dots
-(Fúnmiláyọ̀, Ọlátúnjí), Igbo with its dotted vowels (Ọbịnna, Nnamdị), Hausa
-with its hooked ɗ (Ɗanjuma) and its apostrophe for the glottal stop (Sa'adatu).
-Any match with a real person is chance.
+Every name is invented from common Yoruba, Igbo and Hausa names, spelt the
+way Nigerian secondary schools record them: plain letters, no tone marks, no
+under-dots and no hooked letters (Oluwaseun Adebayo, Chukwuemeka Okafor, Aisha
+Bello). Any match with a real person is chance.
 
 Everybody is dealt by a seeded `random.Random`, so a reset makes the same
 school every time: the same child in the same seat with the same admission
@@ -21,86 +20,86 @@ YORUBA, IGBO, HAUSA = "yoruba", "igbo", "hausa"
 
 FIRST = {
     (YORUBA, "female"): (
-        "Fúnmiláyọ̀", "Tèmítọ́pẹ́", "Adérónkẹ́", "Fọlákẹ́", "Mọ́rẹ́nikẹ́", "Àyìnkẹ́", "Yẹ́misí",
-        "Títílayọ̀", "Bùsáyọ̀", "Ọmọ́tọ́lá", "Oyínkánsọ́lá", "Ìbùkún", "Adéọlá", "Ìfẹ́olúwa",
-        "Tọ́lání", "Damilọ́lá", "Ìyanu", "Kẹ́hìndé",
+        "Funmilayo", "Temitope", "Aderonke", "Folake", "Morenike", "Ayinke", "Yemisi",
+        "Titilayo", "Busayo", "Omotola", "Oyinkansola", "Ibukun", "Adeola", "Ifeoluwa",
+        "Tolani", "Damilola", "Iyanu", "Kehinde",
     ),
     (YORUBA, "male"): (
-        "Adébáyọ̀", "Babátúndé", "Ṣẹ́gun", "Kúnlé", "Gbénga", "Olúwaṣeun", "Ọláolúwa", "Ayọ̀délé",
-        "Ọlámidé", "Táíwò", "Fẹ́mi", "Túndé", "Wálé", "Dámilárè", "Ayọ̀mídé", "Ọlámilékan",
-        "Akínkúnmi", "Ṣeun",
+        "Adebayo", "Babatunde", "Segun", "Kunle", "Gbenga", "Oluwaseun", "Olaoluwa", "Ayodele",
+        "Olamide", "Taiwo", "Femi", "Tunde", "Wale", "Damilare", "Ayomide", "Olamilekan",
+        "Akinkunmi", "Seun",
     ),
     (IGBO, "female"): (
         "Chiamaka", "Ngozi", "Adaeze", "Chidinma", "Oluchi", "Ifeoma", "Obiageli", "Nkechi",
-        "Amarachi", "Chinonso", "Ụchechi",
+        "Amarachi", "Chinonso", "Uchechi",
     ),
     (IGBO, "male"): (
-        "Chukwuemeka", "Ọbịnna", "Nnamdị", "Ifeanyị", "Ụchenna", "Kelechi", "Chinedu", "Chigozie",
-        "Ikenna", "Somtochukwu", "Chibụzọ", "Ụzọma", "Ebuka",
+        "Chukwuemeka", "Obinna", "Nnamdi", "Ifeanyi", "Uchenna", "Kelechi", "Chinedu", "Chigozie",
+        "Ikenna", "Somtochukwu", "Chibuzor", "Uzoma", "Ebuka",
     ),
     (HAUSA, "female"): (
-        "Hauwa", "Zainab", "Halima", "Fatima", "Aisha", "Bilkisu", "Hadiza", "Sa'adatu", "Nafisa",
+        "Hauwa", "Zainab", "Halima", "Fatima", "Aisha", "Bilkisu", "Hadiza", "Saadatu", "Nafisa",
         "Khadija", "Maryam", "Rahma",
     ),
     (HAUSA, "male"): (
-        "Abubakar", "Aminu", "Ibrahim", "Musa", "Yusuf", "Umar", "Sani", "Rabi'u", "Ɗanjuma",
+        "Abubakar", "Aminu", "Ibrahim", "Musa", "Yusuf", "Umar", "Sani", "Rabiu", "Danjuma",
         "Kabiru", "Bashir", "Nasiru",
     ),
 }
 
 SURNAMES = {
     YORUBA: (
-        "Adéyẹmí", "Ògúnlẹ́yẹ", "Akínwùmí", "Ọlátúnjí", "Àlàbí", "Ajíbádé", "Fálọlá", "Ọ̀jó",
-        "Adésànyà", "Bámidélé", "Oyèláràn", "Àjàyí", "Adéwálé", "Ọláníyàn", "Akínọlá",
-        "Ògúndípẹ̀", "Adéyínká", "Bọ́lárìnwá", "Ọ̀ṣúntókùn", "Adébáyọ̀",
+        "Adeyemi", "Ogunleye", "Akinwumi", "Olatunji", "Alabi", "Ajibade", "Falola", "Ojo",
+        "Adesanya", "Bamidele", "Oyelaran", "Ajayi", "Adewale", "Olaniyan", "Akinola",
+        "Ogundipe", "Adeyinka", "Bolarinwa", "Osuntokun", "Adebayo",
     ),
     IGBO: (
-        "Eze", "Nwankwọ", "Okeke", "Anyanwụ", "Nnadị", "Igwe", "Obi", "Chukwu", "Nwosu", "Ugwu",
-        "Ọkafọ", "Ezenwa", "Mbah", "Okoro",
+        "Eze", "Nwankwo", "Okeke", "Anyanwu", "Nnadi", "Igwe", "Obi", "Chukwu", "Nwosu", "Ugwu",
+        "Okafor", "Ezenwa", "Mbah", "Okoro",
     ),
     HAUSA: (
-        "Bello", "Abdullahi", "Ɗanjuma", "Garba", "Usman", "Lawal", "Shehu", "Aliyu", "Ɗanladi",
+        "Bello", "Abdullahi", "Danjuma", "Garba", "Usman", "Lawal", "Shehu", "Aliyu", "Danladi",
         "Yakubu", "Sule", "Idris", "Kabir",
     ),
 }
 
-#: About half Yorùbá, as an Abẹ́òkúta school would be, then Igbo, then Hausa.
+#: About half Yoruba, as an Abeokuta school would be, then Igbo, then Hausa.
 PEOPLES = ((YORUBA, 50), (IGBO, 30), (HAUSA, 20))
 
 #: The staff who are not class or subject teachers: `(key, role, full name)`.
 #: Logins are `cfc.<key>`. The role is `accounts.models.Role`'s value.
 OFFICE = (
-    ("principal", "principal", "Dr Fúnmiláyọ̀ Adéyẹmí"),
-    ("vp", "vp_academic", "Mr Chukwuemeka Nwankwọ"),
-    ("admin", "admin", "Mrs Hauwa Ɗanjuma"),
-    ("bursar", "bursar", "Mr Babátúndé Ọlátúnjí"),
+    ("principal", "principal", "Dr Funmilayo Adeyemi"),
+    ("vp", "vp_academic", "Mr Chukwuemeka Nwankwo"),
+    ("admin", "admin", "Mrs Hauwa Danjuma"),
+    ("bursar", "bursar", "Mr Babatunde Olatunji"),
 )
 
 #: Fifteen teachers: `(key, full name, the class they keep or "")`. Who teaches
 #: what is `school.SUBJECT_TEACHERS`. `teacher` is the demo's teacher login:
 #: JSS mathematics, and JSS 2B's class teacher, whose sheet is still open.
 TEACHERS = (
-    ("teacher", "Mrs Tèmítọ́pẹ́ Àlàbí", "JSS 2B"),
-    ("t02", "Mr Ọbịnna Eze", "SS 3A"),
+    ("teacher", "Mrs Temitope Alabi", "JSS 2B"),
+    ("t02", "Mr Obinna Eze", "SS 3A"),
     ("t03", "Mrs Ngozi Okeke", "JSS 1A"),
-    ("t04", "Mr Kúnlé Àjàyí", "SS 3B"),
+    ("t04", "Mr Kunle Ajayi", "SS 3B"),
     ("t05", "Miss Zainab Bello", "JSS 1B"),
-    ("t06", "Mr Ṣẹ́gun Ògúnlẹ́yẹ", "JSS 3A"),
-    ("t07", "Mrs Chiamaka Anyanwụ", "JSS 2A"),
+    ("t06", "Mr Segun Ogunleye", "JSS 3A"),
+    ("t07", "Mrs Chiamaka Anyanwu", "JSS 2A"),
     ("t08", "Mr Ibrahim Abdullahi", "SS 2B"),
-    ("t09", "Mrs Adérónkẹ́ Ọ̀jó", "JSS 3B"),
-    ("t10", "Mr Ifeanyị Nnadị", "SS 1B"),
+    ("t09", "Mrs Aderonke Ojo", "JSS 3B"),
+    ("t10", "Mr Ifeanyi Nnadi", "SS 1B"),
     ("t11", "Mrs Halima Garba", "SS 1A"),
-    ("t12", "Mr Olúwaṣeun Adésànyà", "SS 2A"),
+    ("t12", "Mr Oluwaseun Adesanya", "SS 2A"),
     ("t13", "Mrs Nkechi Igwe", ""),
-    ("t14", "Mr Musa Ɗanladi", ""),
-    ("t15", "Mrs Ọmọ́tọ́lá Akínwùmí", ""),
+    ("t14", "Mr Musa Danladi", ""),
+    ("t15", "Mrs Omotola Akinwumi", ""),
 )
 
 #: The demo parent (`cfc.parent`) and the two children the brochure shows: one
 #: in JSS 2A and one in SS 1A, both classes released.
-PARENT = "Mrs Adéọlá Bámidélé"
-PARENT_CHILDREN = (("JSS 2A", "Ìfẹ́olúwa Bámidélé", "female"), ("SS 1A", "Ọlámidé Bámidélé", "male"))
+PARENT = "Mrs Adeola Bamidele"
+PARENT_CHILDREN = (("JSS 2A", "Ifeoluwa Bamidele", "female"), ("SS 1A", "Olamide Bamidele", "male"))
 
 #: Area codes for the guardians' 555-01xx numbers: a hundred numbers each.
 AREA_CODES = ("201", "202", "203", "205", "206", "207")

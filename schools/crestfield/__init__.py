@@ -2,9 +2,9 @@
 
 `manage.py crestfield create` makes it once and `manage.py crestfield reset`
 puts it back to exactly this state before each visit. A made-up day secondary
-school in Abẹ́òkúta at the end of its first term:
+school in Abeokuta at the end of its first term:
 
-- **JSS 1A to SS 3B**, twelve classes of 25, 300 students with Yorùbá, Igbo and
+- **JSS 1A to SS 3B**, twelve classes of 25, 300 students with Yoruba, Igbo and
   Hausa names (`people.py`), each with a guardian, some with a brother or
   sister in another class.
 - **Staff**: a principal, a vice principal (academic), an administrator, a
@@ -77,10 +77,10 @@ SIGN_INS = {
 MIN_PASSWORD = 12
 CONTACT_EMAIL = "office.crestfield@example.com"
 ABOUT = (
-    "Crestfield College is a day secondary school in Abẹ́òkúta, JSS 1 to SS 3. "
+    "Crestfield College is a day secondary school in Abeokuta, JSS 1 to SS 3. "
     "It is not a real school: Classnode uses it to show schools what Classnode does."
 )
-ADDRESS = "Ìbàrà, Abẹ́òkúta, Ogun State"
+ADDRESS = "Ibara, Abeokuta, Ogun State"
 LGA = "Abeokuta South"
 
 PER_CLASS = 25
@@ -104,7 +104,7 @@ SUBJECTS = (
     ("Basic Science", "BSC"),
     ("Basic Technology", "BTE"),
     ("Social Studies", "SOS"),
-    ("Yorùbá", "YOR"),
+    ("Yoruba", "YOR"),
     ("Business Studies", "BUS"),
     ("Computer Studies", "CMP"),
     ("Biology", "BIO"),

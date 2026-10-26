@@ -67,14 +67,14 @@ BANK = {
         (
             "Which sentence is in the past tense?",
             (
-                "We visit Olúmọ Rock every year.",
-                "We will visit Olúmọ Rock next year.",
-                "We visited Olúmọ Rock last year.",
-                "We are visiting Olúmọ Rock today.",
+                "We visit Olumo Rock every year.",
+                "We will visit Olumo Rock next year.",
+                "We visited Olumo Rock last year.",
+                "We are visiting Olumo Rock today.",
             ),
             2,
         ),
-        ("Fill the gap: Neither Bọ́lá nor her brothers ___ at home.", ("was", "were", "is", "has been"), 1),
+        ("Fill the gap: Neither Bola nor her brothers ___ at home.", ("was", "were", "is", "has been"), 1),
         ("Which word is the adjective? Amaka wore a beautiful dress.", ("Amaka", "wore", "beautiful", "dress"), 2),
     ),
 }

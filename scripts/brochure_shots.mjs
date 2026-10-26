@@ -47,7 +47,7 @@ from results import checker
 from results.models import ResultSheet
 from schools import crestfield
 school = crestfield.find()
-child = Membership.objects.get(school=school, role=Role.STUDENT, user__full_name="Ìfẹ́olúwa Bámidélé")
+child = Membership.objects.get(school=school, role=Role.STUDENT, user__full_name="Ifeoluwa Bamidele")
 principal = Membership.objects.get(school=school, role=Role.PRINCIPAL).user
 with schema_context(school.schema_name):
     sheet = ResultSheet.objects.get(class_group__name="JSS 2A", term__is_current=True)

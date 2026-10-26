@@ -9,13 +9,13 @@ from schoolsite import services
 from schoolsite.models import Page
 
 HERO = {
-    "heading": "Learning with character in Abẹ́òkúta",
+    "heading": "Learning with character in Abeokuta",
     "subheading": "A day secondary school for boys and girls, JSS 1 to SS 3. This is Classnode's demo school.",
     "buttons": [{"label": "Admissions", "link": "/admissions/"}, {"label": "Visit us", "link": "/contact/"}],
 }
-MOTTO = {"motto": "Ìmọ̀ àti ìwà", "language": "yo", "translation": "Knowledge and character", "founded": 2004}
+MOTTO = {"motto": "Imo ati iwa", "language": "yo", "translation": "Knowledge and character", "founded": 2004}
 MESSAGE = {
-    "name": "Dr Fúnmiláyọ̀ Adéyẹmí",
+    "name": "Dr Funmilayo Adeyemi",
     "title": "Principal",
     "message": (
         "Welcome to Crestfield College. We teach the full Nigerian curriculum from JSS 1 to SS 3, "
@@ -39,14 +39,14 @@ ADMISSIONS = {
 ABOUT = {
     "heading": "Our story",
     "body": (
-        "Crestfield College opened in 2004 with sixty students in two classrooms off the Ìbàrà road.\n\n"
+        "Crestfield College opened in 2004 with sixty students in two classrooms off the Ibara road.\n\n"
         "Today we teach science and arts streams in the senior school, with clubs for debate, "
         "coding, football and the press. Crestfield is a made-up school: Classnode uses it to show "
         "what a school's website, report cards and fees look like."
     ),
 }
 CONTACT = {"hours": "Monday to Friday, 7:30am to 4pm", "latitude": 7.1475, "longitude": 3.3619}
-FOOTER = {"address_line": "Ìbàrà, Abẹ́òkúta, Ogun State"}
+FOOTER = {"address_line": "Ibara, Abeokuta, Ogun State"}
 
 
 def publish(principal, school):

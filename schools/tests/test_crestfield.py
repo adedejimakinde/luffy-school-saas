@@ -470,6 +470,32 @@ class TheDemoDataTests(SimpleTestCase):
                 self.assertEqual(len(set(options)), 4, text)
                 self.assertIn(answer, range(4), text)
 
+    def test_every_name_and_sentence_is_plainly_spelt(self):
+        """No tone marks, under-dots or hooked letters: names as schools record them.
+
+        Money keeps its naira sign and the questions their maths signs; nothing
+        else in the demo's data is outside plain ASCII.
+        """
+        from schools.crestfield import site
+
+        names = [n for pool in people.FIRST.values() for n in pool]
+        names += [n for pool in people.SURNAMES.values() for n in pool]
+        names += [n for _, _, n in people.OFFICE] + [n for _, n, _ in people.TEACHERS]
+        names += [people.PARENT] + [n for _, n, _ in people.PARENT_CHILDREN]
+        names += [crestfield.NAME, crestfield.ABOUT, crestfield.ADDRESS, crestfield.LGA]
+        names += [name for name, _ in crestfield.SUBJECTS]
+        names += [json.dumps(v, ensure_ascii=False) for v in (site.HERO, site.MOTTO, site.MESSAGE, site.FACTS,
+                                                               site.ADMISSIONS, site.ABOUT, site.CONTACT, site.FOOTER)]
+        names += [line for lines in (crestfield.TEACHER_SAYS, crestfield.PRINCIPAL_SAYS)
+                  for _, said in lines for line in (said if isinstance(said, tuple) else (said,))]
+        for text in names:
+            self.assertTrue(text.isascii(), text)
+        allowed = set("₦−°×")
+        for bank in questions.BANK.values():
+            for text, options, _ in bank:
+                for part in (text, *options):
+                    self.assertEqual({c for c in part if not c.isascii()} - allowed, set(), part)
+
     def test_the_roll_is_the_same_every_time_and_names_nobody_twice(self):
         names = [name for name, _ in crestfield.CLASSES]
         first, guardians = people.roll(names, 25, "crestfield")

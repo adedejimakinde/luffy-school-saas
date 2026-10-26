@@ -12,13 +12,13 @@ below is about keeping it apart from them.
 
 ## What is in it
 
-A day secondary school in Abẹ́òkúta at the end of its first term. All of it is
+A day secondary school in Abeokuta at the end of its first term. All of it is
 made up; any match with a real person is chance.
 
 | | |
 |---|---|
 | Classes | JSS 1A to SS 3B, two arms a year, 25 students each (300) |
-| People | Yorùbá, Igbo and Hausa names with their tone marks, dotted vowels and hooked letters; one guardian per family, some with two children here |
+| People | Yoruba, Igbo and Hausa names in plain spelling, as schools record them (no tone marks or under-dots); one guardian per family, some with two children here |
 | Staff | principal, vice principal (academic), administrator, bursar, 15 teachers; who teaches what is set per class, so marking is narrowed |
 | Term | twelve weeks ending on the day of the reset, less two days of mid-term; a register for every school day |
 | Results | the Ogun State sheet, every paper marked, both conduct sections rated, remarks written. Released: JSS 1A, JSS 2A, SS 1A (with result-checker slips printed). Waiting on the principal: six classes. Still open with the class teacher: JSS 2B, SS 3A, SS 3B |
@@ -37,9 +37,9 @@ school sends none. There is no noticeboard feature to fill.
 ## Sign-ins
 
 Three logins can sign in, all at `https://app.classnode.co/staff-sign-in/` with a
-password: `cfc.principal` (Dr Fúnmiláyọ̀ Adéyẹmí), `cfc.teacher` (Mrs Tèmítọ́pẹ́
-Àlàbí: JSS mathematics, class teacher of JSS 2B, whose sheet is still open) and
-`cfc.parent` (Mrs Adéọlá Bámidélé: Ìfẹ́olúwa in JSS 2A and Ọlámidé in SS 1A, both
+password: `cfc.principal` (Dr Funmilayo Adeyemi), `cfc.teacher` (Mrs Temitope
+Alabi: JSS mathematics, class teacher of JSS 2B, whose sheet is still open) and
+`cfc.parent` (Mrs Adeola Bamidele: Ifeoluwa in JSS 2A and Olamide in SS 1A, both
 released). Nobody else at the school has a password.
 
 The passwords are in one file on the server and nowhere else: not in this
