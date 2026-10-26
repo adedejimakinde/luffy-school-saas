@@ -110,8 +110,8 @@ const SMALL_ON_PURPOSE =
   // The Ogun State sheet beside the report card's words: a drawing of the
   // paper sheet at its own sizes, its labels small as the paper's are.
   ".sheet, " +
-  // The public footer: the owner's spec sets its links at 14px and its
-  // column headings at 12px, white on navy at 9.3:1 and 5.6:1.
+  // The public footer: small and calm by the owner's spec, 13 and 14px,
+  // white on navy at 9.3:1 and 6.5:1.
   ".site-foot";
 
 /**
@@ -346,6 +346,63 @@ function measure({ smallOnPurpose, phone, wide, wideTables }) {
   return problems;
 }
 
+/**
+ * The public site's header, on every width: it stays at the top while the page
+ * scrolls, takes its own room so it never covers the page (the first line, or
+ * the place a link to a section lands), shows its shadow only once the page has
+ * scrolled, carries a "Book a demo" button, and below 1024px opens a menu panel
+ * the width of the screen.
+ */
+async function siteHeader({ width }) {
+  const problems = [];
+  const head = document.querySelector(".site-head");
+  const box = (el) => el.getBoundingClientRect();
+  const frames = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  scrollTo(0, 0);
+  await frames();
+  if (getComputedStyle(head).position !== "sticky") problems.push("the header is not sticky");
+  if (Math.abs(box(head).height - 72) > 1) problems.push(`the header is ${box(head).height}px tall, not 72`);
+  if (head.classList.contains("is-scrolled")) problems.push("the header shows its shadow at the top of the page");
+  if (box(document.querySelector("main")).top < box(head).bottom - 0.5) problems.push("the page starts under the header");
+  const demo = [...head.querySelectorAll('a.btn[href="/#demo"]')].filter((a) => box(a).width > 0);
+  if (width >= 360 && demo.length !== 1) problems.push(`${demo.length} "Book a demo" buttons in the header bar, not 1`);
+  for (const a of demo) if (box(a).height < 44) problems.push(`the header's button is ${Math.round(box(a).height)}px tall, under 44`);
+  const bar = head.querySelector(".head-inner");
+  if (bar.scrollWidth > bar.clientWidth) problems.push("the header's bar is wider than the screen");
+
+  scrollTo(0, Math.min(700, document.documentElement.scrollHeight - innerHeight));
+  await frames();
+  if (Math.abs(box(head).top) > 0.5) problems.push("the header leaves the top when the page scrolls");
+  if (!head.classList.contains("is-scrolled") || getComputedStyle(head).boxShadow === "none") problems.push("the header has no shadow once the page has scrolled");
+
+  const here = location.pathname;
+  for (const link of document.querySelectorAll('a[href^="#"], a[href^="/#"]')) {
+    const el = link.pathname === here && link.hash.length > 1 && document.getElementById(link.hash.slice(1));
+    if (!el) continue;
+    el.scrollIntoView({ behavior: "instant" });
+    await frames();
+    if (box(el).top < box(head).bottom - 0.5) problems.push(`${link.hash} lands under the header`);
+  }
+
+  if (width < 1024) {
+    scrollTo(0, 0);
+    const menu = document.getElementById("site-menu");
+    menu.showPopover();
+    await frames();
+    const m = box(menu);
+    if (Math.round(m.left) !== 0 || Math.round(m.width) !== document.documentElement.clientWidth) problems.push(`the menu is ${Math.round(m.width)}px wide at ${Math.round(m.left)}px, not the screen's width`);
+    if (m.top < box(head).bottom - 0.5) problems.push("the menu opens over the header");
+    if (m.bottom > innerHeight + 0.5) problems.push("the menu runs off the bottom of the screen");
+    const links = [...menu.querySelectorAll("a")].filter((a) => box(a).width > 0);
+    if (!links.some((a) => a.classList.contains("btn")) && width < 360) problems.push("the menu has no Book a demo button");
+    for (const a of links) if (box(a).height < 44) problems.push(`a menu link is ${Math.round(box(a).height)}px tall, under 44`);
+    menu.hidePopover();
+  }
+  scrollTo(0, 0);
+  await frames();
+  return problems;
+}
+
 /** The public site's own layout rules, measured in the page. */
 function measureSite({ width }) {
   const problems = [];
@@ -379,20 +436,25 @@ function measureSite({ width }) {
       if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
-    // The footer on a phone: all of it on the left, its links a thumb tall.
+    // The footer on a phone: small and calm, about a third of a screen, all of
+    // it centred, its links a thumb tall and wrapping in even rows.
     const foot = document.querySelector(".site-foot");
-    for (const el of foot.querySelectorAll("*")) {
-      if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
-        problems.push(`the footer's ${el.className || el.tagName} is not left-aligned`);
-      }
+    if (box(foot).height > 300) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over 300`);
+    for (const el of foot.querySelectorAll("p, nav, a")) {
+      if (getComputedStyle(el).textAlign !== "center") problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is not centred`);
     }
+    for (const el of foot.querySelectorAll("*")) {
+      if (parseFloat(getComputedStyle(el).fontSize) > 18) problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is large type`);
+    }
+    if (foot.querySelectorAll("h1, h2, h3, .logo").length !== 1) problems.push("the footer has a heading or a second logo");
     const legal = foot.querySelector(".foot-legal");
-    if (Math.round(box(legal).left) !== 16) problems.push("the footer's legal line is off the left edge");
     // It may wrap: text kept on one line runs past its box on a small phone.
     if (legal.scrollWidth > legal.clientWidth) problems.push(`the footer's legal line is ${legal.scrollWidth}px in ${legal.clientWidth}px`);
-    for (const a of foot.querySelectorAll(".foot-col a")) {
+    for (const a of foot.querySelectorAll(".foot-links a")) {
       if (box(a).height < 44) problems.push(`a footer link is ${Math.round(box(a).height)}px tall, under 44: "${a.textContent.trim()}"`);
     }
+    const rows = new Set([...foot.querySelectorAll(".foot-links a")].map((a) => Math.round(box(a).top)));
+    if (rows.size > 1 && foot.querySelectorAll(".foot-links a").length % rows.size) problems.push("the footer's links wrap to uneven rows");
   }
   if (width < 640 && home) {
     // The form's button is full width; the hero's two share the row from 360px
@@ -622,6 +684,7 @@ async function check(page, width, name, site = false) {
   mkdirSync(join(OUT, String(width)), { recursive: true });
   const siteProblems = site ? await page.evaluate(measureSite, { width }) : [];
   if (site && width < 640) siteProblems.push(...(await page.evaluate(heroOnAPhone)));
+  if (site) siteProblems.push(...(await page.evaluate(siteHeader, { width })));
   await page.screenshot({ path: join(OUT, String(width), `${name}.png`), fullPage: true });
   return (
     await page.evaluate(measure, {

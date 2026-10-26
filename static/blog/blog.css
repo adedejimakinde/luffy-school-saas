@@ -11,10 +11,10 @@
  *   nothing below them moves as they load.
  */
 
-.blog-top { padding: 104px 0 32px; }
+.blog-top { padding: 32px 0 32px; }
 .blog-top h1 { margin: 0; color: var(--text); font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.02em; }
 .blog-top p { margin: 12px 0 0; max-width: 60ch; color: var(--on-band); font-size: var(--copy-lg); }
-@media (min-width: 768px) { .blog-top { padding: 120px 0 40px; } }
+@media (min-width: 768px) { .blog-top { padding: 48px 0 40px; } }
 
 .cover { display: block; width: 100%; height: auto; aspect-ratio: 1200 / 630; object-fit: cover; background: var(--brand-wash); border-radius: 12px; }
 .post-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; color: var(--muted); font-size: var(--copy-note); }
@@ -57,7 +57,7 @@
 
 /* ---------------------------------------------------------------- a post */
 
-.post-top { padding: 96px 0 32px; }
+.post-top { padding: 24px 0 32px; }
 .post-top .wrap > * { max-width: 760px; }
 .crumb { display: inline-flex; align-items: center; gap: 4px; min-height: 44px; margin: 0 0 8px; font-size: var(--copy-note); font-weight: 700; }
 .crumb .icon { width: 18px; height: 18px; }

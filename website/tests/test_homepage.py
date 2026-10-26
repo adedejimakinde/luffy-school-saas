@@ -81,8 +81,7 @@ COPY = [
     "See it with your own classes.",
     "Book a demo and we will call you within two working days.",
     "School management for Nigerian secondary schools.",
-    "Product", "Features", "Pricing", "Sign in", "Staff sign in", "Parent sign in",
-    "Company", "Privacy", "Terms", "hello@classnode.co",
+    "Features", "Pricing", "Blog", "Contact", "Privacy", "Terms", "hello@classnode.co",
     "© 2026 Classnode Edtech Limited · RC 9926572",
 ]
 
@@ -369,39 +368,63 @@ class TheReportSheetTests(SiteSetUp):
         self.assertIn("a demo school", caption)
 
 
+class TheHeaderTests(SiteSetUp):
+    """The header stays at the top, has a demo button on a phone, and takes its own room."""
+
+    def test_the_phone_bar_carries_a_demo_button_beside_the_menu(self):
+        head = self.get().content.decode().split('<header class="site-head">', 1)[1].split("</header>", 1)[0]
+        self.assertLess(head.index('class="btn btn-primary head-cta" href="/#demo"'), head.index('class="menu-toggle"'))
+
+    def test_it_is_sticky_and_in_the_flow_so_it_never_covers_the_page(self):
+        css = (STATIC / "website/website.css").read_text()
+        rule = re.search(r"\n\.site-head \{([^}]*)\}", css).group(1)
+        self.assertIn("position: sticky", rule)
+        self.assertIn("top: 0", rule)
+        self.assertNotIn("absolute", rule)
+
+    def test_the_scrolled_state_is_set_outside_the_blocks_a_page_overrides(self):
+        page = self.get().content.decode()
+        self.assertLess(page.index('classList.toggle("is-scrolled"'), page.index("The phone menu closes"))
+
+
 class TheFooterTests(SiteSetUp):
-    """The owner's footer: the logo and one line, three columns of links, one legal line."""
+    """The footer: small and calm. The logo and one line, one row of links, the email and one legal line."""
 
     def footer(self, path="/"):
         return self.get(path).content.decode().split('<footer class="site-foot', 1)[1].split("</footer>", 1)[0]
 
-    def test_three_columns_hold_the_given_links_in_order(self):
-        columns = re.findall(r'<div class="foot-col[^"]*">(.*?)</div>', self.footer(), flags=re.S)
-        found = [
-            (words(re.search(r"<h2[^>]*>(.*?)</h2>", column, flags=re.S).group(1)),
-             [(href, words(label)) for href, label in
-              re.findall(r'<a href="([^"]+)">(.*?)</a>', column, flags=re.S)])
-            for column in columns
-        ]
-        self.assertEqual(found, [
-            ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
-                         ("/#demo", "Book a demo")]),
-            ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
-                         (f"//{PORTAL}/sign-in/", "Parent sign in")]),
-            ("Company", [("/privacy/", "Privacy"), ("/terms/", "Terms"),
-                         ("mailto:hello@classnode.co", "hello@classnode.co")]),
-        ])
+    def test_one_row_holds_the_given_links_in_order(self):
+        nav = re.search(r'<nav class="foot-links"[^>]*>(.*?)</nav>', self.footer(), flags=re.S).group(1)
+        self.assertEqual(
+            [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', nav, flags=re.S)],
+            [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"), ("/#demo", "Contact"),
+             ("/privacy/", "Privacy"), ("/terms/", "Terms")],
+        )
+
+    def test_it_is_small_one_logo_no_headings_and_no_second_call_to_action(self):
+        footer = self.footer()
+        self.assertEqual(footer.count('class="logo"'), 1)
+        self.assertNotRegex(footer, r"<h[1-6]\b")
+        self.assertNotIn("btn", footer)
+        self.assertNotIn("Book a demo", footer)
+        self.assertLess(len(visible_text("<body>" + footer)), 200)
+
+    def test_the_email_sits_beside_the_legal_line(self):
+        meta = re.search(r'<div class="foot-meta">(.*?)</div>', self.footer(), flags=re.S).group(1)
+        self.assertIn('<a class="foot-mail" href="mailto:hello@classnode.co">hello@classnode.co</a>', meta)
+        self.assertIn('class="foot-legal"', meta)
 
     def test_the_logo_and_tagline_come_first(self):
         footer = self.footer()
         self.assertLess(footer.index('class="logo"'), footer.index("foot-tagline"))
         self.assertLess(footer.index("foot-tagline"), footer.index('class="foot-links"'))
+        self.assertLess(footer.index('class="foot-links"'), footer.index("foot-mail"))
 
     def test_the_company_is_named_once_on_one_legal_line(self):
         for path in ("/", "/privacy/", "/terms/"):
             footer = self.footer(path)
             text = visible_text("<body>" + footer)
-            legal = re.search(r'<p class="foot-legal[^"]*">(.*?)</p>\s*</div>\s*$', footer, flags=re.S)
+            legal = re.search(r'<p class="foot-legal[^"]*">(.*?)</p>\s*</div>\s*</div>\s*$', footer, flags=re.S)
             with self.subTest(path=path):
                 self.assertEqual(text.count("Classnode Edtech Limited"), 1)
                 self.assertIsNotNone(legal, "the legal line closes the footer")
