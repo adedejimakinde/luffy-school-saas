@@ -44,8 +44,10 @@ blog post, from the post's own cover (`og_image`, `blog.views`).
 The header is sticky and takes its own 72px at the top of the page, in the
 colour of the top band under it (`.top-band`: the homepage's hero, or a legal
 page's title), so the band runs unbroken behind both and the header never
-covers a line of the page. Once the page scrolls it gains a border and a
-shadow (`is-scrolled`, set by the script below). The footer is one short, calm
+covers a line of the page. Its background is solid; once the page scrolls it
+turns white and gains a hairline and a shadow (`is-scrolled`, set by the
+script below). The phone menu is the small card it always was, hung from the
+header at its right. The footer is one short, calm
 block: the logo and one line, two groups of links that run inline and wrap
 (Product, Sign in), and a bottom line with the copyright, Privacy, Terms and
 the email.
@@ -78,7 +80,6 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
     </nav>
-    <a class="btn btn-primary head-cta" href="/#demo">Book a demo</a>
     <button class="menu-toggle" type="button" popovertarget="site-menu" aria-label="Menu">
       <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
     </button>

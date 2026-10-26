@@ -147,17 +147,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 
 .top-band { position: relative; isolation: isolate; color: var(--text); background: var(--band); overflow: hidden; }
 
-/* Sticky, and in the flow: it takes its own 72px, in the band's colour, so the
-   band runs on under it and it never covers the page. Scrolled, it gains a
-   hairline, a shadow and a little white. */
+/* Sticky, and in the flow: it takes its own 72px, solid, in the band's colour,
+   so the band runs on under it, nothing shows through it and it never covers
+   the page. Scrolled, it turns white and gains a hairline and a shadow. */
 html { scroll-padding-top: calc(var(--head) + 8px); }
 .site-head { position: sticky; top: 0; z-index: 3; background: var(--band); }
-.site-head.is-scrolled {
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  box-shadow: 0 1px 0 var(--border), var(--shadow-soft);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-}
+.site-head.is-scrolled { background: var(--card); box-shadow: 0 1px 0 var(--border), var(--shadow-soft); }
 .head-inner { display: flex; align-items: center; gap: 8px; min-height: var(--head); }
 .site-head .logo { margin-right: auto; padding: 0; font-size: 1.375rem; color: var(--brand); }
 /* On the light band the mark is as it is everywhere: a One Blue square. */
@@ -180,27 +175,21 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 .site-menu a:not(.btn) { color: var(--text); }
 .site-menu a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
 .site-nav .btn { margin-left: 8px; min-height: 44px; }
-/* The phone's button, beside the menu's: from 360px (below it, the menu holds it). */
-.head-cta { display: none; min-height: 44px; padding: 0 16px; font-size: 0.9375rem; }
-@media (min-width: 360px) { .head-cta { display: inline-flex; } .site-menu .btn { display: none; } }
 .how :focus-visible, .cta :focus-visible, .site-foot :focus-visible { outline-color: var(--card); }
 .top-band :focus-visible { outline-color: var(--brand); }
 
 .menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; color: var(--text); background: transparent; border-color: color-mix(in srgb, var(--text) 25%, transparent); }
 .menu-toggle .icon { width: 24px; height: 24px; }
 
-/* On a phone the menu is a panel the width of the screen, hung from the header. */
 .site-menu {
   position: fixed;
-  inset: var(--head) 0 auto 0;
-  width: auto;
-  max-height: calc(100dvh - var(--head));
+  inset: 72px 16px auto auto;
+  width: min(100vw - 32px, 320px);
   margin: 0;
-  padding: 8px 16px 16px;
-  overflow-y: auto;
+  padding: 8px;
   background: var(--card);
-  border: 0;
-  border-bottom: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: 12px;
   box-shadow: var(--shadow-float);
 }
 .site-menu:popover-open { display: grid; gap: 4px; }
@@ -209,7 +198,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 
 @media (min-width: 1024px) {
   .site-nav { display: flex; }
-  .menu-toggle, .site-menu, .head-cta { display: none; }
+  .menu-toggle, .site-menu { display: none; }
 }
 
 /* ---------------------------------------------------------------- hero */

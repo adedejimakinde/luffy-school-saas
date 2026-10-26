@@ -370,11 +370,15 @@ class TheReportSheetTests(SiteSetUp):
 
 
 class TheHeaderTests(SiteSetUp):
-    """The header stays at the top, has a demo button on a phone, and takes its own room."""
+    """The header stays at the top and takes its own room."""
 
-    def test_the_phone_bar_carries_a_demo_button_beside_the_menu(self):
+    def test_the_phone_bar_is_the_logo_and_the_menu_button_and_the_menu_holds_the_demo_button(self):
         head = self.get().content.decode().split('<header class="site-head">', 1)[1].split("</header>", 1)[0]
-        self.assertLess(head.index('class="btn btn-primary head-cta" href="/#demo"'), head.index('class="menu-toggle"'))
+        bar, menu = head.split('<div id="site-menu"', 1)
+        self.assertNotIn("head-cta", head)
+        self.assertEqual(bar.count('href="/#demo"'), 1, "only the desk nav's button, which is hidden on a phone")
+        self.assertLess(bar.index('class="site-nav"'), bar.index('class="menu-toggle"'))
+        self.assertIn('<a class="btn btn-primary" href="/#demo">Book a demo</a>', menu)
 
     def test_it_is_sticky_and_in_the_flow_so_it_never_covers_the_page(self):
         css = (STATIC / "website/website.css").read_text()
