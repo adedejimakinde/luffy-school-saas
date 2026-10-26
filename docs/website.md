@@ -166,11 +166,13 @@ final call to action, and the footer.
   band runs on under it and it never covers the page: the hero's and a legal
   title's padding stop below it, and `scroll-padding-top` keeps a link to a
   section (`/#features`, a legal contents list) and the pinned report sheet
-  clear of it. A hairline and a soft shadow appear once the page has scrolled
+  clear of it. Once the page has scrolled the bar turns white and gains a hairline and a soft shadow
   (`is-scrolled`, set by the one inline script, outside the block a page
   overrides). On a phone the bar is the logo and the menu button, as ever;
-  "Book a demo" is in the menu, a panel the width of the screen hung from the
-  header. From 1024px the nav carries the button. `tests/ui/screens.test.js` (`siteHeader`)
+  "Book a demo" is in the menu, the same small card at the right that opens
+  from the button (a popover, no animation), now hung from the sticky bar.
+  From 1024px the nav carries the button. The bar's background is solid, the
+  band's colour, so nothing shows through it. `tests/ui/screens.test.js` (`siteHeader`)
   holds all of it at every width.
 - **One Blue, with more of it** (`docs/design.md`): the top band (the header
   and the hero, or a legal page's title) is light, the 5% wash of One Blue

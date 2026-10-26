@@ -350,9 +350,10 @@ function measure({ smallOnPurpose, phone, wide, wideTables }) {
  * The public site's header, on every width: it stays at the top while the page
  * scrolls, takes its own room so it never covers the page (the first line, or
  * the place a link to a section lands), shows its shadow only once the page has
- * scrolled, and below 1024px shows only the logo and the menu button, which
- * opens a menu panel the width of the screen with the "Book a demo" button in
- * it; from 1024px the nav carries that button.
+ * scrolled, is solid (nothing shows through it), and below 1024px shows only
+ * the logo and the menu button, which opens the old card at the right, hung
+ * from the bar, with the "Book a demo" button in it; from 1024px the nav
+ * carries that button.
  */
 async function siteHeader({ width }) {
   const problems = [];
@@ -364,6 +365,8 @@ async function siteHeader({ width }) {
   if (getComputedStyle(head).position !== "sticky") problems.push("the header is not sticky");
   if (Math.abs(box(head).height - 72) > 1) problems.push(`the header is ${box(head).height}px tall, not 72`);
   if (head.classList.contains("is-scrolled")) problems.push("the header shows its shadow at the top of the page");
+  const opaque = () => !/\/|rgba|transparent/.test(getComputedStyle(head).backgroundColor);
+  if (!opaque()) problems.push(`the header's background is not solid: ${getComputedStyle(head).backgroundColor}`);
   if (box(document.querySelector("main")).top < box(head).bottom - 0.5) problems.push("the page starts under the header");
   const demo = [...head.querySelectorAll('a.btn[href="/#demo"]')].filter((a) => box(a).width > 0);
   if (demo.length !== (width >= 1024 ? 1 : 0)) problems.push(`${demo.length} "Book a demo" buttons in the header bar, not ${width >= 1024 ? 1 : 0}`);
@@ -375,6 +378,7 @@ async function siteHeader({ width }) {
   await frames();
   if (Math.abs(box(head).top) > 0.5) problems.push("the header leaves the top when the page scrolls");
   if (!head.classList.contains("is-scrolled") || getComputedStyle(head).boxShadow === "none") problems.push("the header has no shadow once the page has scrolled");
+  if (!opaque()) problems.push(`the scrolled header's background is not solid: ${getComputedStyle(head).backgroundColor}`);
 
   const here = location.pathname;
   for (const link of document.querySelectorAll('a[href^="#"], a[href^="/#"]')) {
@@ -391,7 +395,8 @@ async function siteHeader({ width }) {
     menu.showPopover();
     await frames();
     const m = box(menu);
-    if (Math.round(m.left) !== 0 || Math.round(m.width) !== document.documentElement.clientWidth) problems.push(`the menu is ${Math.round(m.width)}px wide at ${Math.round(m.left)}px, not the screen's width`);
+    const room = document.documentElement.clientWidth;
+    if (Math.round(room - m.right) !== 16 || m.width > 320.5 || m.left < 15.5) problems.push(`the menu is ${Math.round(m.width)}px wide, ${Math.round(room - m.right)}px from the right edge: not the old card (16px in, 320px at most)`);
     if (m.top < box(head).bottom - 0.5) problems.push("the menu opens over the header");
     if (m.bottom > innerHeight + 0.5) problems.push("the menu runs off the bottom of the screen");
     const links = [...menu.querySelectorAll("a")].filter((a) => box(a).width > 0);
