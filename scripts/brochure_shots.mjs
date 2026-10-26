@@ -130,7 +130,7 @@ try {
     await page.locator('[data-action="print-class"]').click();
     const pdf = join(OUT, "slips.pdf");
     await (await download).saveAs(pdf);
-    execFileSync("pdftoppm", ["-png", "-r", "150", "-f", "1", "-l", "1", "-singlefile", pdf, join(OUT, "09-exam-slip")]);
+    execFileSync("pdftoppm", ["-png", "-r", "300", "-f", "1", "-l", "1", "-singlefile", pdf, join(OUT, "09-exam-slip")]);
     rmSync(pdf);
     console.log("09-exam-slip.png");
     await context.close();
@@ -161,7 +161,7 @@ try {
     if (size === PHONE) {
       // The subjects and their marks, under the learner's box.
       await settle(page);
-      await page.getByText("Subjects", { exact: true }).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 24));
+      await page.getByText("Subjects", { exact: true }).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 8));
     }
     await shot(page, name, size === DESK ? { fullPage: true } : {});
     await context.close();

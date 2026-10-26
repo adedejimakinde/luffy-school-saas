@@ -120,7 +120,7 @@ broken but alone; run it again.
 `docs/brochure/`, taken by `scripts/brochure_shots.mjs` from a **local** copy,
 never production: it prints a lost result-checker slip and reprints JSS 3A's
 exam slips, which mint PINs. Phone screens are 390 CSS pixels wide at 2x (780
-by 1688); the report card is also taken at desk width.
+by 1688); the report card is also taken at desk width, and the printed slips are an A4 page at 300 dpi.
 
 ```bash
 export PLATFORM_DOMAIN=classnode.co DJANGO_DEBUG=1 CRESTFIELD_PRINCIPAL_PASSWORD=... \
