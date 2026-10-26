@@ -136,18 +136,18 @@ final call to action, and the footer.
   show.** Kept as the owner gave them: the price (the first term free, then ₦1,500 per student, per term,
   no setup fee; changed from ₦2,500 on 26 October 2026), the call-back time (**two working days**) and the contact
   address (hello@classnode.co). The footer, the same on every page of the site
-  (homepage, privacy notice, terms, the blog), is small and calm: the logo
+  (homepage, privacy notice, terms, the blog), is short and calm: the logo
   with one line under it (School management for Nigerian secondary schools.),
-  one row of links (Features, Pricing, Blog, Contact, Privacy, Terms), the
-  email (hello@classnode.co) and one legal line, the only place the company is
-  named: © 2026 Classnode Edtech Limited · RC 9926572. No headings, no second
-  logo, no feature list or call to action (the page above has them), and no
-  address; the registered address waits for the lawyer. Type is 13 to 14px.
-  On a phone everything is centred, the links one row (two rows of three
-  under 375px) and the whole footer about 215px tall, never over 300px
-  (`tests/ui/screens.test.js`); from 900px it is three columns in one row, the
-  logo and line, the links, and the email over the legal line. Staff and
-  Parent sign in are in the header (the menu on a phone), not the footer.
+  two groups of links with small grey uppercase labels that run inline and
+  wrap (Product: Features, Pricing, Blog, Book a demo; Sign in: Staff sign in,
+  Parent sign in), a thin rule, and one bottom line: the legal line, the only
+  place the company is named (© 2026 Classnode Edtech Limited · RC 9926572),
+  and beside it Privacy, Terms and hello@classnode.co in small text. No
+  address; the registered address waits for the lawyer. Every link is 44px
+  tall by its own padding (32px from 900px). On a phone it is left-aligned and
+  about 300px tall (`tests/ui/screens.test.js` holds it to 300, 320 on the
+  narrowest phones); from 900px the logo and the two groups share one row and
+  the bottom line is a single line, about 150px.
   `website/tests/test_homepage.py` holds the page to that copy and to the
   writing rules: no en or em dash, no exclamation mark, no sentence starting
   "Imagine", none of the banned words, and **no question mark outside the six

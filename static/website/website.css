@@ -773,41 +773,53 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 /* ---------------------------------------------------------------- footer */
 
 /*
- * The footer: small and calm. The logo and one line, one row of links, the
- * email and the legal line. Centred on a phone, where it is about 270px tall;
- * on a desk it is three columns (the logo and line, the links, the email over
- * the legal line) in one row.
+ * The footer: the logo and one line, two groups of links (Product, Sign in)
+ * that run inline and wrap, a thin rule, and one bottom line: the copyright
+ * naming the company once, then Privacy, Terms and the email, small. Every
+ * link is 44px tall by its own padding, not by space between groups. On a
+ * phone it stacks, left-aligned, about 300px tall; from 900px the logo and
+ * the groups share one row and the bottom line is a single line.
  */
-.site-foot { padding: 20px 0 16px; color: var(--on-deep); background: var(--brand-deeper); font-size: 0.8125rem; line-height: 1.5; text-align: center; }
-.foot-inner { display: grid; justify-items: center; gap: 4px; }
-.foot-brand { display: grid; justify-items: center; }
-.foot-brand .logo { padding: 0; font-size: 1.125rem; color: var(--card); }
-.site-foot .logo-mark { width: 24px; height: 24px; }
-.foot-tagline { margin: 0; }
-.foot-links { display: flex; flex-wrap: wrap; justify-content: center; }
-.foot-links a, .foot-mail {
+.site-foot { padding: 12px 0 8px; color: var(--on-deep); background: var(--brand-deeper); font-size: 0.8125rem; line-height: 1.5; }
+.foot-top { display: grid; gap: 8px; }
+.foot-brand .logo { padding: 0; color: var(--card); }
+.foot-tagline { margin: 4px 0 0; }
+.foot-links { display: grid; gap: 4px; }
+.foot-heading {
+  margin: 0;
+  color: var(--on-deep-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.foot-col ul, .foot-small { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; }
+.foot-col li, .foot-small li { display: flex; align-items: center; }
+.foot-col li + li::before, .foot-small li + li::before { content: "\00b7"; color: var(--on-deep-muted); }
+.foot-col a, .foot-small a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 7px;
+  padding: 0 8px;
   color: var(--on-deep);
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   text-decoration: none;
   border-radius: 4px;
 }
-.foot-links a:hover, .foot-links a:focus-visible, .foot-mail:hover, .foot-mail:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
-.foot-links [aria-current] { color: var(--card); }
-/* Under 375px six links do not fit one row: two rows of three. */
-@media (max-width: 374.98px) { .foot-links { display: grid; grid-template-columns: repeat(3, auto); column-gap: 8px; } }
-.foot-legal { margin: 0; color: var(--on-deep-legal); }
+.foot-col li:first-child a, .foot-small li:first-child a { padding-left: 0; }
+.foot-col a:hover, .foot-col a:focus-visible, .foot-small a:hover, .foot-small a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
+.foot-col [aria-current] { color: var(--card); }
+.foot-bottom { margin-top: 4px; border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent); }
+.foot-legal { margin: 8px 0 0; color: var(--on-deep-legal); }
+.foot-small a { font-size: 0.8125rem; color: var(--on-deep-legal); }
 @media (min-width: 900px) {
-  .site-foot { padding: 24px 0; text-align: left; }
-  .foot-inner { grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); justify-items: start; align-items: center; gap: 32px; }
-  .foot-brand { justify-items: start; }
-  .foot-links { justify-content: center; }
-  .foot-links a, .foot-mail { min-height: 32px; }
-  .foot-meta { justify-self: end; text-align: right; }
-  .foot-mail { padding-right: 0; }
+  .site-foot { padding: 24px 0 8px; }
+  .foot-top { grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: start; }
+  .foot-links { grid-auto-flow: column; gap: 40px; }
+  .foot-col a, .foot-small a { min-height: 32px; }
+  .foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 16px; }
+  .foot-legal { margin: 0; }
 }
 
 /* The title sits in the top band, under the header. */

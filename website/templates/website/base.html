@@ -45,8 +45,10 @@ The header is sticky and takes its own 72px at the top of the page, in the
 colour of the top band under it (`.top-band`: the homepage's hero, or a legal
 page's title), so the band runs unbroken behind both and the header never
 covers a line of the page. Once the page scrolls it gains a border and a
-shadow (`is-scrolled`, set by the script below). The footer is one quiet
-block: the logo and one line, one row of links, the email and the legal line.
+shadow (`is-scrolled`, set by the script below). The footer is one short, calm
+block: the logo and one line, two groups of links that run inline and wrap
+(Product, Sign in), and a bottom line with the copyright, Privacy, Terms and
+the email.
 
 The one script is inline and a module, so it waits for the page: it marks the
 header once the page has scrolled, closes the phone menu after a tap, and the homepage adds its slider and its counting
@@ -96,22 +98,38 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
 {% block main %}{% endblock %}
 </main>
 <footer class="site-foot">
-  <div class="wrap foot-inner">
-    <div class="foot-brand">
-      <a class="logo" href="/" aria-label="Classnode home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
-      <p class="foot-tagline">School management for Nigerian secondary schools.</p>
+  <div class="wrap">
+    <div class="foot-top">
+      <div class="foot-brand">
+        <a class="logo" href="/" aria-label="Classnode home"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg><span>classnode</span></a>
+        <p class="foot-tagline">School management for Nigerian secondary schools.</p>
+      </div>
+      <nav class="foot-links" aria-label="Footer">
+        <div class="foot-col">
+          <h2 class="foot-heading">Product</h2>
+          <ul>
+            <li><a href="/#features">Features</a></li>
+            <li><a href="/pricing/"{% if nav_pricing %} aria-current="page"{% endif %}>Pricing</a></li>
+            <li><a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a></li>
+            <li><a href="/#demo">Book a demo</a></li>
+          </ul>
+        </div>
+        {% if portal_host %}<div class="foot-col">
+          <h2 class="foot-heading">Sign in</h2>
+          <ul>
+            <li><a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a></li>
+            <li><a href="//{{ portal_host }}/sign-in/">Parent sign in</a></li>
+          </ul>
+        </div>{% endif %}
+      </nav>
     </div>
-    <nav class="foot-links" aria-label="Footer">
-      <a href="/#features">Features</a>
-      <a href="/pricing/"{% if nav_pricing %} aria-current="page"{% endif %}>Pricing</a>
-      <a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a>
-      <a href="/#demo">Contact</a>
-      <a href="/privacy/">Privacy</a>
-      <a href="/terms/">Terms</a>
-    </nav>
-    <div class="foot-meta">
-      <a class="foot-mail" href="mailto:hello@classnode.co">hello@classnode.co</a>
+    <div class="foot-bottom">
       <p class="foot-legal">&copy; 2026 Classnode Edtech Limited &middot; RC 9926572</p>
+      <ul class="foot-small">
+        <li><a href="/privacy/">Privacy</a></li>
+        <li><a href="/terms/">Terms</a></li>
+        <li><a href="mailto:hello@classnode.co">hello@classnode.co</a></li>
+      </ul>
     </div>
   </div>
 </footer>

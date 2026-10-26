@@ -110,8 +110,8 @@ const SMALL_ON_PURPOSE =
   // The Ogun State sheet beside the report card's words: a drawing of the
   // paper sheet at its own sizes, its labels small as the paper's are.
   ".sheet, " +
-  // The public footer: small and calm by the owner's spec, 13 and 14px,
-  // white on navy at 9.3:1 and 6.5:1.
+  // The public footer: small by the owner's spec, 12 to 14px, white on navy
+  // at 9.3:1, its labels at 5.6:1 and its legal line at 6.5:1.
   ".site-foot";
 
 /**
@@ -436,25 +436,30 @@ function measureSite({ width }) {
       if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
-    // The footer on a phone: small and calm, about a third of a screen, all of
-    // it centred, its links a thumb tall and wrapping in even rows.
+    // The footer on a phone: short (about 300px, 320 on the narrowest), all of
+    // it on the left, small type, and every link a thumb tall by its padding.
     const foot = document.querySelector(".site-foot");
-    if (box(foot).height > 300) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over 300`);
-    for (const el of foot.querySelectorAll("p, nav, a")) {
-      if (getComputedStyle(el).textAlign !== "center") problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is not centred`);
-    }
+    const limit = width < 360 ? 320 : 300;
+    if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
-      if (parseFloat(getComputedStyle(el).fontSize) > 18) problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is large type`);
+      if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
+        problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is not left-aligned`);
+      }
+      if (el.closest(".logo")) continue;
+      if (parseFloat(getComputedStyle(el).fontSize) > 14.05) problems.push(`the footer's ${el.getAttribute("class") || el.tagName} is over 14px`);
     }
-    if (foot.querySelectorAll("h1, h2, h3, .logo").length !== 1) problems.push("the footer has a heading or a second logo");
+    if (foot.querySelectorAll(".logo").length !== 1) problems.push("the footer has a second logo");
     const legal = foot.querySelector(".foot-legal");
+    if (Math.round(box(legal).left) !== 16) problems.push("the footer's legal line is off the left edge");
     // It may wrap: text kept on one line runs past its box on a small phone.
     if (legal.scrollWidth > legal.clientWidth) problems.push(`the footer's legal line is ${legal.scrollWidth}px in ${legal.clientWidth}px`);
-    for (const a of foot.querySelectorAll(".foot-links a")) {
+    for (const a of foot.querySelectorAll(".foot-col a, .foot-small a")) {
       if (box(a).height < 44) problems.push(`a footer link is ${Math.round(box(a).height)}px tall, under 44: "${a.textContent.trim()}"`);
     }
-    const rows = new Set([...foot.querySelectorAll(".foot-links a")].map((a) => Math.round(box(a).top)));
-    if (rows.size > 1 && foot.querySelectorAll(".foot-links a").length % rows.size) problems.push("the footer's links wrap to uneven rows");
+    for (const list of foot.querySelectorAll(".foot-col ul")) {
+      const tops = new Set([...list.querySelectorAll("a")].map((a) => Math.round(box(a).top)));
+      if (tops.size > Math.ceil(list.children.length / 2)) problems.push("a footer group's links are one to a line, not inline");
+    }
   }
   if (width < 640 && home) {
     // The form's button is full width; the hero's two share the row from 360px
