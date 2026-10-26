@@ -37,6 +37,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from messaging import kinds, providers
+from schools import quiet
 
 from . import hours
 from .models import MoneySummarySent
@@ -132,7 +133,7 @@ def send_summary(school, day) -> bool:
     whether it was processed just now — `False` when the setting is off or
     `day` was already sent, either way with nothing sent twice.
     """
-    if not offered().daily_money_summary:
+    if not offered().daily_money_summary or quiet.is_quiet(school):
         return False
     if MoneySummarySent.objects.filter(for_day=day).exists():
         return False

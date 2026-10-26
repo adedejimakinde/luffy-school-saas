@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from accounts.models import Role
 from messaging import kinds
+from schools import quiet
 
 from . import hours, recipients
 from .models import MoneySummaryRecipient, Notice, NoticeKind, NoticeSettings
@@ -79,6 +80,9 @@ def set_offered_as(
 
     school = school_on_this_connection()
     require_settings_authority(actor, school)
+    switching_on = (result_notices, fee_reminders, payment_receipts, absence_alerts, daily_money_summary)
+    if any(switching_on):
+        quiet.refuse_if_quiet(school)
     row, _ = NoticeSettings.objects.get_or_create(pk=1)
     if result_notices is not None:
         row.result_notices = bool(result_notices)

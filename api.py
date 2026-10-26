@@ -89,6 +89,7 @@ from schools.models import (
     School,
     WeakPassword,
 )
+from schools.quiet import SwitchedOff
 from timetable.api import router as timetable_router
 from timetable.services import READING_ROLES as TIMETABLE_READING_ROLES
 
@@ -1029,6 +1030,10 @@ def create_invitation(request, slug: str, payload: InviteIn):
         raise HttpError(409, str(exc))
     except (InvitationError, NoDeliveryAddress) as exc:
         raise HttpError(400, str(exc))
+    except SwitchedOff as exc:
+        # Classnode's demo school sends nothing (`schools.quiet`), and nothing
+        # was written: the refusal came before the commit.
+        raise HttpError(409, str(exc))
     except DeliveryNotConfigured as exc:
         # 503, not 400 or 500: nothing is wrong with the request and nothing is
         # wrong at this school. The platform has no accept URL or no mail host,
@@ -1079,6 +1084,8 @@ def resend_invitation(request, slug: str, invitation_id: int):
         raise HttpError(403, str(exc))
     except NoDeliveryAddress as exc:
         raise HttpError(400, str(exc))
+    except SwitchedOff as exc:
+        raise HttpError(409, str(exc))
     except DeliveryNotConfigured as exc:
         raise HttpError(503, str(exc))
     except DeliveryFailed as exc:

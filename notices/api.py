@@ -13,6 +13,7 @@ from django.http import Http404
 from ninja import Router, Schema
 
 from accounts.session import session_auth
+from schools import quiet
 from schools.invitations import active_staff
 
 from . import services
@@ -90,7 +91,7 @@ def get_settings(request):
     return _settings_out(school)
 
 
-@router.post("/settings/", response={200: SettingsOut, 403: MessageOut, 404: MessageOut})
+@router.post("/settings/", response={200: SettingsOut, 403: MessageOut, 404: MessageOut, 409: MessageOut})
 def update_settings(request, payload: SettingsIn):
     school = _school_of(request)
     try:
@@ -106,6 +107,8 @@ def update_settings(request, payload: SettingsIn):
             )
     except services.NotAllowed as e:
         return 403, MessageOut(detail=str(e))
+    except quiet.SwitchedOff as e:
+        return 409, MessageOut(detail=str(e))
     return _settings_out(school)
 
 

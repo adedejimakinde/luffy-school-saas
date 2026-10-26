@@ -1,5 +1,8 @@
 # The demo server: classnode.co
 
+Not to be confused with Crestfield College, the sales demo school that lives on
+the production server beside the real schools (`docs/demo-school.md`).
+
 A throwaway server that holds the two fictional demo schools and nothing real,
 so people can click through Classnode. One server, any Ubuntu 24.04 VPS (Contabo or similar), DNS on
 Cloudflare, the same compose stack as production (`deploy/compose.yml`,

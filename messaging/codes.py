@@ -83,6 +83,8 @@ def send_code(code_id, kind, sealed):
 
     contact = code.contact
     school = code.requested_by_school
+    if _quiet(school, contact):
+        return _record(delivery, Outcome.SWITCHED_OFF)
     minutes = max(1, round(lifetime / 60))
     params = {"code": raw_code, "minutes": minutes, "school": school.name if school else ""}
     outbound = providers.Outbound(
@@ -113,6 +115,15 @@ def send_code(code_id, kind, sealed):
     return _record(delivery, Outcome.ACCEPTED, provider_ref=accepted.provider_ref or "")
 
 
+def _quiet(school, contact):
+    """A code for a quiet school, or a sign-in code for somebody only at quiet ones."""
+    from schools import quiet
+
+    if school is not None:
+        return quiet.is_quiet(school)
+    return quiet.only_at_quiet_schools(contact.guardian.user_id)
+
+
 def _claim(code, kind):
     """The claim row, or None if this code has been claimed already (at most once)."""
     try:
@@ -139,6 +150,7 @@ SAID = {
     Outcome.UNAVAILABLE: "not sent: messages are not going out just now",
     Outcome.NOT_CONFIGURED: "not sent: this platform cannot send messages yet",
     Outcome.EXPIRED: "not sent in time",
+    Outcome.SWITCHED_OFF: "not sent: messages are switched off for this school",
 }
 NOT_KNOWN = "not known whether it arrived"
 QUEUED = "waiting to be sent"

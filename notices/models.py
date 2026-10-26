@@ -216,6 +216,8 @@ class NoticeOutcome(_AppendOnly):
         #: sending. The number it would have stated is no longer true, so it
         #: went nowhere, and it does not count against the reminder interval.
         BALANCE_CHANGED = "balance_changed", "Balance changed before sending"
+        #: The school sends nothing (`schools.quiet`): Classnode's demo school.
+        SWITCHED_OFF = "switched_off", "Switched off for this school"
 
     claim = models.OneToOneField(NoticeClaim, related_name="outcome", on_delete=models.PROTECT)
     said = models.CharField(max_length=24, choices=Said)

@@ -68,6 +68,8 @@ class Outcome(models.TextChoices):
     NOT_CONFIGURED = "not_configured", "No provider configured"
     #: The sealed code expired on the queue before a worker reached it.
     EXPIRED = "expired", "Expired before it could be sent"
+    #: Asked for by, or only for, a school that sends nothing (`schools.quiet`).
+    SWITCHED_OFF = "switched_off", "Switched off for this school"
 
 
 class CodeDeliveryOutcome(_AppendOnly):
