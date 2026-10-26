@@ -41,12 +41,17 @@ every page, and the card WhatsApp, LinkedIn and X draw from
 `static/website/share.png` (`scripts/share_image.html` draws it), or, on a
 blog post, from the post's own cover (`og_image`, `blog.views`).
 
-The header sits over the page's top band, the One Blue strip each page opens
-with (`.top-band`: the homepage's hero, or a legal page's title), so the blue
-runs unbroken behind both.
+The header is sticky and takes its own 72px at the top of the page, in the
+colour of the top band under it (`.top-band`: the homepage's hero, or a legal
+page's title), so the band runs unbroken behind both and the header never
+covers a line of the page. Once the page scrolls it gains a border and a
+shadow (`is-scrolled`, set by the script below). The footer is one short, calm
+block: the logo and one line, two groups of links that run inline and wrap
+(Product, Sign in), and a bottom line with the copyright, Privacy, Terms and
+the email.
 
-The one script is inline and a module, so it waits for the page: it closes the
-phone menu after a tap, and the homepage adds its slider and its counting
+The one script is inline and a module, so it waits for the page: it marks the
+header once the page has scrolled, closes the phone menu after a tap, and the homepage adds its slider and its counting
 figures to it (`{% block script %}`). Nothing else on the site runs.
 {% endcomment %}
 {% include "design/head.html" %}
@@ -73,6 +78,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
     </nav>
+    <a class="btn btn-primary head-cta" href="/#demo">Book a demo</a>
     <button class="menu-toggle" type="button" popovertarget="site-menu" aria-label="Menu">
       <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
     </button>
@@ -115,20 +121,23 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
             <li><a href="//{{ portal_host }}/sign-in/">Parent sign in</a></li>
           </ul>
         </div>{% endif %}
-        <div class="foot-col foot-col-company">
-          <h2 class="foot-heading">Company</h2>
-          <ul>
-            <li><a href="/privacy/">Privacy</a></li>
-            <li><a href="/terms/">Terms</a></li>
-            <li><a href="mailto:hello@classnode.co">hello@classnode.co</a></li>
-          </ul>
-        </div>
       </nav>
     </div>
-    <p class="foot-legal">&copy; 2026 Classnode Edtech Limited &middot; RC 9926572</p>
+    <div class="foot-bottom">
+      <p class="foot-legal">&copy; 2026 Classnode Edtech Limited &middot; RC 9926572</p>
+      <ul class="foot-small">
+        <li><a href="/privacy/">Privacy</a></li>
+        <li><a href="/terms/">Terms</a></li>
+        <li><a href="mailto:hello@classnode.co">hello@classnode.co</a></li>
+      </ul>
+    </div>
   </div>
 </footer>
 <script type="module">
+const head = document.querySelector(".site-head");
+const mark = () => head.classList.toggle("is-scrolled", scrollY > 4);
+addEventListener("scroll", mark, { passive: true });
+mark();
 {% block script %}/* The phone menu closes once a link in it is tapped. */
 const menu = document.getElementById("site-menu");
 menu?.addEventListener("click", (e) => { if (e.target.closest("a")) menu.hidePopover(); });

@@ -21,6 +21,9 @@
 :root {
   --wrap: 1160px;
   --section: 56px;
+  /* The sticky header's height: the top band's own padding stops below it, and
+     an anchor or the pinned report sheet stops below it too. */
+  --head: 72px;
   /* Type and card sizes (`docs/website.md`): body copy 16px on a phone and
      17px for the larger copy on a desk; notes 15px on a phone and 16px on a
      desk; small labels 13px; cards 24px in, 12 to 16px round. */
@@ -144,8 +147,18 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 
 .top-band { position: relative; isolation: isolate; color: var(--text); background: var(--band); overflow: hidden; }
 
-.site-head { position: absolute; top: 0; left: 0; right: 0; z-index: 3; }
-.head-inner { display: flex; align-items: center; gap: 8px; min-height: 72px; }
+/* Sticky, and in the flow: it takes its own 72px, in the band's colour, so the
+   band runs on under it and it never covers the page. Scrolled, it gains a
+   hairline, a shadow and a little white. */
+html { scroll-padding-top: calc(var(--head) + 8px); }
+.site-head { position: sticky; top: 0; z-index: 3; background: var(--band); }
+.site-head.is-scrolled {
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  box-shadow: 0 1px 0 var(--border), var(--shadow-soft);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.head-inner { display: flex; align-items: center; gap: 8px; min-height: var(--head); }
 .site-head .logo { margin-right: auto; padding: 0; font-size: 1.375rem; color: var(--brand); }
 /* On the light band the mark is as it is everywhere: a One Blue square. */
 .site-head .logo-mark, .site-foot .logo-mark { width: 32px; height: 32px; }
@@ -167,21 +180,27 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 .site-menu a:not(.btn) { color: var(--text); }
 .site-menu a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
 .site-nav .btn { margin-left: 8px; min-height: 44px; }
+/* The phone's button, beside the menu's: from 360px (below it, the menu holds it). */
+.head-cta { display: none; min-height: 44px; padding: 0 16px; font-size: 0.9375rem; }
+@media (min-width: 360px) { .head-cta { display: inline-flex; } .site-menu .btn { display: none; } }
 .how :focus-visible, .cta :focus-visible, .site-foot :focus-visible { outline-color: var(--card); }
 .top-band :focus-visible { outline-color: var(--brand); }
 
 .menu-toggle { display: inline-flex; align-items: center; justify-content: center; width: 44px; padding: 0; color: var(--text); background: transparent; border-color: color-mix(in srgb, var(--text) 25%, transparent); }
 .menu-toggle .icon { width: 24px; height: 24px; }
 
+/* On a phone the menu is a panel the width of the screen, hung from the header. */
 .site-menu {
   position: fixed;
-  inset: 72px 16px auto auto;
-  width: min(100vw - 32px, 320px);
+  inset: var(--head) 0 auto 0;
+  width: auto;
+  max-height: calc(100dvh - var(--head));
   margin: 0;
-  padding: 8px;
+  padding: 8px 16px 16px;
+  overflow-y: auto;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-float);
 }
 .site-menu:popover-open { display: grid; gap: 4px; }
@@ -190,12 +209,12 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 
 @media (min-width: 1024px) {
   .site-nav { display: flex; }
-  .menu-toggle, .site-menu { display: none; }
+  .menu-toggle, .site-menu, .head-cta { display: none; }
 }
 
 /* ---------------------------------------------------------------- hero */
 
-.hero { position: relative; padding: 112px 0 56px; }
+.hero { position: relative; padding: 40px 0 56px; }
 .hero-inner { position: relative; z-index: 1; display: grid; gap: 48px; align-items: center; }
 
 .hero .eyebrow { color: var(--brand); }
@@ -371,7 +390,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 /* ---------------------------------------------------------------- hero, wide */
 
 @media (max-width: 639.98px) {
-  .hero { padding-top: 96px; }
+  .hero { padding-top: 24px; }
   .hero h1 { margin-bottom: 16px; }
   .hero-lead { margin-bottom: 24px; }
   .hero-inner { gap: 32px; }
@@ -412,7 +431,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
    until 1024px, where the picture's grows. The "Fees collected" card stays
    inside its own column until the gap is wide enough to lean into. */
 @media (min-width: 768px) {
-  .hero { padding: 112px 0 72px; }
+  .hero { padding: 40px 0 72px; }
   .hero-inner { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
   .hero-visual { padding-top: 40px; }
   .photo-hero { width: 44%; }
@@ -423,7 +442,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
   .float-b { right: 0; bottom: 96px; }
 }
 @media (min-width: 1024px) {
-  .hero { padding: 120px 0 80px; }
+  .hero { padding: 48px 0 80px; }
   .hero-inner { grid-template-columns: 5fr 7fr; gap: 56px; }
   .slider { width: 90%; }
   .float-a { top: 48px; left: -40px; }
@@ -754,19 +773,21 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 /* ---------------------------------------------------------------- footer */
 
 /*
- * The footer: the logo and one line on the left, three columns of links on
- * the right, a thin rule, and one legal line naming the company once. On a
- * phone it stacks, everything left-aligned: the logo, the links two columns
- * across (Company the full width), the rule, the legal line.
+ * The footer: the logo and one line, two groups of links (Product, Sign in)
+ * that run inline and wrap, a thin rule, and one bottom line: the copyright
+ * naming the company once, then Privacy, Terms and the email, small. Every
+ * link is 44px tall by its own padding, not by space between groups. On a
+ * phone it stacks, left-aligned, about 330px tall, with room between the
+ * description and the groups; from 900px the logo and
+ * the groups share one row and the bottom line is a single line.
  */
-.site-foot { padding: 32px 0; color: var(--on-deep); background: var(--brand-deeper); }
-.foot-top { display: grid; gap: 32px; }
+.site-foot { padding: 16px 0 12px; color: var(--on-deep); background: var(--brand-deeper); font-size: 0.8125rem; line-height: 1.5; }
+.foot-top { display: grid; gap: 16px; }
 .foot-brand .logo { padding: 0; color: var(--card); }
-.foot-tagline { margin: 8px 0 0; max-width: 28ch; font-size: 0.9375rem; }
-.foot-links { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
-.foot-col-company { grid-column: 1 / -1; }
+.foot-tagline { margin: 4px 0 0; font-size: 0.875rem; }
+.foot-links { display: grid; gap: 12px; }
 .foot-heading {
-  margin: 0 0 8px;
+  margin: 0;
   color: var(--on-deep-muted);
   font-size: 0.75rem;
   font-weight: 700;
@@ -774,56 +795,37 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
   line-height: 1.4;
   text-transform: uppercase;
 }
-.foot-col ul { list-style: none; margin: 0; padding: 0; }
-.foot-col a {
+.foot-col ul, .foot-small { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; }
+.foot-col li, .foot-small li { display: flex; align-items: center; }
+.foot-col li + li::before, .foot-small li + li::before { content: "\00b7"; color: var(--on-deep-muted); }
+.foot-col a, .foot-small a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
+  padding: 0 8px;
   color: var(--on-deep);
   font-size: 0.875rem;
   text-decoration: none;
   border-radius: 4px;
 }
-.foot-col a:hover, .foot-col a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
-.foot-legal {
-  margin: 32px 0 0;
-  padding-top: 24px;
-  color: var(--on-deep-legal);
-  font-size: 0.875rem;
-  text-align: left;
-  border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent);
-}
+.foot-col li:first-child a, .foot-small li:first-child a { padding-left: 0; }
+.foot-col a:hover, .foot-col a:focus-visible, .foot-small a:hover, .foot-small a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
+.foot-col [aria-current] { color: var(--card); }
+.foot-bottom { margin-top: 8px; border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent); }
+.foot-legal { margin: 8px 0 0; color: var(--on-deep-legal); }
+.foot-small a { color: var(--on-deep-legal); }
 @media (min-width: 900px) {
-  .site-foot { padding: 48px 0 32px; }
+  .site-foot { padding: 24px 0 8px; }
   .foot-top { grid-template-columns: minmax(0, 1fr) auto; gap: 48px; align-items: start; }
-  .foot-links { grid-template-columns: repeat(3, auto); gap: 48px; }
-  .foot-col-company { grid-column: auto; }
-  .foot-col a { min-height: 32px; }
-  .foot-legal { margin-top: 40px; }
+  .foot-links { grid-auto-flow: column; gap: 40px; }
+  .foot-tagline, .foot-small a { font-size: 0.8125rem; }
+  .foot-col a, .foot-small a { min-height: 32px; }
+  .foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 16px; }
+  .foot-legal { margin: 0; }
 }
-
-/* ---------------------------------------------------------------- form states */
-
-.demo-form > .refused { margin: 0; padding: 8px 12px; font-weight: 700; color: var(--warn); background: var(--warn-bg); border-radius: 8px; }
-.sent { margin: 0; padding: var(--card-pad); font-size: var(--copy-lg); font-weight: 700; background: var(--brand-wash); border-radius: 12px; }
-.num { font-variant-numeric: tabular-nums; }
-.nowrap { white-space: nowrap; }
-
-/* A fact still to be decided, shown as one on the page. */
-.todo {
-  display: inline-block;
-  padding: 0 6px;
-  font-weight: 700;
-  color: var(--warn);
-  background: var(--warn-bg);
-  border-radius: 6px;
-  outline: 1px dashed var(--warn);
-}
-
-/* ---------------------------------------------------------------- legal pages */
 
 /* The title sits in the top band, under the header. */
-.legal-top { padding: 112px 0 40px; }
+.legal-top { padding: 40px 0 40px; }
 .legal-top h1 { margin: 0; max-width: 760px; color: var(--text); font-size: clamp(2rem, 1.4rem + 2.6vw, 3.25rem); line-height: 1.08; letter-spacing: -0.02em; }
 .legal { padding: 48px 0 72px; }
 .legal > * { max-width: 760px; }
@@ -835,7 +837,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
   .legal-contents ol { columns: 2; column-gap: 40px; }
   .legal-contents li { break-inside: avoid; }
 }
-.legal-body section { padding: 8px 0 24px; scroll-margin-top: 24px; }
+.legal-body section { padding: 8px 0 24px; }
 .legal-body section + section { border-top: 1px solid var(--divider); padding-top: 32px; }
 .legal-body h2 { margin: 0 0 16px; font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem); letter-spacing: -0.01em; }
 .legal-body h3 { margin: 24px 0 8px; font-size: 1.0625rem; }
@@ -843,7 +845,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 .legal-body ul { margin: 0 0 16px; padding-left: 1.25em; }
 .legal-body li + li { margin-top: 6px; }
 @media (max-width: 639.98px) {
-  .legal-top { padding: 96px 0 28px; }
+  .legal-top { padding: 24px 0 28px; }
   .legal { padding: 28px 0 40px; }
   .legal-contents { margin-bottom: 28px; padding: 16px; }
   .legal-body p, .legal-body li { font-size: 1rem; line-height: 1.55; }
@@ -852,8 +854,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 /* ---------------------------------------------------------------- density on a phone */
 
 /* Below 640px: cards 20px in, benefit tiles 36px, each step's 28px number on
-   its title's line, the hero's two buttons stacked only below 360px, and the
-   footer's Company links in a row of their own under the two columns. */
+   its title's line, and the hero's two buttons stacked only below 360px. */
 @media (max-width: 639.98px) {
   :root { --card-pad: 20px; }
   .tile-lg { width: 36px; height: 36px; margin-bottom: 16px; border-radius: 10px; }
@@ -865,7 +866,6 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
   .step p { grid-column: 1 / -1; margin-top: 8px; }
   .sheet { padding: 20px 16px; }
   .mini { padding: 16px; }
-  .foot-col-company ul { display: flex; flex-wrap: wrap; column-gap: 24px; }
 }
 @media (max-width: 359.98px) {
   .hero-actions .btn { flex-basis: 100%; }
@@ -946,7 +946,7 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
     @media (min-width: 900px) and (min-height: 920px) {
       .sheet-row { height: 260vh; padding: 0; view-timeline: --sheet block; }
       .sheet { view-timeline: none; }
-      .sheet-stage { position: sticky; top: 0; min-height: 100vh; align-content: center; padding-block: 48px; }
+      .sheet-stage { position: sticky; top: var(--head); min-height: calc(100vh - var(--head)); align-content: center; padding-block: 40px; }
       .sheet .ink, .sheet .stamp { animation-range: contain calc(var(--s) * 100%) contain calc(var(--e) * 100%); }
     }
   }

@@ -81,8 +81,8 @@ COPY = [
     "See it with your own classes.",
     "Book a demo and we will call you within two working days.",
     "School management for Nigerian secondary schools.",
-    "Product", "Features", "Pricing", "Sign in", "Staff sign in", "Parent sign in",
-    "Company", "Privacy", "Terms", "hello@classnode.co",
+    "Product", "Features", "Pricing", "Blog", "Sign in", "Staff sign in", "Parent sign in",
+    "Privacy", "Terms", "hello@classnode.co",
     "© 2026 Classnode Edtech Limited · RC 9926572",
 ]
 
@@ -369,18 +369,37 @@ class TheReportSheetTests(SiteSetUp):
         self.assertIn("a demo school", caption)
 
 
+class TheHeaderTests(SiteSetUp):
+    """The header stays at the top, has a demo button on a phone, and takes its own room."""
+
+    def test_the_phone_bar_carries_a_demo_button_beside_the_menu(self):
+        head = self.get().content.decode().split('<header class="site-head">', 1)[1].split("</header>", 1)[0]
+        self.assertLess(head.index('class="btn btn-primary head-cta" href="/#demo"'), head.index('class="menu-toggle"'))
+
+    def test_it_is_sticky_and_in_the_flow_so_it_never_covers_the_page(self):
+        css = (STATIC / "website/website.css").read_text()
+        rule = re.search(r"\n\.site-head \{([^}]*)\}", css).group(1)
+        self.assertIn("position: sticky", rule)
+        self.assertIn("top: 0", rule)
+        self.assertNotIn("absolute", rule)
+
+    def test_the_scrolled_state_is_set_outside_the_blocks_a_page_overrides(self):
+        page = self.get().content.decode()
+        self.assertLess(page.index('classList.toggle("is-scrolled"'), page.index("The phone menu closes"))
+
+
 class TheFooterTests(SiteSetUp):
-    """The owner's footer: the logo and one line, three columns of links, one legal line."""
+    """The footer: short and calm. The logo and one line, two groups of links, one bottom line."""
 
     def footer(self, path="/"):
         return self.get(path).content.decode().split('<footer class="site-foot', 1)[1].split("</footer>", 1)[0]
 
-    def test_three_columns_hold_the_given_links_in_order(self):
+    def test_two_groups_hold_the_given_links_in_order(self):
         columns = re.findall(r'<div class="foot-col[^"]*">(.*?)</div>', self.footer(), flags=re.S)
         found = [
             (words(re.search(r"<h2[^>]*>(.*?)</h2>", column, flags=re.S).group(1)),
              [(href, words(label)) for href, label in
-              re.findall(r'<a href="([^"]+)">(.*?)</a>', column, flags=re.S)])
+              re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', column, flags=re.S)])
             for column in columns
         ]
         self.assertEqual(found, [
@@ -388,9 +407,20 @@ class TheFooterTests(SiteSetUp):
                          ("/#demo", "Book a demo")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
-            ("Company", [("/privacy/", "Privacy"), ("/terms/", "Terms"),
-                         ("mailto:hello@classnode.co", "hello@classnode.co")]),
         ])
+
+    def test_privacy_terms_and_the_email_sit_in_the_bottom_line_by_the_copyright(self):
+        bottom = re.search(r'<div class="foot-bottom">(.*?)</div>\s*</div>\s*$', self.footer(), flags=re.S).group(1)
+        self.assertLess(bottom.index("foot-legal"), bottom.index("foot-small"))
+        self.assertEqual(
+            [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', bottom, flags=re.S)],
+            [("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co")],
+        )
+
+    def test_it_has_one_logo_and_no_second_call_to_action(self):
+        footer = self.footer()
+        self.assertEqual(footer.count('class="logo"'), 1)
+        self.assertNotIn("btn", footer)
 
     def test_the_logo_and_tagline_come_first(self):
         footer = self.footer()
@@ -401,10 +431,10 @@ class TheFooterTests(SiteSetUp):
         for path in ("/", "/privacy/", "/terms/"):
             footer = self.footer(path)
             text = visible_text("<body>" + footer)
-            legal = re.search(r'<p class="foot-legal[^"]*">(.*?)</p>\s*</div>\s*$', footer, flags=re.S)
+            legal = re.search(r'<p class="foot-legal[^"]*">(.*?)</p>', footer, flags=re.S)
             with self.subTest(path=path):
                 self.assertEqual(text.count("Classnode Edtech Limited"), 1)
-                self.assertIsNotNone(legal, "the legal line closes the footer")
+                self.assertIsNotNone(legal, "the footer has its legal line")
                 self.assertEqual(words(legal.group(1)),
                                  "© 2026 Classnode Edtech Limited · RC 9926572")
                 self.assertNotIn("Classnode. Nigeria.", text)

@@ -104,7 +104,7 @@ final call to action, and the footer.
   (64px, a figure rather than a heading), the slider's own controls and its
   address bar (the slider is kept as it is), the drawings' own paddings (the
   report sheet, the roles, the register phone and the floating cards are
-  pictures of the product) and the footer (its links are 14px, its own spec).
+  pictures of the product) and the footer (its text is 13 to 14px, its own spec).
   Measured at 360px before this pass: the hero 33px, section headlines 28px,
   body 16px, buttons 48px and full width, cards and steps 24px in, the step
   number 44px above its title, benefit tiles 56px.
@@ -136,14 +136,19 @@ final call to action, and the footer.
   show.** Kept as the owner gave them: the price (the first term free, then ₦1,500 per student, per term,
   no setup fee; changed from ₦2,500 on 26 October 2026), the call-back time (**two working days**) and the contact
   address (hello@classnode.co). The footer, the same on every page of the site
-  (homepage, privacy notice, terms, the blog): the logo with one line under it (School
-  management for Nigerian secondary schools.), three columns of links (Product:
-  Features, Pricing, Blog, Book a demo; Sign in: Staff sign in, Parent sign in;
-  Company: Privacy, Terms, hello@classnode.co), a thin rule, and one legal
-  line, the only place the company is named: © 2026 Classnode Edtech Limited ·
-  RC 9926572. No address there; the registered address waits for the lawyer.
-  On phones it is all left-aligned, Product and Sign in two across and
-  Company's three links in one row under them, so no column stands alone.
+  (homepage, privacy notice, terms, the blog), is short and calm: the logo
+  with one line under it (School management for Nigerian secondary schools.),
+  two groups of links with small grey uppercase labels that run inline and
+  wrap (Product: Features, Pricing, Blog, Book a demo; Sign in: Staff sign in,
+  Parent sign in), a thin rule, and one bottom line: the legal line, the only
+  place the company is named (© 2026 Classnode Edtech Limited · RC 9926572),
+  and beside it Privacy, Terms and hello@classnode.co in small text. No
+  address; the registered address waits for the lawyer. Every link is 44px
+  tall by its own padding (32px from 900px). On a phone it is left-aligned and
+  about 330px tall, with 16px between the line under the logo and the first
+  label and 12px between the groups (`tests/ui/screens.test.js` holds it to
+  340, 350 under 375px); from 900px the logo and the two groups share one row and
+  the bottom line is a single line, about 150px.
   `website/tests/test_homepage.py` holds the page to that copy and to the
   writing rules: no en or em dash, no exclamation mark, no sentence starting
   "Imagine", none of the banned words, and **no question mark outside the six
@@ -156,6 +161,17 @@ final call to action, and the footer.
   While `website.views.LEGAL_IN_DRAFT` is set, the two pages say so in one line at the top, are `noindex`
   and are not in the sitemap; `website/tests/test_legal.py` holds all three, and that no page the site serves
   has "TODO" in it.
+- **The header is sticky.** It stays at the top while the page scrolls and
+  takes its own 72px in the flow (`--head`), in the top band's colour, so the
+  band runs on under it and it never covers the page: the hero's and a legal
+  title's padding stop below it, and `scroll-padding-top` keeps a link to a
+  section (`/#features`, a legal contents list) and the pinned report sheet
+  clear of it. A hairline and a soft shadow appear once the page has scrolled
+  (`is-scrolled`, set by the one inline script, outside the block a page
+  overrides). From 360px a "Book a demo" button sits beside the menu button;
+  below that it is in the menu. The phone menu is a panel the width of the
+  screen hung from the header. `tests/ui/screens.test.js` (`siteHeader`)
+  holds all of it at every width.
 - **One Blue, with more of it** (`docs/design.md`): the top band (the header
   and the hero, or a legal page's title) is light, the 5% wash of One Blue
   (the owner's choice of three, 12 October 2026), with ink headings, One Blue
