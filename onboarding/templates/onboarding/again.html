@@ -1,0 +1,48 @@
+{% extends "onboarding/layout.html" %}
+{% block title %}Start again{% endblock %}
+{% block content %}
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/start/"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Start here</a>
+      </nav>
+      <article class="panel again-page" data-again="{% if plan.possible %}possible{% else %}refused{% endif %}">
+        <h1>Start your setup again</h1>
+        {% if not plan.possible %}
+        <div class="msg" role="status" data-blocked><span class="label label-stop">Not possible</span><p>{{ school_name }} cannot start again, because:</p></div>
+        <ul class="again-list" data-blockers>{% for why in plan.blockers %}<li>{{ why|capfirst }}.</li>{% endfor %}</ul>
+        <p class="quiet">Those records are kept for good, so the setup they belong to stays.</p>
+        <p><a class="btn" href="/start/"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Back to Start here</a></p>
+        {% else %}
+        <p>This clears your school's setup so you can begin again. Your school has no marks, attendance, fees or released results yet, so nothing that has happened is lost.</p>
+        {% if note %}<div class="msg" role="alert"><span class="label label-stop">Nothing cleared</span><p>{{ note }}</p></div>{% endif %}
+
+        <section aria-labelledby="clears-title">
+          <h2 id="clears-title">This will be cleared</h2>
+          <ul class="again-list" data-clears>
+            {% for label, count, names in plan.clears %}
+            <li data-count="{{ count }}"><strong>{{ label }}: {{ count }}</strong>{% if names %}<span class="quiet">{{ names|join:", " }}</span>{% endif %}</li>
+            {% endfor %}
+          </ul>
+        </section>
+
+        <section aria-labelledby="keeps-title">
+          <h2 id="keeps-title">This stays</h2>
+          <ul class="again-list" data-keeps>
+            {% for what, why in plan.keeps %}<li><strong>{{ what }}</strong><span class="quiet">{{ why }}</span></li>{% endfor %}
+          </ul>
+        </section>
+
+        <form method="post" action="/start/again/" class="again-form">{% csrf_token %}
+          <input type="hidden" name="plan" value="{{ plan.fingerprint }}">
+          <label class="field" for="school_name">Type your school's name to confirm
+            <span class="hint">{{ school_name }}</span>
+            <input id="school_name" name="school_name" autocomplete="off" required>
+          </label>
+          <p class="quiet"><span class="label label-stop">Cannot be undone</span> Starting again is written in your setup record, with your name and the time.</p>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary">Clear the setup and start again</button>
+            <a class="btn btn-quiet" href="/start/">Keep everything</a>
+          </div>
+        </form>
+        {% endif %}
+      </article>
+{% endblock %}

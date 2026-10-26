@@ -10,5 +10,6 @@ far the administrator has got. The steps are `onboarding.progress`'s.
   <h2 id="setup-title">Your school is being set up</h2>
   {% if setup %}<p class="quiet">Your school administrator has done {{ setup.done }} of {{ setup.total }} setup steps. This page fills in once classes and students are added.</p>
   <svg class="meter" role="img" aria-label="{{ setup.done }} of {{ setup.total }} steps done"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ setup.percent }}%" height="8" rx="4"/></svg>{% endif %}
+  {% if may_open_steps %}<p class="quiet"><a href="/start/">Open the setup steps</a></p>{% endif %}
   {% endif %}
 </section>

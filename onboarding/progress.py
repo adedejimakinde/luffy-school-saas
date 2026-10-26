@@ -45,11 +45,24 @@ from django_tenants.utils import schema_context
 
 from accounts.models import Role
 
-#: Who works through the steps: the school administrator. A principal sees
-#: how far the school has got on the dashboard, but the steps are the
-#: administrator's to do, and several of them (inviting staff, importing the
-#: roll) are the administrator's alone.
-ONBOARDING_ROLES = frozenset({Role.ADMIN.value})
+#: Who may open Start here and the step pages: the school administrator and
+#: the principal. The steps are mostly the administrator's to do, and several
+#: of them (inviting staff, importing the roll) are the administrator's alone,
+#: but a principal must be able to see where setup stands and open any step;
+#: a step the viewer cannot do says who does it (`Step.doers`).
+ONBOARDING_ROLES = frozenset({Role.ADMIN.value, Role.PRINCIPAL.value})
+
+#: Who setup is brought to while it is unfinished: signing in lands them on
+#: Start here, the top bar carries the setup chip, and the dashboard opens
+#: with the next-step card. The administrator only. The principal's dashboard
+#: says how far setup has got and links Start here, without the push.
+LEAD_ROLES = frozenset({Role.ADMIN.value})
+
+
+#: Who can do each kind of step, by the authority each page already asks.
+_SETUP = frozenset({Role.ADMIN.value, Role.PRINCIPAL.value})  # academics.services.SETUP_ROLES
+_GRANTING = frozenset({Role.ADMIN.value})  # accounts.models.MEMBERSHIP_GRANTING_ROLES
+_FEES = frozenset({Role.ADMIN.value, Role.BURSAR.value})  # fees.authority.WRITING_ROLES
 
 
 @dataclass(frozen=True)
@@ -68,27 +81,28 @@ class Step:
     optional: bool = False
     #: Another place on the platform this step also uses: (label, href).
     also: Optional[tuple] = None
-    #: The facts that must hold before this step can be done, and what the
-    #: locked page says about it.
+    #: The facts this step goes better after, and the one line said about it
+    #: while they are missing. Advice only: no step is ever locked, and the
+    #: step's own button is always there.
     needs: tuple = ()
-    locked_because: str = ""
-    #: The list's one line while the step is locked.
-    opens_when: str = ""
+    hint: str = ""
     get_ready: tuple = ()
-
+    #: The roles that can do this step's work, and who to name to anybody else.
+    doers: frozenset = _SETUP
+    done_by: str = "your principal or school administrator"
 
 STEPS = (
     Step(
         key="school-details",
         title="Add your school details",
-        detail="Contact email and crest, for every report card",
+        detail="Contact email and crest. You can add either later",
         icon="i-school",
         what="Saves your school's contact email and its crest.",
         why="The crest heads every report card, and replies from parents go to the contact email, not to Classnode.",
         todo=(
             "Type the email address your office reads.",
             "Upload your crest as a PNG or JPG picture.",
-            "Save each one. You can change them later.",
+            "Save each one, or choose Add later. You can change them any time.",
         ),
         action="Add the contact email",
         href="/setup/#contact-email",
@@ -103,9 +117,9 @@ STEPS = (
         what="Opens the term your school is in now, inside its session.",
         why="Registers, marks, fees and report cards all belong to a term. Nothing else can start without one.",
         todo=(
-            "Type the session, such as 2026/2027.",
-            "Pick the term and its first and last days.",
-            "Save. It becomes the current term.",
+            "Type the session, such as 2026/2027, pick the term and its first and last days, and save.",
+            "Tap Make current beside it, so Classnode knows this is the term you are teaching now.",
+            "Open next term the same way when its dates are known. It waits until you make it current.",
         ),
         action="Open the term setup",
         href="/setup/#terms",
@@ -121,7 +135,7 @@ STEPS = (
         todo=(
             "Type a class name, such as JSS 1A.",
             "Add one class for each arm you run.",
-            "Save. You can rename or add a class later.",
+            "Save. You can rename, archive or add a class later.",
         ),
         action="Open class setup",
         href="/setup/#classes",
@@ -158,6 +172,8 @@ STEPS = (
         action="Invite teachers",
         href="/staff/",
         minutes=5,
+        doers=_GRANTING,
+        done_by="your school administrator",
     ),
     Step(
         key="students",
@@ -175,11 +191,12 @@ STEPS = (
         href="/roll/import/",
         minutes=10,
         needs=("classes",),
-        locked_because=(
-            "Add your classes first. Each student is placed in a class as they are imported, "
-            "so Classnode needs the classes before it can read your roll."
+        hint=(
+            "Each student is placed in a class as they are imported, so add your classes "
+            "too. The import will tell you about any class it cannot find."
         ),
-        opens_when="Opens once you add your classes",
+        doers=_GRANTING,
+        done_by="your school administrator",
         get_ready=(
             "Your roll as an Excel or CSV file",
             "Each student's surname, first name and class",
@@ -203,8 +220,9 @@ STEPS = (
         minutes=10,
         optional=True,
         needs=("term", "classes"),
-        locked_because="Set the term and add your classes first. Fees are charged per class, per term.",
-        opens_when="Opens once the term and classes are in",
+        hint="Fees are set per class, for the current term, so you need a current term and a class to set them on.",
+        doers=_FEES,
+        done_by="your bursar or school administrator",
     ),
     Step(
         key="report-card",
@@ -223,8 +241,7 @@ STEPS = (
         also=("Add this term's papers", "/teaching/#papers"),
         minutes=5,
         needs=("term", "subjects"),
-        locked_because="Set the term and add your subjects first. Papers belong to a subject, in a term.",
-        opens_when="Opens once the term and subjects are in",
+        hint="Papers belong to a subject, in the current term, so you need both to add them. You can choose the card itself now.",
     ),
 )
 
@@ -236,16 +253,15 @@ REQUIRED = tuple(step for step in STEPS if not step.optional)
 class StepState:
     step: Step
     number: int
-    state: str  # "done", "next", "todo" or "locked"
+    state: str  # "done", "next" or "todo"
     status: str = ""
+    #: What this step's done-ness let the office put off ("contact email",
+    #: "crest"), for the list to say. Only the first step has any.
+    later: tuple = ()
 
     @property
     def done(self):
         return self.state == "done"
-
-    @property
-    def locked(self):
-        return self.state == "locked"
 
 
 @dataclass
@@ -274,6 +290,7 @@ _STEPS_SQL = """
 WITH t AS (SELECT id FROM academics_term WHERE is_current ORDER BY starts_on DESC LIMIT 1)
 SELECT json_build_object(
     'term', EXISTS (SELECT 1 FROM t),
+    'terms', (SELECT count(*) FROM academics_term),
     'classes', (SELECT count(*) FROM academics_classgroup WHERE is_active),
     'subjects', (SELECT count(*) FROM gradebook_subject WHERE is_active),
     'teachers', (
@@ -319,6 +336,8 @@ def _read_here(school) -> dict:
         cursor.execute(_STEPS_SQL, {"school": school.pk})
         (facts,) = cursor.fetchone()
     facts["contact_email"] = bool(school.contact_email)
+    facts["contact_email_later"] = school.contact_email_later_at is not None
+    facts["crest_later"] = school.crest_later_at is not None
     return facts
 
 
@@ -327,7 +346,10 @@ def _read_here(school) -> dict:
 
 def _is_done(key: str, f: dict) -> bool:
     return {
-        "school-details": f["contact_email"] and f["crest"],
+        # Each is given or put off: neither is needed to sign in or to recover
+        # an account, so the office can choose "Add later" for either.
+        "school-details": (f["contact_email"] or f.get("contact_email_later", False))
+        and (f["crest"] or f.get("crest_later", False)),
         "session-and-term": f["term"],
         "classes": f["classes"] > 0,
         "subjects": f["subjects"] > 0,
@@ -350,13 +372,19 @@ def _plural(n, one, many=None):
 def _status(key: str, f: dict) -> str:
     """What is there now, in a few words, for the step page's action box."""
     if key == "school-details":
-        parts = [
-            "Contact email saved" if f["contact_email"] else "No contact email yet",
-            "crest uploaded" if f["crest"] else "no crest yet",
-        ]
-        return ", ".join(parts)
+        def one(given, later, name):
+            if given:
+                return f"{name} saved"
+            return f"{name} to add later" if later else f"no {name.lower()} yet"
+        email = one(f["contact_email"], f.get("contact_email_later"), "Contact email")
+        crest = one(f["crest"], f.get("crest_later"), "Crest")
+        return f"{email[0].upper()}{email[1:]}, {crest[0].lower()}{crest[1:]}"
     if key == "session-and-term":
-        return "A term is open" if f["term"] else "No term yet"
+        if f["term"]:
+            return "A term is current"
+        if f.get("terms"):
+            return "A term is saved but not current yet. Tap Make current beside it."
+        return "No term yet"
     if key == "classes":
         return _plural(f["classes"], "class", "classes") if f["classes"] else "No classes yet"
     if key == "subjects":
@@ -366,25 +394,41 @@ def _status(key: str, f: dict) -> str:
     if key == "students":
         return _plural(f["students"], "student") if f["students"] else "No students yet"
     if key == "fees":
-        return "Fee items set for this term" if f["fees"] else "No fee items this term"
-    return "Papers set for this term" if f["papers"] else "No papers this term yet"
+        if f["fees"]:
+            return "Fee items set for this term"
+        return "No fee items this term" if f["term"] else "Fee items count once a term is current"
+    if f["papers"]:
+        return "Papers set for this term"
+    return "No papers this term yet" if f["term"] else "Papers count once a term is current"
+
+
+def _later(key: str, f: dict) -> tuple:
+    if key != "school-details":
+        return ()
+    put_off = []
+    if not f["contact_email"] and f.get("contact_email_later"):
+        put_off.append("contact email")
+    if not f["crest"] and f.get("crest_later"):
+        put_off.append("crest")
+    return tuple(put_off)
 
 
 def judge(facts: dict) -> Progress:
-    """The steps' states from the facts. Pure, so every rule is testable alone."""
+    """The steps' states from the facts. Pure, so every rule is testable alone.
+
+    **Any order, nothing locked.** Each step is done when its data is there,
+    whichever order it got there in, and a step that is not done is "todo",
+    open to anybody who may see the steps. A step that goes better after
+    another carries a hint (`Step.needs`, `hint_for()`), never a lock.
+    """
     states = []
     for number, step in enumerate(STEPS, 1):
-        if _is_done(step.key, facts):
-            state = "done"
-        elif not all(_holds(fact, facts) for fact in step.needs):
-            state = "locked"
-        else:
-            state = "todo"
-        states.append(StepState(step, number, state, _status(step.key, facts)))
+        state = "done" if _is_done(step.key, facts) else "todo"
+        states.append(StepState(step, number, state, _status(step.key, facts), _later(step.key, facts)))
 
-    # The next step is the first required one that can be done now. An
-    # optional step is never the next one: it waits in the list, marked
-    # Optional, and the step pages' Next buttons still pass through it.
+    # The next step is the first required one not yet done, in the list's
+    # order. An optional step is never the next one: it waits in the list,
+    # marked Optional, and the step pages' Next buttons still pass through it.
     nxt = next((s for s in states if s.state == "todo" and not s.step.optional), None)
     if nxt is not None:
         nxt.state = "next"
@@ -400,16 +444,24 @@ def judge(facts: dict) -> Progress:
     )
 
 
-#: Which step makes each fact a locked step waits on.
+#: Which step makes each fact a step's hint is about.
 FACT_STEP = {"term": "session-and-term", "classes": "classes", "subjects": "subjects"}
 
 
-def waits_on(state: StepState, facts: dict) -> Optional[Step]:
-    """For a locked step, the first step it is waiting on."""
+def hint_for(state: StepState, facts: dict) -> Optional[Step]:
+    """For a step not yet done, the first step its hint points to, or None
+    when everything it goes better after is already there."""
+    if state.done:
+        return None
     for fact in state.step.needs:
         if not _holds(fact, facts):
             return BY_KEY[FACT_STEP[fact]]
     return None
+
+
+def may_do(step: Step, roles) -> bool:
+    """Whether somebody holding `roles` can do this step's work themselves."""
+    return bool(set(roles) & step.doers)
 
 
 def progress_for(school) -> Progress:
@@ -425,7 +477,8 @@ def progress_for(school) -> Progress:
 
 
 def is_onboarding(roles) -> bool:
-    return bool(set(roles) & ONBOARDING_ROLES)
+    """Whether setup is brought to this person (`LEAD_ROLES`)."""
+    return bool(set(roles) & LEAD_ROLES)
 
 
 def for_request(request) -> Optional[Progress]:
@@ -450,6 +503,7 @@ def for_request(request) -> Optional[Progress]:
 
 __all__ = [
     "BY_KEY",
+    "LEAD_ROLES",
     "ONBOARDING_ROLES",
     "Progress",
     "REQUIRED",
@@ -458,9 +512,10 @@ __all__ = [
     "StepState",
     "WrongSchema",
     "for_request",
+    "hint_for",
     "is_onboarding",
     "judge",
     "progress_for",
+    "may_do",
     "read",
-    "waits_on",
 ]

@@ -622,6 +622,17 @@ def attention(facts, scope: Scope, school, user, today, term, week) -> list:
             "detail": "So replies from parents reach your office",
             "chip": _chip("brand", "i-todo", "To do"),
         })
+    # The crest is optional, so it is asked for only once the office has said
+    # it will add it later (`onboarding.later`).
+    if not facts["crest"] and school.crest_later_at is not None and scope.may(SETUP_ROLES):
+        items.append({
+            "key": "crest",
+            "icon": "i-settings",
+            "href": "/setup/#report-card",
+            "title": "Add your school's crest",
+            "detail": "It heads every report card. Until then the card prints your initials",
+            "chip": _chip("brand", "i-todo", "To do"),
+        })
     for item in items:
         item["title"] = keep_together(item["title"])
         item["detail"] = keep_together(item["detail"])

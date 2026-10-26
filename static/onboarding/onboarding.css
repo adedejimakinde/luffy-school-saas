@@ -33,7 +33,7 @@
   .ob-head h1 { font-size: var(--t-6); }
 }
 
-/* -- The steps: done, next, to do, locked, optional --------------------------- */
+/* -- The steps: done, next, to do, optional ---------------------------------- */
 .ob-steps { list-style: none; margin: var(--s-2) calc(-1 * var(--s-1)) 0; padding: 0; }
 .ob-steps li + li { border-top: 1px solid var(--divider); }
 .ob-steps a {
@@ -53,12 +53,10 @@
 .ob-steps .done .mark { color: var(--ok); }
 .ob-steps .next .mark { color: var(--brand); }
 .ob-steps .todo .mark { color: var(--field-border); }
-.ob-steps .locked .mark { color: var(--muted); }
 .ob-steps .text { display: grid; gap: 2px; min-width: 0; }
 .ob-steps .text strong { line-height: 1.35; }
 .ob-steps .text > span { color: var(--muted); font-size: var(--t-3); line-height: 1.4; }
 .ob-steps .done strong { color: var(--muted); font-weight: 400; }
-.ob-steps .locked strong { color: var(--muted); }
 .ob-steps .next a { background: var(--brand-tint); }
 .ob-steps .next .chip-brand { background: var(--card); }
 .ob-steps .next + li, .ob-steps li:has(+ .next) { border-color: transparent; }
@@ -165,25 +163,43 @@
   .side-steps { display: block; }
 }
 
-/* Locked. */
-.locked-box { display: grid; gap: var(--s-2); justify-items: start; }
-.locked-box p { margin: 0; }
-.lock-badge {
-  display: grid;
-  place-items: center;
-  width: 48px;
-  height: 48px;
-  color: var(--muted);
-  background: var(--divider);
-  border-radius: var(--r-card);
-}
-.lock-badge .icon { width: 24px; height: 24px; }
-.locked-box .btn-primary { width: 100%; }
-@media (min-width: 640px) { .locked-box .btn-primary { width: auto; } }
-
 .need { display: grid; gap: var(--s-half); width: 100%; padding: var(--s-2); background: var(--bg); border-radius: var(--r-control); }
 .need strong { font-size: var(--t-3); }
+.need p { margin: 0; }
 .need ul { margin: 0; padding-left: 1.25rem; color: var(--muted); font-size: var(--t-3); }
+
+/* The first step's two parts, each with its own button and "Add later". */
+.detail-rows { display: grid; gap: var(--s-1); margin: 0; padding: 0; list-style: none; }
+.detail-rows .quiet, .why-later { margin: 0; font-size: var(--t-3); }
+.later-form { display: grid; }
+.later-form .btn { width: 100%; }
+@media (min-width: 640px) {
+  .detail-rows .go { grid-auto-flow: column; align-items: center; }
+  .later-form .btn { width: auto; }
+}
+
+/* -- Start here: put off, any order, what changed, start again -------------- */
+.ob-any-order { margin: var(--s-2) 0 0; color: var(--muted); font-size: var(--t-3); }
+.later-list, .change-list, .again-list { display: grid; margin: var(--s-1) 0 0; padding: 0; list-style: none; }
+.later-list li, .change-list li, .again-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-half) var(--s-2);
+  padding: var(--s-1) 0;
+}
+.later-list li + li, .change-list li + li, .again-list li + li { border-top: 1px solid var(--divider); }
+.change-list .quiet, .again-list .quiet { font-size: var(--t-3); }
+.again-list li { display: grid; justify-content: stretch; }
+.again-list li[data-count="0"] strong { color: var(--muted); font-weight: 400; }
+.again-page { display: grid; gap: var(--s-2); }
+.again-page h1 { font-size: var(--t-5); line-height: 1.2; margin: 0; }
+.again-page h2 { margin: 0; font-size: var(--t-4); }
+.again-form { display: grid; gap: var(--s-2); max-width: 32rem; }
+@media (max-width: 639.98px) {
+  .later-list .btn, .again-form .btn { width: 100%; }
+}
 
 /* -- Help and next steps ---------------------------------------------------- */
 .help-grid { display: grid; gap: var(--s-2); }

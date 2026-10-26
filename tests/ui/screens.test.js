@@ -170,11 +170,17 @@ export const SCREENS = [
   { name: "home-teacher", as: "sunrise.teacher", url: `${SUNRISE}/home/` },
   { name: "home-bursar", as: "sunrise.bursar", url: `${SUNRISE}/home/` },
 
-  // Onboarding: Start here, a step, a locked step's page and Help, as the
-  // demo's administrator (whose school is part set up), and Help as a teacher.
+  // Onboarding: Start here, a step (the first, with its two "Add later"
+  // rows), another step and Help, as the demo's administrator (whose school is
+  // part set up), and Help as a teacher. The principal's Start here, a step
+  // the principal does not do, and Start again, which at the demo school says
+  // why it cannot (it has marks and registers).
   { name: "start-here", as: "sunrise.admin", url: `${SUNRISE}/start/` },
   { name: "start-step", as: "sunrise.admin", url: `${SUNRISE}/start/school-details/` },
   { name: "start-report-card", as: "sunrise.admin", url: `${SUNRISE}/start/report-card/` },
+  { name: "start-here-principal", as: "sunrise.principal", url: `${SUNRISE}/start/` },
+  { name: "start-students-principal", as: "sunrise.principal", url: `${SUNRISE}/start/students/` },
+  { name: "start-again", as: "sunrise.principal", url: `${SUNRISE}/start/again/` },
   { name: "help", as: "sunrise.admin", url: `${SUNRISE}/help/` },
   { name: "help-teacher", as: "sunrise.teacher", url: `${SUNRISE}/help/` },
 

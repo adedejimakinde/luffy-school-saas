@@ -10,6 +10,7 @@ may set up the school's terms and classes, `academics.services.can_set_up()`.
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
+from django.db import transaction
 
 from academics.services import NotAllowedToSetUp, can_set_up
 
@@ -32,8 +33,19 @@ def set_contact_email_as(actor, school, address: str) -> str:
             validate_email(address)
         except ValidationError:
             raise NotAnEmailAddress(f"'{address}' does not look like an email address.")
-    school.contact_email = address
-    school.save(update_fields=["contact_email"])
+    from audit import log
+
+    with transaction.atomic():
+        was = school.contact_email
+        school.contact_email = address
+        school.save(update_fields=["contact_email"])
+        if was != address:
+            log.record(
+                actor, school,
+                action="saved" if address else "cleared", kind="contact-email", item_name=school.name,
+                summary=f"Set the contact email to {address}." if address else "Cleared the contact email.",
+                before={"contact_email": was}, after={"contact_email": address},
+            )
     return school.contact_email
 
 

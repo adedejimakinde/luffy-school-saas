@@ -7,26 +7,6 @@
         <a class="skip" href="/home/">Skip to dashboard<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>
       </nav>
       <div class="split">
-        {% if here.locked %}
-        <article class="panel step-page" data-step="{{ here.step.key }}" data-step-state="locked">
-          <div class="locked-box">
-            <span class="lock-badge" aria-hidden="true"><svg class="icon"><use href="#i-lock"/></svg></span>
-            <p class="eyebrow">Locked for now</p>
-            <h1>{{ here.step.title }}</h1>
-            <p>{{ here.step.locked_because }}</p>
-            {% if here.step.get_ready %}
-            <div class="need">
-              <strong>While you wait, get this ready</strong>
-              <ul>{% for line in here.step.get_ready %}<li>{{ line }}</li>{% endfor %}</ul>
-            </div>
-            {% endif %}
-            {% if first %}<a class="btn btn-primary" href="/start/{{ first.key }}/">Go to {{ first.title }}<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>{% endif %}
-          </div>
-          <div class="step-foot">
-            <a class="btn btn-quiet" href="/start/"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Back to Start here</a>
-          </div>
-        </article>
-        {% else %}
         <article class="panel step-page" data-step="{{ here.step.key }}" data-step-state="{{ here.state }}">
           <h1>{{ here.step.title }}</h1>
           <div class="explain">
@@ -43,22 +23,60 @@
               <ol>{% for line in here.step.todo %}<li>{{ line }}</li>{% endfor %}</ol>
             </section>
           </div>
+          {% if hint %}
+          <div class="need" data-hint="{{ hint.key }}">
+            <strong>Good to know</strong>
+            <p>{{ here.step.hint }} <a href="/start/{{ hint.key }}/">Go to {{ hint.title }}</a></p>
+            {% if here.step.get_ready %}<ul>{% for line in here.step.get_ready %}<li>{{ line }}</li>{% endfor %}</ul>{% endif %}
+          </div>
+          {% endif %}
+          {% if note %}<div class="msg" role="alert"><span class="label label-stop">Not saved</span><p>{{ note }}</p></div>{% endif %}
+          {% if details %}
+          <ul class="detail-rows">
+            {% for d in details %}
+            <li class="action-box" data-detail="{{ d.what }}" data-detail-state="{% if d.given %}given{% elif d.later %}later{% else %}todo{% endif %}">
+              <div class="status">
+                <strong>{{ d.label }}</strong>
+                {% if d.given %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Saved</span>{% elif d.later %}<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>Adding later</span>{% else %}<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-todo"/></svg>Not done yet</span>{% endif %}
+              </div>
+              <div class="go">
+                <a class="btn {% if d.given %}btn{% else %}btn-primary{% endif %}" href="{{ d.href }}">{% if d.given %}Change the {{ d.name }}{% else %}Add the {{ d.name }}{% endif %}<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+                {% if not d.given and not d.later and may_do %}
+                <form method="post" action="/start/{{ here.step.key }}/" class="later-form">{% csrf_token %}
+                  <input type="hidden" name="what" value="{{ d.what }}">
+                  {% comment %}No `type`: a button in a form submits it anyway, and without
+                  `type="submit"` the design draws it as the plain white button, so the
+                  step's own blue button stays the one to press.{% endcomment %}
+                  <button data-later="{{ d.what }}">Add later</button>
+                </form>
+                {% endif %}
+              </div>
+              {% if d.later and not d.given %}<p class="quiet">You chose to add this later. A reminder stays on your dashboard until you do.</p>{% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          <p class="quiet why-later">Neither is needed to sign in or to get back into an account, so you can add both later.</p>
+          {% else %}
           <div class="action-box">
             <div class="status">
               {% if here.done %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Done</span>{% else %}<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-todo"/></svg>Not done yet</span>{% endif %}
               <span class="quiet">{{ here.status }}</span>
             </div>
             <div class="go">
+              {% if may_do %}
               <a class="btn {% if here.done %}btn{% else %}btn-primary{% endif %}" href="{{ here.step.href }}">{{ here.step.action }}<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a>
               {% if here.step.also %}<a class="also" href="{{ here.step.also.1 }}">{{ here.step.also.0 }}</a>{% endif %}
+              {% else %}
+              <p class="quiet" data-done-by>This step is done by {{ here.step.done_by }}.</p>
+              {% endif %}
             </div>
           </div>
+          {% endif %}
           <div class="step-foot">
             <a class="btn btn-quiet" href="/start/"><svg class="icon" aria-hidden="true"><use href="#i-back"/></svg>Back to Start here</a>
-            {% if after %}<a class="btn" href="/start/{{ after.step.key }}/">{% if here.step.optional and not here.done %}Skip for now: {% else %}Next: {% endif %}{{ after.step.title }}<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>{% else %}<a class="btn" href="/start/">Next: see where you are<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>{% endif %}
+            {% if after %}<a class="btn" href="/start/{{ after.step.key }}/">{% if not here.done %}Skip for now: {% else %}Next: {% endif %}{{ after.step.title }}<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>{% else %}<a class="btn" href="/start/">Next: see where you are<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>{% endif %}
           </div>
         </article>
-        {% endif %}
         <aside class="panel side-steps" aria-labelledby="all-steps">
           <div class="panel-head"><h2 id="all-steps">All steps</h2></div>
           {% include "onboarding/parts/progress.html" %}
