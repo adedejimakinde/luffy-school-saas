@@ -350,8 +350,9 @@ function measure({ smallOnPurpose, phone, wide, wideTables }) {
  * The public site's header, on every width: it stays at the top while the page
  * scrolls, takes its own room so it never covers the page (the first line, or
  * the place a link to a section lands), shows its shadow only once the page has
- * scrolled, carries a "Book a demo" button, and below 1024px opens a menu panel
- * the width of the screen.
+ * scrolled, and below 1024px shows only the logo and the menu button, which
+ * opens a menu panel the width of the screen with the "Book a demo" button in
+ * it; from 1024px the nav carries that button.
  */
 async function siteHeader({ width }) {
   const problems = [];
@@ -365,7 +366,7 @@ async function siteHeader({ width }) {
   if (head.classList.contains("is-scrolled")) problems.push("the header shows its shadow at the top of the page");
   if (box(document.querySelector("main")).top < box(head).bottom - 0.5) problems.push("the page starts under the header");
   const demo = [...head.querySelectorAll('a.btn[href="/#demo"]')].filter((a) => box(a).width > 0);
-  if (width >= 360 && demo.length !== 1) problems.push(`${demo.length} "Book a demo" buttons in the header bar, not 1`);
+  if (demo.length !== (width >= 1024 ? 1 : 0)) problems.push(`${demo.length} "Book a demo" buttons in the header bar, not ${width >= 1024 ? 1 : 0}`);
   for (const a of demo) if (box(a).height < 44) problems.push(`the header's button is ${Math.round(box(a).height)}px tall, under 44`);
   const bar = head.querySelector(".head-inner");
   if (bar.scrollWidth > bar.clientWidth) problems.push("the header's bar is wider than the screen");
@@ -394,7 +395,7 @@ async function siteHeader({ width }) {
     if (m.top < box(head).bottom - 0.5) problems.push("the menu opens over the header");
     if (m.bottom > innerHeight + 0.5) problems.push("the menu runs off the bottom of the screen");
     const links = [...menu.querySelectorAll("a")].filter((a) => box(a).width > 0);
-    if (!links.some((a) => a.classList.contains("btn")) && width < 360) problems.push("the menu has no Book a demo button");
+    if (!links.some((a) => a.classList.contains("btn"))) problems.push("the menu has no Book a demo button");
     for (const a of links) if (box(a).height < 44) problems.push(`a menu link is ${Math.round(box(a).height)}px tall, under 44`);
     menu.hidePopover();
   }

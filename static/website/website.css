@@ -180,9 +180,6 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 .site-menu a:not(.btn) { color: var(--text); }
 .site-menu a:not(.btn):hover { color: var(--brand); background: var(--brand-tint); }
 .site-nav .btn { margin-left: 8px; min-height: 44px; }
-/* The phone's button, beside the menu's: from 360px (below it, the menu holds it). */
-.head-cta { display: none; min-height: 44px; padding: 0 16px; font-size: 0.9375rem; }
-@media (min-width: 360px) { .head-cta { display: inline-flex; } .site-menu .btn { display: none; } }
 .how :focus-visible, .cta :focus-visible, .site-foot :focus-visible { outline-color: var(--card); }
 .top-band :focus-visible { outline-color: var(--brand); }
 
@@ -209,7 +206,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 
 @media (min-width: 1024px) {
   .site-nav { display: flex; }
-  .menu-toggle, .site-menu, .head-cta { display: none; }
+  .menu-toggle, .site-menu { display: none; }
 }
 
 /* ---------------------------------------------------------------- hero */

@@ -168,9 +168,9 @@ final call to action, and the footer.
   section (`/#features`, a legal contents list) and the pinned report sheet
   clear of it. A hairline and a soft shadow appear once the page has scrolled
   (`is-scrolled`, set by the one inline script, outside the block a page
-  overrides). From 360px a "Book a demo" button sits beside the menu button;
-  below that it is in the menu. The phone menu is a panel the width of the
-  screen hung from the header. `tests/ui/screens.test.js` (`siteHeader`)
+  overrides). On a phone the bar is the logo and the menu button, as ever;
+  "Book a demo" is in the menu, a panel the width of the screen hung from the
+  header. From 1024px the nav carries the button. `tests/ui/screens.test.js` (`siteHeader`)
   holds all of it at every width.
 - **One Blue, with more of it** (`docs/design.md`): the top band (the header
   and the hero, or a legal page's title) is light, the 5% wash of One Blue
