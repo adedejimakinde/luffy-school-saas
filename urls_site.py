@@ -13,10 +13,11 @@ happens on the portal's `/write/`, which is not routed here at all.
 from django.urls import path, re_path
 
 from blog import views as blog
-from website.views import homepage, privacy, sitemap, terms
+from website.views import homepage, pricing, privacy, sitemap, terms
 
 urlpatterns = [
     path("", homepage, name="site-home"),
+    path("pricing/", pricing, name="site-pricing"),
     path("privacy/", privacy, name="site-privacy"),
     path("terms/", terms, name="site-terms"),
     path("blog/", blog.index, name="site-blog"),

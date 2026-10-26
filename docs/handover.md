@@ -579,7 +579,7 @@ The home therefore reads "2 of 3" released (a released class's marks sheet is lo
 from the open class).
 
 ## Copy and what is still TODO
-Homepage copy is the user's, word for word, with the price (₦2,500 per student, per term, no setup fee), "one
+Homepage copy is the user's, word for word, with the price (now the first term free, then ₦1,500 per student, per term, no setup fee; see `docs/website.md`), "one
 working day" and hello@classnode.co. Footer of every public page ends on one legal line, "© 2026 Classnode Edtech
 Limited · RC 9926572" (no address; see docs/website.md). Legal pages: company Classnode, contact
 hello@classnode.co. **Still visible TODOs:** the RC number, the registered address, every "TODO: lawyer", the

@@ -122,6 +122,7 @@ const SMALL_ON_PURPOSE =
 export const SCREENS = [
   // Classnode's own public site, on the bare domain.
   { name: "homepage", as: null, url: `${SITE}/`, widths: SITE_WIDTHS, site: true },
+  { name: "pricing", as: null, url: `${SITE}/pricing/`, widths: SITE_WIDTHS, site: true },
   { name: "privacy", as: null, url: `${SITE}/privacy/`, widths: SITE_WIDTHS, site: true },
   { name: "terms", as: null, url: `${SITE}/terms/`, widths: SITE_WIDTHS, site: true },
 

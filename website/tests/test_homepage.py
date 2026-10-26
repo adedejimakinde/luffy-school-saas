@@ -36,7 +36,7 @@ COPY = [
     "Results, fees and registers, all in one place.",
     "Teachers enter scores and take the register on their phones. You approve results, see who "
     "has paid, and keep less paper in the office.",
-    "See pricing", "₦2,500 per student, per term. No setup fee.",
+    "See pricing", "The first term is free, then ₦1,500 per student, per term. No setup fee.",
     "Less chasing, less paper, fewer late nights.",
     "Report cards that add up by themselves",
     "Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every "
@@ -61,7 +61,7 @@ COPY = [
     "On their own phones, through the term. You can see what is done and what is still waiting.",
     "You approve and release results",
     "Check each class's broadsheet, approve it, and release. Parents read the report card online.",
-    "One simple price.", "Per student, per term", "No setup fee.",
+    "One simple price.", "The first term is free, then", "per student, per term. No setup fee.",
     "Results and report cards, including the Ogun State template",
     "Fee tracking, with an account number for each child",
     "Daily registers on staff phones",
@@ -384,7 +384,7 @@ class TheFooterTests(SiteSetUp):
             for column in columns
         ]
         self.assertEqual(found, [
-            ("Product", [("/#features", "Features"), ("/#pricing", "Pricing"), ("/blog/", "Blog"),
+            ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
                          ("/#demo", "Book a demo")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
