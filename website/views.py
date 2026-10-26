@@ -1,5 +1,5 @@
 """Classnode's public site, on `settings.SITE_HOST` only: the homepage, the
-privacy notice, the terms and the sitemap.
+pricing page, the privacy notice, the terms and the sitemap.
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
 one inline script moves the homepage's slider, counts its figures up and closes
@@ -29,13 +29,15 @@ from accounts.throttling import client_address
 from schools.hosts import portal_host
 
 from .crawlers import NOINDEX, site_url
+from .features import included, premium
 from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
 
 #: The price as the page prints it, comma and all. Structured data's `price`
 #: stays the bare number schema.org asks for; every sentence carries this.
-PRICE = "₦2,500 per student, per term. No setup fee."
+#: `docs/website.md` lists where it appears.
+PRICE = "The first term is free, then ₦1,500 per student, per term. No setup fee."
 
 #: Each public page's title and description, by route name, in the order the
 #: sitemap lists them. Every title is the page's own, starts or ends with the
@@ -45,8 +47,11 @@ PRICE = "₦2,500 per student, per term. No setup fee."
 PAGES = {
     "site-home": (
         "Classnode: School software for Nigerian schools",
-        "Results, report cards, fees and registers for Nigerian secondary schools, in one "
-        "place. " + PRICE,
+        "Results, report cards, fees and registers for Nigerian secondary schools. " + PRICE,
+    ),
+    "site-pricing": (
+        "Pricing: Classnode",
+        "Everything Classnode includes for every school, and the premium add-on. " + PRICE,
     ),
     "site-privacy": (
         "Privacy notice: Classnode",
@@ -168,18 +173,28 @@ def structured_data():
                                "results and report cards, fees and registers in one place. "
                                + PRICE,
                 "publisher": {"@id": organization},
-                "offers": {
-                    "@type": "Offer",
-                    "price": "2500",
-                    "priceCurrency": "NGN",
-                    "description": PRICE,
-                    "priceSpecification": {
-                        "@type": "UnitPriceSpecification",
-                        "price": "2500",
+                "offers": [
+                    {
+                        "@type": "Offer",
+                        "name": "First term",
+                        "price": "0",
                         "priceCurrency": "NGN",
-                        "unitText": "per student, per term",
+                        "description": "The first term is free. No setup fee.",
                     },
-                },
+                    {
+                        "@type": "Offer",
+                        "name": "Every term after the first",
+                        "price": "1500",
+                        "priceCurrency": "NGN",
+                        "description": "₦1,500 per student, per term. No setup fee.",
+                        "priceSpecification": {
+                            "@type": "UnitPriceSpecification",
+                            "price": "1500",
+                            "priceCurrency": "NGN",
+                            "unitText": "per student, per term",
+                        },
+                    },
+                ],
             },
             {
                 "@type": "FAQPage",
@@ -287,6 +302,13 @@ def homepage(request):
         },
         status=status,
     )
+
+
+@require_http_methods(["GET", "HEAD"])
+def pricing(request):
+    """The price, everything it includes, and the premium add-on. Which features still wear
+    "Coming soon" is `website.features`, read from settings on every request."""
+    return site_page(request, "website/pricing.html", {"groups": included(), "premium": premium(), "nav_pricing": True})
 
 
 @require_http_methods(["GET", "HEAD"])

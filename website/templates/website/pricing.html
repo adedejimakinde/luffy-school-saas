@@ -1,0 +1,49 @@
+{% extends "website/base.html" %}
+{% block main %}
+{% comment %}
+The pricing page (`docs/website.md`): the price, then everything it includes in
+groups (`website.features.INCLUDED`), then the premium add-on, priced by asking.
+A feature not yet on `main` wears "Coming soon", decided per feature by its own
+setting (`settings.COMING_SOON_*`), so the label goes with a setting and no code.
+The premium add-on promises sending from the school's own email domain and
+nothing else: no mailboxes.
+{% endcomment %}
+<div class="top-band legal-top"><div class="wrap"><h1>Pricing</h1></div></div>
+<div class="wrap pricing-page">
+  <div class="price-card price-card-wide">
+    <div class="price-band">
+      <p class="price-label">The first term is free, then</p>
+      <p class="price"><span class="price-figure num">&#8358;1,500</span></p>
+      <p class="price-sub">per student, per term. No setup fee.</p>
+    </div>
+    <p class="price-action"><a class="btn btn-lg btn-primary" href="/#demo">Book a demo</a></p>
+  </div>
+
+  <section class="included-section" aria-labelledby="included-title">
+    <h2 id="included-title">Everything in the price</h2>
+    <div class="included-groups">
+      {% for group in groups %}
+      <section class="included-group" aria-labelledby="group-{{ forloop.counter }}">
+        <h3 id="group-{{ forloop.counter }}">{{ group.heading }}</h3>
+        <ul class="included">
+          {% for item in group.items %}
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><b>{{ item.label }}</b>{% if item.coming_soon %} <span class="chip">Coming soon</span>{% endif %}<br><span class="quiet">{{ item.sentence }}</span></span></li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="included-group premium" aria-labelledby="premium-title">
+    <h2 id="premium-title">Premium add-on</h2>
+    <p class="premium-price"><b>Contact us</b></p>
+    <ul class="included">
+      {% for item in premium %}
+      <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><b>{{ item.label }}</b>{% if item.coming_soon %} <span class="chip">Coming soon</span>{% endif %}<br><span class="quiet">{{ item.sentence }}</span></span></li>
+      {% endfor %}
+    </ul>
+    <p class="price-action"><a class="btn btn-outline" href="mailto:hello@classnode.co">Contact us</a></p>
+  </section>
+</div>
+{% endblock %}

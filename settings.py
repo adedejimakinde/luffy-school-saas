@@ -107,6 +107,17 @@ DEMO_REQUEST_INBOX = os.environ.get(
 #: anywhere else; `docs/handover.md` lists every note still open.
 SHOW_LEGAL_TODOS = os.environ.get("SHOW_LEGAL_TODOS", "1" if DEBUG else "0") == "1"
 
+#: **"Coming soon" on the pricing page, one setting per feature.** Each is on
+#: until the feature ships; set it to `0` (in `deploy/production.env`) and the
+#: label goes, with no code change. `website/features.py` lists the features
+#: and the setting that governs each, and a test holds the two to each other.
+COMING_SOON_SCHOOL_WEBSITE = os.environ.get("COMING_SOON_SCHOOL_WEBSITE", "1") == "1"
+COMING_SOON_CBT_SCHOOL_TESTS = os.environ.get("COMING_SOON_CBT_SCHOOL_TESTS", "1") == "1"
+COMING_SOON_CBT_UTME_PRACTICE = os.environ.get("COMING_SOON_CBT_UTME_PRACTICE", "1") == "1"
+COMING_SOON_CBT_WASSCE_PRACTICE = os.environ.get("COMING_SOON_CBT_WASSCE_PRACTICE", "1") == "1"
+COMING_SOON_CUSTOM_DOMAIN = os.environ.get("COMING_SOON_CUSTOM_DOMAIN", "1") == "1"
+COMING_SOON_SENDER_DOMAIN = os.environ.get("COMING_SOON_SENDER_DOMAIN", "1") == "1"
+
 #: **Development only: the whole demo through one host.** A Codespace forwards
 #: one port, which is one hostname, so the portal and a school cannot both be
 #: reached. With this on, that one host (a school's `Domain` row) also answers

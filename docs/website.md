@@ -133,8 +133,8 @@ final call to action, and the footer.
   of it on every screen at 320, 375 and 414px.
 
 - **The words say what the product does and promise no outcome we cannot
-  show.** Kept as the owner gave them: the price (₦2,500 per student, per term,
-  no setup fee), the call-back time (**two working days**) and the contact
+  show.** Kept as the owner gave them: the price (the first term free, then ₦1,500 per student, per term,
+  no setup fee; changed from ₦2,500 on 26 October 2026), the call-back time (**two working days**) and the contact
   address (hello@classnode.co). The footer, the same on every page of the site
   (homepage, privacy notice, terms, the blog): the logo with one line under it (School
   management for Nigerian secondary schools.), three columns of links (Product:
@@ -262,6 +262,28 @@ final call to action, and the footer.
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
 
+## The pricing page and "Coming soon"
+
+`/pricing/` (`website.views.pricing`, `website/features.py`) shows the price, then
+everything it includes in groups (results and report cards; registers, fees and
+notices; staff and exams; the school online; safe and separate), then a separate
+**Premium add-on** group (a custom domain for the school website, and sending
+results and notices from the school's own email domain) priced "Contact us". No
+mailboxes are promised.
+
+Each feature was checked against `main` on 26 October 2026. Not on `main`, so
+labelled "Coming soon": the school website (public pages render, but there is no
+editor, so a school cannot yet publish one: `docs/school-sites.md` PR 4), the
+three CBT items (CBT stops at exam PINs: `docs/cbt.md` steps 3 to 6), and both
+premium items (custom domains and sender domains, PRs 10 and 11).
+
+**One setting per label**, on by default, read on every request:
+`COMING_SOON_SCHOOL_WEBSITE`, `COMING_SOON_CBT_SCHOOL_TESTS`,
+`COMING_SOON_CBT_UTME_PRACTICE`, `COMING_SOON_CBT_WASSCE_PRACTICE`,
+`COMING_SOON_CUSTOM_DOMAIN` and `COMING_SOON_SENDER_DOMAIN`. When a feature
+ships, set its variable to `0` in `deploy/production.env` and deploy: the label
+goes and nothing else changes. No code change.
+
 ## Search engines and shared links
 
 The site is the only thing on the platform a search engine is asked to index.
@@ -299,15 +321,20 @@ The site is the only thing on the platform a search engine is asked to index.
   owner's, 18 October 2026; the one before, 68 characters, was cut off). The
   sitemap lists the same pages, and each names its own canonical address,
   `https://` and the bare domain with no query.
-- **The price is written ₦2,500**, with its comma, in the description, the
-  share card's and the structured data's words (`website.views.PRICE`), as the
-  page writes it. The structured data's `price` field stays `2500`: schema.org
-  asks for a bare number there, and a comma would read as a decimal point.
+- **The price is written "The first term is free, then ₦1,500 per student, per
+  term. No setup fee."**, with its comma, in the description, the share card's
+  and the structured data's words (`website.views.PRICE`), as the page writes
+  it. The structured data's `price` fields stay bare numbers (`0` for the first
+  term, `1500` after it): schema.org asks for that, and a comma would read as a
+  decimal point. Classnode's price is on the homepage (hero line and price
+  card), the pricing page, the terms (`#price`), every page's meta and share
+  descriptions that carry `PRICE`, the structured data, and the tests that hold
+  them (`website/tests/test_pricing.py`). It is not any school's fee.
 - **Structured data, on the homepage and each blog post only.** On a post it
   is an Article (`docs/blog.md`). On the homepage: Organization (Classnode Edtech
   Limited, its logo `https://classnode.co/icon-512.png`, `hello@classnode.co`,
-  no address), SoftwareApplication (EducationalApplication, ₦2,500 per student
-  per term) and FAQPage. The FAQ on the page and in the data are drawn from one list,
+  no address), SoftwareApplication (EducationalApplication, a free first term
+  then ₦1,500 per student per term) and FAQPage. The FAQ on the page and in the data are drawn from one list,
   `website.views.FAQ`. No ratings and no reviews: there are none to stand
   behind.
 - **The share card.** Open Graph and a large Twitter card on every page, with

@@ -670,6 +670,21 @@ h3 { margin: 0 0 12px; font-size: clamp(1.25rem, 1rem + 0.9vw, 1.75rem); line-he
 .included .icon { margin-top: 2px; color: var(--brand); }
 .demo-card { padding: var(--card-pad); }
 
+/* The pricing page: the price card, then the features it includes in groups. */
+.pricing-page { display: grid; gap: 40px; padding: 48px 0 72px; }
+.price-card-wide { max-width: 760px; }
+.price-action { margin: 0; padding: 0 var(--card-pad) var(--card-pad); }
+.price-card-wide .price-action { padding-top: var(--card-pad); }
+.included-section > h2, .premium > h2 { margin: 0 0 24px; }
+.included-groups { display: grid; gap: 24px; }
+@media (min-width: 900px) { .included-groups { grid-template-columns: 1fr 1fr; gap: 32px; } }
+.included-group { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-soft); }
+.included-group > h3 { margin: 0; padding: var(--card-pad) var(--card-pad) 0; font-size: 1.25rem; }
+.premium { max-width: 760px; }
+.premium > h2 { padding: var(--card-pad) var(--card-pad) 0; margin-bottom: 8px; }
+.premium-price { margin: 0; padding: 0 var(--card-pad); font-size: var(--copy-lg); }
+.included-group .chip { margin-left: 4px; white-space: nowrap; }
+
 .demo-card h3 { font-size: 1.5rem; }
 .demo-card > p { margin: 0 0 24px; }
 .demo-form { display: grid; gap: 16px; }

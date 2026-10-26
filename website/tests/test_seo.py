@@ -216,16 +216,17 @@ class TitlesAndDescriptionsTests(SiteSetUp):
         self.assertTrue(title.startswith("Classnode: "), title)
 
     def test_the_price_is_written_as_the_page_writes_it(self):
-        """₦2,500, with its comma, in every description a search result or a
-        shared link can show; never ₦2500."""
+        """₦1,500, with its comma, in every description a search result or a
+        shared link can show; never ₦1500, and never the old ₦2,500."""
         page = self.get().content.decode()
-        self.assertIn("₦2,500", html.unescape(re.sub(r"<[^>]+>", " ", page)))
+        self.assertIn("₦1,500", html.unescape(re.sub(r"<[^>]+>", " ", page)))
         for attribute, name in (("name", "description"), ("property", "og:description"),
                                 ("name", "twitter:description")):
             with self.subTest(meta=name):
                 (description,) = meta(page, attribute, name)
-                self.assertIn("₦2,500 per student, per term.", description)
-        self.assertNotIn("₦2500", html.unescape(page))
+                self.assertIn("The first term is free, then ₦1,500 per student, per term. No setup fee.", description)
+        self.assertNotIn("₦1500", html.unescape(page))
+        self.assertNotIn("2,500", html.unescape(page))
 
     def test_each_page_has_its_own_title_and_description_within_their_lengths(self):
         titles, descriptions = set(), set()
@@ -295,15 +296,20 @@ class TheStructuredDataTests(SiteSetUp):
         app = self.graph["SoftwareApplication"]
         self.assertEqual(app["applicationCategory"], "EducationalApplication")
         self.assertEqual(app["publisher"], {"@id": self.graph["Organization"]["@id"]})
-        offer = app["offers"]
-        self.assertEqual((offer["price"], offer["priceCurrency"]), ("2500", "NGN"))
-        unit = offer["priceSpecification"]
-        self.assertEqual((unit["price"], unit["priceCurrency"]), ("2500", "NGN"))
+        first, then = app["offers"]
+        self.assertEqual((first["price"], first["priceCurrency"]), ("0", "NGN"))
+        self.assertEqual(first["description"], "The first term is free. No setup fee.")
+        self.assertEqual((then["price"], then["priceCurrency"]), ("1500", "NGN"))
+        unit = then["priceSpecification"]
+        self.assertEqual((unit["price"], unit["priceCurrency"]), ("1500", "NGN"))
         self.assertEqual(unit["unitText"], "per student, per term")
         # `price` is the bare number schema.org asks for; the words carry the comma.
-        self.assertEqual(offer["description"], "₦2,500 per student, per term. No setup fee.")
-        self.assertIn("₦2,500 per student, per term.", app["description"])
-        self.assertNotIn("₦2500", json.dumps(structured(self.page), ensure_ascii=False))
+        self.assertEqual(then["description"], "₦1,500 per student, per term. No setup fee.")
+        self.assertIn("The first term is free, then ₦1,500 per student, per term. No setup fee.", app["description"])
+        text = json.dumps(structured(self.page), ensure_ascii=False)
+        self.assertNotIn("₦1500", text)
+        self.assertNotIn("2,500", text)
+        self.assertNotIn("2500", text)
 
     def test_the_faq_is_the_visible_questions_and_answers_word_for_word(self):
         shown = [
