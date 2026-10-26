@@ -436,10 +436,11 @@ function measureSite({ width }) {
       if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
-    // The footer on a phone: short (about 300px, 320 on the narrowest), all of
-    // it on the left, small type, and every link a thumb tall by its padding.
+    // The footer on a phone: short (about 330px, a little more where the line
+    // under the logo wraps), all of it on the left, small type, and every link
+    // a thumb tall by its padding.
     const foot = document.querySelector(".site-foot");
-    const limit = width < 360 ? 320 : 300;
+    const limit = width < 375 ? 350 : 340;
     if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
       if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {

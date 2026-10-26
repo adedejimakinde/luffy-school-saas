@@ -145,8 +145,9 @@ final call to action, and the footer.
   and beside it Privacy, Terms and hello@classnode.co in small text. No
   address; the registered address waits for the lawyer. Every link is 44px
   tall by its own padding (32px from 900px). On a phone it is left-aligned and
-  about 300px tall (`tests/ui/screens.test.js` holds it to 300, 320 on the
-  narrowest phones); from 900px the logo and the two groups share one row and
+  about 330px tall, with 16px between the line under the logo and the first
+  label and 12px between the groups (`tests/ui/screens.test.js` holds it to
+  340, 350 under 375px); from 900px the logo and the two groups share one row and
   the bottom line is a single line, about 150px.
   `website/tests/test_homepage.py` holds the page to that copy and to the
   writing rules: no en or em dash, no exclamation mark, no sentence starting
