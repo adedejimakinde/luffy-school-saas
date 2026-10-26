@@ -135,6 +135,13 @@ class School(TenantMixin):
         "accounts.User", null=True, blank=True, on_delete=models.PROTECT, related_name="+"
     )
     pilot_agreement_recorded_at = models.DateTimeField(null=True, blank=True)
+    #: Classnode's own sales demo, Crestfield College (`schools.crestfield`),
+    #: made and reset by `manage.py crestfield` and by nothing else. A sales
+    #: demo sends no email and no SMS (`schools.quiet`), is never indexed or
+    #: listed (`schoolsite.views`), and can be wiped back to its starting state.
+    #: Only the one slug may carry it (the constraint below), so the switch
+    #: cannot be thrown on a real school, by a typo or otherwise.
+    sales_demo = models.BooleanField(default=False)
 
     # Schemas are created on save in real use; tests turn this off per instance.
     auto_create_schema = True
@@ -169,6 +176,11 @@ class School(TenantMixin):
                     )
                 )
                 | models.Q(pilot_agreement_signed_on__isnull=True),
+            ),
+            # `schools.crestfield.SLUG`, spelled out: a constraint cannot import it.
+            models.CheckConstraint(
+                name="only_crestfield_is_the_sales_demo",
+                condition=models.Q(sales_demo=False) | models.Q(slug="crestfield"),
             ),
         ]
 

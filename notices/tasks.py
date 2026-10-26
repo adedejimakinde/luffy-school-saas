@@ -22,6 +22,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from messaging import kinds, providers
+from schools import quiet
 from schools.tasks import TenantTask
 
 from . import hours, recipients
@@ -111,9 +112,13 @@ def send_notice(schema_name, notice_id):
             student_membership_id=notice.student_membership_id,
         )
 
-    claim = _claim(notice, message_kind, text if reachable and not changed else "")
+    # The claim keeps the text only of a message that is about to go.
+    switched_off = quiet.is_quiet(school)
+    claim = _claim(notice, message_kind, text if reachable and not changed and not switched_off else "")
     if claim is None:
         return None
+    if switched_off:
+        return _record(claim, Said.SWITCHED_OFF)
     if not reachable:
         return _record(claim, Said.NO_LONGER_REACHABLE)
     if changed:

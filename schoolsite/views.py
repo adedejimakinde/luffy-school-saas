@@ -87,7 +87,7 @@ def _cached_draw(school, revision, key, host):
     return drawn
 
 
-def _served(request, body, content_type, *, style=None):
+def _served(request, body, content_type, *, style=None, indexable=True):
     """A public page's response: indexable, cacheable, conditional, and under its CSP."""
     etag = '"' + hashlib.sha256(body.encode()).hexdigest()[:32] + '"'
     if etag in [t.strip() for t in request.headers.get("If-None-Match", "").split(",")]:
@@ -98,8 +98,19 @@ def _served(request, body, content_type, *, style=None):
     response["Cache-Control"] = CACHE_CONTROL
     if style is not None:
         response["Content-Security-Policy"] = render.csp(style)
-    response.indexable = True
+    response.indexable = indexable
     return response
+
+
+def _may_be_indexed(school) -> bool:
+    """Classnode's demo school (`School.sales_demo`) publishes a site that is never indexed.
+
+    It sits on the production server beside real schools and must not turn up
+    in a search for a real one: its pages go out `noindex` (`website.crawlers`
+    adds the header to every response not marked indexable), its robots.txt
+    stays closed and it has no sitemap.
+    """
+    return not school.sales_demo
 
 
 def _page(request, key):
@@ -112,7 +123,9 @@ def _page(request, key):
     drawn = _cached_draw(school, revision, key, _host(request))
     if drawn is None:
         raise Http404("This page is not on the school's website.")
-    return _served(request, drawn.html, "text/html; charset=utf-8", style=drawn.style)
+    return _served(
+        request, drawn.html, "text/html; charset=utf-8", style=drawn.style, indexable=_may_be_indexed(school)
+    )
 
 
 @require_safe
@@ -149,7 +162,7 @@ def contact(request):
 def sitemap(request):
     school = _school(request)
     revision = live_revision(school)
-    if revision is None:
+    if revision is None or not _may_be_indexed(school):
         raise Http404("This school has not published its website yet.")
     return _served(request, render.sitemap(revision, _host(request)), "application/xml; charset=utf-8")
 
@@ -172,7 +185,8 @@ def robots(request):
     this does not answer with a 200.
     """
     school = _school(request)
-    body = SCHOOL_ROBOTS if live_revision(school) is None else open_robots(_host(request))
+    closed = live_revision(school) is None or not _may_be_indexed(school)
+    body = SCHOOL_ROBOTS if closed else open_robots(_host(request))
     response = HttpResponse(body, content_type="text/plain; charset=utf-8")
     response["Cache-Control"] = CACHE_CONTROL
     return response

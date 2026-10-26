@@ -21,6 +21,7 @@ from accounts.identifiers import normalize_email, try_normalize_phone
 from accounts.models import Membership, MembershipStatus, Role, STAFF_ROLES, User
 from accounts.services import NotPermitted, _require_grant_authority, grant_membership
 
+from . import quiet
 from .delivery import DeliveryNotConfigured, get_channel
 from .models import Invitation, InvitationError, InviteeDeactivated
 
@@ -429,6 +430,11 @@ def _deliver(invitation, raw_token, accept_url_for):
     now the configured URL, so the way to send nothing is to configure nothing,
     and that refuses out loud.
     """
+    # A school that sends nothing (`schools.quiet`, Classnode's demo) is refused
+    # here, before the commit, so the invitation and any placeholder account it
+    # would have made roll back with it.
+    quiet.refuse_if_quiet(invitation.membership.school)
+
     channel = get_channel()
 
     # Both optional halves of the seam — a test double, or any channel that

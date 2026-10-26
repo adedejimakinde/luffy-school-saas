@@ -48,6 +48,7 @@ import urllib.request
 from django.conf import settings
 
 from .providers import Accepted, NotConfigured, Refused, Unavailable
+from .reserved import is_fictional_phone
 
 #: Words in a 4xx reply's `message` that put the fault on the sender ID or the
 #: account, checked first: "Invalid sender ID for phone number" is a sender ID.
@@ -85,6 +86,8 @@ class TermiiProvider:
         if outbound.channel_type != "phone":
             raise ValueError("The Termii provider sends to phone channels only.")
         self.check_configured()
+        if is_fictional_phone(outbound.address):
+            raise Refused("That number is reserved for fiction and belongs to nobody.")
 
         body = json.dumps(
             {
