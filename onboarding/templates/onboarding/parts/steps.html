@@ -1,18 +1,19 @@
 {% comment %}
 The eight steps as a list. `compact` drops the detail line and the chips, for
-the column beside a step page; `here` marks the step being looked at.
+the column beside a step page; `here` marks the step being looked at. Every
+step opens, in any order: none is ever locked (`onboarding.progress.judge()`).
 {% endcomment %}<ol class="ob-steps">
   {% for s in progress.steps %}
   <li class="{{ s.state }}{% if here and s.step.key == here.step.key %} here{% endif %}" data-step="{{ s.step.key }}" data-step-state="{{ s.state }}">
     <a href="/start/{{ s.step.key }}/"{% if here and s.step.key == here.step.key %} aria-current="step"{% endif %}>
-      <svg class="icon mark" aria-hidden="true"><use href="#{% if s.state == 'done' %}i-check{% elif s.state == 'next' %}i-next{% elif s.state == 'locked' %}i-lock{% else %}i-todo{% endif %}"/></svg>
+      <svg class="icon mark" aria-hidden="true"><use href="#{% if s.state == 'done' %}i-check{% elif s.state == 'next' %}i-next{% else %}i-todo{% endif %}"/></svg>
       <span class="text">
-        <strong><span class="sr">{% if s.state == "done" %}Done: {% elif s.state == "next" %}Next: {% elif s.state == "locked" %}Locked: {% else %}To do: {% endif %}</span>{{ s.number }}. {{ s.step.title }}</strong>
-        {% if not compact %}<span>{% if s.state == "locked" %}{{ s.step.opens_when }}{% else %}{{ s.step.detail }}{% endif %}</span>
-        {% if s.state == "next" %}<span class="in-text chip chip-brand">Next</span>{% elif s.state == "locked" %}<span class="in-text chip">Locked</span>{% elif s.step.optional and not s.done %}<span class="in-text chip">Optional</span>{% endif %}{% endif %}
+        <strong><span class="sr">{% if s.state == "done" %}Done: {% elif s.state == "next" %}Next: {% else %}To do: {% endif %}</span>{{ s.number }}. {{ s.step.title }}</strong>
+        {% if not compact %}<span>{% if s.later %}Done. To add later: {{ s.later|join:" and " }}{% else %}{{ s.step.detail }}{% endif %}</span>
+        {% if s.state == "next" %}<span class="in-text chip chip-brand">Next</span>{% elif s.step.optional and not s.done %}<span class="in-text chip">Optional</span>{% endif %}{% endif %}
       </span>
       <span class="end">
-        {% if not compact %}{% if s.state == "done" %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Done</span>{% elif s.state == "next" %}<span class="chip chip-brand">Next</span>{% elif s.state == "locked" %}<span class="chip"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg>Locked</span>{% elif s.step.optional %}<span class="chip">Optional</span>{% endif %}{% endif %}
+        {% if not compact %}{% if s.state == "done" %}<span class="chip chip-ok"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Done</span>{% elif s.state == "next" %}<span class="chip chip-brand">Next</span>{% elif s.step.optional %}<span class="chip">Optional</span>{% endif %}{% endif %}
         <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
       </span>
     </a>

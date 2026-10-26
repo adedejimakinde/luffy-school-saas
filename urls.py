@@ -32,7 +32,7 @@ from cbt.views import exam_slips_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
-from onboarding.views import help_page, start_here, step_page
+from onboarding.views import help_page, start_again_page, start_here, step_page
 from notices.views import settings_page
 from schools.demo import only_in_the_single_host_demo
 from schools.paths import RESERVED
@@ -100,6 +100,9 @@ urlpatterns = [
     # Start here and the administrator's setup steps, and Help and next steps
     # for every member of staff (`onboarding`).
     path("start/", start_here, name="start-here"),
+    # Start again: the principal clears the setup while there are no real
+    # records yet. Before the step pattern, which "again" would also match.
+    path("start/again/", start_again_page, name="start-again"),
     path("start/<slug:key>/", step_page, name="setup-step"),
     path("help/", help_page, name="help"),
     path("setup/", setup_page, name="school-setup"),

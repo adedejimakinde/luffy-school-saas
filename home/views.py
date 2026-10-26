@@ -40,9 +40,11 @@ def home_page(request):
     # there are no students yet, how far the administrator has got. Never a
     # redirect: only signing in sends an administrator to Start here.
     setup = onboarding.for_request(request)
-    if setup is not None and setup.next is not None:
+    if setup is not None and setup.next is not None and setup.next.step.key == "school-details":
         # The next-step card says it already; the list below need not repeat it.
-        dash["attention"] = [item for item in dash["attention"] if item["key"] != "contact"]
+        # Once the email or the crest is put off ("Add later") the step is done,
+        # the card moves on, and the reminders below stay until each is given.
+        dash["attention"] = [item for item in dash["attention"] if item["key"] not in ("contact", "crest")]
     if setup is None and dash["setup"] and not onboarding.is_onboarding(roles):
         setup = onboarding.progress_for(school)
     return render(request, TEMPLATE, {
@@ -50,6 +52,8 @@ def home_page(request):
         "dash": dash,
         "setup": setup,
         "leads_setup": onboarding.is_onboarding(roles),
+        # The principal may open every step without being led through them.
+        "may_open_steps": bool(roles & onboarding.ONBOARDING_ROLES),
         "first": first_days.card_for(request, school, user, roles),
         # The principal's prompt to say who teaches what, read live rather than from
         # the cached facts so it goes the moment the first assignment is made.

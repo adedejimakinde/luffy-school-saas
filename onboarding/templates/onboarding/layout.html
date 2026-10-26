@@ -19,7 +19,7 @@ signed-out caller is served.
       {% if state == "not-yours" %}
       <section class="panel">
         <h1>This page is not yours</h1>
-        <p>This page is for {% if current == "help" %}the school's staff{% else %}the school administrator{% endif %}. Your school office can tell you which pages are yours.</p>
+        <p>This page is for {% if current == "help" %}the school's staff{% elif current == "again" %}the school's principal{% else %}the principal and the school administrator{% endif %}. Your school office can tell you which pages are yours.</p>
         <p><a href="/home/">Go to Home</a></p>
       </section>
       {% elif state == "signed-out" %}

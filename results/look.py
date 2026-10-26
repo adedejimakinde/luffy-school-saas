@@ -28,6 +28,8 @@ import io
 import re
 from typing import Optional
 
+from django.db import transaction
+
 from academics.services import can_set_up
 
 from .models import ReportCardSettings
@@ -174,18 +176,30 @@ def redraw_crest(raw: bytes) -> bytes:
 def set_crest_as(actor, school, raw: bytes) -> ReportCardSettings:
     _require_authority(actor, school)
     crest = redraw_crest(raw)
-    row, _ = ReportCardSettings.objects.get_or_create(pk=1)
-    row.crest = crest
-    row.save(update_fields=["crest", "updated_at"])
+    with transaction.atomic():
+        row, _ = ReportCardSettings.objects.get_or_create(pk=1)
+        row.crest = crest
+        row.save(update_fields=["crest", "updated_at"])
+        _log_crest(actor, school, "saved", "Uploaded a new crest.")
     return row
 
 
 def clear_crest_as(actor, school) -> ReportCardSettings:
     _require_authority(actor, school)
-    row, _ = ReportCardSettings.objects.get_or_create(pk=1)
-    row.crest = None
-    row.save(update_fields=["crest", "updated_at"])
+    with transaction.atomic():
+        row, _ = ReportCardSettings.objects.get_or_create(pk=1)
+        had = row.crest is not None
+        row.crest = None
+        row.save(update_fields=["crest", "updated_at"])
+        if had:
+            _log_crest(actor, school, "cleared", "Removed the crest. Cards print the school's initials.")
     return row
+
+
+def _log_crest(actor, school, action, summary):
+    from audit import log
+
+    log.record(actor, school, action=action, kind="crest", item_name=school.name, summary=summary)
 
 
 # -- the position in class ---------------------------------------------------

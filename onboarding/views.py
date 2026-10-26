@@ -19,13 +19,16 @@ from django.utils import timezone
 from home.dashboard import HOME_ROLES, first_name
 from schools.hosts import portal_host
 
-from . import handover
+from audit import log as audit_log
+
+from . import again, handover, later
 from . import help as tips
 from . import progress as steps
 
 START = "onboarding/start.html"
 STEP = "onboarding/step.html"
 HELP = "onboarding/help.html"
+AGAIN = "onboarding/again.html"
 
 
 def _refusal(request, template, roles, current):
@@ -41,19 +44,51 @@ def _refusal(request, template, roles, current):
     return None
 
 
+def _share_with_the_chip(request, progress):
+    """Hand this read to the setup chip, so the page and the chip share it.
+    Only for whoever setup is brought to (`progress.LEAD_ROLES`): a principal
+    opening the steps gets no chip."""
+    lead = steps.is_onboarding(request.school_roles)
+    request._onboarding_progress = progress if lead and not progress.complete else None
+
+
+def _details(school, facts):
+    """The first step's two parts, each given, put off, or still to do."""
+    rows = []
+    for what, given, label, href in (
+        ("contact-email", facts["contact_email"], "Contact email", "/setup/#contact-email"),
+        ("crest", facts["crest"], "Crest", "/setup/#report-card"),
+    ):
+        column, name = later.LATER[what]
+        rows.append({
+            "what": what,
+            "label": label,
+            "given": bool(given),
+            "later": getattr(school, column) is not None,
+            "href": href,
+            "name": name,
+        })
+    return rows
+
+
 def start_here(request):
     refused = _refusal(request, START, steps.ONBOARDING_ROLES, "start")
     if refused is not None:
         return refused
     school = request.school
     progress = steps.progress_for(school)
-    request._onboarding_progress = None if progress.complete else progress
+    _share_with_the_chip(request, progress)
+    put_off = [d for d in _details(school, progress.facts) if d["later"] and not d["given"]]
     return render(request, START, {
         "state": "start",
         "current": "start",
         "progress": progress,
         "name": first_name(request.user),
         "school_name": school.name,
+        "put_off": put_off,
+        "changes": audit_log.recent(5),
+        "may_start_again": again.may_start_again(request.user, school),
+        "started_again": request.GET.get("started-again") == "1",
     })
 
 
@@ -63,20 +98,67 @@ def step_page(request, key):
         return refused
     if key not in steps.BY_KEY:
         raise Http404("No such step.")
-    progress = steps.progress_for(request.school)
-    request._onboarding_progress = None if progress.complete else progress
+    school = request.school
+    note = ""
+    if request.method == "POST":
+        # "Add later", on the first step: a form post, so the page needs no script.
+        try:
+            later.put_off_as(request.user, school, request.POST.get("what", ""))
+        except later.NotAllowedToPutOff:
+            return render(request, STEP, {"state": "not-yours", "current": "start"}, status=403)
+        except later.NothingToPutOff:
+            note = "Choose the contact email or the crest to add later."
+        else:
+            return redirect(f"/start/{key}/")
+    progress = steps.progress_for(school)
+    _share_with_the_chip(request, progress)
     here = progress.by_key[key]
     index = progress.steps.index(here)
     after = progress.steps[index + 1] if index + 1 < len(progress.steps) else None
-    first = steps.waits_on(here, progress.facts) if here.locked else None
     return render(request, STEP, {
         "state": "step",
         "current": "start",
         "progress": progress,
         "here": here,
         "after": after,
-        "first": first,
-    })
+        "hint": steps.hint_for(here, progress.facts),
+        "may_do": steps.may_do(here.step, request.school_roles),
+        "details": _details(school, progress.facts) if key == "school-details" else None,
+        "note": note,
+    }, status=422 if note else 200)
+
+
+def start_again_page(request):
+    """Start again: what it clears, what stays, and the typed confirmation.
+
+    The principal's alone (`again.AGAIN_ROLES`), asked before anything of the
+    school is read. A POST clears, then shows Start here; a refusal draws the
+    page again with the reason and changes nothing."""
+    refused = _refusal(request, AGAIN, again.AGAIN_ROLES, "again")
+    if refused is not None:
+        return refused
+    school = request.school
+    note = ""
+    if request.method == "POST":
+        try:
+            again.start_again_as(
+                request.user, school,
+                typed_name=request.POST.get("school_name", ""),
+                fingerprint=request.POST.get("plan", ""),
+            )
+        except again.NotAllowedToStartAgain:
+            return render(request, AGAIN, {"state": "not-yours", "current": "again"}, status=403)
+        except again.StartAgainRefused as exc:
+            note = str(exc)
+        else:
+            return redirect("/start/?started-again=1")
+    return render(request, AGAIN, {
+        "state": "again",
+        "current": "again",
+        "plan": again.plan(school),
+        "school_name": school.name,
+        "note": note,
+    }, status=422 if note else 200)
 
 
 def help_page(request):
@@ -144,4 +226,4 @@ def handover_page(request):
     }, status=422 if note else 200)
 
 
-__all__ = ["handover_page", "help_page", "start_here", "step_page"]
+__all__ = ["handover_page", "help_page", "start_again_page", "start_here", "step_page"]

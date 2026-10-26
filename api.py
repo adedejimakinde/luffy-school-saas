@@ -75,7 +75,7 @@ from results.health_api import router as health_router
 from results.withholding import CardWithheld
 from schools import invitations as invitation_service
 from schools.platform_api import router as platform_router
-from onboarding.progress import ONBOARDING_ROLES
+from onboarding.progress import LEAD_ROLES
 from onboarding.progress import progress_for as onboarding_progress
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.demo import single_host
@@ -500,7 +500,7 @@ def _schools_of(user, *, parent_scoped=False):
     if not parent_scoped:
         administered = set(
             user.memberships.with_access()
-            .filter(school__in=schools, role__in=ONBOARDING_ROLES)
+            .filter(school__in=schools, role__in=LEAD_ROLES)
             .values_list("school_id", flat=True)
         )
         starting = {

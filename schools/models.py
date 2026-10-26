@@ -119,6 +119,13 @@ class School(TenantMixin):
     #: all held, so a finished school is never sent back to Start here and
     #: pays no query for the setup chip again.
     setup_completed_at = models.DateTimeField(null=True, blank=True)
+    #: When the office chose "Add later" for the contact email and for the
+    #: crest on the first setup step (`onboarding.progress`). Neither is needed
+    #: to sign in or to recover an account, so the step counts as done once
+    #: each is either given or put off; the dashboard keeps a reminder card
+    #: until it is given. Null when it was never put off.
+    contact_email_later_at = models.DateTimeField(null=True, blank=True)
+    crest_later_at = models.DateTimeField(null=True, blank=True)
     #: The date the signed pilot agreement came back, recorded by platform
     #: staff on the handover page (`onboarding.handover`), with who recorded it
     #: and when. Never shown to the school. All three are set together or not

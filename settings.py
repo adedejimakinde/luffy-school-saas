@@ -241,6 +241,9 @@ TENANT_APPS = [
     "cbt",
     # A school's own website: its draft, what it published and who did (`docs/school-sites.md`).
     "schoolsite",
+    # What changed in the school's setup, by whom and when: one append-only
+    # table in each school's schema (`audit.models`).
+    "audit",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

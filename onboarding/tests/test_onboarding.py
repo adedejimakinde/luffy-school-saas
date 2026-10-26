@@ -154,7 +154,7 @@ class TwoSchools(TestCase):
 
 
 class DoneStatesFlipAsDataArrivesTests(TwoSchools):
-    def test_a_new_school_has_nothing_done_and_three_steps_locked(self):
+    def test_a_new_school_has_nothing_done_and_nothing_locked(self):
         states = self.states(self.a)
 
         self.assertEqual(
@@ -166,9 +166,9 @@ class DoneStatesFlipAsDataArrivesTests(TwoSchools):
                 "subjects": "todo",
                 # The fixture's teacher is already invited at Sunrise.
                 "teachers": "done",
-                "students": "locked",
-                "fees": "locked",
-                "report-card": "locked",
+                "students": "todo",
+                "fees": "todo",
+                "report-card": "todo",
             },
         )
         self.assertEqual(self.steps_of(self.a).done, 1)
@@ -235,46 +235,161 @@ class DoneStatesFlipAsDataArrivesTests(TwoSchools):
         self.assertEqual(School.objects.get(pk=self.a.pk).setup_completed_at, first_time)
 
 
-class LockedStepsStayLockedTests(TwoSchools):
-    def test_students_stay_locked_until_a_class_exists(self):
-        self.details(self.a)
-        self.term(self.a)
-        self.subject(self.a)
-        self.teacher(self.a, "t1")
-        self.assertEqual(self.states(self.a)["students"], "locked")
+class NoStepIsLockedTests(TwoSchools):
+    """Every step opens with its own action whatever else is done. Control:
+    the step page's action was hidden while a hint shows (`may_do and not
+    hint`), and the every-step and students-before-classes tests went red;
+    restored."""
 
-        self.a_class(self.a)
-        self.assertIn(self.states(self.a)["students"], {"todo", "next"})
+    def test_every_step_page_offers_its_own_action(self):
+        for step in progress.STEPS:
+            if step.key == "school-details":
+                continue
+            with self.subTest(step=step.key):
+                html = self.get(self.admin_a, f"/start/{step.key}/").content.decode()
+                self.assertIn(f'data-step="{step.key}" data-step-state=', html)
+                self.assertIn(f'href="{step.href}"', html)
+                self.assertNotIn('data-step-state="locked"', html)
 
-    def test_the_report_card_waits_on_the_term_and_the_subjects(self):
-        self.subject(self.a)
-        self.assertEqual(self.states(self.a)["report-card"], "locked")
-
-        self.term(self.a)
-        self.assertEqual(self.states(self.a)["report-card"], "todo")
-
-    def test_fees_wait_on_the_term_and_a_class(self):
-        self.term(self.a)
-        self.assertEqual(self.states(self.a)["fees"], "locked")
-
-        self.a_class(self.a)
-        self.assertEqual(self.states(self.a)["fees"], "todo")
-
-    def test_the_locked_page_says_what_to_finish_first_and_links_it(self):
+    def test_students_before_classes_is_a_hint_with_the_import_still_offered(self):
         html = self.get(self.admin_a, "/start/students/").content.decode()
 
-        self.assertIn('data-step-state="locked"', html)
-        self.assertIn("Add your classes first", html)
+        self.assertIn('data-hint="classes"', html)
         self.assertIn('href="/start/classes/"', html)
-        self.assertNotIn('href="/roll/import/"', html)
+        self.assertIn('href="/roll/import/"', html)
 
-    def test_once_a_class_exists_the_page_offers_the_import(self):
+    def test_the_hint_goes_once_what_it_names_is_there(self):
         self.a_class(self.a)
 
         html = self.get(self.admin_a, "/start/students/").content.decode()
 
-        self.assertIn('<article class="panel step-page" data-step="students" data-step-state="todo">', html)
+        self.assertNotIn("data-hint=", html)
         self.assertIn('href="/roll/import/"', html)
+
+    def test_students_imported_before_classes_count_as_done(self):
+        self.student(self.a, "early")
+
+        self.assertEqual(self.states(self.a)["students"], "done")
+
+    def test_the_term_step_no_longer_says_saving_makes_it_current(self):
+        html = self.get(self.admin_a, "/start/session-and-term/").content.decode()
+
+        self.assertNotIn("It becomes the current term", html)
+        self.assertIn("Tap Make current", html)
+
+    def test_a_term_saved_but_not_current_is_not_done_and_says_so(self):
+        with connected_to(self.a):
+            Term.objects.create(
+                session="2026/2027", name="first", starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 18),
+            )
+        html = self.get(self.admin_a, "/start/session-and-term/").content.decode()
+
+        self.assertNotEqual(self.states(self.a)["session-and-term"], "done")
+        self.assertIn("A term is saved but not current yet", html)
+
+
+# -- "Add later" for the contact email and the crest --------------------------------
+
+
+class AddLaterTests(TwoSchools):
+    """Control: `put_off_as()` lost its `can_set_up()` check, and the
+    service-level test went red (the page's gate and the school host's
+    membership check still stopped the HTTP callers, as they should); restored."""
+
+    def later(self, member, what, host=HOST_A):
+        self.client.force_login(member.user)
+        response = self.client.post("/start/school-details/", {"what": what}, HTTP_HOST=host)
+        connection.set_schema_to_public()
+        return response
+
+    def log_of(self, school):
+        from audit.models import Change
+
+        with connected_to(school):
+            return list(Change.objects.order_by("id").values_list("action", "kind", "by_id"))
+
+    def test_both_put_off_moves_the_administrator_on_and_is_logged(self):
+        for what in ("contact-email", "crest"):
+            self.assertEqual(self.later(self.admin_a, what).status_code, 302)
+
+        steps = self.steps_of(self.a)
+        self.assertEqual(steps.by_key["school-details"].state, "done")
+        self.assertEqual(steps.next.step.key, "session-and-term")
+        self.assertEqual(
+            self.log_of(self.a),
+            [("put-off", "contact-email", self.admin_a.user.pk), ("put-off", "crest", self.admin_a.user.pk)],
+        )
+
+    def test_the_principal_may_put_off_too(self):
+        self.assertEqual(self.later(self.principal_a, "contact-email").status_code, 302)
+        self.assertIsNotNone(School.objects.get(pk=self.a.pk).contact_email_later_at)
+
+    def test_saying_it_twice_is_one_record(self):
+        self.later(self.admin_a, "crest")
+        self.later(self.admin_a, "crest")
+
+        self.assertEqual(len(self.log_of(self.a)), 1)
+
+    def test_a_teacher_a_bursar_and_a_parent_may_not(self):
+        for member in (self.teacher_a, self.bursar_a, self.parent_a):
+            with self.subTest(role=member.role):
+                self.assertEqual(self.later(member, "crest").status_code, 403)
+        self.assertIsNone(School.objects.get(pk=self.a.pk).crest_later_at)
+        self.assertEqual(self.log_of(self.a), [])
+
+    def test_another_schools_administrator_may_not_put_off_this_schools(self):
+        response = self.later(self.admin_b, "contact-email", host=HOST_A)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIsNone(School.objects.get(pk=self.a.pk).contact_email_later_at)
+        self.assertIsNone(School.objects.get(pk=self.b.pk).contact_email_later_at)
+        self.assertEqual(self.log_of(self.a), [])
+        self.assertEqual(self.log_of(self.b), [])
+
+    def test_the_service_itself_refuses_a_teacher_and_another_schools_administrator(self):
+        """Behind the page's own gate and the school host's: called directly."""
+        from onboarding import later
+
+        school = School.objects.get(pk=self.a.pk)
+        for actor in (self.teacher_a.user, self.admin_b.user):
+            with self.subTest(actor=actor.username), self.assertRaises(later.NotAllowedToPutOff):
+                later.put_off_as(actor, school, "crest")
+        self.assertIsNone(School.objects.get(pk=self.a.pk).crest_later_at)
+
+    def test_something_else_is_refused_and_changes_nothing(self):
+        response = self.later(self.admin_a, "name")
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.log_of(self.a), [])
+
+    def test_the_page_offers_add_later_and_says_why_it_is_safe(self):
+        html = self.get(self.admin_a, "/start/school-details/").content.decode()
+
+        self.assertIn('data-later="contact-email"', html)
+        self.assertIn('data-later="crest"', html)
+        self.assertIn("Neither is needed to sign in or to get back into an account", html)
+
+    def test_once_put_off_start_here_and_then_the_dashboard_remind(self):
+        self.later(self.admin_a, "contact-email")
+        self.later(self.admin_a, "crest")
+        start = self.get(self.admin_a, "/start/").content.decode()
+
+        # The dashboard's list of things to do starts once the school has
+        # students; until then Start here carries the reminder.
+        self.student(self.a, "first-child")
+        home = self.get(self.admin_a, "/home/").content.decode()
+
+        self.assertIn("Add your school&#x27;s contact email", home)
+        self.assertIn("Add your school&#x27;s crest", home)
+        self.assertIn("data-later-card", start)
+
+    def test_the_reminder_goes_once_the_email_is_given(self):
+        self.later(self.admin_a, "contact-email")
+        School.objects.filter(pk=self.a.pk).update(contact_email="office@sunrise.example")
+
+        start = self.get(self.admin_a, "/start/").content.decode()
+
+        self.assertNotIn("Your school&#x27;s contact email", start)
 
 
 # -- tenant isolation ---------------------------------------------------------------------
@@ -320,19 +435,33 @@ class OneSchoolsProgressNeverReflectsAnothersTests(TwoSchools):
 # -- who may open what ---------------------------------------------------------------------
 
 
-class OnlyTheAdministratorOpensTheStepsTests(TwoSchools):
+class TheAdministratorAndThePrincipalOpenTheStepsTests(TwoSchools):
     """Control: `ONBOARDING_ROLES` was widened to every staff role and the
-    refusal tests went red."""
+    refusal tests went red; and narrowed back to the administrator alone, and
+    the principal's went red."""
 
     PATHS = ("/start/", "/start/school-details/", "/start/classes/", "/start/students/")
 
-    def test_the_administrator_opens_every_step(self):
-        for path in self.PATHS:
-            with self.subTest(path=path):
-                self.assertEqual(self.get(self.admin_a, path).status_code, 200)
+    def test_the_administrator_and_the_principal_open_every_step(self):
+        for member in (self.admin_a, self.principal_a):
+            for path in self.PATHS + tuple(f"/start/{s.key}/" for s in progress.STEPS):
+                with self.subTest(role=member.role, path=path):
+                    self.assertEqual(self.get(member, path).status_code, 200)
 
-    def test_a_teacher_a_bursar_a_principal_and_a_parent_are_refused(self):
-        for member in (self.teacher_a, self.bursar_a, self.principal_a, self.parent_a):
+    def test_the_principal_gets_no_setup_chip_on_the_steps(self):
+        for path in ("/start/", "/start/classes/"):
+            with self.subTest(path=path):
+                self.assertNotIn("setup-chip", self.get(self.principal_a, path).content.decode())
+                self.assertIn("setup-chip", self.get(self.admin_a, path).content.decode())
+
+    def test_a_step_the_principal_cannot_do_says_who_does(self):
+        html = self.get(self.principal_a, "/start/students/").content.decode()
+
+        self.assertIn("This step is done by your school administrator.", html)
+        self.assertNotIn('href="/roll/import/"', html)
+
+    def test_a_teacher_a_bursar_and_a_parent_are_refused(self):
+        for member in (self.teacher_a, self.bursar_a, self.parent_a):
             for path in self.PATHS:
                 with self.subTest(role=member.role, path=path):
                     response = self.get(member, path)
@@ -497,6 +626,7 @@ class TheSetupChipTests(TwoSchools):
                 self.assertNotIn("Setup 1 of 8", html)
 
     def test_nobody_but_the_administrator_sees_it(self):
+        """The principal may open Start here, but setup is not pushed at them."""
         for member in (self.teacher_a, self.bursar_a, self.principal_a):
             with self.subTest(role=member.role):
                 self.assertNotIn("setup-chip", self.get(member, "/home/").content.decode())
@@ -826,12 +956,54 @@ class TheJudgingIsPureTests(TestCase):
         teachers=0, students=0, fees=False, papers=False, registers=False,
     )
 
-    def test_nothing_is_eight_to_do_with_three_locked(self):
+    def test_nothing_is_eight_to_do_and_none_locked(self):
         steps = progress.judge(dict(self.FACTS))
 
         self.assertEqual(steps.done, 0)
-        self.assertEqual([s.step.key for s in steps.steps if s.locked], ["students", "fees", "report-card"])
+        self.assertEqual({s.state for s in steps.steps}, {"next", "todo"})
         self.assertEqual(steps.next.step.key, "school-details")
+
+    def test_every_step_done_in_reverse_order_is_done(self):
+        """The tester's case: later steps first. Each is judged on its own data."""
+        facts = dict(self.FACTS)
+        for key, fact in (
+            ("report-card", dict(papers=True, term=True, subjects=1)),
+            ("fees", dict(fees=True)),
+            ("students", dict(students=2)),
+            ("teachers", dict(teachers=1)),
+        ):
+            facts.update(fact)
+            self.assertEqual(progress.judge(dict(facts)).by_key[key].state, "done")
+        self.assertEqual(progress.judge(dict(facts)).next.step.key, "school-details")
+
+    def test_the_first_step_is_done_with_each_part_given_or_put_off(self):
+        for email, email_later, crest, crest_later, done in (
+            (False, False, False, False, False),
+            (True, False, False, False, False),
+            (False, True, False, False, False),
+            (False, True, False, True, True),
+            (True, False, False, True, True),
+            (False, True, True, False, True),
+            (True, False, True, False, True),
+        ):
+            with self.subTest(email=email, email_later=email_later, crest=crest, crest_later=crest_later):
+                steps = progress.judge(dict(
+                    self.FACTS, contact_email=email, contact_email_later=email_later,
+                    crest=crest, crest_later=crest_later,
+                ))
+                self.assertEqual(steps.by_key["school-details"].done, done)
+
+    def test_what_was_put_off_is_named_on_the_step(self):
+        steps = progress.judge(dict(self.FACTS, contact_email_later=True, crest=True))
+
+        self.assertEqual(steps.by_key["school-details"].later, ("contact email",))
+        self.assertIn("Contact email to add later", steps.by_key["school-details"].status)
+
+    def test_a_term_saved_but_not_current_says_what_to_tap(self):
+        steps = progress.judge(dict(self.FACTS, terms=1))
+
+        self.assertNotEqual(steps.by_key["session-and-term"].state, "done")
+        self.assertIn("Tap Make current", steps.by_key["session-and-term"].status)
 
     def test_a_step_done_out_of_order_is_still_done(self):
         steps = progress.judge(dict(self.FACTS, students=3))

@@ -10,6 +10,8 @@
         <a class="skip" href="/home/">Skip to dashboard<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>
       </header>
 
+      {% if started_again %}<div class="msg" role="status"><span class="label label-ok">Started again</span><p>Your setup is clear. Begin with any step below, in any order.</p></div>{% endif %}
+
       {% if progress.complete %}
       <section class="next-card celebrate" aria-labelledby="done-title" data-next="first-register">
         <div class="next-top">
@@ -32,10 +34,37 @@
       {% include "onboarding/parts/next_card.html" %}
       {% endif %}
 
+      {% if put_off %}
+      <section class="panel later-card" aria-labelledby="later-title" data-later-card>
+        <h2 id="later-title">You chose to add these later</h2>
+        <ul class="later-list">
+          {% for d in put_off %}<li><span>Your school's {{ d.name }}</span><a class="btn" href="{{ d.href }}">Add it now<svg class="icon" aria-hidden="true"><use href="#i-arrow"/></svg></a></li>{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
       <section class="panel" aria-labelledby="steps-title">
         <div class="panel-head"><h2 id="steps-title">Your setup</h2></div>
         {% include "onboarding/parts/progress.html" %}
         {% include "onboarding/parts/steps.html" %}
+        <p class="ob-any-order">Do the steps in any order. Each one is ticked as soon as what it adds is there.</p>
         {% if not progress.complete %}<p class="ob-finish"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span>When these are done, take your first register and your dashboard fills in.</span></p>{% endif %}
       </section>
+
+      {% if changes %}
+      <section class="panel" aria-labelledby="changes-title" data-changes>
+        <div class="panel-head"><h2 id="changes-title">Recent setup changes</h2></div>
+        <ul class="change-list">
+          {% for c in changes %}<li><span>{{ c.summary }}</span><span class="quiet">{{ c.by_name }}, {{ c.at|date:"j M Y, g:i a" }}</span></li>{% endfor %}
+        </ul>
+      </section>
+      {% endif %}
+
+      {% if may_start_again %}
+      <section class="panel" aria-labelledby="again-title" data-start-again>
+        <h2 id="again-title">Start again</h2>
+        <p class="quiet">Clear the classes, terms, students and other setup and begin again. Only while your school has no marks, attendance, fees or released results. Staff and their accounts are never removed.</p>
+        <a class="btn" href="/start/again/">See what starting again clears<svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg></a>
+      </section>
+      {% endif %}
 {% endblock %}
