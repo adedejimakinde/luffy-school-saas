@@ -60,6 +60,7 @@ urlpatterns = [
     path("news/", site.news, name="school-site-news"),
     path("gallery/", site.gallery, name="school-site-gallery"),
     path("contact/", site.contact, name="school-site-contact"),
+    path("pages/<slug:slug>/", site.custom_page, name="school-site-page"),
     path("sitemap.xml", site.sitemap, name="school-site-sitemap"),
     path("robots.txt", site.robots, name="school-site-robots"),
     path("api/", api.urls),

@@ -22,6 +22,12 @@ there and published in its turn. Both are the principal's alone.
 **"Ready for the principal"** is a mark on a draft version: an edit after it
 means the draft is not ready again until somebody marks it. The email that
 tells the principal arrives with the preview page it links to (PR 4).
+
+**A page is named by its key or its address.** The six fixed pages by their key
+(`"about"`); a page the school made by its slug (`"boarding"`), which can never be
+a fixed page's key (`sections.REFUSED_SLUGS`). Making one, renaming it, deleting
+it and the menu's order are PR 3b (§2.1.1); the menu's order and the list of
+pages are site-wide, so they are saved against the settings row's version.
 """
 
 from django.db import transaction
@@ -35,7 +41,20 @@ from .errors import (
     SiteRefused,
     StaleDraft,
 )
-from .models import Page, PageKey, Section, SectionKind, SiteDelegationEvent, SitePublishEvent, SiteRevision, SiteSettings
+from .models import (
+    CUSTOM_PAGE_SLOTS,
+    MOST_SECTIONS,
+    SLUG_LENGTH,
+    Page,
+    PageKey,
+    PageKind,
+    Section,
+    SectionKind,
+    SiteDelegationEvent,
+    SitePublishEvent,
+    SiteRevision,
+    SiteSettings,
+)
 
 #: How many log rows `publish_log_as()` returns, newest first (§2.3: "the last 20").
 LOG_LENGTH = 20
@@ -79,10 +98,35 @@ def _touched(settings, *, settings_changed=False):
     settings.save(update_fields=fields)
 
 
-def _page(key) -> Page:
-    if key not in PageKey.values:
+def _page(ref) -> Page:
+    """The page named by `ref`, a fixed page's key or a custom page's slug, locked."""
+    if ref in PageKey.values:
+        return Page.objects.select_for_update().get(kind=PageKind.FIXED, key=ref)
+    page = (
+        Page.objects.select_for_update().filter(kind=PageKind.CUSTOM, slug=ref).first()
+        if isinstance(ref, str) and ref
+        else None
+    )
+    if page is None:
         raise SiteRefused("That is not one of the site's pages.")
-    return Page.objects.select_for_update().get(key=key)
+    return page
+
+
+def _allowed_on(page):
+    """What `sections.ALLOWED_ON` calls this page, and its name for a refusal."""
+    if page.kind == PageKind.CUSTOM:
+        return sections.CUSTOM, page.title
+    return page.key, None
+
+
+def _check_links(data):
+    """Refuse a link to a custom page the draft does not have (`sections.page_links`)."""
+    wanted = sections.page_links(data)
+    if wanted:
+        have = set(Page.objects.filter(kind=PageKind.CUSTOM, slug__in=wanted).values_list("slug", flat=True))
+        missing = sorted(wanted - have)
+        if missing:
+            raise SiteRefused(f"There is no page at /pages/{missing[0]}/ on this site.")
 
 
 def _section(section_id) -> Section:
@@ -108,14 +152,18 @@ def _compact(page):
 
 
 def save_page_as(actor, school, key, *, version, title=_UNCHANGED, description=_UNCHANGED, enabled=_UNCHANGED):
-    """Change a page's title, description or whether it is on. Home is always on."""
+    """Change a page's title, description or whether it is on. Home is always on.
+
+    `key` is a fixed page's key or a custom page's slug. A custom page's title
+    is its name in the menu, so it cannot be emptied.
+    """
     _require_edit(actor, school)
     with transaction.atomic():
         settings = _locked_settings()
         page = _page(key)
         _check(version, page.version)
         if title is not _UNCHANGED:
-            page.title = sections.clean_page_title(title)
+            page.title = sections.clean_page_title(title, required=page.kind == PageKind.CUSTOM)
         if description is not _UNCHANGED:
             page.description = sections.clean_page_description(description)
         if enabled is not _UNCHANGED:
@@ -131,16 +179,24 @@ def save_page_as(actor, school, key, *, version, title=_UNCHANGED, description=_
 
 
 def add_section_as(actor, school, key, *, version, kind, data, variant=None) -> Section:
-    """Add a section to a page: last, or first for a hero, which a page has at most one of."""
+    """Add a section to a page: last, or first for a hero, which a page has at most one of.
+
+    A page holds at most `MOST_SECTIONS`, and Postgres holds that too.
+    """
     _require_edit(actor, school)
-    kind = sections.clean_kind(kind, key)
-    variant = sections.clean_variant(kind, variant)
-    data = sections.clean(kind, data)
+    if kind not in SectionKind.values:
+        sections.clean_kind(kind, PageKey.HOME)
     with transaction.atomic():
         settings = _locked_settings()
         page = _page(key)
+        kind = sections.clean_kind(kind, *_allowed_on(page))
+        variant = sections.clean_variant(kind, variant)
+        data = sections.clean(kind, data)
         _check(version, page.version)
+        _check_links(data)
         existing = list(page.sections.order_by("position", "id"))
+        if len(existing) >= MOST_SECTIONS:
+            raise SiteRefused(f"A page holds at most {MOST_SECTIONS} sections. Take one off first.")
         if kind == SectionKind.HERO:
             if any(s.kind == SectionKind.HERO for s in existing):
                 raise SiteRefused("This page has a hero already.")
@@ -165,6 +221,7 @@ def save_section_as(actor, school, section_id, *, version, data, variant=None) -
         section = _section(section_id)
         _check(version, section.version)
         section.data = sections.clean(section.kind, data)
+        _check_links(section.data)
         if variant is not None:
             section.variant = sections.clean_variant(section.kind, variant)
         section.version += 1
@@ -208,6 +265,135 @@ def move_sections_as(actor, school, key, order, *, version):
         page.version += 1
         page.save(update_fields=["version", "updated_at"])
         _touched(settings)
+
+
+# -- the school's own pages and the menu (PR 3b) -----------------------------
+
+
+def _compact_menu():
+    """Number the pages' menu places 0, 1, 2 … in their order, after one was taken out."""
+    for position, page in enumerate(Page.objects.select_for_update().order_by("menu_position", "id")):
+        if page.menu_position != position:
+            page.menu_position = position
+            page.save(update_fields=["menu_position", "updated_at"])
+
+
+def _custom(ref) -> Page:
+    page = _page(ref)
+    if page.kind != PageKind.CUSTOM:
+        raise SiteRefused(f"The {page} page is one of the six every site has: it cannot be renamed or deleted.")
+    return page
+
+
+def create_page_as(actor, school, *, version, title, slug=None) -> Page:
+    """Make a page of the school's own, switched off and empty, last in the menu.
+
+    `version` is the settings row's: the list of pages is site-wide. Its address
+    is `/pages/<slug>/`, from `slug` if given, else made from the title; a
+    made-up address that another page has already gets `-2`, `-3` … A site has
+    at most 20 pages, the six fixed ones and `CUSTOM_PAGE_SLOTS` of its own, and
+    Postgres holds that by the slot each page takes.
+    """
+    _require_edit(actor, school)
+    title = sections.clean_page_title(title, required=True)
+    given = slug is not None
+    slug = sections.clean_slug(slug) if given else sections.slug_from_title(title)
+    with transaction.atomic():
+        settings = _locked_settings()
+        _check(version, settings.version)
+        taken = set(Page.objects.filter(kind=PageKind.CUSTOM).values_list("slot", flat=True))
+        free = [n for n in range(1, CUSTOM_PAGE_SLOTS + 1) if n not in taken]
+        if not free:
+            raise SiteRefused(
+                f"A site has at most {CUSTOM_PAGE_SLOTS + len(PageKey.values)} pages: the six every site has "
+                f"and {CUSTOM_PAGE_SLOTS} of its own. Delete one you no longer use first."
+            )
+        addresses = set(Page.objects.filter(kind=PageKind.CUSTOM).values_list("slug", flat=True))
+        if slug in addresses:
+            if given:
+                raise SiteRefused(f"Another page is at /pages/{slug}/ already. Choose another address.")
+            stem, n = slug, 2
+            while slug in addresses:
+                suffix = f"-{n}"
+                slug = f"{stem[:SLUG_LENGTH - len(suffix)].rstrip('-')}{suffix}"
+                n += 1
+        last = Page.objects.order_by("-menu_position").values_list("menu_position", flat=True).first()
+        page = Page.objects.create(
+            kind=PageKind.CUSTOM, slug=slug, slot=free[0], title=title, menu_position=last + 1
+        )
+        _touched(settings, settings_changed=True)
+        return page
+
+
+def rename_page_as(actor, school, ref, *, version, title=_UNCHANGED, slug=_UNCHANGED) -> Page:
+    """Change a custom page's title, or its address while it has never been published.
+
+    `version` is the page's. Once a publish has shown the page, its address is
+    fixed: people have it, and so have search engines.
+    """
+    _require_edit(actor, school)
+    with transaction.atomic():
+        settings = _locked_settings()
+        page = _custom(ref)
+        _check(version, page.version)
+        if title is not _UNCHANGED:
+            page.title = sections.clean_page_title(title, required=True)
+        if slug is not _UNCHANGED:
+            slug = sections.clean_slug(slug)
+            if slug != page.slug:
+                if page.ever_published:
+                    raise SiteRefused(
+                        f"/pages/{page.slug}/ has been published, so its address stays: links to it would break."
+                    )
+                if Page.objects.filter(kind=PageKind.CUSTOM, slug=slug).exclude(pk=page.pk).exists():
+                    raise SiteRefused(f"Another page is at /pages/{slug}/ already. Choose another address.")
+                page.slug = slug
+        page.version += 1
+        page.save()
+        _touched(settings, settings_changed=slug is not _UNCHANGED)
+        return page
+
+
+def delete_page_as(actor, school, ref, *, version):
+    """Delete a custom page and its sections: one never published, or one switched off.
+
+    `version` is the page's. A page that is live is switched off and published
+    first, so a deletion never takes a page off the public site by surprise. The
+    published site keeps showing what it showed until the next publish.
+    """
+    _require_edit(actor, school)
+    with transaction.atomic():
+        settings = _locked_settings()
+        page = _custom(ref)
+        _check(version, page.version)
+        if page.ever_published and page.enabled:
+            raise SiteRefused(f"{page} is on the published site. Switch it off first, then delete it.")
+        page.delete()
+        _compact_menu()
+        _touched(settings, settings_changed=True)
+
+
+def order_menu_as(actor, school, order, *, version):
+    """Put every page in this menu order, Home first. `version` is the settings row's.
+
+    `order` names each page once, by key or slug, switched on or not, so a page
+    switched on later already has its place.
+    """
+    _require_edit(actor, school)
+    with transaction.atomic():
+        settings = _locked_settings()
+        _check(version, settings.version)
+        pages = {p.ref: p for p in Page.objects.select_for_update()}
+        if not isinstance(order, list) or len(order) != len(pages) or set(order) != set(pages):
+            raise SiteRefused("Put every page of the site in order, each once.")
+        if order[0] != PageKey.HOME:
+            raise SiteRefused("Home stays first in the menu.")
+        for position, ref in enumerate(order):
+            page = pages[ref]
+            if page.menu_position != position:
+                page.menu_position = position
+                page.save(update_fields=["menu_position", "updated_at"])
+        _touched(settings, settings_changed=True)
 
 
 def save_footer_as(actor, school, footer, *, version) -> SiteSettings:
@@ -297,6 +483,7 @@ def publish_as(actor, school, note="") -> SiteRevision:
         if _nothing_new(settings, latest.snapshot if latest else None, current):
             raise SiteRefused("Nothing has changed since the last publish.")
         revision = _revision(actor, current, latest, note=note)
+        _shown(revision.snapshot)
         _clear_ready(settings)
         _logged(actor, school, SitePublishEvent.Kind.PUBLISHED, revision, note)
         return revision
@@ -320,8 +507,15 @@ def rollback_as(actor, school, number, note="") -> SiteRevision:
         if target.pk == latest.pk or target.snapshot == latest.snapshot:
             raise SiteRefused(f"Revision {number} is what the site shows already.")
         revision = _revision(actor, target.snapshot, latest, note=note, rollback_of=target)
+        _shown(revision.snapshot)
         _logged(actor, school, SitePublishEvent.Kind.ROLLED_BACK, revision, note)
         return revision
+
+
+def _shown(snap):
+    """Mark every custom page this publish shows switched on: its address is fixed from now."""
+    live = [p["slug"] for p in snap["pages"] if p.get("kind") == PageKind.CUSTOM and p["enabled"]]
+    Page.objects.filter(kind=PageKind.CUSTOM, slug__in=live, ever_published=False).update(ever_published=True)
 
 
 def _revision(actor, snap, latest, *, note, rollback_of=None) -> SiteRevision:
@@ -361,7 +555,7 @@ def _clear_ready(settings):
 def snapshot() -> dict:
     """The whole draft, as a revision keeps it. Read on the connection's schema."""
     settings = SiteSettings.objects.get(pk=1)
-    pages = Page.objects.prefetch_related("sections").order_by("id")
+    pages = Page.objects.prefetch_related("sections").order_by("menu_position", "id")
     return {
         "theme": settings.theme,
         "options": settings.theme_options.get(settings.theme, {}),
@@ -369,6 +563,9 @@ def snapshot() -> dict:
         "pages": [
             {
                 "key": page.key,
+                "kind": page.kind,
+                "slug": page.slug,
+                "menu_position": page.menu_position,
                 "enabled": page.enabled,
                 "title": page.title,
                 "description": page.description,
@@ -397,6 +594,11 @@ def _latest_snapshot():
     return SiteRevision.objects.order_by("-number").values_list("snapshot", flat=True).first()
 
 
+def page_ref(page) -> str:
+    """A snapshot page's name: its key, or its slug if the school made it. Older snapshots have no kind."""
+    return page.get("slug") if page.get("kind") == PageKind.CUSTOM else page["key"]
+
+
 def summary(before, after) -> dict:
     """What changed from one snapshot to the next, in counts a log line can say."""
 
@@ -404,10 +606,10 @@ def summary(before, after) -> dict:
         return {s["id"]: s for p in (snap or {}).get("pages", []) for s in p["sections"]}
 
     def orders(snap):
-        return {p["key"]: [s["id"] for s in p["sections"]] for p in (snap or {}).get("pages", [])}
+        return {page_ref(p): [s["id"] for s in p["sections"]] for p in (snap or {}).get("pages", [])}
 
     def enabled(snap):
-        return {p["key"] for p in (snap or {}).get("pages", []) if p["enabled"]}
+        return {page_ref(p) for p in (snap or {}).get("pages", []) if p["enabled"]}
 
     old, new = by_id(before), by_id(after)
     common = old.keys() & new.keys()
@@ -432,7 +634,7 @@ def draft_as(actor, school) -> dict:
     """The draft, with the versions a save must name, for whoever may edit it."""
     _require_edit(actor, school)
     settings = SiteSettings.objects.get(pk=1)
-    pages = Page.objects.prefetch_related("sections").order_by("id")
+    pages = Page.objects.prefetch_related("sections").order_by("menu_position", "id")
     return {
         "theme": settings.theme,
         "theme_options": settings.theme_options,
@@ -444,6 +646,11 @@ def draft_as(actor, school) -> dict:
         "pages": [
             {
                 "key": page.key,
+                "kind": page.kind,
+                "slug": page.slug,
+                "path": page.path,
+                "menu_position": page.menu_position,
+                "address_fixed": page.kind == PageKind.FIXED or page.ever_published,
                 "enabled": page.enabled,
                 "title": page.title,
                 "description": page.description,
@@ -498,13 +705,18 @@ def live_revision(school):
 __all__ = [
     "LOG_LENGTH",
     "add_section_as",
+    "create_page_as",
+    "delete_page_as",
     "draft_as",
     "live_revision",
     "mark_ready_as",
     "move_sections_as",
+    "order_menu_as",
+    "page_ref",
     "publish_as",
     "publish_log_as",
     "remove_section_as",
+    "rename_page_as",
     "rollback_as",
     "save_footer_as",
     "save_page_as",

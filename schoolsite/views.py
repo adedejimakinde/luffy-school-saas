@@ -3,8 +3,9 @@
 - **Before the school's first publish** the root is today's page
   (`schools.views.school_site`), drawn exactly as before and still noindex, and
   every other page of the site is a 404, as it was.
-- **After it**, each page the school switched on is drawn from the latest
-  published revision (`schoolsite.render`), marked indexable
+- **After it**, each page the school switched on, fixed or its own under
+  `/pages/<slug>/`, is drawn from the latest published revision
+  (`schoolsite.render`), marked indexable
   (`website.crawlers`), with its Content-Security-Policy, a short public cache
   life and an ETag. A page the school switched off is a 404.
 
@@ -65,9 +66,10 @@ def _school_key(school) -> str:
     return hashlib.sha256(shown.encode()).hexdigest()[:16]
 
 
-def _cached_draw(school, revision, key, host):
+def _cached_draw(school, revision, key, host, slug=None):
+    page = f"pages/{slug}" if slug is not None else key
     cache_key = (
-        f"site:{GENERATION}:{connection.schema_name}:{revision.number}:{_school_key(school)}:{host}:{key}"
+        f"site:{GENERATION}:{connection.schema_name}:{revision.number}:{_school_key(school)}:{host}:{page}"
     )
     cache = caches["sites"]
     try:
@@ -78,7 +80,7 @@ def _cached_draw(school, revision, key, host):
         hit = None
     if hit is not None:
         return render.Drawn(*hit)
-    drawn = render.draw(school, revision, key, host)
+    drawn = render.draw(school, revision, key, host, slug=slug)
     if drawn is not None:
         try:
             cache.set(cache_key, (drawn.html, drawn.style), CACHE_SECONDS)
@@ -113,14 +115,14 @@ def _may_be_indexed(school) -> bool:
     return not school.sales_demo
 
 
-def _page(request, key):
+def _page(request, key, slug=None):
     school = _school(request)
     revision = live_revision(school)
     if revision is None:
         if key == PageKey.HOME:
             return school_site(request)
         raise Http404("This school has not published its website yet.")
-    drawn = _cached_draw(school, revision, key, _host(request))
+    drawn = _cached_draw(school, revision, key, _host(request), slug)
     if drawn is None:
         raise Http404("This page is not on the school's website.")
     return _served(
@@ -159,6 +161,12 @@ def contact(request):
 
 
 @require_safe
+def custom_page(request, slug):
+    """A page the school made itself, at `/pages/<slug>/` (§2.1.1), as it published it."""
+    return _page(request, None, slug)
+
+
+@require_safe
 def sitemap(request):
     school = _school(request)
     revision = live_revision(school)
@@ -192,4 +200,6 @@ def robots(request):
     return response
 
 
-__all__ = ["about", "admissions", "contact", "gallery", "home", "news", "open_robots", "robots", "sitemap"]
+__all__ = [
+    "about", "admissions", "contact", "custom_page", "gallery", "home", "news", "open_robots", "robots", "sitemap",
+]

@@ -169,8 +169,8 @@ renditions under `/media/` (§9).
 A school can add pages of its own, such as Boarding, Sports, Clubs, Academics and Alumni.
 
 - **Built from the same safe sections.** A custom page is a title and an ordered list of sections, drawn from the fixed kinds a custom page may hold: hero, text, facts, gallery, the principal's message and the admissions panel. There is no free-form HTML, as everywhere else (§2.2).
-- **At most 12 per school, held by Postgres.** Each custom page takes a slot numbered 1 to 12, unique within the school, so a thirteenth cannot be written by any path, however it is written.
-- **At `/pages/<slug>/`.** All custom pages share one prefix, so no custom page can clash with a fixed page, a portal path or `/sit/`. The slug is made from the title when the page is created, uses `[a-z0-9-]`, is at most 40 characters and is unique within the school. Renaming the page later does not move its address.
+- **20 pages in all, held by Postgres** (decided 30 October 2026): the six fixed pages and up to 14 of the school's own. Each custom page takes a slot numbered 1 to 14, unique within the school, so a fifteenth cannot be written by any path, however it is written. A deleted page frees its slot.
+- **At `/pages/<slug>/`.** All custom pages share one prefix, so no custom page can take a portal path, `/sit/` or a path the platform adds later. The school may give the slug when it makes the page; otherwise it is made from the title ("Boarding & Hostel" is `boarding-hostel`; tone marks and underdots are dropped, so "Ìmọ̀ Club" is `imo-club`). A slug uses `[a-z0-9-]` with single hyphens between words, is at most 40 characters, and is unique within the school; a made-up slug another page already has gets `-2`, `-3`. A slug that is a fixed page's key, a reserved path or a portal name is refused (`schoolsite.sections.REFUSED_SLUGS`), so `/pages/about/` can never stand in for About. **The slug can change until the page is first published switched on, and is fixed from then on**, because people and search engines have it. Renaming the page's title never moves it.
 - **Draft, preview and publish exactly like the fixed pages.** It goes into the revision snapshot, and the principal alone publishes it.
 - **A menu that updates itself.** The menu is the switched-on pages, fixed and custom, in one order the school sets (`menu_position`), with Home always first. On a phone, links after the fifth go under a "More" menu (a `<details>`, no script). The footer lists them all, and the sitemap includes every switched-on custom page.
 
@@ -183,15 +183,15 @@ breaks.
 
 | Kind | Data (all text plain) | Allowed on |
 |---|---|---|
-| `hero` | heading, sub-heading, up to 2 buttons (label + an allowed link), media: one image with a focal point, or one video with a poster (§9) | every page, at most one, always first |
+| `hero` | heading, sub-heading, up to 2 buttons (label + an allowed link), media: one image with a focal point, or one video with a poster (§9) | every page, custom pages too, at most one, always first |
 | `crest_motto` | uses the school's crest, plus the motto (up to 120 characters, an optional language tag, an optional translation) and the year founded | Home, About |
-| `principal_message` | portrait image, name, title ("Rev. Sr.", "Dr (Mrs)"), message (up to 4,000 characters), signature line | Home, About |
-| `facts` | 2–6 items, each a figure plus a label ("98%", "WAEC credit pass in 5 subjects, 2025"), and an optional source note | Home, About, Admissions |
+| `principal_message` | portrait image, name, title ("Rev. Sr.", "Dr (Mrs)"), message (up to 4,000 characters), signature line | Home, About, custom pages |
+| `facts` | 2–6 items, each a figure plus a label ("98%", "WAEC credit pass in 5 subjects, 2025"), and an optional source note | Home, About, Admissions, custom pages |
 | `news` | count to show (3–6). Draws the latest published posts and holds no copy of them. | Home, News |
-| `gallery` | an album and a count, or up to 12 chosen photos | Home, Gallery, About |
-| `admissions_cta` | heading, text, button label, session ("2027/2028"), open/closed state, closing date | every page |
+| `gallery` | an album and a count, or up to 12 chosen photos | Home, Gallery, About, custom pages |
+| `admissions_cta` | heading, text, button label, an optional link to one of the school's own pages (otherwise Admissions, else Contact), session ("2027/2028"), open/closed state, closing date | every page, custom pages too |
 | `contact_map` | taken from `School.address/phone/contact_email`, plus WhatsApp number, office hours, map location (latitude/longitude or a maps link) | Contact, Home |
-| `text` | heading and body (up to 6,000 characters). The one free-text block, still plain text. | About, Admissions |
+| `text` | heading and body (up to 6,000 characters). The one free-text block, still plain text. | About, Admissions, custom pages |
 | `footer` | site-wide, not per page: links to enabled pages, social links (fixed list of networks, URL checked against that network's host), address line, "Report this page" (§10.3) | every page, always last |
 
 Each kind declares a small set of **layout variant names** that are part of the
@@ -201,9 +201,13 @@ variant; it never adds data. This is what lets a school switch theme without
 losing anything (§3.2).
 
 Validation is server-side, per kind. Limits on length and count are what keep a
-theme able to draw every school's content well. A link field accepts an internal
-path from the fixed page list, `https:`, `tel:`, `mailto:`, or a `wa.me` link,
-and nothing else (§10.2).
+theme able to draw every school's content well. **A page holds at most 15
+sections** (decided 30 October 2026), held by the service and by Postgres (one
+section per place on a page, places 0 to 14). A link field accepts an internal
+path from the fixed page list, a custom page's `/pages/<slug>/` (one the draft
+has), `https:`, `tel:`, `mailto:`, or a `wa.me` link, and nothing else (§10.2).
+**A button whose page is switched off or unpublished is left out when the page is
+drawn**, fixed page or custom, rather than drawn as a way to a 404.
 
 ### 2.3 Draft, preview, publish
 
@@ -684,7 +688,7 @@ of script) loads **only when tapped**, behind a static placeholder. (Decided
 
 - **No HTML from users, anywhere.** All text is autoescaped. Site templates contain no `|safe`, `mark_safe` or `autoescape off`, and the theme contract test greps for them.
 - **Line breaks** go through `linebreaksbr` after escaping (the current `site.html` pattern).
-- **Links** come from structured fields only. Allowed: internal paths from the fixed list, and `https:`, `tel:`, `mailto:` and `https://wa.me/`. Refused, server-side: `javascript:`, `data:`, `vbscript:`, protocol-relative `//`, and schemes a parser could misread. External links get `rel="noopener noreferrer"`.
+- **Links** come from structured fields only. Allowed: internal paths from the fixed list, a custom page's `/pages/<slug>/`, and `https:`, `tel:`, `mailto:` and `https://wa.me/`. Refused, server-side: `javascript:`, `data:`, `vbscript:`, protocol-relative `//`, and schemes a parser could misread. External links get `rel="noopener noreferrer"`.
 - **Colour values** are six hex digits only, validated as `results.look.clean_colour` does. They are written into a per-page `<style nonce>` block, not an inline `style` attribute, so CSP can refuse inline styles.
 - **JSON-LD** is escaped as in `website.views._json_ld`.
 - **Content-Security-Policy on public pages**:
@@ -841,25 +845,28 @@ Access tests:
 
 ### PR 3b: Custom pages and a menu that updates itself
 
-Added on 25 October 2026. Built before PR 4, so the editor is built once, with custom pages in it.
+Added on 25 October 2026. Built before PR 4, so the editor is built once, with custom pages in it. **Built** (30 October 2026), with the owner's four calls that day: custom pages at `/pages/<slug>/`, 20 pages in all with up to 15 sections a page, buttons that may link to a custom page and are left out when it is off, and a slug that may be given and is fixed once published.
 
-- **The model change.** PR 2's models need an additive change, not a rewrite:
-  - `Page` gains `kind` (fixed or custom), `slug`, `slot` (1 to 12, unique) and `menu_position`;
-  - `key` becomes empty for a custom page;
-  - the constraint `a_page_is_one_of_the_fixed_six` becomes "a fixed page has one of the six keys and no slug or slot; a custom page has a slug and a slot and no key";
-  - the revision snapshot gains `kind`, `slug` and `menu_position` per page;
-  - `sections.ALLOWED_ON` gains the custom page's kinds (§2.1.1).
+- **The model change**, additive (migrations `0002` and `0003`):
+  - `Page` gains `kind` (fixed or custom), `slug`, `slot` (1 to 14, unique), `menu_position` and `ever_published` (set by the first publish that shows the page switched on, which fixes its slug);
+  - `key` becomes empty for a custom page, and is unique among fixed pages;
+  - `a_page_is_one_of_the_fixed_six` becomes `a_page_is_fixed_or_the_schools_own`: "a fixed page has one of the six keys and no slug or slot; a custom page has a slug in shape that is not a fixed key, a slot from 1 to 14, and no key";
+  - each slug once, each slot once, one page per menu place, Home first (`the_home_page_comes_first_in_the_menu`) and always on;
+  - `Section` gains one section per place on a page and places 0 to 14 (`a_page_holds_at_most_fifteen_sections`). The two "one per place" rules are deferred to the end of the transaction, so a reorder can pass through two sharing a place;
+  - the revision snapshot gains `kind`, `slug` and `menu_position` per page, in menu order. A snapshot from before reads as six fixed pages in PR 3's order;
+  - `sections.ALLOWED_ON` gains custom pages (§2.1.1).
 
-  No school can have published before the editor exists, so there is nothing to carry over beyond giving the six fixed rows their kind and menu order.
-- **Services:** `create_page_as`, `rename_page_as`, `delete_page_as` (only while the page has never been published, or once it is switched off) and `order_menu_as`.
-- **Rendering:** `/pages/<slug>/`, the self-updating menu with its "More" on a phone, the footer and the sitemap. `pages` is added to `schools.paths.PUBLIC_SITE`.
-- Adding, removing and reordering sections on any page is already built as services in PR 2 (`add_section_as`, `remove_section_as`, `move_sections_as`). PR 4 gives them their screens.
+  The six fixed rows got `kind="fixed"` and PR 3's menu order; nothing else carried over.
+- **Services:** `create_page_as`, `rename_page_as` (the title; the slug only until first published), `delete_page_as` (only while the page has never been published, or once it is switched off; the published site keeps it until the next publish) and `order_menu_as` (every page once, Home first). A page is named by its key or its slug in every service, so `save_page_as` (on or off, Home always on), `add_section_as`, `remove_section_as` and `move_sections_as` work on custom pages unchanged. The list of pages and the menu are saved against the settings row's version.
+- **Rendering:** `/pages/<slug>/`, drawn from the latest revision only, on the school's own host only, and cached under the school's schema and the path. The menu is the switched-on pages, fixed and custom, in the school's order with Home first. On a phone the links after the fifth go under "More", a `<details>` like Sign in, with no script: the same links are drawn twice and the stylesheet shows one set or the other. The footer lists them all, and the sitemap names every switched-on page. `pages` is in `schools.paths.PUBLIC_SITE`.
+- **The demo:** Harbour publishes two pages of its own, Boarding and Sports and clubs, so the screens job photographs a custom page and the phone menu's "More" (`school-website-boarding`, `school-website-more`), and the Slow 4G check covers `/pages/boarding/`.
 
-Access tests:
-- only A's editors make, rename, delete or reorder A's pages, and only A's principal publishes them;
-- a thirteenth custom page is refused, by the service and by Postgres;
-- a custom slug cannot clash with a fixed page or a reserved path, and B's custom page never answers on A's host;
-- a custom page switched off, or never published, is a 404, and is in no menu and no sitemap.
+Access tests (`schoolsite/tests/test_custom_pages.py`, two schools):
+- only A's editors (the principal, or the administrator while delegated) make, rename, switch, delete or reorder A's pages, and only A's principal publishes them; B's principal is refused on A's schema and on B's;
+- a fifteenth custom page and a sixteenth section are refused, by the service and by Postgres, and so is a page that is neither fixed nor in the custom shape;
+- a custom slug cannot be a fixed page's key, a reserved path or a portal name; B's page never answers on A's host, even when both have a page at the same address;
+- a custom page switched off, or never published, is a 404, and is in no menu and no sitemap; so is any other address under `/pages/`;
+- a button to a page that is off is left out.
 
 ### PR 4: The editor and preview in the portal
 
@@ -1014,11 +1021,20 @@ Each is written into the section it changes.
 
 | Decision | Where |
 |---|---|
-| **The scope widens:** a school switches any fixed page on or off except Home, adds, removes and reorders sections on every page, and makes up to 12 custom pages from the safe section kinds, with a menu that updates itself. | §2.1, §2.1.1, PRs 3b and 4 |
+| **The scope widens:** a school switches any fixed page on or off except Home, adds, removes and reorders sections on every page, and makes custom pages from the safe section kinds, with a menu that updates itself. | §2.1, §2.1.1, PRs 3b and 4 |
 | **One designed theme, with strong options**, instead of three. The engine stays ready for more. | §3.3, §3.4, PR 7 |
 | PR 3: the hero draws without its picture, and news and gallery draw nothing, until PRs 5 and 6. | PR 3 |
 | PR 3: "Open in Maps" only; the tap-to-load map comes in PR 5. | §9.3, PR 3 |
 | PR 3: the Slow 4G largest-paint check is in the screens job now. | §4.1, PR 3 |
+
+### Decided 30 October 2026 (PR 3b)
+
+| Decision | Where |
+|---|---|
+| Custom pages live at `/pages/<slug>/`. A slug that is a fixed page's key, a reserved path or a portal name is refused. | §2.1.1 |
+| 20 pages in all: the six fixed and up to 14 custom. Up to 15 sections a page. Both held by Postgres. | §2.1.1, §2.2 |
+| Hero and admissions buttons may link to a custom page; a button whose page is off or unpublished is left out when drawn. | §2.2 |
+| The school may give a slug when it makes a page, else it is made from the title, and it is fixed once the page is first published. | §2.1.1 |
 
 **Still to settle before the PR that needs it:**
 - the Brevo plan check (before PR 11a);

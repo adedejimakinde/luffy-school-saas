@@ -40,9 +40,18 @@ bold face that arrived after the first paint would move them (§4.1's layout shi
       </ul>
     </details>{% endif %}
   </div>
+  {% comment %}Every switched-on page, in the school's order. On a phone, the links
+  after the first few go under "More", a <details> like Sign in: the same links
+  are drawn twice, and the stylesheet shows one set or the other, never both.{% endcomment %}
   {% if nav|length > 1 %}<nav aria-label="The school's pages">
     <ul>{% for item in nav %}
-      <li><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
+      <li{% if forloop.counter > menu_on_a_phone %} class="wide"{% endif %}><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
+      {% if nav_more %}<li class="more"><details>
+        <summary>More</summary>
+        <ul>{% for item in nav_more %}
+          <li><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
+        </ul>
+      </details></li>{% endif %}
     </ul>
   </nav>{% endif %}
 </header>

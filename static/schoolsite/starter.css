@@ -3,7 +3,7 @@
  * phone first, until the designed theme replaces it (`docs/school-sites.md`
  * §3.4). Colours, type and controls are `web/design.css`'s; the one colour that
  * varies is `--school`, the school's own, set by the page's one inline style.
- * No script: the Sign in menu is a <details>.
+ * No script: the Sign in menu is a <details>, and so is the menu's "More".
  */
 body { margin: 0; background: var(--bg); color: var(--text); }
 
@@ -32,6 +32,18 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .site-header nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; color: var(--card); text-decoration: none; border-bottom: 3px solid transparent; }
 .site-header nav a[aria-current="page"] { border-bottom-color: var(--card); font-weight: 700; }
 .site-header nav a:focus-visible { outline: 3px solid var(--card); outline-offset: -3px; }
+.site-header nav .more { display: none; position: relative; margin-left: auto; }
+.more summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; color: var(--card); font-weight: 700; }
+.more summary::-webkit-details-marker { display: none; }
+.more summary::after { content: "\25BE"; margin-left: 6px; }
+.more summary:focus-visible { outline: 3px solid var(--card); outline-offset: -3px; }
+.site-header nav .more ul { position: absolute; right: 0; top: 100%; z-index: 1; display: block; min-width: 14rem; max-width: calc(100vw - 32px); padding: 6px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); }
+.site-header nav .more a { display: flex; color: var(--text); border-bottom: 0; border-radius: var(--radius); }
+.site-header nav .more a:hover, .site-header nav .more a:focus-visible { background: var(--brand-tint); }
+@media (max-width: 39.99rem) {
+  .site-header nav .wide { display: none; }
+  .site-header nav .more { display: block; }
+}
 
 main { max-width: 40rem; margin: 0 auto; padding: 8px 16px 40px; }
 main section { margin: 28px 0; overflow-wrap: anywhere; }
