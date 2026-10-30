@@ -65,7 +65,7 @@ class EveryRouteIsSortedTests(SiteSetUp):
     def test_the_website_paths_routed_are_the_fixed_pages_and_not_media_yet(self):
         self.assertEqual(
             segments(urls.urlpatterns) & PUBLIC_SITE,
-            {"", "about", "admissions", "news", "gallery", "contact", "sitemap.xml", "robots.txt"},
+            {"", "about", "admissions", "news", "gallery", "contact", "pages", "sitemap.xml", "robots.txt"},
         )
 
     def test_sit_and_the_other_held_names_are_held_everywhere_under_them(self):

@@ -139,6 +139,16 @@ export const SCREENS = [
   { name: "school-website-about", as: null, url: `${HARBOUR}/about/` },
   { name: "school-website-admissions", as: null, url: `${HARBOUR}/admissions/` },
   { name: "school-website-contact", as: null, url: `${HARBOUR}/contact/` },
+  // A page of the school's own (docs/school-sites.md §2.1.1), and on a phone the
+  // menu's "More", which the demo's six pages put there.
+  { name: "school-website-boarding", as: null, url: `${HARBOUR}/pages/boarding/` },
+  {
+    name: "school-website-more",
+    as: null,
+    url: `${HARBOUR}/`,
+    steps: [["school-website-more-open", ".site-header nav .more summary:visible"]],
+    phoneOnly: true,
+  },
   { name: "outbox", as: null, url: `${PORTAL}/dev/outbox/` },
   // Signed in at one school, asking for another's page.
   { name: "not-allowed", as: "sunrise.teacher", url: `${HARBOUR}/register/`, status: 403 },
@@ -756,11 +766,13 @@ describe("every page, at every width", () => {
             // step's target a moment to arrive before calling it missing. The
             // specimen's menu button never arrives above 1024px, which is why
             // it is only a wait and not the assertion.
-            await target.waitFor({ state: "attached", timeout: screen.specimen ? 1 : 5000 }).catch(() => {});
+            const narrowOnly = screen.specimen || screen.phoneOnly;
+            await target.waitFor({ state: "attached", timeout: narrowOnly ? 1 : 5000 }).catch(() => {});
             if (!(await target.count())) {
               // A drill-down whose first step is not on screen at this width
-              // (the specimen's menu button, above 1024px) has nothing to show.
-              if (screen.specimen) continue;
+              // (the specimen's menu button above 1024px, a school website's
+              // "More" above a phone's width) has nothing to show.
+              if (narrowOnly) continue;
               assert.fail(`${screen.name}: nothing to tap for ${name} (${selector}) at ${width}px`);
             }
             await target.click();

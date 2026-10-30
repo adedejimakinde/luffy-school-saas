@@ -8,8 +8,15 @@ module does not know is refused, not dropped, and so is a value of the wrong
 type: the editor is told, rather than finding it missing later.
 
 Links come from structured fields only and are held to `clean_link`: a path
-from the fixed page list, `https:`, `tel:` or `mailto:`, and nothing else
-(§10.2).
+from the fixed page list, a custom page's `/pages/<slug>/`, `https:`, `tel:` or
+`mailto:`, and nothing else (§10.2). Whether a custom page at that address exists
+is the services' to ask, against the draft; a link to a page that is off or
+unpublished is left out when the page is drawn (`schoolsite.render`).
+
+**A custom page's address** (§2.1.1) is a slug the school gives, or one made from
+its title (`slug_from_title`): lowercase letters, digits and single hyphens, at
+most 40 characters, and never a fixed page's key or a name the platform routes
+(`schools.paths`), so `/pages/about/` cannot stand in for About.
 
 **News and gallery sections are checked for their shape only** (decided 24
 October 2026): a count, an album id, photo ids. Whether that album or those
@@ -19,13 +26,16 @@ image and video ids in the hero and the principal's portrait.
 
 import datetime
 import re
+import unicodedata
 from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 
+from schools.paths import PORTAL, PUBLIC_SITE, RESERVED
+
 from .errors import SiteRefused
-from .models import PageKey, SectionKind
+from .models import SLUG_LENGTH, SLUG_PATTERN, PageKey, SectionKind
 
 
 class SectionRefused(SiteRefused):
@@ -46,19 +56,23 @@ VARIANTS = {
     SectionKind.TEXT: ("default",),
 }
 
-EVERY_PAGE = frozenset(PageKey.values)
+#: What `ALLOWED_ON` calls any page a school made itself (§2.1.1).
+CUSTOM = "custom"
 
-#: Which pages each kind may sit on (§2.2).
+EVERY_PAGE = frozenset(PageKey.values) | {CUSTOM}
+
+#: Which pages each kind may sit on (§2.2). A custom page takes the hero, text,
+#: facts, a gallery, the principal's message and the admissions panel.
 ALLOWED_ON = {
     SectionKind.HERO: EVERY_PAGE,
     SectionKind.CREST_MOTTO: frozenset({PageKey.HOME, PageKey.ABOUT}),
-    SectionKind.PRINCIPAL_MESSAGE: frozenset({PageKey.HOME, PageKey.ABOUT}),
-    SectionKind.FACTS: frozenset({PageKey.HOME, PageKey.ABOUT, PageKey.ADMISSIONS}),
+    SectionKind.PRINCIPAL_MESSAGE: frozenset({PageKey.HOME, PageKey.ABOUT, CUSTOM}),
+    SectionKind.FACTS: frozenset({PageKey.HOME, PageKey.ABOUT, PageKey.ADMISSIONS, CUSTOM}),
     SectionKind.NEWS: frozenset({PageKey.HOME, PageKey.NEWS}),
-    SectionKind.GALLERY: frozenset({PageKey.HOME, PageKey.GALLERY, PageKey.ABOUT}),
+    SectionKind.GALLERY: frozenset({PageKey.HOME, PageKey.GALLERY, PageKey.ABOUT, CUSTOM}),
     SectionKind.ADMISSIONS_CTA: EVERY_PAGE,
     SectionKind.CONTACT_MAP: frozenset({PageKey.CONTACT, PageKey.HOME}),
-    SectionKind.TEXT: frozenset({PageKey.ABOUT, PageKey.ADMISSIONS}),
+    SectionKind.TEXT: frozenset({PageKey.ABOUT, PageKey.ADMISSIONS, CUSTOM}),
 }
 
 #: The paths a link may name on the school's own site: its fixed pages (§2.1).
@@ -66,6 +80,14 @@ INTERNAL_PATHS = frozenset(
     {"/", "/about/", "/admissions/", "/admissions/enquire/", "/admissions/apply/",
      "/news/", "/gallery/", "/contact/"}
 )
+
+#: A link to one of the school's own pages: `/pages/<slug>/`.
+_PAGE_LINK = re.compile(r"^/pages/([a-z0-9]+(?:-[a-z0-9]+)*)/$")
+_SLUG = re.compile(SLUG_PATTERN)
+
+#: What a custom page's address may never be: a fixed page's key, or a name the
+#: platform routes on a school's host, the website's, the portal's or one held.
+REFUSED_SLUGS = frozenset(PageKey.values) | PORTAL | PUBLIC_SITE | frozenset(RESERVED)
 
 #: The motto's language, for its `lang` attribute (§11.1).
 MOTTO_LANGUAGES = frozenset({"", "en", "la", "yo", "ig", "ha", "ar"})
@@ -188,6 +210,11 @@ def clean_link(value, label="A link"):
     value = _text(value, label, 300, required=True)
     if value in INTERNAL_PATHS:
         return value
+    match = _PAGE_LINK.match(value)
+    if match and len(match.group(1)) <= SLUG_LENGTH:
+        return value
+    if value.startswith("/"):
+        raise SectionRefused(f"{label} names a page this site does not have.")
     if value.startswith("tel:"):
         if not _PHONE.match(value[4:]):
             raise SectionRefused(f"{label} has a phone number this cannot call.")
@@ -328,13 +355,20 @@ def _gallery(data):
 
 
 def _admissions_cta(data):
-    data = _fields(data, "The admissions panel", {"heading", "text", "button", "session", "open", "closes"})
+    data = _fields(data, "The admissions panel", {"heading", "text", "button", "link", "session", "open", "closes"})
     if "open" in data and not isinstance(data["open"], bool):
         raise SectionRefused("Whether admissions are open is yes or no.")
+    link = data.get("link") or ""
+    if link:
+        link = clean_link(link, "The button's link")
+        if not link.startswith("/"):
+            raise SectionRefused("The admissions button goes to one of the school's own pages.")
     return {
         "heading": _text(data.get("heading"), "The heading", 120, required=True),
         "text": _text(data.get("text"), "The words", 600, lines=True),
         "button": _text(data.get("button"), "The button's words", 40),
+        # Empty: the button goes to the Admissions page, else Contact (`render`).
+        "link": link,
         "session": _session(data.get("session"), "The session"),
         "open": data.get("open", True),
         "closes": _date(data.get("closes"), "The closing date"),
@@ -382,14 +416,17 @@ _CLEANERS = {
 }
 
 
-def clean_kind(kind, page_key):
-    """The kind, if it exists and may sit on this page, or `SectionRefused`."""
+def clean_kind(kind, page_key, page_name=None):
+    """The kind, if it exists and may sit on this page, or `SectionRefused`.
+
+    `page_key` is a fixed page's key, or `CUSTOM` for a page the school made,
+    named in the refusal by `page_name`.
+    """
     if kind not in SectionKind.values:
         raise SectionRefused("That is not one of the kinds of section on offer.")
     if page_key not in ALLOWED_ON[kind]:
-        raise SectionRefused(
-            f"A {SectionKind(kind).label.lower()} section cannot go on the {PageKey(page_key).label} page."
-        )
+        name = page_name or (PageKey(page_key).label if page_key in PageKey.values else "this")
+        raise SectionRefused(f"A {SectionKind(kind).label.lower()} section cannot go on the {name} page.")
     return kind
 
 
@@ -429,8 +466,49 @@ def clean_footer(data) -> dict:
     }
 
 
-def clean_page_title(value):
-    return _text(value, "The page title", 70)
+def clean_page_title(value, *, required=False):
+    return _text(value, "The page title", 70, required=required)
+
+
+def page_links(data) -> set:
+    """The custom-page slugs a section's data links to: its buttons, and the admissions button."""
+    links = [b.get("link", "") for b in data.get("buttons", [])] + [data.get("link") or ""]
+    return {m.group(1) for m in map(_PAGE_LINK.match, links) if m}
+
+
+def clean_slug(value):
+    """An address the school gave its page, as given, or `SectionRefused` saying why not."""
+    if not isinstance(value, str):
+        raise SectionRefused("The page's web address is text.")
+    value = value.strip().lower()
+    if not value:
+        raise SectionRefused("The page needs a web address.")
+    if len(value) > SLUG_LENGTH:
+        raise SectionRefused(f"The page's web address can be at most {SLUG_LENGTH} characters.")
+    if not _SLUG.match(value):
+        raise SectionRefused(
+            "The page's web address is lowercase letters and numbers, with single hyphens between words."
+        )
+    if value in REFUSED_SLUGS:
+        raise SectionRefused(f"/pages/{value}/ is kept for the site's own pages. Choose another address.")
+    return value
+
+
+def slug_from_title(title):
+    """An address made from a page's title: "Boarding & Hostel" is `boarding-hostel`.
+
+    Letters with tone marks or dots lose them ("Ìmọ̀" is `imo`); anything that is
+    not a letter or a digit becomes one hyphen; it is cut at a hyphen to fit in
+    40 characters. Checked like a given address, so it may still be refused.
+    """
+    plain = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode().lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
+    if len(slug) > SLUG_LENGTH:
+        slug = slug[:SLUG_LENGTH + 1].rsplit("-", 1)[0] if "-" in slug[:SLUG_LENGTH + 1] else slug[:SLUG_LENGTH]
+        slug = slug.strip("-")
+    if not slug:
+        raise SectionRefused("The page's title has no letters or numbers to make a web address from. Give it one.")
+    return clean_slug(slug)
 
 
 def clean_page_description(value):
@@ -443,7 +521,9 @@ def clean_note(value):
 
 __all__ = [
     "ALLOWED_ON",
+    "CUSTOM",
     "INTERNAL_PATHS",
+    "REFUSED_SLUGS",
     "SOCIAL_HOSTS",
     "SectionRefused",
     "VARIANTS",
@@ -454,5 +534,8 @@ __all__ = [
     "clean_note",
     "clean_page_description",
     "clean_page_title",
+    "clean_slug",
     "clean_variant",
+    "page_links",
+    "slug_from_title",
 ]

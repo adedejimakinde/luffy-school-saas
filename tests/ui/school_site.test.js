@@ -30,7 +30,7 @@ const PORT = process.env.SCREENS_PORT || "8000";
 const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 
-const PAGES = ["/", "/about/", "/admissions/", "/contact/"];
+const PAGES = ["/", "/about/", "/admissions/", "/contact/", "/pages/boarding/"];
 
 /** Lighthouse's "Slow 4G", in the units the DevTools protocol takes. */
 const SLOW_4G = { offline: false, latency: 150, downloadThroughput: (1.6 * 1024 * 1024) / 8, uploadThroughput: (750 * 1024) / 8 };

@@ -7,7 +7,7 @@ unpublished, so the demo keeps today's page at a school root as well.
 """
 
 from . import services
-from .models import Page
+from .models import Page, PageKey, SiteSettings
 
 HERO = {
     "heading": "Every child known, every child stretched",
@@ -50,6 +50,25 @@ ABOUT = {
 }
 CONTACT = {"whatsapp": "0803 000 0000", "hours": "Monday to Friday, 7:30am to 4pm", "latitude": 6.4541,
            "longitude": 3.3947}
+#: Two pages of Harbour's own (§2.1.1): enough, with the four fixed ones on, to
+#: put a "More" in the menu on a phone (`render.MENU_ON_A_PHONE`).
+BOARDING = {
+    "title": "Boarding",
+    "hero": {"heading": "Boarding at Harbour",
+             "subheading": "Two houses on the school grounds, for students from JSS 1.",
+             "buttons": [{"label": "Apply for a place", "link": "/admissions/"}]},
+    "text": {"heading": "Life in the houses",
+             "body": ("Each house has a housemaster or housemistress who lives on site, a matron, and "
+                      "supervised prep every evening.\n\nBoarders go home for the mid-term break and at "
+                      "the end of each term.")},
+    "facts": {"items": [{"figure": "2", "label": "boarding houses, one for boys and one for girls"},
+                        {"figure": "180", "label": "boarders"}]},
+}
+SPORTS = {
+    "title": "Sports and clubs",
+    "text": {"heading": "After the last bell",
+             "body": "Football, athletics, table tennis, debate, drama, the press club and robotics."},
+}
 FOOTER = {"social": [{"network": "facebook", "url": "https://www.facebook.com/harbourdemocollege"}],
           "address_line": "Off Ozumba Mbadiwe Avenue, Victoria Island, Lagos"}
 
@@ -57,9 +76,9 @@ FOOTER = {"social": [{"network": "facebook", "url": "https://www.facebook.com/ha
 def publish_demo_site(principal, school):
     """Build and publish Harbour's website as its principal would. On the school's schema."""
 
-    def add(key, kind, data):
-        version = Page.objects.get(key=key).version
-        services.add_section_as(principal, school, key, version=version, kind=kind, data=data)
+    def add(ref, kind, data):
+        version = (Page.objects.get(key=ref) if ref in PageKey.values else Page.objects.get(slug=ref)).version
+        services.add_section_as(principal, school, ref, version=version, kind=kind, data=data)
 
     for key in ("about", "admissions", "contact"):
         services.save_page_as(principal, school, key, version=Page.objects.get(key=key).version, enabled=True)
@@ -73,6 +92,16 @@ def publish_demo_site(principal, school):
     add("admissions", "admissions_cta", ADMISSIONS)
     add("contact", "contact_map", CONTACT)
     services.save_footer_as(principal, school, FOOTER, version=0)
+    for page in (BOARDING, SPORTS):
+        version = SiteSettings.objects.get(pk=1).version
+        slug = services.create_page_as(principal, school, version=version, title=page["title"]).slug
+        for kind in ("hero", "text", "facts"):
+            if kind in page:
+                add(slug, kind, page[kind])
+        services.save_page_as(principal, school, slug, version=Page.objects.get(slug=slug).version, enabled=True)
+    # The boarding page beside the About page in the menu, not last.
+    order = ["home", "about", "boarding", "admissions", "sports-and-clubs", "news", "gallery", "contact"]
+    services.order_menu_as(principal, school, order, version=SiteSettings.objects.get(pk=1).version)
     return services.publish_as(principal, school, note="Our new website")
 
 

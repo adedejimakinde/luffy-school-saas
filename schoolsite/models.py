@@ -6,9 +6,9 @@ are named by their platform-wide login id, a bare integer with no foreign key, a
 everywhere else (`docs/tenancy.md`), and by their names as they read at the time
 (operating rule 2), so the record survives a rename.
 
-- **The draft** is `SiteSettings` (one row: theme, theme options, footer), the six
-  fixed `Page` rows and their `Section` rows. Editors change it; nobody outside
-  sees it.
+- **The draft** is `SiteSettings` (one row: theme, theme options, footer), the
+  `Page` rows (the six fixed pages and up to 14 of the school's own, PR 3b) and
+  their `Section` rows. Editors change it; nobody outside sees it.
 - **What is published** is `SiteRevision`: a snapshot of the whole draft written
   at publish time, never changed afterwards. The public site (PR 3) reads the
   latest one and nothing else, the way a family's card is the released row and
@@ -24,7 +24,18 @@ bulk `.update()` or an import cannot rewrite them either (rule 3).
 """
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import Deferrable, Q
+
+#: A school's own pages, beside the six fixed ones: 20 pages in all
+#: (`docs/school-sites.md` §2.1.1). Each takes a numbered slot, so Postgres
+#: refuses a fifteenth however it is written.
+CUSTOM_PAGE_SLOTS = 14
+#: The most sections a page holds (§2.2), held by Postgres as positions 0 to 14.
+MOST_SECTIONS = 15
+#: A custom page's address is `/pages/<slug>/`: lowercase letters, digits and
+#: single hyphens between them, at most 40 characters.
+SLUG_LENGTH = 40
+SLUG_PATTERN = r"^[a-z0-9]+(-[a-z0-9]+)*$"
 
 
 class RecordIsFixed(Exception):
@@ -55,6 +66,13 @@ class PageKey(models.TextChoices):
     NEWS = "news", "News"
     GALLERY = "gallery", "Gallery"
     CONTACT = "contact", "Contact"
+
+
+class PageKind(models.TextChoices):
+    """A fixed page, at its fixed address, or one the school made, under `/pages/`."""
+
+    FIXED = "fixed", "Fixed"
+    CUSTOM = "custom", "The school's own"
 
 
 class SectionKind(models.TextChoices):
@@ -121,29 +139,80 @@ class SiteSettings(models.Model):
 
 
 class Page(models.Model):
-    """One of the six fixed pages, in the draft. Seeded by the migration."""
+    """One page of the draft: one of the six fixed pages, or one the school made.
 
-    key = models.CharField(max_length=16, choices=PageKey, unique=True)
+    The fixed six are seeded by the migration and are never made or deleted. A
+    school's own page (§2.1.1) has a title, an address under `/pages/` that is
+    fixed once it has been published, and a numbered slot; it holds sections of
+    the kinds `sections.ALLOWED_ON` lets onto a custom page. Every page has a
+    place in the menu, Home first.
+    """
+
+    kind = models.CharField(max_length=8, choices=PageKind, default=PageKind.FIXED)
+    #: A fixed page's key; empty on a page the school made.
+    key = models.CharField(max_length=16, choices=PageKey, blank=True, default="")
+    #: A custom page's address, `/pages/<slug>/`; empty on a fixed page.
+    slug = models.CharField(max_length=SLUG_LENGTH, blank=True, default="")
+    #: A custom page's slot, 1 to `CUSTOM_PAGE_SLOTS`; empty on a fixed page.
+    slot = models.PositiveSmallIntegerField(null=True, blank=True)
+    #: Its place in the menu, from 0. Home is 0.
+    menu_position = models.PositiveSmallIntegerField()
     enabled = models.BooleanField(default=False)
     title = models.CharField(max_length=70, blank=True, default="")
     description = models.CharField(max_length=160, blank=True, default="")
+    #: Set by the first publish that showed this page switched on. From then on
+    #: its address does not change: people and search engines have it.
+    ever_published = models.BooleanField(default=False)
     #: Bumped by every write to this page or to the list of its sections.
     version = models.PositiveIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["id"]
+        ordering = ["menu_position", "id"]
         constraints = [
             models.CheckConstraint(
-                condition=Q(key__in=PageKey.values), name="a_page_is_one_of_the_fixed_six"
+                condition=(
+                    Q(kind=PageKind.FIXED, key__in=PageKey.values, slug="", slot__isnull=True)
+                    | (
+                        # `slot__isnull=False` too: a check whose comparison meets a NULL passes.
+                        Q(kind=PageKind.CUSTOM, key="", slot__isnull=False, slot__gte=1,
+                          slot__lte=CUSTOM_PAGE_SLOTS, slug__regex=SLUG_PATTERN)
+                        & ~Q(slug__in=PageKey.values)
+                    )
+                ),
+                name="a_page_is_fixed_or_the_schools_own",
+            ),
+            models.UniqueConstraint(
+                fields=["key"], condition=Q(kind=PageKind.FIXED), name="a_fixed_page_appears_once"
+            ),
+            models.UniqueConstraint(
+                fields=["slug"], condition=Q(kind=PageKind.CUSTOM), name="a_custom_page_has_its_own_address"
+            ),
+            models.UniqueConstraint(fields=["slot"], name="a_custom_page_takes_its_own_slot"),
+            # Deferred, so a reorder can pass through two pages sharing a place
+            # on its way to the order it ends in.
+            models.UniqueConstraint(
+                fields=["menu_position"], name="a_menu_place_holds_one_page", deferrable=Deferrable.DEFERRED
             ),
             models.CheckConstraint(
                 condition=~Q(key=PageKey.HOME) | Q(enabled=True), name="the_home_page_is_always_on"
             ),
+            models.CheckConstraint(
+                condition=~Q(key=PageKey.HOME) | Q(menu_position=0), name="the_home_page_comes_first_in_the_menu"
+            ),
         ]
 
     def __str__(self):
-        return self.get_key_display()
+        return self.title if self.kind == PageKind.CUSTOM else self.get_key_display()
+
+    @property
+    def ref(self) -> str:
+        """How the services name it: a fixed page's key, or a custom page's slug."""
+        return self.slug if self.kind == PageKind.CUSTOM else self.key
+
+    @property
+    def path(self) -> str:
+        return f"/pages/{self.slug}/" if self.kind == PageKind.CUSTOM else ("/" if self.key == PageKey.HOME else f"/{self.key}/")
 
 
 class Section(models.Model):
@@ -170,6 +239,14 @@ class Section(models.Model):
             ),
             models.CheckConstraint(
                 condition=~Q(kind=SectionKind.HERO) | Q(position=0), name="a_hero_comes_first"
+            ),
+            # Deferred, so adding a hero can move every section down one place.
+            models.UniqueConstraint(
+                fields=["page", "position"], name="a_place_on_a_page_holds_one_section",
+                deferrable=Deferrable.DEFERRED,
+            ),
+            models.CheckConstraint(
+                condition=Q(position__lt=MOST_SECTIONS), name="a_page_holds_at_most_fifteen_sections"
             ),
         ]
 
@@ -271,8 +348,11 @@ class SiteDelegationEvent(AppendOnly):
 
 
 __all__ = [
+    "CUSTOM_PAGE_SLOTS",
+    "MOST_SECTIONS",
     "Page",
     "PageKey",
+    "PageKind",
     "RecordIsFixed",
     "Section",
     "SectionKind",
@@ -280,4 +360,6 @@ __all__ = [
     "SitePublishEvent",
     "SiteRevision",
     "SiteSettings",
+    "SLUG_LENGTH",
+    "SLUG_PATTERN",
 ]

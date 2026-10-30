@@ -294,9 +294,13 @@ class TheDemoSiteTests(PublicSiteSetUp):
         with connected_to(self.stmarys):
             revision = publish_demo_site(self.principal, self.stmarys)
         self.assertEqual(revision.number, 1)
-        for path in ("/", "/about/", "/admissions/", "/contact/"):
+        for path in ("/", "/about/", "/admissions/", "/contact/", "/pages/boarding/", "/pages/sports-and-clubs/"):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path).status_code, 200)
+        # Six pages on, in the order the demo set: the sixth goes under "More" on a phone.
+        home = self.get("/").content.decode()
+        self.assertIn('<li class="more"><details>', home)
+        self.assertIn('<li class="wide"><a href="/contact/">Contact</a></li>', home)
         contact = self.get("/contact/").content.decode()
         self.assertIn("Open in Maps", contact)
         self.assertIn('href="https://wa.me/2348030000000"', contact)

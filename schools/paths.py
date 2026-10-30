@@ -23,10 +23,11 @@ name that is both, and on a name here that nothing routes.
   moves from here to `PORTAL` in the same change that routes the real view.
 """
 
-#: `docs/school-sites.md` §2.1. `""` is the root. `robots.txt` is the site's
+#: `docs/school-sites.md` §2.1. `""` is the root. `pages` holds the pages a
+#: school makes itself, at `/pages/<slug>/` (§2.1.1). `robots.txt` is the site's
 #: own file for crawlers, never itself indexed.
 PUBLIC_SITE = frozenset(
-    {"", "about", "admissions", "news", "gallery", "contact", "media", "sitemap.xml", "robots.txt"}
+    {"", "about", "admissions", "news", "gallery", "contact", "pages", "media", "sitemap.xml", "robots.txt"}
 )
 
 PORTAL = frozenset(

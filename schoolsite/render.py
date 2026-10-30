@@ -22,6 +22,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from urllib.parse import quote
+from xml.sax.saxutils import escape
 
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
@@ -30,7 +31,7 @@ from results import look
 from schools.hosts import portal_host
 
 from . import themes
-from .models import PageKey, SectionKind
+from .models import PageKey, PageKind, SectionKind
 
 #: Where each fixed page answers (§2.1), in the order the menu lists them.
 PAGE_PATHS = {
@@ -41,6 +42,9 @@ PAGE_PATHS = {
     PageKey.GALLERY: "/gallery/",
     PageKey.CONTACT: "/contact/",
 }
+
+#: On a phone, the menu shows this many links and puts the rest under "More" (§2.1.1).
+MENU_ON_A_PHONE = 5
 
 #: How each network the footer may link to is written.
 NETWORK_NAMES = {"facebook": "Facebook", "instagram": "Instagram", "x": "X", "youtube": "YouTube",
@@ -97,17 +101,54 @@ def csp(style) -> str:
     )
 
 
+def is_custom(page) -> bool:
+    """A page the school made (§2.1.1). A snapshot from before PR 3b has no kind: all fixed."""
+    return page.get("kind") == PageKind.CUSTOM
+
+
+def page_path(page) -> str:
+    return f"/pages/{page['slug']}/" if is_custom(page) else PAGE_PATHS[page["key"]]
+
+
+def page_label(page) -> str:
+    """Its name in the menu: a fixed page's own name, or the title the school gave its page."""
+    return page["title"] if is_custom(page) else PageKey(page["key"]).label
+
+
+def _menu_place(page):
+    if "menu_position" in page:
+        return page["menu_position"]
+    # A snapshot from before PR 3b: the order the menu had then.
+    return list(PAGE_PATHS).index(page["key"])
+
+
 def enabled_pages(snapshot):
     """The snapshot's switched-on pages, in the menu's order, Home always first."""
-    on = {p["key"]: p for p in snapshot.get("pages", []) if p["enabled"]}
-    return [on[key] for key in PAGE_PATHS if key in on]
+    on = [p for p in snapshot.get("pages", []) if p["enabled"] and (is_custom(p) or p["key"] in PAGE_PATHS)]
+    return sorted(on, key=lambda p: (p.get("key") != PageKey.HOME, _menu_place(p)))
 
 
-def find_page(snapshot, key):
+def find_page(snapshot, key=None, *, slug=None):
+    """The switched-on page with this key, or the switched-on custom page at this slug."""
     for page in snapshot.get("pages", []):
-        if page["key"] == key and page["enabled"]:
+        if not page["enabled"]:
+            continue
+        if slug is not None and is_custom(page) and page["slug"] == slug:
+            return page
+        if slug is None and not is_custom(page) and page["key"] == key:
             return page
     return None
+
+
+def link_is_live(link, live_paths) -> bool:
+    """Whether a button's link may be drawn: anywhere off the site, or a page of it that is on.
+
+    A link to one of the school's own pages that is switched off, or was never
+    published, is left out rather than drawn as a way to a 404 (§2.2).
+    """
+    if not link.startswith("/"):
+        return True
+    return link in live_paths or any(link.startswith(path) for path in live_paths if path != "/")
 
 
 def whatsapp_link(number) -> str:
@@ -134,16 +175,22 @@ class Drawn:
     style: str
 
 
-def _section(theme, section, pages_on, school, address):
+def _section(theme, section, live_paths, school, address):
     kind = section["kind"]
     data = dict(section["data"])
+    if kind == SectionKind.HERO:
+        data["buttons"] = [b for b in data.get("buttons", []) if link_is_live(b["link"], live_paths)]
     if kind == SectionKind.ADMISSIONS_CTA:
-        # The button goes where the school has a page to send a family to.
-        data["href"] = (
-            PAGE_PATHS[PageKey.ADMISSIONS] if PageKey.ADMISSIONS in pages_on
-            else PAGE_PATHS[PageKey.CONTACT] if PageKey.CONTACT in pages_on
-            else ""
-        )
+        # The button goes where the school sends it, if that page is on; else
+        # where the school has a page to send a family to.
+        if data.get("link"):
+            data["href"] = data["link"] if link_is_live(data["link"], live_paths) else ""
+        else:
+            data["href"] = (
+                PAGE_PATHS[PageKey.ADMISSIONS] if PAGE_PATHS[PageKey.ADMISSIONS] in live_paths
+                else PAGE_PATHS[PageKey.CONTACT] if PAGE_PATHS[PageKey.CONTACT] in live_paths
+                else ""
+            )
         data["closes_on"] = datetime.date.fromisoformat(data["closes"]) if data.get("closes") else None
     if kind == SectionKind.CONTACT_MAP:
         data["whatsapp_link"] = whatsapp_link(data.get("whatsapp", ""))
@@ -178,21 +225,32 @@ def structured_data(school, canonical_root, snapshot):
     return json_ld(data)
 
 
-def draw(school, revision, key, host) -> Drawn | None:
-    """The page `key` of this revision, drawn, or None if the school has it switched off."""
+def draw(school, revision, key, host, *, slug=None) -> Drawn | None:
+    """The fixed page `key`, or the school's own page at `slug`, as published, drawn.
+
+    None if the school has that page switched off, or never published it.
+    """
     snapshot = revision.snapshot
-    page = find_page(snapshot, key)
+    page = find_page(snapshot, key, slug=slug)
     if page is None:
         return None
+    key = "" if slug is not None else key
     theme = theme_of(snapshot)
     card = look.for_site(school.name)
     style = style_block(colour_for(snapshot, card["colour"]))
     pages = enabled_pages(snapshot)
-    pages_on = {p["key"] for p in pages}
+    live_paths = {page_path(p) for p in pages}
     root = f"https://{host}"
-    label = PageKey(key).label
-    title = page["title"] or (school.name if key == PageKey.HOME else f"{label} | {school.name}")
-    sections = [_section(theme, s, pages_on, school, school.address) for s in page["sections"]]
+    label = page_label(page)
+    if is_custom(page):
+        title = f"{label} | {school.name}"
+    else:
+        title = page["title"] or (school.name if key == PageKey.HOME else f"{label} | {school.name}")
+    sections = [_section(theme, s, live_paths, school, school.address) for s in page["sections"]]
+    nav = [
+        {"path": page_path(p), "label": page_label(p), "current": p is page}
+        for p in pages
+    ]
     context = {
         "indexable": True,
         "school": school,
@@ -200,14 +258,12 @@ def draw(school, revision, key, host) -> Drawn | None:
         "style": style,
         "title": title,
         "description": page["description"] or school.about[:160],
-        "canonical": root + PAGE_PATHS[key],
+        "canonical": root + page_path(page),
         "key": key,
         "label": label,
-        "nav": [
-            {"key": p["key"], "path": PAGE_PATHS[p["key"]], "label": PageKey(p["key"]).label,
-             "current": p["key"] == key}
-            for p in pages
-        ],
+        "nav": nav,
+        "nav_more": nav[MENU_ON_A_PHONE:],
+        "menu_on_a_phone": MENU_ON_A_PHONE,
         "sections": sections,
         "has_hero": any(s["kind"] == SectionKind.HERO for s in sections),
         "footer": _footer(snapshot.get("footer") or {}),
@@ -222,7 +278,7 @@ def sitemap(revision, host) -> str:
     root = f"https://{host}"
     day = revision.published_at.date().isoformat()
     urls = "".join(
-        f"<url><loc>{root}{PAGE_PATHS[p['key']]}</loc><lastmod>{day}</lastmod></url>"
+        f"<url><loc>{root}{escape(page_path(p))}</loc><lastmod>{day}</lastmod></url>"
         for p in enabled_pages(revision.snapshot)
     )
     return (
@@ -231,4 +287,17 @@ def sitemap(revision, host) -> str:
     )
 
 
-__all__ = ["PAGE_PATHS", "Drawn", "csp", "draw", "sitemap", "style_hash", "theme_of"]
+__all__ = [
+    "MENU_ON_A_PHONE",
+    "PAGE_PATHS",
+    "Drawn",
+    "csp",
+    "draw",
+    "enabled_pages",
+    "link_is_live",
+    "page_label",
+    "page_path",
+    "sitemap",
+    "style_hash",
+    "theme_of",
+]
