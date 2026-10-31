@@ -37,6 +37,20 @@ COMING_SOON = {
 }
 
 
+#: Each kind's name in the editor, as `static/site-editor/states.js` writes it too.
+KIND_LABELS = {
+    SectionKind.HERO: "Hero",
+    SectionKind.CREST_MOTTO: "Crest and motto",
+    SectionKind.PRINCIPAL_MESSAGE: "Principal's message",
+    SectionKind.FACTS: "Facts",
+    SectionKind.NEWS: "News",
+    SectionKind.GALLERY: "Gallery",
+    SectionKind.ADMISSIONS_CTA: "Admissions panel",
+    SectionKind.CONTACT_MAP: "Contact and map",
+    SectionKind.TEXT: "Text",
+}
+
+
 class MessageOut(Schema):
     detail: str
 
@@ -123,7 +137,7 @@ def _kinds(page_key, page_name):
             continue
         offered.append({
             "kind": kind.value,
-            "label": kind.label,
+            "label": KIND_LABELS[kind],
             "available": kind not in COMING_SOON,
             "hint": COMING_SOON.get(kind, ""),
         })

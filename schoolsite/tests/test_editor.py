@@ -235,6 +235,7 @@ class ThePrincipalsWorkTests(EditorSetUp):
         self.assertEqual(response.status_code, 422)
         self.assertIn("Coming soon", response.json()["detail"])
         kinds = {k["kind"]: k for k in self.overview().json()["pages"][0]["kinds"]}
+        self.assertEqual(kinds["admissions_cta"]["label"], "Admissions panel", "the name the section list uses")
         self.assertFalse(kinds["news"]["available"])
         self.assertFalse(kinds["gallery"]["available"])
         self.assertTrue(kinds["hero"]["available"])

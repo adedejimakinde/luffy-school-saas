@@ -54,6 +54,7 @@ from results.views import (
     OGSERA_MODULES,
 )
 from notices.views import SETTINGS_MODULES
+from schoolsite.editor import EDITOR_MODULES as WEBSITE_EDITOR_MODULES
 from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -90,6 +91,7 @@ PAGES = {
     "subject-teachers": SUBJECT_TEACHERS_MODULES,
     "exam-slips": EXAM_SLIPS_MODULES,
     "blog-editor": BLOG_EDITOR_MODULES,
+    "website-editor": WEBSITE_EDITOR_MODULES,
 }
 
 #: Pages whose modules build no markup of their own, and so import no escaping
