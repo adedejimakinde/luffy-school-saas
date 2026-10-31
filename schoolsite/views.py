@@ -60,9 +60,22 @@ def _host(request) -> str:
 
 def _school_key(school) -> str:
     """What the page shows of `School` and the card's look, so editing either is a new key."""
-    look_updated = ReportCardSettings.objects.values_list("updated_at", flat=True).first()
+    from django.db.models import Subquery
+
+    from files.models import StoredFile
+
+    # The crest's file key in the same query: a new crest finished by the
+    # media worker is a new key, though the settings row did not change.
+    crest = StoredFile.objects.filter(
+        schema_name=connection.schema_name, slot="crest", state="ready"
+    ).values("key")[:1]
+    look_updated, crest_key = (
+        ReportCardSettings.objects.annotate(crest_key=Subquery(crest))
+        .values_list("updated_at", "crest_key")
+        .first()
+    ) or (None, None)
     shown = "\n".join((school.name, school.about, school.address, school.phone, school.contact_email,
-                       str(look_updated)))
+                       str(look_updated), str(crest_key)))
     return hashlib.sha256(shown.encode()).hexdigest()[:16]
 
 

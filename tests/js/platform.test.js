@@ -152,3 +152,27 @@ test("a refusal keeps the form and what was typed, with the server's sentence", 
   assert.match(root.innerHTML, /value="app"/);
   assert.match(root.innerHTML, /value="Hope Academy"/);
 });
+
+test("storage shows each school against its quota, and marks a disk past the warning line", async () => {
+  const states = await import("../../static/platform/states.js");
+  const storage = {
+    disk: { used_bytes: 75 * 1024 ** 3, total_bytes: 100 * 1024 ** 3, percent: 75, warn_percent: 70, refuse_percent: 90 },
+    schools: [
+      { name: "St Mary's", subdomain: "st-marys", bytes: 512 * 1024 ** 2, files: 41, quota_bytes: 1024 ** 3, default_quota: true, percent: 50 },
+      { name: "Grace", subdomain: "grace", bytes: 0, files: 1, quota_bytes: 2048 * 1024 ** 2, default_quota: false, percent: 0 },
+    ],
+    platform_bytes: 3 * 1024 ** 2,
+    default_quota_bytes: 1024 ** 3,
+  };
+  const html = states.storageSection(storage);
+  assert.match(html, /<strong>75%<\/strong> full \(75\.0 GB of 100\.0 GB\)/);
+  assert.match(html, /class="disk warn" role="alert"/);
+  assert.match(html, /St Mary&#39;s|St Mary's/);
+  assert.match(html, /512 MB of 1\.0 GB \(50%\), 41 files/);
+  assert.match(html, /data-school="grace"[\s\S]*value="2048"/);
+  assert.match(html, /data-school="st-marys"[\s\S]*value="" placeholder="default"/);
+
+  const calm = states.storageSection({ ...storage, disk: { ...storage.disk, percent: 40 } });
+  assert.doesNotMatch(calm, /role="alert"/);
+  assert.equal(states.storageSection(null), "");
+});

@@ -73,13 +73,23 @@ class TheColourTests(SimpleTestCase):
 
 
 class TheCrestTests(SimpleTestCase):
-    def test_a_png_or_a_jpg_becomes_a_square_png(self):
+    """The crest's drawing is the upload service's (`files.images.mark`)."""
+
+    def draw(self, raw):
+        from files import images
+        from files.kinds import Kind, profile_for
+
+        return images.mark(raw, profile_for(Kind.CREST))
+
+    def test_a_png_or_a_jpg_becomes_a_trimmed_square_png_for_the_card(self):
         from PIL import Image
 
         for fmt in ("PNG", "JPEG"):
             with self.subTest(format=fmt):
-                drawn = Image.open(io.BytesIO(look.redraw_crest(image(fmt))))
+                made = self.draw(image(fmt))
+                drawn = Image.open(io.BytesIO(made["data"]["card.png"]))
                 self.assertEqual((drawn.format, drawn.size), ("PNG", (256, 256)))
+                self.assertEqual(Image.open(io.BytesIO(made["data"]["site.png"])).size, (128, 128))
 
     def test_what_is_stored_is_redrawn_and_carries_nothing_of_the_upload(self):
         from PIL import PngImagePlugin
@@ -88,24 +98,29 @@ class TheCrestTests(SimpleTestCase):
         info.add_text("Comment", "a secret the school did not mean to publish")
         sent = image("PNG", pnginfo=info) + b"trailing bytes after the image"
 
-        drawn = look.redraw_crest(sent)
+        for drawn in self.draw(sent)["data"].values():
+            self.assertNotIn(b"a secret", drawn)
+            self.assertNotIn(b"trailing bytes", drawn)
 
-        self.assertNotIn(b"a secret", drawn)
-        self.assertNotIn(b"trailing bytes", drawn)
+    def test_over_five_megabytes_is_refused_before_it_is_opened(self):
+        from files import images
 
-    def test_over_a_megabyte_is_refused_before_it_is_opened(self):
-        with self.assertRaisesRegex(look.LookRefused, "at most 1 MB"):
-            look.redraw_crest(b"\x89PNG" + b"0" * (look.MAX_UPLOAD_BYTES + 1))
+        with self.assertRaisesRegex(images.Refused, "at most 5 MB"):
+            self.draw(b"\x89PNG" + b"0" * (5 * 1024 * 1024 + 1))
 
-    def test_a_gif_or_a_file_that_is_not_an_image_is_refused(self):
-        for raw in (image("GIF"), b"not an image at all", b"\x89PNG\r\n\x1a\nbroken"):
+    def test_a_gif_an_svg_or_a_file_that_is_not_an_image_is_refused(self):
+        from files import images
+
+        for raw in (image("GIF"), b"not an image at all", b"\x89PNG\r\n\x1a\nbroken", b"<svg onload='x'></svg>"):
             with self.subTest(raw=raw[:12]):
-                with self.assertRaisesRegex(look.LookRefused, "PNG or a JPG"):
-                    look.redraw_crest(raw)
+                with self.assertRaisesRegex(images.Refused, "JPG, PNG or WebP"):
+                    self.draw(raw)
 
     def test_an_image_far_larger_than_a_crest_is_refused_before_it_is_decoded(self):
-        with self.assertRaisesRegex(look.LookRefused, "far larger"):
-            look.redraw_crest(image("PNG", size=(5000, 5000)))
+        from files import images
+
+        with self.assertRaisesRegex(images.Refused, "far larger"):
+            self.draw(image("PNG", size=(5000, 5000)))
 
     def test_initials_are_two_letters_at_most(self):
         for name, expected in (
@@ -155,6 +170,9 @@ class TwoSchoolsOneCrestTests(LookSetUp):
         # Grace's row, card, and API all know nothing of it.
         with connected_to(self.grace):
             self.assertFalse(ReportCardSettings.objects.filter(crest__isnull=False).exists())
+            from files.models import StoredFile
+
+            self.assertFalse(StoredFile.objects.exists())
         grace = self.html(self.grace)
         self.assertNotIn("data:image/png;base64,", grace)
         self.assertIn('class="initials">GA<', grace)
@@ -204,15 +222,15 @@ class TheDoorTests(LookSetUp):
         self.assertEqual(response.status_code, 422)
         self.assertIn("too light", response.json()["detail"])
 
-    def test_an_upload_over_a_megabyte_is_refused(self):
+    def test_an_upload_over_five_megabytes_is_refused(self):
         host = self.as_user(self.principal)
-        big = io.BytesIO(b"\x89PNG" + b"0" * (look.MAX_UPLOAD_BYTES + 1))
+        big = io.BytesIO(b"\x89PNG" + b"0" * (5 * 1024 * 1024 + 1))
         big.name = "crest.png"
 
         response = self.client.post(CREST, {"crest": big}, HTTP_HOST=host)
 
         self.assertEqual(response.status_code, 422)
-        self.assertIn("1 MB", response.json()["detail"])
+        self.assertIn("5 MB", response.json()["detail"])
 
     def test_no_file_is_a_sentence_not_an_error(self):
         host = self.as_user(self.principal)
@@ -236,7 +254,8 @@ class TheDoorTests(LookSetUp):
         self.assertEqual(
             card,
             {"colour": "#143D8C", "default_colour": "#143D8C", "has_crest": False,
-             "crest_version": None, "initials": "SM", "template": "standard",
+             "crest_version": None, "crest_processing": False, "crest_problem": "",
+             "initials": "SM", "template": "standard",
              "show_position": False, "show_ministry": False},
         )
 

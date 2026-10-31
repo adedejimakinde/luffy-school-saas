@@ -39,8 +39,8 @@ test("with a crest the preview shows it, versioned, and offers to remove it", ()
 test("the form says what a crest may be before anybody picks one", () => {
   const html = states.shape(SETUP);
 
-  assert.match(html, /accept="image\/png,image\/jpeg"/);
-  assert.match(html, /PNG or JPG, up to 1 MB/);
+  assert.match(html, /accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.match(html, /PNG, JPG or WebP, up to 5 MB/);
   assert.match(html, /too light to read is refused/);
   assert.doesNotMatch(html, /in white/, "the card no longer prints the name in white");
 });
@@ -140,4 +140,20 @@ test("removeCrest classifies a refusal like every other write", async () => {
 
 test("the page body has no sign-out: it is not what this page is for", () => {
   assert.doesNotMatch(states.shape(SETUP), /data-action="sign-out"/);
+});
+
+test("a crest still being prepared says so, and a failed one says why", () => {
+  const preparing = states.shape({ ...SETUP, card: { ...SETUP.card, crest_processing: true } });
+  assert.match(preparing, /role="status">Your new crest is being prepared/);
+
+  const failed = states.shape({ ...SETUP, card: { ...SETUP.card, crest_problem: "That file is not a picture this can read." } });
+  assert.match(failed, /role="alert">That file is not a picture this can read\./);
+  assert.doesNotMatch(failed, /being prepared/);
+});
+
+test("the page keeps asking only while the crest is being prepared", async () => {
+  const { stillPreparing } = await import("../../static/setup/app.js");
+  assert.equal(stillPreparing({ card: { crest_processing: true } }), true);
+  assert.equal(stillPreparing({ card: { crest_processing: false } }), false);
+  assert.equal(stillPreparing({ step: "broken" }), false);
 });

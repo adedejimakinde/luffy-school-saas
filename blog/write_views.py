@@ -337,13 +337,16 @@ def editor(request, pk):
     return redirect(f"{reverse('write-post', args=[post.pk])}?done={done}")
 
 
-def _read(upload) -> bytes:
-    """An uploaded file's bytes, refused by its size before they are read into memory."""
+def _read(upload):
+    """The uploaded file, refused by its size before anything else is done with it.
+
+    Passed on as the file, not its bytes: the upload service streams it to
+    disk for the media worker (`files.service`)."""
     if upload is None:
         return b""
     if upload.size > images.MAX_UPLOAD_BYTES:
         raise images.ImageRefused("A picture can be at most 10 MB. Save it smaller and try again.")
-    return upload.read()
+    return upload
 
 
 @require_POST
@@ -403,7 +406,7 @@ def portal_image(request, key, small=False):
     refusal = _require_blog_account(request)
     if refusal:
         raise Http404("No such picture.")
-    found = BlogImage.objects.select_related("post").filter(key=key).first()
+    found = BlogImage.objects.select_related("post", "file").filter(key=key).first()
     if found is None or not workflow.can_open(request.user, found.post):
         raise Http404("No such picture.")
     response = serve_image(found, small)

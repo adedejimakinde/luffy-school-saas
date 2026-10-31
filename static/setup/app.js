@@ -107,6 +107,14 @@ export function movedOrder(state, group, traitId, by) {
   return ids;
 }
 
+const POLLS = 30;
+const POLL_MS = 2000;
+
+/** Is a crest uploaded a moment ago still with the media worker? */
+export function stillPreparing(state) {
+  return Boolean(state && state.card && state.card.crest_processing);
+}
+
 export async function mount(root, { fetchImpl = fetch } = {}) {
   const portal = root.dataset.portal || "";
   let state = { step: "loading" };
@@ -114,10 +122,20 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
   };
+  // A new crest is drawn by the media worker after the upload answers, so
+  // while the look says it is still being prepared, ask again every couple of
+  // seconds, for at most a minute (`files.service`).
+  let polls = 0;
   const load = async (notes = {}) => {
     state = fromSetup(await fetchSetup({ fetchImpl }));
     if (state.step === "setup") state = { ...state, notes };
     draw();
+    if (state.step === "setup" && stillPreparing(state) && polls < POLLS && typeof setTimeout === "function") {
+      polls += 1;
+      setTimeout(() => load(state.notes), POLL_MS);
+    } else if (!stillPreparing(state)) {
+      polls = 0;
+    }
   };
 
   await load();

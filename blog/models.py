@@ -11,6 +11,8 @@ import secrets
 
 from django.conf import settings
 from django.db import models
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
 from django.db.models import Q
 from django.utils import timezone
 
@@ -163,10 +165,17 @@ class BlogImage(models.Model):
     is_cover = models.BooleanField(default=False)
     width = models.PositiveIntegerField()
     height = models.PositiveIntegerField()
-    data = models.BinaryField()
+    #: The picture as the upload service keeps it: `full.webp` and
+    #: `small.webp` on disk (`files`). Null only for a picture uploaded before
+    #: the service, still in the two columns below until
+    #: `manage.py move_files_to_disk` copies it across.
+    file = models.ForeignKey(
+        "files.StoredFile", null=True, blank=True, related_name="+", on_delete=models.SET_NULL
+    )
+    data = models.BinaryField(null=True, blank=True)
     small_width = models.PositiveIntegerField()
     small_height = models.PositiveIntegerField()
-    small = models.BinaryField()
+    small = models.BinaryField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
@@ -174,7 +183,13 @@ class BlogImage(models.Model):
 
     @property
     def bytes(self) -> int:
-        return len(self.data)
+        if self.file_id is not None:
+            return self.file.variants.get("full.webp", {}).get("bytes", 0) if self.file.variants else 0
+        return len(self.data or b"")
+
+    @property
+    def is_ready(self) -> bool:
+        return self.file_id is None or self.file.state == "ready"
 
 
 class CodeStatus(models.TextChoices):
@@ -218,3 +233,14 @@ class SignInCode(models.Model):
     @property
     def is_expired(self) -> bool:
         return timezone.now() >= self.expires_at
+
+
+@receiver(post_delete, sender=BlogImage)
+def _discard_the_file(sender, instance, **kwargs):
+    """A picture removed takes its file with it: the bytes on disk and the row."""
+    if instance.file_id is None:
+        return
+    from files import service
+    from files.models import StoredFile
+
+    service.discard(StoredFile.objects.filter(pk=instance.file_id, schema_name="public").first())

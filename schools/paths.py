@@ -41,6 +41,8 @@ PORTAL = frozenset(
         "comments",
         "exam-slips",
         "fees",
+        # A school's private files: photos, signatures, documents (`files.views`).
+        "files",
         "help",
         "home",
         "marking",

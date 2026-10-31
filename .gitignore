@@ -11,3 +11,4 @@ screens/
 # Redis's snapshot of a development queue; runtime state, and it held task
 # arguments. Never tracked, never in an image (.dockerignore).
 *.rdb
+media-local/

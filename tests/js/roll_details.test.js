@@ -183,3 +183,18 @@ test("a photo goes up as a file, multipart", async () => {
   assert.ok(bodies[0].get("photo"));
   assert.match(root.innerHTML, /data-action="remove-photo"/);
 });
+
+test("a photo still being prepared says so, and a failed one says why", () => {
+  const preparing = states.detailsPanel({ body: { ...DETAILS, photo_processing: true } });
+  assert.match(preparing, /role="status">The new photo is being prepared/);
+
+  const failed = states.detailsPanel({ body: { ...DETAILS, photo_problem: "A photo is a JPG, PNG, WebP or HEIC file." } });
+  assert.match(failed, /role="alert">A photo is a JPG, PNG, WebP or HEIC file\./);
+  assert.doesNotMatch(failed, /being prepared/);
+});
+
+test("the form takes an iPhone's HEIC, and says the location is removed", () => {
+  const html = states.detailsPanel({ body: DETAILS });
+  assert.match(html, /image\/heic/);
+  assert.match(html, /location and camera details are removed/);
+});

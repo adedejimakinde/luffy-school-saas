@@ -135,6 +135,123 @@ class TheParentDomainIsNamedOnceTests(SimpleTestCase):
                 self.assertNotIn(domain, (BASE_DIR / name).read_text())
 
 
+class UploadedFilesTests(SimpleTestCase):
+    """The upload service on the server (`files`, docs/school-sites.md §9.1)."""
+
+    def test_files_are_on_the_media_mount_sent_by_caddy_and_alerts_go_to_hello(self):
+        derived = production_settings(
+            "FILES_ROOT", "FILES_X_ACCEL", "FILES_PROCESS_INLINE", "OPS_ALERT_EMAIL",
+            "FILES_DISK_WARN_PERCENT", "FILES_DISK_REFUSE_PERCENT", "FILES_DEFAULT_QUOTA_BYTES",
+        )
+        domain = read_env_file(PRODUCTION_ENV)["PLATFORM_DOMAIN"]
+
+        self.assertEqual(derived["FILES_ROOT"], "/srv/media")
+        self.assertIs(derived["FILES_X_ACCEL"], True)
+        self.assertIs(derived["FILES_PROCESS_INLINE"], False)
+        self.assertEqual(derived["OPS_ALERT_EMAIL"], f"hello@{domain}")
+        self.assertEqual((derived["FILES_DISK_WARN_PERCENT"], derived["FILES_DISK_REFUSE_PERCENT"]), (70.0, 90.0))
+        self.assertEqual(derived["FILES_DEFAULT_QUOTA_BYTES"], 1024 ** 3)
+
+    def test_the_media_mount_is_writable_by_the_app_and_read_only_for_caddy(self):
+        compose = (BASE_DIR / "deploy/compose.yml").read_text()
+        self.assertIn("- ${CLASSNODE_DATA:-/srv/classnode}/media:/srv/media\n", compose)
+        self.assertIn("- ${CLASSNODE_DATA:-/srv/classnode}/media:/srv/media:ro", compose)
+        caddy = (BASE_DIR / "deploy/caddy/Caddyfile").read_text()
+        self.assertIn("handle_response @sendfile", caddy)
+        self.assertIn("root * /srv/media", caddy)
+        deploy = (BASE_DIR / "deploy/deploy.sh").read_text()
+        self.assertIn("chown 10001:10001 /srv/media", deploy)
+        self.assertIn("up -d web worker media caddy", deploy)
+
+    def test_the_backup_script_is_in_the_image_and_nothing_else_of_deploy(self):
+        """`deploy` stays out of the image; the `media-backup` service runs
+        /app/deploy/media-backup.sh, so that one file, and only it, is let back."""
+        lines = [
+            line.strip()
+            for line in (BASE_DIR / ".dockerignore").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertIn("deploy", lines)
+        self.assertEqual([line for line in lines if line.startswith("!")], ["!deploy/media-backup.sh"])
+        self.assertGreater(lines.index("!deploy/media-backup.sh"), lines.index("deploy"))
+        compose = (BASE_DIR / "deploy/compose.yml").read_text()
+        self.assertIn('entrypoint: ["bash", "/app/deploy/media-backup.sh"]', compose)
+
+    def test_the_media_worker_serves_only_the_media_queue_one_job_at_a_time(self):
+        compose = (BASE_DIR / "deploy/compose.yml").read_text()
+        self.assertIn('"-Q", "media"', compose)
+        self.assertIn('"--concurrency", "1"', compose)
+
+
+class UploadsAreQueuedInProductionTests(SimpleTestCase):
+    """`FILES_PROCESS_INLINE` draws an upload inside the web request instead of
+    on the media worker. It is for the suite and for CI's screens job (a dev
+    server with no worker) only: in production it would put photo, PDF and
+    video work on gunicorn's 60-second requests and around the media queue's
+    one-at-a-time, low-priority worker. So it is off unless asked for, and
+    nothing that deploys may ask for it.
+
+    CONTROL: `FILES_PROCESS_INLINE=1` added to production.env, to a service's
+    `environment` in deploy/compose.yml, or as an `ENV` in the Dockerfile makes
+    this red.
+    """
+
+    NAME = "FILES_PROCESS_INLINE"
+
+    def test_it_is_off_unless_the_environment_says_exactly_1(self):
+        self.assertIs(production_settings(self.NAME)[self.NAME], False)
+        for value in ("0", "", "true", "yes", "on"):
+            with self.subTest(value=value):
+                derived = production_settings(self.NAME, extra_env={self.NAME: value})
+                self.assertIs(derived[self.NAME], False)
+        # The control: the switch does work, so the lines above mean something.
+        self.assertIs(production_settings(self.NAME, extra_env={self.NAME: "1"})[self.NAME], True)
+
+    def test_production_env_and_the_env_templates_never_set_it(self):
+        self.assertNotIn(self.NAME, read_env_file(PRODUCTION_ENV))
+        for template in sorted((BASE_DIR / "deploy/env").glob("*.env.example")):
+            with self.subTest(file=template.name):
+                self.assertNotIn(self.NAME, template.read_text())
+
+    def test_no_compose_service_turns_it_on(self):
+        import yaml
+
+        compose = yaml.safe_load((BASE_DIR / "deploy/compose.yml").read_text())
+        for name, service in compose["services"].items():
+            environment = service.get("environment") or {}
+            if isinstance(environment, list):
+                environment = dict(item.split("=", 1) if "=" in item else (item, "") for item in environment)
+            with self.subTest(service=name):
+                self.assertNotIn(self.NAME, environment)
+                for env_file in service.get("env_file") or []:
+                    path = env_file["path"] if isinstance(env_file, dict) else env_file
+                    # Each is production.env (checked above) or a file on the
+                    # server under /etc/classnode, made from a checked template.
+                    self.assertTrue(path == "production.env" or "/classnode}/" in path or path.startswith("/etc/"), path)
+
+    def test_nothing_under_deploy_and_not_the_image_mentions_it(self):
+        found = [
+            str(path.relative_to(BASE_DIR))
+            for path in sorted((BASE_DIR / "deploy").rglob("*"))
+            if path.is_file() and self.NAME in path.read_text(errors="ignore")
+        ]
+        self.assertEqual(found, [])
+        self.assertNotIn(self.NAME, (BASE_DIR / "Dockerfile").read_text())
+        self.assertNotIn(self.NAME, (BASE_DIR / ".github/workflows/deploy.yml").read_text())
+
+    def test_in_ci_only_the_screens_job_turns_it_on(self):
+        import yaml
+
+        workflow = yaml.safe_load((BASE_DIR / ".github/workflows/tests.yml").read_text())
+        setting = {
+            name: (job.get("env") or {}).get(self.NAME)
+            for name, job in workflow["jobs"].items()
+            if self.NAME in (job.get("env") or {})
+        }
+        self.assertEqual(setting, {"screens": "1"})
+        self.assertNotIn(self.NAME, str(workflow["jobs"]["image"]))
+
+
 class ConnectionsAreNotPooledTests(SimpleTestCase):
     def test_a_connection_per_request_and_no_pool(self):
         """**Issue #115.** Tenant isolation is Postgres `search_path`, set per

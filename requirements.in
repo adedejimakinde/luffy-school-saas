@@ -52,6 +52,19 @@ Pillow>=10.0
 # a formula is read as the value Excel saved, never evaluated.
 openpyxl>=3.1
 
+# Every upload goes through one service (`files`, docs/school-sites.md §9):
+# iPhones send HEIC, which Pillow reads only with this plugin.
+pillow-heif>=1.0
+
+# Lossless PDF optimisation and the safe downsampling of scanned pages
+# (`files/pdf.py`). The wheel carries qpdf; nothing is installed beside it.
+pikepdf>=10.0
+
+# The website's short hero loops: probing what was sent and encoding it to
+# H.264 MP4 with the sound removed (`files/video.py`). The wheel carries its own
+# FFmpeg, libx264 included, so there is no `apt install ffmpeg` to pin.
+av>=14.0
+
 # How a failing test reaches the parent of a parallel run (issue #193). Django's
 # parallel runner pickles each failure to send it back; a traceback cannot be
 # pickled without tblib, so the worker re-raises inside the test. That skips

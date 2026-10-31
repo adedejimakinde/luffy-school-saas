@@ -4,15 +4,18 @@ Both optional, both on `ReportCardSettings` (the row that already says how this
 school handles its cards), both set from the setup page by whoever may set the
 school up.
 
-## The crest is re-drawn, never kept as sent
+## The crest is an upload like any other
 
-An upload is a file somebody chose, and it is opened here with Pillow only to be
-drawn again: fitted inside a square, on transparency, and written out as a
-fresh PNG. What is stored is that PNG and nothing of the original, so a
-metadata block, a second image hidden after the first, or a file that only
-claims to be a PNG never reaches a card. A file over 1 MB is refused before it
-is opened, and one that decodes to more pixels than a crest could need is
-refused before it is decoded.
+It goes through the one upload service (`files.service`, slot `"crest"`): the
+file is checked by its own bytes in the request, then redrawn in the media
+worker as a trimmed lossless PNG with no metadata, at the sizes the card and
+the website draw it. Nothing of the uploaded file is kept. A new crest replaces
+the old one only once it is ready, so a card never prints the initials for the
+seconds the worker takes, and a failed upload leaves the old crest in place.
+
+Until `manage.py move_files_to_disk` has copied it, a school's crest may still
+be the bytes in `ReportCardSettings.crest`, written before the service existed;
+every reader here falls back to them. Removing the crest clears both.
 
 ## The colour has to read on white
 
@@ -37,17 +40,6 @@ from .models import ReportCardSettings
 #: The design's own blue (`docs/design.md`). What a school that never chose a
 #: colour prints in.
 DEFAULT_COLOUR = "#143D8C"
-
-#: The largest upload looked at, in bytes.
-MAX_UPLOAD_BYTES = 1024 * 1024
-
-#: The side of the square the crest is drawn into, in pixels. About 22mm at
-#: 300dpi, which is larger than the card prints it.
-CREST_SIDE = 256
-
-#: More pixels than any crest needs, and fewer than a decompression bomb
-#: expands to. Checked from the header, before a pixel is decoded.
-MAX_SOURCE_PIXELS = 4096 * 4096
 
 #: The colour against white paper needs this much contrast. WCAG AA for body text.
 MIN_CONTRAST = 4.5
@@ -122,78 +114,73 @@ def set_colour_as(actor, school, value: Optional[str]) -> ReportCardSettings:
 
 # -- the crest ---------------------------------------------------------------
 
-
-def open_picture(raw: bytes, *, noun: str, max_bytes: int, max_pixels: int, size_hint=None):
-    """An uploaded PNG or JPG, decoded to RGBA, or `LookRefused` saying why not.
-
-    The checks every picture a school sends goes through, the crest's and a
-    child's photo's (`academics.details`) alike: the size of the file before it
-    is opened, the format, and the pixel count read from the header before a
-    pixel is decoded. `noun` is what the refusals call it ("A crest").
-
-    `size_hint`, for a JPEG, asks the decoder for a reduced-scale decode near
-    that size (`Image.draft`), so a phone's 12-megapixel photo is not inflated
-    in full only to be shrunk to a passport frame.
-    """
-    from PIL import Image, ImageOps, UnidentifiedImageError
-
-    if len(raw) > max_bytes:
-        raise LookRefused(
-            f"{noun} can be at most {max_bytes // (1024 * 1024)} MB. Save it smaller and try again."
-        )
-    try:
-        source = Image.open(io.BytesIO(raw))
-        if source.format not in ("PNG", "JPEG"):
-            raise LookRefused(f"{noun} is a PNG or a JPG file.")
-        width, height = source.size
-        if width * height > max_pixels:
-            raise LookRefused(
-                f"That image is far larger than {noun.lower()} needs. Save it smaller and try again."
-            )
-        if size_hint and source.format == "JPEG":
-            source.draft("RGB", size_hint)
-        source = ImageOps.exif_transpose(source)
-        return source.convert("RGBA")
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
-        raise LookRefused(f"That file is not an image this can read. {noun} is a PNG or a JPG file.")
+CREST_SLOT = "crest"
 
 
-def redraw_crest(raw: bytes) -> bytes:
-    """The upload, fitted into a transparent square and written as a new PNG."""
-    from PIL import Image
+def set_crest_as(actor, school, upload):
+    """Take a new crest. It is checked now and drawn by the media worker."""
+    from files import service
+    from files.kinds import Kind
 
-    source = open_picture(
-        raw, noun="A crest", max_bytes=MAX_UPLOAD_BYTES, max_pixels=MAX_SOURCE_PIXELS
-    )
-    source.thumbnail((CREST_SIDE, CREST_SIDE), Image.LANCZOS)
-    square = Image.new("RGBA", (CREST_SIDE, CREST_SIDE), (0, 0, 0, 0))
-    square.paste(source, ((CREST_SIDE - source.width) // 2, (CREST_SIDE - source.height) // 2), source)
-    out = io.BytesIO()
-    square.save(out, format="PNG", optimize=True)
-    return out.getvalue()
-
-
-def set_crest_as(actor, school, raw: bytes) -> ReportCardSettings:
     _require_authority(actor, school)
-    crest = redraw_crest(raw)
-    with transaction.atomic():
-        row, _ = ReportCardSettings.objects.get_or_create(pk=1)
-        row.crest = crest
-        row.save(update_fields=["crest", "updated_at"])
-        _log_crest(actor, school, "saved", "Uploaded a new crest.")
-    return row
+    # The row the site's cache key reads the crest through (`schoolsite.views`).
+    ReportCardSettings.objects.get_or_create(pk=1)
+    try:
+        stored = service.accept(Kind.CREST, upload, slot=CREST_SLOT, by=actor)
+    except service.UploadRefused as exc:
+        raise LookRefused(str(exc))
+    if stored.state == "failed":
+        raise LookRefused(stored.error)
+    _log_crest(actor, school, "saved", "Uploaded a new crest.")
+    return settings()
 
 
 def clear_crest_as(actor, school) -> ReportCardSettings:
+    from files import service
+
     _require_authority(actor, school)
     with transaction.atomic():
         row, _ = ReportCardSettings.objects.get_or_create(pk=1)
-        had = row.crest is not None
+        had = row.crest is not None or service.latest(CREST_SLOT) is not None
+        service.clear_slot(CREST_SLOT)
         row.crest = None
         row.save(update_fields=["crest", "updated_at"])
         if had:
             _log_crest(actor, school, "cleared", "Removed the crest. Cards print the school's initials.")
     return row
+
+
+def crest_file():
+    """The crest as the upload service keeps it, or None."""
+    from files import service
+
+    return service.current(CREST_SLOT)
+
+
+def crest_png(row=None) -> Optional[bytes]:
+    """The crest as the card prints it, a 256 px square PNG, or None."""
+    from files import service
+
+    stored = crest_file()
+    if stored is not None:
+        try:
+            return service.read(stored, "card.png")
+        except FileNotFoundError:
+            return None
+    row = row or settings()
+    return bytes(row.crest) if row.crest else None
+
+
+def crest_status() -> dict:
+    """What the setup page says about the crest: ready, being drawn, or why not."""
+    from files import service
+
+    status = service.status_of(CREST_SLOT)
+    if not status["ready"]:
+        row = settings()
+        if row.crest:
+            status = {**status, "ready": True, "version": f"db{int(row.updated_at.timestamp())}"}
+    return status
 
 
 def _log_crest(actor, school, action, summary):
@@ -246,7 +233,7 @@ def initials(school_name: str) -> str:
 def for_card(school_name: str) -> dict:
     """What the card's header needs: the colour, and a crest or the initials."""
     row = settings()
-    crest = bytes(row.crest) if row.crest else None
+    crest = crest_png(row)
     return {
         "colour": row.colour or DEFAULT_COLOUR,
         "crest": f"data:image/png;base64,{base64.b64encode(crest).decode()}" if crest else None,
@@ -255,17 +242,28 @@ def for_card(school_name: str) -> dict:
 
 
 #: The side of the crest on the school's public page, in pixels. It is drawn
-#: about 96 CSS pixels wide, so twice that keeps it sharp on a phone, and small
+#: about 96 CSS pixels wide, so 128 keeps it sharp on a phone, and small
 #: enough that even a crest full of noise is a fraction of the page's budget.
 SITE_CREST_SIDE = 128
 
 
 def for_site(school_name: str) -> dict:
-    """`for_card()`, with the crest shrunk for a page that has to stay small."""
+    """The look for a page that has to stay small: the crest as an address.
+
+    A crest kept by the upload service is a public file on the school's own
+    host, sent by Caddy with a year's cache (§4.2), not base64 in every page.
+    One still only in the database column is shrunk and inlined, as before.
+    """
     from PIL import Image
 
-    look = for_card(school_name)
     row = settings()
+    look = {"colour": row.colour or DEFAULT_COLOUR, "crest": None, "initials": initials(school_name)}
+    stored = crest_file()
+    if stored is not None and stored.has("site.png"):
+        from files.views import url_for
+
+        look["crest"] = url_for(stored, "site.png")
+        return look
     if not row.crest:
         return look
     image = Image.open(io.BytesIO(bytes(row.crest))).convert("RGBA")
@@ -278,17 +276,18 @@ def for_site(school_name: str) -> dict:
 
 __all__ = [
     "for_site",
+    "CREST_SLOT",
     "DEFAULT_COLOUR",
     "LookRefused",
-    "MAX_UPLOAD_BYTES",
     "NotAllowedToSetTheLook",
     "clean_colour",
     "clear_crest_as",
     "contrast_with_white",
     "for_card",
     "initials",
-    "open_picture",
-    "redraw_crest",
+    "crest_file",
+    "crest_png",
+    "crest_status",
     "set_colour_as",
     "set_crest_as",
     "set_show_position_as",

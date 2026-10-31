@@ -62,10 +62,10 @@ class EveryRouteIsSortedTests(SiteSetUp):
         self.assertEqual(PORTAL & set(RESERVED), set())
         self.assertEqual(NEVER_INDEXED - segments(urls.urlpatterns), set())
 
-    def test_the_website_paths_routed_are_the_fixed_pages_and_not_media_yet(self):
+    def test_the_website_paths_routed_are_the_fixed_pages_and_media(self):
         self.assertEqual(
             segments(urls.urlpatterns) & PUBLIC_SITE,
-            {"", "about", "admissions", "news", "gallery", "contact", "pages", "sitemap.xml", "robots.txt"},
+            {"", "about", "admissions", "news", "gallery", "contact", "pages", "media", "sitemap.xml", "robots.txt"},
         )
 
     def test_sit_and_the_other_held_names_are_held_everywhere_under_them(self):

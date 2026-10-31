@@ -4,6 +4,8 @@
 #
 #   init-env.sh            creates /etc/classnode/secrets.env and caddy.env
 #   init-env.sh backup     creates /etc/classnode/backup.env (do this when you have B2)
+#   init-env.sh media-backup  adds MEDIA_RESTIC_PASSWORD to an existing backup.env,
+#                          generated, if it has none (deploy/media-backup.sh)
 #   init-env.sh --check    says which files are ready; prints names, never values
 #
 # Run as root on the server. **Safe to re-run: it never touches a file that
@@ -46,6 +48,32 @@ make() {
   ' "$TEMPLATES/$name.env.example" > "$tmp"
   install -m 640 -o root -g deploy "$tmp" "$dest"
   echo "$name.env: created at $dest"
+}
+
+# add_media_password — the uploaded files' backup password, appended to a
+# backup.env made before that backup existed. Generated inside awk like every
+# GENERATE above, written straight to the file, never shown. A file that has
+# one already is left exactly as it is: a new password would orphan the backup.
+add_media_password() {
+  local dest="$ETC/backup.env" tmp
+  [ -f "$dest" ] || die "$dest does not exist yet; run 'init-env.sh backup' first (it includes this)."
+  if grep -qE '^MEDIA_RESTIC_PASSWORD=.+' "$dest" && ! grep -qE '^MEDIA_RESTIC_PASSWORD=GENERATE$' "$dest"; then
+    echo "backup.env: already has MEDIA_RESTIC_PASSWORD, left exactly as it is"
+    return 0
+  fi
+  tmp="$(mktemp)"
+  trap 'rm -f "$tmp"' RETURN
+  grep -vE '^MEDIA_RESTIC_PASSWORD=' "$dest" > "$tmp" || true
+  awk 'BEGIN {
+      cmd = "openssl rand -hex 32"
+      cmd | getline value
+      close(cmd)
+      if (value == "") { print "openssl produced nothing" > "/dev/stderr"; exit 1 }
+      print "MEDIA_RESTIC_PASSWORD=" value
+    }' >> "$tmp"
+  install -m 640 -o root -g deploy "$tmp" "$dest"
+  echo "backup.env: MEDIA_RESTIC_PASSWORD added. Copy it to your password manager now:"
+  echo "  sudo grep ^MEDIA_RESTIC_PASSWORD= $dest"
 }
 
 # value FILE KEY — the value, for the checks below only; never printed.
@@ -94,6 +122,8 @@ check() {
     if [ "$prefix" != CHANGE_ME ] && [[ "$prefix" != s3://* ]]; then
       problem "WALG_S3_PREFIX should start s3://"
     fi
+    [ -n "$(value "$ETC/backup.env" MEDIA_RESTIC_PASSWORD 2>/dev/null)" ] \
+      || problem "MEDIA_RESTIC_PASSWORD is missing: the uploaded files are not backed up (fix: deploy/init-env.sh media-backup)"
   else
     echo "backup.env"
     echo "  (not created yet; fine until the backup step)"
@@ -110,6 +140,7 @@ check() {
 case "${1:-}" in
   "") make secrets; make caddy ;;
   backup) make backup ;;
+  media-backup) add_media_password ;;
   --check) check ;;
-  *) die "usage: init-env.sh [backup | --check]" ;;
+  *) die "usage: init-env.sh [backup | media-backup | --check]" ;;
 esac

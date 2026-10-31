@@ -113,10 +113,11 @@ through. The public site registers no worker of its own.
 
 ### Images and files
 
-- **No file storage is configured.** There is no `MEDIA_ROOT`, and the default `FileSystemStorage` is not used. Every image and PDF is a Postgres `BinaryField`: the crest (`ReportCardSettings.crest`), a child's photo (`academics`), blog images (`blog.BlogImage`, `data` plus a half-width `small`), and released-card PDFs. `results/models.py` records that this is "a decision with a ceiling".
-- Each upload is decoded and drawn again, never stored as sent (`results.look.open_picture`). The byte size is checked before opening, the pixel count is read from the header before decoding, EXIF orientation is applied, and the output is a fresh file with no metadata.
-  - Crest: PNG/JPEG, at most 1 MB, at most 4096², drawn into a 256 px transparent PNG.
-  - Blog image: PNG/JPEG/WebP, at most 10 MB, at most 40 MP, WebP at quality 80, at most 1600 px wide, plus a half-width copy for `srcset`. Served as `image/webp` with `Cache-Control: public, max-age=3600`, and only while its post is published. Keys are random 128-bit hex.
+- **Files are on the server's disk, through one upload service** (`files`, decided 31 October 2026, §9.1). Before it, every image and PDF was a Postgres `BinaryField`: the crest (`ReportCardSettings.crest`), a child's photo (`StudentDetails.photo`), blog images (`blog.BlogImage.data`/`small`) and released-card PDFs (`ReleasedCardPdf`). The first three now go through the service, and `manage.py move_files_to_disk` copies what the columns hold; the columns stay, read as a fallback, until a later release drops them. Released-card PDFs are generated, not uploaded, and move in a follow-up PR.
+- Each upload is decoded and drawn again, never stored as sent. Its type is read from its own bytes (never the name or the browser's MIME type), the byte size is checked before anything is read, the pixel count is read from the header before decoding, EXIF orientation is applied, colour is converted to sRGB, and every output is encoded afresh with **no metadata at all** (no EXIF, so no GPS; no XMP; no colour profile).
+  - Crest: PNG, JPG or WebP, at most 5 MB, trimmed, kept as lossless PNG: a master of at most 1024 px, a 256 px square for the card and a 128 px one for the website.
+  - A child's photo: JPG, PNG, WebP or HEIC, at most 15 MB; a master of 1200 px on its long side, the card's passport frame (280 x 360) as JPEG and WebP, and a half-size WebP.
+  - Blog image: PNG, JPG or WebP, at most 10 MB, at most 40 MP, WebP at quality 80, at most 1600 px wide, plus a half-width copy for `srcset`. Served as `image/webp` with `Cache-Control: public, max-age=3600`, and only while its post is published. Keys are random 128-bit hex.
 - Pillow is pinned at 13.0.0.
 - Static files: WhiteNoise with a hashed, pre-compressed manifest. The fonts are Hanken Grotesk 400 and 700, about 12 KB each as woff2, and a 1.5 KB Noto Sans subset for Hausa's hooked letters, fetched only where one is used.
 
@@ -362,7 +363,7 @@ number is the median of three runs, so noise does not flip the gate.
 
 ### 4.2 Images: responsive, modern formats
 
-- Renditions are made once at upload in the Celery worker. Widths are 320, 480, 640, 828, 1080, 1440 and 1920 px, never wider than the source. Each width is made in **AVIF and WebP**, plus a **JPEG** fallback for the old Android browsers and Opera Mini that are common here. Pillow 13 writes all three. PR 5's first test confirms that the pinned wheel's AVIF encoder works on the server image.
+- Renditions are made once at upload in the media worker (`files.images`). **Three widths, not seven** (decided 31 October 2026, to keep the 100 GB server small): 480 and 828 px for phones, and the largest the place draws, 1920 px for the hero and 1600 px for the gallery's lightbox; never wider than the source. Each width is made in **AVIF and WebP**, plus a **JPEG** fallback at 828 px and at the largest, for the old Android browsers and Opera Mini that are common here. Pillow 13 writes all three; the CI image job checks that the image's AVIF encoder works.
 - Every `<img>` is a `<picture>` with `srcset` per format and a `sizes` value from the theme manifest for that variant. Width and height are always set, so nothing moves.
 - The hero image is preloaded (`<link rel="preload" as="image" imagesrcset imagesizes fetchpriority="high">`) and never lazy. Everything below the first screen is `loading="lazy" decoding="async"`.
 - No blurred base64 placeholders, which cost bytes in the HTML. Each image gets its dominant colour, computed at upload, as the background behind it.
@@ -627,37 +628,38 @@ Classnode sends mail; it does not host inboxes. The page carries a short guide:
 
 | Rule | Value |
 |---|---|
-| Accepted | JPEG, PNG, WebP, and HEIC (iPhones) through `pillow-heif`, a new pinned and hashed dependency. Decoded by Pillow only; the file's extension and the browser's MIME type are not trusted. **SVG is refused** everywhere (it can carry script). GIF is refused (use video). |
+| Accepted | JPEG, PNG, WebP, and HEIC (iPhones) through `pillow-heif`, a pinned and hashed dependency. Decoded by Pillow only; the file's extension and the browser's MIME type are not trusted. **SVG is refused** everywhere (it can carry script); crests, logos, signatures and stamps are PNG. GIF is refused (use video). |
 | Upload size | ≤ 15 MB per photo; ≤ 60 megapixels read from the header before decoding (the existing pattern). Five uploads at once per editor. |
-| What is kept | a master re-encoded from the decoded pixels: sRGB, EXIF orientation applied, **all metadata stripped (GPS included)**, at most 3000 px on the long side, JPEG quality 90. The original upload is discarded. |
-| Renditions | §4.2: 7 widths × AVIF, WebP and JPEG, made in the Celery worker after commit, on a queue of its own so photo work never delays result PDFs. AVIF quality is tuned so that dark skin tones keep their shadow detail; the design round signs off on the exact quality using real photos of Nigerian pupils. |
+| What is kept | a master re-encoded from the decoded pixels: sRGB, EXIF orientation applied, **all metadata stripped (GPS included)**, **2400 px** on the long side for a website photo and **1200 px** for a portrait (decided 31 October 2026), JPEG quality 90. The original upload is discarded. Crests, logos, signatures and stamps are **trimmed lossless PNG** instead. |
+| Renditions | §4.2: 3 widths × AVIF and WebP, JPEG at two, made in the media worker after commit, on a queue of its own (`media`, one job at a time, low priority) so photo work never delays result PDFs. AVIF is quality 60 at speed 6, WebP 82, JPEG 85; the design round may tune AVIF with real photos of Nigerian pupils so dark skin tones keep their shadow detail. |
 | Required with each photo | alt text (publish is refused while any published image lacks it, as `blog.markdown.images_without_alt` already does); a focal point (tap on the image), which every crop uses so faces are not cut off |
 | Child-image consent | each upload asks the uploader to confirm: "Parents have agreed to photos of their children being published." The answer is stored on the image. The wording is on the lawyer list. |
-| Quota | 2 GB of masters plus renditions per school at first, shown on the media page. |
+| Quota | **1 GB** of masters plus renditions per school by default (decided 31 October 2026), set per school by the platform operator on the platform page, where each school's total is shown. Uploads are refused past it, and past **90%** of the disk for everyone. |
+| Documents | PDF only, ≤ 20 MB, ≤ 200 pages: rewritten losslessly (pikepdf), with scripts, actions, embedded files and the author removed, EXIF stripped from JPEGs inside it, and scanned pages above 300 dpi brought down to 200 dpi; black-and-white scans are left as they are. Sent as a download. |
 
 **Storage.** This is the first feature for which Postgres `BinaryField` is the
 wrong home: a gallery school could hold several hundred megabytes, and backups
 and the weekly restore test grow with it. **Decided 2026-10-24: the VPS disk for the pilot, backed up nightly to B2. Move to B2 object storage when space or load calls for it.**
 
-- Files on the VPS data volume under `/srv/classnode/media/<schema>/<2-hex>/<content hash>-<width>.<fmt>`.
-- **A nightly backup** to B2 runs from `deploy/cron/classnode` beside the database backup. It copies only new files, since names are content hashes and never change. It reports failure the way `deploy/postgres/backup.sh` does, and the weekly restore test checks that a sample of files comes back.
-- **When to move to B2**: when the media volume passes 70% full, or when serving media becomes a noticeable share of the server's bandwidth or CPU at the post-CBT load test. Because Django already decides and Caddy only sends, the move changes only where Caddy fetches from. The URLs, the tenant check and the tests stay the same.
-- Postgres holds only the rows (`SiteImage`: key, hash, size, focal point, alt text, consent flag, uploader).
+- Files on the VPS data volume under `/srv/classnode/media/<schema>/<2-hex>/<key>-<variant>`. The key is random (128 bits) and a key's variants are written once and never change, so they are cached for a year; a new upload is a new key. (The key rather than a content hash, so two uploads of the same picture can be removed independently.)
+- **A nightly backup** to B2 runs from `deploy/cron/classnode` beside the database backup: restic, encrypted, into the same bucket and prefix under `media/` (`deploy/media-backup.sh`). It sends only new files. A failure is **emailed to hello@ the platform's domain** and written to the cron log (Sentry is not set up yet; its heartbeat is optional). The weekly check restores a sample of files and compares them with the disk; `media-backup test` backs up and restores one file when it is set up.
+- **The disk**: checked hourly (`manage.py check_storage`). Past **70%** an alert is emailed (once a day); past 90% uploads are refused and it is emailed hourly.
+- **When to move to B2 object storage**: when the disk passes 70% full, or when serving media becomes a noticeable share of the server's bandwidth or CPU at the post-CBT load test. Because Django already decides and Caddy only sends, the move changes only where Caddy fetches from. The URLs, the tenant check and the tests stay the same.
+- Postgres holds only the rows (`files.StoredFile`: key, kind, slot, public or private, state, variants and their sizes, SHA-256 of the master, dominant colour, uploader). Each row also names its schema, and every lookup filters on it as well as on `search_path`. The website's own fields (focal point, alt text, consent) come with the gallery (PR 5).
 - Served by **Django deciding and Caddy sending**:
   1. `/media/<key>-<w>.<fmt>` reaches Django;
-  2. Django looks the key up **in the current school's schema**, checks that the image is published or that the requester may preview it, and answers with an internal redirect header (`X-Accel-Redirect`);
+  2. Django looks the key up **in the current school's schema**, checks that the file is public (or, at `/files/<key>/<variant>`, a portal path, that the requester is the school's office), and answers with an internal redirect header (`X-Accel-Redirect`);
   3. Caddy's `reverse_proxy` `handle_response` serves the file from a read-only mount with the immutable cache header.
 
-  So school B's image cannot be served on school A's host, even with its key and hash, and gunicorn never streams the bytes.
+  So school B's image cannot be served on school A's host, even with its key, a private file (a child's photo, a signature) is never on the public path, and gunicorn never streams the bytes. `/media/` reads no session and sets no cookie, like every public page.
 
 ### 9.2 Video
 
-- **Self-hosted, only for hero video**: a muted ambient loop. MP4 or MOV up to 100 MB, at most 30 seconds. `ffprobe` checks the container and streams before anything else runs.
-- It is transcoded once, in the Celery worker (an `ffmpeg` added to the image), on its own queue with concurrency 1 and `nice`, so it cannot starve the portal. Outputs:
-  - 1080p and 720p H.264 MP4 for desktop, ≤ 4 MB / ≤ 2.5 MB;
-  - 480p for phones, ≤ 1.2 MB;
-  - a poster image made like any photo.
-- Audio is stripped.
+- **Self-hosted, only for hero video**: a muted ambient loop. MP4, MOV or WebM up to 50 MB, **at most about 10 seconds** (decided 31 October 2026). The container and streams are probed (FFmpeg, through PyAV's wheel) before anything else runs.
+- It is transcoded once, in the media worker, on its own queue with concurrency 1 and `nice`, so it cannot starve the portal. FFmpeg comes inside the pinned, hashed `av` wheel, so nothing is added to the image with apt. Outputs:
+  - **one** H.264 MP4, at most 720p and 30 frames a second, `faststart`, **at most 3 MB** (tried again smaller if the first encode is larger, refused if it still does not fit);
+  - a poster image made like any hero photo (phones are only ever sent the poster, below).
+- Audio is stripped, and no metadata is copied over.
 - **Loading rules**:
   - the poster is the LCP element;
   - the `<video>` gets its `src` only after the `load` event, and only when the screen is ≥ 768 px wide or the theme opts phones in, `navigator.connection.saveData` is not set, and `prefers-reduced-motion` is not `reduce`;
@@ -898,7 +900,7 @@ Access tests (`schoolsite/tests/test_editor.py`, `tests/js/site_editor.test.js`,
 
 ### PR 5: Images and the gallery
 
-- The upload pipeline (§9.1), renditions on their own Celery queue, the media volume with its nightly B2 backup and restore check, `/media/` behind Django with Caddy's `X-Accel-Redirect` handling, and quotas.
+- **Built ahead of it, in the upload service PR (31 October 2026):** the upload pipeline (§9.1) for every kind of file, renditions on their own Celery queue, the media volume with its nightly B2 backup and restore check, `/media/` and `/files/` behind Django with Caddy's `X-Accel-Redirect` handling, and quotas. PR 5 uses `files.service` for the hero and gallery pictures and adds what is the website's own:
 - Alt text and focal points, the consent confirmation, and the `gallery` section with albums.
 
 Access tests:
@@ -925,7 +927,7 @@ Access tests: none new. The contract runs the PR 3 isolation and escaping tests 
 
 ### PR 8: Hero video (after the design round)
 
-`ffmpeg` in the image, the video queue, the loading rules in §9.2, and the external video facade.
+The video's processing is built (the upload service PR: PyAV, the media queue, the 10-second and 3 MB rules). PR 8 adds the loading rules in §9.2, the editor's video field and the external video facade.
 
 Access tests:
 - the same matrix as PR 5 for video;
@@ -1060,6 +1062,19 @@ Each is written into the section it changes.
 | "Ready for the principal" is the delegated administrator's; every active principal with an address is emailed after commit; if none has one, the editor says so. | §2.4, PR 4 |
 | Preview: signed out goes to the staff sign-in and back, non-editors get the portal's 403, pages switched off show with the bar saying so, links stay inside it, `noindex` and `no-store`. | §2.3, PR 4 |
 | The principal sets the school's colour in the editor, held to the contrast rule. | §3.2, PR 4 |
+
+### Decided 31 October 2026 (the upload service)
+
+| Decision | Where |
+|---|---|
+| One upload service for every upload in the portal and the websites; processing in a background job on a queue of its own. | §9.1 |
+| Masters of 2400 px for website photos and 1200 px for portraits; three widths (480, 828, the largest drawn) in AVIF and WebP with JPEG at two. | §4.2, §9.1 |
+| SVG stays refused everywhere; crests, logos, signatures and stamps are trimmed lossless PNG. | §9.1 |
+| Hero video at most about 10 seconds and 3 MB once encoded; anything longer is a YouTube or Vimeo link. | §9.2 |
+| 1 GB per school by default, set by the platform operator; uploads refused past 90% of the disk. | §9.1 |
+| Files backed up nightly by restic to the same B2 bucket under `classnode/media/`, with its own password; setting it up includes backing up and restoring one file. | §9.1 |
+| Sentry is not set up: the disk alert (70%) and a failed media backup are emailed to hello@ the platform's domain and printed to the cron log. | §9.1 |
+| The three existing uploads (crest, child's photo, blog image) move to the service now; the screens for signatures, stamps, staff photos, website pictures and documents come with their own features. Released-card PDFs move in a follow-up. | §1 |
 
 **Still to settle before the PR that needs it:**
 - the Brevo plan check (before PR 11a);

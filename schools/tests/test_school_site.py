@@ -137,8 +137,15 @@ class ThePageTests(SiteSetUp):
         assets += ["web/fonts/hanken-grotesk-400.woff2", "web/fonts/hanken-grotesk-700.woff2"]
         weight = len(response.content) + sum((STATIC / a).stat().st_size for a in set(assets))
 
-        self.assertIn('class="crest" src="data:image/png;base64,', html)
-        self.assertLess(weight, BUDGET, f"{weight} bytes")
+        # The crest is an address now (§4.2: a public file with a year's
+        # cache), so its bytes are not in the page; it is counted here anyway.
+        with connected_to(self.stmarys):
+            stored = look.crest_file()
+            from files import service
+
+            crest = len(service.read(stored, "site.png"))
+        self.assertIn(f'class="crest" src="/media/{stored.key}/site.png"', html)
+        self.assertLess(weight + crest, BUDGET, f"{weight} + {crest} bytes")
 
 
 class EditingThePageTests(SiteSetUp):

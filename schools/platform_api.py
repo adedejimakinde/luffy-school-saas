@@ -195,3 +195,107 @@ def add_school(request, payload: NewSchoolIn):
         link_to_hand_over=handed,
         link_expires_at=created.invitation.expires_at.isoformat() if handed else None,
     )
+
+
+# -- storage ------------------------------------------------------------------
+#
+# What each school keeps on the server's disk (`files`), against its quota,
+# and how full the disk is. The figures are read from each school's own
+# schema, one aggregate each; there is no running total to drift.
+
+
+class StorageRowOut(Schema):
+    name: str
+    subdomain: str
+    bytes: int
+    files: int
+    quota_bytes: int
+    #: True when the school has no quota of its own and has the default.
+    default_quota: bool
+    percent: float
+
+
+class DiskOut(Schema):
+    used_bytes: int
+    total_bytes: int
+    percent: float
+    warn_percent: float
+    refuse_percent: float
+
+
+class StorageOut(Schema):
+    disk: DiskOut
+    schools: List[StorageRowOut]
+    #: Classnode's own blog's pictures, in the platform's schema.
+    platform_bytes: int
+    default_quota_bytes: int
+
+
+class QuotaIn(Schema):
+    #: Megabytes. Null or 0 goes back to the platform's default.
+    quota_mb: Optional[int] = None
+
+
+def _storage():
+    from django.conf import settings
+
+    from files import storage
+    from files.management.commands.check_storage import school_usage
+
+    used, total = storage.disk_usage()
+    rows, blog = school_usage()
+    return StorageOut(
+        disk=DiskOut(
+            used_bytes=used,
+            total_bytes=total,
+            percent=round(100.0 * used / total, 1) if total else 0.0,
+            warn_percent=settings.FILES_DISK_WARN_PERCENT,
+            refuse_percent=settings.FILES_DISK_REFUSE_PERCENT,
+        ),
+        schools=[
+            StorageRowOut(
+                name=school.name,
+                subdomain=school.slug,
+                bytes=usage["bytes"],
+                files=usage["files"],
+                quota_bytes=quota,
+                default_quota=school.storage_quota_bytes is None,
+                percent=round(100.0 * usage["bytes"] / quota, 1) if quota else 0.0,
+            )
+            for school, usage, quota in rows
+        ],
+        platform_bytes=blog["bytes"],
+        default_quota_bytes=settings.FILES_DEFAULT_QUOTA_BYTES,
+    )
+
+
+@router.get("/storage/", response={200: StorageOut, 403: MessageOut})
+def storage_totals(request):
+    """Every school's files against its quota, and how full the disk is."""
+    _portal_only(request)
+    if not _is_platform_staff(request):
+        return 403, MessageOut(detail=_NOT_YOURS)
+    return 200, _storage()
+
+
+#: The most a quota may be set to, so a typo cannot promise a school the disk.
+MAX_QUOTA_MB = 50 * 1024
+
+
+@router.put(
+    "/schools/{subdomain}/quota/",
+    response={200: StorageOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def set_quota(request, subdomain: str, payload: QuotaIn):
+    """Set one school's quota, in megabytes; empty goes back to the default."""
+    _portal_only(request)
+    if not _is_platform_staff(request):
+        return 403, MessageOut(detail=_NOT_YOURS)
+    school = School.objects.exclude(schema_name="public").filter(slug=subdomain).first()
+    if school is None:
+        return 404, MessageOut(detail="No school has that subdomain.")
+    mb = payload.quota_mb or 0
+    if mb < 0 or mb > MAX_QUOTA_MB:
+        return 422, MessageOut(detail=f"A quota is between 1 MB and {MAX_QUOTA_MB // 1024} GB.")
+    School.objects.filter(pk=school.pk).update(storage_quota_bytes=mb * 1024 * 1024 if mb else None)
+    return 200, _storage()

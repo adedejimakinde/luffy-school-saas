@@ -291,6 +291,10 @@ jobs:
       PLATFORM_DOMAIN: classnode.test
       INVITATION_ACCEPT_URL: "http://app.classnode.test:8000/invitations/{token}/"
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      # No Celery worker and no Redis serve this job, so an upload (the blog
+      # test's picture and cover) is drawn in the request, as the suite does
+      # (`files.service`); queued, it would stay "being processed" for ever.
+      FILES_PROCESS_INLINE: "1"
       SCREENS_OUT: screens
     steps:
       - uses: actions/checkout@v5
@@ -407,6 +411,25 @@ jobs:
         run: >-
           docker run --rm "$APP_IMAGE" python -c
           "import weasyprint; assert weasyprint.HTML(string='<p>x</p>').write_pdf()[:4] == b'%PDF'"
+
+      # The upload service's encoders, in the image that will run them: Pillow's
+      # AVIF and WebP writers, HEIC through pillow-heif, PDF through pikepdf,
+      # H.264 through PyAV's own FFmpeg (docs/school-sites.md §4.2, §9).
+      - name: The image can make every kind of file the upload service keeps
+        run: >-
+          docker run --rm "$APP_IMAGE" python -c
+          "from PIL import features; assert features.check('avif') and features.check('webp');
+          import pillow_heif, pikepdf, av; av.Codec('libx264', 'w'); print('encoders ok')"
+
+      # restic is checksummed at build time; this asks whether it runs, and
+      # whether the media backup's own round trip works against a local
+      # repository standing in for B2, as the server's setup step does.
+      - name: restic runs in the image, and the media backup restores a file
+        run: |
+          docker run --rm "$APP_IMAGE" restic version
+          docker run --rm --entrypoint bash -e MEDIA_RESTIC_REPOSITORY=/tmp/repo \
+            -e MEDIA_RESTIC_PASSWORD=ci-only -e FILES_ROOT=/tmp/files "$APP_IMAGE" \
+            -c 'mkdir -p /tmp/files && bash /app/deploy/media-backup.sh test'
 
       - name: The image passes the deployment checklist under production.env
         run: >-

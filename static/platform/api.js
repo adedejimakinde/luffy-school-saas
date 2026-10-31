@@ -6,7 +6,7 @@
  * does not exist. On the add, a 422 or 502 carries a sentence for the person.
  */
 
-import { getJson, postJson } from "../web/http.js";
+import { getJson, postJson, putJson } from "../web/http.js";
 
 export const REFUSAL = {
   NOT_ALLOWED: "not-allowed",
@@ -68,4 +68,32 @@ export async function addSchool(fields, { fetchImpl = fetch } = {}) {
     return { ok: false, note: (answer.body && answer.body.detail) || "That did not work." };
   }
   return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}
+
+/**
+ * What each school keeps on the server's disk against its quota, and how full
+ * the disk is (`GET /api/platform/storage/`). Null where it cannot be read: the
+ * page then shows the schools and leaves storage out.
+ */
+export async function fetchStorage({ fetchImpl = fetch } = {}) {
+  try {
+    const answer = await getJson("/api/platform/storage/", { fetchImpl });
+    if (answer.status === 200 && answer.body) return answer.body;
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/** One school's quota in megabytes; empty goes back to the default. */
+export async function setQuota({ subdomain, quotaMb, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(`/api/platform/schools/${encodeURIComponent(subdomain)}/quota/`,
+      { quota_mb: quotaMb || null }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, note: String(error) };
+  }
+  if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+  return { ok: false, note: (answer.body && answer.body.detail) || "That did not work." };
 }
