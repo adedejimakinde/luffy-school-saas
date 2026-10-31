@@ -19,7 +19,7 @@ built and ignored.
 
 from decimal import Decimal
 
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.test import TestCase
 
 from accounts.models import Role, User
@@ -28,9 +28,10 @@ from results import grades
 from results.models import GradeBand
 from results.tests.test_positions import PASSWORD, make_school
 from schools.tests.tenants import connected_to
+from tests.refusals import RefusalAssertions
 
 
-class GradeSetUp(TestCase):
+class GradeSetUp(RefusalAssertions, TestCase):
     """One school, seeded with the default scale by migration `0015`.
 
     **One school, deliberately.** Per-test tenant schema creation is most of this
@@ -297,25 +298,25 @@ class TheDatabaseRefusesItTooTests(GradeSetUp):
 
     def test_two_bands_cannot_start_at_the_same_mark(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("one_grade_band_starts_at_each_mark"):
                 with transaction.atomic():
                     GradeBand.objects.create(minimum=Decimal("75.00"), letter="AA")
 
     def test_a_letter_cannot_be_used_twice(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("uniq_grade_band_letter"):
                 with transaction.atomic():
                     GradeBand.objects.create(minimum=Decimal("77.00"), letter="A1")
 
     def test_a_band_cannot_start_outside_the_percentage_range(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("a_grade_band_starts_within_the_percentage_range"):
                 with transaction.atomic():
                     GradeBand.objects.create(minimum=Decimal("140.00"), letter="XX")
 
     def test_a_band_cannot_have_a_blank_letter(self):
         with connected_to(self.stmarys):
-            with self.assertRaises(IntegrityError):
+            with self.assertRefusedBy("a_grade_band_has_a_letter"):
                 with transaction.atomic():
                     GradeBand.objects.create(minimum=Decimal("99.00"), letter="   ")
 

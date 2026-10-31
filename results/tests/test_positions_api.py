@@ -23,7 +23,7 @@ Academy's broadsheet" is a question about the middleware and the authority check
 together, and neither one alone answers it.
 """
 
-from django.db import IntegrityError, connection, transaction
+from django.db import connection, transaction
 
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Role, User
@@ -32,12 +32,13 @@ from tests.guardians import give_verified_channel
 from gradebook.models import Subject
 from results.tests.test_positions import PASSWORD, PositionSetUp, connected_to
 from schools.models import Domain, School
+from tests.refusals import RefusalAssertions
 
 HOST = "st-marys.testserver"
 THEIR_HOST = "grace.testserver"
 
 
-class BroadsheetApiSetUp(PositionSetUp):
+class BroadsheetApiSetUp(RefusalAssertions, PositionSetUp):
     def setUp(self):
         super().setUp()
 
@@ -522,7 +523,11 @@ class AReleasedTermIsServedFromTheSnapshotTests(BroadsheetApiSetUp):
         # `gradebook_scores_stop_at_release()`, arriving as `IntegrityError`.
         # Its own atomic block — an IntegrityError marks the enclosing
         # transaction unusable, and this test goes on to make more queries.
-        with self.assertRaises(IntegrityError):
+        # Named down to "its marks" and the operation: the comments trigger
+        # says the same sentence about remarks.
+        with self.assertRefusedBy(
+            "its marks are part of a card somebody is holding and INSERT is not allowed"
+        ):
             with transaction.atomic():
                 self.mark(self.stmarys, self.term_id, self.maths_id, latecomer, 99)
 
