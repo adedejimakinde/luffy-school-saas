@@ -103,7 +103,8 @@ step 2) adds `/exam-slips/` and nothing at `/sit/`. Today `/sit/` is a 404 that
 nothing protects. This note reserves it (§6, PR 1) so that no public page, news
 slug or album slug can ever take it. *(Done in PR 1: `schools.paths.RESERVED`
 holds `/sit/`, `/website/` and `/applicants/`, each a noindex 404 at the name
-and everywhere under it until its work is built.)*
+and everywhere under it until its work is built. `/website/` moved to
+`schools.paths.PORTAL` when PR 4 built the editor there.)*
 
 The existing offline worker (`/sw.js`, `sync/worker.js`) is registered with
 scope `/` on every school host. It only intercepts navigations to `/marking/`
@@ -215,7 +216,7 @@ Modelled on the released report card: **the published site is an artefact
 written at publish time, not the current state of a table.**
 
 - **Draft.** One editable draft per school: settings, pages, sections, the theme and its options. Saving writes the draft only. Two editors at once: each part saved (the settings row, a page, a section) carries a version number, a save names the version it was based on, and a stale one is refused with a request to reload. No silent overwrite. *(Built in PR 2 as integers rather than `updated_at`, so two saves in the same instant cannot both look current.)*
-- **Preview.** `/website/preview/<page>` on the school's classnode host, for whoever may edit. It renders the draft through exactly the same templates as the live site, under a fixed "Preview: not published" bar. It is `noindex`, `Cache-Control: no-store`, and never cached server-side. It can preview the draft **in another theme** without saving the switch.
+- **Preview.** `/website/preview/<page>` on the school's classnode host, for whoever may edit. It renders the draft through exactly the same templates as the live site, under a fixed "Preview: not published" bar. It is `noindex`, `Cache-Control: no-store`, and never cached server-side. It can preview the draft **in another theme** without saving the switch, once there is another theme to preview (PR 7).
 - **Publish.** One button, the principal's alone (§2.4). It writes an immutable `SiteRevision` row: a JSON snapshot of the whole draft plus the theme, with `published_by`, `published_at`, and a short optional note ("Admissions open for 2027/28"). The public site reads only the latest revision. That is one indexed row, which is also the cache key (§4.4).
 - **Log.** Revisions are never deleted, so the publish log is the revision table: who, when, the note, and a diff summary (sections added, removed or changed). The settings page shows the last 20. **Roll back** republishes an older snapshot as a new revision, logged as a rollback by whoever did it. The draft is left as it is: the fix is made there and published in its turn. A draft nobody has touched yet, the six empty pages every school starts with, is nothing to publish.
 - **News posts and gallery albums** publish one item at a time (`NewsPost`, `Album`, each with draft/published state and `published_by`/`published_at`), because a school posts news weekly and should not have to republish the whole site to do it. Every publish or unpublish of an item writes a `SitePublishEvent` row (who, when, what, which item), so the single log the principal reads covers both kinds.
@@ -873,12 +874,27 @@ Access tests (`schoolsite/tests/test_custom_pages.py`, two schools):
 - `/website/` on the school's classnode host: page list (fixed and custom pages, switch on or off, make, rename, order the menu), section editor (add, remove, reorder, edit), theme options, delegation switch, the "Ready for the principal" button, and the publish log.
 - `/website/preview/…`.
 
-Access tests:
-- every `/website/` route refuses non-editors with 403 and refuses B's staff on A's host;
-- preview is `noindex` and `no-store` and is refused when signed out;
-- previewing another theme does not change the draft;
-- the delegation switch and the Publish button are refused to the administrator, delegated or not;
-- "Ready for the principal" emails A's principal, and only A's, a link to the preview (moved here from PR 2).
+**Built** (31 October 2026), with the owner's four calls that day: an explicit Save on each form, the Ready button for the delegated administrator only, the preview as below, and the school colour in this PR.
+
+- **The editor** (`static/site-editor/`, `schoolsite/api.py`, `schoolsite/editor.py`), phone first in the design system, checked at 320 px and at 200% text:
+  - the pages in menu order, each switched on or off and moved up or down with a tap (Home always first and on), a page of the school's own added by name and optional address;
+  - a page's name, its description for search engines and, until it is first published, its address; deleting a custom page asks twice;
+  - a page's sections added through the picker, offering only the kinds that page may hold, with news and gallery shown as "coming soon" and never offered; each section edited in its own form, moved, and removed (asked twice). The hero's picture and the principal's portrait say "Pictures come in a later update", and whatever the data already holds for them is kept;
+  - the footer (address line and social links), and for the principal, the school's colour (refused if white writing would not read on it, `look.MIN_CONTRAST`, or back to the report card's colour) and "Who edits";
+  - the history (the last 20 lines) with "Go back to version N" for the principal.
+- **Saving.** Each form has its own Save; switching, moving and removing save at once. Nothing is kept in the browser: leaving a form with edits not saved asks "You have unsaved changes. Leave anyway?", inside the editor and on leaving the page. A refusal keeps the form as typed with the school's sentence under it; a save based on somebody else's newer change is a 409 with a Reload.
+- **Draft and published.** Every screen says "Draft: not published yet" or "Published, version N, date, by whom", and "Changes not yet published" while the draft differs from the live site. **Publish** is the principal's, behind its own confirm screen, and names the draft version the principal confirmed, so a change made in between is refused rather than published unseen. **Going back** to an earlier version has its own confirm screen too.
+- **The preview** (`/website/preview/`, `/website/preview/<page>/`, `/website/preview/pages/<slug>/`) draws the draft through the live templates (`render.draw_snapshot`) under the bar. It shows pages switched off, with the bar saying so, keeps every link to a page of the site inside the preview, and sends `noindex` (header and meta) and `no-store`. Signed out goes to the staff sign-in and back: the sign-in honours `?next=` only for a preview on one of that person's own schools, so it can never send anybody elsewhere. Signed in and not an editor is the portal's 403.
+- **"Ready for the principal"** is offered to the delegated administrator only. It emails each active principal of that school with an address, one message each, after the mark commits, with a link to the preview on the school's own address (`schoolsite.notify`). When no principal has an address, the editor says so and asks the administrator to tell them.
+- **The menu** gains Website for the principal and the administrator. A non-delegated administrator sees the state and the history, and why there is nothing to edit.
+- Previewing another theme waits for a second theme (PR 7).
+
+Access tests (`schoolsite/tests/test_editor.py`, `tests/js/site_editor.test.js`, two schools):
+- every `/website/` route refuses non-editors with 403 and refuses B's staff on A's host: a vice principal, a teacher, a bursar, a parent and a student are refused on the read and on every write, with one sentence, and a refused write changes nothing; a refusal says nothing about whether a page or a section exists;
+- preview is `noindex` and `no-store`, sends the signed out to sign in and back, is refused to non-editors and to B's principal, and never shows B's draft on A's host; looking at it changes nothing;
+- the delegation switch, the colour, Publish and Roll back are refused to the administrator, delegated or not;
+- a publish of a draft changed since it was confirmed is refused;
+- "Ready for the principal" emails A's principals, and only A's, a link to A's preview, sends nothing when the mark is refused or when the principal marks it, and says so when nobody has an address.
 
 ### PR 5: Images and the gallery
 
@@ -1035,6 +1051,15 @@ Each is written into the section it changes.
 | 20 pages in all: the six fixed and up to 14 custom. Up to 15 sections a page. Both held by Postgres. | §2.1.1, §2.2 |
 | Hero and admissions buttons may link to a custom page; a button whose page is off or unpublished is left out when drawn. | §2.2 |
 | The school may give a slug when it makes a page, else it is made from the title, and it is fixed once the page is first published. | §2.1.1 |
+
+### Decided 31 October 2026 (PR 4)
+
+| Decision | Where |
+|---|---|
+| An explicit Save on each form; switching, moving and removing save at once; leaving a form with unsaved edits asks first; nothing is stored in the browser. | PR 4 |
+| "Ready for the principal" is the delegated administrator's; every active principal with an address is emailed after commit; if none has one, the editor says so. | §2.4, PR 4 |
+| Preview: signed out goes to the staff sign-in and back, non-editors get the portal's 403, pages switched off show with the bar saying so, links stay inside it, `noindex` and `no-store`. | §2.3, PR 4 |
+| The principal sets the school's colour in the editor, held to the contrast rule. | §3.2, PR 4 |
 
 **Still to settle before the PR that needs it:**
 - the Brevo plan check (before PR 11a);

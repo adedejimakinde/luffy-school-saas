@@ -21,6 +21,7 @@ import re
 from urllib.parse import unquote
 
 from django.core import mail
+from django.db import transaction
 
 from accounts.models import Role, User
 from accounts.services import grant_membership
@@ -385,6 +386,22 @@ class ReadyForThePrincipalTests(EditorSetUp):
         with self.captureOnCommitCallbacks(execute=True):
             again = self.call("post", "ready/", self.admin, note="")
         self.assertEqual(again.status_code, 422)
+        self.assertEqual(mail.outbox, [])
+
+    def test_a_mark_that_rolls_back_sends_nothing(self):
+        """The email waits for the commit: a mark undone with its transaction tells nobody."""
+
+        class Undone(Exception):
+            pass
+
+        with self.captureOnCommitCallbacks(execute=True) as callbacks:
+            try:
+                with transaction.atomic(), connected_to(self.stmarys):
+                    services.mark_ready_as(self.admin, self.stmarys, "Never mind")
+                    raise Undone
+            except Undone:
+                pass
+        self.assertEqual(callbacks, [])
         self.assertEqual(mail.outbox, [])
 
     def test_the_principal_marking_their_own_draft_emails_nobody(self):
