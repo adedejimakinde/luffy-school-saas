@@ -7,7 +7,7 @@
  * shows the answer, and a refusal keeps the form and what was typed.
  */
 
-import { REFUSAL, addSchool, fetchSchools, fetchUnrouted } from "./api.js";
+import { REFUSAL, addSchool, fetchSchools, fetchStorage, fetchUnrouted, setQuota } from "./api.js";
 import * as states from "./states.js";
 
 export function htmlFor(state) {
@@ -44,7 +44,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
   let state = fromList(await fetchSchools({ fetchImpl }));
   // Payments no school owns: read only, and only where the schools were readable.
   let unrouted = state.step === "main" ? await fetchUnrouted({ fetchImpl }) : [];
-  if (state.step === "main") state = { ...state, unrouted };
+  // What each school keeps on the disk, read only where the schools were.
+  let storage = state.step === "main" ? await fetchStorage({ fetchImpl }) : null;
+  if (state.step === "main") state = { ...state, unrouted, storage };
   const draw = () => {
     root.innerHTML = htmlFor(state);
   };
@@ -55,6 +57,15 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (event.preventDefault) event.preventDefault();
     if (state.step !== "main") return;
 
+    if (form.dataset && form.dataset.form === "quota") {
+      const quotaMb = Number(String(form.quota_mb.value).trim()) || null;
+      const result = await setQuota({ subdomain: form.dataset.school, quotaMb, fetchImpl });
+      if (result.ok) storage = result.body;
+      state = { ...state, storage, storageNote: result.ok ? null : result.note };
+      draw();
+      return;
+    }
+
     const fields = fieldsFrom(form);
     if (!fields.name || !fields.subdomain) {
       state = { ...state, values: fields, note: "A school needs a name and a subdomain." };
@@ -64,7 +75,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const result = await addSchool(fields, { fetchImpl });
       if (result.ok) {
         const list = fromList(await fetchSchools({ fetchImpl }));
-        state = list.step === "main" ? { ...list, made: result.body, unrouted } : list;
+        state = list.step === "main" ? { ...list, made: result.body, unrouted, storage } : list;
       } else if (result.refusal) {
         state = { step: result.refusal };
       } else {

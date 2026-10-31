@@ -72,8 +72,54 @@ export function unroutedList(payments = []) {
   ].join("");
 }
 
+/** Bytes as MB or GB, by hand: `1073741824` is `1.0 GB`. */
+export function size(bytes) {
+  const n = Number(bytes) || 0;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`;
+  return `${Math.round(n / 1024 ** 2)} MB`;
+}
+
+/**
+ * What each school keeps on the server's disk, against its quota, and how full
+ * the disk is. The disk line is marked once it passes the warning line (70%),
+ * the point at which an alert is emailed. Each school's quota can be changed
+ * here; an empty box goes back to the platform's default.
+ */
+export function storageSection(storage, note = null) {
+  if (!storage) return "";
+  const disk = storage.disk || {};
+  const warn = disk.percent >= disk.warn_percent;
+  return [
+    '<section class="storage" data-state="storage">',
+    "<h2>Storage</h2>",
+    `<p class="disk${warn ? " warn" : ""}"${warn ? ' role="alert"' : ""}>`,
+    `The disk is <strong>${esc(disk.percent)}%</strong> full (${esc(size(disk.used_bytes))} of ${esc(size(disk.total_bytes))}).`,
+    warn
+      ? ` Past ${esc(disk.warn_percent)}%: an alert has been emailed. Uploads stop at ${esc(disk.refuse_percent)}%.`
+      : ` An alert is emailed past ${esc(disk.warn_percent)}%, and uploads stop at ${esc(disk.refuse_percent)}%.`,
+    "</p>",
+    `<p class="hint">Classnode's blog keeps ${esc(size(storage.platform_bytes))}. The default quota is ${esc(size(storage.default_quota_bytes))} a school.</p>`,
+    note ? `<p class="note" role="alert">${esc(note)}</p>` : "",
+    '<ul class="schools storage-list">',
+    (storage.schools || [])
+      .map(
+        (s) =>
+          `<li><span><strong>${esc(s.name)}</strong> <span class="count">${esc(size(s.bytes))} of ${esc(size(s.quota_bytes))}` +
+          ` (${esc(s.percent)}%), ${esc(s.files)} ${s.files === 1 ? "file" : "files"}</span></span>` +
+          `<form class="quota" data-form="quota" data-school="${esc(s.subdomain)}">` +
+          `<label for="quota-${esc(s.subdomain)}">Quota in MB</label>` +
+          `<input id="quota-${esc(s.subdomain)}" name="quota_mb" type="number" min="1" inputmode="numeric" ` +
+          `value="${s.default_quota ? "" : esc(Math.round(s.quota_bytes / 1024 ** 2))}" placeholder="default">` +
+          '<button type="submit">Save</button></form></li>',
+      )
+      .join(""),
+    "</ul>",
+    "</section>",
+  ].join("");
+}
+
 /** The list, and the form to add another. `made` is the last add's answer, if any. */
-export function main({ schools = [], made = null, note = null, values = {}, unrouted = [] } = {}) {
+export function main({ schools = [], made = null, note = null, values = {}, unrouted = [], storage = null, storageNote = null } = {}) {
   return [
     '<section class="state state-main" data-state="main">',
     '<div class="page-head"><div><h1>Schools</h1></div><a href="/platform/handover/">New school handover</a></div>',
@@ -81,6 +127,7 @@ export function main({ schools = [], made = null, note = null, values = {}, unro
     addForm(made ? {} : values, note),
     `<h2>${esc(schools.length)} ${schools.length === 1 ? "school" : "schools"}</h2>`,
     schoolList(schools),
+    storageSection(storage, storageNote),
     unroutedList(unrouted),
     "</section>",
   ].join("");

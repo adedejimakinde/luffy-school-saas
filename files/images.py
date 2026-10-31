@@ -69,7 +69,9 @@ def header(raw_or_file, profile: Profile):
     try:
         with Image.open(source) as image:
             fmt, (width, height) = image.format, image.size
-    except (UnidentifiedImageError, Image.DecompressionBombError, OSError, SyntaxError, ValueError):
+    except Image.DecompressionBombError:
+        raise Refused(f"That picture is far larger than {profile.noun.lower()} needs. Save it smaller and try again.")
+    except (UnidentifiedImageError, OSError, SyntaxError, ValueError):
         raise Refused(
             f"That file is not a picture this can read. {profile.noun} is a {_names(profile.formats)} file."
             + (" SVG files are not accepted." if _looks_like_svg(raw_or_file) else "")
@@ -212,8 +214,17 @@ def dominant_colour(image) -> str:
     return f"#{r:02X}{g:02X}{b:02X}"
 
 
+#: A border this close to white is paper, or an export's background.
+WHITE_ENOUGH = 235
+
+
 def trim(image):
-    """Cut away a transparent or plain border, the way a scan or export leaves one."""
+    """Cut away a transparent border, or a white one the way a scan leaves it.
+
+    Only those two: a crest drawn on a solid colour that runs to its edges is
+    left whole, because a dot on blue and a blue square with a dot in it are
+    the same pixels, and only one of them is the school's crest.
+    """
     from PIL import Image, ImageChops
 
     if "A" in image.getbands():
@@ -221,11 +232,14 @@ def trim(image):
         if box:
             image = image.crop(box)
     rgb = _flatten(image)
-    corner = rgb.getpixel((0, 0))
-    background = Image.new("RGB", rgb.size, corner)
-    difference = ImageChops.difference(rgb, background).convert("L").point(lambda v: 255 if v > 24 else 0)
-    box = difference.getbbox()
-    if box and box != (0, 0, image.width, image.height):
+    width, height = rgb.size
+    corners = [rgb.getpixel(p) for p in ((0, 0), (width - 1, 0), (0, height - 1), (width - 1, height - 1))]
+    if not all(min(c) >= WHITE_ENOUGH for c in corners):
+        return image
+    background = Image.new("RGB", rgb.size, (255, 255, 255))
+    ink = ImageChops.difference(rgb, background).convert("L").point(lambda v: 255 if v > 255 - WHITE_ENOUGH else 0)
+    box = ink.getbbox()
+    if box and box != (0, 0, width, height):
         image = image.crop(box)
     return image
 

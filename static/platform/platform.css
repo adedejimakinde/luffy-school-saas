@@ -48,3 +48,10 @@ main.handover-page { max-width: 60rem; }
 }
 .platform-only { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
 .platform-only .icon { width: 16px; height: 16px; }
+.storage .disk { margin: 0 0 8px; }
+.storage .disk.warn { padding: 10px 12px; border: 1px solid var(--danger, #B42318); border-radius: var(--radius); }
+.storage-list li { flex-wrap: wrap; }
+.storage-list form.quota { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.storage-list form.quota label { margin: 0; font-size: var(--small); color: var(--muted); }
+.storage-list form.quota input { width: 8rem; min-height: 44px; }
+.storage-list form.quota button { min-height: 44px; }

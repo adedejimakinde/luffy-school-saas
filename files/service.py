@@ -165,11 +165,15 @@ def check(kind, upload):
     return {"bytes": size}
 
 
-def accept(kind, upload, *, slot: str = "", by=None, public=None) -> StoredFile:
-    """Check an upload, keep it for the worker, and queue it. Returns the pending row."""
+def accept(kind, upload, *, slot: str = "", by=None, public=None, origin="upload") -> StoredFile:
+    """Check an upload, keep it for the worker, and queue it. Returns the pending row.
+
+    `origin="migrated"` is `move_files_to_disk` copying bytes that were already
+    the school's: not a new upload, so not held to the quota."""
     profile = profile_for(kind)
     facts = check(kind, upload)
-    _refuse_when_full(profile, facts["bytes"])
+    if origin == "upload":
+        _refuse_when_full(profile, facts["bytes"])
     schema = schema_here()
     with transaction.atomic():
         stored = StoredFile.objects.create(
@@ -181,6 +185,7 @@ def accept(kind, upload, *, slot: str = "", by=None, public=None) -> StoredFile:
             uploaded_by_id=getattr(by, "pk", None),
             width=facts.get("width"),
             height=facts.get("height"),
+            origin=origin,
         )
         storage.write_incoming(schema, stored.key, upload)
         _queue(stored)
@@ -284,7 +289,7 @@ def process(schema, key):
             storage.delete_variants(schema, key, written)
             return stored
         school = school_here()
-        if school is not None:
+        if school is not None and stored.origin == "upload":
             used = usage()["bytes"]
             previous = _here().filter(slot=stored.slot, state=State.READY).exclude(slot="")
             freed = sum(p.bytes for p in previous)
