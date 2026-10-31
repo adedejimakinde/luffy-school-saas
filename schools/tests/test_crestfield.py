@@ -365,8 +365,8 @@ class NothingLeavesTests(SendsThroughTheFake, TestCase):
     def tearDown(self):
         connection.set_schema_to_public()
 
-    def test_result_notices_written_anyway_are_not_sent(self):
-        """The second lock: notices that got written (say, switched on by hand) go nowhere."""
+    def result_notices_written_anyway(self):
+        """Write result notices (switched on by hand) and send each: what each send said."""
         from notices import services as notices
         from notices import tasks
         from notices.models import Notice, NoticeOutcome, NoticeSettings
@@ -376,7 +376,11 @@ class NothingLeavesTests(SendsThroughTheFake, TestCase):
         with schema_context(self.school.schema_name):
             NoticeSettings.objects.update_or_create(pk=1, defaults={"result_notices": True})
             sheet = ResultSheet.objects.get(class_group__name="JSS 2A")
-            now = timezone.now().replace(hour=10)
+            # 10:00 UTC (11:00 in Lagos, inside the sending hours) *yesterday*, so the
+            # notices are already due whatever time of day this runs. 10:00 today was
+            # still to come before 10:00 UTC, and `send_notice` holds a notice that is
+            # not yet due without saying anything: the test failed every morning.
+            now = (timezone.now() - timedelta(days=1)).replace(hour=10)
             with mock.patch("notices.tasks.send_notice.apply_async"):
                 with self.captureOnCommitCallbacks(execute=True):
                     notices.tell_families(sheet, actor=principal, now=now)
@@ -385,7 +389,22 @@ class NothingLeavesTests(SendsThroughTheFake, TestCase):
             with mock.patch("notices.hours.send_after", side_effect=lambda when: when):
                 for pk in ids:
                     tasks.send_notice(self.school.schema_name, pk)
-            said = set(NoticeOutcome.objects.values_list("said", flat=True))
+            return set(NoticeOutcome.objects.values_list("said", flat=True))
+
+    def test_result_notices_written_anyway_are_not_sent(self):
+        """The second lock: notices that got written (say, switched on by hand) go nowhere."""
+        from notices.models import NoticeOutcome
+
+        self.assertEqual(self.result_notices_written_anyway(), {NoticeOutcome.Said.SWITCHED_OFF})
+        self.assertFalse(FakeMessage.objects.exists())
+
+    def test_the_same_at_eight_in_the_morning_utc(self):
+        """The time of day the test above used to fail at: before 10:00 UTC, with the clock stopped there."""
+        from notices.models import NoticeOutcome
+
+        eight = timezone.now().replace(hour=8, minute=0, second=0, microsecond=0)
+        with mock.patch("django.utils.timezone.now", return_value=eight):
+            said = self.result_notices_written_anyway()
         self.assertEqual(said, {NoticeOutcome.Said.SWITCHED_OFF})
         self.assertFalse(FakeMessage.objects.exists())
 
