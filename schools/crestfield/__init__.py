@@ -232,6 +232,14 @@ def rebuild_schema(school):
         # deferred foreign keys must be checked before its tables can go.
         cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
         cursor.execute(f'DROP SCHEMA IF EXISTS "{SCHEMA}" CASCADE')
+    # Its uploaded files go with it (`files.storage`: one directory per
+    # schema), or every reset would leave the last one's crest on the disk.
+    import shutil
+
+    from files import storage
+
+    for where in (storage.root() / SCHEMA, storage.root() / storage.INCOMING / SCHEMA):
+        shutil.rmtree(where, ignore_errors=True)
     school.create_schema(check_if_exists=True, verbosity=0)
 
 
