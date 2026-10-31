@@ -37,6 +37,7 @@ from notices.views import settings_page
 from schools.demo import only_in_the_single_host_demo
 from schools.paths import RESERVED
 from schools.views import reserved
+from schoolsite import editor as site_editor
 from schoolsite import views as site
 from results.views import (
     broadsheet_page,
@@ -146,6 +147,12 @@ urlpatterns = [
     # The result checker: a family with no account opens a card with the
     # admission number and the PIN from a slip (docs/messaging.md D11).
     path("check/", checker_page, name="result-checker"),
+    # The school's website editor and its preview of the draft (`schoolsite.editor`,
+    # `docs/school-sites.md` PR 4): a portal path, never indexed.
+    path("website/", site_editor.editor_page, name="website-editor"),
+    path("website/preview/", site_editor.preview, name="website-preview"),
+    path("website/preview/pages/<slug:slug>/", site_editor.preview_custom_page, name="website-preview-page"),
+    path("website/preview/<slug:key>/", site_editor.preview_page, name="website-preview-fixed"),
     # Names held for work not yet built (`schools.paths.RESERVED`), `/sit/` among
     # them: a 404 at the name and everywhere under it until the work is routed here.
     *(

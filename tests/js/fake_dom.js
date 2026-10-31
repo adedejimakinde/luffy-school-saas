@@ -95,6 +95,12 @@ export function fakeRoot(dataset = {}) {
       Object.assign(target, extra);
       for (const handler of listeners.change || []) await handler({ target });
     },
+    /** Typing into a field: `input` bubbles to the root, which is how a page learns a form is dirty. */
+    async input(attributes = {}, value = "") {
+      const target = fakeTarget(attributes);
+      target.value = value;
+      for (const handler of listeners.input || []) await handler({ target });
+    },
     async click(attributes = { "data-action": "sign-out" }) {
       const target = fakeTarget(attributes);
       for (const handler of listeners.click || []) await handler({ target });

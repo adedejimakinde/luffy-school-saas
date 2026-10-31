@@ -18,6 +18,7 @@ import {
   initialState,
   landingRedirect,
   mount,
+  returnTo,
 } from "../../static/staff-signin/app.js";
 import * as steps from "../../static/staff-signin/states.js";
 import { forgetToken } from "../../static/web/http.js";
@@ -506,4 +507,35 @@ test("somebody with no school who is not platform staff stays on the sentence ab
   const state = advance(initialState(), { status: 200, body: { full_name: "Nobody", schools: [], is_platform_staff: false } });
   assert.equal(landingRedirect(state), null);
   assert.match(htmlFor(state), /No school on this account yet/);
+});
+
+// -- back to the website preview (docs/school-sites.md PR 4) ------------------
+
+const MINE = [{ name: "Sunrise", host: "sunrise.example.ng" }];
+
+test("a sign-in sent from a preview goes back to it, on one of the person's own schools only", () => {
+  const preview = "https://sunrise.example.ng/website/preview/pages/boarding/";
+  assert.equal(returnTo(preview, MINE), preview);
+  for (const elsewhere of [
+    "https://evil.example/website/preview/",
+    "https://sunrise.example.ng.evil.example/website/preview/",
+    "https://sunrise.example.ng/home/",
+    "https://sunrise.example.ng/website/",
+    "javascript:alert(1)//sunrise.example.ng/website/preview/",
+    "https://user@sunrise.example.ng/website/preview/",
+    "/website/preview/",
+    "",
+    null,
+  ]) {
+    assert.equal(returnTo(elsewhere, MINE), null, String(elsewhere));
+  }
+  assert.equal(returnTo("http://localhost:8000/website/preview/", [{ name: "Demo", path_only: true }], "localhost:8000"),
+    "http://localhost:8000/website/preview/");
+});
+
+test("landing with a preview to go back to goes there, and without one lands as before", () => {
+  const landed = advance(initialState(), { status: 200, body: { full_name: "Ada", schools: MINE } });
+  assert.equal(landingRedirect(landed, "https://sunrise.example.ng/website/preview/"), "https://sunrise.example.ng/website/preview/");
+  assert.equal(landingRedirect(landed, "https://evil.example/website/preview/"), null);
+  assert.equal(landingRedirect(landed), null);
 });

@@ -69,7 +69,7 @@ class EveryRouteIsSortedTests(SiteSetUp):
         )
 
     def test_sit_and_the_other_held_names_are_held_everywhere_under_them(self):
-        self.assertEqual(set(RESERVED), {"sit", "website", "applicants"})
+        self.assertEqual(set(RESERVED), {"sit", "applicants"})
         for name in RESERVED:
             for tail in ("", "x", "x/", "a/b/c", "preview/home"):
                 with self.subTest(path=f"/{name}/{tail}"):

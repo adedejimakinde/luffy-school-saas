@@ -24,6 +24,9 @@ from .models import SiteDelegationEvent
 
 PRINCIPAL = Role.PRINCIPAL.value
 ADMIN = Role.ADMIN.value
+#: Who may open the editor at all: the principal, and the administrator, who
+#: reads the log and edits only while delegated. The menu's link is theirs.
+READING_ROLES = frozenset({PRINCIPAL, ADMIN})
 
 
 def _roles(actor, school) -> set:
@@ -67,7 +70,7 @@ def can_set_theme(actor, school) -> bool:
 
 def can_read_log(actor, school) -> bool:
     """May this login read the publish log? The principal and the administrator, delegated or not."""
-    return here(school) and bool(_roles(actor, school) & {PRINCIPAL, ADMIN})
+    return here(school) and bool(_roles(actor, school) & READING_ROLES)
 
 
 def role_of(actor, school) -> str:
@@ -77,6 +80,7 @@ def role_of(actor, school) -> str:
 
 
 __all__ = [
+    "READING_ROLES",
     "can_edit",
     "can_publish",
     "can_read_log",

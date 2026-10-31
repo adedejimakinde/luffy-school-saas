@@ -128,10 +128,13 @@ def enabled_pages(snapshot):
     return sorted(on, key=lambda p: (p.get("key") != PageKey.HOME, _menu_place(p)))
 
 
-def find_page(snapshot, key=None, *, slug=None):
-    """The switched-on page with this key, or the switched-on custom page at this slug."""
+def find_page(snapshot, key=None, *, slug=None, include_off=False):
+    """The switched-on page with this key, or the switched-on custom page at this slug.
+
+    `include_off` finds it switched off too: the editor's preview shows every page of the draft.
+    """
     for page in snapshot.get("pages", []):
-        if not page["enabled"]:
+        if not page["enabled"] and not include_off:
             continue
         if slug is not None and is_custom(page) and page["slug"] == slug:
             return page
@@ -230,8 +233,26 @@ def draw(school, revision, key, host, *, slug=None) -> Drawn | None:
 
     None if the school has that page switched off, or never published it.
     """
-    snapshot = revision.snapshot
-    page = find_page(snapshot, key, slug=slug)
+    return draw_snapshot(school, revision.snapshot, key, host, slug=slug)
+
+
+#: Where the editor's preview of the draft lives (`schoolsite.views.preview`).
+PREVIEW_ROOT = "/website/preview"
+
+
+def preview_path(path) -> str:
+    """A path of the site as it is inside the preview: `/about/` is `/website/preview/about/`."""
+    return f"{PREVIEW_ROOT}{path}"
+
+
+def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False) -> Drawn | None:
+    """A page of `snapshot` drawn: a published revision's, or, for the preview, the draft's.
+
+    `preview` draws the draft for an editor (PR 4): any page of it, switched on or
+    off, under a "Preview: not published" bar, with every link to a page of the
+    site kept inside the preview, and never indexable.
+    """
+    page = find_page(snapshot, key, slug=slug, include_off=preview)
     if page is None:
         return None
     key = "" if slug is not None else key
@@ -247,12 +268,23 @@ def draw(school, revision, key, host, *, slug=None) -> Drawn | None:
     else:
         title = page["title"] or (school.name if key == PageKey.HOME else f"{label} | {school.name}")
     sections = [_section(theme, s, live_paths, school, school.address) for s in page["sections"]]
+    within = preview_path if preview else (lambda path: path)
+    if preview:
+        for section in sections:
+            data = section["data"]
+            if "buttons" in data:
+                data["buttons"] = [
+                    {**b, "link": within(b["link"])} if b["link"].startswith("/") else b for b in data["buttons"]
+                ]
+            if data.get("href", "").startswith("/"):
+                data["href"] = within(data["href"])
     nav = [
-        {"path": page_path(p), "label": page_label(p), "current": p is page}
+        {"path": within(page_path(p)), "label": page_label(p), "current": p is page}
         for p in pages
     ]
     context = {
-        "indexable": True,
+        "indexable": not preview,
+        "preview": {"off": not page["enabled"], "editor": "/website/"} if preview else None,
         "school": school,
         "look": card,
         "style": style,
@@ -264,11 +296,12 @@ def draw(school, revision, key, host, *, slug=None) -> Drawn | None:
         "nav": nav,
         "nav_more": nav[MENU_ON_A_PHONE:],
         "menu_on_a_phone": MENU_ON_A_PHONE,
+        "home_path": within("/"),
         "sections": sections,
         "has_hero": any(s["kind"] == SectionKind.HERO for s in sections),
         "footer": _footer(snapshot.get("footer") or {}),
         "portal_host": portal_host(),
-        "structured_data": structured_data(school, root, snapshot) if key == PageKey.HOME else "",
+        "structured_data": structured_data(school, root, snapshot) if key == PageKey.HOME and not preview else "",
     }
     html = render_to_string(f"schoolsite/themes/{theme}/page.html", context)
     return Drawn(html=html, style=style)
@@ -293,10 +326,12 @@ __all__ = [
     "Drawn",
     "csp",
     "draw",
+    "draw_snapshot",
     "enabled_pages",
     "link_is_live",
     "page_label",
     "page_path",
+    "preview_path",
     "sitemap",
     "style_hash",
     "theme_of",

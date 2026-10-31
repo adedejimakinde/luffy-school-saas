@@ -9,7 +9,8 @@ designed theme replaces it (`docs/school-sites.md` §3.4). Drawn with no request
 style is the school's colour; the page's Content-Security-Policy names it by its
 hash and refuses every other inline style and every script.
 {% endcomment %}
-{% if description %}<meta name="description" content="{{ description }}">
+{% if preview %}<meta name="robots" content="noindex, nofollow">
+{% endif %}{% if description %}<meta name="description" content="{{ description }}">
 {% endif %}<link rel="canonical" href="{{ canonical }}">
 <meta property="og:type" content="website">
 <meta property="og:title" content="{{ title }}">
@@ -24,10 +25,11 @@ bold face that arrived after the first paint would move them (§4.1's layout shi
 <style>{{ style }}</style>
 {% if structured_data %}<script type="application/ld+json">{{ structured_data }}</script>
 {% endif %}<body>
-<a class="skip" href="#content">Skip to the page</a>
+{% if preview %}<p class="preview-bar" role="status"><strong>Preview: not published</strong>{% if preview.off %} &middot; This page is switched off, so the public cannot see it{% endif %} <a href="{{ preview.editor }}">Back to the editor</a></p>
+{% endif %}<a class="skip" href="#content">Skip to the page</a>
 <header class="site-header">
   <div class="bar">
-    <a class="school" href="/">
+    <a class="school" href="{{ home_path|default:'/' }}">
       {% if look.crest %}<img class="crest" src="{{ look.crest }}" alt="" width="48" height="48">
       {% else %}<span class="crest initials" aria-hidden="true">{{ look.initials }}</span>{% endif %}
       <span class="school-name">{{ school.name }}</span>
