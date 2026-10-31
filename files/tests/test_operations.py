@@ -3,7 +3,7 @@
 - `move_files_to_disk` writes nothing on a dry run, moves each school's own
   bytes into that school's storage on `--apply`, moves nothing twice, and its
   rollback leaves the previous release showing the same crest and photo.
-- `check_storage` emails hello@classnode.co past 70% (once a day), prints a
+- `check_storage` emails OPS_ALERT_EMAIL past 70% (once a day), prints a
   line to the cron log every time, and fails the run past the line.
 - The platform page's storage figures and quota are platform staff's alone.
 """
@@ -11,6 +11,7 @@
 import io
 from unittest import mock
 
+from django.conf import settings
 from django.core import mail
 from django.core.management import CommandError, call_command
 from django.test import override_settings
@@ -136,7 +137,7 @@ class TheHourlyCheckTests(FilesSetUp):
         self.assertTrue(failed)
         self.assertIn("ALERT: [Classnode] Disk 72% full", said)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(mail.outbox[0].to, ["hello@classnode.co"])
+        self.assertEqual(mail.outbox[0].to, [settings.OPS_ALERT_EMAIL])
         self.assertIn("St Mary's College (st-marys)", mail.outbox[0].body)
 
         said, failed = self.check(73)
@@ -145,6 +146,7 @@ class TheHourlyCheckTests(FilesSetUp):
         self.assertEqual(len(mail.outbox), 1)
 
     def test_past_ninety_percent_it_emails_every_time(self):
+        # hello@ the platform's domain on the server: tests.test_deployment.
         self.check(91)
         self.check(92)
         self.assertEqual(len(mail.outbox), 2)
@@ -154,14 +156,14 @@ class TheHourlyCheckTests(FilesSetUp):
         with mock.patch("schools.alerts.send_mail", side_effect=OSError("no mail host")):
             said, failed = self.check(80)
         self.assertTrue(failed)
-        self.assertIn("ALERT NOT EMAILED to hello@classnode.co", said)
+        self.assertIn(f"ALERT NOT EMAILED to {settings.OPS_ALERT_EMAIL}", said)
 
     def test_the_backup_script_alerts_through_the_same_path(self):
         out = io.StringIO()
         with mock.patch("sys.stdin", io.StringIO("restic: unable to open repository")):
             call_command("send_ops_alert", "Media backup FAILED", stdout=out)
         self.assertIn("ALERT: [Classnode] Media backup FAILED", out.getvalue())
-        self.assertEqual(mail.outbox[0].to, ["hello@classnode.co"])
+        self.assertEqual(mail.outbox[0].to, [settings.OPS_ALERT_EMAIL])
         self.assertIn("unable to open repository", mail.outbox[0].body)
 
 

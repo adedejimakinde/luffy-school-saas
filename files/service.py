@@ -75,10 +75,20 @@ def _here():
 
 
 def school_here():
-    tenant = getattr(connection, "tenant", None)
-    if tenant is None or getattr(tenant, "schema_name", "public") == "public":
+    """The `School` this connection is on, or None on the platform's schema.
+
+    A request and a `TenantTask` set the real `School`; `schema_context()` (a
+    management command, the demo's reset) sets a stand-in with only a schema
+    name, so the school is then read by that name."""
+    from schools.models import School
+
+    schema = connection.schema_name
+    if not schema or schema == "public":
         return None
-    return tenant
+    tenant = getattr(connection, "tenant", None)
+    if isinstance(tenant, School) and tenant.schema_name == schema:
+        return tenant
+    return School.objects.filter(schema_name=schema).first()
 
 
 # -- the quota and the disk ----------------------------------------------------
