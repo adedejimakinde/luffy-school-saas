@@ -118,6 +118,9 @@ class AFileIsNeverServedOnAnotherSchoolsHostTests(FilesSetUp):
         """`schema_name` is checked as well as `search_path` (`files.models`)."""
         with connected_to(self.grace):
             StoredFile.objects.filter(pk=self.their_crest.pk).update(schema_name="st_marys")
+            self.assertIsNone(service.find(self.their_crest.key))
+            self.assertIsNone(service.current("crest"))
+            self.assertEqual(service.usage()["files"], 1)
         self.assertEqual(self.get(f"/media/{self.their_crest.key}/site.png", host=GRACE).status_code, 404)
 
     def test_the_files_are_in_each_schools_own_directory(self):

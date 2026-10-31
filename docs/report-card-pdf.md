@@ -301,11 +301,13 @@ school up (`academics.api`, `card/colour/` and `card/crest/`). They live on
 `ReportCardSettings`, in the school's own schema, and `results/look.py` holds
 every rule about them:
 
-- **A crest is re-drawn, never kept as sent.** PNG or JPG, at most 1 MB,
-  refused before it is opened if larger and before it is decoded if its header
-  claims more than 4096 × 4096 pixels. Pillow fits it inside a 256px
-  transparent square and writes a fresh PNG, so nothing of the upload but its
-  picture reaches a card.
+- **A crest is re-drawn, never kept as sent.** It goes through the upload
+  service (`files`, docs/school-sites.md §9.1): PNG, JPG or WebP, at most 5 MB,
+  refused before it is decoded if its header claims more than 4096 × 4096
+  pixels, then trimmed and kept as lossless PNG on the server's disk. The card
+  prints its 256px transparent square, so nothing of the upload but its picture
+  reaches a card. (Until 31 October 2026 it was a 256px PNG in this row's
+  `crest` column, which is still read as a fallback until the files are moved.)
 - **A colour must read on white.** The school's name is printed in its colour
   on white paper, so a colour under 4.5 to 1 against white (WCAG's figure for
   body text) is refused with a sentence. The default is the design's own

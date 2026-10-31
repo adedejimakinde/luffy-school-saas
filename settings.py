@@ -1154,7 +1154,11 @@ FILES_PROCESS_INLINE = os.environ.get("FILES_PROCESS_INLINE", "0") == "1"
 
 #: Where an operational alert goes: the disk filling up, a media backup that
 #: failed. Through the same email settings as everything else (EMAIL_HOST...).
-OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "hello@classnode.co")
+#: hello@ the platform's own domain unless a deploy says otherwise, so on the
+#: server it is hello@ the domain in production.env, which is named only there.
+OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "").strip() or (
+    f"hello@{PLATFORM_DOMAIN}" if PLATFORM_DOMAIN else "hello@localhost"
+)
 
 #: Photo, PDF and video work has a queue of its own, served by the `media`
 #: worker with one process at low priority (deploy/compose.yml), so a gallery

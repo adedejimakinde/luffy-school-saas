@@ -12,6 +12,16 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # writes a row per active session; nothing else removes the dead ones).
 15 1 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py clearsessions >> /var/log/classnode-housekeeping.log 2>&1
 
+# Nightly backup of the uploaded files to B2, 01:45 UTC, after the database's
+# (deploy/media-backup.sh). Fails loudly until backup.env has its settings; a
+# failure is emailed to the operator (OPS_ALERT_EMAIL, hello@ the platform's
+# domain) and written here.
+45 1 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose --profile backup run --rm --no-deps media-backup backup >> /var/log/classnode-media-backup.log 2>&1
+
+# Hourly, at 17 past: tidy the uploads and look at the disk. Past 70% full it
+# emails the operator (once a day; hourly past 90%, where uploads stop).
+17 * * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py check_storage >> /var/log/classnode-storage.log 2>&1
+
 # Weekly restore test, Sunday 02:00 UTC.
 0 2 * * 0 root /opt/classnode/deploy/restore-check.sh >> /var/log/classnode-restore-check.log 2>&1
 
@@ -25,3 +35,7 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # school's day closes. Safe to run more than once: a school already sent for
 # that day is skipped (docs/messaging.md D15).
 5 23 * * * root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose run --rm --no-deps web python manage.py send_daily_money_summary >> /var/log/classnode-notices.log 2>&1
+
+# Weekly restore test of the uploaded files, Sunday 03:30 UTC, after the
+# database's: a sample of the backup is read back and compared with the disk.
+30 3 * * 0 root cd /opt/classnode/deploy && CLASSNODE_TAG=$(cat deployed-sha) docker compose --profile backup run --rm --no-deps media-backup check >> /var/log/classnode-media-backup.log 2>&1

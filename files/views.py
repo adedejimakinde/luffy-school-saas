@@ -23,6 +23,7 @@ streams a byte.
 """
 
 from django.conf import settings
+from django.db import connection
 from django.http import FileResponse, Http404, HttpResponse
 from django.views.decorators.http import require_http_methods
 
@@ -37,6 +38,9 @@ PRIVATE = "private, no-store"
 def send(stored, variant, *, cache_control, download_name=None):
     """The response that sends `variant` of `stored`, with `cache_control`."""
     if stored is None or stored.state not in (State.READY, State.RETIRED) or not stored.has(variant):
+        raise Http404("No such file.")
+    if stored.schema_name != connection.schema_name:
+        # Never a path under another school's directory, however the row got here.
         raise Http404("No such file.")
     relative = storage.relative(stored.schema_name, stored.key, variant)
     content_type = storage.content_type(variant)
