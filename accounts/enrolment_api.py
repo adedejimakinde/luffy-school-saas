@@ -1134,6 +1134,10 @@ class DetailsOut(Schema):
     has_photo: bool
     #: Changes whenever the photo does, for the page to put on the image's URL.
     photo_version: Optional[str] = None
+    #: A new photo is being drawn by the media worker: ask again in a moment.
+    photo_processing: bool = False
+    #: Why the last photo uploaded could not be used, in a sentence; else "".
+    photo_problem: str = ""
     may_edit: bool
 
 
@@ -1146,7 +1150,12 @@ class DetailsIn(Schema):
 
 def _details_out(request, school, child) -> DetailsOut:
     row = details.details_for([child.pk]).get(child.pk)
-    has_photo = bool(row and row.has_photo)
+    status = details.photo_status(child.pk)
+    has_photo = bool(row and row.has_photo) or status["ready"]
+    if status["version"]:
+        version = status["version"]
+    else:
+        version = str(int(row.updated_at.timestamp())) if has_photo and row else None
     return DetailsOut(
         student_membership_id=child.pk,
         student=child.display_name or child.user.full_name or child.user.username,
@@ -1154,7 +1163,9 @@ def _details_out(request, school, child) -> DetailsOut:
         sex=row.sex if row else "",
         date_of_birth=row.date_of_birth.isoformat() if row and row.date_of_birth else None,
         has_photo=has_photo,
-        photo_version=str(int(row.updated_at.timestamp())) if has_photo else None,
+        photo_version=version,
+        photo_processing=status["processing"],
+        photo_problem=status["problem"],
         may_edit=details.can_edit_details(request.user, school),
     )
 
@@ -1214,7 +1225,10 @@ def set_child_details(request, student_membership_id: int, payload: DetailsIn):
     response={200: DetailsOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
 )
 def set_child_photo(request, student_membership_id: int):
-    """A passport photo, as a multipart `photo` file: PNG or JPG, at most 5 MB."""
+    """A passport photo, as a multipart `photo` file: JPG, PNG, WebP or HEIC, at most 15 MB.
+
+    Answers at once with `photo_processing`: the media worker draws it, and the
+    page asks for the details again until it is ready (`files`)."""
     school, refused = _details_child(request)
     if refused:
         return refused
@@ -1226,10 +1240,8 @@ def set_child_photo(request, student_membership_id: int):
     upload = request.FILES.get("photo")
     if upload is None:
         return 422, MessageOut(detail="Choose a PNG or JPG file for the photo.")
-    if upload.size > details.MAX_PHOTO_BYTES:
-        return 422, MessageOut(detail="A photo can be at most 5 MB. Save it smaller and try again.")
     try:
-        details.set_photo_as(request.user, school, child, upload.read())
+        details.set_photo_as(request.user, school, child, upload)
     except details.NotAllowedToEditDetails as exc:
         return 403, MessageOut(detail=str(exc))
     except (details.DetailsRefused, LookRefused) as exc:
@@ -1260,13 +1272,24 @@ def clear_child_photo(request, student_membership_id: int):
     response={403: MessageOut, 404: MessageOut},
 )
 def child_photo(request, student_membership_id: int):
-    """The child's photo as stored: a JPEG, from this school's schema."""
+    """The child's photo, from this school's schema: WebP where the browser
+    takes it, JPEG otherwise. `?size=small` is the half-size frame for a list."""
     school, refused = _details_child(request)
     if refused:
         return refused
     child = details.student_here(school, student_membership_id)
     if child is None:
         return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    stored = details.photo_file(child.pk)
+    if stored is not None:
+        from files.views import send
+
+        small = request.GET.get("size") == "small"
+        webp = "image/webp" in request.headers.get("Accept", "")
+        variant = "small.webp" if small and webp else ("card.webp" if webp else "card.jpg")
+        response = send(stored, variant, cache_control="private, max-age=0, must-revalidate")
+        response["Vary"] = "Accept"
+        return response
     photo = details.photo_of(child.pk)
     if not photo:
         return 404, MessageOut(detail="No photo has been added for this child.")

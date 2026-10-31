@@ -174,6 +174,12 @@ def problems(post) -> list:
     keys = set(post.images.values_list("key", flat=True))
     if any(key not in keys for key in markdown.image_keys(post.body)):
         found.append("A picture in the post is not one uploaded to it. Add it again.")
+    # A picture still with the media worker, or one it could not use, would be
+    # a broken image on the published page (`files.service`).
+    named = set(markdown.image_keys(post.body)) | ({post.cover.key} if post.cover_id else set())
+    unready = post.images.filter(key__in=named, file__isnull=False).exclude(file__state="ready")
+    if unready.exists():
+        found.append("A picture is still being processed, or could not be used. Wait a moment, or upload it again.")
     return found
 
 

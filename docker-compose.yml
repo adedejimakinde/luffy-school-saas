@@ -64,7 +64,7 @@ services:
     # exact case CELERY_TASK_ACKS_LATE and CELERY_TASK_REJECT_ON_WORKER_LOST
     # exist to survive, defeated by the process tree in front of them. `exec`
     # replaces the shell, so celery *is* PID 1 and warm-shuts-down.
-    command: sh -c "pip install --quiet --root-user-action=ignore -r requirements.txt && exec celery -A celery_app worker --loglevel=info"
+    command: sh -c "pip install --quiet --root-user-action=ignore -r requirements.txt && exec celery -A celery_app worker -Q celery,media --loglevel=info"
     environment:
       <<: *django-environment
       # This container runs as root (the base image sets no USER) against a

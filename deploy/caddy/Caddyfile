@@ -37,5 +37,23 @@ http://{$PLATFORM_DOMAIN}, http://www.{$PLATFORM_DOMAIN} {
 	# SECURE_PROXY_SSL_HEADER and TRUSTED_PROXY_COUNT=1 are only safe because
 	# of that: nothing may ever be put in front of this without the same
 	# property.
-	reverse_proxy web:8000
+	#
+	# Uploaded files: Django decides, Caddy sends (`files.views`). Django
+	# answers a file it has decided may be sent with an empty body and its path
+	# in X-Accel-Redirect, built only from the current school's schema, the key
+	# and a checked variant name. Caddy then serves that path from the files'
+	# read-only mount, with Django's cache and safety headers, and never shows
+	# the header to the browser. There is no other way in to /srv/media: no
+	# route here serves it directly.
+	reverse_proxy web:8000 {
+		@sendfile header X-Accel-Redirect *
+		handle_response @sendfile {
+			root * /srv/media
+			rewrite * {rp.header.X-Accel-Redirect}
+			copy_response_headers {
+				include Cache-Control Content-Type Content-Disposition Content-Security-Policy X-Content-Type-Options Vary
+			}
+			file_server
+		}
+	}
 }

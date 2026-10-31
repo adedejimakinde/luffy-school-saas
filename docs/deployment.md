@@ -14,7 +14,9 @@ exists yet. Everything in this document that needs one is marked **[needs …]**
 
 ```
 internet ──443──▶ caddy ──http──▶ web (gunicorn) ──▶ db (Postgres 15)
-                   │                  worker (Celery) ─┘      redis
+                   │  │               worker (Celery) ─┤      redis
+                   │  │               media (Celery, -Q media) ─┘
+                   │  └─ reads /srv/classnode/media (read-only), only when web says so
                    └─ one wildcard certificate: PLATFORM_DOMAIN and *.PLATFORM_DOMAIN
 ```
 
@@ -279,6 +281,75 @@ Postgres 15 (Debian) with WAL-G pinned by version and checksum.
   password manager as well as on the server: without it the backups are noise.
 
 **[needs B2]** for all of it; until then the nightly job fails loudly by design.
+
+## Uploaded files
+
+Every upload (crests, photos, signatures, website pictures, documents, the
+hero loop) goes through one service, `files` (docs/school-sites.md §9). The
+bytes are **on the server's data volume, never in Postgres**:
+
+- **Where**: `/srv/classnode/media` on the host, `/srv/media` in the
+  containers (`FILES_ROOT`). One directory per school's schema, then the key.
+  `web`, `worker` and `media` write to it as the app's user (uid 10001, which
+  `deploy/deploy.sh` makes sure of on every deploy); Caddy mounts it read-only.
+- **Processing**: on the `media` Celery queue, served by the `media` service,
+  one job at a time at low priority. The upload screen answers at once and
+  says "being prepared" until the job is done.
+- **Sending**: Django decides who may have a file (the school's own schema,
+  public or the school's office only) and answers with `X-Accel-Redirect`;
+  Caddy's `handle_response` sends it. Gunicorn never streams a file.
+- **Quota**: 1 GB per school by default, changed per school on the platform
+  page (`/platform/`, "Storage"), which also shows each school's total.
+- **The disk**: `manage.py check_storage` runs hourly (`deploy/cron/classnode`),
+  writes a line to `/var/log/classnode-storage.log`, and past **70%** emails
+  `OPS_ALERT_EMAIL` (hello@ the platform's domain) once a day; past **90%**
+  uploads are refused and it emails every hour.
+- **Alerts** go by email through the ordinary email settings, and are printed
+  to the cron log. Sentry is optional here: `DISK_HEARTBEAT_URL` and
+  `MEDIA_BACKUP_HEARTBEAT_URL` in `backup.env`, if set, get `ok`/`error`
+  check-ins for a cron monitor later.
+
+### The files' backup
+
+**restic, encrypted, to the same B2 bucket and prefix as the database**, under
+`media/` (`s3:<AWS_ENDPOINT>/<bucket>/classnode/media`), so a B2 key limited to
+`classnode/` covers it. `deploy/media-backup.sh` in the `media-backup` service
+(compose profile `backup`):
+
+- **Nightly, 01:45 UTC**: `backup` sends what is new (file names never change,
+  so that is only the day's uploads) and keeps 14 daily, 8 weekly and 12
+  monthly snapshots. Log: `/var/log/classnode-media-backup.log`.
+- **Weekly, Sunday 03:30 UTC**: `check` prunes, checks 2% of the repository's
+  data, and restores ten random files older than two days, comparing each with
+  the disk.
+- **Setting it up, and whenever the key or prefix changes**: `test` makes the
+  repository if there is none, backs up one new file, restores it and compares
+  it byte for byte. A wrong key, endpoint, prefix or password fails here, at once.
+- **Encrypted** with `MEDIA_RESTIC_PASSWORD` in `backup.env`
+  (`deploy/init-env.sh media-backup` adds a generated one to a `backup.env` made
+  before this existed). Keep it in the password manager beside
+  `WALG_LIBSODIUM_KEY`: without it the backup is noise.
+- **A failure is emailed** to `OPS_ALERT_EMAIL` and written to the log.
+
+To restore everything onto a new server (after `deploy/bootstrap.sh` and the
+env files):
+
+```
+cd /opt/classnode/deploy
+docker compose --profile backup run --rm --no-deps -v /srv/classnode/media:/restore media-backup restore /restore
+```
+
+It reads the repository and password from `backup.env`, and puts every file of
+the latest snapshot back where it was, under `/srv/classnode/media`.
+
+### Moving the files that were in Postgres
+
+Crests, children's photos and the blog's pictures were kept in database
+columns before the service existed. `manage.py move_files_to_disk` copies
+them through the same processing: a dry run by default, `--apply` to do it,
+`--rollback --apply` to copy the current files back into the columns (so the
+previous release shows the same thing) and remove them. The columns are left
+in place until a later release drops them, after a backup cycle.
 
 ## The weekly restore test
 

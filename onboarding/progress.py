@@ -307,7 +307,9 @@ SELECT json_build_object(
         WHERE s.term_id = (SELECT id FROM t)
     ),
     'papers', EXISTS (SELECT 1 FROM gradebook_assessment WHERE term_id = (SELECT id FROM t)),
-    'crest', EXISTS (SELECT 1 FROM results_reportcardsettings WHERE crest IS NOT NULL),
+    'crest', (EXISTS (SELECT 1 FROM results_reportcardsettings WHERE crest IS NOT NULL)
+              OR EXISTS (SELECT 1 FROM files_storedfile
+                         WHERE slot = 'crest' AND state = 'ready' AND schema_name = current_schema())),
     'registers', EXISTS (SELECT 1 FROM attendance_register)
 )
 """

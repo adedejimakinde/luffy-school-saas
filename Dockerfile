@@ -52,9 +52,26 @@ COPY . .
 # import without one.
 RUN DJANGO_SECRET_KEY=build-time-collectstatic-only python manage.py collectstatic --noinput
 
+# restic, for the nightly backup of the uploaded files to B2
+# (deploy/media-backup.sh, the `media-backup` service). Pinned by version *and*
+# by the SHA-256 the release publishes beside it, as WAL-G is in the database
+# image: a download that does not match stops the build. Fetched and unpacked
+# with Python, which the image already has, so no curl or bzip2 is added.
+ARG RESTIC_VERSION=0.18.1
+ARG RESTIC_SHA256=680838f19d67151adba227e1570cdd8af12c19cf1735783ed1ba928bc41f363d
+RUN python -c "import bz2, hashlib, sys, urllib.request; \
+url = 'https://github.com/restic/restic/releases/download/v${RESTIC_VERSION}/restic_${RESTIC_VERSION}_linux_amd64.bz2'; \
+data = urllib.request.urlopen(url, timeout=60).read(); \
+got = hashlib.sha256(data).hexdigest(); \
+sys.exit('restic checksum mismatch: ' + got) if got != '${RESTIC_SHA256}' else None; \
+open('/usr/local/bin/restic', 'wb').write(bz2.decompress(data))" \
+    && chmod 755 /usr/local/bin/restic \
+    && restic version
+
 # Not root. A home directory because fontconfig — under WeasyPrint — writes its
 # cache there, and without one every render logs a warning and rebuilds it.
-RUN useradd --create-home --uid 10001 app
+# restic keeps its index cache there too (the `media-backup-cache` volume).
+RUN useradd --create-home --uid 10001 app && install -d -o app -g app /home/app/.cache
 USER app
 
 EXPOSE 8000

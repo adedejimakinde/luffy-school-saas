@@ -143,6 +143,12 @@ class School(TenantMixin):
     #: cannot be thrown on a real school, by a typo or otherwise.
     sales_demo = models.BooleanField(default=False)
 
+    #: How many bytes of files this school may keep on the server: masters and
+    #: every variant, counted by `files.service.usage()`. Null is the platform's
+    #: default (`settings.FILES_DEFAULT_QUOTA_BYTES`, 1 GB); the platform operator
+    #: sets a school's own from the platform page (`schools.platform_api`).
+    storage_quota_bytes = models.PositiveBigIntegerField(null=True, blank=True)
+
     # Schemas are created on save in real use; tests turn this off per instance.
     auto_create_schema = True
     auto_drop_schema = False

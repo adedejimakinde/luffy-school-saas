@@ -82,6 +82,12 @@ export function applyDetails(state, childId, result, { form = null, typed = null
   return { ...state, details: { ...details, note: { kind, form, detail: result.body.detail, typed } } };
 }
 
+/** Is the photo just uploaded for this child still with the media worker? */
+export function photoPreparing(state, childId) {
+  const details = state && state.details;
+  return Boolean(details && details.childId === childId && details.body && details.body.photo_processing);
+}
+
 export function fromRoll(answer) {
   if (!answer.ok) return { step: answer.refusal, ...answer.body };
   return { step: "roll", ...answer.body, notes: {} };
@@ -252,6 +258,15 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
         form: "photo",
       });
       draw();
+      // The media worker draws the photo after the upload answers: ask again
+      // every couple of seconds while the panel is open and it is still being
+      // prepared, for at most a minute (`files.service`).
+      for (let polls = 0; polls < 30 && photoPreparing(state, childId); polls += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        if (!photoPreparing(state, childId)) break;
+        state = applyDetails(state, childId, await fetchDetails({ studentMembershipId: childId, fetchImpl }));
+        draw();
+      }
       return;
     }
     if (form && form.new_contact && state.panel) {

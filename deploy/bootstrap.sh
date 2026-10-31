@@ -334,6 +334,8 @@ chmod 600 /home/deploy/.ssh/authorized_keys
 say "Directories and the repository"
 # The database and Redis data (deploy/compose.yml, CLASSNODE_DATA).
 install -d -m 755 /srv/classnode /srv/classnode/postgres /srv/classnode/redis
+# The uploaded files (deploy/compose.yml, FILES_ROOT), owned by the app's user.
+install -d -m 755 -o 10001 -g 10001 /srv/classnode/media
 # The secrets. deploy must be able to read them: `docker compose` reads an
 # env_file on the CLIENT side, as whoever runs it. Nobody else can.
 install -d -m 750 -o root -g deploy /etc/classnode

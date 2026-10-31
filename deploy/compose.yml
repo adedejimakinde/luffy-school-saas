@@ -21,6 +21,11 @@ x-app: &app
     # Which commit this is, for Sentry's "release" (settings.py).
     CLASSNODE_RELEASE: ${CLASSNODE_TAG}
   restart: unless-stopped
+  volumes:
+    # Uploaded files (`files`, FILES_ROOT in production.env): on the VPS data
+    # volume beside the database, owned by the app's user (uid 10001;
+    # deploy/deploy.sh makes it so). Backed up nightly to B2 by `media-backup`.
+    - ${CLASSNODE_DATA:-/srv/classnode}/media:/srv/media
   depends_on:
     db:
       condition: service_healthy
@@ -44,6 +49,9 @@ services:
       # The certificate and ACME account. Kept, so a restart does not re-issue.
       - caddy-data:/data
       - caddy-config:/config
+      # Uploaded files, read-only: Caddy sends one only when Django's answer
+      # names it in X-Accel-Redirect (deploy/caddy/Caddyfile, `files.views`).
+      - ${CLASSNODE_DATA:-/srv/classnode}/media:/srv/media:ro
     restart: unless-stopped
     depends_on:
       - web
@@ -66,6 +74,34 @@ services:
     command: ["celery", "-A", "celery_app", "worker", "--loglevel=info"]
     # Long enough for a warm shutdown to finish the card it is rendering.
     stop_grace_period: 2m
+
+  # Photo, PDF and video work (`files.tasks`, the `media` queue): one process,
+  # at low CPU priority, so an upload never starves the portal or delays a
+  # report card's PDF on the default queue.
+  media:
+    <<: *app
+    command: ["nice", "-n", "10", "celery", "-A", "celery_app", "worker", "-Q", "media",
+              "--concurrency", "1", "--hostname", "media@%h", "--loglevel=info"]
+    # A job's hard limit is four minutes (`files.tasks.LIMITS`).
+    stop_grace_period: 5m
+
+  # The nightly backup of the uploaded files to B2 (deploy/media-backup.sh),
+  # run by cron and never by `up`. Encrypted by restic, into the same bucket
+  # and prefix as the database backup, under media/.
+  media-backup:
+    <<: *app
+    profiles: ["backup"]
+    restart: "no"
+    entrypoint: ["bash", "/app/deploy/media-backup.sh"]
+    command: ["backup"]
+    env_file:
+      - production.env
+      - ${CLASSNODE_ETC:-/etc/classnode}/secrets.env
+      - path: ${CLASSNODE_ETC:-/etc/classnode}/backup.env
+        required: false
+    volumes:
+      - ${CLASSNODE_DATA:-/srv/classnode}/media:/srv/media:ro
+      - media-backup-cache:/home/app/.cache
 
   db:
     # Postgres 15 with WAL-G (deploy/postgres/Dockerfile), built by CI beside
@@ -125,3 +161,5 @@ volumes:
   caddy-data:
   caddy-config:
   restore-data:
+  # restic's index cache, so a nightly run does not re-read the repository.
+  media-backup-cache:

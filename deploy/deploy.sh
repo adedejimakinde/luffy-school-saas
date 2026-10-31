@@ -53,10 +53,15 @@ else
   echo "No GHCR login (/root/ghcr-login is missing or unreadable): pulling anonymously, which only works for public images. docs/first-day.md, step 12." >&2
 fi
 
-docker compose pull web worker caddy db
+docker compose pull web worker media caddy db
 docker compose up -d db redis
 docker compose run --rm --no-deps web python manage.py migrate_schemas --noinput
-docker compose up -d web worker caddy
+# The uploaded files' directory (FILES_ROOT), given to the app's user. Docker
+# makes a missing bind-mount source as root, which the app could not write to;
+# this runs as root inside a container, so `deploy` needs no sudo for it.
+docker compose run --rm --no-deps --user 0 web \
+  sh -c 'mkdir -p /srv/media/.incoming && chown 10001:10001 /srv/media /srv/media/.incoming && chmod 755 /srv/media'
+docker compose up -d web worker media caddy
 
 healthy=0
 for _ in $(seq 1 30); do
@@ -71,8 +76,8 @@ done
 if [ "$healthy" != 1 ]; then
   echo "NOT HEALTHY: $SHA did not answer /healthz/ inside the container and through Caddy" >&2
   if [ -n "$PREVIOUS" ]; then
-    echo "Rolling web, worker and caddy back to $PREVIOUS. Migrations are not rolled back." >&2
-    CLASSNODE_TAG="$PREVIOUS" docker compose up -d web worker caddy
+    echo "Rolling web, worker, media and caddy back to $PREVIOUS. Migrations are not rolled back." >&2
+    CLASSNODE_TAG="$PREVIOUS" docker compose up -d web worker media caddy
   fi
   exit 1
 fi

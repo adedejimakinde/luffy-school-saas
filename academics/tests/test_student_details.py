@@ -31,6 +31,13 @@ def picture(fmt="JPEG", size=(1200, 1600), colour=(200, 120, 90), exif=None):
     return out.getvalue()
 
 
+def body(response) -> bytes:
+    """A response's bytes, whether Django sent them or streamed the file."""
+    if getattr(response, "streaming", False):
+        return b"".join(response.streaming_content)
+    return response.content
+
+
 def upload(raw, name="photo.jpg", content_type="image/jpeg"):
     from django.core.files.uploadedfile import SimpleUploadedFile
 
@@ -203,29 +210,41 @@ class ThePhotoTests(DetailsSetUp):
         self.assertTrue(response.json()["has_photo"])
         served = self.get(self.admin, self.ada, part="photo")
         self.assertEqual(served["Content-Type"], "image/jpeg")
-        image = Image.open(io.BytesIO(served.content))
+        sent = body(served)
+        image = Image.open(io.BytesIO(sent))
         self.assertEqual((image.format, image.size), ("JPEG", details.PHOTO_SIZE))
-        self.assertNotIn(b"SecretCam", served.content)
+        self.assertNotIn(b"SecretCam", sent)
+
+    def test_a_browser_that_takes_webp_is_sent_webp(self):
+        self.send_photo(self.admin, self.ada, picture(size=(3000, 4000)))
+        self.client.force_login(self.admin.user)
+        served = self.client.get(self.details_url(self.ada, "photo"), HTTP_HOST=HOST, HTTP_ACCEPT="image/webp,*/*")
+        self.assertEqual(served["Content-Type"], "image/webp")
+        self.assertIn("Accept", served["Vary"])
+        self.assertEqual(Image.open(io.BytesIO(body(served))).size, details.PHOTO_SIZE)
 
     def test_a_landscape_photo_is_cropped_not_stretched(self):
-        raw = picture(size=(1600, 900))
-        image = Image.open(io.BytesIO(details.redraw_photo(raw)))
+        self.send_photo(self.admin, self.ada, picture(size=(1600, 900)))
+        image = Image.open(io.BytesIO(details.photo_of(self.ada.pk)))
         self.assertEqual(image.size, details.PHOTO_SIZE)
 
     def test_what_is_not_a_photo_is_refused_with_a_sentence(self):
         for raw, said in (
-            (b"not an image at all", "not an image this can read"),
-            (picture(fmt="GIF"), "PNG or a JPG"),
+            (b"not an image at all", "not a picture this can read"),
+            (picture(fmt="GIF"), "JPG, PNG, WebP or HEIC"),
         ):
             with self.subTest(said=said):
                 response = self.send_photo(self.admin, self.ada, raw)
                 self.assertEqual(response.status_code, 422)
                 self.assertIn(said, response.json()["detail"])
 
-    def test_a_file_over_five_megabytes_is_refused_unread(self):
-        response = self.send_photo(self.admin, self.ada, b"\xff\xd8" + b"x" * details.MAX_PHOTO_BYTES)
+    def test_a_file_over_fifteen_megabytes_is_refused_unread(self):
+        from files.kinds import Kind, profile_for
+
+        limit = profile_for(Kind.STUDENT_PHOTO).max_bytes
+        response = self.send_photo(self.admin, self.ada, b"\xff\xd8" + b"x" * limit)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("at most 5 MB", response.json()["detail"])
+        self.assertIn("at most 15 MB", response.json()["detail"])
 
     def test_removing_the_photo_leaves_the_rest(self):
         self.put(self.admin, self.ada, learner_id="OG/1")
@@ -241,9 +260,9 @@ class ThePhotoTests(DetailsSetUp):
         self.send_photo(self.admin, self.ada, picture(colour=(250, 0, 0)))
         self.send_photo(self.their_admin, self.grace_child, picture(colour=(0, 0, 250)), host=THEIR_HOST)
 
-        mine = Image.open(io.BytesIO(self.get(self.admin, self.ada, part="photo").content)).getpixel((140, 180))
+        mine = Image.open(io.BytesIO(body(self.get(self.admin, self.ada, part="photo")))).getpixel((140, 180))
         theirs = Image.open(
-            io.BytesIO(self.get(self.their_admin, self.grace_child, host=THEIR_HOST, part="photo").content)
+            io.BytesIO(body(self.get(self.their_admin, self.grace_child, host=THEIR_HOST, part="photo")))
         ).getpixel((140, 180))
         self.assertGreater(mine[0], 200)
         self.assertGreater(theirs[2], 200)

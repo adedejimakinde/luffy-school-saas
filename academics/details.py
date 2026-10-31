@@ -9,15 +9,19 @@ The office: a principal or an administrator, `PLACEMENT_ROLES` — the people wh
 already keep the roll on `/roll/`. A teacher sees a child's name and class and
 does not edit what the office recorded about them.
 
-## The photo is re-drawn, never kept as sent
+## The photo is an upload like any other
 
-As a crest is (`results.look`): the upload goes through the same checks
-(`look.open_picture()`: size before opening, PNG or JPG only, pixel count from
-the header before decoding) and is then cropped to a passport frame, centred a
-little above the middle where a face is, and written out as a fresh JPEG of
-`PHOTO_SIZE`. Nothing of the original file is stored: no metadata, no location,
-nothing hidden after the image. The limit is larger than a crest's because a
-photo comes off a phone camera.
+It goes through the one upload service (`files.service`, slot
+`student_photo:<membership id>`): checked by its own bytes in the request, then
+drawn by the media worker into a master of 1200 px on its long side and a
+passport frame (7:9, centred a little above the middle, where a face is) at the
+size the card prints, as JPEG and WebP, plus a half-size WebP for a phone.
+Nothing of the original file is kept: no metadata, no location. A new photo
+replaces the old one only once it is ready.
+
+Until `manage.py move_files_to_disk` has copied it, a child's photo may still be
+the JPEG in `StudentDetails.photo`, written before the service existed; the
+readers here fall back to it, and removing the photo clears both.
 
 ## A learner's ID is unique at this school, when there is one
 
@@ -26,7 +30,6 @@ and by `learner_id_holder()` before it, so the office is told which child alread
 it rather than shown a database error.
 """
 
-import io
 from datetime import date
 from typing import Iterable, Optional
 
@@ -34,20 +37,13 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from accounts.models import Membership, Role
-from results import look
 
 from .models import Sex, StudentDetails
 from .services import can_place_students
 
-#: The photo as stored and printed: a passport frame (35 by 45 mm), about
-#: 200dpi at the size the card prints it.
+#: The photo as the card prints it: a passport frame (35 by 45 mm), about
+#: 200dpi at the size the card prints it (`files.kinds`, "card").
 PHOTO_SIZE = (280, 360)
-
-#: A photo straight off a phone is a few megabytes.
-MAX_PHOTO_BYTES = 5 * 1024 * 1024
-
-#: A 48-megapixel phone sensor and some room; checked from the header.
-MAX_PHOTO_PIXELS = 52_000_000
 
 MAX_LEARNER_ID = StudentDetails._meta.get_field("learner_id").max_length
 
@@ -208,42 +204,37 @@ def set_details_as(actor, school, membership, *, learner_id="", sex="", date_of_
     )
 
 
-def redraw_photo(raw: bytes) -> bytes:
-    """The upload, cropped to a passport frame and written as a new JPEG."""
-    from PIL import Image, ImageOps
-
-    source = look.open_picture(
-        raw,
-        noun="A photo",
-        max_bytes=MAX_PHOTO_BYTES,
-        max_pixels=MAX_PHOTO_PIXELS,
-        size_hint=(PHOTO_SIZE[0] * 2, PHOTO_SIZE[1] * 2),
-    )
-    # On white rather than black wherever the upload was transparent.
-    flat = Image.new("RGB", source.size, (255, 255, 255))
-    flat.paste(source, mask=source.split()[3])
-    framed = ImageOps.fit(flat, PHOTO_SIZE, Image.LANCZOS, centering=(0.5, 0.4))
-    out = io.BytesIO()
-    framed.save(out, format="JPEG", quality=85, optimize=True)
-    return out.getvalue()
+def photo_slot(membership_id: int) -> str:
+    return f"student_photo:{int(membership_id)}"
 
 
-def set_photo_as(actor, school, membership, raw: bytes) -> StudentDetails:
+def set_photo_as(actor, school, membership, upload) -> StudentDetails:
+    """Take a new photo. It is checked now and drawn by the media worker."""
+    from files import service
+    from files.kinds import Kind
+
     _require_authority(actor, school)
     _require_student_here(school, membership)
-    photo = redraw_photo(raw)
+    try:
+        stored = service.accept(Kind.STUDENT_PHOTO, upload, slot=photo_slot(membership.pk), by=actor)
+    except service.UploadRefused as exc:
+        raise DetailsRefused(str(exc))
+    if stored.state == "failed":
+        raise DetailsRefused(stored.error)
     with transaction.atomic():
         row = _row_for(membership.pk)
-        row.photo = photo
         row.updated_by_id = actor.pk
-        row.save(update_fields=["photo", "updated_by_id", "updated_at"])
+        row.save(update_fields=["updated_by_id", "updated_at"])
     return row
 
 
 def clear_photo_as(actor, school, membership) -> StudentDetails:
     _require_authority(actor, school)
     _require_student_here(school, membership)
+    from files import service
+
     with transaction.atomic():
+        service.clear_slot(photo_slot(membership.pk))
         row = _row_for(membership.pk)
         row.photo = None
         row.updated_by_id = actor.pk
@@ -258,16 +249,27 @@ def details_for(membership_ids: Iterable[int]) -> dict:
     """`{membership id: StudentDetails}` for those that have a row. One query.
 
     The photo is deferred: a list of children never reads their pictures.
-    `has_photo` is answered from the row's own query, not from the bytes.
+    `has_photo` is answered in the same query: a ready file in the child's
+    slot, or (until it is moved to disk) bytes in the old column.
     """
-    from django.db.models import BooleanField, Case, Value, When
+    from django.db import connection
+    from django.db.models import BooleanField, Case, CharField, Exists, OuterRef, Q, Value, When
+    from django.db.models.functions import Cast, Concat
 
+    from files.models import StoredFile
+
+    ready_file = StoredFile.objects.filter(
+        schema_name=connection.schema_name,
+        state="ready",
+        slot=Concat(Value("student_photo:"), Cast(OuterRef("student_membership_id"), CharField())),
+    )
     rows = (
         StudentDetails.objects.filter(student_membership_id__in=list(membership_ids))
         .defer("photo")
+        .annotate(has_file=Exists(ready_file))
         .annotate(
             has_photo=Case(
-                When(photo__isnull=False, then=Value(True)),
+                When(Q(has_file=True) | Q(photo__isnull=False), then=Value(True)),
                 default=Value(False),
                 output_field=BooleanField(),
             )
@@ -276,7 +278,30 @@ def details_for(membership_ids: Iterable[int]) -> dict:
     return {row.student_membership_id: row for row in rows}
 
 
+def photo_file(membership_id: int):
+    """The child's photo as the upload service keeps it, or None."""
+    from files import service
+
+    return service.current(photo_slot(membership_id))
+
+
+def photo_status(membership_id: int) -> dict:
+    """Ready, being drawn, or why the last one could not be used."""
+    from files import service
+
+    return service.status_of(photo_slot(membership_id))
+
+
 def photo_of(membership_id: int) -> Optional[bytes]:
+    """The passport frame the card prints, as JPEG bytes, or None."""
+    from files import service
+
+    stored = photo_file(membership_id)
+    if stored is not None:
+        try:
+            return service.read(stored, "card.jpg")
+        except FileNotFoundError:
+            return None
     photo = (
         StudentDetails.objects.filter(student_membership_id=membership_id)
         .values_list("photo", flat=True)
@@ -295,7 +320,6 @@ def student_here(school, membership_id: int) -> Optional[Membership]:
 
 __all__ = [
     "DetailsRefused",
-    "MAX_PHOTO_BYTES",
     "MAY_NOT_EDIT",
     "NotAllowedToEditDetails",
     "PHOTO_SIZE",
@@ -303,12 +327,14 @@ __all__ = [
     "clear_photo_as",
     "details_for",
     "learner_id_holder",
+    "photo_file",
     "photo_of",
+    "photo_slot",
+    "photo_status",
     "read_date_of_birth",
     "read_learner_id",
     "read_sex",
     "record",
-    "redraw_photo",
     "set_details_as",
     "set_photo_as",
     "student_here",

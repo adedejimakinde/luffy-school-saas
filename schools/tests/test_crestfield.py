@@ -259,6 +259,26 @@ class DemoSchoolTests(TestCase):
         self.assertTrue(User.objects.get(pk=principal.user_id).check_password(PASSWORDS["principal"]),
                         "a reset without passwords keeps them")
 
+    def test_a_reset_leaves_only_the_new_crest_on_disk_and_no_other_schools_files(self):
+        from files import service, storage
+        from files.kinds import Kind
+        from files.tests import samples
+
+        with schema_context(self.school.schema_name):
+            before = service.current("crest")
+        with schema_context(self.other.schema_name):
+            theirs = service.accept(Kind.CREST, samples.logo(), slot="crest")
+
+        crestfield.reset({}, write=lambda *_: None, per_class=PER_CLASS)
+
+        with schema_context(self.school.schema_name):
+            after = service.current("crest")
+        self.assertNotEqual(after.key, before.key)
+        self.assertFalse(storage.path_of(self.school.schema_name, before.key, "card.png").exists())
+        kept = sorted(p.name for p in (storage.root() / self.school.schema_name).rglob("*") if p.is_file())
+        self.assertEqual(kept, sorted(f"{after.key}-{v}" for v in after.variants))
+        self.assertTrue(storage.path_of(self.other.schema_name, theirs.key, "card.png").is_file())
+
     def test_the_schema_reset_drops_is_the_demos_and_no_other(self):
         """`rebuild_schema` asks the database, not the row in hand, before it drops."""
         impostor = School.objects.get(pk=self.other.pk)

@@ -113,7 +113,7 @@ def read(school, today: date) -> dict:
             "people": people,
             "money": None,
             "work": None,
-            "crest": _small_crest(people.pop("crest")),
+            "crest": _crest(people.pop("crest_key", None), people.pop("crest")),
         }
         if term is None or facts["setting_up"]:
             return facts
@@ -127,6 +127,15 @@ def _one(cursor, sql, params) -> dict:
     cursor.execute(sql, params)
     (value,) = cursor.fetchone()
     return value
+
+
+def _crest(key: Optional[str], encoded: Optional[str]) -> Optional[str]:
+    """The crest's address on this host: the upload service's public file when
+    there is one (`files`), sent by Caddy with a year's cache; otherwise the
+    bytes still in the old column, shrunk and inlined."""
+    if key:
+        return f"/media/{key}/site.png"
+    return _small_crest(encoded)
 
 
 def _small_crest(encoded: Optional[str]) -> Optional[str]:
@@ -219,6 +228,11 @@ SELECT json_build_object(
               AND m.role = ANY(%(staff)s) AND i.accepted_at IS NOT NULL
             ORDER BY i.accepted_at DESC LIMIT 5
         ) j
+    ),
+    'crest_key', (
+        SELECT key FROM files_storedfile
+        WHERE slot = 'crest' AND state = 'ready' AND schema_name = current_schema()
+        LIMIT 1
     ),
     'crest', (
         SELECT encode(crest, 'base64') FROM results_reportcardsettings

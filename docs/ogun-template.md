@@ -45,6 +45,12 @@ writing.
 
 ### The photo is redrawn, as a crest is
 
+*Since 31 October 2026 both go through the upload service instead (`files`,
+docs/school-sites.md §9.1): a photo may be JPG, PNG, WebP or HEIC up to 15 MB,
+is kept on the server's disk as a 1200 px master plus the 280 x 360 passport
+frame the card prints, and has every bit of metadata removed. What follows is
+how it was first built, and the frame and crop are unchanged.*
+
 `results.look.open_picture()` is now the one decoder for both: file size before
 opening, PNG or JPG only, pixel count from the header before decoding, EXIF
 rotation applied. The crest's limits are unchanged (1 MB, 16 megapixels); a
