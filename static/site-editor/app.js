@@ -54,7 +54,11 @@ export function fromOverview(answer, kept = {}) {
 /** A form's fields as name to value; a checkbox's value is whether it is ticked. */
 export function valuesOf(form) {
   const values = {};
-  for (const el of Array.from(form.elements || [])) {
+  // A real form's `elements`; or, in `node --test`, a form whose fields are its own properties.
+  const els = form.elements
+    ? Array.from(form.elements)
+    : Object.entries(form).filter(([name]) => name !== "dataset").map(([name, field]) => ({ name, ...field }));
+  for (const el of els) {
     if (!el.name) continue;
     values[el.name] = el.type === "checkbox" ? Boolean(el.checked) : el.value;
   }

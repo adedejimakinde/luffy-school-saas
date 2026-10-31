@@ -290,7 +290,7 @@ export function confirmPublish(body, { notes = {} } = {}) {
     '<section class="state state-confirm" data-state="confirm-publish">',
     "<h1>Publish the website?</h1>",
     `<p>Everyone who visits ${esc(body.school)}&#39;s website will see the draft as it is now, straight away.</p>`,
-    `<p><a href="${esc(body.preview)}" target="_blank" rel="noopener">Look at the preview first</a></p>`,
+    `<p><a class="btn" href="${esc(body.preview)}" target="_blank" rel="noopener">Look at the preview first</a></p>`,
     '<form data-form="publish">',
     '<label for="publish-note">A note for the history (optional)</label>',
     '<input id="publish-note" name="note" maxlength="200" placeholder="Admissions open for 2027/2028">',

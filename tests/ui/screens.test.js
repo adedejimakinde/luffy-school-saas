@@ -139,6 +139,20 @@ export const SCREENS = [
   { name: "school-website-about", as: null, url: `${HARBOUR}/about/` },
   { name: "school-website-admissions", as: null, url: `${HARBOUR}/admissions/` },
   { name: "school-website-contact", as: null, url: `${HARBOUR}/contact/` },
+  // The website editor (docs/school-sites.md PR 4), as Harbour's principal:
+  // the pages, the home page's sections, and its hero's form. Read only: the
+  // editor's writes are held by schoolsite/tests/test_editor.py and
+  // tests/js/site_editor.test.js, and Harbour's published site is
+  // school_site.test.js's.
+  {
+    name: "website-editor",
+    as: "harbour.principal",
+    url: `${HARBOUR}/website/`,
+    steps: [
+      ["website-editor-page", '[data-action="open-page"][data-ref="home"]'],
+      ["website-editor-section", '[data-action="edit-section"]'],
+    ],
+  },
   // A page of the school's own (docs/school-sites.md §2.1.1), and on a phone the
   // menu's "More", which the demo's six pages put there.
   { name: "school-website-boarding", as: null, url: `${HARBOUR}/pages/boarding/` },
