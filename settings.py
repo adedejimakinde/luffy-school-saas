@@ -195,6 +195,10 @@ SHARED_APPS = [
     # Classnode's own blog: posts, their pictures and its writers' sign-in
     # codes. The platform's too (`docs/blog.md`).
     "blog",
+    # Every upload's row: here for the blog's pictures, and in TENANT_APPS for
+    # each school's own (`files.models` says why both, and how a lookup stays
+    # in its own schema).
+    "files",
 ]
 
 TENANT_APPS = [
@@ -255,6 +259,9 @@ TENANT_APPS = [
     # What changed in the school's setup, by whom and when: one append-only
     # table in each school's schema (`audit.models`).
     "audit",
+    # The school's uploads: crests, photos, signatures, website pictures,
+    # documents and the hero loop. Rows here, bytes on disk (`files`).
+    "files",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]
@@ -1116,3 +1123,40 @@ CELERY_WORKER_PREFETCH_MULTIPLIER = 1
 #: exit. Celery 6 makes this the default and warns when it is unset; setting it
 #: here is what silences the warning as well as choosing the behaviour.
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+
+# ---------------------------------------------------------------------------
+# Uploaded files (`files`, docs/school-sites.md §9)
+#
+# The bytes live on the server's disk under FILES_ROOT, never in Postgres.
+# Django decides who may see a file; in production Caddy sends it
+# (`X-Accel-Redirect`, deploy/caddy/Caddyfile), so gunicorn never streams one.
+# ---------------------------------------------------------------------------
+FILES_ROOT = os.environ.get("FILES_ROOT", "").strip() or str(BASE_DIR / "media-local")
+
+#: On where Caddy is in front (production.env); off in development and the
+#: suite, where Django sends the file itself.
+FILES_X_ACCEL = os.environ.get("FILES_X_ACCEL", "0") == "1"
+
+#: Each school's allowance, unless the platform operator set its own
+#: (`School.storage_quota_bytes`). 1 GB (decided 31 October 2026).
+FILES_DEFAULT_QUOTA_BYTES = int(os.environ.get("FILES_DEFAULT_QUOTA_BYTES", str(1024 ** 3)))
+
+#: The disk the files are on: alert by email past the first, refuse new
+#: uploads past the second, so Postgres never runs out of room.
+FILES_DISK_WARN_PERCENT = float(os.environ.get("FILES_DISK_WARN_PERCENT", "70"))
+FILES_DISK_REFUSE_PERCENT = float(os.environ.get("FILES_DISK_REFUSE_PERCENT", "90"))
+
+#: Process an upload in the request instead of on the media queue. Never in
+#: production. The test runner turns it on (`schools.tests.runner`), so a test
+#: reads what it uploaded; a test of the queue turns it off again.
+FILES_PROCESS_INLINE = os.environ.get("FILES_PROCESS_INLINE", "0") == "1"
+
+#: Where an operational alert goes: the disk filling up, a media backup that
+#: failed. Through the same email settings as everything else (EMAIL_HOST...).
+OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "hello@classnode.co")
+
+#: Photo, PDF and video work has a queue of its own, served by the `media`
+#: worker with one process at low priority (deploy/compose.yml), so a gallery
+#: upload never delays a report card's PDF.
+CELERY_TASK_ROUTES = {"files.tasks.*": {"queue": "media"}}

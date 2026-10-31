@@ -143,6 +143,22 @@ class TenantTemplateRunner(DiscoverRunner):
 
         settings.MESSAGING_PROVIDERS = {"email": "", "phone": ""}
 
+        # **Uploads go to a directory of the run's own, and are processed in the
+        # request** (`files.service`): a test reads back what it uploaded, and
+        # no run writes into a developer's files or another run's. The tests of
+        # the queue itself turn inline processing off again. Removed at the end.
+        import tempfile
+
+        self._files_root = tempfile.TemporaryDirectory(prefix="classnode-files-test-")
+        settings.FILES_ROOT = self._files_root.name
+        settings.FILES_PROCESS_INLINE = True
+        settings.FILES_X_ACCEL = False
+
+    def teardown_test_environment(self, **kwargs):
+        super().teardown_test_environment(**kwargs)
+        if getattr(self, "_files_root", None) is not None:
+            self._files_root.cleanup()
+
     def clear_stale_backends(self):
         """Issue #61: let go of a test database the last run is still holding.
 

@@ -131,8 +131,15 @@ def post(request, slug):
 
 
 def serve_image(image, small: bool):
-    data = bytes(image.small if small else image.data)
-    response = HttpResponse(data, content_type="image/webp")
+    if image.file_id is not None:
+        from files.views import send
+
+        # Caddy sends it in production; the caller sets the cache rule.
+        return send(image.file, "small.webp" if small else "full.webp", cache_control="private, no-store")
+    data = image.small if small else image.data
+    if not data:
+        raise Http404("No such picture.")
+    response = HttpResponse(bytes(data), content_type="image/webp")
     response["Content-Length"] = str(len(data))
     return response
 
@@ -140,7 +147,7 @@ def serve_image(image, small: bool):
 @require_http_methods(["GET", "HEAD"])
 def image(request, key, small=False):
     """A published post's picture. A draft's, or one that does not exist, is a 404."""
-    found = BlogImage.objects.filter(key=key, post__status="published").first()
+    found = BlogImage.objects.select_related("file").filter(key=key, post__status="published").first()
     if found is None:
         raise Http404("No such picture.")
     response = serve_image(found, small)

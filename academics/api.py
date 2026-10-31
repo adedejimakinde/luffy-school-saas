@@ -173,6 +173,10 @@ class CardLookOut(Schema):
     default_colour: str
     has_crest: bool
     crest_version: Optional[str] = None
+    #: A new crest is being drawn by the media worker: ask again in a moment.
+    crest_processing: bool = False
+    #: Why the last crest uploaded could not be used, in a sentence; else "".
+    crest_problem: str = ""
     #: What the card prints in the circle when there is no crest.
     initials: str = ""
     #: Which card the school prints: "standard" or "ogun" (`results.ogun`).
@@ -434,14 +438,14 @@ class ColourIn(Schema):
 
 def _card_look(school) -> CardLookOut:
     row = look.settings()
-    has_crest = bool(row.crest)
+    crest = look.crest_status()
     return CardLookOut(
         colour=row.colour or look.DEFAULT_COLOUR,
         default_colour=look.DEFAULT_COLOUR,
-        has_crest=has_crest,
-        crest_version=(
-            str(int(row.updated_at.timestamp())) if has_crest and row.updated_at else None
-        ),
+        has_crest=crest["ready"],
+        crest_version=crest["version"],
+        crest_processing=crest["processing"],
+        crest_problem=crest["problem"],
         initials=look.initials(school.name),
         template=row.template,
         show_position=row.show_position,
@@ -511,7 +515,10 @@ def set_card_ministry(request, payload: ShowMinistryIn):
 
 @router.post("/card/crest/", response={200: CardLookOut, 403: MessageOut, 422: MessageOut})
 def set_card_crest(request):
-    """A new crest, as a multipart `crest` file: PNG or JPG, at most 1 MB.
+    """A new crest, as a multipart `crest` file: PNG, JPG or WebP, at most 5 MB.
+
+    Answers at once with the crest `crest_processing`: the media worker draws
+    it, and the page asks for the look again until it is ready (`files`).
 
     Read from `request.FILES` by hand rather than declared as a required
     parameter, so a caller who may not set the look is told so before being
@@ -526,10 +533,8 @@ def set_card_crest(request):
     upload = request.FILES.get("crest")
     if upload is None:
         return 422, MessageOut(detail="Choose a PNG or JPG file for the crest.")
-    if upload.size > look.MAX_UPLOAD_BYTES:
-        return 422, MessageOut(detail="A crest can be at most 1 MB. Save it smaller and try again.")
     try:
-        look.set_crest_as(request.user, school, upload.read())
+        look.set_crest_as(request.user, school, upload)
     except look.NotAllowedToSetTheLook:
         return 403, MessageOut(detail=_MAY_NOT_SET_THE_LOOK)
     except look.LookRefused as exc:
@@ -563,10 +568,15 @@ def card_crest(request):
     refused = _refuse_look_outsiders(request, school)
     if refused is not None:
         return refused
-    row = look.settings()
-    if not row.crest:
+    stored = look.crest_file()
+    if stored is not None:
+        from files.views import send
+
+        return send(stored, "card.png", cache_control="private, max-age=0, must-revalidate")
+    crest = look.crest_png()
+    if not crest:
         return 404, MessageOut(detail="This school has no crest yet.")
-    response = HttpResponse(bytes(row.crest), content_type="image/png")
+    response = HttpResponse(crest, content_type="image/png")
     response["Cache-Control"] = "private, max-age=0, must-revalidate"
     response["X-Content-Type-Options"] = "nosniff"
     return response

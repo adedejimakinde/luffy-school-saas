@@ -267,14 +267,20 @@ function cardLook(card, notes) {
 
     `<form class="crest-form${notes.crest ? ` ${esc(notes.crest.kind)}` : ""}" data-form="crest" enctype="multipart/form-data">`,
     '<label for="crest">Crest</label>',
-    '<input id="crest" name="crest" type="file" accept="image/png,image/jpeg" required>',
-    '<span class="hint">PNG or JPG, up to 1 MB. It is resized to a small square. ',
+    '<input id="crest" name="crest" type="file" accept="image/png,image/jpeg,image/webp" required>',
+    '<span class="hint">PNG, JPG or WebP, up to 5 MB. Any plain border is trimmed and it is resized to a small square. ',
     "With no crest, the card shows your school&#39;s initials in a circle.</span>",
     '<span class="actions">',
     '<button type="submit">Upload crest</button>',
     card.has_crest ? '<button type="button" data-action="remove-crest">Remove crest</button>' : "",
     "</span>",
     notes.crest ? `<p class="note" role="alert">${esc(notes.crest.detail)}</p>` : "",
+    !notes.crest && card.crest_processing
+      ? '<p class="note" role="status">Your new crest is being prepared. This takes a few seconds.</p>'
+      : "",
+    !notes.crest && !card.crest_processing && card.crest_problem
+      ? `<p class="note rejected" role="alert">${esc(card.crest_problem)}</p>`
+      : "",
     "</form>",
   ].join("");
 }

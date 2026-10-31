@@ -39,6 +39,7 @@ from schools.paths import RESERVED
 from schools.views import reserved
 from schoolsite import editor as site_editor
 from schoolsite import views as site
+from files import views as files_views
 from results.views import (
     broadsheet_page,
     card_index_page,
@@ -64,6 +65,10 @@ urlpatterns = [
     path("pages/<slug:slug>/", site.custom_page, name="school-site-page"),
     path("sitemap.xml", site.sitemap, name="school-site-sitemap"),
     path("robots.txt", site.robots, name="school-site-robots"),
+    # Files: public ones on the website's path, private ones on the portal's
+    # (`files.views` says what each will send, to whom).
+    path("media/<str:key>/<str:variant>", files_views.public_file, name="media-file"),
+    path("files/<str:key>/<str:variant>", files_views.private_file, name="private-file"),
     path("api/", api.urls),
     # The offline worker: the marking and register pages kept for a phone with
     # no connection. At the root because a worker's scope is where it is served

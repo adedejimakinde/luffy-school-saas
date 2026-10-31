@@ -4,7 +4,6 @@
 whole session each, St Mary's on the Ogun card and Grace on the Standard one.
 """
 
-import base64
 import io
 from datetime import date
 
@@ -39,7 +38,7 @@ class OgunCardSetUp(ReportCardApiSetUp):
             ogun.set_template_as(self.principal, self.stmarys, "ogun")
             StudentDetails.objects.create(
                 student_membership_id=self.ada.pk, learner_id="OG/ABS/0042", sex="female",
-                date_of_birth=date(2013, 5, 2), photo=details.redraw_photo(jpeg()),
+                date_of_birth=date(2013, 5, 2), photo=jpeg(),
             )
 
     def ogun_papers(self, term, child, subject, test1, test2, assignment, exam):
@@ -357,8 +356,14 @@ class TheMinistryHeadingTests(OgunCardSetUp):
 
         sheet = self.payload()["ogun"]
 
-        self.assertTrue(sheet["crest"].startswith("data:image/png;base64,"))
-        with Image.open(io.BytesIO(base64.b64decode(sheet["crest"].split(",", 1)[1]))) as image:
+        # An address on the school's own host, not base64 in the payload.
+        with connected_to(self.stmarys):
+            stored = look.crest_file()
+            self.assertEqual(sheet["crest"], f"/media/{stored.key}/site.png")
+            from files import service
+
+            small = service.read(stored, "site.png")
+        with Image.open(io.BytesIO(small)) as image:
             self.assertEqual(image.size, (look.SITE_CREST_SIDE, look.SITE_CREST_SIDE))
 
 

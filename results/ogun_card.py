@@ -245,10 +245,13 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         return None
     from . import look, ratings
 
-    details = StudentDetails.objects.filter(student_membership_id=card.student_membership_id).first()
+    from academics.details import photo_of
+
+    details = StudentDetails.objects.filter(student_membership_id=card.student_membership_id).defer("photo").first()
     photo = None
-    if details is not None and details.photo:
-        photo = "data:image/jpeg;base64," + base64.b64encode(bytes(details.photo)).decode()
+    jpeg = photo_of(card.student_membership_id)
+    if jpeg:
+        photo = "data:image/jpeg;base64," + base64.b64encode(jpeg).decode()
 
     lines = list(ReleasedSubjectResult.objects.filter(card=card).values_list("subject_id", "subject_name"))
     subject_of = {name: sid for sid, name in lines}

@@ -358,6 +358,8 @@ export function detailsPanel({ body = {}, note = null } = {}) {
     date_of_birth = null,
     has_photo = false,
     photo_version = null,
+    photo_processing = false,
+    photo_problem = "",
     may_edit = false,
   } = body;
   const typed = (note && note.typed) || {};
@@ -394,13 +396,20 @@ export function detailsPanel({ body = {}, note = null } = {}) {
           "</form>",
           `<form class="child-photo${note && note.form === "photo" ? ` ${esc(note.kind)}` : ""}" data-form="photo" enctype="multipart/form-data">`,
           '<label for="photo">Passport photo</label>',
-          '<input id="photo" name="photo" type="file" accept="image/png,image/jpeg" required>',
-          '<span class="hint">PNG or JPG, up to 5 MB. It is cropped to a passport frame.</span>',
+          '<input id="photo" name="photo" type="file" accept="image/png,image/jpeg,image/webp,image/heic,image/heif" required>',
+          '<span class="hint">JPG, PNG, WebP or iPhone HEIC, up to 15 MB. It is cropped to a passport frame, ' +
+            "and its location and camera details are removed.</span>",
           '<span class="actions">',
           '<button type="submit">Upload photo</button>',
           has_photo ? '<button type="button" data-action="remove-photo">Remove photo</button>' : "",
           "</span>",
           note && note.form === "photo" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+          !(note && note.form === "photo") && photo_processing
+            ? '<p class="note" role="status">The new photo is being prepared. This takes a few seconds.</p>'
+            : "",
+          !(note && note.form === "photo") && !photo_processing && photo_problem
+            ? `<p class="note rejected" role="alert">${esc(photo_problem)}</p>`
+            : "",
           "</form>",
         ].join("")
       : [
