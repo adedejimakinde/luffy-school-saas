@@ -96,7 +96,32 @@ export function afterSignOut(state, answer) {
  * Everybody else keeps the landing. `start_here` is the server's answer
  * (`api._schools_of()`), so this never guesses from a role.
  */
-export function landingRedirect(state) {
+/**
+ * Where a sign-in was sent from, if it may be gone back to: a page of the
+ * website editor's preview (`/website/preview/…`) on one of this person's own
+ * schools, as the sign-in answer lists them. Anything else is ignored, so
+ * `?next=` can never send anybody to a host of somebody else's choosing.
+ * `here` is the host this page is on, for the single-host demo (`path_only`).
+ */
+export function returnTo(next, schools, here = "") {
+  if (!next) return null;
+  let url;
+  try {
+    url = new URL(next);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.username || url.password || !url.pathname.startsWith("/website/preview/")) return null;
+  const ours = (schools || []).some((s) => (s.path_only ? url.host === here : Boolean(s.host) && url.hostname === s.host));
+  return ours ? url.href : null;
+}
+
+export function landingRedirect(state, next = null, here = "") {
+  if (state.step === "landed" && next) {
+    const back = returnTo(next, state.body && state.body.schools, here);
+    if (back) return back;
+  }
   // Platform staff go to the platform's own page, whether or not they also
   // belong to a school: "No school on this account yet" is not true of them.
   if (state.body && state.body.is_platform_staff && (state.step === "landed" || state.step === "nowhere")) {
@@ -140,7 +165,10 @@ function note(state) {
   return state.signOutFailed ? failureNote() : "";
 }
 
-export function mount(root, { fetchImpl = fetch, go = (url) => window.location.assign(url) } = {}) {
+export function mount(
+  root,
+  { fetchImpl = fetch, go = (url) => window.location.assign(url), next = null, here = "" } = {},
+) {
   let state = initialState();
 
   const draw = () => {
@@ -164,8 +192,8 @@ export function mount(root, { fetchImpl = fetch, go = (url) => window.location.a
     }
     state = advance(state, answer);
     draw();
-    const next = landingRedirect(state);
-    if (next) go(next);
+    const target = landingRedirect(state, next, here);
+    if (target) go(target);
   });
 
   root.addEventListener("click", async (event) => {
@@ -188,5 +216,7 @@ export function mount(root, { fetchImpl = fetch, go = (url) => window.location.a
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("staff-signin");
-  if (root) mount(root);
+  if (root) {
+    mount(root, { next: new URLSearchParams(window.location.search).get("next"), here: window.location.host });
+  }
 }

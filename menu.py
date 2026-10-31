@@ -46,6 +46,7 @@ from notices.services import SETTINGS_ROLES as NOTICES_ROLES
 from results.api import POSITION_VIEWING_ROLES
 from results.comments_api import VIEWING_ROLES as REMARK_ROLES
 from results.services import OPENING_ROLES as CHAIN_ROLES
+from schoolsite.access import READING_ROLES as WEBSITE_ROLES
 from timetable.services import READING_ROLES as TIMETABLE_ROLES
 
 
@@ -85,6 +86,9 @@ LINKS = (
     Link("roll", "/roll/", "i-people", "Roll", MEMBERSHIP_GRANTING_ROLES | PLACEMENT_ROLES, "Office"),
     Link("staff", "/staff/", "i-staff", "Staff", MEMBERSHIP_GRANTING_ROLES, "Office"),
     Link("notices-settings", "/notices/settings/", "i-megaphone", "Notices", NOTICES_ROLES, "Office"),
+    # The school's website: the principal's, and the administrator's to read
+    # (and to edit while the principal allows it), as `schoolsite.api` admits.
+    Link("website", "/website/", "i-flag", "Website", WEBSITE_ROLES, "Office"),
 )
 
 BY_KEY = {link.key: link for link in LINKS}

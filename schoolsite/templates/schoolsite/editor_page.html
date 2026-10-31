@@ -1,0 +1,30 @@
+{% load static shell %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Website</title>
+
+{% comment %}
+The website editor (`docs/school-sites.md` PR 4). A frame like the other portal
+pages: no `login_required`, for the oracle reason `gradebook/views.py` gives, and
+the modules ask `/api/website/` who is asking before anything is drawn. The
+setup page's stylesheet for its lists, switches and notes, and the editor's own.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'web/picker.css' %}">
+<link rel="stylesheet" href="{% static 'setup/setup.css' %}">
+<link rel="stylesheet" href="{% static 'site-editor/editor.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'site-editor/app.js' %}"></script>
+
+{% shell_open "website" %}
+    <main id="website-editor" data-portal="{{ portal_host }}">
+      <noscript>
+        <h1>Website</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading your school&rsquo;s website&hellip;</p>
+    </main>
+{% shell_close "website" %}

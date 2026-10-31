@@ -7,6 +7,8 @@
  */
 body { margin: 0; background: var(--bg); color: var(--text); }
 
+.preview-bar { position: sticky; top: 0; z-index: 3; margin: 0; padding: 10px 16px; background: var(--text); color: var(--card); font-size: 0.9375rem; line-height: 1.4; }
+.preview-bar a { color: var(--card); display: inline-flex; align-items: center; min-height: 44px; margin-left: 8px; }
 .skip { position: absolute; left: 8px; top: -64px; z-index: 2; padding: 12px 16px; background: var(--card); color: var(--school); border-radius: var(--radius); }
 .skip:focus { top: 8px; }
 

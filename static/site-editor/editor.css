@@ -1,0 +1,27 @@
+/*
+ * The website editor (`docs/school-sites.md` PR 4), beside `setup/setup.css`,
+ * whose lists, switches and notes it shares. Phone first: every row wraps, every
+ * control is 44px, and nothing is wider than the screen at 320px or at 200% text.
+ */
+#website-editor form { display: grid; gap: 6px; max-width: 32rem; margin: 16px 0 0; }
+#website-editor form label { margin-top: 6px; }
+#website-editor textarea { width: 100%; box-sizing: border-box; }
+#website-editor input, #website-editor select { max-width: 100%; box-sizing: border-box; }
+.site-status { padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); line-height: 1.5; }
+.site-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.row-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
+.page-row, .section-row { align-items: center; }
+.page-row .name, .section-row .name { min-width: 0; overflow-wrap: anywhere; }
+.icon-button { min-width: 44px; min-height: 44px; padding: 0; }
+.sections-list { list-style: none; margin: 0; padding: 0; }
+.row-group { border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px 12px; margin: 8px 0 0; min-width: 0; display: grid; gap: 4px; }
+.row-group legend { font-weight: 700; padding: 0 4px; }
+label.check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 400; }
+label.check input { width: 22px; height: 22px; margin: 0; }
+.soon { margin: 8px 0 0; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius); color: var(--muted); }
+.danger { color: var(--stop); border-color: var(--stop); }
+.site-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.site-log li { overflow-wrap: anywhere; }
+.site-log .when { color: var(--muted); }
+.delegation, .remove-page { max-width: 32rem; margin-top: 16px; }
+input[type="color"] { width: 88px; height: 44px; padding: 2px; }

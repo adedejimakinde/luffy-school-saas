@@ -60,13 +60,14 @@ PORTAL = frozenset(
         "sw.js",
         "teaching",
         "timetable",
+        # The school's website editor and its preview (docs/school-sites.md, PR 4).
+        "website",
     }
 )
 
 #: Each held name, and what it is held for.
 RESERVED = {
     "sit": "the CBT exam door (docs/cbt.md, CBT PR 4)",
-    "website": "the site editor and its preview (docs/school-sites.md, PR 4)",
     "applicants": "the admissions list (docs/school-sites.md, PR 9b)",
 }
 

@@ -33,7 +33,9 @@ pages are site-wide, so they are saved against the settings row's version.
 from django.db import transaction
 from django.utils import timezone
 
-from . import access, sections, themes
+from results import look
+
+from . import access, notify, sections, themes
 from .errors import (
     NotAllowedToEdit,
     NotAllowedToPublish,
@@ -432,6 +434,35 @@ def set_theme_as(actor, school, key, options=None, *, version) -> SiteSettings:
         return settings
 
 
+def set_colour_as(actor, school, colour, *, version) -> SiteSettings:
+    """Set the school's colour on its website, or clear it ("") to use the report card's. The principal's.
+
+    The colour carries white text on the site's header and buttons, so it is
+    held to the report card's rule: at least `look.MIN_CONTRAST` against white.
+    """
+    _require_principal(actor, school, "change the website's colour")
+    if colour:
+        colour = themes.clean_colour(colour)
+        if themes.contrast(colour, "#FFFFFF") < look.MIN_CONTRAST:
+            raise themes.ThemeRefused(
+                f"{colour} is too light for white writing on it to read. Choose a darker colour."
+            )
+    with transaction.atomic():
+        settings = _locked_settings()
+        _check(version, settings.version)
+        current = dict(settings.theme_options.get(settings.theme, {}))
+        colours = dict(current.get("colours", {}))
+        if colour:
+            colours["primary"] = colour
+        else:
+            colours.pop("primary", None)
+        current["colours"] = colours
+        settings.theme_options = {**settings.theme_options, settings.theme: themes.clean_options(settings.theme, current)}
+        settings.save(update_fields=["theme_options", "updated_at"])
+        _touched(settings, settings_changed=True)
+        return settings
+
+
 def set_delegation_as(actor, school, on) -> SiteDelegationEvent:
     """Let the administrator edit drafts, or stop. The principal's. Never lets them publish."""
     _require_principal(actor, school, "change who edits the website")
@@ -462,7 +493,7 @@ def mark_ready_as(actor, school, note="") -> SitePublishEvent:
         settings.ready_by_name = _name_of(actor)
         settings.ready_at = timezone.now()
         settings.save(update_fields=["ready_version", "ready_by_id", "ready_by_name", "ready_at", "updated_at"])
-        return SitePublishEvent.objects.create(
+        event = SitePublishEvent.objects.create(
             kind=SitePublishEvent.Kind.MARKED_READY,
             draft_version=settings.draft_version,
             note=note,
@@ -470,14 +501,28 @@ def mark_ready_as(actor, school, note="") -> SitePublishEvent:
             by_name=_name_of(actor),
             by_role=access.role_of(actor, school),
         )
+        # The principal is told (§2.4), once the mark has committed: a mark
+        # that rolls back sends nothing. A principal marking their own draft
+        # needs no email.
+        if not access.can_publish(actor, school):
+            school_id, by_name = school.pk, _name_of(actor)
+            transaction.on_commit(lambda: notify.ready(school_id, by_name, note))
+        return event
 
 
-def publish_as(actor, school, note="") -> SiteRevision:
-    """Publish the draft as it stands: a new revision, and a line in the log. The principal's."""
+def publish_as(actor, school, note="", *, draft_version=None) -> SiteRevision:
+    """Publish the draft as it stands: a new revision, and a line in the log. The principal's.
+
+    `draft_version`, when given, is the draft the principal looked at before
+    confirming (the editor's confirm step): a change made since is refused,
+    so what is published is what they saw.
+    """
     _require_principal(actor, school, "publish the website")
     note = sections.clean_note(note)
     with transaction.atomic():
         settings = _locked_settings()
+        if draft_version is not None:
+            _check(draft_version, settings.draft_version)
         latest = SiteRevision.objects.order_by("-number").first()
         current = snapshot()
         if _nothing_new(settings, latest.snapshot if latest else None, current):
@@ -588,6 +633,11 @@ def _nothing_new(settings, live, current) -> bool:
     if live is None:
         return settings.draft_version == 0
     return live == current
+
+
+def has_changes(settings, live, current) -> bool:
+    """Does the draft hold anything to publish? What the editor's "Changes not yet published" says."""
+    return not _nothing_new(settings, live, current)
 
 
 def _latest_snapshot():
@@ -708,6 +758,7 @@ __all__ = [
     "create_page_as",
     "delete_page_as",
     "draft_as",
+    "has_changes",
     "live_revision",
     "mark_ready_as",
     "move_sections_as",
@@ -721,6 +772,7 @@ __all__ = [
     "save_footer_as",
     "save_page_as",
     "save_section_as",
+    "set_colour_as",
     "set_delegation_as",
     "set_theme_as",
     "snapshot",
