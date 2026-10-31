@@ -291,6 +291,10 @@ jobs:
       PLATFORM_DOMAIN: classnode.test
       INVITATION_ACCEPT_URL: "http://app.classnode.test:8000/invitations/{token}/"
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+      # No Celery worker and no Redis serve this job, so an upload (the blog
+      # test's picture and cover) is drawn in the request, as the suite does
+      # (`files.service`); queued, it would stay "being processed" for ever.
+      FILES_PROCESS_INLINE: "1"
       SCREENS_OUT: screens
     steps:
       - uses: actions/checkout@v5

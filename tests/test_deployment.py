@@ -163,6 +163,20 @@ class UploadedFilesTests(SimpleTestCase):
         self.assertIn("chown 10001:10001 /srv/media", deploy)
         self.assertIn("up -d web worker media caddy", deploy)
 
+    def test_the_backup_script_is_in_the_image_and_nothing_else_of_deploy(self):
+        """`deploy` stays out of the image; the `media-backup` service runs
+        /app/deploy/media-backup.sh, so that one file, and only it, is let back."""
+        lines = [
+            line.strip()
+            for line in (BASE_DIR / ".dockerignore").read_text().splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        self.assertIn("deploy", lines)
+        self.assertEqual([line for line in lines if line.startswith("!")], ["!deploy/media-backup.sh"])
+        self.assertGreater(lines.index("!deploy/media-backup.sh"), lines.index("deploy"))
+        compose = (BASE_DIR / "deploy/compose.yml").read_text()
+        self.assertIn('entrypoint: ["bash", "/app/deploy/media-backup.sh"]', compose)
+
     def test_the_media_worker_serves_only_the_media_queue_one_job_at_a_time(self):
         compose = (BASE_DIR / "deploy/compose.yml").read_text()
         self.assertIn('"-Q", "media"', compose)
