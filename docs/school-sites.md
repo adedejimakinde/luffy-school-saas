@@ -221,7 +221,7 @@ written at publish time, not the current state of a table.**
 - **Publish.** One button, the principal's alone (§2.4). It writes an immutable `SiteRevision` row: a JSON snapshot of the whole draft plus the theme, with `published_by`, `published_at`, and a short optional note ("Admissions open for 2027/28"). The public site reads only the latest revision. That is one indexed row, which is also the cache key (§4.4).
 - **Log.** Revisions are never deleted, so the publish log is the revision table: who, when, the note, and a diff summary (sections added, removed or changed). The settings page shows the last 20. **Roll back** republishes an older snapshot as a new revision, logged as a rollback by whoever did it. The draft is left as it is: the fix is made there and published in its turn. A draft nobody has touched yet, the six empty pages every school starts with, is nothing to publish.
 - **News posts and gallery albums** publish one item at a time (`NewsPost`, `Album`, each with draft/published state and `published_by`/`published_at`), because a school posts news weekly and should not have to republish the whole site to do it. Every publish or unpublish of an item writes a `SitePublishEvent` row (who, when, what, which item), so the single log the principal reads covers both kinds.
-- Images referenced by any revision are `PROTECT`ed: an old revision can always be rolled back to with its pictures.
+- ~~Images referenced by any revision are `PROTECT`ed.~~ *Changed 1 November 2026 (PR 5):* a picture the live site, the draft or a published album uses cannot be deleted, but one only an older revision names can, so the 1 GB quota is not held by every picture ever published. Rolling back to such a revision draws that section without the picture. The principal can also **take a picture down** from everywhere at once (§9.1).
 
 ### 2.4 Who may do what
 
@@ -633,7 +633,7 @@ Classnode sends mail; it does not host inboxes. The page carries a short guide:
 | What is kept | a master re-encoded from the decoded pixels: sRGB, EXIF orientation applied, **all metadata stripped (GPS included)**, **2400 px** on the long side for a website photo and **1200 px** for a portrait (decided 31 October 2026), JPEG quality 90. The original upload is discarded. Crests, logos, signatures and stamps are **trimmed lossless PNG** instead. |
 | Renditions | §4.2: 3 widths × AVIF and WebP, JPEG at two, made in the media worker after commit, on a queue of its own (`media`, one job at a time, low priority) so photo work never delays result PDFs. AVIF is quality 60 at speed 6, WebP 82, JPEG 85; the design round may tune AVIF with real photos of Nigerian pupils so dark skin tones keep their shadow detail. |
 | Required with each photo | alt text (publish is refused while any published image lacks it, as `blog.markdown.images_without_alt` already does); a focal point (tap on the image), which every crop uses so faces are not cut off |
-| Child-image consent | each upload asks the uploader to confirm: "Parents have agreed to photos of their children being published." The answer is stored on the image. The wording is on the lawyer list. |
+| Child-image consent | each upload asks the uploader to confirm: "Parents have agreed to photos of their children being published." The answer is stored on the image with the wording's version (`SitePicture.consent_version`). The wording is on the lawyer list. |
 | Quota | **1 GB** of masters plus renditions per school by default (decided 31 October 2026), set per school by the platform operator on the platform page, where each school's total is shown. Uploads are refused past it, and past **90%** of the disk for everyone. |
 | Documents | PDF only, ≤ 20 MB, ≤ 200 pages: rewritten losslessly (pikepdf), with scripts, actions, embedded files and the author removed, EXIF stripped from JPEGs inside it, and scanned pages above 300 dpi brought down to 200 dpi; black-and-white scans are left as they are. Sent as a download. |
 
@@ -645,13 +645,21 @@ and the weekly restore test grow with it. **Decided 2026-10-24: the VPS disk for
 - **A nightly backup** to B2 runs from `deploy/cron/classnode` beside the database backup: restic, encrypted, into the same bucket and prefix under `media/` (`deploy/media-backup.sh`). It sends only new files. A failure is **emailed to hello@ the platform's domain** and written to the cron log (Sentry is not set up yet; its heartbeat is optional). The weekly check restores a sample of files and compares them with the disk; `media-backup test` backs up and restores one file when it is set up.
 - **The disk**: checked hourly (`manage.py check_storage`). Past **70%** an alert is emailed (once a day); past 90% uploads are refused and it is emailed hourly.
 - **When to move to B2 object storage**: when the disk passes 70% full, or when serving media becomes a noticeable share of the server's bandwidth or CPU at the post-CBT load test. Because Django already decides and Caddy only sends, the move changes only where Caddy fetches from. The URLs, the tenant check and the tests stay the same.
-- Postgres holds only the rows (`files.StoredFile`: key, kind, slot, public or private, state, variants and their sizes, SHA-256 of the master, dominant colour, uploader). Each row also names its schema, and every lookup filters on it as well as on `search_path`. The website's own fields (focal point, alt text, consent) come with the gallery (PR 5).
+- Postgres holds only the rows (`files.StoredFile`: key, kind, slot, public or private, state, variants and their sizes, SHA-256 of the master, dominant colour, uploader). Each row also names its schema, and every lookup filters on it as well as on `search_path`. The website's own fields (focal point, alt text, caption, consent) are `schoolsite.SitePicture`, one row per website picture, naming its file by key (PR 5).
 - Served by **Django deciding and Caddy sending**:
   1. `/media/<key>-<w>.<fmt>` reaches Django;
   2. Django looks the key up **in the current school's schema**, checks that the file is public (or, at `/files/<key>/<variant>`, a portal path, that the requester is the school's office), and answers with an internal redirect header (`X-Accel-Redirect`);
   3. Caddy's `reverse_proxy` `handle_response` serves the file from a read-only mount with the immutable cache header.
 
   So school B's image cannot be served on school A's host, even with its key, a private file (a child's photo, a signature) is never on the public path, and gunicorn never streams the bytes. `/media/` reads no session and sets no cookie, like every public page.
+
+#### 9.1.1 Website pictures: public only once published, and taking one down (PR 5)
+
+- **Public only once published.** A website picture's file is private on the upload service until the live site (the latest revision) or a published album shows it, and private again once nothing published does (`schoolsite.pictures.sync_public`, run at every publish, rollback, album publish and take-down). Before that it is a 404 on `/media/`, and is sent only to the school's editors on `/website/pictures/<key>/<variant>`, which the preview and the editor draw from.
+- **Who may.** The principal, or a delegated administrator, uploads, describes, crops, arranges and deletes draft pictures and adds photos to an album. Only the principal publishes or takes off an album, takes a photo out of a published album (it stays live until the album is published again), or takes a picture down.
+- **Deleting** is for a picture neither the live site, the draft nor a published album uses. Its row, its file and every size of it go from the server's disk.
+- **Take down now** (the principal's, with a reason, such as "consent withdrawn"): the picture is removed from the draft, from every album's draft and published copy, and from the live site, which is published again from its own revision without it (never from the draft, whose other changes the principal may not have looked at). Its file and every size are deleted from the server's disk once the change commits. The school's whole page cache moves to new keys (`SiteSettings.gallery_version` is in every page's key), so no cached page shows it. Going back to an older version does not bring it back. The publish log records who, when, the reason and the version published.
+- **What a take-down cannot reach**, for the privacy policy: copies stay in the **encrypted nightly backups** until they age out, **up to 12 months** (the media backup keeps a monthly snapshot for 12 months, `deploy/media-backup.sh`; the database backups, which hold the picture's description and caption, follow the same 12 months, `deploy/postgres/retention.py`). A browser or a search engine that already fetched the picture may keep its own copy, because `/media/` files are cached for a year.
 
 ### 9.2 Video
 
@@ -672,7 +680,10 @@ and the weekly restore test grow with it. **Decided 2026-10-24: the VPS disk for
 `contact_map` shows the address and an **Open in Maps** link built from a
 latitude/longitude. An embedded Google map (an iframe and roughly half a megabyte
 of script) loads **only when tapped**, behind a static placeholder. (Decided
-2026-10-24.)
+2026-10-24.) *Built in PR 5:* the placeholder is a link to the same page with
+`?map=1`, the only response whose CSP allows `frame-src https://www.google.com`;
+it is never indexed and is cached apart from the plain page, which keeps
+`frame-src 'none'`. No script is needed.
 
 ---
 
@@ -702,7 +713,7 @@ of script) loads **only when tapped**, behind a static placeholder. (Decided
   form-action 'self'; base-uri 'none'; frame-ancestors 'none'
   ```
 
-  `frame-src` is relaxed to the one maps or video host only on a page where that tap-to-load embed exists.
+  `frame-src` is relaxed to the one maps or video host only on a page where that tap-to-load embed exists. *As built (PR 3, PR 5):* the page's one inline style is allowed by its hash rather than a nonce, so the cache can hold the page; `script-src` is `'none'` except on a page with a gallery or a hero video, which runs one module from `static/` (`'self'`); `frame-src` allows Google Maps only on a page asked for with `?map=1`.
 
 ### 10.3 Abuse and takedown
 
@@ -720,7 +731,7 @@ staff member. So:
 
 1. The school-website terms: the school is responsible for its content; Classnode hosts it and may suspend it; the takedown process and its timings.
 2. Admissions consent wording (§5.3), the lawful basis for children's data under the NDPA 2023 and GAID 2025, the retention period for applicants who are not admitted, and who is controller and who is processor.
-3. Consent for published photos of children (the upload confirmation in §9.1), and what happens when a parent withdraws it.
+3. Consent for published photos of children (the upload confirmation in §9.1), and what happens when a parent withdraws it. *Built in PR 5:* the principal's **Take down now** (§9.1.1). The privacy policy must say that copies stay in the encrypted backups for up to 12 months after a take-down.
 4. Copyright in photos, video and fonts (the Copyright Act 2022), and notice-and-takedown.
 5. Cross-border transfer: the VPS location, Brevo (EU), B2 (US or EU, whichever is chosen).
 6. Sending mail as the school's domain: the school's authorisation, and liability for content.
@@ -910,6 +921,16 @@ Access tests:
 - GPS EXIF is absent from every rendition;
 - the quota is per school.
 
+**Built** (1 November 2026), with the owner's four calls and one addition that day (§13): the hero video's upload and loading rules in this PR rather than PR 8; deleting any picture nothing live or in the draft uses; only the principal taking a photo out of a published album; the consent box on every upload; and **Take down now**.
+
+- **Models** (`schoolsite/migrations/0004`): `SitePicture` (the file's key, where it may go, alt text, caption, focal point, consent and its wording's version, a video flag, its album and place in it) and `Album` (title, words, address under `/gallery/`, fixed once published, and `published`, the album as last published, written at publish time like a revision). `SitePublishEvent` gains album published, album taken off and picture taken down, each naming its subject as it read. `SiteSettings.gallery_version` is in every public page's cache key. The upload service gains a website portrait kind (1200 px master; 320 and 640 px).
+- **Services** (`schoolsite.pictures`): `upload_as` (one to five files through `files.service`, the consent tick required, at most five processing per editor), `save_picture_as`, `delete_picture_as`, `take_down_as`, and the album services. A section's pictures and album are checked to be this school's and the right sort (`check_media`); publishing waits while a picture it shows is processing or has no description (`check_publishable`). A revision carries what it shows of each picture (`snapshot["pictures"]`), so the live site draws with no query for it and a change to a picture's description is a change to publish.
+- **Public pages**: a `<picture>` with AVIF and WebP at each width and the JPEG fallbacks, `sizes` from the theme manifest (`Theme.sizes`), width and height set, the focal point and dominant colour as a class in the page's one style. The hero is preloaded and fetched first; everything else is `loading="lazy"`. The hero video follows §9.2: no source until after `load`, at 768 px or wider (unless the theme lets phones have it), never with data saver or reduced motion, with a visible pause button; a phone is sent only the poster. Gallery sections show the first photos of a published album with a way to the album's own page, `/gallery/<slug>/`; the Gallery page lists the albums. A tap opens a photo over the page (`static/schoolsite/site-app.js`, about 6 KB, a `<dialog>` with next, previous, swipe and Escape); with no script the photo's link opens the large JPEG. The map is §9.3's.
+- **The editor**: the hero's and the portrait's fields choose from the school's pictures, a gallery section chooses an album, and **Photos and albums** at `/website/photos/` is a frame of its own (the editor was already at 145 KB of its 150 KB budget): uploading with the consent box, describing, a focal point set by a tap or one of nine places, an album's photos in order with their descriptions and captions, publishing and taking off albums, deleting and taking down. "Processing…" while the media worker draws a picture; the page asks again every few seconds until it is ready.
+- **Budgets**: the rendition test holds the hero to 120 KB at 828 px and 250 KB at 1920, a gallery photo to 25 KB at 480 px (§4.1 says 400; there is no 400) and 200 KB at 1600. The demo (`schoolsite.demo.publish_demo_pictures`) gives Harbour a hero photo, a portrait and a six-photo album, so the screens job's Slow 4G check measures a page whose largest paint is a photograph, the Gallery page and the album's page (600 KB before scrolling for those two).
+
+Access tests (`schoolsite/tests/test_pictures.py`, `tests/js/site_editor_pictures.test.js`, two schools): everything above, plus a delegated administrator refused publishing an album, taking a photo out of a published one and taking down; a take-down that removes the picture from the live site, every album and the draft, publishes nothing else of the draft, deletes the file, moves the cache key, is not undone by a rollback, and leaves the other school untouched. Breaking the cache key's school scoping, and making `sync_public` publish every picture, each turned these tests red before they were put back.
+
 ### PR 6: News
 
 `NewsPost` with publish-per-item, the `news` section, `/news/` and `/news/<slug>/`.
@@ -927,7 +948,7 @@ Access tests: none new. The contract runs the PR 3 isolation and escaping tests 
 
 ### PR 8: Hero video (after the design round)
 
-The video's processing is built (the upload service PR: PyAV, the media queue, the 10-second and 3 MB rules). PR 8 adds the loading rules in §9.2, the editor's video field and the external video facade.
+The video's processing is built (the upload service PR: PyAV, the media queue, the 10-second and 3 MB rules), and so are the loading rules in §9.2 and the editor's video upload (moved into PR 5, decided 1 November 2026). PR 8 adds the external video facade: a YouTube or Vimeo link drawn as a poster, its player loaded only on tap.
 
 Access tests:
 - the same matrix as PR 5 for video;
@@ -1075,6 +1096,16 @@ Each is written into the section it changes.
 | Files backed up nightly by restic to the same B2 bucket under `classnode/media/`, with its own password; setting it up includes backing up and restoring one file. | §9.1 |
 | Sentry is not set up: the disk alert (70%) and a failed media backup are emailed to hello@ the platform's domain and printed to the cron log. | §9.1 |
 | The three existing uploads (crest, child's photo, blog image) move to the service now; the screens for signatures, stamps, staff photos, website pictures and documents come with their own features. Released-card PDFs move in a follow-up. | §1 |
+
+### Decided 1 November 2026 (PR 5)
+
+| Decision | Where |
+|---|---|
+| The hero video's upload and its loading rules (§9.2) come in PR 5; the YouTube and Vimeo player stays in PR 8. | §9.2, PRs 5 and 8 |
+| The principal, or a delegated administrator, deletes any picture the live site, the draft and the published albums do not use; going back to an older version that showed it draws that section without it. | §2.3, §9.1.1 |
+| Only the principal takes a photo out of a published album; a delegated administrator adds photos to it as a draft. | §9.1.1 |
+| The consent box is on every website upload, its wording on the lawyer list. | §9.1 |
+| **Take down now**, the principal's: out of the draft, every album and the live site at once, published straight away, logged with who, when and why, the file deleted and the cache moved on. Copies stay in the encrypted backups for up to 12 months, which the privacy policy must say. | §9.1.1, §10.4 |
 
 **Still to settle before the PR that needs it:**
 - the Brevo plan check (before PR 11a);

@@ -375,6 +375,29 @@ def find(key: str):
     return _here().filter(key=key).first()
 
 
+def find_many(keys):
+    """The rows for these keys in this schema, by key. Keys not here are simply absent."""
+    keys = [k for k in keys if storage.KEY.match(k or "")]
+    return {f.key: f for f in _here().filter(key__in=keys)} if keys else {}
+
+
+def pending_by(user_id) -> int:
+    """How many uploads this person has waiting for the media worker in this schema."""
+    return _here().filter(state=State.PENDING, uploaded_by_id=user_id).count()
+
+
+def set_public(keys, public: bool) -> int:
+    """Mark these files of this schema public (sent on `/media/` to anybody) or not.
+
+    For a feature that decides when its files go public, like the website,
+    whose pictures are public only while something published shows them.
+    """
+    keys = [k for k in keys if storage.KEY.match(k or "")]
+    if not keys:
+        return 0
+    return _here().filter(key__in=keys).exclude(public=public).update(public=public)
+
+
 def read(stored, variant: str) -> bytes:
     if stored is None or stored.state not in (State.READY, State.RETIRED) or not stored.has(variant):
         raise FileNotFoundError(variant)
@@ -435,12 +458,15 @@ __all__ = [
     "current",
     "discard",
     "find",
+    "find_many",
     "latest",
     "nudge",
+    "pending_by",
     "process",
     "quota_for",
     "read",
     "school_here",
+    "set_public",
     "status_of",
     "sweep",
     "usage",

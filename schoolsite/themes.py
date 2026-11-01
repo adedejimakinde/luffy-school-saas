@@ -39,6 +39,11 @@ class Theme:
     #: contract weighs and checks the Nigerian alphabets against (§3.3, §11.2).
     stylesheet: str
     fonts: tuple
+    #: The `sizes` attribute of each place a picture is drawn (§4.2): how wide
+    #: the theme draws it, so a phone fetches the size it needs and no larger.
+    sizes: dict = None
+    #: Whether a phone may be sent the hero's video (§9.2). Off: phones get the poster.
+    video_on_phones: bool = False
 
 
 #: The starter theme is the plain design system (PR 3). The design round adds
@@ -55,6 +60,14 @@ THEMES = {
             "web/fonts/noto-sans-hausa-400.woff2",
             "web/fonts/noto-sans-hausa-700.woff2",
         ),
+        # `main` is at most 40rem (640px) wide, less 16px a side on a phone.
+        sizes={
+            "hero": "(min-width: 40rem) 40rem, 100vw",
+            "portrait": "8rem",
+            "grid": "(min-width: 40rem) 13rem, calc(50vw - 22px)",
+            "strip": "(min-width: 40rem) 12rem, 40vw",
+            "cover": "(min-width: 40rem) 19rem, calc(100vw - 32px)",
+        },
     ),
 }
 

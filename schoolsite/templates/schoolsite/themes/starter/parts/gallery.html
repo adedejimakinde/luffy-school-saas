@@ -1,1 +1,8 @@
-{% comment %}Photos arrive in PR 5. Until then the section draws nothing.{% endcomment %}
+{% comment %}A gallery section: the first photos of one published album, with a way to the whole album, or photos chosen one by one. Nothing at all while there is nothing published to show.{% endcomment %}{% if s.photo_list %}
+<section class="gallery gallery-{{ variant }}">
+  {% if s.album_title %}<h2>{{ s.album_title }}</h2>{% endif %}
+  <ul class="photos" data-lightbox>{% for photo in s.photo_list %}
+    <li>{% include "schoolsite/themes/starter/parts/photo.html" with p=photo %}</li>{% endfor %}
+  </ul>
+  {% if s.album_link %}<p class="actions"><a class="button" href="{{ s.album_link }}">See all {{ s.album_total }} photo{{ s.album_total|pluralize }}</a></p>{% endif %}
+</section>{% endif %}

@@ -154,7 +154,7 @@ class EveryKindInEveryVariantDrawsTests(ContractSetUp):
                 self.assertIn("Federal Government Girls&#x27; College, Abuloma, Port Harcourt, Rivers State", html)
                 self.assertIn('<p class="motto-words" lang="yo">Ìmọ̀ ni agbára, ìwà ni ẹwà</p>', html)
 
-    def test_news_and_gallery_draw_nothing_until_their_prs(self):
+    def test_news_and_a_gallery_with_nothing_published_draw_nothing(self):
         pages = {PageKey.HOME: [section(SectionKind.NEWS, "default"), section(SectionKind.GALLERY, "grid")]}
         for theme in THEMES:
             with self.subTest(theme=theme):
@@ -171,7 +171,12 @@ class TheTemplatesAreSafeTests(ContractSetUp):
                     self.assertNotIn("|safe", text)
                     self.assertNotIn("mark_safe", text)
                     self.assertNotRegex(text, r"autoescape\s+off")
-                    self.assertNotRegex(text, r"<script(?![^>]*application/ld\+json)")
+                    # Structured data, and the site's own module from `static/` (the
+                    # gallery and the hero video, §4.3): no other script, none inline.
+                    self.assertNotRegex(
+                        text,
+                        r"<script(?![^>]*application/ld\+json)(?! type=\"module\" src=\"\{% static 'schoolsite/site-app\.js' %\}\"></script>)",
+                    )
                     self.assertNotRegex(text, r'\sstyle="')
                     self.assertNotRegex(text, r'\son[a-z]+="')
                     self.assertNotRegex(text, r'(?:src|<link[^>]*href)="(?:https?:)?//')

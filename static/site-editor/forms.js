@@ -3,9 +3,11 @@
  * school's rules check (`schoolsite/sections.py`). Pure, so every kind is testable with no browser.
  *
  * The server is the judge of every value: lengths here are only `maxlength`, to stop a phone
- * keyboard early, and a refusal comes back as the school's own sentence. Pictures and videos
- * arrive in a later update: their fields show a "coming soon" line, and whatever the data
- * already holds for them is kept as it is.
+ * keyboard early, and a refusal comes back as the school's own sentence.
+ *
+ * Pictures (PR 5): a hero's photo or video and the principal's portrait are chosen from the
+ * school's pictures, uploaded at Photos and albums (`/website/photos/`); a gallery shows one
+ * album. A picture is named by its id, which the server checks is this school's and the right sort.
  */
 
 import { esc } from "../web/html.js";
@@ -20,7 +22,7 @@ export const FORMS = {
     { name: "heading", label: "Heading", type: "text", max: 120, required: true },
     { name: "subheading", label: "The line under the heading", type: "text", max: 240 },
     { name: "buttons", label: "Buttons", type: "buttons", count: 2 },
-    { type: "soon", label: "Picture or video", text: "Pictures and video come in a later update." },
+    { name: "media", label: "Picture or video", type: "picture", use: "hero" },
   ],
   crest_motto: [
     { name: "motto", label: "Motto", type: "text", max: 120 },
@@ -29,7 +31,7 @@ export const FORMS = {
     { name: "founded", label: "Year founded", type: "number" },
   ],
   principal_message: [
-    { type: "soon", label: "Portrait", text: "Pictures come in a later update." },
+    { name: "portrait", label: "Portrait", type: "picture", use: "portrait" },
     { name: "name", label: "Name", type: "text", max: 120 },
     { name: "title", label: "Title", type: "text", max: 80, hint: "For example Rev. Sr. or Dr (Mrs)" },
     { name: "message", label: "Message", type: "textarea", max: 4000, required: true },
@@ -57,11 +59,14 @@ export const FORMS = {
     { name: "body", label: "Text", type: "textarea", max: 6000, required: true },
   ],
   news: [{ type: "soon", label: "News", text: "News arrives in a later update." }],
-  gallery: [{ type: "soon", label: "Photo albums", text: "Photo albums arrive in a later update." }],
+  gallery: [
+    { name: "album", label: "Album", type: "album" },
+    { name: "count", label: "How many photos to show", type: "number", hint: "From 1 to 12. The rest are on the album's own page." },
+  ],
 };
 
-/** Fields of the data a form does not show yet, kept as they are when it is saved. */
-const KEPT = { hero: ["image", "focal", "video"], principal_message: ["portrait"] };
+/** Fields of the data a form does not show, kept as they are when it is saved. */
+const KEPT = { hero: ["focal"], gallery: ["photos"] };
 
 /** Data a new section of each kind starts with. */
 export const BLANK = { admissions_cta: { open: true } };
@@ -105,8 +110,40 @@ function linkChoice(prefix, name, label, value, pages) {
   ].join("");
 }
 
-function field(prefix, f, data, pages) {
+/** A picture field's value: `image:12` or `video:13` for a hero, `12` for a portrait. */
+export const pictureValue = (use, p) => (!p ? "" : use === "hero" ? `${p.video ? "video" : "image"}:${p.id}` : String(p.id));
+
+const PHOTOS = "/website/photos/";
+
+function pictureField(prefix, f, data, ctx) {
+  const pictures = (ctx.pictures || []).filter((p) => p.use === f.use);
+  const chosen = f.use === "hero" ? (data.video ? `video:${data.video}` : data.image ? `image:${data.image}` : "") : String(data[f.name] || "");
+  const picked = pictures.find((p) => pictureValue(f.use, p) === chosen);
+  const state = (p) => (p.state === "processing" ? " \u2013 Processing\u2026" : p.state === "ready" ? "" : " \u2013 Could not be used");
+  const options = [["", "None"], ...pictures.map((p) => [pictureValue(f.use, p), `${p.alt || "No description yet"}${p.video ? " (video)" : ""}${state(p)}`])];
+  // A picture the list does not hold stays chosen rather than being dropped on Save.
+  if (chosen && !picked) options.push([chosen, "The current picture"]);
+  const thumb = picked && picked.thumb ? `<img class="thumb" src="${esc(picked.thumb)}" alt="${esc(picked.alt)}" width="96" height="96">` : "";
+  const upload = f.use === "hero" ? `${PHOTOS}#upload-hero">Upload a photo</a> <a class="btn" href="${PHOTOS}#upload-hero-video">Upload a video` : `${PHOTOS}#upload-portrait">Upload a portrait`;
+  return [
+    `<fieldset class="row-group picture-field"><legend>${esc(f.label)}</legend>${thumb}`,
+    select(prefix, f.name, "Choose one", options, chosen),
+    `<p><a class="btn" href="${upload}</a>${picked ? ` <a class="btn" href="${PHOTOS}#picture-${esc(picked.id)}">Edit this picture</a>` : ""}</p>`,
+    "</fieldset>",
+  ].join("");
+}
+
+function albumField(prefix, f, data, ctx) {
+  const options = [["", "Choose an album"], ...(ctx.albums || []).map((a) => [String(a.id), `${a.title}${a.live ? "" : " (not published)"}`])];
+  return `${select(prefix, f.name, f.label, options, data.album ? String(data.album) : "")}<p class="hint">It shows only what is published in the album. <a href="${PHOTOS}">Photos and albums</a></p>`;
+}
+
+function field(prefix, f, data, pages, ctx = {}) {
   switch (f.type) {
+    case "picture":
+      return pictureField(prefix, f, data, ctx);
+    case "album":
+      return albumField(prefix, f, data, ctx);
     case "soon":
       return `<p class="soon"><strong>${esc(f.label)}.</strong> ${esc(f.text)}</p>`;
     case "select":
@@ -153,9 +190,12 @@ function field(prefix, f, data, pages) {
   }
 }
 
-/** The fields of one kind's form, filled from `data`. `pages` are the site's pages a link may name. */
-export function fields(kind, data = {}, { pages = [], prefix = "f" } = {}) {
-  return (FORMS[kind] || []).map((f) => field(prefix, f, data || {}, pages)).join("");
+/**
+ * The fields of one kind's form, filled from `data`. `pages` are the site's pages a link may name;
+ * `pictures` and `albums` what a picture or album field offers.
+ */
+export function fields(kind, data = {}, { pages = [], prefix = "f", pictures = [], albums = [] } = {}) {
+  return (FORMS[kind] || []).map((f) => field(prefix, f, data || {}, pages, { pictures, albums })).join("");
 }
 
 const linkOf = (values, name) => (values[name] === "other" ? String(values[`${name}_other`] || "").trim() : values[name] || "");
@@ -185,6 +225,24 @@ export function collect(kind, values, existing = {}) {
         };
         if (item.figure || item.label || item.source) data.items.push(item);
       }
+    } else if (f.type === "picture") {
+      if (!(f.name in values)) {
+        // A form that does not show the field keeps what the data holds.
+        for (const name of f.use === "hero" ? ["image", "video"] : [f.name]) {
+          if (existing && existing[name] !== undefined && existing[name] !== null) data[name] = existing[name];
+        }
+        continue;
+      }
+      const raw = String(values[f.name] || "");
+      if (f.use === "hero") {
+        const [what, id] = raw.split(":");
+        data.image = what === "image" && id ? Number(id) : null;
+        data.video = what === "video" && id ? Number(id) : null;
+      } else {
+        data[f.name] = raw ? Number(raw) : null;
+      }
+    } else if (f.type === "album") {
+      if (values[f.name]) data.album = Number(values[f.name]);
     } else if (f.type === "checkbox") {
       data[f.name] = Boolean(values[f.name]);
     } else if (f.type === "number") {
@@ -199,12 +257,22 @@ export function collect(kind, values, existing = {}) {
   for (const name of KEPT[kind] || []) {
     if (existing && existing[name] !== undefined && existing[name] !== null) data[name] = existing[name];
   }
+  // A gallery shows an album or photos chosen one by one, never both: an album chosen wins.
+  if (kind === "gallery" && data.album) {
+    delete data.photos;
+  } else if (kind === "gallery") {
+    delete data.count;
+  }
   return data;
 }
 
 /** One line saying what a section holds, for the list of a page's sections. */
-export function summary(kind, data = {}) {
+export function summary(kind, data = {}, { albums = [] } = {}) {
   switch (kind) {
+    case "gallery": {
+      const album = albums.find((a) => a.id === data.album);
+      return album ? `${album.title}${album.live ? "" : " (not published)"}` : data.photos ? `${data.photos.length} photos` : "No album chosen";
+    }
     case "facts":
       return `${(data.items || []).length} facts`;
     case "principal_message":
@@ -214,7 +282,6 @@ export function summary(kind, data = {}) {
     case "crest_motto":
       return data.motto || "The crest";
     case "news":
-    case "gallery":
       return "Coming soon";
     default:
       return data.heading || (data.body ? data.body.split("\n")[0] : "");

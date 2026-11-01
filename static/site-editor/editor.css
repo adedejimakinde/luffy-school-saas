@@ -25,3 +25,4 @@ label.check input { width: 22px; height: 22px; margin: 0; }
 .site-log .when { color: var(--muted); }
 .delegation, .remove-page { max-width: 32rem; margin-top: 16px; }
 input[type="color"] { width: 88px; height: 44px; padding: 2px; }
+.thumb { display: block; width: 96px; height: 72px; object-fit: cover; border-radius: var(--radius); background: var(--border); }

@@ -77,8 +77,9 @@ SCHOOL_PAGES = (
     "/subject-teachers/",
     "/exam-slips/",
     "/help/",
-    # The website editor (docs/school-sites.md PR 4).
+    # The website editor (docs/school-sites.md PR 4), and its photos and albums (PR 5).
     "/website/",
+    "/website/photos/",
     "/",
 )
 

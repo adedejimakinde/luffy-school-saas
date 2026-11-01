@@ -6,8 +6,10 @@
 The starter theme: the plain design system, rebuilt on sections, until the
 designed theme replaces it (`docs/school-sites.md` §3.4). Drawn with no request
 (`schoolsite.render`), so nothing here can know who is looking. The one inline
-style is the school's colour; the page's Content-Security-Policy names it by its
-hash and refuses every other inline style and every script.
+style is the school's colour and its pictures' focal points; the page's
+Content-Security-Policy names it by its hash and refuses every other inline
+style. The only script is the site's own module, on a page with a gallery or a
+hero video, and the page works without it.
 {% endcomment %}
 {% if preview %}<meta name="robots" content="noindex, nofollow">
 {% endif %}{% if description %}<meta name="description" content="{{ description }}">
@@ -22,6 +24,8 @@ hash and refuses every other inline style and every script.
 bold face that arrived after the first paint would move them (§4.1's layout shift).{% endcomment %}
 <link rel="preload" href="{% static 'web/fonts/hanken-grotesk-700.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'schoolsite/starter.css' %}">
+{% if hero_preload %}{% comment %}The hero is the page's largest paint (§4.2): asked for at once, at the size this screen draws it, in AVIF (a browser without AVIF skips this and finds the WebP or JPEG in the page).{% endcomment %}<link rel="preload" as="image" type="image/avif" imagesrcset="{{ hero_preload.avif }}" imagesizes="{{ hero_preload.sizes }}" fetchpriority="high">
+{% endif %}
 <style>{{ style }}</style>
 {% if structured_data %}<script type="application/ld+json">{{ structured_data }}</script>
 {% endif %}<body>
@@ -58,8 +62,10 @@ bold face that arrived after the first paint would move them (§4.1's layout shi
   </nav>{% endif %}
 </header>
 <main id="content">
+  {% if album %}{% include "schoolsite/themes/starter/parts/album.html" %}{% else %}
   {% if not has_hero %}<h1 class="page-title">{% if key == "home" %}{{ school.name }}{% else %}{{ label }}{% endif %}</h1>{% endif %}
   {% for section in sections %}{% include section.template with s=section.data variant=section.variant %}{% endfor %}
+  {% if key == "gallery" %}{% include "schoolsite/themes/starter/parts/albums.html" %}{% endif %}{% endif %}
   {% if key == "home" %}<p class="checker"><a class="button" href="/check/">Check a result</a></p>{% endif %}
 </main>
 <footer class="site-footer">
@@ -72,3 +78,5 @@ bold face that arrived after the first paint would move them (§4.1's layout shi
   </ul>{% endif %}
   <p class="made">&copy; {{ school.name }}</p>
 </footer>
+{% if script %}<script type="module" src="{% static 'schoolsite/site-app.js' %}"></script>
+{% endif %}

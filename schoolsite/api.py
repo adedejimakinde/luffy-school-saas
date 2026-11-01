@@ -22,9 +22,21 @@ from ninja import Router, Schema
 from accounts.session import session_auth
 from results import look
 
-from . import access, notify, sections, services
+from files import service as files
+
+from . import access, notify, pictures, sections, services
 from .errors import NotAllowed, NotAllowedToEdit, SiteRefused, StaleDraft
-from .models import PageKey, PageKind, SectionKind, SiteRevision, SiteSettings
+from .models import (
+    CONSENT_WORDING,
+    MOST_PHOTOS,
+    Album,
+    PageKey,
+    PageKind,
+    SectionKind,
+    SitePicture,
+    SiteRevision,
+    SiteSettings,
+)
 
 router = Router(auth=session_auth)
 
@@ -33,7 +45,6 @@ _MAY_NOT = "The school's website is looked after by its principal, and by the ad
 #: Kinds whose section has nothing to draw until their own PR: shown, never offered.
 COMING_SOON = {
     SectionKind.NEWS: "Coming soon: news arrives in a later update.",
-    SectionKind.GALLERY: "Coming soon: photo albums arrive in a later update.",
 }
 
 
@@ -120,6 +131,34 @@ class RollbackIn(Schema):
     note: str = ""
 
 
+class PictureChange(Schema):
+    version: int
+    alt: Optional[str] = None
+    caption: Optional[str] = None
+    focal: Optional[dict] = None
+
+
+class TakeDownIn(Schema):
+    reason: str = ""
+
+
+class AlbumIn(Schema):
+    title: str
+    slug: Optional[str] = None
+
+
+class AlbumChange(Schema):
+    version: int
+    title: Optional[str] = None
+    description: Optional[str] = None
+    slug: Optional[str] = None
+
+
+class AlbumVersionIn(Schema):
+    version: int
+    note: str = ""
+
+
 def _school_of(request):
     school = getattr(request, "school", None)
     if school is None:
@@ -188,13 +227,54 @@ def _overview(request, school):
         "networks": sorted(sections.SOCIAL_HOSTS),
         "preview": notify.PREVIEW_PATH,
         "pages": [],
+        "pictures": [],
+        "albums": [],
+        "consent": CONSENT_WORDING,
+        "uploads_at_once": pictures.UPLOADS_AT_ONCE,
+        "most_photos": MOST_PHOTOS,
         "log": [
             {**e, "at": e["at"].isoformat()} for e in services.publish_log_as(user, school)["events"]
         ],
     }
     if may_edit:
         body["pages"] = [_page_out(p) for p in services.draft_as(user, school)["pages"]]
+        # The hero and portrait pictures, and any photo no longer in an album: the
+        # pictures a section can choose. An album's photos come with the album.
+        body["pictures"] = pictures.statuses(SitePicture.objects.filter(album__isnull=True).order_by("-id"))
+        body["albums"] = [_album_summary(a) for a in Album.objects.all()]
+        used = files.usage()["bytes"]
+        body["storage"] = {"used": used, "quota": files.quota_for(school)}
     return body
+
+
+def _album_summary(album):
+    photos = list(album.photos.filter(removed=False).order_by("position", "id")[:1])
+    cover = pictures.statuses(photos)[0]["thumb"] if photos else ""
+    return {
+        "id": album.pk,
+        "title": album.title,
+        "slug": album.slug,
+        "path": f"/gallery/{album.slug}/",
+        "preview": f"/website/preview/gallery/{album.slug}/",
+        "version": album.version,
+        "count": album.photos.filter(removed=False).count(),
+        "live": album.published is not None,
+        "live_count": len(album.published["photos"]) if album.published else 0,
+        "changes": pictures.album_has_changes(album),
+        "address_fixed": album.ever_published,
+        "cover": cover,
+    }
+
+
+def _album_detail(album):
+    return {
+        **_album_summary(album),
+        "description": album.description,
+        "published_at": album.published_at.isoformat() if album.published_at else None,
+        "published_by": album.published_by_name,
+        "photos": pictures.statuses(album.photos.filter(removed=False).order_by("position", "id")),
+        "leaving": [p.pk for p in album.photos.filter(removed=True)],
+    }
 
 
 def _doing(act):
@@ -343,6 +423,150 @@ def publish(request, payload: PublishIn):
 @router.post("/rollback/", response=_WRITE)
 def rollback(request, payload: RollbackIn):
     return _write(request, lambda school: services.rollback_as(request.user, school, payload.number, payload.note))
+
+
+# -- pictures and albums (PR 5) ------------------------------------------------
+
+
+def _with_album(album_id):
+    """An answer's extra part: the album, as the album screen draws it, if it is still here."""
+    def extra(school):
+        album = Album.objects.filter(pk=album_id).first() if album_id else None
+        return {"album": _album_detail(album) if album else None}
+    return extra
+
+
+def _album_of(request, picture_id):
+    """The album a picture is in, for the answer to show; None off a school's host."""
+    if getattr(request, "school", None) is None:
+        return None
+    return SitePicture.objects.filter(pk=picture_id).values_list("album_id", flat=True).first()
+
+
+def _yes(value) -> bool:
+    return str(value or "").strip().lower() in ("1", "on", "true", "yes")
+
+
+@router.post("/pictures/", response=_WRITE)
+def upload_pictures(request):
+    """One to five files as multipart `photo`, with `use` (hero, portrait or gallery),
+    `alt`, `consent`, and `album` for gallery photos or `video` for a hero's loop.
+
+    Answers at once with the new pictures being processed (`state: processing`):
+    the media worker draws their sizes, and the editor asks again until they are ready.
+    """
+    data = request.POST
+    album_id = int(data["album"]) if str(data.get("album", "")).isdigit() else None
+    made = []
+
+    def act(school):
+        if not access.can_edit(request.user, school):
+            raise NotAllowedToEdit(_MAY_NOT)
+        made.extend(pictures.upload_as(
+            request.user, school, data.get("use", ""), request.FILES.getlist("photo"),
+            consent=_yes(data.get("consent")), alt=data.get("alt", ""), album_id=album_id,
+            video=_yes(data.get("video")),
+        ))
+
+    def extra(school):
+        return {**_with_album(album_id)(school), "made": [p.pk for p in made]}
+
+    return _write(request, act, extra)
+
+
+@router.put("/pictures/{int:picture_id}/", response=_WRITE)
+def change_picture(request, picture_id: int, payload: PictureChange):
+    def act(school):
+        kwargs = {k: v for k, v in (("alt", payload.alt), ("caption", payload.caption), ("focal", payload.focal))
+                  if v is not None}
+        pictures.save_picture_as(request.user, school, picture_id, version=payload.version, **kwargs)
+    return _write(request, act, _with_album(_album_of(request, picture_id)))
+
+
+@router.delete("/pictures/{int:picture_id}/", response=_WRITE)
+def remove_picture(request, picture_id: int, version: int):
+    album = _album_of(request, picture_id)
+    return _write(request, lambda school: pictures.delete_picture_as(request.user, school, picture_id, version=version),
+                  _with_album(album))
+
+
+@router.post("/pictures/{int:picture_id}/take-down/", response=_WRITE)
+def take_down(request, picture_id: int, payload: TakeDownIn):
+    album = _album_of(request, picture_id)
+    return _write(request, lambda school: pictures.take_down_as(request.user, school, picture_id, reason=payload.reason),
+                  _with_album(album))
+
+
+@router.post("/albums/", response=_WRITE)
+def add_album(request, payload: AlbumIn):
+    made = []
+
+    def act(school):
+        made.append(pictures.create_album_as(request.user, school, title=payload.title, slug=payload.slug or None))
+    return _write(request, act, lambda school: _with_album(made[0].pk if made else None)(school))
+
+
+@router.get("/albums/{int:album_id}/", response=_READ)
+def album(request, album_id: int):
+    school = _school_of(request)
+    if not access.can_edit(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT)
+    found = Album.objects.filter(pk=album_id).first()
+    if found is None:
+        return 403, MessageOut(detail=_MAY_NOT)
+    return 200, {"album": _album_detail(found)}
+
+
+@router.put("/albums/{int:album_id}/", response=_WRITE)
+def change_album(request, album_id: int, payload: AlbumChange):
+    def act(school):
+        kwargs = {k: v for k, v in (("title", payload.title), ("description", payload.description),
+                                    ("slug", payload.slug)) if v is not None}
+        pictures.save_album_as(request.user, school, album_id, version=payload.version, **kwargs)
+    return _write(request, act, _with_album(album_id))
+
+
+@router.put("/albums/{int:album_id}/photos/", response=_WRITE)
+def order_photos(request, album_id: int, payload: OrderIn):
+    return _write(
+        request,
+        lambda school: pictures.order_photos_as(request.user, school, album_id, payload.order, version=payload.version),
+        _with_album(album_id),
+    )
+
+
+@router.delete("/albums/{int:album_id}/photos/{int:picture_id}/", response=_WRITE)
+def remove_photo(request, album_id: int, picture_id: int, version: int):
+    return _write(
+        request,
+        lambda school: pictures.remove_photo_as(request.user, school, album_id, picture_id, version=version),
+        _with_album(album_id),
+    )
+
+
+@router.delete("/albums/{int:album_id}/", response=_WRITE)
+def remove_album(request, album_id: int, version: int):
+    return _write(request, lambda school: pictures.delete_album_as(request.user, school, album_id, version=version))
+
+
+@router.post("/albums/{int:album_id}/publish/", response=_WRITE)
+def publish_album(request, album_id: int, payload: AlbumVersionIn):
+    return _write(
+        request,
+        lambda school: pictures.publish_album_as(request.user, school, album_id, version=payload.version,
+                                                 note=payload.note),
+        _with_album(album_id),
+    )
+
+
+@router.post("/albums/{int:album_id}/unpublish/", response=_WRITE)
+def unpublish_album(request, album_id: int, payload: AlbumVersionIn):
+    return _write(
+        request,
+        lambda school: pictures.unpublish_album_as(request.user, school, album_id, version=payload.version,
+                                                   note=payload.note),
+        _with_album(album_id),
+    )
 
 
 __all__ = ["COMING_SOON", "router"]

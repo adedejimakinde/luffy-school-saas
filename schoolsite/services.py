@@ -35,7 +35,7 @@ from django.utils import timezone
 
 from results import look
 
-from . import access, notify, sections, themes
+from . import access, notify, pictures, sections, themes
 from .errors import (
     NotAllowedToEdit,
     NotAllowedToPublish,
@@ -196,6 +196,7 @@ def add_section_as(actor, school, key, *, version, kind, data, variant=None) -> 
         data = sections.clean(kind, data)
         _check(version, page.version)
         _check_links(data)
+        pictures.check_media(kind, data)
         existing = list(page.sections.order_by("position", "id"))
         if len(existing) >= MOST_SECTIONS:
             raise SiteRefused(f"A page holds at most {MOST_SECTIONS} sections. Take one off first.")
@@ -224,6 +225,7 @@ def save_section_as(actor, school, section_id, *, version, data, variant=None) -
         _check(version, section.version)
         section.data = sections.clean(section.kind, data)
         _check_links(section.data)
+        pictures.check_media(section.kind, section.data)
         if variant is not None:
             section.variant = sections.clean_variant(section.kind, variant)
         section.version += 1
@@ -527,10 +529,12 @@ def publish_as(actor, school, note="", *, draft_version=None) -> SiteRevision:
         current = snapshot()
         if _nothing_new(settings, latest.snapshot if latest else None, current):
             raise SiteRefused("Nothing has changed since the last publish.")
+        pictures.check_publishable(current)
         revision = _revision(actor, current, latest, note=note)
         _shown(revision.snapshot)
         _clear_ready(settings)
         _logged(actor, school, SitePublishEvent.Kind.PUBLISHED, revision, note)
+        pictures.sync_public()
         return revision
 
 
@@ -554,6 +558,8 @@ def rollback_as(actor, school, number, note="") -> SiteRevision:
         revision = _revision(actor, target.snapshot, latest, note=note, rollback_of=target)
         _shown(revision.snapshot)
         _logged(actor, school, SitePublishEvent.Kind.ROLLED_BACK, revision, note)
+        # A picture deleted since that version is simply not drawn (`render`).
+        pictures.sync_public()
         return revision
 
 
@@ -601,7 +607,7 @@ def snapshot() -> dict:
     """The whole draft, as a revision keeps it. Read on the connection's schema."""
     settings = SiteSettings.objects.get(pk=1)
     pages = Page.objects.prefetch_related("sections").order_by("menu_position", "id")
-    return {
+    snap = {
         "theme": settings.theme,
         "options": settings.theme_options.get(settings.theme, {}),
         "footer": settings.footer,
@@ -622,6 +628,14 @@ def snapshot() -> dict:
             for page in pages
         ],
     }
+    # The pictures the draft shows, as they stand: their files' sizes, alt text
+    # and focal points, so a revision draws them with no query and an edit to a
+    # picture is a change to publish. Left out when there are none, so a draft
+    # with no pictures still equals a revision from before PR 5.
+    drawn = pictures.snapshot_pictures(snap)
+    if drawn:
+        snap["pictures"] = drawn
+    return snap
 
 
 def _nothing_new(settings, live, current) -> bool:
@@ -731,6 +745,7 @@ def publish_log_as(actor, school) -> dict:
                 "rollback_of": e.revision.rollback_of.number if e.revision and e.revision.rollback_of else None,
                 "summary": e.revision.summary if e.revision else None,
                 "note": e.note,
+                "subject": e.subject,
                 "by": e.by_name,
                 "by_role": e.by_role,
                 "at": e.at,

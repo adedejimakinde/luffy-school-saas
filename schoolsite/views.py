@@ -13,8 +13,14 @@ Nothing here reads the session or who is asking: `schools.paths
 .is_public_site_request` keeps the middleware from reading it on the way, and
 `schools.sessions` keeps a cookie from going back. A drawn page is kept in the
 `sites` cache under the school's schema, its revision, what it shows of the
-school, the host and the path, so one school's page can never be handed out on
-another's host, and a new publish is a new key.
+school, the albums' version, the host and the path, so one school's page can
+never be handed out on another's host, and a new publish, an album published or
+a picture taken down is a new key for every page of that school at once.
+
+**Albums** have their own pages under the Gallery page, `/gallery/<slug>/`,
+drawn as their principal last published them. **The map** (`?map=1` on the page
+holding the contact panel) is that page with Google Maps framed in it: never
+indexed, and the only response whose policy allows that frame.
 """
 
 import hashlib
@@ -32,7 +38,7 @@ from schools.paths import NEVER_INDEXED, robots_path
 from website.crawlers import ICONS, SCHOOL_ROBOTS
 
 from . import render
-from .models import PageKey
+from .models import PageKey, SiteSettings
 from .services import live_revision
 
 log = logging.getLogger(__name__)
@@ -42,7 +48,7 @@ log = logging.getLogger(__name__)
 #: deploy, and how long the portal's address or the crest can lag behind.
 CACHE_SECONDS = 600
 #: Bumped by hand when the starter theme's templates change what they draw.
-GENERATION = 1
+GENERATION = 2
 #: What a browser and anything between it and us may do with a page.
 CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=600"
 
@@ -69,18 +75,25 @@ def _school_key(school) -> str:
     crest = StoredFile.objects.filter(
         schema_name=connection.schema_name, slot="crest", state="ready"
     ).values("key")[:1]
-    look_updated, crest_key = (
-        ReportCardSettings.objects.annotate(crest_key=Subquery(crest))
-        .values_list("updated_at", "crest_key")
+    # The card's look and the albums' version in the same query, from the
+    # site's own settings row, which every school has: an album published, or
+    # a picture taken down, is a new key for every page (`SiteSettings.gallery_version`).
+    look = ReportCardSettings.objects.filter(pk=1).values("updated_at")[:1]
+    gallery_version, look_updated, crest_key = (
+        SiteSettings.objects.filter(pk=1)
+        .annotate(look_updated=Subquery(look), crest_key=Subquery(crest))
+        .values_list("gallery_version", "look_updated", "crest_key")
         .first()
-    ) or (None, None)
+    ) or (None, None, None)
     shown = "\n".join((school.name, school.about, school.address, school.phone, school.contact_email,
-                       str(look_updated), str(crest_key)))
+                       str(look_updated), str(crest_key), str(gallery_version)))
     return hashlib.sha256(shown.encode()).hexdigest()[:16]
 
 
-def _cached_draw(school, revision, key, host, slug=None):
-    page = f"pages/{slug}" if slug is not None else key
+def _cached_draw(school, revision, key, host, slug=None, *, album=None, map_open=False):
+    page = f"pages/{slug}" if slug is not None else f"gallery/{album}" if album is not None else key
+    if map_open:
+        page += ":map"
     cache_key = (
         f"site:{GENERATION}:{connection.schema_name}:{revision.number}:{_school_key(school)}:{host}:{page}"
     )
@@ -93,16 +106,16 @@ def _cached_draw(school, revision, key, host, slug=None):
         hit = None
     if hit is not None:
         return render.Drawn(*hit)
-    drawn = render.draw(school, revision, key, host, slug=slug)
+    drawn = render.draw(school, revision, key, host, slug=slug, album=album, map_open=map_open)
     if drawn is not None:
         try:
-            cache.set(cache_key, (drawn.html, drawn.style), CACHE_SECONDS)
+            cache.set(cache_key, (drawn.html, drawn.style, drawn.script, drawn.map_frame), CACHE_SECONDS)
         except Exception:
             log.warning("The sites cache could not be written.", exc_info=True)
     return drawn
 
 
-def _served(request, body, content_type, *, style=None, indexable=True):
+def _served(request, body, content_type, *, drawn=None, indexable=True):
     """A public page's response: indexable, cacheable, conditional, and under its CSP."""
     etag = '"' + hashlib.sha256(body.encode()).hexdigest()[:32] + '"'
     if etag in [t.strip() for t in request.headers.get("If-None-Match", "").split(",")]:
@@ -111,8 +124,8 @@ def _served(request, body, content_type, *, style=None, indexable=True):
         response = HttpResponse(body, content_type=content_type)
     response["ETag"] = etag
     response["Cache-Control"] = CACHE_CONTROL
-    if style is not None:
-        response["Content-Security-Policy"] = render.csp(style)
+    if drawn is not None:
+        response["Content-Security-Policy"] = drawn.csp
     response.indexable = indexable
     return response
 
@@ -128,19 +141,21 @@ def _may_be_indexed(school) -> bool:
     return not school.sales_demo
 
 
-def _page(request, key, slug=None):
+def _page(request, key, slug=None, album=None):
     school = _school(request)
     revision = live_revision(school)
     if revision is None:
         if key == PageKey.HOME:
             return school_site(request)
         raise Http404("This school has not published its website yet.")
-    drawn = _cached_draw(school, revision, key, _host(request), slug)
+    map_open = request.GET.get("map") == "1" and album is None
+    drawn = _cached_draw(school, revision, key, _host(request), slug, album=album, map_open=map_open)
     if drawn is None:
         raise Http404("This page is not on the school's website.")
-    return _served(
-        request, drawn.html, "text/html; charset=utf-8", style=drawn.style, indexable=_may_be_indexed(school)
-    )
+    # The page with the map framed is a visitor's choice, not a page of its
+    # own: never indexed (its canonical link names the page without it).
+    indexable = _may_be_indexed(school) and not drawn.map_frame
+    return _served(request, drawn.html, "text/html; charset=utf-8", drawn=drawn, indexable=indexable)
 
 
 @require_safe
@@ -166,6 +181,12 @@ def news(request):
 @require_safe
 def gallery(request):
     return _page(request, PageKey.GALLERY)
+
+
+@require_safe
+def album(request, slug):
+    """One published album, at `/gallery/<slug>/`, while the Gallery page is on (§2.1)."""
+    return _page(request, PageKey.GALLERY, album=slug)
 
 
 @require_safe
@@ -214,5 +235,5 @@ def robots(request):
 
 
 __all__ = [
-    "about", "admissions", "contact", "custom_page", "gallery", "home", "news", "open_robots", "robots", "sitemap",
+    "about", "admissions", "album", "contact", "custom_page", "gallery", "home", "news", "open_robots", "robots", "sitemap",
 ]

@@ -37,6 +37,8 @@ class Kind(models.TextChoices):
     HERO_IMAGE = "hero_image", "Website hero image"
     GALLERY_IMAGE = "gallery_image", "Website gallery image"
     HERO_VIDEO = "hero_video", "Website hero video"
+    #: The principal's portrait in the website's "From the principal" section.
+    SITE_PORTRAIT = "site_portrait", "Website portrait"
     DOCUMENT = "document", "Document"
     #: Classnode's own blog (`blog`), on the platform's schema, not a school's.
     BLOG_COVER = "blog_cover", "Blog cover"
@@ -143,6 +145,12 @@ PROFILES = {
         Profile(
             Kind.GALLERY_IMAGE, Family.SITE_PHOTO, "A photo", 15 * MB,
             master_side=2400, widths=(480, 828, 1600), typical_bytes=1300 * 1024,
+        ),
+        # Drawn about 8 rem (128 CSS px) wide beside the principal's message, so
+        # 320 and 640 serve 1x to 3x screens; a 1200 px master, as for any portrait.
+        Profile(
+            Kind.SITE_PORTRAIT, Family.SITE_PHOTO, "A photo", 15 * MB,
+            master_side=1200, widths=(320, 640), typical_bytes=400 * 1024,
         ),
         Profile(
             Kind.HERO_VIDEO, Family.VIDEO, "A video", 50 * MB,
