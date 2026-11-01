@@ -1,0 +1,14 @@
+{% comment %}The admissions band: the school's colour, its words and the accent button on the left, and its line art on the right.{% endcomment %}
+<section class="admissions">
+  <div class="wrap">
+    <div class="band">
+      {% if motion.admissions %}{% include "schoolsite/themes/modern/parts/art_admissions.html" %}{% endif %}
+      <div class="band-words">
+        {% if s.session %}<p class="pill">{% if s.open %}Admissions for {{ s.session }} are open{% else %}Admissions for {{ s.session }} are closed{% endif %}{% if s.open and s.closes_on %}, until {{ s.closes_on|date:"j F Y" }}{% endif %}.</p>{% endif %}
+        <h2>{{ s.heading }}</h2>
+        {% if s.text %}{{ s.text|linebreaks }}{% endif %}
+        {% if s.open and s.href %}<p class="actions"><a class="button accent" href="{{ s.href }}">{{ s.button|default:"Find out how to apply" }}</a></p>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>

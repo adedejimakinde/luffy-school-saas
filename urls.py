@@ -159,6 +159,7 @@ urlpatterns = [
     path("website/preview/", site_editor.preview, name="website-preview"),
     path("website/preview/pages/<slug:slug>/", site_editor.preview_custom_page, name="website-preview-page"),
     path("website/photos/", site_editor.photos_page, name="website-photos"),
+    path("website/look/", site_editor.look_page, name="website-look"),
     path("website/preview/gallery/<slug:slug>/", site_editor.preview_album, name="website-preview-album"),
     path("website/pictures/<str:key>/<str:variant>", site_editor.picture, name="website-picture"),
     path("website/preview/<slug:key>/", site_editor.preview_page, name="website-preview-fixed"),

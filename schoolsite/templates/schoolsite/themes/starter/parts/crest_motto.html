@@ -1,7 +1,0 @@
-<section class="motto">
-  {% if look.crest %}<img class="crest large" src="{{ look.crest }}" alt="{{ school.name }} crest" width="96" height="96">
-  {% else %}<span class="crest large initials" aria-hidden="true">{{ look.initials }}</span>{% endif %}
-  {% if s.motto %}<p class="motto-words"{% if s.language %} lang="{{ s.language }}"{% endif %}{% if s.language == "ar" %} dir="rtl"{% endif %}>{{ s.motto }}</p>{% endif %}
-  {% if s.translation %}<p class="translation">{{ s.translation }}</p>{% endif %}
-  {% if s.founded %}<p class="founded">Founded {{ s.founded }}</p>{% endif %}
-</section>

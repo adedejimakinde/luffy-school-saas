@@ -105,14 +105,14 @@ test("every refusal has its own screen, and none of them is the editor", () => {
 
 // -- the first screen ---------------------------------------------------------
 
-test("the principal sees the state, Publish while there are changes, the pages, the colour and who edits", () => {
+test("the principal sees the state, Publish while there are changes, the pages, the way to the colours and who edits", () => {
   const html = htmlFor(fromOverview({ ok: true, body: OVERVIEW }));
   assert.match(html, /Published<\/strong> Version 2/);
   assert.match(html, /Changes not yet published/);
   assert.match(html, /data-action="publish"/);
   assert.doesNotMatch(html, /Ready for the principal/, "the principal has Publish, not Ready");
   assert.match(html, /data-form="add-page"/);
-  assert.match(html, /data-form="colour"/);
+  assert.match(html, /<a class="btn" href="\/website\/look\/">Colours and animations<\/a>/);
   assert.match(html, /data-action="delegation"/);
   assert.match(html, /Go back to version 1/);
   assert.doesNotMatch(html, /Go back to version 2/, "the live version is not offered");
@@ -131,7 +131,7 @@ test("with nothing to publish there is no Publish, and an unpublished site says 
 test("the delegated administrator has Ready for the principal and none of the principal's", () => {
   const html = htmlFor(fromOverview({ ok: true, body: ADMIN }));
   assert.match(html, /data-form="ready"/);
-  assert.doesNotMatch(html, /data-action="publish"|data-form="colour"|data-action="delegation"|Go back to version/);
+  assert.doesNotMatch(html, /data-action="publish"|\/website\/look\/|data-action="delegation"|Go back to version/);
   const told = htmlFor({ ...fromOverview({ ok: true, body: { ...ADMIN, state: { ...ADMIN.state, ready: true, ready_by: "Ade" } } }), told: 0 });
   assert.match(told, /no email address on file/);
   assert.match(told, /Marked ready for the principal by Ade/);
@@ -180,10 +180,10 @@ test("each kind's form reads back as the data the server checks", () => {
     collect("hero", {
       heading: "Welcome", subheading: "", button1_label: "Apply", button1_link: "/admissions/",
       button2_label: "Call", button2_link: "other", button2_link_other: " tel:+2348031112222 ",
-    }, { image: 5, focal: { x: 0.5, y: 0.5 } }),
+    }, { slides: [{ picture: 5 }], video: null }),
     { heading: "Welcome", subheading: "", buttons: [{ label: "Apply", link: "/admissions/" }, { label: "Call", link: "tel:+2348031112222" }],
-      image: 5, focal: { x: 0.5, y: 0.5 } },
-    "a picture it does not show yet is kept",
+      slides: [{ picture: 5 }] },
+    "pictures it does not show are kept",
   );
   assert.deepEqual(collect("facts", { fact1_figure: "98%", fact1_label: "WAEC credits", fact2_figure: "", fact2_label: "" }).items,
     [{ figure: "98%", label: "WAEC credits", source: "" }]);
@@ -201,6 +201,7 @@ test("a form is drawn filled, with its picture chosen from the school's own", ()
   assert.match(hero, /<option value="\/pages\/boarding\/" selected>Boarding<\/option>/);
   assert.match(hero, /<option value="other" selected>Another address<\/option>/);
   assert.match(hero, /value="https:\/\/x.example\/"/);
+  assert.match(hero, /<select id="f-slide1" name="slide1"><option value="" selected>None<\/option><\/select>/);
   assert.match(hero, /<select id="f-media" name="media"><option value="" selected>None<\/option><\/select>/);
   assert.match(hero, /<a class="btn" href="\/website\/photos\/#upload-hero">Upload a photo<\/a>/);
   assert.match(fields("admissions_cta", { open: true }, { pages }), /type="checkbox" name="open" checked/);

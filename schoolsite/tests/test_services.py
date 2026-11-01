@@ -116,7 +116,7 @@ class EveryNewSchoolStartsWithTheSameDraftTests(SiteSetUp):
                     {"home": True, "about": False, "admissions": False, "news": False,
                      "gallery": False, "contact": False},
                 )
-                self.assertEqual(SiteSettings.objects.get(pk=1).theme, "starter")
+                self.assertEqual(SiteSettings.objects.get(pk=1).theme, "modern")
                 self.assertIsNone(services.live_revision(school))
 
 
@@ -158,7 +158,7 @@ class WhoMayDoWhatTests(SiteSetUp):
             with self.assertRaises(NotAllowedToPublish):
                 services.rollback_as(self.admin, self.stmarys, 1)
             with self.assertRaises(NotAllowedToPublish):
-                services.set_theme_as(self.admin, self.stmarys, "starter", version=0)
+                services.set_theme_as(self.admin, self.stmarys, "modern", version=0)
             with self.assertRaises(NotAllowedToPublish):
                 services.set_delegation_as(self.admin, self.stmarys, False)
             self.assertEqual(self.counts(), before)
@@ -193,7 +193,7 @@ class WhoMayDoWhatTests(SiteSetUp):
                 with self.assertRaises(NotAllowedToPublish):
                     services.publish_as(who, self.stmarys)
                 with self.assertRaises(NotAllowedToPublish):
-                    services.set_theme_as(who, self.stmarys, "starter", version=0)
+                    services.set_theme_as(who, self.stmarys, "modern", version=0)
                 with self.assertRaises(NotAllowedToPublish):
                     services.set_delegation_as(who, self.stmarys, False)
                 with self.assertRaises(NotAllowedToReadLog):
@@ -283,7 +283,7 @@ class AStaleSaveIsRefusedTests(SiteSetUp):
                 services.add_section_as(self.principal, self.stmarys, "home", version=0, kind="crest_motto", data=MOTTO)
             services.save_footer_as(self.principal, self.stmarys, {"address_line": "Ring Road"}, version=0)
             with self.assertRaises(StaleDraft):
-                services.set_theme_as(self.principal, self.stmarys, "starter", version=0)
+                services.set_theme_as(self.principal, self.stmarys, "modern", version=0)
             self.assertEqual(Section.objects.get(pk=section.pk).data["heading"], "First")
         self.assertEqual(self.counts()[:4], before[:4])
 
@@ -498,27 +498,33 @@ class TheDraftHoldsOnlyWhatIsAllowedTests(SiteSetUp):
 class ThemeOptionsAreAnAllowListTests(SiteSetUp):
     def test_only_a_known_theme_and_its_own_options_are_kept_and_kept_clean(self):
         with connected_to(self.stmarys):
-            services.set_theme_as(self.principal, self.stmarys, "starter", {
-                "header_style": "solid", "font_pairing": "default",
+            services.set_theme_as(self.principal, self.stmarys, "modern", {
+                "header_style": "sticky", "font_pairing": "hanken",
                 "colours": {"primary": "143d8c", "text": "#1A1A1A", "surface": "#ffffff"},
+                "animations": {"hero": False},
             }, version=0)
             stored = SiteSettings.objects.get(pk=1).theme_options
-            self.assertEqual(stored, {"starter": {
-                "header_style": "solid", "font_pairing": "default",
+            self.assertEqual(stored, {"modern": {
+                "header_style": "sticky", "font_pairing": "hanken",
                 "colours": {"primary": "#143D8C", "surface": "#FFFFFF", "text": "#1A1A1A"},
+                "animations": {"hero": False},
             }})
             before = self.counts()
             for key, options in (
                 ("golden", None),
-                ("starter", {"css": "body{display:none}"}),
-                ("starter", {"header_style": "<script>alert(1)</script>"}),
-                ("starter", {"font_pairing": "comic"}),
-                ("starter", {"colours": {"primary": "red"}}),
-                ("starter", {"colours": {"primary": "#fff"}}),
-                ("starter", {"colours": {"glow": "#000000"}}),
-                ("starter", {"colours": {"primary": "url(javascript:x)"}}),
-                ("starter", {"colours": {"text": "#BBBBBB", "surface": "#FFFFFF"}}),
-                ("starter", "header_style=solid"),
+                ("starter", {}),
+                ("modern", {"css": "body{display:none}"}),
+                ("modern", {"header_style": "<script>alert(1)</script>"}),
+                ("modern", {"font_pairing": "comic"}),
+                ("modern", {"colours": {"primary": "red"}}),
+                ("modern", {"colours": {"primary": "#fff"}}),
+                ("modern", {"colours": {"glow": "#000000"}}),
+                ("modern", {"colours": {"primary": "url(javascript:x)"}}),
+                ("modern", {"colours": {"text": "#BBBBBB", "surface": "#FFFFFF"}}),
+                ("modern", {"animations": {"hero": "off"}}),
+                ("modern", {"animations": {"fireworks": True}}),
+                ("modern", {"animations": "all"}),
+                ("modern", "header_style=solid"),
             ):
                 with self.subTest(key=key, options=options), self.assertRaises(ThemeRefused):
                     services.set_theme_as(self.principal, self.stmarys, key, options, version=1)

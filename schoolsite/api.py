@@ -24,7 +24,7 @@ from results import look
 
 from files import service as files
 
-from . import access, notify, pictures, sections, services
+from . import access, notify, pictures, render, sections, services, themes
 from .errors import NotAllowed, NotAllowedToEdit, SiteRefused, StaleDraft
 from .models import (
     CONSENT_WORDING,
@@ -111,6 +111,14 @@ class FooterIn(Schema):
 class ColourIn(Schema):
     version: int
     colour: str = ""
+
+
+class LookIn(Schema):
+    version: int
+    #: Some of primary, accent, detail and dark; "" goes back to the theme's own.
+    colours: Optional[dict] = None
+    #: Some of the five animated backgrounds, each on or off.
+    animations: Optional[dict] = None
 
 
 class DelegationIn(Schema):
@@ -203,6 +211,7 @@ def _overview(request, school):
     settings = SiteSettings.objects.get(pk=1)
     live = SiteRevision.objects.order_by("-number").first()
     draft = services.snapshot()
+    card_colour = look.for_site(school.name)["colour"]
     body = {
         "role": access.role_of(user, school),
         "can_edit": may_edit,
@@ -222,7 +231,8 @@ def _overview(request, school):
         },
         "version": settings.version,
         "colour": settings.theme_options.get(settings.theme, {}).get("colours", {}).get("primary", ""),
-        "card_colour": look.for_site(school.name)["colour"],
+        "card_colour": card_colour,
+        "look": _look(settings, card_colour),
         "footer": settings.footer,
         "networks": sorted(sections.SOCIAL_HOSTS),
         "preview": notify.PREVIEW_PATH,
@@ -245,6 +255,21 @@ def _overview(request, school):
         used = files.usage()["bytes"]
         body["storage"] = {"used": used, "quota": files.quota_for(school)}
     return body
+
+
+def _look(settings, card_colour):
+    """The website's colours and animated backgrounds, for the Look screen: what the school chose,
+    and every colour as the site draws it (its tints worked out), so the screen shows both."""
+    options = settings.theme_options.get(settings.theme, {})
+    snap = {"theme": settings.theme, "options": options}
+    return {
+        "theme": themes.THEMES[render.theme_of(snap)].name,
+        "chosen": {role: options.get("colours", {}).get(role, "") for role in services.LOOK_COLOURS},
+        "palette": render.palette_for(snap, card_colour),
+        "theme_colours": {role: themes.THEMES[render.theme_of(snap)].colours.get(role, "") for role in services.LOOK_COLOURS},
+        "animations": themes.animations(options),
+        "animation_names": themes.ANIMATIONS,
+    }
 
 
 def _album_summary(album):
@@ -396,6 +421,16 @@ def change_footer(request, payload: FooterIn):
 def change_colour(request, payload: ColourIn):
     return _write(
         request, lambda school: services.set_colour_as(request.user, school, payload.colour, version=payload.version)
+    )
+
+
+@router.put("/look/", response=_WRITE)
+def change_look(request, payload: LookIn):
+    return _write(
+        request,
+        lambda school: services.set_look_as(
+            request.user, school, version=payload.version, colours=payload.colours, animations=payload.animations
+        ),
     )
 
 

@@ -1,6 +1,0 @@
-<section class="admissions">
-  <h2>{{ s.heading }}</h2>
-  {% if s.session %}<p class="session">{% if s.open %}Admissions for {{ s.session }} are open{% else %}Admissions for {{ s.session }} are closed{% endif %}{% if s.open and s.closes_on %}, until {{ s.closes_on|date:"j F Y" }}{% endif %}.</p>{% endif %}
-  {% if s.text %}{{ s.text|linebreaks }}{% endif %}
-  {% if s.open and s.href %}<p class="actions"><a class="button primary" href="{{ s.href }}">{{ s.button|default:"Find out how to apply" }}</a></p>{% endif %}
-</section>

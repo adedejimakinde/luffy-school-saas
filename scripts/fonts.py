@@ -29,8 +29,9 @@ mark and underdot, was drawn in whatever font the phone had: a name like
 
 ## What is cut
 
-Both families are instanced at weight 400 and 700 (Noto at normal width), then
-subset to the characters below, as WOFF2. The `unicode-range` each face needs is
+Hanken is instanced at weight 400, 700 and 800 (800 is the school websites'
+headings, `docs/school-sites-theme-modern.md`), Noto at 400 and 700 (at normal
+width), then subset to the characters below, as WOFF2. The `unicode-range` each face needs is
 printed, and `tests/test_design.py` holds it to the files.
 """
 
@@ -238,7 +239,7 @@ def main(argv):
             raise SystemExit(f"{path} is not the file this script was written against ({sha256(path)})")
 
     hanken_range = None
-    for weight, style in ((400, "Regular"), (700, "Bold")):
+    for weight, style in ((400, "Regular"), (700, "Bold"), (800, "ExtraBold")):
         font = instance(args.hanken, weight)
         build_hanken(font)
         cmap = font.getBestCmap()

@@ -1,0 +1,18 @@
+{% comment %}Visit us. The address, phone and email are the school's own details. The map is Google's, and nothing of Google's loads until the visitor asks: the placeholder reloads this page with `?map=1`, the only response whose policy lets it frame Google Maps (§9.3). "Open in Maps" always leaves for the maps app instead.{% endcomment %}
+<section class="contact">
+  <div class="wrap contact-grid">
+    <div class="contact-words">
+      <h2>Visit us</h2>
+      <dl>
+        {% if school.address %}<dt>Address</dt><dd>{{ school.address|linebreaksbr }}</dd>{% endif %}
+        {% if school.phone %}<dt>Phone</dt><dd><a href="tel:{{ school.phone }}">{{ school.phone }}</a></dd>{% endif %}
+        {% if s.whatsapp_link %}<dt>WhatsApp</dt><dd><a href="{{ s.whatsapp_link }}" rel="noopener noreferrer">{{ s.whatsapp }}</a></dd>{% endif %}
+        {% if school.contact_email %}<dt>Email</dt><dd><a href="mailto:{{ school.contact_email }}">{{ school.contact_email }}</a></dd>{% endif %}
+        {% if s.hours %}<dt>Office hours</dt><dd>{{ s.hours|linebreaksbr }}</dd>{% endif %}
+      </dl>
+      {% if s.maps %}<p class="actions"><a class="button" href="{{ s.maps }}" rel="noopener noreferrer">Open in Maps</a></p>{% endif %}
+    </div>
+    {% if s.map_embed %}<div class="map" id="map"><iframe title="Map showing where {{ school.name }} is" src="{{ s.map_embed }}" width="640" height="480" loading="lazy" referrerpolicy="no-referrer" allowfullscreen></iframe></div>
+    {% elif s.map_tap %}<a class="map-tap" id="map" href="{{ s.map_tap }}">{% if motion.contact %}{% include "schoolsite/themes/modern/parts/art_contact.html" %}{% endif %}<strong>Show the map here</strong><span>This loads Google Maps.</span></a>{% endif %}
+  </div>
+</section>

@@ -1,16 +1,16 @@
 /**
  * A school's public website: the only script it runs, and nothing needs it to work.
- * `docs/school-sites.md` §4.3, §9.2, PR 5. Loaded as a module only on a page with a
- * gallery or a hero video; the page's policy allows this file and no other script.
+ * `docs/school-sites.md` §4.3, §9.2; `docs/school-sites-theme-modern.md`. A module
+ * on a page with a gallery, a hero video or a slideshow; the policy allows no other.
  *
- * - **Tap to enlarge.** Each gallery photo is a link to its large JPEG, which opens
- *   with no script at all. Here a tap opens it over the page instead, in a <dialog>,
- *   in AVIF or WebP where the browser takes them, with its caption, the next and the
- *   previous photo (buttons, arrow keys, a swipe), and Escape or Close to leave.
- * - **The hero video** gets its source only after the page has loaded, and only when
- *   the screen is at least 768px wide (or the theme lets phones have it), data saver
- *   is off and reduced motion is not asked for. Otherwise the poster stays. Once it
- *   plays, a visible button pauses it.
+ * - **Tap to enlarge.** A gallery photo links to its large JPEG; here a tap opens it
+ *   over the page in a <dialog>, with next, previous, a swipe and Escape.
+ * - **The hero video** gets its source after load, on a wide screen (or where the
+ *   theme lets phones), never with data saver or reduced motion; a button pauses it.
+ * - **The slideshow.** The first photo came with the page. After load, and never
+ *   with data saver, the others are added from their <template> and crossfade every
+ *   4 seconds; dots jump; hovering, touching or focusing it pauses it; under reduced
+ *   motion it never moves on by itself.
  */
 
 const WIDE = "(min-width: 48em)";
@@ -109,8 +109,7 @@ export function mayPlay(video, win = window) {
   const phones = video.dataset.phones === "1";
   const wide = win.matchMedia ? win.matchMedia(WIDE).matches : false;
   const still = win.matchMedia ? win.matchMedia(STILL).matches : true;
-  const saving = Boolean(win.navigator && win.navigator.connection && win.navigator.connection.saveData);
-  return (wide || phones) && !saving && !still;
+  return (wide || phones) && !saving(win) && !still;
 }
 
 export function heroVideo(doc = document, win = window) {
@@ -140,7 +139,48 @@ export function heroVideo(doc = document, win = window) {
   else win.addEventListener("load", start, { once: true });
 }
 
+/** Whether data saver is on: then only the first photo is ever fetched. */
+const saving = (win) => Boolean(win.navigator && win.navigator.connection && win.navigator.connection.saveData);
+
+export function slideshow(doc = document, win = window, every = 4000) {
+  const box = doc.querySelector("[data-slides]");
+  const later = box && box.querySelector("template.later");
+  if (!later) return;
+  const start = () => {
+    if (saving(win)) return;
+    box.insertBefore(later.content.cloneNode(true), later);
+    const slides = Array.from(box.querySelectorAll(".slide"));
+    const dots = Array.from(box.querySelectorAll(".dot"));
+    const still = win.matchMedia ? win.matchMedia(STILL).matches : true;
+    let at = 0;
+    let held = 0;
+    const show = (i) => {
+      at = (i + slides.length) % slides.length;
+      slides.forEach((slide, n) => {
+        slide.classList.toggle("is-on", n === at);
+        if (n === at) slide.removeAttribute("aria-hidden");
+        else slide.setAttribute("aria-hidden", "true");
+      });
+      dots.forEach((dot, n) => (n === at ? dot.setAttribute("aria-current", "true") : dot.removeAttribute("aria-current")));
+    };
+    dots.forEach((dot, n) => dot.addEventListener("click", () => show(n)));
+    box.querySelector(".dots").hidden = false;
+    const hold = () => { held += 1; };
+    const free = () => { held = Math.max(0, held - 1); };
+    box.addEventListener("pointerenter", hold);
+    box.addEventListener("pointerleave", free);
+    box.addEventListener("touchstart", hold, { passive: true });
+    box.addEventListener("touchend", () => win.setTimeout(free, every), { passive: true });
+    box.addEventListener("focusin", hold);
+    box.addEventListener("focusout", free);
+    if (!still) win.setInterval(() => { if (!held && !doc.hidden) show(at + 1); }, every);
+  };
+  if (doc.readyState === "complete") start();
+  else win.addEventListener("load", start, { once: true });
+}
+
 if (typeof document !== "undefined") {
   lightbox();
   heroVideo();
+  slideshow();
 }

@@ -1,0 +1,9 @@
+{% comment %}The facts, as a bento of soft tinted cards: the figure large, its words under it, its source small.{% endcomment %}
+<section class="facts">
+  <div class="wrap">
+    <h2 class="sr">At a glance</h2>
+    <ul class="bento count-{{ s.items|length }}">{% for fact in s.items %}
+      <li><strong class="figure">{{ fact.figure }}</strong> <span class="fact-label">{{ fact.label }}</span>{% if fact.source %} <small>{{ fact.source }}</small>{% endif %}</li>{% endfor %}
+    </ul>
+  </div>
+</section>

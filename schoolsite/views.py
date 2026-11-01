@@ -47,8 +47,8 @@ log = logging.getLogger(__name__)
 #: this bounds how long a template change takes to reach every page after a
 #: deploy, and how long the portal's address or the crest can lag behind.
 CACHE_SECONDS = 600
-#: Bumped by hand when the starter theme's templates change what they draw.
-GENERATION = 2
+#: Bumped by hand when the theme's templates change what they draw.
+GENERATION = 3
 #: What a browser and anything between it and us may do with a page.
 CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=600"
 

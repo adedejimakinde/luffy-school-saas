@@ -33,6 +33,7 @@ from files.tests import samples
 from schools.tests.tenants import connected_to
 
 from schoolsite import pictures, services
+from schoolsite.themes import THEMES
 from schoolsite.errors import NotAllowed, NotAllowedToPublish, SiteRefused
 from schoolsite.models import Album, Page, Section, SitePicture, SitePublishEvent, SiteRevision
 
@@ -75,7 +76,7 @@ class PicturesSetUp(PublicSiteSetUp):
         with connected_to(school):
             home = Page.objects.get(key="home")
             existing = home.sections.filter(kind="hero").first()
-            data = {"heading": heading, "image": picture.pk}
+            data = {"heading": heading, "slides": [{"picture": picture.pk}]}
             if existing:
                 services.save_section_as(who, school, existing.pk, version=existing.version, data=data)
             else:
@@ -318,7 +319,9 @@ class AlbumTests(PicturesSetUp):
         home = self.get("/").content.decode()
         self.assertIn(made[2].file_key, home)
         self.assertNotIn(made[0].file_key, home)  # the section's count is 1
-        self.assertIn(f'href="/gallery/{album.slug}/">See all 3 photos', home)
+        # The mosaic's last tile counts the photos not shown, and is the way to the album.
+        self.assertIn(f'<li class="count-tile"><a href="/gallery/{album.slug}/"><strong>+2</strong>'
+                      '<span>See all 3 photos</span></a></li>', home)
         listing = self.get("/gallery/").content.decode()
         self.assertIn(album.title, listing)
 
@@ -457,7 +460,7 @@ class TakeDownTests(PicturesSetUp):
             # The About page the principal switched on but never published stays off.
             self.assertFalse(next(p for p in latest.snapshot["pages"] if p["key"] == "about")["enabled"])
             hero = Section.objects.get(kind="hero")
-            self.assertIsNone(hero.data["image"])
+            self.assertEqual(hero.data["slides"], [])
             self.assertFalse(SitePicture.objects.filter(pk=self.hero.pk).exists())
             self.assertIsNone(files.find(self.hero.file_key))
         self.assertFalse(any((storage.root() / "st_marys").rglob(f"{self.hero.file_key}-*")))
@@ -508,7 +511,7 @@ class DrawnTests(PicturesSetUp):
         html = self.get("/").content.decode()
         key = picture.file_key
         self.assertIn(f'<source type="image/avif" srcset="/media/{key}/480.avif 480w, /media/{key}/828.avif 828w, '
-                      f'/media/{key}/1920.avif 1920w" sizes="(min-width: 40rem) 40rem, 100vw">', html)
+                      f'/media/{key}/1920.avif 1920w" sizes="{THEMES["modern"].sizes["hero"]}">', html)
         self.assertIn(f'src="/media/{key}/828.jpg" srcset="/media/{key}/828.jpg 828w, /media/{key}/1920.jpg 1920w"', html)
         self.assertIn('width="1920" height="1280" alt="The school gate" fetchpriority="high"', html)
         self.assertIn('<link rel="preload" as="image" type="image/avif" imagesrcset=', html)
@@ -542,7 +545,7 @@ class DrawnTests(PicturesSetUp):
             services.publish_as(self.principal, self.stmarys)
         html = self.get("/").content.decode()
         self.assertIn(f"/media/{portrait.file_key}/320.avif 320w", html)
-        self.assertIn('sizes="8rem"', html)
+        self.assertIn(f'sizes="{THEMES["modern"].sizes["portrait"]}"', html)
         self.assertIn('alt="Rev. Sr. Okafor" loading="lazy"', html)
 
     def test_publishing_waits_for_a_description_and_the_wrong_sort_of_picture_is_refused(self):

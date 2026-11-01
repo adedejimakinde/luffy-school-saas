@@ -125,7 +125,7 @@ export function site(body, { notes = {}, told = null } = {}) {
       footerForm(body, notes.footer),
     );
   }
-  if (body.can_publish) parts.push(colourForm(body, notes.colour), delegation(body, notes.delegation));
+  if (body.can_publish) parts.push(lookLink(), delegation(body, notes.delegation));
   parts.push(log(body), "</section>");
   return parts.join("");
 }
@@ -148,19 +148,9 @@ function footerForm(body, n) {
   ].join("");
 }
 
-function colourForm(body, n) {
-  const current = body.colour || body.card_colour || "#143D8C";
-  return [
-    '<form class="colour-form" data-form="colour">',
-    "<h2>The school&#39;s colour</h2>",
-    `<p class="hint">${body.colour ? "The website&#39;s own colour." : "The report card&#39;s colour, until you choose another."} White writing must read on it.</p>`,
-    '<label for="site-colour">Colour</label>',
-    `<input type="color" id="site-colour" name="colour" value="${esc(current.toLowerCase())}">`,
-    '<button type="submit">Save the colour</button>',
-    body.colour ? '<button type="button" class="again" data-action="colour-reset">Use the report card&#39;s colour</button>' : "",
-    note(n),
-    "</form>",
-  ].join("");
+/** The website's colours and animated backgrounds are set on a screen of their own, the principal's. */
+function lookLink() {
+  return '<h2>Colours and animations</h2><p class="hint">The main, accent, detail and dark-band colours, and the five animated backgrounds.</p><p><a class="btn" href="/website/look/">Colours and animations</a></p>';
 }
 
 function delegation(body, n) {

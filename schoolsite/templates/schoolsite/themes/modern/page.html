@@ -1,0 +1,109 @@
+{% load static %}{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+{% comment %}
+Modern Campus (`docs/school-sites-theme-modern.md`), the one designed theme.
+Drawn with no request (`schoolsite.render`), so nothing here can know who is
+looking. The one inline style is the school's palette (its colours, checked and
+worked out by `schoolsite.themes`) and its pictures' focal points; the page's
+Content-Security-Policy names it by its hash and refuses every other inline
+style. The only script is the site's own module, on a page with a gallery, a
+hero video or a slideshow of more than one photo, and the page works without
+it: the menu and Sign in are <details>, a slideshow shows its first photo.
+{% endcomment %}
+{% if preview %}<meta name="robots" content="noindex, nofollow">
+{% endif %}{% if description %}<meta name="description" content="{{ description }}">
+{% endif %}<link rel="canonical" href="{{ canonical }}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ title }}">
+{% if description %}<meta property="og:description" content="{{ description }}">
+{% endif %}<meta property="og:url" content="{{ canonical }}">
+<meta property="og:site_name" content="{{ school.name }}">
+{% include "design/head.html" %}
+{% comment %}The heavy weight too: a school's page is mostly headings and buttons, and a
+heading face that arrived after the first paint would move them (§4.1's layout shift).{% endcomment %}
+<link rel="preload" href="{% static heading_font %}" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="{% static stylesheet %}">
+{% if hero_preload %}{% comment %}The hero's first photo is the page's largest paint (§4.2): asked for at once, at the size this screen draws it, in AVIF (a browser without AVIF skips this and finds the WebP or JPEG in the page).{% endcomment %}<link rel="preload" as="image" type="image/avif" imagesrcset="{{ hero_preload.avif }}" imagesizes="{{ hero_preload.sizes }}" fetchpriority="high">
+{% endif %}
+<style>{{ style }}</style>
+{% if structured_data %}<script type="application/ld+json">{{ structured_data }}</script>
+{% endif %}<body class="site">
+{% if preview %}<p class="preview-bar" role="status"><strong>Preview: not published</strong>{% if preview.off %} &middot; This page is switched off, so the public cannot see it{% endif %} <a href="{{ preview.editor }}">Back to the editor</a></p>
+{% endif %}<a class="skip" href="#content">Skip to the page</a>
+{% comment %}The header sticks to the top on every screen. From 860px it is one slim bar: the
+crest and name, the first pages (the rest under "More"), Sign in and Apply now. Under
+860px a Menu button drops a panel from the bar with every page and two big buttons. Both
+menus are <details>, so they open with no script; a browser that has no <details> shows
+them as plain lists. Links never wrap: each is one line, and the ones that would not fit
+are under "More".{% endcomment %}
+<header class="site-header">
+  <div class="bar">
+    <a class="school" href="{{ home_path|default:'/' }}">
+      {% if look.crest %}<span class="crest-tile"><img class="crest" src="{{ look.crest }}" alt="" width="40" height="40"></span>
+      {% else %}<span class="crest-tile initials" aria-hidden="true">{{ look.initials }}</span>{% endif %}
+      <span class="school-name">{{ school.name }}</span>
+    </a>
+    {% if nav|length > 1 %}<nav class="links" aria-label="The school's pages">
+      <ul>{% for item in nav %}
+        <li class="n{{ forloop.counter }}"><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
+        {% if nav|length > menu_in_a_narrow_bar %}<li class="more{% if nav|length <= menu_in_the_bar %} few{% endif %}"><details>
+          <summary>More</summary>
+          <ul>{% for item in nav %}{% if forloop.counter > menu_in_a_narrow_bar %}
+            <li class="n{{ forloop.counter }}"><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endif %}{% endfor %}
+          </ul>
+        </details></li>{% endif %}
+      </ul>
+    </nav>{% endif %}
+    <div class="actions-bar">
+      {% if portal_host %}<details class="sign-in">
+        <summary>Sign in</summary>
+        <ul>
+          <li><a href="//{{ portal_host }}/sign-in/">Parent or guardian</a></li>
+          <li><a href="//{{ portal_host }}/staff-sign-in/">Staff</a></li>
+        </ul>
+      </details>{% endif %}
+      {% if apply_href %}<a class="button accent apply" href="{{ apply_href }}">Apply now</a>{% endif %}
+    </div>
+    <details class="menu">
+      <summary><span class="menu-lines" aria-hidden="true"></span>Menu</summary>
+      <div class="panel">
+        {% if nav|length > 1 %}<ul class="panel-links">{% for item in nav %}
+          <li><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
+        </ul>{% endif %}
+        <div class="panel-buttons">
+          {% if portal_host %}<details class="sign-in-big">
+            <summary class="button">Sign in</summary>
+            <ul>
+              <li><a class="button" href="//{{ portal_host }}/sign-in/">Parent or guardian</a></li>
+              <li><a class="button" href="//{{ portal_host }}/staff-sign-in/">Staff</a></li>
+            </ul>
+          </details>{% endif %}
+          {% if apply_href %}<a class="button accent" href="{{ apply_href }}">Apply now</a>{% endif %}
+        </div>
+      </div>
+    </details>
+  </div>
+</header>
+<main id="content">
+  {% if album %}{% include "schoolsite/themes/modern/parts/album.html" %}{% else %}
+  {% if not has_hero %}<div class="wrap"><h1 class="page-title">{% if key == "home" %}{{ school.name }}{% else %}{{ label }}{% endif %}</h1></div>{% endif %}
+  {% for section in sections %}{% include section.template with s=section.data variant=section.variant %}{% endfor %}
+  {% if key == "gallery" %}{% include "schoolsite/themes/modern/parts/albums.html" %}{% endif %}{% endif %}
+  {% if key == "home" %}<p class="wrap checker"><a class="button" href="/check/">Check a result</a></p>{% endif %}
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <p class="footer-school"><strong>{{ school.name }}</strong>{% if footer.address_line %}<span>{{ footer.address_line }}</span>{% endif %}</p>
+    {% if nav|length > 1 %}<ul class="links">{% for item in nav %}
+      <li><a href="{{ item.path }}">{{ item.label }}</a></li>{% endfor %}
+    </ul>{% endif %}
+    {% if footer.social %}<ul class="social">{% for link in footer.social %}
+      <li><a href="{{ link.url }}" rel="noopener noreferrer">{{ link.label }}</a></li>{% endfor %}
+    </ul>{% endif %}
+    <p class="made"><span>&copy; {{ school.name }}</span> <a class="powered" href="{{ classnode }}">Powered by Classnode</a></p>
+  </div>
+</footer>
+{% if script %}<script type="module" src="{% static 'schoolsite/site-app.js' %}"></script>
+{% endif %}

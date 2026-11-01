@@ -1,8 +1,0 @@
-{% comment %}The Gallery page's albums, newest first, each a cover, a title and how many photos.{% endcomment %}{% if album_cards %}
-<section class="albums">
-  <h2>Albums</h2>
-  <ul>{% for card in album_cards %}
-    <li><a href="{{ card.link }}">{% include "schoolsite/themes/starter/parts/picture.html" with p=card.cover %}<span class="album-title">{{ card.title }}</span><span class="album-count">{{ card.count }} photo{{ card.count|pluralize }}{% if not card.live %} &middot; not published{% endif %}</span></a></li>{% endfor %}
-  </ul>
-</section>{% elif key == "gallery" %}
-<p class="blank">There are no albums to show yet.</p>{% endif %}

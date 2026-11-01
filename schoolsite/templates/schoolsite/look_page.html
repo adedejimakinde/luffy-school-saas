@@ -1,0 +1,30 @@
+{% load static shell %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Colours and animations</title>
+
+{% comment %}
+The website's colours and animated backgrounds (`docs/school-sites-theme-modern.md`),
+the principal's: a frame of its own beside the editor, like Photos and albums, so
+neither passes the 150 KB a page may cost. No `login_required`, for the oracle
+reason the other frames give; the module asks `/api/website/` who is asking first.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'setup/setup.css' %}">
+<link rel="stylesheet" href="{% static 'site-editor/editor.css' %}">
+<link rel="stylesheet" href="{% static 'site-editor/look.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'site-editor/look-app.js' %}"></script>
+
+{% shell_open "website" %}
+    <main id="website-look" data-portal="{{ portal_host }}">
+      <noscript>
+        <h1>Colours and animations</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading your school&rsquo;s website&hellip;</p>
+    </main>
+{% shell_close "website" %}

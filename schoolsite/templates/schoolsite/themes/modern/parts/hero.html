@@ -1,0 +1,22 @@
+{% comment %}The hero: its words on the left over a faint line art, and on the right a slideshow of one to five of the school's photos, or its video, or nothing. The first photo is drawn with the page and fetched first (it is the largest paint); the others wait in a <template> until the site's script adds them after the page has loaded, and never with data saver on. The photos crossfade in a box whose shape is fixed, so the heading and the buttons never move. The video has no source until the script decides it may play (§9.2) and a visible button pauses it. On a phone the words come first and the photos under them.{% endcomment %}
+<section class="hero hero-{{ variant }}{% if s.media %} has-media{% endif %}">
+  <div class="wrap hero-grid">
+    <div class="hero-text">
+      {% if motion.hero %}{% include "schoolsite/themes/modern/parts/art_hero.html" %}{% endif %}
+      {% if s.pill %}<p class="pill"><span class="pill-dot" aria-hidden="true"></span>{{ s.pill }}</p>{% endif %}
+      <h1>{{ s.heading }}</h1>
+      {% if s.subheading %}<p class="lead">{{ s.subheading }}</p>{% endif %}
+      {% if s.buttons %}<p class="actions">{% for button in s.buttons %}
+        <a class="button{% if forloop.first %} accent{% else %} ghost{% endif %}" href="{{ button.link }}">{{ button.label }}</a>{% endfor %}
+      </p>{% endif %}
+    </div>
+    {% if s.slide_list %}<div class="slides"{% if s.slide_list|length > 1 %} data-slides role="group" aria-roledescription="slideshow" aria-label="Photos of {{ school.name }}"{% endif %}>
+      <div class="slide is-on">{% include "schoolsite/themes/modern/parts/picture.html" with p=s.slide_list.0 %}</div>
+      {% if s.slide_list|length > 1 %}<template class="later">{% for p in s.slide_list|slice:"1:" %}<div class="slide" aria-hidden="true">{% include "schoolsite/themes/modern/parts/picture.html" %}</div>{% endfor %}</template>
+      <div class="dots" hidden>{% for p in s.slide_list %}<button type="button" class="dot" aria-label="Show photo {{ forloop.counter }} of {{ s.slide_list|length }}"{% if forloop.first %} aria-current="true"{% endif %}></button>{% endfor %}</div>{% endif %}
+    </div>{% elif s.media %}<div class="slides hero-media">{% include "schoolsite/themes/modern/parts/picture.html" with p=s.media %}{% if s.media.loop %}
+      <video class="hero-video {{ s.media.cls }}" muted loop playsinline preload="none" aria-hidden="true" width="{{ s.media.w }}" height="{{ s.media.h }}" data-src="{{ s.media.loop }}"{% if video_on_phones %} data-phones="1"{% endif %}></video>
+      <button type="button" class="pause" aria-pressed="false" hidden>Pause the video</button>{% endif %}
+    </div>{% endif %}
+  </div>
+</section>

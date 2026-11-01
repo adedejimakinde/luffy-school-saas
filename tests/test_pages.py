@@ -56,6 +56,7 @@ from results.views import (
 from notices.views import SETTINGS_MODULES
 from schoolsite.editor import EDITOR_MODULES as WEBSITE_EDITOR_MODULES
 from schoolsite.editor import PHOTOS_MODULES as WEBSITE_PHOTOS_MODULES
+from schoolsite.editor import LOOK_MODULES as WEBSITE_LOOK_MODULES
 from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -94,8 +95,9 @@ PAGES = {
     "blog-editor": BLOG_EDITOR_MODULES,
     "website-editor": WEBSITE_EDITOR_MODULES,
     "website-photos": WEBSITE_PHOTOS_MODULES,
+    "website-look": WEBSITE_LOOK_MODULES,
     # A school's public website: one module and no import map, loaded only on a
-    # page with a gallery or a hero video (`schoolsite.render`).
+    # page with a gallery, a hero video or a slideshow (`schoolsite.render`).
     "school-site": ("schoolsite/site-app.js",),
 }
 
