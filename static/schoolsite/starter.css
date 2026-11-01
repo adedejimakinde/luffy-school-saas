@@ -107,8 +107,8 @@ main p { line-height: 1.6; }
 .hero-media picture, .hero-media .pic, .hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .hero-video { opacity: 0; }
 .hero-video.playing { opacity: 1; }
-.pause { position: absolute; right: 12px; bottom: 12px; min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: rgba(0, 0, 0, 0.72); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-.pause:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.pause { position: absolute; right: 12px; bottom: 12px; min-height: 44px; padding: 0 14px; border: 0; border-radius: var(--radius); background: var(--text); color: var(--card); font: inherit; font-weight: 700; cursor: pointer; }
+.pause:focus-visible { outline: 3px solid var(--card); outline-offset: 2px; }
 .message .portrait { width: 8rem; aspect-ratio: 4 / 5; margin: 0 0 12px; border-radius: var(--radius); overflow: hidden; }
 .message .portrait .pic { width: 100%; height: 100%; object-fit: cover; }
 
@@ -130,14 +130,14 @@ main p { line-height: 1.6; }
 .album .back a { display: inline-flex; align-items: center; min-height: 44px; }
 .blank { color: var(--muted); }
 
-.lightbox { max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; padding: 12px; box-sizing: border-box; border: 0; background: #000; color: #fff; }
-.lightbox::backdrop { background: rgba(0, 0, 0, 0.9); }
+.lightbox { max-width: 100vw; max-height: 100vh; width: 100%; height: 100%; margin: 0; padding: 12px; box-sizing: border-box; border: 0; background: var(--text); color: var(--card); }
+.lightbox::backdrop { background: var(--text); }
 .lightbox[open] { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
 .lightbox img { display: block; max-width: 100%; max-height: calc(100vh - 140px); width: auto; height: auto; margin: 0 auto; object-fit: contain; }
 .lightbox-caption { margin: 0; text-align: center; line-height: 1.4; }
 .lightbox-bar { display: flex; justify-content: center; gap: 8px; }
-.lightbox-bar button { min-height: 44px; min-width: 44px; padding: 0 14px; border: 2px solid #fff; border-radius: var(--radius); background: transparent; color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
-.lightbox-bar button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.lightbox-bar button { min-height: 44px; min-width: 44px; padding: 0 14px; border: 2px solid var(--card); border-radius: var(--radius); background: transparent; color: var(--card); font: inherit; font-weight: 700; cursor: pointer; }
+.lightbox-bar button:focus-visible { outline: 3px solid var(--card); outline-offset: 2px; }
 
 .map { margin-top: 16px; aspect-ratio: 4 / 3; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
 .map iframe { display: block; width: 100%; height: 100%; border: 0; }
