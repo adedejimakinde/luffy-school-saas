@@ -304,4 +304,4 @@ class TheDemoSiteTests(PublicSiteSetUp):
         contact = self.get("/contact/").content.decode()
         self.assertIn("Open in Maps", contact)
         self.assertIn('href="https://wa.me/2348030000000"', contact)
-        self.assertIn('lang="yo"', self.get("/").content.decode())
+        self.assertIn('lang="yo"', self.get("/about/").content.decode())

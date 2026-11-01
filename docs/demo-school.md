@@ -24,7 +24,7 @@ made up; any match with a real person is chance.
 | Results | the Ogun State sheet, every paper marked, both conduct sections rated, remarks written. Released: JSS 1A, JSS 2A, SS 1A (with result-checker slips printed). Waiting on the principal: six classes. Still open with the class teacher: JSS 2B, SS 3A, SS 3B |
 | Fees | every class billed (tuition and two levies); about half paid in full, a third part-paid, the rest owing |
 | CBT | the vice principal named exam officer; JSS 3A's exam slips printed |
-| Website | the starter theme with the school's details, published |
+| Website | Modern Campus: a slideshow of three drawn scenes of buildings and trees (no people), the facts, the principal's message, an album of the grounds, the admissions band and Visit us; the motto on About. Published |
 | Setup | finished, with the contact email and the crest in the setup log |
 
 **Not in it, and why.** The CBT question bank is CBT step 3, which is not built:
@@ -111,6 +111,11 @@ docker compose run --rm web python manage.py crestfield reset
 
 Reset keeps the passwords. To change them, edit the file and run the reset with
 the variables passed, as `create` takes them.
+
+The website's photos are drawn and processed inside the command itself, so it
+needs no media worker; they add some seconds to it. A Crestfield made before
+Modern Campus keeps working in the new look as it is: its hero had no photo, so
+it shows its words alone until a reset gives it the slideshow and the album.
 
 A reset that stops half way (a deploy, a lost connection) leaves the school
 broken but alone; run it again.

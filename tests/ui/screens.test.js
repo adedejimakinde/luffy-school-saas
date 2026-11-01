@@ -134,8 +134,9 @@ export const SCREENS = [
   // The school's own public page, at its root, open to anyone: Sunrise has not
   // published its website, so this is today's page.
   { name: "school-site", as: null, url: `${SUNRISE}/` },
-  // Harbour has (`schoolsite.demo`): its website, in the starter theme.
-  { name: "school-website", as: null, url: `${HARBOUR}/` },
+  // Harbour has (`schoolsite.demo`): its website, in Modern Campus, also at a
+  // small and a common phone (docs/school-sites-theme-modern.md).
+  { name: "school-website", as: null, url: `${HARBOUR}/`, widths: [320, 390] },
   { name: "school-website-about", as: null, url: `${HARBOUR}/about/` },
   { name: "school-website-admissions", as: null, url: `${HARBOUR}/admissions/` },
   { name: "school-website-contact", as: null, url: `${HARBOUR}/contact/` },
@@ -169,16 +170,26 @@ export const SCREENS = [
   },
   { name: "school-website-gallery", as: null, url: `${HARBOUR}/gallery/` },
   { name: "school-website-album", as: null, url: `${HARBOUR}/gallery/inter-house-sports-2026/` },
-  // A page of the school's own (docs/school-sites.md §2.1.1), and on a phone the
-  // menu's "More", which the demo's six pages put there.
+  // A page of the school's own (docs/school-sites.md §2.1.1); on a phone the
+  // menu's panel, and on a wide screen the bar's "More", which the demo's six
+  // pages put there.
   { name: "school-website-boarding", as: null, url: `${HARBOUR}/pages/boarding/` },
+  {
+    name: "school-website-menu",
+    as: null,
+    url: `${HARBOUR}/`,
+    steps: [["school-website-menu-open", ".menu summary:visible"]],
+    phoneOnly: true,
+  },
   {
     name: "school-website-more",
     as: null,
     url: `${HARBOUR}/`,
-    steps: [["school-website-more-open", ".site-header nav .more summary:visible"]],
-    phoneOnly: true,
+    steps: [["school-website-more-open", ".site-header .more summary:visible"]],
+    wideOnly: true,
   },
+  // Colours and animations (docs/school-sites-theme-modern.md), as Harbour's principal. Read only.
+  { name: "website-look", as: "harbour.principal", url: `${HARBOUR}/website/look/` },
   { name: "outbox", as: null, url: `${PORTAL}/dev/outbox/` },
   // Signed in at one school, asking for another's page.
   { name: "not-allowed", as: "sunrise.teacher", url: `${HARBOUR}/register/`, status: 403 },
@@ -796,7 +807,8 @@ describe("every page, at every width", () => {
             // step's target a moment to arrive before calling it missing. The
             // specimen's menu button never arrives above 1024px, which is why
             // it is only a wait and not the assertion.
-            const narrowOnly = screen.specimen || screen.phoneOnly;
+            // A school website's menu button is only on a phone, its bar's "More" only wider.
+            const narrowOnly = screen.specimen || screen.phoneOnly || screen.wideOnly;
             await target.waitFor({ state: "attached", timeout: narrowOnly ? 1 : 5000 }).catch(() => {});
             if (!(await target.count())) {
               // A drill-down whose first step is not on screen at this width

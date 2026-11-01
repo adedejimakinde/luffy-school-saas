@@ -21,7 +21,7 @@ school in Abeokuta at the end of its first term:
   part-paid, the rest owing.
 - **CBT**: the vice principal named exam officer and JSS 3A's exam slips
   printed. The question bank (`questions.py`) waits for CBT step 3.
-- **Its website**, the starter theme with the school's details, published.
+- **Its website**, Modern Campus with the school's details and drawn photos, published.
 
 ## What keeps it apart from real schools
 
