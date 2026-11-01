@@ -36,7 +36,7 @@ function where(p) {
   if (u.live) lines.push("On the live website");
   for (const title of u.albums_live || []) lines.push(`In the published album &ldquo;${esc(title)}&rdquo;`);
   for (const place of u.draft || []) lines.push(`In the draft: ${esc(place)}`);
-  if (u.album) lines.push(`In the album &ldquo;${esc(u.album)}&rdquo;`);
+  if (u.album && !(u.albums_live || []).includes(u.album)) lines.push(`In the album &ldquo;${esc(u.album)}&rdquo; (not published yet)`);
   return lines.length ? lines.join("<br>") : "Not used anywhere yet";
 }
 

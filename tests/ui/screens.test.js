@@ -153,6 +153,22 @@ export const SCREENS = [
       ["website-editor-section", '[data-action="edit-section"]'],
     ],
   },
+  // Photos and albums (docs/school-sites.md PR 5), as Harbour's principal: the
+  // list, the published album, one photo's screen with its focal point, and the
+  // upload screen. Read only, like the editor; and the public album and Gallery.
+  {
+    name: "website-photos",
+    as: "harbour.principal",
+    url: `${HARBOUR}/website/photos/`,
+    steps: [
+      ["website-photos-album", '[data-action="open-album"]'],
+      ["website-photos-picture", '[data-action="open-picture"]'],
+      ["website-photos-back", '[data-action="close-picture"]'],
+      ["website-photos-upload", '[data-action="new-picture"]'],
+    ],
+  },
+  { name: "school-website-gallery", as: null, url: `${HARBOUR}/gallery/` },
+  { name: "school-website-album", as: null, url: `${HARBOUR}/gallery/inter-house-sports-2026/` },
   // A page of the school's own (docs/school-sites.md §2.1.1), and on a phone the
   // menu's "More", which the demo's six pages put there.
   { name: "school-website-boarding", as: null, url: `${HARBOUR}/pages/boarding/` },

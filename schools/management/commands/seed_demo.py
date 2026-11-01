@@ -66,7 +66,7 @@ from messaging.fake import FakeProvider
 from messaging.providers import provider_for
 from results import ogun
 from schools.models import Domain, School
-from schoolsite.demo import publish_demo_site
+from schoolsite.demo import publish_demo_pictures, publish_demo_site
 from timetable import services as timetable
 from timetable.models import Weekday
 
@@ -260,6 +260,9 @@ class Command(BaseCommand):
             # that has not published (`schoolsite.demo`).
             with schema_context(school.schema_name), transaction.atomic():
                 publish_demo_site(staff["principal"].user, school)
+            # And its pictures: a hero photo, a portrait and an album (PR 5).
+            with schema_context(school.schema_name), transaction.atomic():
+                publish_demo_pictures(staff["principal"].user, school)
         return logins
 
     def _term_data(self, school, staff, teachers, children, rng, paper_scheme, template):
