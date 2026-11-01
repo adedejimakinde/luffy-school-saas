@@ -110,7 +110,7 @@ def public_rows(school):
 class OwnFilesRoot:
     """Each class that makes the demo writes its files under a directory of its own.
 
-    The demo draws its website's photos (`schools.crestfield.site`) into
+    The demo loads its website's photos (`schools.crestfield.site`) into
     `<FILES_ROOT>/crestfield/`, and the run's `FILES_ROOT` is one directory shared
     by every parallel worker (`schools.tests.runner`): two classes making the demo
     at once in two workers would write, and a reset would delete, in the same
@@ -302,7 +302,7 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
         self.assertNotEqual(after.key, before.key)
         self.assertFalse(storage.path_of(self.school.schema_name, before.key, "card.png").exists())
         kept = sorted(p.name for p in (storage.root() / self.school.schema_name).rglob("*") if p.is_file())
-        # The new crest and the website's new photos (drawn by `schools.crestfield.site`), and nothing else.
+        # The new crest and the website's photos (loaded again by `schools.crestfield.site`), and nothing else.
         with schema_context(self.school.schema_name):
             from files.models import StoredFile
 
@@ -365,6 +365,52 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
         answer = self.client.put(url, data=json.dumps({"absent_ids": []}), content_type="application/json", HTTP_HOST=DEMO)
         self.assertEqual(answer.status_code, 403)
         self.assertEqual(counts(self.school), before)
+
+    # -- the website's photos -----------------------------------------------------
+
+    def test_the_website_shows_the_photos_classnodes_own_site_uses(self):
+        """Three stock photos of adults, through the upload service: the slideshow, the portrait and the album."""
+        from schools.crestfield import site
+        from schoolsite import sections
+        from schoolsite.models import Album, Page, PageKey, SectionKind, SitePicture
+        from files.models import StoredFile, State
+
+        self.assertEqual(site.PHOTO_DIR.parent.name, "website", "the photos Classnode's own site serves")
+        self.assertEqual(sorted(p["file"] for p in site.PHOTOS),
+                         ["bursar-880.webp", "principal-600.webp", "teacher-880.webp"])
+        for photo in site.PHOTOS:
+            self.assertTrue((site.PHOTO_DIR / photo["file"]).is_file(), photo["file"])
+        with schema_context(self.school.schema_name):
+            home = Page.objects.get(key=PageKey.HOME)
+            hero = home.sections.get(kind=SectionKind.HERO)
+            message = home.sections.get(kind=SectionKind.PRINCIPAL_MESSAGE)
+            slides = sections.hero_slides(hero.data)
+            self.assertEqual(len(slides), len(site.PHOTOS), "every photo is in the slideshow")
+            rows = {p.pk: p for p in SitePicture.objects.filter(pk__in=[*slides, message.data["portrait"]])}
+            self.assertEqual([rows[i].alt for i in slides], [p["alt"] for p in site.PHOTOS])
+            self.assertEqual(rows[message.data["portrait"]].use, "portrait")
+            self.assertEqual(rows[message.data["portrait"]].alt, site.PORTRAIT_ALT)
+            album = Album.objects.get()
+            self.assertIsNotNone(album.published, "the album is on the site")
+            gallery = list(album.photos.order_by("position"))
+            self.assertEqual([p.caption for p in gallery], [p["caption"] for p in site.PHOTOS], "the same photos")
+            for picture, photo in zip([rows[i] for i in slides] + gallery, site.PHOTOS * 2):
+                self.assertEqual((picture.focal_x, picture.focal_y), (photo["focal"]["x"], photo["focal"]["y"]))
+            # Each went through the upload service: ready, with the sizes it makes, and nothing else kept.
+            stored = list(StoredFile.objects.filter(key__in=[p.file_key for p in SitePicture.objects.all()]))
+            self.assertEqual(len(stored), 3 + 1 + 3)
+            for item in stored:
+                self.assertEqual(item.state, State.READY)
+                self.assertTrue(any(name.endswith(".avif") for name in item.variants), item.variants)
+
+    def test_the_page_names_every_photo_and_no_drawn_scene_is_left(self):
+        page = self.client.get("/", HTTP_HOST=DEMO).content.decode()
+        for words in ("smiling at her desk", "holding a phone", "checking papers at a laptop"):
+            self.assertIn(words, page)
+        gallery = self.client.get("/gallery/", HTTP_HOST=DEMO)
+        self.assertEqual(gallery.status_code, 200)
+        self.assertIn("Around the school", gallery.content.decode())
+        self.assertNotIn("The main gate", page)
 
     # -- never indexed ----------------------------------------------------------
 
@@ -541,6 +587,37 @@ class TheDemoDataTests(SimpleTestCase):
                 self.assertEqual(len(options), 4, text)
                 self.assertEqual(len(set(options)), 4, text)
                 self.assertIn(answer, range(4), text)
+
+    def test_every_photo_keeps_its_head_in_every_crop_the_theme_makes(self):
+        """The focal points keep each head inside the 4:3 phone slide, the near-square desk slide,
+        the square gallery tile and the 4:5 portrait, which are the shapes `modern.css` crops to."""
+        from PIL import Image
+
+        from schools.crestfield import site
+
+        #: Each head, hair to chin, as (left, top, right, bottom) fractions of the photo.
+        heads = {
+            "principal-600.webp": (0.42, 0.12, 0.71, 0.56),
+            "bursar-880.webp": (0.48, 0.06, 0.67, 0.38),
+            "teacher-880.webp": (0.40, 0.18, 0.64, 0.49),
+        }
+        shapes = {"phone slide": 4 / 3, "desk slide": 5 / 5.2, "gallery tile": 1.0, "portrait": 0.8}
+        for photo in site.PHOTOS:
+            with Image.open(site.PHOTO_DIR / photo["file"]) as image:
+                width, height = image.size
+            for name, aspect in shapes.items():
+                if aspect > width / height:
+                    across, down = 1.0, (width / height) / aspect
+                else:
+                    across, down = aspect / (width / height), 1.0
+                left = photo["focal"]["x"] * (1 - across)
+                top = photo["focal"]["y"] * (1 - down)
+                head = heads[photo["file"]]
+                where = f"{photo['file']} as a {name}"
+                self.assertGreaterEqual(head[0], left, where)
+                self.assertGreaterEqual(head[1], top, where)
+                self.assertLessEqual(head[2], left + across, where)
+                self.assertLessEqual(head[3], top + down, where)
 
     def test_every_name_and_sentence_is_plainly_spelt(self):
         """No tone marks, under-dots or hooked letters: names as schools record them.

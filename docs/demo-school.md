@@ -24,7 +24,7 @@ made up; any match with a real person is chance.
 | Results | the Ogun State sheet, every paper marked, both conduct sections rated, remarks written. Released: JSS 1A, JSS 2A, SS 1A (with result-checker slips printed). Waiting on the principal: six classes. Still open with the class teacher: JSS 2B, SS 3A, SS 3B |
 | Fees | every class billed (tuition and two levies); about half paid in full, a third part-paid, the rest owing |
 | CBT | the vice principal named exam officer; JSS 3A's exam slips printed |
-| Website | Modern Campus: a slideshow of three drawn scenes of buildings and trees (no people), the facts, the principal's message, an album of the grounds, the admissions band and Visit us; the motto on About. Published |
+| Website | Modern Campus: a slideshow of three stock photos of adult staff (a principal, a teacher and a bursar; no child is shown), the facts, the principal's message with her portrait, an album of the same three photos, the admissions band and Visit us; the motto on About. Published |
 | Setup | finished, with the contact email and the crest in the setup log |
 
 **Not in it, and why.** The CBT question bank is CBT step 3, which is not built:
@@ -112,10 +112,44 @@ docker compose run --rm web python manage.py crestfield reset
 Reset keeps the passwords. To change them, edit the file and run the reset with
 the variables passed, as `create` takes them.
 
-The website's photos are drawn and processed inside the command itself, so it
-needs no media worker; they add some seconds to it. A Crestfield made before
+The website's photos are loaded and processed inside the command itself, so it
+needs no media worker; they add a few seconds to it. A Crestfield made before
 Modern Campus keeps working in the new look as it is: its hero had no photo, so
-it shows its words alone until a reset gives it the slideshow and the album.
+it shows its words alone until a reset gives it the slideshow and the album. One
+made before the stock photos (1 November 2026) shows drawn scenes of buildings
+until its next reset replaces them.
+
+### The website's photos
+
+They are **licensed stock photos of adult staff, used for the demo only**: the
+three Classnode's own public site uses (`static/website/photos/`, recorded under
+"Photo sources and licences" in `docs/website.md`). They are not photographs of
+anyone at a real school, and the people in them are not the staff named in the
+demo: the principal's name beside her portrait is made up, like the school.
+Do not use them for a real school's site, and do not move them out of the demo.
+No photo shows a child.
+
+`manage.py crestfield create` and `reset` load them again every time, from the
+repository, through the upload service (`schools/crestfield/site.py`): each is
+checked, stripped of metadata and drawn again in sizes for phones, exactly as a
+principal's upload is, so a reset (which deletes the school's files with its
+schema) never leaves the site without them. Nothing is uploaded by hand.
+
+| where | which | focal point (across, down) |
+|---|---|---|
+| hero slideshow, first | the principal at her desk | 0.56, 0.15 |
+| hero slideshow, second | the teacher with a phone | 0.55, 0.10 |
+| hero slideshow, third | the bursar at a laptop | 0.70, 0.10 |
+| the principal's message | the principal, cropped 4:5 | 0.56, 0.15 |
+| the album "Around the school" | the same three | as above |
+
+The slideshow takes up to five photos; Classnode's site has three, so it shows
+three. The focal points keep each head inside every crop the theme makes (the 4:3
+phone slide, the near-square desk slide, the square gallery tile and the 4:5
+portrait); `schools/tests/test_crestfield.py` checks it. The largest copy
+Classnode's site keeps is 880 px wide (600 for the principal), so on a wide screen the
+slideshow shows them a little soft: a larger original would sharpen it, and is
+not in the repository.
 
 A reset that stops half way (a deploy, a lost connection) leaves the school
 broken but alone; run it again.
