@@ -23,8 +23,14 @@ theme, width and height set, lazy below the hero. A picture whose file is no
 longer on the server (deleted after that revision was published, then rolled
 back to) is left out, with its section drawn without it. **Script** runs only on
 a page that needs it, one module from `static/` (`schoolsite/site-app.js`): the
-gallery's tap-to-enlarge, and the hero video's loading rules (§9.2); the CSP
-then allows `'self'` scripts and no others. **The map** is an outside frame only
+gallery's tap-to-enlarge, the hero video's loading rules (§9.2), and a hero
+slideshow of more than one photo (Modern Campus), whose first photo is drawn
+with the page and the rest added after it loads; the CSP then allows `'self'`
+scripts and no others.
+
+**Colours** are the school's palette (`palette_for`: its choices, the theme's
+own, and the tints `schoolsite.themes` works out), written into the page's one
+style as custom properties. **The map** is an outside frame only
 on the page a visitor asked for it on (`?map=1`), and only that page's CSP
 allows its host.
 """
@@ -43,7 +49,7 @@ from django.utils.safestring import mark_safe
 from results import look
 from schools.hosts import portal_host
 
-from . import pictures, themes
+from . import pictures, sections as section_rules, themes
 from .models import Album, PageKey, PageKind, SectionKind
 
 #: Where each fixed page answers (§2.1), in the order the menu lists them.
@@ -56,8 +62,11 @@ PAGE_PATHS = {
     PageKey.CONTACT: "/contact/",
 }
 
-#: On a phone, the menu shows this many links and puts the rest under "More" (§2.1.1).
-MENU_ON_A_PHONE = 5
+#: How many pages the header's bar shows from 1100px, and from 860px; the rest are under
+#: "More" (§2.1.1). Under 860px every page is in the menu's panel. `modern.css` holds the same
+#: two numbers (`:nth-child(n+6)`, `:nth-child(n+4)`).
+MENU_IN_THE_BAR = 5
+MENU_IN_A_NARROW_BAR = 3
 
 #: How each network the footer may link to is written.
 NETWORK_NAMES = {"facebook": "Facebook", "instagram": "Instagram", "x": "X", "youtube": "YouTube",
@@ -68,8 +77,12 @@ WHITE = "#FFFFFF"
 
 
 def theme_of(snapshot) -> str:
-    """The snapshot's theme, or the default if it names one this platform no longer has."""
+    """The snapshot's theme, or the default if it names one this platform no longer has.
+
+    A revision published on the starter theme names "starter", which is Modern Campus now.
+    """
     key = snapshot.get("theme")
+    key = themes.FORMER_THEMES.get(key, key)
     return key if key in themes.THEMES else themes.DEFAULT_THEME
 
 
@@ -87,10 +100,33 @@ def colour_for(snapshot, report_card_colour) -> str:
     return report_card_colour
 
 
-def style_block(colour, rules=()) -> str:
-    """The page's one inline style. `colour` is six hex digits, checked twice before here;
-    `rules` are the pictures' classes (`picture_rule`), built only from numbers and checked hex."""
-    return f":root{{--school:{colour}}}" + "".join(sorted(rules))
+#: The colours the page's one style names, as custom properties the stylesheet draws with.
+PALETTE_PROPERTIES = ("primary", "accent", "detail", "dark", "text", "surface", "tint", "warm", "mist", "mint")
+
+
+def palette_for(snapshot, report_card_colour) -> dict:
+    """Every colour the page is drawn with: the school's choices, the theme's own, the tints.
+
+    The primary is the school's colour (`colour_for`), so a school that never chose
+    one has its report card's, and the tints are worked out from that.
+    """
+    theme = theme_of(snapshot)
+    options = dict(snapshot.get("options") or {})
+    colours = {**(options.get("colours") or {}), "primary": colour_for(snapshot, report_card_colour)}
+    chosen = themes.palette(theme, {**options, "colours": colours})
+    return {name: chosen[name] for name in PALETTE_PROPERTIES if _is_hex(chosen.get(name, ""))}
+
+
+def _is_hex(value) -> bool:
+    return len(value) == 7 and value.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in value[1:])
+
+
+def style_block(colour, rules=(), palette=None) -> str:
+    """The page's one inline style. `colour` is six hex digits, checked twice before here, and
+    so is every colour of `palette`; `rules` are the pictures' classes (`picture_rule`), built
+    only from numbers and checked hex."""
+    names = "".join(f";--{name}:{value}" for name, value in (palette or {}).items() if _is_hex(value))
+    return f":root{{--school:{colour}{names}}}" + "".join(sorted(rules))
 
 
 def style_hash(style) -> str:
@@ -318,17 +354,31 @@ def map_embed(data, address) -> str:
 
 
 def _section(theme, section, live_paths, school, address, *, pics=None, albums=None, first=False, page_path_=None,
-             map_open=False, within=lambda path: path):
+             map_open=False, within=lambda path: path, pill=""):
     kind = section["kind"]
     data = dict(section["data"])
     pics = pics or Pictures({}, set(), PUBLIC_MEDIA, {})
     if kind == SectionKind.HERO:
         data["buttons"] = [b for b in data.get("buttons", []) if link_is_live(b["link"], live_paths)]
+        data["slide_list"], data["media"] = [], None
         if section.get("variant") != "plain":
-            media = pics.get(data.get("video") or data.get("image"), "hero", eager=first)
-            data["media"] = media
-            if media and media["loop"]:
-                pics.script = True
+            if data.get("video"):
+                media = pics.get(data["video"], "hero", eager=first)
+                data["media"] = media
+                if media and media["loop"]:
+                    pics.script = True
+            else:
+                # The slideshow: the first photo drawn with the page and fetched first (it
+                # is the page's largest paint); the others only after the page has
+                # loaded, by the site's script, and never with data saver on.
+                drawn = [p for p in (pics.get(pid, "hero") for pid in section_rules.hero_slides(data)) if p]
+                if drawn:
+                    drawn[0] = pics.get(drawn[0]["id"], "hero", eager=first)
+                    data["media"] = drawn[0]
+                data["slide_list"] = drawn
+                if len(drawn) > 1:
+                    pics.script = True
+        data["pill"] = pill
     if kind == SectionKind.PRINCIPAL_MESSAGE:
         data["portrait_picture"] = pics.get(data.get("portrait"), "portrait")
     if kind == SectionKind.GALLERY:
@@ -340,12 +390,19 @@ def _section(theme, section, live_paths, school, address, *, pics=None, albums=N
                 count = data.get("count") or GALLERY_DEFAULT_COUNT
                 drawn = [p for p in (pics.draw(e, place) for e in album["photos"]) if p]
                 total, shown, title = len(drawn), drawn[:count], album["title"]
+                if shown and place == "grid":
+                    # The mosaic draws its first photo tall, so it is fetched at that size.
+                    first_entry = next(e for e in album["photos"] if e["id"] == shown[0]["id"])
+                    shown[0] = pics.draw(first_entry, "tall")
                 gallery = PAGE_PATHS[PageKey.GALLERY]
                 if gallery in live_paths and total:
                     link = within(f"{gallery}{album['slug']}/")
         else:
             shown = [p for p in (pics.get(pid, place) for pid in data.get("photos", [])) if p]
+            if shown and place == "grid":
+                shown[0] = pics.get(shown[0]["id"], "tall")
         data["photo_list"] = shown
+        data["album_more"] = max(total - len(shown), 0)
         data["album_title"] = title
         data["album_link"] = link
         data["album_total"] = total
@@ -375,6 +432,30 @@ def _section(theme, section, live_paths, school, address, *, pics=None, albums=N
         "data": data,
         "template": f"schoolsite/themes/{theme}/parts/{kind}.html",
     }
+
+
+def admissions_pill(page_sections) -> str:
+    """The hero's small "Admissions open" line, from the page's own admissions panel.
+
+    Drawn only while that panel says admissions are open, with its session when it
+    names one; nothing when the page has no panel or admissions are closed.
+    """
+    panel = next((s["data"] for s in page_sections if s["kind"] == SectionKind.ADMISSIONS_CTA), None)
+    if not panel or not panel.get("open", True):
+        return ""
+    return f"Admissions open for {panel['session']}" if panel.get("session") else "Admissions open"
+
+
+def apply_href(live_paths) -> str:
+    """Where the header's "Apply now" goes: the Admissions page if it is on, else Contact, else nowhere."""
+    for key in (PageKey.ADMISSIONS, PageKey.CONTACT):
+        if PAGE_PATHS[key] in live_paths:
+            return PAGE_PATHS[key]
+    return ""
+
+
+#: Where "Powered by Classnode" goes.
+CLASSNODE = "https://classnode.co"
 
 
 def _footer(footer):
@@ -470,9 +551,10 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
         title = f"{label} | {school.name}"
     else:
         title = page["title"] or (school.name if key == PageKey.HOME else f"{label} | {school.name}")
+    pill = admissions_pill(page_sections)
     sections = [
         _section(theme, s, live_paths, school, school.address, pics=pics, albums=albums, first=(i == 0),
-                 page_path_=page_path(page), map_open=map_open, within=within)
+                 page_path_=page_path(page), map_open=map_open, within=within, pill=pill)
         for i, s in enumerate(page_sections)
     ]
     album_cards = []
@@ -497,7 +579,9 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
         for p in pages
     ]
     hero = next((s["data"].get("media") for s in sections if s["kind"] == SectionKind.HERO), None)
-    style = style_block(colour_for(snapshot, card["colour"]), pics.rules)
+    palette = palette_for(snapshot, card["colour"])
+    style = style_block(palette["primary"], pics.rules, palette)
+    apply = apply_href(live_paths)
     canonical = root + page_path(page) + (f"{album}/" if album is not None else "")
     context = {
         "indexable": not preview,
@@ -512,8 +596,8 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
         "key": key,
         "label": album_page["title"] if album_page else label,
         "nav": nav,
-        "nav_more": nav[MENU_ON_A_PHONE:],
-        "menu_on_a_phone": MENU_ON_A_PHONE,
+        "menu_in_the_bar": MENU_IN_THE_BAR,
+        "menu_in_a_narrow_bar": MENU_IN_A_NARROW_BAR,
         "home_path": within("/"),
         "sections": sections,
         "has_hero": any(s["kind"] == SectionKind.HERO for s in sections),
@@ -522,6 +606,11 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
         "album_cards": album_cards,
         "script": pics.script,
         "video_on_phones": themes.THEMES[theme].video_on_phones,
+        "motion": themes.animations(snapshot.get("options")),
+        "heading_font": themes.THEMES[theme].heading_font,
+        "stylesheet": themes.THEMES[theme].stylesheet,
+        "apply_href": within(apply) if apply else "",
+        "classnode": CLASSNODE,
         "footer": _footer(snapshot.get("footer") or {}),
         "portal_host": portal_host(),
         "structured_data": structured_data(school, root, snapshot) if key == PageKey.HOME and not preview else "",
@@ -551,12 +640,15 @@ def sitemap(revision, host) -> str:
 
 __all__ = [
     "MAP_FRAME",
-    "MENU_ON_A_PHONE",
+    "MENU_IN_A_NARROW_BAR",
+    "MENU_IN_THE_BAR",
     "PAGE_PATHS",
     "Drawn",
     "Pictures",
     "albums_for",
     "available_keys",
+    "admissions_pill",
+    "apply_href",
     "csp",
     "draw",
     "draw_snapshot",
@@ -564,6 +656,7 @@ __all__ = [
     "link_is_live",
     "page_label",
     "page_path",
+    "palette_for",
     "preview_path",
     "sitemap",
     "style_hash",

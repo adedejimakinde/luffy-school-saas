@@ -176,8 +176,6 @@ export async function mount(root, { fetchImpl = fetch, ask = (q) => window.confi
       after("section", result, result.ok ? { editing: null } : {});
     } else if (which === "footer") {
       after("footer", await api.changeFooter({ version: body.version, footer: footerFrom(values, body.networks || []), fetchImpl }));
-    } else if (which === "colour") {
-      after("colour", await api.changeColour({ version: body.version, colour: values.colour, fetchImpl }));
     } else if (which === "ready") {
       const result = await api.markReady({ note: values.note, fetchImpl });
       after("ready", result, result.ok ? { told: result.body.told } : {});
@@ -215,8 +213,6 @@ export async function mount(root, { fetchImpl = fetch, ask = (q) => window.confi
       go({ confirming: { what: "publish" } });
     } else if (action === "rollback") {
       go({ confirming: { what: "rollback", number: Number(button.dataset.number) } });
-    } else if (action === "colour-reset") {
-      after("colour", await api.changeColour({ version: body.version, colour: "", fetchImpl }));
     } else if (action === "page-up" || action === "page-down") {
       const order = (body.pages || []).map((x) => x.ref);
       const next = moved(order, order.indexOf(button.dataset.ref), action === "page-up" ? -1 : 1);

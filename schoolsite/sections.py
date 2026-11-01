@@ -24,7 +24,9 @@ school's draft, and is the right sort (a hero's photo or video, a portrait, a
 gallery photo), is `schoolsite.pictures.check_media`'s to ask (PR 5); news is
 PR 6. A picture's focal point and alt text live on the picture itself
 (`SitePicture`), so every place it is drawn crops it the same way; a hero's old
-`focal` field is still accepted and is not used.
+`focal` field is still accepted and is not used. A hero shows a slideshow of one
+to five photos (`slides`), or a video, or neither; the single `image` it held
+before slideshows is read as a slideshow of one (`hero_slides`).
 """
 
 import datetime
@@ -276,26 +278,61 @@ def _button(value, label):
 # -- each kind ---------------------------------------------------------------
 
 
+#: The most photos a hero's slideshow shows (`docs/school-sites-theme-modern.md`).
+MOST_SLIDES = 5
+
+
+def hero_slides(data) -> list:
+    """The picture ids a hero's slideshow shows, in order: its `slides`, or the one `image` a
+    hero kept before slideshows (a revision published then still names it that way)."""
+    slides = [s.get("picture") for s in (data.get("slides") or []) if isinstance(s, dict)]
+    if not slides and data.get("image"):
+        slides = [data["image"]]
+    return [pid for pid in slides if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0]
+
+
+def _slides(data):
+    """A hero's slides as stored: `[{"picture": id}]`, at most `MOST_SLIDES`, each photo once.
+
+    A photo's description and focal point are the photo's own (`SitePicture`), so
+    it crops and reads the same wherever it is drawn. An older client's single
+    `image` is taken as a slideshow of one.
+    """
+    slides = data.get("slides")
+    image = data.get("image")
+    if slides is not None and image is not None:
+        raise SectionRefused("A hero's photos are its slides.")
+    if slides is None:
+        return [] if image is None else [{"picture": _id(image, "The picture")}]
+    slides = _list(slides, "The slideshow", MOST_SLIDES)
+    cleaned, seen = [], set()
+    for i, slide in enumerate(slides, start=1):
+        slide = _fields(slide, f"Slide {i}", {"picture"})
+        pid = _id(slide.get("picture"), f"Slide {i}'s photo")
+        if pid in seen:
+            raise SectionRefused("Each photo is in the slideshow once.")
+        seen.add(pid)
+        cleaned.append({"picture": pid})
+    return cleaned
+
+
 def _hero(data):
-    data = _fields(data, "The hero", {"heading", "subheading", "buttons", "image", "focal", "video"})
+    data = _fields(data, "The hero", {"heading", "subheading", "buttons", "slides", "image", "focal", "video"})
     buttons = _list(data.get("buttons", []), "The hero's buttons", 2)
-    focal = data.get("focal")
-    if focal is not None:
-        focal = _fields(focal, "The focal point", {"x", "y"})
-        focal = {
-            "x": _number(focal.get("x"), "The focal point's across", 0, 1),
-            "y": _number(focal.get("y"), "The focal point's down", 0, 1),
-        }
-    image = _optional_id(data.get("image"), "The picture")
+    # A hero's own focal point predates pictures having theirs (PR 5): accepted, not kept.
+    if data.get("focal") is not None:
+        focal = _fields(data["focal"], "The focal point", {"x", "y"})
+        _number(focal.get("x"), "The focal point's across", 0, 1)
+        _number(focal.get("y"), "The focal point's down", 0, 1)
+    slides = _slides(data)
     video = _optional_id(data.get("video"), "The video")
-    if image is not None and video is not None:
-        raise SectionRefused("A hero shows a photo or a video, not both.")
+    if slides and video is not None:
+        raise SectionRefused("A hero shows photos or a video, not both.")
     return {
         "heading": _text(data.get("heading"), "The heading", 120, required=True),
         "subheading": _text(data.get("subheading"), "The line under the heading", 240),
         "buttons": [_button(b, f"Button {i}") for i, b in enumerate(buttons, start=1)],
-        "image": image,
-        "focal": focal,
+        "slides": slides,
         "video": video,
     }
 
@@ -583,6 +620,7 @@ def clean_note(value):
 
 __all__ = [
     "ALLOWED_ON",
+    "MOST_SLIDES",
     "CUSTOM",
     "INTERNAL_PATHS",
     "REFUSED_SLUGS",
@@ -605,6 +643,7 @@ __all__ = [
     "clean_page_title",
     "clean_slug",
     "clean_variant",
+    "hero_slides",
     "page_links",
     "slug_from_title",
 ]

@@ -78,8 +78,6 @@ export const removeSection = ({ id, version, fetchImpl = fetch }) =>
 export const changeFooter = ({ version, footer, fetchImpl = fetch }) =>
   send(() => putJson(at("footer/"), { version, footer }, { fetchImpl }));
 
-export const changeColour = ({ version, colour, fetchImpl = fetch }) =>
-  send(() => putJson(at("colour/"), { version, colour }, { fetchImpl }));
 
 export const changeDelegation = ({ on, fetchImpl = fetch }) =>
   send(() => putJson(at("delegation/"), { on }, { fetchImpl }));

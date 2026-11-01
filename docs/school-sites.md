@@ -946,6 +946,14 @@ One theme for now (decided 25 October 2026), with its colour roles from the cres
 
 Access tests: none new. The contract runs the PR 3 isolation and escaping tests against the theme.
 
+**Built as Modern Campus** (1 November 2026), its design approved in
+`docs/school-sites-theme-modern.md`, which also says what was built and how. In
+short: it replaces the starter theme in its place (`modern`, migration `0005`,
+with no step by hand); a hero is a slideshow of one to five photos; the principal
+sets four colours and five animated backgrounds on `/website/look/`; and the
+contract, the 150 KB frame and the Slow 4G check hold it. The new section kinds
+(programmes, facilities, clubs, events, steps) are its PR B.
+
 ### PR 8: Hero video (after the design round)
 
 The video's processing is built (the upload service PR: PyAV, the media queue, the 10-second and 3 MB rules), and so are the loading rules in §9.2 and the editor's video upload (moved into PR 5, decided 1 November 2026). PR 8 adds the external video facade: a YouTube or Vimeo link drawn as a poster, its player loaded only on tap.

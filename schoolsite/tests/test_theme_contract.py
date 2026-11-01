@@ -66,7 +66,7 @@ def _fetched(html):
     return re.sub(r'<link rel="canonical"[^>]*>', "", html)
 
 
-def snapshot(pages, theme="starter"):
+def snapshot(pages, theme="modern"):
     return {"theme": theme, "options": {}, "footer": {}, "pages": [
         {"key": key, "enabled": key in pages or key == PageKey.HOME, "title": "", "description": "",
          "sections": [{"id": i + 1000 * n, **section} for i, section in enumerate(pages.get(key, []))]}
@@ -208,7 +208,7 @@ class UnderTheBudgetTests(ContractSetUp):
                 weight = len(response.content) + sum((STATIC / a).stat().st_size for a in assets)
                 with self.subTest(host=host, path=path):
                     self.assertEqual(response.status_code, 200)
-                    self.assertIn("schoolsite/starter.css", assets)
+                    self.assertIn("schoolsite/modern.css", assets)
                     self.assertIn("web/fonts/hanken-grotesk-400.woff2", assets)
                     self.assertLess(weight, BUDGET, f"{path} weighs {weight} bytes")
                     for url in _ASSET.findall(_fetched(html)):

@@ -1,0 +1,11 @@
+{% comment %}One album's own page: every photo, in the order the school set.{% endcomment %}
+<section class="album">
+  <div class="wrap">
+    <p class="back"><a href="{{ album.back }}">All albums</a></p>
+    <h1 class="page-title">{{ album.title }}</h1>
+    {% if album.description %}{{ album.description|linebreaks }}{% endif %}
+    <ul class="photos" data-lightbox>{% for photo in album.photos %}
+      <li>{% include "schoolsite/themes/modern/parts/photo.html" with p=photo %}</li>{% endfor %}
+    </ul>
+  </div>
+</section>

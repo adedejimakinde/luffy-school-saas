@@ -15,6 +15,8 @@ term, a class, a child, a register and a principal of its own. What these hold:
 """
 
 import json
+import shutil
+import tempfile
 from datetime import timedelta
 from io import StringIO
 from unittest import mock
@@ -105,7 +107,31 @@ def public_rows(school):
     }
 
 
-class DemoSchoolTests(TestCase):
+class OwnFilesRoot:
+    """Each class that makes the demo writes its files under a directory of its own.
+
+    The demo draws its website's photos (`schools.crestfield.site`) into
+    `<FILES_ROOT>/crestfield/`, and the run's `FILES_ROOT` is one directory shared
+    by every parallel worker (`schools.tests.runner`): two classes making the demo
+    at once in two workers would write, and a reset would delete, in the same
+    place. Set before `setUpTestData` makes the demo, removed after the class.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls._files_root = tempfile.mkdtemp(prefix="crestfield-files-")
+        cls._own_root = override_settings(FILES_ROOT=cls._files_root)
+        cls._own_root.enable()
+        super().setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        super().tearDownClass()
+        cls._own_root.disable()
+        shutil.rmtree(cls._files_root, ignore_errors=True)
+
+
+class DemoSchoolTests(OwnFilesRoot, TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.other, cls.other_principal, cls.other_child, cls.other_parent, cls.other_group, cls.other_term, cls.other_day = (
@@ -276,7 +302,14 @@ class DemoSchoolTests(TestCase):
         self.assertNotEqual(after.key, before.key)
         self.assertFalse(storage.path_of(self.school.schema_name, before.key, "card.png").exists())
         kept = sorted(p.name for p in (storage.root() / self.school.schema_name).rglob("*") if p.is_file())
-        self.assertEqual(kept, sorted(f"{after.key}-{v}" for v in after.variants))
+        # The new crest and the website's new photos (drawn by `schools.crestfield.site`), and nothing else.
+        with schema_context(self.school.schema_name):
+            from files.models import StoredFile
+
+            now = list(StoredFile.objects.filter(schema_name=self.school.schema_name))
+        self.assertIn(after.key, {f.key for f in now})
+        self.assertNotIn(before.key, {f.key for f in now})
+        self.assertEqual(kept, sorted(f"{f.key}-{v}" for f in now for v in f.variants))
         self.assertTrue(storage.path_of(self.other.schema_name, theirs.key, "card.png").is_file())
 
     def test_the_schema_reset_drops_is_the_demos_and_no_other(self):
@@ -373,7 +406,7 @@ class DemoSchoolTests(TestCase):
             self.assertFalse(row and (row.payment_receipts or row.absence_alerts))
 
 
-class NothingLeavesTests(SendsThroughTheFake, TestCase):
+class NothingLeavesTests(OwnFilesRoot, SendsThroughTheFake, TestCase):
     """The switch at each send, with the fake provider on: nothing reaches its outbox."""
 
     @classmethod

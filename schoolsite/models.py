@@ -104,7 +104,7 @@ class SiteSettings(models.Model):
 
     id = models.PositiveSmallIntegerField(primary_key=True, default=1)
     #: A key from `schoolsite.themes.THEMES`, checked on every write.
-    theme = models.CharField(max_length=32, default="starter")
+    theme = models.CharField(max_length=32, default="modern")
     #: Per theme key, that theme's options as `schoolsite.themes.clean_options`
     #: left them: allow-listed names and values only, never markup. Kept per
     #: key so switching back to a theme brings its choices back (§3.2).

@@ -119,7 +119,7 @@ def refs_in(kind, data) -> list:
     """The picture ids a section's data names."""
     data = data or {}
     if kind == SectionKind.HERO:
-        found = [data.get("image"), data.get("video")]
+        found = sections.hero_slides(data) + [data.get("video")]
     elif kind == SectionKind.PRINCIPAL_MESSAGE:
         found = [data.get("portrait")]
     elif kind == SectionKind.GALLERY:
@@ -430,7 +430,7 @@ def check_media(kind, data):
             if picture is None:
                 raise SiteRefused("That picture is not on this site. Upload it again.")
             if kind == SectionKind.HERO:
-                wanted_video = pid == data.get("video")
+                wanted_video = pid == data.get("video") and pid not in sections.hero_slides(data)
                 if picture.use != PictureUse.HERO or picture.video != wanted_video:
                     raise SiteRefused("That is not a hero " + ("video." if wanted_video else "picture."))
             elif kind == SectionKind.PRINCIPAL_MESSAGE and picture.use != PictureUse.PORTRAIT:
@@ -735,9 +735,13 @@ def _strip_data(kind, data, pid):
     """A section's data without picture `pid`, or None if the section should go altogether."""
     data = dict(data)
     if kind == SectionKind.HERO:
-        for field in ("image", "video"):
-            if data.get(field) == pid:
-                data[field] = None
+        if data.get("video") == pid:
+            data["video"] = None
+        if data.get("image") == pid:
+            data["image"] = None
+        if "slides" in data:
+            # The last slide taken leaves a hero with no photo, drawn with its words alone.
+            data["slides"] = [s for s in data["slides"] if s.get("picture") != pid]
     elif kind == SectionKind.PRINCIPAL_MESSAGE:
         if data.get("portrait") == pid:
             data["portrait"] = None

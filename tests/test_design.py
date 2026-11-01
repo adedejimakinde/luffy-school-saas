@@ -236,19 +236,45 @@ class OneFontTwoWeightsTests(SimpleTestCase):
             [
                 "hanken-grotesk-400.woff2",
                 "hanken-grotesk-700.woff2",
+                # The school websites' headings (`docs/school-sites-theme-modern.md`),
+                # declared by the theme's own stylesheet, not here (below).
+                "hanken-grotesk-800.woff2",
                 "noto-sans-hausa-400.woff2",
                 "noto-sans-hausa-700.woff2",
             ],
         )
 
+    def test_the_websites_heading_weight_is_hankens_own_cut_over_the_same_letters(self):
+        """Modern Campus sets its headings at 800 (`static/schoolsite/modern.css`): the same cut
+        (`scripts/fonts.py`), the same letters as the 400 face here, and the same `prep`."""
+        from fontTools.ttLib import TTFont
+
+        theme_css = (STATIC / "schoolsite" / "modern.css").read_text()
+        (face,) = re.findall(r"@font-face\s*{(.*?)}", theme_css, re.S)
+        self.assertIn('font-family: "Hanken Grotesk"', face)
+        self.assertIn("font-weight: 800", face)
+        self.assertIn("font-display: swap", face)
+        self.assertIn('url("../web/fonts/hanken-grotesk-800.woff2")', face)
+        regular = next(f for f in self.faces() if "font-weight: 400" in f and "Hanken" in f)
+        ranges = [re.sub(r"\s+", " ", re.search(r"unicode-range:\s*([^;]+);", f).group(1)) for f in (face, regular)]
+        self.assertEqual(ranges[0], ranges[1])
+        heavy, light = (TTFont(STATIC / "web" / "fonts" / f"hanken-grotesk-{w}.woff2") for w in (800, 400))
+        self.assertEqual(set(heavy.getBestCmap()), set(light.getBestCmap()))
+        self.assertEqual(heavy["OS/2"].usWeightClass, 800)
+        self.assertIn("prep", heavy)
+
     def test_the_font_falls_back_to_noto_and_then_the_systems_own(self):
         self.assertRegex(DESIGN.read_text(), r'--font:\s*"Hanken Grotesk",\s*"Noto Sans",\s*system-ui')
 
     def test_no_stylesheet_asks_for_a_weight_that_is_not_there(self):
+        """400 and 700 everywhere; 800 only in the school websites' theme, which ships its face."""
         for name, css in stylesheets():
             with self.subTest(stylesheet=name):
+                there = {"400", "700", "normal", "bold", "inherit"}
+                if name == "static/schoolsite/modern.css":
+                    there |= {"800", "var(--heavy)"}
                 for weight in re.findall(r"font-weight:\s*([^;}\s]+)", css):
-                    self.assertIn(weight, {"400", "700", "normal", "bold", "inherit"})
+                    self.assertIn(weight, there)
 
     def test_the_licences_ship_with_the_fonts(self):
         """SIL Open Font License 1.1: the files may be redistributed with it."""

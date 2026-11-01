@@ -7,6 +7,9 @@
 - **`/website/photos/`** is Photos and albums (PR 5), a frame of its own the
   same way: uploading, describing, cropping, arranging, publishing albums and
   taking pictures down. The editor's section forms choose from what is here.
+- **`/website/look/`** is Colours and animations, the principal's, a frame of
+  its own the same way (`docs/school-sites-theme-modern.md`): the website's four
+  colours and its five animated backgrounds.
 - **`/website/preview/…`** draws the *draft* through the same templates as the
   live site (`render.draw_snapshot`), any page of it, switched on or off, under
   a "Preview: not published" bar, with its links kept inside the preview. Only
@@ -66,7 +69,25 @@ PHOTOS_MODULES = (
     "site-editor/photos-app.js",
 )
 
+#: Colours and animations' modules (`docs/school-sites-theme-modern.md`), entry point last:
+#: a frame of its own too, for the same reason.
+LOOK_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "site-editor/api.js",
+    "site-editor/look-app.js",
+)
+
 NOINDEX = "noindex, nofollow"
+
+
+def look_page(request):
+    """The frame for `/website/look/`. Its module asks `/api/website/` before it draws anything."""
+    return render(
+        request,
+        "schoolsite/look_page.html",
+        {"import_map": pages.import_map(*LOOK_MODULES), "portal_host": portal_host()},
+    )
 
 
 def photos_page(request):
@@ -153,5 +174,5 @@ def picture(request, key, variant):
 
 
 __all__ = [
-    "EDITOR_MODULES", "PHOTOS_MODULES", "editor_page", "photos_page", "picture", "preview", "preview_album", "preview_custom_page", "preview_page",
+    "EDITOR_MODULES", "LOOK_MODULES", "PHOTOS_MODULES", "editor_page", "look_page", "photos_page", "picture", "preview", "preview_album", "preview_custom_page", "preview_page",
 ]

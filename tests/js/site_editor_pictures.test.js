@@ -103,18 +103,28 @@ test("the editor links to photos and albums, and its log says what happened to a
   assert.doesNotMatch(html, /Go back to version 3/);
 });
 
-test("a hero chooses among the school's hero pictures and videos, and reads back as image or video", () => {
-  const html = fields("hero", { heading: "Hi", image: 5 }, { pictures: OVERVIEW.pictures });
-  assert.match(html, /<option value="image:5" selected>Picture 5<\/option>/);
-  assert.match(html, /<option value="video:6">Arriving \(video\) – Processing…<\/option>/);
+test("a hero's slideshow chooses one to five of the school's hero photos, or a video, and reads back in order", () => {
+  const html = fields("hero", { heading: "Hi", slides: [{ picture: 5 }] }, { pictures: OVERVIEW.pictures });
+  assert.match(html, /<select id="f-slide1" name="slide1">.*<option value="5" selected>Picture 5<\/option>/);
+  assert.match(html, /<label for="f-slide1">Photo 1, shown first<\/label>/);
+  assert.match(html, /<label for="f-slide5">Photo 5<\/label>/, "five places");
+  assert.doesNotMatch(html, /name="slide6"/, "and no sixth");
+  assert.doesNotMatch(html.split('name="media"')[0], /Arriving/, "a video is not a slide");
+  assert.match(html, /<option value="video:6">Arriving \(video\) – Processing…<\/option>/, "the video is offered instead");
   assert.doesNotMatch(html, /The principal/, "a portrait is not offered for a hero");
   assert.match(html, /<img class="thumb" src="\/website\/pictures\/k5\/480.webp" alt="Picture 5"/);
+  assert.match(html, /href="\/website\/photos\/#picture-5">Description and focal point<\/a>/, "each photo's own, edited where photos are");
+  assert.match(html, /href="\/website\/photos\/#upload-hero">Upload a photo<\/a>/);
   assert.match(html, /href="\/website\/photos\/#upload-hero-video">Upload a video<\/a>/);
-  assert.match(html, /href="\/website\/photos\/#picture-5">Edit this picture<\/a>/);
-  assert.match(fields("hero", { heading: "Hi", image: 99 }, { pictures: OVERVIEW.pictures }),
-    /<option value="image:99" selected>The current picture<\/option>/, "a picture not in the list stays chosen");
-  assert.deepEqual(collect("hero", { heading: "Hi", media: "video:6" }), { heading: "Hi", subheading: "", buttons: [], image: null, video: 6 });
-  assert.deepEqual(collect("hero", { heading: "Hi", media: "" }).image, null);
+  assert.match(fields("hero", { heading: "Hi", slides: [{ picture: 99 }] }, { pictures: OVERVIEW.pictures }),
+    /<option value="99" selected>The current photo<\/option>/, "a photo not in the list stays chosen");
+  assert.match(fields("hero", { heading: "Hi", image: 5 }, { pictures: OVERVIEW.pictures }),
+    /<option value="5" selected>Picture 5<\/option>/, "a hero from before slideshows shows its one photo");
+  assert.deepEqual(collect("hero", { heading: "Hi", slide1: "5", slide2: "", slide3: "8", slide4: "5", slide5: "", media: "" }),
+    { heading: "Hi", subheading: "", buttons: [], slides: [{ picture: 5 }, { picture: 8 }], video: null },
+    "in order, blanks and repeats left out");
+  assert.deepEqual(collect("hero", { heading: "Hi", slide1: "5", media: "video:6" }),
+    { heading: "Hi", subheading: "", buttons: [], slides: [], video: 6 }, "a video takes the photos' place");
   assert.equal(collect("principal_message", { message: "Hello", portrait: "7" }).portrait, 7);
   assert.equal(pictureValue("hero", { id: 9, video: true }), "video:9");
 });

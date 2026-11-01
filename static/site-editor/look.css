@@ -1,0 +1,12 @@
+/*
+ * Colours and animations (`/website/look/`, `docs/school-sites-theme-modern.md`),
+ * beside `setup/setup.css` and `site-editor/editor.css`. The sample chips take
+ * the colours being picked from `--chip`, which the page sets on each.
+ */
+.look-sample { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.chip { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--chip, var(--brand)); font-weight: 700; }
+.chip[data-chip="primary"], .chip[data-chip="dark"] { color: var(--card); }
+.chip[data-chip="accent"] { color: var(--text); }
+.chip i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; background: var(--chip, var(--amber)); }
+.state-look input[type="color"] { width: 64px; height: 44px; padding: 2px; }
+.state-look .refused:empty { display: none; }

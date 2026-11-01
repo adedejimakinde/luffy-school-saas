@@ -130,7 +130,7 @@ class AfterThePublishTests(PublicSiteSetUp):
                 self.assertIn(f'<link rel="canonical" href="https://{ST_MARYS}{path}">', page)
         home = self.get("/").content.decode()
         self.assertIn("<h1>Welcome to St Mary&#x27;s</h1>", home)
-        self.assertIn('<a class="button primary" href="/about/">About us</a>', home)
+        self.assertIn('<a class="button accent" href="/about/">About us</a>', home)
         self.assertIn('"@type":"EducationalOrganization"', home)
 
     def test_a_change_to_the_draft_after_the_publish_is_not_served_until_published(self):
@@ -297,11 +297,11 @@ class TheDemoSiteTests(PublicSiteSetUp):
         for path in ("/", "/about/", "/admissions/", "/contact/", "/pages/boarding/", "/pages/sports-and-clubs/"):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path).status_code, 200)
-        # Six pages on, in the order the demo set: the sixth goes under "More" on a phone.
+        # Six pages on, in the order the demo set: the sixth is under "More" even on a wide screen.
         home = self.get("/").content.decode()
         self.assertIn('<li class="more"><details>', home)
-        self.assertIn('<li class="wide"><a href="/contact/">Contact</a></li>', home)
+        self.assertIn('<li class="n6"><a href="/contact/">Contact</a></li>', home)
         contact = self.get("/contact/").content.decode()
         self.assertIn("Open in Maps", contact)
         self.assertIn('href="https://wa.me/2348030000000"', contact)
-        self.assertIn('lang="yo"', self.get("/").content.decode())
+        self.assertIn('lang="yo"', self.get("/about/").content.decode())

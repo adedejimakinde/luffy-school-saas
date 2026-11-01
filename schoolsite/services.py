@@ -63,6 +63,9 @@ LOG_LENGTH = 20
 
 _UNCHANGED = object()
 
+#: The colours a school sets on its website's Look screen (`set_look_as`).
+LOOK_COLOURS = ("primary", "accent", "detail", "dark")
+
 
 def _name_of(user) -> str:
     return user.full_name or user.get_username()
@@ -465,6 +468,43 @@ def set_colour_as(actor, school, colour, *, version) -> SiteSettings:
         return settings
 
 
+def set_look_as(actor, school, *, version, colours=None, animations=None) -> SiteSettings:
+    """Change the website's colours and switch its animated backgrounds on or off. The principal's.
+
+    `colours` names some of primary, accent, detail and dark; a role given as ""
+    goes back to the theme's own (the primary to the report card's). `animations`
+    names some of `themes.ANIMATIONS`, each on or off. What is not named is kept.
+    The whole palette is checked as it will be drawn (`themes.check_palette`), so
+    no change can leave writing that does not read.
+    """
+    _require_principal(actor, school, "change the website's look")
+    if colours is not None and not isinstance(colours, dict):
+        raise themes.ThemeRefused("Colours are named by their role: primary, accent, detail and dark.")
+    if animations is not None and not isinstance(animations, dict):
+        raise themes.ThemeRefused("The animated backgrounds are each switched on or off.")
+    with transaction.atomic():
+        settings = _locked_settings()
+        _check(version, settings.version)
+        current = dict(settings.theme_options.get(settings.theme, {}))
+        if colours:
+            unknown = set(colours) - set(LOOK_COLOURS)
+            if unknown:
+                raise themes.ThemeRefused("Only the main, accent, detail and dark colours can be changed here.")
+            chosen = dict(current.get("colours", {}))
+            for role, value in colours.items():
+                if value in ("", None):
+                    chosen.pop(role, None)
+                else:
+                    chosen[role] = value
+            current["colours"] = chosen
+        if animations:
+            current["animations"] = {**current.get("animations", {}), **animations}
+        settings.theme_options = {**settings.theme_options, settings.theme: themes.clean_options(settings.theme, current)}
+        settings.save(update_fields=["theme_options", "updated_at"])
+        _touched(settings, settings_changed=True)
+        return settings
+
+
 def set_delegation_as(actor, school, on) -> SiteDelegationEvent:
     """Let the administrator edit drafts, or stop. The principal's. Never lets them publish."""
     _require_principal(actor, school, "change who edits the website")
@@ -553,7 +593,7 @@ def rollback_as(actor, school, number, note="") -> SiteRevision:
         target = SiteRevision.objects.filter(number=number).first()
         if target is None:
             raise SiteRefused(f"There is no revision {number}.")
-        if target.pk == latest.pk or target.snapshot == latest.snapshot:
+        if target.pk == latest.pk or comparable(target.snapshot) == comparable(latest.snapshot):
             raise SiteRefused(f"Revision {number} is what the site shows already.")
         revision = _revision(actor, target.snapshot, latest, note=note, rollback_of=target)
         _shown(revision.snapshot)
@@ -638,6 +678,32 @@ def snapshot() -> dict:
     return snap
 
 
+def comparable(snap):
+    """A snapshot as it draws, for asking whether two are the same site.
+
+    Modern Campus moved every school's draft on (`migrations/0005`): the starter
+    theme's key became "modern", its options gained the colours and switches it
+    was given, and a hero's one picture became a slideshow of one. A revision
+    published before is never rewritten, and draws the same, so it is compared
+    as it draws: otherwise every school would be told it had changes to publish.
+    """
+    if not snap:
+        return snap
+    key = themes.FORMER_THEMES.get(snap.get("theme"), snap.get("theme"))
+    pages = []
+    for page in snap.get("pages", []):
+        page_sections = []
+        for s in page["sections"]:
+            if s["kind"] == SectionKind.HERO:
+                data = {k: v for k, v in s["data"].items() if k not in ("image", "focal")}
+                data["slides"] = [{"picture": pid} for pid in sections.hero_slides(s["data"])]
+                s = {**s, "data": data}
+            page_sections.append(s)
+        pages.append({**page, "sections": page_sections})
+    options = themes.full_options(key, snap.get("options")) if key in themes.THEMES else snap.get("options")
+    return {**snap, "theme": key, "options": options, "pages": pages}
+
+
 def _nothing_new(settings, live, current) -> bool:
     """Is there nothing to publish? The draft is what is live, or nobody has touched it yet.
 
@@ -646,7 +712,7 @@ def _nothing_new(settings, live, current) -> bool:
     """
     if live is None:
         return settings.draft_version == 0
-    return live == current
+    return comparable(live) == comparable(current)
 
 
 def has_changes(settings, live, current) -> bool:
@@ -788,6 +854,7 @@ __all__ = [
     "save_page_as",
     "save_section_as",
     "set_colour_as",
+    "set_look_as",
     "set_delegation_as",
     "set_theme_as",
     "snapshot",

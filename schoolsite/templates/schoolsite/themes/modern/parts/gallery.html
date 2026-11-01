@@ -1,0 +1,10 @@
+{% comment %}A gallery section: the first photos of one published album as a mosaic (one tall photo, smaller ones beside it, and a tile counting the rest, which is the way to the whole album), or a strip; or photos chosen one by one. Nothing at all while there is nothing published to show.{% endcomment %}{% if s.photo_list %}
+<section class="gallery gallery-{{ variant }}">
+  <div class="wrap">
+    <h2>{{ s.album_title|default:"Gallery" }}</h2>
+    <ul class="photos{% if variant == "grid" %} mosaic{% endif %}" data-lightbox>{% for photo in s.photo_list %}
+      <li{% if forloop.first and variant == "grid" %} class="tall"{% endif %}>{% include "schoolsite/themes/modern/parts/photo.html" with p=photo %}</li>{% endfor %}
+      {% if s.album_link %}<li class="count-tile"><a href="{{ s.album_link }}"><strong>{% if s.album_more %}+{{ s.album_more }}{% else %}{{ s.album_total }}{% endif %}</strong><span>See all {{ s.album_total }} photo{{ s.album_total|pluralize }}</span></a></li>{% endif %}
+    </ul>
+  </div>
+</section>{% endif %}

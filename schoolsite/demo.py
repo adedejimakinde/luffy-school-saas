@@ -5,9 +5,10 @@ College, through the same services a principal's clicks will go through, so the
 demo's site is a real draft, a real publish and a real log line. Sunrise is left
 unpublished, so the demo keeps today's page at a school root as well.
 
-`publish_demo_pictures` then gives it pictures (PR 5): a hero photo, the
-principal's portrait and a published album, through the upload service, so the
-screens job's Slow 4G check measures a page whose largest paint is a photograph.
+`publish_demo_pictures` then gives it pictures (PR 5): a slideshow of three hero
+photos (Modern Campus), the principal's portrait and a published album, through
+the upload service, so the screens job's Slow 4G check measures a page whose
+largest paint is a photograph, with the slideshow's other photos loading after.
 The pictures are drawn here, so nothing binary is committed; they are busier
 than most photographs (fine detail and grain), so they cost more bytes, not fewer.
 """
@@ -19,8 +20,8 @@ from . import pictures, services
 from .models import Page, PageKey, SiteSettings
 
 HERO = {
-    "heading": "Every child known, every child stretched",
-    "subheading": "A day and boarding secondary school in Lagos, JSS 1 to SSS 3.",
+    "heading": "A day and boarding secondary school in Lagos, JSS 1 to SSS 3",
+    "subheading": "On Ozumba Mbadiwe Avenue, Victoria Island. Science, arts and commercial streams from SSS 1.",
     "buttons": [{"label": "Admissions", "link": "/admissions/"}, {"label": "Visit us", "link": "/contact/"}],
 }
 MOTTO = {"motto": "Ìmọ̀ ni agbára", "language": "yo", "translation": "Knowledge is power", "founded": 1987}
@@ -28,10 +29,10 @@ MESSAGE = {
     "name": "Mrs Ọláòlúwa Adéṣínà",
     "title": "Principal",
     "message": (
-        "Welcome to Harbour Demo College. For nearly forty years we have taught young people to "
-        "think clearly, work hard and look after one another.\n\n"
-        "Our students sit WAEC, NECO and the BECE with us, and they leave ready for university and "
-        "for life. We would be glad to show you round."
+        "Welcome to Harbour Demo College. We opened in 1987 and teach the Nigerian curriculum from "
+        "JSS 1 to SSS 3.\n\n"
+        "Students sit the BECE in JSS 3, and WAEC and NECO in SSS 3. To visit, call the office and we "
+        "will arrange a time on a school day."
     ),
     "signature": "With warm regards,",
 }
@@ -54,13 +55,13 @@ ABOUT = {
     "body": (
         "Harbour Demo College opened in 1987 with forty students and four teachers.\n\n"
         "Today we teach the full Nigerian curriculum from JSS 1 to SSS 3, with science, arts and "
-        "commercial streams, a boarding house for boys and girls, and clubs from debate to robotics."
+        "commercial streams, a boarding house for boys and girls, and clubs for debate, drama and robotics."
     ),
 }
 CONTACT = {"whatsapp": "0803 000 0000", "hours": "Monday to Friday, 7:30am to 4pm", "latitude": 6.4541,
            "longitude": 3.3947}
 #: Two pages of Harbour's own (§2.1.1): enough, with the four fixed ones on, to
-#: put a "More" in the menu on a phone (`render.MENU_ON_A_PHONE`).
+#: put a "More" in the header's bar even on a wide screen (`render.MENU_IN_THE_BAR`).
 BOARDING = {
     "title": "Boarding",
     "hero": {"heading": "Boarding at Harbour",
@@ -75,7 +76,7 @@ BOARDING = {
 }
 SPORTS = {
     "title": "Sports and clubs",
-    "text": {"heading": "After the last bell",
+    "text": {"heading": "Sports and clubs after school",
              "body": "Football, athletics, table tennis, debate, drama, the press club and robotics."},
 }
 FOOTER = {"social": [{"network": "facebook", "url": "https://www.facebook.com/harbourdemocollege"}],
@@ -91,11 +92,14 @@ def publish_demo_site(principal, school):
 
     for key in ("about", "admissions", "contact"):
         services.save_page_as(principal, school, key, version=Page.objects.get(key=key).version, enabled=True)
+    # Modern Campus's home page: hero, facts, the principal, (the gallery, with the
+    # pictures), the admissions band and Visit us. The motto is on About.
     add("home", "hero", HERO)
-    add("home", "crest_motto", MOTTO)
     add("home", "facts", FACTS)
     add("home", "principal_message", MESSAGE)
     add("home", "admissions_cta", ADMISSIONS)
+    add("home", "contact_map", CONTACT)
+    add("about", "crest_motto", MOTTO)
     add("about", "text", ABOUT)
     add("about", "facts", FACTS)
     add("admissions", "admissions_cta", ADMISSIONS)
@@ -158,7 +162,14 @@ def _scene(size, seed, *, portrait=False):
     return out.getvalue()
 
 
-ALBUM = {"title": "Inter-house sports, 2026", "description": "Blue House took the cup on a hot February afternoon."}
+#: The hero's slideshow: three scenes, each described for people who cannot see it.
+HERO_SLIDES = (
+    (1, "The main block at Harbour Demo College, with trees along the yard"),
+    (3, "The science block and the sports field in the afternoon"),
+    (4, "The library and the assembly ground"),
+)
+
+ALBUM = {"title": "Inter-house sports, 2026", "description": "Held on Saturday 14 February 2026. Blue House won the cup."}
 ALBUM_CAPTIONS = ("The 4 x 100 m relay", "Long jump", "Blue House with the cup", "March past", "The tug of war",
                   "Prize giving")
 
@@ -171,8 +182,8 @@ def publish_demo_pictures(principal, school):
     from django.test.utils import override_settings
 
     with override_settings(FILES_PROCESS_INLINE=True):
-        (hero,) = pictures.upload_as(principal, school, "hero", [_scene((2400, 1600), 1)], consent=True,
-                                     alt="The main block at Harbour Demo College, with trees along the yard")
+        slides = [pictures.upload_as(principal, school, "hero", [_scene((2400, 1600), seed)], consent=True, alt=alt)[0]
+                  for seed, alt in HERO_SLIDES]
         (portrait,) = pictures.upload_as(principal, school, "portrait", [_scene((960, 1200), 2, portrait=True)],
                                          consent=True, alt="Mrs Ọláòlúwa Adéṣínà, the principal")
         album = pictures.create_album_as(principal, school, title=ALBUM["title"])
@@ -193,12 +204,17 @@ def publish_demo_pictures(principal, school):
     for section in home.sections.all():
         if section.kind == "hero":
             services.save_section_as(principal, school, section.pk, version=section.version,
-                                     data={**section.data, "image": hero.pk})
+                                     data={**section.data, "slides": [{"picture": p.pk} for p in slides]})
         elif section.kind == "principal_message":
             services.save_section_as(principal, school, section.pk, version=section.version,
                                      data={**section.data, "portrait": portrait.pk})
     services.add_section_as(principal, school, "home", version=Page.objects.get(key=PageKey.HOME).version,
-                            kind="gallery", data={"album": album.pk, "count": 3})
+                            kind="gallery", data={"album": album.pk, "count": 4})
+    # The gallery after the principal's message, before the admissions band.
+    home = Page.objects.get(key=PageKey.HOME)
+    order = [s.pk for s in home.sections.order_by("position")]
+    order.insert(3, order.pop())
+    services.move_sections_as(principal, school, "home", order, version=home.version)
     gallery = Page.objects.get(key=PageKey.GALLERY)
     services.save_page_as(principal, school, "gallery", version=gallery.version, enabled=True)
     return services.publish_as(principal, school, note="Photos for the website")

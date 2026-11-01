@@ -19,7 +19,7 @@ from schools.tests.tenants import connected_to
 from schoolsite import services
 from schoolsite.errors import NotAllowedToEdit, NotAllowedToPublish, SiteRefused, StaleDraft
 from schoolsite.models import CUSTOM_PAGE_SLOTS, MOST_SECTIONS, Page, PageKind, Section, SiteSettings
-from schoolsite.render import MENU_ON_A_PHONE
+from schoolsite.render import MENU_IN_A_NARROW_BAR, MENU_IN_THE_BAR
 from schoolsite.sections import REFUSED_SLUGS, SectionRefused
 from schools.paths import PORTAL, RESERVED
 
@@ -497,15 +497,19 @@ class CustomPagesInPublicTests(PublicSiteSetUp):
         self.publish(self.principal, self.stmarys)
         html = self.get("/pages/sports/").content.decode()
         drawn = ["/", "/pages/boarding/", "/about/", "/pages/sports/", "/admissions/", "/news/", "/contact/"]
-        nav = html.split("<nav aria-label=\"The school's pages\">")[1].split("</nav>")[0]
-        wide = re.findall(r'<li(?: class="wide")?><a href="([^"]+)"', nav.split('<li class="more">')[0])
-        self.assertEqual(wide, drawn)
-        self.assertEqual(re.findall(r'<li class="wide"><a href="([^"]+)"', nav), drawn[MENU_ON_A_PHONE:])
+        nav = html.split("<nav class=\"links\" aria-label=\"The school's pages\">")[1].split("</nav>")[0]
+        # The bar: every page, each numbered so the stylesheet shows the first three from
+        # 860px and the first five from 1100px; the rest are under More.
+        bar = nav.split('<li class="more')[0]
+        self.assertEqual(re.findall(r'<li class="n\d+"><a href="([^"]+)"', bar), drawn)
         self.assertEqual(len(drawn), 7)
         more = nav.split('<li class="more">')[1]
         self.assertIn("<summary>More</summary>", more)
-        self.assertEqual(re.findall(r'href="([^"]+)"', more), drawn[MENU_ON_A_PHONE:])
+        self.assertEqual(re.findall(r'href="([^"]+)"', more), drawn[MENU_IN_A_NARROW_BAR:])
         self.assertIn('<a href="/pages/sports/" aria-current="page">Sports</a>', nav)
+        # On a phone, the menu's panel: every page, in the same order.
+        panel = html.split('<ul class="panel-links">')[1].split("</ul>")[0]
+        self.assertEqual(re.findall(r'href="([^"]+)"', panel), drawn)
         footer = html.split('<footer class="site-footer">')[1]
         self.assertEqual(re.findall(r'href="(/[^"]*)"', footer), drawn)
 
@@ -514,8 +518,10 @@ class CustomPagesInPublicTests(PublicSiteSetUp):
         self.make(self.principal, self.stmarys, "Boarding", sections=[("text", {"body": "Boarders."})])
         self.publish(self.principal, self.stmarys)
         html = self.get("/").content.decode()
-        self.assertNotIn('class="more"', html)
-        self.assertNotIn('class="wide"', html)
+        self.assertEqual(len(re.findall(r'<li class="n\d+"><a', html.split('<li class="more')[0])), MENU_IN_THE_BAR - 1)
+        # Four pages: the fourth is under More only where the bar is narrow, and More is
+        # hidden where the bar is wide enough for all of them (`few`).
+        self.assertIn('<li class="more few">', html)
 
     def test_a_button_to_a_page_that_is_off_or_unpublished_is_left_out(self):
         with connected_to(self.stmarys):

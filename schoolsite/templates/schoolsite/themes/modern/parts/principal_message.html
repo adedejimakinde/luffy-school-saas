@@ -1,0 +1,15 @@
+{% comment %}The principal's message, with their portrait when there is one, cropped around its focal point.{% endcomment %}
+<section class="message{% if s.portrait_picture %} has-portrait{% endif %}">
+  <div class="wrap message-card">
+    {% if s.portrait_picture %}<div class="portrait">{% include "schoolsite/themes/modern/parts/picture.html" with p=s.portrait_picture %}</div>{% endif %}
+    <div class="message-words">
+      <h2>From the principal</h2>
+      {{ s.message|linebreaks }}
+      {% if s.name or s.title or s.signature %}<p class="signed">
+        {% if s.signature %}<span>{{ s.signature }}</span>{% endif %}
+        {% if s.name %}<strong>{{ s.name }}</strong>{% endif %}
+        {% if s.title %}<span>{{ s.title }}</span>{% endif %}
+      </p>{% endif %}
+    </div>
+  </div>
+</section>
