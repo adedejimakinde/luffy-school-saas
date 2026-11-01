@@ -116,6 +116,9 @@ real children, and the demo copy is plain and specific rather than slogan-like
 ("A day secondary school in Abeokuta, JSS 1 to SS 3", not a three-beat tagline).
 Harbour's and Crestfield's headings, principal's messages and section words are
 written that way (`schoolsite/demo.py`, `schools/crestfield/site.py`).
+Crestfield's photos changed again on 1 November 2026: from drawn scenes to the
+three stock photos of adult staff on Classnode's own site, used for the demo only
+(`docs/demo-school.md`). Harbour's stay drawn scenes.
 
 ### The engine
 
@@ -160,7 +163,13 @@ written that way (`schoolsite/demo.py`, `schools/crestfield/site.py`).
   buttons. Both are `<details>`: no script needed. Headings and anchored
   sections keep clear of the bar (`scroll-margin-top`).
 - **Hero**: the words on the left over the orbit art, the slideshow on the
-  right (under the words on a phone). The first photo is a normal `<picture>`,
+  right (under the words on a phone). On a phone, and up to 860 px where the hero
+  is one column, the art is not behind the words: it is small (96 px), fainter
+  (opacity 0.6) and in the top-right corner, in a 68 px strip above the headline
+  (`--band`), so no line of the triangle or the orbits crosses the headline, the
+  intro or the buttons. `tests/ui/school_site.test.js` measures every shape of it
+  against every line of words at 320 and 390 px, and checks the desk drawing is
+  unchanged at 1280. The first photo is a normal `<picture>`,
   preloaded and fetched first; the others are in a `<template>` that the site's
   script (`static/schoolsite/site-app.js`, 7.6 KB of its 8) adds after `load`,
   never with data saver. It crossfades over 700 ms every 4 s, the dots jump, it

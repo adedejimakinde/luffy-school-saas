@@ -266,6 +266,54 @@ describe("a school's website at 320, 390 and 1280px and at 200% text", () => {
     await context.close();
   });
 
+  test("on a phone the hero's line art sits small in the top-right corner and crosses no word, at 320 and 390px", async () => {
+    // The triangle and the orbits, as drawn (each shape's own box, which the
+    // spinning cannot widen: the dots ride inside the outer orbit), against
+    // the headline, the intro, the pill and the buttons.
+    for (const path of ["/", "/pages/boarding/"]) {
+      for (const width of [320, 390]) {
+        const context = await browser.newContext({ viewport: { width, height: 800 } });
+        const page = await context.newPage();
+        await page.goto(`${HARBOUR}${path}`, { waitUntil: "load" });
+        const found = await page.evaluate(() => {
+          const box = (r) => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+          const hero = document.querySelector(".hero").getBoundingClientRect();
+          const art = document.querySelector(".art-hero");
+          return {
+            hero: box(hero),
+            art: art ? box(art.getBoundingClientRect()) : null,
+            shapes: art ? [...art.querySelectorAll("circle, path")].map((el) => box(el.getBoundingClientRect())) : [],
+            words: [...document.querySelectorAll(".hero h1, .hero .lead, .hero .pill, .hero .actions")].map((el) => box(el.getBoundingClientRect())),
+          };
+        });
+        const where = `${path} at ${width}px`;
+        assert.ok(found.art, `the line art is on at ${where}`);
+        assert.ok(found.shapes.length >= 8, `its triangle and orbits are drawn at ${where}`);
+        assert.ok(found.words.length >= 2, `the headline and the intro are there at ${where}`);
+        assert.ok(found.art.right - found.art.left <= 120, `smaller than 120px at ${where}`);
+        const centre = (found.art.left + found.art.right) / 2;
+        assert.ok(centre > width * 0.6, `in the right of the screen at ${where}: ${centre}`);
+        assert.ok(found.art.top < found.hero.top + 40, `in the top of the hero at ${where}`);
+        const faint = await page.$eval(".art-hero", (el) => Number(getComputedStyle(el).opacity));
+        assert.ok(faint <= 0.6, `fainter than the desk drawing at ${where}: ${faint}`);
+        for (const shape of found.shapes) {
+          for (const word of found.words) {
+            const crosses = shape.left < word.right && shape.right > word.left && shape.top < word.bottom && shape.bottom > word.top;
+            assert.ok(!crosses, `a line of the art crosses the words at ${where}: ${JSON.stringify({ shape, word })}`);
+          }
+        }
+        await context.close();
+      }
+    }
+    // The desk keeps its big drawing, to the left of the words.
+    const desk = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const deskPage = await desk.newPage();
+    await deskPage.goto(`${HARBOUR}/`, { waitUntil: "load" });
+    const big = await deskPage.$eval(".art-hero", (el) => el.getBoundingClientRect().width);
+    assert.ok(big > 400, `the line art is still the big drawing at 1280px: ${big}px`);
+    await desk.close();
+  });
+
   test("with data saver on, only the first photo is ever fetched", async () => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     await context.addInitScript(() => {

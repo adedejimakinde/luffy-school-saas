@@ -370,6 +370,12 @@ The site is the only thing on the platform a search engine is asked to index.
 | `photos/bursar-*.webp` | fees row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
 | `photos/teacher-*.webp` | register row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
 
+All three are licensed stock photos of adults. They are also the photos of the
+Crestfield demo school's website (`schools/crestfield/site.py`), **for the demo
+only** (`docs/demo-school.md`). The licence's name, the photographers and where
+each was bought are still to be written into this table by the owner; the demo
+and this page both rely on that record being kept.
+
 ## What holds it
 
 - `website/tests/test_legal.py`: the two pages answer on the site host only,

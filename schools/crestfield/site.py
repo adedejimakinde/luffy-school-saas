@@ -5,16 +5,22 @@ principal's clicks make, so the demo's site is a real draft, a real publish and
 a real line in the log. Never indexed (`schoolsite.views._may_be_indexed`).
 Every figure is made up.
 
-**The photos are drawn here** (`schoolsite.demo._scene`: sky, buildings, trees,
-no people, so no child is ever shown) and processed in the same process, so
-`manage.py crestfield create` and `reset` need no media worker and publish a
-site whose pictures are ready. Drawing them takes some seconds.
+**The photos are the three on Classnode's own public site** (`static/website/photos/`:
+a principal, a teacher and a bursar, all adults; none shows a child). They are
+licensed stock photos, used here for the demo only (`docs/demo-school.md`). Every
+create and reset loads them again through the upload service, the same call a
+principal's upload makes, so each is checked, stripped of metadata and drawn
+again in sizes for phones, and they survive every reset: a reset drops the
+school's schema and its files, and these come back with it. They are processed
+in the same process, so `manage.py crestfield create` and `reset` need no media
+worker and publish a site whose pictures are ready.
 """
+
+from pathlib import Path
 
 from django.test.utils import override_settings
 
 from schoolsite import pictures, services
-from schoolsite.demo import _scene
 from schoolsite.models import Page
 
 HERO = {
@@ -57,33 +63,70 @@ ABOUT = {
 CONTACT = {"hours": "Monday to Friday, 7:30am to 4pm", "latitude": 7.1475, "longitude": 3.3619}
 FOOTER = {"address_line": "Ibara, Abeokuta, Ogun State"}
 
-#: The hero's slideshow: generated scenes with no people in them, each described.
-SLIDES = (
-    (21, "The front of Crestfield College on a bright morning"),
-    (22, "The classroom blocks around the assembly ground"),
-    (23, "The playing field and the trees behind it"),
+#: Where the photos are: the ones Classnode's own homepage serves.
+PHOTO_DIR = Path(__file__).resolve().parents[2] / "static" / "website" / "photos"
+
+#: One entry per photo, in the order the slideshow shows them. `file` is the
+#: largest size the public site keeps; `focal` is where every crop centres, as
+#: fractions across and down, set on each face so a 4:3 phone crop, the near
+#: square desk crop, the album's square tiles and the 4:5 portrait all keep the
+#: head (checked in `schools/tests/test_crestfield.py`). `alt` describes it for
+#: people who cannot see it; `caption` is the album's.
+PHOTOS = (
+    {
+        "file": "principal-600.webp",
+        "focal": {"x": 0.56, "y": 0.15},
+        "alt": "A school principal smiling at her desk in front of a whiteboard",
+        "caption": "The principal at her desk",
+    },
+    {
+        "file": "teacher-880.webp",
+        "focal": {"x": 0.55, "y": 0.1},
+        "alt": "A teacher at her desk holding a phone, with a world map and a globe behind her",
+        "caption": "A teacher in her classroom",
+    },
+    {
+        "file": "bursar-880.webp",
+        "focal": {"x": 0.7, "y": 0.1},
+        "alt": "A school bursar in a suit checking papers at a laptop with a calculator",
+        "caption": "The bursar checking the fees",
+    },
 )
-ALBUM = {"title": "Our school grounds", "description": "A walk round Crestfield College, Ibara, Abeokuta."}
-ALBUM_PHOTOS = ("The main gate", "The science laboratory block", "The library", "The sports field")
+#: The principal's message shows this one, cropped to 4:5.
+PORTRAIT = PHOTOS[0]
+PORTRAIT_ALT = "Dr Funmilayo Adeyemi, the principal, smiling at her desk in front of a whiteboard"
+ALBUM = {"title": "Around the school", "description": "Staff at work at Crestfield College, Ibara, Abeokuta."}
+
+
+def _bytes(photo):
+    return (PHOTO_DIR / photo["file"]).read_bytes()
 
 
 def _pictures(principal, school):
-    """The slideshow's photos and an album of the grounds, drawn and processed here."""
+    """The slideshow's photos, the principal's portrait and an album, all through the upload service."""
     with override_settings(FILES_PROCESS_INLINE=True):
-        slides = [pictures.upload_as(principal, school, "hero", [_scene((2400, 1600), seed)], consent=True, alt=alt)[0]
-                  for seed, alt in SLIDES]
+        slides = [pictures.upload_as(principal, school, "hero", [_bytes(p)], consent=True, alt=p["alt"])[0]
+                  for p in PHOTOS]
+        (portrait,) = pictures.upload_as(principal, school, "portrait", [_bytes(PORTRAIT)], consent=True,
+                                         alt=PORTRAIT_ALT)
         album = pictures.create_album_as(principal, school, title=ALBUM["title"])
         album = pictures.save_album_as(principal, school, album.pk, version=album.version,
                                        description=ALBUM["description"])
-        photos = pictures.upload_as(principal, school, "gallery",
-                                    [_scene((2000, 1500), 30 + n) for n in range(len(ALBUM_PHOTOS))],
-                                    consent=True, album_id=album.pk)
-    for photo, alt in zip(photos, ALBUM_PHOTOS):
-        photo.refresh_from_db()
-        pictures.save_picture_as(principal, school, photo.pk, version=photo.version, alt=alt)
+        photos = pictures.upload_as(principal, school, "gallery", [_bytes(p) for p in PHOTOS], consent=True,
+                                    album_id=album.pk)
+    for picture, photo in zip(slides, PHOTOS):
+        _describe(principal, school, picture, focal=photo["focal"])
+    _describe(principal, school, portrait, focal=PORTRAIT["focal"])
+    for picture, photo in zip(photos, PHOTOS):
+        _describe(principal, school, picture, alt=photo["caption"], caption=photo["caption"], focal=photo["focal"])
     album.refresh_from_db()
     pictures.publish_album_as(principal, school, album.pk, version=album.version)
-    return slides, album
+    return slides, portrait, album
+
+
+def _describe(principal, school, picture, **fields):
+    picture.refresh_from_db()
+    pictures.save_picture_as(principal, school, picture.pk, version=picture.version, **fields)
 
 
 def publish(principal, school):
@@ -93,14 +136,14 @@ def publish(principal, school):
         version = Page.objects.get(key=key).version
         services.add_section_as(principal, school, key, version=version, kind=kind, data=data)
 
-    slides, album = _pictures(principal, school)
+    slides, portrait, album = _pictures(principal, school)
     for key in ("about", "admissions", "gallery", "contact"):
         services.save_page_as(principal, school, key, version=Page.objects.get(key=key).version, enabled=True)
     # Modern Campus's home page: hero, facts, the principal, the gallery, the
     # admissions band and Visit us. The motto is on About.
     add("home", "hero", {**HERO, "slides": [{"picture": p.pk} for p in slides]})
     add("home", "facts", FACTS)
-    add("home", "principal_message", MESSAGE)
+    add("home", "principal_message", {**MESSAGE, "portrait": portrait.pk})
     add("home", "gallery", {"album": album.pk, "count": 3})
     add("home", "admissions_cta", ADMISSIONS)
     add("home", "contact_map", CONTACT)

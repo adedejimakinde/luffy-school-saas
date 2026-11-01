@@ -130,7 +130,9 @@ main > section, main > .checker { margin-top: clamp(40px, 6vw, 72px); margin-bot
 
 /* The hero */
 .hero { margin-top: 0; overflow: hidden; overflow: clip; }
-.hero-grid { display: grid; gap: 28px; padding-top: 32px; padding-bottom: 8px; }
+/* --band is the room above the words: on a phone, with the line art on, the strip the art lives in (below). */
+.hero-grid { --band: 32px; display: grid; gap: 28px; padding-top: var(--band); padding-bottom: 8px; }
+.hero-grid:has(.art-hero) { --band: 68px; }
 .hero-text { position: relative; isolation: isolate; align-self: center; }
 .hero h1 { margin: 0; font-size: clamp(1.875rem, 1.3rem + 2.4vw, 3rem); line-height: 1.06; letter-spacing: -0.035em; }
 .hero .lead { margin: 18px 0 0; max-width: 34rem; font-size: 1.125rem; color: var(--text); }
@@ -152,7 +154,8 @@ main > section, main > .checker { margin-top: clamp(40px, 6vw, 72px); margin-bot
   .dot::before { transition: width 0.3s ease, opacity 0.3s ease; }
 }
 @media (min-width: 53.75rem) {
-  .hero-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; padding-top: 48px; }
+  .hero-grid, .hero-grid:has(.art-hero) { --band: 48px; }
+  .hero-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); gap: 56px; }
   .hero-plain .hero-grid, .hero-grid:not(:has(.slides)) { grid-template-columns: minmax(0, 46rem); }
   .slides { aspect-ratio: 5 / 5.2; }
   .hero .actions .button { flex: 0 1 auto; }
@@ -162,14 +165,22 @@ main > section, main > .checker { margin-top: clamp(40px, 6vw, 72px); margin-bot
 .art { position: absolute; z-index: -1; display: block; pointer-events: none; content-visibility: auto; }
 .art svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .art .orbit, .art .route, .art .street, .art .draw { fill: none; }
-.art-hero { width: 620px; height: 620px; left: -230px; top: 50%; margin-top: -310px; opacity: 0.9; }
-.art-hero .orbit { stroke: var(--primary); stroke-width: 1.2; opacity: 0.16; }
+/* On a phone the hero's art is small and faint, in the top-right corner, in the strip above the
+   headline (--band), so no line of it crosses a word: the headline runs the whole width there.
+   Its box is 96px for a 600-unit drawing, so the strokes are drawn about 6 times their size. The
+   two-column hero (from 860px) has room to the left of the words and keeps the big drawing. */
+.art-hero { --line: 7.5; --thick: 10; --dash: 12 40; width: 96px; height: 96px; right: -40px; top: calc(var(--band) * -1 - 32px); opacity: 0.6; }
+.art-hero .orbit { stroke: var(--primary); stroke-width: var(--line); opacity: 0.16; }
 .art .dashed { stroke-dasharray: 3 9; }
+.art-hero .dashed { stroke-dasharray: var(--dash); }
 .art .gold { fill: var(--detail); }
 .art .halo { fill: var(--detail); opacity: 0.22; }
 .art-hero .node circle { fill: var(--primary); opacity: 0.22; }
-.art-hero .draw { stroke: var(--primary); stroke-width: 2; stroke-linejoin: round; opacity: 0.3; }
+.art-hero .draw { stroke: var(--primary); stroke-width: var(--thick); stroke-linejoin: round; opacity: 0.3; }
 .art-hero .spin { transform-origin: 300px 300px; }
+@media (min-width: 53.75rem) {
+  .art-hero { --line: 1.2; --thick: 2; --dash: 3 9; width: 620px; height: 620px; right: auto; left: -230px; top: 50%; margin-top: -310px; opacity: 0.9; }
+}
 .art-admissions { width: 380px; height: 380px; right: -90px; top: 50%; margin-top: -190px; }
 .art-admissions .spin { transform-origin: 200px 200px; }
 .art-admissions .orbit { stroke: var(--card); stroke-width: 1.2; opacity: 0.28; }
