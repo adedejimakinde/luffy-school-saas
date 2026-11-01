@@ -17,7 +17,7 @@ website's pages are marked (`schoolsite.views`), so a school that has not
 published is noindex exactly as before. No one condition is enough: a marked response on
 `/sit/` or any portal path is still noindex, and so is an unmarked root.
 
-This middleware also answers `/robots.txt` for every host. The site's points to
+This middleware also answers `/robots.txt` for every host. The site's names the AI search crawlers it welcomes and points to
 its sitemap. The portal's disallows everything but the icons (`ICONS`, which
 are Classnode's mark and nobody's school). Every other host's, a school's or one
 with no school behind it (this runs before the host is looked up), says the
@@ -52,7 +52,29 @@ ICONS = (
     "/site.webmanifest",
 )
 
-SITE_ROBOTS = "User-agent: *\nAllow: /\n\nSitemap: {site_url}/sitemap.xml\n"
+#: The AI search and answer crawlers the public site names, so that no one
+#: has to wonder whether they are welcome. Training and live fetches both:
+#: OpenAI's (`GPTBot`, `OAI-SearchBot`, `ChatGPT-User`), Anthropic's
+#: (`ClaudeBot`, `Claude-SearchBot`), Perplexity's, Google's AI opt-out token
+#: (`Google-Extended`) and Bing's. Only the site's robots.txt names them; every
+#: other host's closes the rest to them as it does to everyone.
+AI_CRAWLERS = (
+    "GPTBot",
+    "OAI-SearchBot",
+    "ChatGPT-User",
+    "ClaudeBot",
+    "Claude-SearchBot",
+    "PerplexityBot",
+    "Google-Extended",
+    "Bingbot",
+)
+
+#: One group for the named crawlers (a crawler obeys the group that names it and
+#: no other, so each is told "allowed" in so many words), then everyone else.
+SITE_ROBOTS = (
+    "".join(f"User-agent: {name}\n" for name in AI_CRAWLERS)
+    + "Allow: /\n\nUser-agent: *\nAllow: /\n\nSitemap: {site_url}/sitemap.xml\n"
+)
 #: The allowances first: a crawler that takes the first matching line, as
 #: Python's own `urllib.robotparser` does, then agrees with one that takes the
 #: longest, as Google does.
@@ -127,4 +149,4 @@ def _a_school_website_page(request, response):
     return getattr(response, "indexable", False) is True and is_public_site_request(request)
 
 
-__all__ = ["CLOSED_ROBOTS", "ICONS", "SCHOOL_ROBOTS", "CrawlerMiddleware", "NOINDEX", "site_url"]
+__all__ = ["AI_CRAWLERS", "CLOSED_ROBOTS", "ICONS", "SCHOOL_ROBOTS", "CrawlerMiddleware", "NOINDEX", "site_url"]

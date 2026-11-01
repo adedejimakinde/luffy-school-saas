@@ -1,5 +1,6 @@
 """Classnode's public site, on `settings.SITE_HOST` only: the homepage, the
-pricing page, the privacy notice, the terms and the sitemap.
+pricing page, the questions and answers, the privacy notice, the terms and the
+sitemap (`website.llms` answers `/llms.txt`).
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
 one inline script moves the homepage's slider, counts its figures up and closes
@@ -50,8 +51,13 @@ PAGES = {
         "Results, report cards, fees and registers for Nigerian secondary schools. " + PRICE,
     ),
     "site-pricing": (
-        "Pricing: Classnode",
+        "Classnode pricing: first term free, then ₦1,500",
         "Everything Classnode includes for every school, and the premium add-on. " + PRICE,
+    ),
+    "site-faq": (
+        "Classnode FAQ: Nigerian school software questions",
+        "Plain answers on what Classnode does, the Ogun State report card, the price, weak "
+        "networks, parents' results, your data and CBT.",
     ),
     "site-privacy": (
         "Privacy notice: Classnode",
@@ -64,7 +70,7 @@ PAGES = {
         "the school's data, our responsibility and ending the service.",
     ),
     "site-blog": (
-        "Blog: Classnode",
+        "Classnode blog: results, fees and registers",
         "Notes for principals, bursars and teachers on running a Nigerian secondary school: "
         "results, fees, registers and the term in between.",
     ),
@@ -94,6 +100,93 @@ FAQ = [
      "Your records are kept apart from every other school's. Our "
      '<a href="/privacy/">privacy notice</a> has the details.'),
 ]
+
+
+#: The CBT features by the name the page gives them, in the order the pricing
+#: page lists them; each is governed by its own "coming soon" setting
+#: (`website.features`).
+_CBT = {
+    "CBT: school tests": "school tests",
+    "CBT: UTME-style practice": "UTME-style practice",
+    "CBT: WASSCE-style practice": "WASSCE-style practice",
+}
+
+
+def _series(names):
+    """`names` as a plain English list: "a", "a and b", "a, b and c"."""
+    names = list(names)
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def _cbt_answer():
+    """Whether Classnode has CBT, as the pricing page says it today.
+
+    Read from the same "coming soon" settings as the pricing page on every
+    request, so this answer changes the day a setting does and not later.
+    """
+    items = {item["label"]: item["coming_soon"] for group in included() for item in group["items"]}
+    soon = [name for label, name in _CBT.items() if items[label]]
+    live = [name for label, name in _CBT.items() if not items[label]]
+    if not live:
+        return ("Not yet. CBT is coming soon: " + _series(soon) + ", all on questions the school "
+                "writes. Exam PIN slips are available now.")
+    if not soon:
+        return ("Yes. Teachers write questions, set timed tests, and the computer marks them. "
+                "UTME-style and WASSCE-style practice use questions the school writes.")
+    return ("Part of it. Available now: " + _series(live) + ". Coming soon: " + _series(soon)
+            + ". All of it uses questions the school writes.")
+
+
+def faq_page():
+    """The questions on `/faq/`, as (question, answer) with the answer written in HTML.
+
+    Drawn on the page and given to search engines as FAQPage structured data
+    from this one list, as the homepage's `FAQ` is. Every answer says what the
+    product does today, in the words the pricing page and the homepage use.
+    """
+    return [
+        ("What is the best school management software for Nigerian secondary schools?",
+         "The best one is the one your teachers will really use every day. For a Nigerian secondary "
+         "school, that means software that works on a phone, copes with a poor network, and follows "
+         "the report sheet your state asks for. Classnode is built for exactly that. It covers results "
+         "and report cards, fees, registers and parent result checks. "
+         'Book a <a href="/#demo">demo</a> and try it with your own classes.'),
+        ("What does Classnode do?",
+         "Classnode is school management software for Nigerian secondary schools, made by Classnode "
+         "Edtech Limited. Teachers enter CA and exam scores on their phones. Totals, grades, class "
+         "positions and remarks are worked out for you. You approve each class, print report cards "
+         "with affective and psychomotor ratings, track school fees, take registers and let parents "
+         'check results online. See everything in the price on the <a href="/pricing/">pricing page</a>.'),
+        ("Does it support the Ogun State report card?",
+         "Yes. Switch on the Ogun State template in setup and your report cards follow the sheet "
+         "the Ministry asks for."),
+        ("How much does it cost?",
+         PRICE + " Everything on the "
+         '<a href="/pricing/">pricing page</a> is in that price. The premium add-on is priced by asking.'),
+        ("Is there a free trial?",
+         "Yes. Your school's first term is free, with no setup fee. After that it is ₦1,500 per "
+         "student, per term. If you would like to see it first, book a demo and we will call you "
+         "within two working days."),
+        ("Does it work on weak networks and cheap phones?",
+         "Yes. Classnode works in the browser on the phones your teachers already carry. There is "
+         "nothing to install and no laptop is needed. Pages are kept light, so they open quickly "
+         "on a slow connection. When the network drops, scores and registers stay on the phone and "
+         "send when the connection comes back."),
+        ("Can parents check results on their phones?",
+         "Yes. A parent opens a child's report card in the browser with the admission number and "
+         "the PIN on a paper slip. No account is needed. Parents see a result only after you have "
+         "approved the class and released it."),
+        ("Is our school's data safe and private?",
+         "Your school's records are kept apart from every other school's. Only your staff, each "
+         "according to their role, and parents for their own children can see them. A payment "
+         "cannot be edited or deleted, only reversed with a reason. The database is backed up every "
+         'night. Our <a href="/privacy/">privacy notice</a> has the details.'),
+        ("How fast can we start?",
+         "Book a demo and we will call you within two working days. To set up, send us your class "
+         "lists and fee items, as an Excel or CSV file if you have one. We add your classes, "
+         "students and staff, then walk your team through it. There is no setup fee."),
+        ("Does it have CBT?", _cbt_answer()),
+    ]
 
 
 def site_page(request, template, context=None, status=200):
@@ -143,26 +236,68 @@ def _json_ld(data):
     return mark_safe(text.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026"))
 
 
+def _faq_schema(faq):
+    """FAQPage structured data for `faq`, a list of (question, answer in HTML)."""
+    return {
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": question,
+                "acceptedAnswer": {"@type": "Answer", "text": strip_tags(answer)},
+            }
+            for question, answer in faq
+        ],
+    }
+
+
+def _organization(site):
+    """Who publishes the site.
+
+    The town and state, and no street: there is no public office to send
+    anyone to. The phone line and the LinkedIn and Google Business Profile
+    pages are named only when a deployment sets them (`settings.SITE_PHONE`,
+    `SITE_LINKEDIN_URL`, `SITE_GOOGLE_BUSINESS_URL`); nothing is made up.
+    """
+    organization = {
+        "@type": "Organization",
+        "@id": f"{site}/#organization",
+        "name": "Classnode Edtech Limited",
+        "alternateName": "Classnode",
+        "url": f"{site}/",
+        "logo": logo(site),
+        "email": "hello@classnode.co",
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": "Abeokuta",
+            "addressRegion": "Ogun State",
+            "addressCountry": "NG",
+        },
+    }
+    if settings.SITE_PHONE:
+        organization["telephone"] = settings.SITE_PHONE
+    profiles = [
+        url
+        for url in (settings.SITE_LINKEDIN_URL, settings.SITE_GOOGLE_BUSINESS_URL)
+        if url.startswith("https://")
+    ]
+    if profiles:
+        organization["sameAs"] = profiles
+    return organization
+
+
 def structured_data():
     """Who publishes the site, what it sells, and the homepage's questions.
 
-    No address, no ratings and no reviews: there is no public office, and no
-    rating or review exists that we could stand behind.
+    No street address, no ratings and no reviews: there is no public office,
+    and no rating or review exists that we could stand behind.
     """
     site = site_url()
     organization = f"{site}/#organization"
     return _json_ld({
         "@context": "https://schema.org",
         "@graph": [
-            {
-                "@type": "Organization",
-                "@id": organization,
-                "name": "Classnode Edtech Limited",
-                "alternateName": "Classnode",
-                "url": f"{site}/",
-                "logo": logo(site),
-                "email": "hello@classnode.co",
-            },
+            _organization(site),
             {
                 "@type": "SoftwareApplication",
                 "name": "Classnode",
@@ -196,19 +331,15 @@ def structured_data():
                     },
                 ],
             },
-            {
-                "@type": "FAQPage",
-                "mainEntity": [
-                    {
-                        "@type": "Question",
-                        "name": question,
-                        "acceptedAnswer": {"@type": "Answer", "text": strip_tags(answer)},
-                    }
-                    for question, answer in FAQ
-                ],
-            },
+            _faq_schema(FAQ),
         ],
     })
+
+
+def faq_structured_data(faq):
+    """The `/faq/` page's FAQPage, for the same questions the page shows."""
+    return _json_ld({"@context": "https://schema.org", **_faq_schema(faq)})
+
 
 #: Whether the privacy notice and the terms are still waiting for the lawyer's
 #: wording. While they are, each says so in one line at the top, asks search
@@ -309,6 +440,21 @@ def pricing(request):
     """The price, everything it includes, and the premium add-on. Which features still wear
     "Coming soon" is `website.features`, read from settings on every request."""
     return site_page(request, "website/pricing.html", {"groups": included(), "premium": premium(), "nav_pricing": True})
+
+
+@require_http_methods(["GET", "HEAD"])
+def faq(request):
+    """Ten plain questions and answers, also given to search engines as FAQPage structured data."""
+    questions = faq_page()
+    return site_page(
+        request,
+        "website/faq.html",
+        {
+            "faq": [(question, mark_safe(answer)) for question, answer in questions],
+            "structured_data": faq_structured_data(questions),
+            "nav_faq": True,
+        },
+    )
 
 
 @require_http_methods(["GET", "HEAD"])
