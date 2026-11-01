@@ -473,3 +473,142 @@ class TheCheckoutStepWorksAgainstARealRepositoryTests(SimpleTestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.head(), self.v2)
+
+
+STEP_CI = "CI passed on exactly this SHA"
+
+
+class TheCiGuardReadsTheRightCheckRunsTests(SimpleTestCase):
+    """The guard step, run with a `gh` that serves canned API responses.
+
+    077f758 was refused although run #616 had `test`, `image` and `publish`
+    green: the default check-runs listing left the first and last out. The
+    guard now asks with `filter=all`, keeps only runs of `tests.yml` on the
+    SHA, and judges each name by its latest attempt.
+    """
+
+    SHA = "077f758c1eabcf52509b5174f96a592ce4e77c54"
+    TESTS_RUN = 41289830142
+    TESTS_RUN_2 = 41289830999
+    DEPLOY_RUN = 41293676989
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        bin_dir = self.root / "bin"
+        bin_dir.mkdir()
+        fake_gh = bin_dir / "gh"
+        fake_gh.write_text(textwrap.dedent("""\
+            #!/usr/bin/env bash
+            echo "$2" >> "$GH_LOG"
+            case "$2" in
+              *workflows/tests.yml/runs*head_sha=$SHA*) src=$FIXTURES/runs.json ;;
+              *commits/$SHA/check-runs*filter=all*per_page=100*) src=$FIXTURES/checks.json ;;
+              *) echo "unexpected request: $2" >&2; exit 1 ;;
+            esac
+            if [ "$3" = --jq ]; then jq -r "$4" "$src"; else cat "$src"; fi
+            """))
+        fake_gh.chmod(0o755)
+        self.log = self.root / "gh.log"
+        self.env = {
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "HOME": str(self.root),
+            "SHA": self.SHA,
+            "REPO": "owner/repo",
+            "GH_LOG": str(self.log),
+            "FIXTURES": str(self.root),
+        }
+
+    def run_(self, name, run, id, conclusion="success", status="completed"):
+        return {
+            "id": id, "name": name, "status": status, "conclusion": conclusion,
+            "details_url": f"https://github.com/owner/repo/actions/runs/{run}/job/{id}",
+        }
+
+    def good(self):
+        return [
+            self.run_("test", self.TESTS_RUN, 103),
+            self.run_("image", self.TESTS_RUN, 101),
+            self.run_("publish", self.TESTS_RUN, 104),
+        ]
+
+    def guard(self, check_runs, tests_runs=None):
+        import json
+        (self.root / "checks.json").write_text(json.dumps({"check_runs": check_runs}))
+        runs = [self.TESTS_RUN] if tests_runs is None else tests_runs
+        (self.root / "runs.json").write_text(
+            json.dumps({"workflow_runs": [{"id": r} for r in runs]}))
+        return subprocess.run(
+            ["bash", "-e", "-o", "pipefail", "-c", run_block(STEP_CI)],
+            env=self.env, capture_output=True, text=True,
+        )
+
+    def test_it_asks_for_every_check_run_not_just_the_latest_listing(self):
+        self.guard(self.good())
+
+        self.assertIn("filter=all&per_page=100", self.log.read_text())
+
+    def test_all_three_passing_is_passed(self):
+        result = self.guard(self.good())
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_any_one_failing_is_not_passed(self):
+        for position in range(3):
+            runs = self.good()
+            runs[position]["conclusion"] = "failure"
+
+            result = self.guard(runs)
+
+            self.assertEqual(result.returncode, 1, runs[position]["name"])
+            self.assertIn("CI has not passed", result.stdout)
+
+    def test_any_one_missing_is_not_passed(self):
+        for position in range(3):
+            runs = self.good()
+            del runs[position]
+
+            self.assertEqual(self.guard(runs).returncode, 1)
+
+    def test_nothing_at_all_is_not_passed(self):
+        self.assertEqual(self.guard([]).returncode, 1)
+
+    def test_one_still_running_is_not_passed(self):
+        runs = self.good()
+        runs[2].update(status="in_progress", conclusion=None)
+
+        self.assertEqual(self.guard(runs).returncode, 1)
+
+    def test_a_failed_attempt_followed_by_a_green_rerun_is_passed(self):
+        runs = self.good() + [
+            self.run_("test", self.TESTS_RUN, 90, conclusion="failure"),
+            self.run_("publish", self.TESTS_RUN, 95, conclusion="cancelled"),
+        ]
+
+        self.assertEqual(self.guard(runs).returncode, 0)
+
+    def test_a_green_attempt_followed_by_a_failed_rerun_is_not_passed(self):
+        runs = self.good() + [self.run_("image", self.TESTS_RUN, 201, conclusion="failure")]
+
+        self.assertEqual(self.guard(runs).returncode, 1)
+
+    def test_the_rerun_counts_even_if_the_api_lists_it_first(self):
+        runs = [self.run_("test", self.TESTS_RUN, 205, conclusion="failure")] + self.good()
+
+        self.assertEqual(self.guard(runs).returncode, 1)
+
+    def test_other_workflows_check_runs_are_ignored(self):
+        # a failed same-named job from the deploy run must not count against it ...
+        runs = self.good() + [self.run_("test", self.DEPLOY_RUN, 999, conclusion="failure")]
+        self.assertEqual(self.guard(runs).returncode, 0)
+
+        # ... nor a green one from another workflow stand in for a missing one.
+        runs = self.good()[:2] + [self.run_("publish", self.DEPLOY_RUN, 999)]
+        self.assertEqual(self.guard(runs).returncode, 1)
+
+    def test_a_check_run_with_no_details_url_is_ignored(self):
+        runs = self.good()
+        runs[0]["details_url"] = None
+
+        self.assertEqual(self.guard(runs).returncode, 1)

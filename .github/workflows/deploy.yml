@@ -78,15 +78,32 @@ jobs:
       # succeeded: an empty list is "never ran", not "passed". `publish` is the
       # one that makes the `<sha>` tags exist at all, since `image` now pushes
       # only `candidate-<sha>`; without it, deploy.sh would fail at the pull.
+      #
+      # `?filter=all`: the default (`latest`) listing left out `test` and
+      # `publish` for 077f758 although both ran green in run #616 (the jobs
+      # API and a direct fetch showed them), so every deploy of it was refused.
+      # Only check runs of a `tests.yml` run on this SHA count (not a `deploy`
+      # run, nor a same-named job from some other workflow), and for each name
+      # only the latest attempt counts: a failed run followed by a green re-run
+      # passes, a green run followed by a failed re-run does not.
+      # tests/test_deploy_workflow.py runs this step against canned responses.
       - name: CI passed on exactly this SHA
         env:
           GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
         run: |
-          verdict=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" --jq '
-            [.check_runs[] | select(.name == "test" or .name == "image" or .name == "publish")] as $runs
-            | if ($runs | map(.name) | unique | length) == 3
-                 and ($runs | all(.status == "completed" and .conclusion == "success"))
-              then "passed" else "not passed" end')
+          runs=$(gh api "repos/$REPO/actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100" \
+            --jq '[.workflow_runs[].id]')
+          verdict=$(gh api "repos/$REPO/commits/$SHA/check-runs?filter=all&per_page=100" |
+            jq -r --argjson runs "$runs" '
+              [.check_runs[]
+               | select(.name == "test" or .name == "image" or .name == "publish")
+               | select(((.details_url // "") | capture("/actions/runs/(?<r>[0-9]+)/") | .r | tonumber) as $r
+                        | $runs | index($r))]
+              | group_by(.name) | map(max_by(.id)) as $latest
+              | if ($latest | length) == 3
+                   and ($latest | all(.status == "completed" and .conclusion == "success"))
+                then "passed" else "not passed" end')
           if [ "$verdict" != "passed" ]; then
             echo "::error::CI has not passed on $SHA ('test', 'image' and 'publish' must all succeed)."
             exit 1
