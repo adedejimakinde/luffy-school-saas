@@ -368,6 +368,10 @@ SignInCode.objects.all().delete()
     await page.setViewportSize({ width: 375, height: 800 });
     await page.goto(`${PORTAL}/write/`);
     await page.click('a:has-text("What a class teacher")');
+    // `click` returns before the navigation commits, and "networkidle" on the page being left
+    // can already be true, so `settle` alone let the next line run on the post list, which has
+    // no `.ed-bottom` (main run #618). Wait for the editor itself.
+    await page.waitForSelector(".ed-bottom");
     await settle(page);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const atBottom = await page.evaluate(() => {
