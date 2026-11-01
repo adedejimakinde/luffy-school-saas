@@ -20,8 +20,8 @@ from . import pictures, services
 from .models import Page, PageKey, SiteSettings
 
 HERO = {
-    "heading": "Every child known, every child stretched",
-    "subheading": "A day and boarding secondary school in Lagos, JSS 1 to SSS 3.",
+    "heading": "A day and boarding secondary school in Lagos, JSS 1 to SSS 3",
+    "subheading": "On Ozumba Mbadiwe Avenue, Victoria Island. Science, arts and commercial streams from SSS 1.",
     "buttons": [{"label": "Admissions", "link": "/admissions/"}, {"label": "Visit us", "link": "/contact/"}],
 }
 MOTTO = {"motto": "Ìmọ̀ ni agbára", "language": "yo", "translation": "Knowledge is power", "founded": 1987}
@@ -29,10 +29,10 @@ MESSAGE = {
     "name": "Mrs Ọláòlúwa Adéṣínà",
     "title": "Principal",
     "message": (
-        "Welcome to Harbour Demo College. For nearly forty years we have taught young people to "
-        "think clearly, work hard and look after one another.\n\n"
-        "Our students sit WAEC, NECO and the BECE with us, and they leave ready for university and "
-        "for life. We would be glad to show you round."
+        "Welcome to Harbour Demo College. We opened in 1987 and teach the Nigerian curriculum from "
+        "JSS 1 to SSS 3.\n\n"
+        "Students sit the BECE in JSS 3, and WAEC and NECO in SSS 3. To visit, call the office and we "
+        "will arrange a time on a school day."
     ),
     "signature": "With warm regards,",
 }
@@ -55,7 +55,7 @@ ABOUT = {
     "body": (
         "Harbour Demo College opened in 1987 with forty students and four teachers.\n\n"
         "Today we teach the full Nigerian curriculum from JSS 1 to SSS 3, with science, arts and "
-        "commercial streams, a boarding house for boys and girls, and clubs from debate to robotics."
+        "commercial streams, a boarding house for boys and girls, and clubs for debate, drama and robotics."
     ),
 }
 CONTACT = {"whatsapp": "0803 000 0000", "hours": "Monday to Friday, 7:30am to 4pm", "latitude": 6.4541,
@@ -76,7 +76,7 @@ BOARDING = {
 }
 SPORTS = {
     "title": "Sports and clubs",
-    "text": {"heading": "After the last bell",
+    "text": {"heading": "Sports and clubs after school",
              "body": "Football, athletics, table tennis, debate, drama, the press club and robotics."},
 }
 FOOTER = {"social": [{"network": "facebook", "url": "https://www.facebook.com/harbourdemocollege"}],
@@ -169,7 +169,7 @@ HERO_SLIDES = (
     (4, "The library and the assembly ground"),
 )
 
-ALBUM = {"title": "Inter-house sports, 2026", "description": "Blue House took the cup on a hot February afternoon."}
+ALBUM = {"title": "Inter-house sports, 2026", "description": "Held on Saturday 14 February 2026. Blue House won the cup."}
 ALBUM_CAPTIONS = ("The 4 x 100 m relay", "Long jump", "Blue House with the cup", "March past", "The tug of war",
                   "Prize giving")
 

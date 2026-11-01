@@ -18,8 +18,8 @@ from schoolsite.demo import _scene
 from schoolsite.models import Page
 
 HERO = {
-    "heading": "Learning with character in Abeokuta",
-    "subheading": "A day secondary school for boys and girls, JSS 1 to SS 3. This is Classnode's demo school.",
+    "heading": "A day secondary school in Abeokuta, JSS 1 to SS 3",
+    "subheading": "Boys and girls, two arms in every year, off the Ibara road. This is Classnode's demo school.",
     "buttons": [{"label": "Admissions", "link": "/admissions/"}, {"label": "Visit us", "link": "/contact/"}],
 }
 MOTTO = {"motto": "Imo ati iwa", "language": "yo", "translation": "Knowledge and character", "founded": 2004}
@@ -27,9 +27,9 @@ MESSAGE = {
     "name": "Dr Funmilayo Adeyemi",
     "title": "Principal",
     "message": (
-        "Welcome to Crestfield College. We teach the full Nigerian curriculum from JSS 1 to SS 3, "
-        "and we ask every child to work hard, speak up and look after one another.\n\n"
-        "Parents see results, attendance and fees on their phones, the week they happen."
+        "Welcome to Crestfield College. We teach the Nigerian curriculum from JSS 1 to SS 3, "
+        "with two arms in every year.\n\n"
+        "Parents see results, attendance and fees on their phones in the week they are recorded."
     ),
     "signature": "With warm regards,",
 }

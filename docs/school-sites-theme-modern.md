@@ -111,6 +111,11 @@ backgrounds 2 and 3 and the dark band in PR B; the school sets four colours with
 the tints worked out; existing schools get every animation on and the demo's
 accent, detail and dark colours, keeping their own main colour; and the header's
 Sign in keeps its two doors, with Apply now going to Admissions, else Contact.
+Decision 9 as changed the same day: the demo photos are generated scenes with no
+real children, and the demo copy is plain and specific rather than slogan-like
+("A day secondary school in Abeokuta, JSS 1 to SS 3", not a three-beat tagline).
+Harbour's and Crestfield's headings, principal's messages and section words are
+written that way (`schoolsite/demo.py`, `schools/crestfield/site.py`).
 
 ### The engine
 
