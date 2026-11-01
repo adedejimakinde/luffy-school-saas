@@ -121,6 +121,7 @@ export function site(body, { notes = {}, told = null } = {}) {
       '<button type="submit">Add the page</button>',
       note(notes["add-page"]),
       "</form>",
+      '<h2>Photos and albums</h2><p class="hint">Upload hero pictures, videos, portraits and gallery albums, then choose them in a section.</p><p><a class="btn" href="/website/photos/">Photos and albums</a></p>',
       footerForm(body, notes.footer),
     );
   }
@@ -179,8 +180,14 @@ function log(body) {
   const events = body.log || [];
   const live = body.state && body.state.revision;
   const rows = events.map((e) => {
-    const what = e.kind === "marked_ready" ? "Marked ready" : e.kind === "rolled_back" ? `Rolled back to version ${esc(e.rollback_of)} as version ${esc(e.revision)}` : `Published version ${esc(e.revision)}`;
-    const back = body.can_publish && e.revision && e.revision !== live && e.kind !== "marked_ready"
+    const what = {
+      marked_ready: "Marked ready",
+      rolled_back: `Rolled back to version ${esc(e.rollback_of)} as version ${esc(e.revision)}`,
+      album_published: `Published the album &ldquo;${esc(e.subject)}&rdquo;`,
+      album_unpublished: `Took the album &ldquo;${esc(e.subject)}&rdquo; off the website`,
+      taken_down: `Took down a picture (&ldquo;${esc(e.subject)}&rdquo;)${e.revision ? `, as version ${esc(e.revision)}` : ""}`,
+    }[e.kind] || `Published version ${esc(e.revision)}`;
+    const back = body.can_publish && e.revision && e.revision !== live && ["published", "rolled_back"].includes(e.kind)
       ? ` <button type="button" class="again" data-action="rollback" data-number="${esc(e.revision)}">Go back to version ${esc(e.revision)}</button>`
       : "";
     return `<li><span class="when">${esc(day(e.at))}</span> ${what} by ${esc(e.by)}${e.note ? `: &ldquo;${esc(e.note)}&rdquo;` : ""}${back}</li>`;
@@ -220,7 +227,7 @@ export function page(body, ref, { confirming = null, notes = {} } = {}) {
     "</form>",
     "<h2>Sections</h2>",
     sections.length
-      ? `<ol class="sections-list">${sections.map((s, i) => sectionRow(s, i, sections.length, confirming)).join("")}</ol>`
+      ? `<ol class="sections-list">${sections.map((s, i) => sectionRow(s, i, sections.length, confirming, body)).join("")}</ol>`
       : '<p class="blank">No sections yet. Add the first below.</p>',
     note(notes.sections),
     '<form class="add-section" data-form="add-section">',
@@ -234,13 +241,13 @@ export function page(body, ref, { confirming = null, notes = {} } = {}) {
   ].join("");
 }
 
-function sectionRow(s, i, count, confirming) {
+function sectionRow(s, i, count, confirming, body = {}) {
   const asked = confirming && confirming.what === "remove-section" && confirming.id === s.id;
-  const soon = s.kind === "news" || s.kind === "gallery";
+  const soon = s.kind === "news";
   return [
     '<li class="group section-row">',
     `<span class="name">${esc(kindLabel(s.kind))}</span>`,
-    `<span class="level">${esc(summary(s.kind, s.data))}</span>`,
+    `<span class="level">${esc(summary(s.kind, s.data, { albums: body.albums || [] }))}</span>`,
     '<span class="row-actions">',
     soon ? "" : `<button type="button" data-action="edit-section" data-id="${esc(s.id)}">Edit<span class="visually-hidden"> ${esc(kindLabel(s.kind))}</span></button>`,
     `<button type="button" class="icon-button" data-action="section-up" data-id="${esc(s.id)}"${i === 0 ? " disabled" : ""} aria-label="Move up">&uarr;</button>`,
@@ -276,7 +283,7 @@ export function section(body, ref, { id = null, kind = null, notes = {} } = {}) 
     `<button type="button" class="again" data-action="cancel">Back to ${esc(p ? p.label : "the page")}</button>`,
     `<h1>${s ? "" : "New: "}${esc(kindLabel(k))}</h1>`,
     `<form class="section-form" data-form="section" data-kind="${esc(k)}" data-tracked>`,
-    fields(k, s ? s.data : BLANK[k] || {}, { pages }),
+    fields(k, s ? s.data : BLANK[k] || {}, { pages, pictures: body.pictures || [], albums: body.albums || [] }),
     `<button type="submit">${s ? "Save" : "Add to the page"}</button>`,
     note(notes.section),
     "</form>",

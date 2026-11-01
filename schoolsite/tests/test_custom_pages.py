@@ -207,12 +207,16 @@ class TwentyPagesAndFifteenSectionsTests(CustomPageSetUp):
 
 class SectionsOnAPageOfTheSchoolsOwnTests(CustomPageSetUp):
     def test_the_safe_kinds_go_on_and_the_rest_are_refused(self):
+        from schoolsite import pictures
+
         self.make(title="Boarding")
+        with connected_to(self.stmarys):
+            album = pictures.create_album_as(self.principal, self.stmarys, title="The houses")
         allowed = {
             "hero": HERO,
             "text": TEXT,
             "facts": {"items": [{"figure": "2", "label": "houses"}, {"figure": "120", "label": "boarders"}]},
-            "gallery": {"album": 1},
+            "gallery": {"album": album.pk},
             "principal_message": {"message": "Welcome to boarding."},
             "admissions_cta": {"heading": "Boarding places for 2027/2028"},
         }

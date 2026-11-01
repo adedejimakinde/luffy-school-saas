@@ -18,10 +18,13 @@ its title (`slug_from_title`): lowercase letters, digits and single hyphens, at
 most 40 characters, and never a fixed page's key or a name the platform routes
 (`schools.paths`), so `/pages/about/` cannot stand in for About.
 
-**News and gallery sections are checked for their shape only** (decided 24
-October 2026): a count, an album id, photo ids. Whether that album or those
-photos exist is checked in PRs 5 and 6, which bring them. The same goes for
-image and video ids in the hero and the principal's portrait.
+**Pictures, albums and news are named by id and checked for shape here**: a
+count, an album id, picture ids. Whether that album or picture exists in the
+school's draft, and is the right sort (a hero's photo or video, a portrait, a
+gallery photo), is `schoolsite.pictures.check_media`'s to ask (PR 5); news is
+PR 6. A picture's focal point and alt text live on the picture itself
+(`SitePicture`), so every place it is drawn crops it the same way; a hero's old
+`focal` field is still accepted and is not used.
 """
 
 import datetime
@@ -283,13 +286,17 @@ def _hero(data):
             "x": _number(focal.get("x"), "The focal point's across", 0, 1),
             "y": _number(focal.get("y"), "The focal point's down", 0, 1),
         }
+    image = _optional_id(data.get("image"), "The picture")
+    video = _optional_id(data.get("video"), "The video")
+    if image is not None and video is not None:
+        raise SectionRefused("A hero shows a photo or a video, not both.")
     return {
         "heading": _text(data.get("heading"), "The heading", 120, required=True),
         "subheading": _text(data.get("subheading"), "The line under the heading", 240),
         "buttons": [_button(b, f"Button {i}") for i, b in enumerate(buttons, start=1)],
-        "image": _optional_id(data.get("image"), "The picture"),
+        "image": image,
         "focal": focal,
-        "video": _optional_id(data.get("video"), "The video"),
+        "video": video,
     }
 
 
@@ -494,6 +501,18 @@ def clean_slug(value):
     return value
 
 
+def _slugify(title, what):
+    """`title` as an address: no tone marks, anything else one hyphen, cut at a hyphen to fit."""
+    plain = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode().lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
+    if len(slug) > SLUG_LENGTH:
+        slug = slug[:SLUG_LENGTH + 1].rsplit("-", 1)[0] if "-" in slug[:SLUG_LENGTH + 1] else slug[:SLUG_LENGTH]
+        slug = slug.strip("-")
+    if not slug:
+        raise SectionRefused(f"The {what}'s title has no letters or numbers to make a web address from. Give it one.")
+    return slug
+
+
 def slug_from_title(title):
     """An address made from a page's title: "Boarding & Hostel" is `boarding-hostel`.
 
@@ -501,14 +520,57 @@ def slug_from_title(title):
     not a letter or a digit becomes one hyphen; it is cut at a hyphen to fit in
     40 characters. Checked like a given address, so it may still be refused.
     """
-    plain = unicodedata.normalize("NFKD", title or "").encode("ascii", "ignore").decode().lower()
-    slug = re.sub(r"[^a-z0-9]+", "-", plain).strip("-")
-    if len(slug) > SLUG_LENGTH:
-        slug = slug[:SLUG_LENGTH + 1].rsplit("-", 1)[0] if "-" in slug[:SLUG_LENGTH + 1] else slug[:SLUG_LENGTH]
-        slug = slug.strip("-")
-    if not slug:
-        raise SectionRefused("The page's title has no letters or numbers to make a web address from. Give it one.")
-    return clean_slug(slug)
+    return clean_slug(_slugify(title, "page"))
+
+
+def clean_album_slug(value):
+    """An album's address under `/gallery/`, as given, or `SectionRefused`.
+
+    Under its own prefix, so no platform name can clash with it; only its shape is checked.
+    """
+    if not isinstance(value, str):
+        raise SectionRefused("The album's web address is text.")
+    value = value.strip().lower()
+    if not value:
+        raise SectionRefused("The album needs a web address.")
+    if len(value) > SLUG_LENGTH:
+        raise SectionRefused(f"The album's web address can be at most {SLUG_LENGTH} characters.")
+    if not _SLUG.match(value):
+        raise SectionRefused(
+            "The album's web address is lowercase letters and numbers, with single hyphens between words."
+        )
+    return value
+
+
+def album_slug_from_title(title):
+    """An album's address made from its title, the way a page's is."""
+    return clean_album_slug(_slugify(title, "album"))
+
+
+def clean_album_title(value):
+    return _text(value, "The album's title", 120, required=True)
+
+
+def clean_album_description(value):
+    return _text(value, "The album's description", 600, lines=True)
+
+
+def clean_alt(value, *, required=False):
+    """What a picture shows, for people who cannot see it (§11.1)."""
+    return _text(value, "The description of the picture", 250, required=required)
+
+
+def clean_caption(value):
+    return _text(value, "The caption", 200)
+
+
+def clean_focal(value):
+    """A focal point, `{"x", "y"}` each from 0 (left, top) to 1 (right, bottom)."""
+    value = _fields(value, "The focal point", {"x", "y"})
+    return (
+        _number(value.get("x"), "The focal point's across", 0, 1),
+        _number(value.get("y"), "The focal point's down", 0, 1),
+    )
 
 
 def clean_page_description(value):
@@ -527,7 +589,14 @@ __all__ = [
     "SOCIAL_HOSTS",
     "SectionRefused",
     "VARIANTS",
+    "album_slug_from_title",
     "clean",
+    "clean_album_description",
+    "clean_album_slug",
+    "clean_album_title",
+    "clean_alt",
+    "clean_caption",
+    "clean_focal",
     "clean_footer",
     "clean_kind",
     "clean_link",

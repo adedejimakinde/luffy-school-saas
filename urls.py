@@ -61,6 +61,7 @@ urlpatterns = [
     path("admissions/", site.admissions, name="school-site-admissions"),
     path("news/", site.news, name="school-site-news"),
     path("gallery/", site.gallery, name="school-site-gallery"),
+    path("gallery/<slug:slug>/", site.album, name="school-site-album"),
     path("contact/", site.contact, name="school-site-contact"),
     path("pages/<slug:slug>/", site.custom_page, name="school-site-page"),
     path("sitemap.xml", site.sitemap, name="school-site-sitemap"),
@@ -157,6 +158,9 @@ urlpatterns = [
     path("website/", site_editor.editor_page, name="website-editor"),
     path("website/preview/", site_editor.preview, name="website-preview"),
     path("website/preview/pages/<slug:slug>/", site_editor.preview_custom_page, name="website-preview-page"),
+    path("website/photos/", site_editor.photos_page, name="website-photos"),
+    path("website/preview/gallery/<slug:slug>/", site_editor.preview_album, name="website-preview-album"),
+    path("website/pictures/<str:key>/<str:variant>", site_editor.picture, name="website-picture"),
     path("website/preview/<slug:key>/", site_editor.preview_page, name="website-preview-fixed"),
     # Names held for work not yet built (`schools.paths.RESERVED`), `/sit/` among
     # them: a 404 at the name and everywhere under it until the work is routed here.

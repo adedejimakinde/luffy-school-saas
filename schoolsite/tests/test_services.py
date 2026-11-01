@@ -462,12 +462,22 @@ class TheDraftHoldsOnlyWhatIsAllowedTests(SiteSetUp):
             with self.subTest(link=bad), self.assertRaises(SectionRefused):
                 clean_link(bad)
 
-    def test_news_and_gallery_are_checked_for_shape_only(self):
-        self.add(self.principal, "gallery", {"album": 999_999, "count": 12}, key="gallery")
+    def test_news_is_checked_for_shape_and_a_gallery_for_shape_and_its_album(self):
+        from schoolsite import pictures
+        from schoolsite.errors import SiteRefused
+
+        with connected_to(self.stmarys):
+            album = pictures.create_album_as(self.principal, self.stmarys, title="Sports day")
+        self.add(self.principal, "gallery", {"album": album.pk, "count": 12}, key="gallery")
         self.add(self.principal, "news", {"count": 6}, key="news")
         for data in ({"album": 1, "photos": [1]}, {}, {"album": 0}, {"album": 1, "count": 13},
                      {"photos": [1] * 13}, {"photos": [1], "count": 2}, {"album": True}):
             with self.subTest(data=data), connected_to(self.stmarys), self.assertRaises(SectionRefused):
+                services.add_section_as(self.principal, self.stmarys, "gallery",
+                                        version=Page.objects.get(key="gallery").version, kind="gallery", data=data)
+        # An album or photo the school does not have is refused too (PR 5).
+        for data in ({"album": 999_999}, {"photos": [999_999]}):
+            with self.subTest(data=data), connected_to(self.stmarys), self.assertRaises(SiteRefused):
                 services.add_section_as(self.principal, self.stmarys, "gallery",
                                         version=Page.objects.get(key="gallery").version, kind="gallery", data=data)
 

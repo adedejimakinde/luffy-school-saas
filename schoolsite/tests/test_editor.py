@@ -184,8 +184,8 @@ class ThePrincipalsWorkTests(EditorSetUp):
         boarding = next(p for p in body["pages"] if p["ref"] == "boarding")
         self.assertEqual(boarding["preview"], "/website/preview/pages/boarding/")
         self.assertEqual([k["kind"] for k in boarding["kinds"] if k["available"]],
-                         ["hero", "principal_message", "facts", "admissions_cta", "text"])
-        self.assertEqual([k["kind"] for k in boarding["kinds"] if not k["available"]], ["gallery"])
+                         ["hero", "principal_message", "facts", "gallery", "admissions_cta", "text"])
+        self.assertEqual([k["kind"] for k in boarding["kinds"] if not k["available"]], [])
         body = self.call("post", "pages/boarding/sections/", self.principal, version=boarding["version"],
                          kind="text", data={"body": "Two houses."}).json()
         boarding = next(p for p in body["pages"] if p["ref"] == "boarding")
@@ -228,7 +228,7 @@ class ThePrincipalsWorkTests(EditorSetUp):
         self.assertEqual(refused.status_code, 422)
         self.assertIn("kept for the site's own pages", refused.json()["detail"])
 
-    def test_news_and_gallery_are_coming_soon_and_cannot_be_added(self):
+    def test_news_is_coming_soon_and_cannot_be_added_and_a_gallery_now_can(self):
         versions, _ = self.versions()
         response = self.call("post", "pages/home/sections/", self.principal, version=versions["home"],
                              kind="news", data={"count": 3})
@@ -237,7 +237,7 @@ class ThePrincipalsWorkTests(EditorSetUp):
         kinds = {k["kind"]: k for k in self.overview().json()["pages"][0]["kinds"]}
         self.assertEqual(kinds["admissions_cta"]["label"], "Admissions panel", "the name the section list uses")
         self.assertFalse(kinds["news"]["available"])
-        self.assertFalse(kinds["gallery"]["available"])
+        self.assertTrue(kinds["gallery"]["available"])
         self.assertTrue(kinds["hero"]["available"])
 
     def test_the_colour_must_carry_white_writing_and_can_go_back_to_the_cards(self):

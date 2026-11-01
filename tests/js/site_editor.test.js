@@ -9,7 +9,9 @@
  * And what it promises a person: each form has its own Save and nothing is kept in the browser,
  * so leaving a form with edits asks first; removing asks twice; publishing has its own confirm
  * screen and names the draft the principal confirmed; the Ready button is the delegated
- * administrator's; news and gallery are offered as "coming soon", never as something to add.
+ * administrator's; news is offered as "coming soon", never as something to add.
+ *
+ * Pictures and albums (PR 5) are `site_editor_pictures.test.js`'s.
  */
 
 import { test } from "node:test";
@@ -192,14 +194,15 @@ test("each kind's form reads back as the data the server checks", () => {
   assert.equal(collect("contact_map", { latitude: "6.45", longitude: "" }).latitude, 6.45);
 });
 
-test("a form is drawn filled, with pictures said to be coming later", () => {
+test("a form is drawn filled, with its picture chosen from the school's own", () => {
   const pages = [{ path: "/", label: "Home" }, { path: "/pages/boarding/", label: "Boarding" }];
   const hero = fields("hero", { heading: "Welcome", buttons: [{ label: "Boarding", link: "/pages/boarding/" }, { label: "Out", link: "https://x.example/" }] }, { pages });
   assert.match(hero, /value="Welcome"/);
   assert.match(hero, /<option value="\/pages\/boarding\/" selected>Boarding<\/option>/);
   assert.match(hero, /<option value="other" selected>Another address<\/option>/);
   assert.match(hero, /value="https:\/\/x.example\/"/);
-  assert.match(hero, /Pictures and video come in a later update/);
+  assert.match(hero, /<select id="f-media" name="media"><option value="" selected>None<\/option><\/select>/);
+  assert.match(hero, /<a class="btn" href="\/website\/photos\/#upload-hero">Upload a photo<\/a>/);
   assert.match(fields("admissions_cta", { open: true }, { pages }), /type="checkbox" name="open" checked/);
   assert.doesNotMatch(fields("admissions_cta", {}, { pages }), /Another address/, "the admissions button stays on the site");
   assert.equal(summary("facts", { items: [{}, {}] }), "2 facts");

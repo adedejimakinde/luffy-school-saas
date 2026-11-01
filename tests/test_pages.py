@@ -55,6 +55,7 @@ from results.views import (
 )
 from notices.views import SETTINGS_MODULES
 from schoolsite.editor import EDITOR_MODULES as WEBSITE_EDITOR_MODULES
+from schoolsite.editor import PHOTOS_MODULES as WEBSITE_PHOTOS_MODULES
 from timetable.views import TIMETABLE_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
@@ -92,11 +93,15 @@ PAGES = {
     "exam-slips": EXAM_SLIPS_MODULES,
     "blog-editor": BLOG_EDITOR_MODULES,
     "website-editor": WEBSITE_EDITOR_MODULES,
+    "website-photos": WEBSITE_PHOTOS_MODULES,
+    # A school's public website: one module and no import map, loaded only on a
+    # page with a gallery or a hero video (`schoolsite.render`).
+    "school-site": ("schoolsite/site-app.js",),
 }
 
 #: Pages whose modules build no markup of their own, and so import no escaping
 #: (`test_a_page_that_draws_no_markup_imports_no_escaping` says what holds them).
-DRAWS_NO_MARKUP = {"blog-editor"}
+DRAWS_NO_MARKUP = {"blog-editor", "school-site"}
 
 #: `from "./x.js"` and `from "../web/x.js"`, and `import("../web/x.js")` for
 #: the one module a page loads only if it can (`web/picker.js`): a dynamic
