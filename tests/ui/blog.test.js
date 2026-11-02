@@ -224,6 +224,42 @@ async function everyWidth(who, name, url, steps = async () => {}) {
 let postUrl;
 let editorUrl;
 
+/**
+ * A draft of the writer's own, made through `blog.workflow` as the writer's clicks would, and the
+ * address of its editor. A test that needs a draft makes one, so it never depends on which posts the
+ * tests before it left in the writer's list, or on finding one by its title.
+ */
+function writersDraft() {
+  const id = shell(`
+from accounts.models import User
+from blog import workflow
+writer = User.objects.get(email="${WRITER}")
+post = workflow.new_post(writer)
+workflow.save(writer, post, {"title": "A draft on a phone", "slug": "a-draft-on-a-phone-${Date.now()}", "summary": "Nothing more than a draft."})
+print(post.pk)
+`).split("\n").pop();
+  return `${PORTAL}/write/posts/${id}/`;
+}
+
+/**
+ * Wait for the editor's phone bar, and when it does not come say which page this is, so a failure
+ * names what the browser got (a list, a sign-in, an error page, a read-only post) and keeps its photograph.
+ */
+async function waitForEditorBar(page) {
+  try {
+    await page.waitForSelector(".ed-bottom", { timeout: 15000 });
+  } catch (error) {
+    const seen = await page.evaluate(() => ({
+      url: location.href,
+      title: document.title,
+      main: (document.querySelector("main") || document.body).innerText.replace(/\s+/g, " ").slice(0, 300),
+    }));
+    mkdirSync(join(OUT, "375"), { recursive: true });
+    await page.screenshot({ path: join(OUT, "375", "editor-bar-missing.png"), fullPage: true });
+    assert.fail(`the editor's bar never came: ${JSON.stringify(seen)}`);
+  }
+}
+
 describe("the blog", () => {
   before(async () => {
     shell(`
@@ -343,6 +379,8 @@ SignInCode.objects.all().delete()
     });
     await everyWidth("writer", "editor-writer", `${PORTAL}/write/`, async (page) => {
       await page.click('a:has-text("What a class teacher")');
+      // The editor itself, not the list the click left: `shoot` would photograph either without complaint.
+      await page.waitForSelector("#post-form");
       await settle(page);
     });
     await everyWidth("writer", "editor-preview", editorUrl.replace(/\/$/, "/view/"));
@@ -364,14 +402,15 @@ SignInCode.objects.all().delete()
   });
 
   test("on a phone the editor's bar never covers the post, and sits above a keyboard", async () => {
+    // Its own draft, opened by its address: the click from the list is the step above's. An earlier
+    // version clicked the list's link to a draft an earlier test left, and failed on main when the
+    // browser was not on the editor ("click" returns before the navigation commits: run #618).
+    const draft = writersDraft();
     const page = await (await contextFor("writer")).newPage();
     await page.setViewportSize({ width: 375, height: 800 });
-    await page.goto(`${PORTAL}/write/`);
-    await page.click('a:has-text("What a class teacher")');
-    // `click` returns before the navigation commits, and "networkidle" on the page being left
-    // can already be true, so `settle` alone let the next line run on the post list, which has
-    // no `.ed-bottom` (main run #618). Wait for the editor itself.
-    await page.waitForSelector(".ed-bottom");
+    const response = await page.goto(draft);
+    assert.ok(response.ok(), `the draft's editor answered ${response.status()}: ${draft}`);
+    await waitForEditorBar(page);
     await settle(page);
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const atBottom = await page.evaluate(() => {
