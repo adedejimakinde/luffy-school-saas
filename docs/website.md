@@ -4,8 +4,8 @@ Classnode's own homepage, for a school that is not a customer yet. It lives on
 the bare platform domain (`SITE_HOST`, which is `PLATFORM_DOMAIN` unless set),
 and `www.` and plain HTTP are sent to `https://` and the bare domain in one hop
 (Caddy, and `website/crawlers.py` for any that reach the app). `/privacy/`,
-`/terms/`, the blog (`/blog/`, its posts and their pictures: `docs/blog.md`)
-and `/sitemap.xml` are on it too, and nothing else is.
+`/terms/`, `/faq/`, the blog (`/blog/`, its posts and their pictures: `docs/blog.md`),
+`/sitemap.xml` and `/llms.txt` are on it too, and nothing else is.
 
 ## Where it answers, and where it does not
 
@@ -318,7 +318,11 @@ The site is the only thing on the platform a search engine is asked to index.
   website's paths (`schools.paths.PUBLIC_SITE`), and never on the portal. No
   view marks one yet.
 - **robots.txt** is answered on every host by the same middleware: on the site
-  it allows everything and names `/sitemap.xml`; on the portal it disallows
+  it allows everything, names the AI search crawlers it welcomes (GPTBot,
+  OAI-SearchBot, ChatGPT-User, ClaudeBot, Claude-SearchBot, PerplexityBot,
+  Google-Extended and Bingbot: `website.crawlers.AI_CRAWLERS`, one `Allow: /`
+  group, because a crawler obeys the group that names it and no other) and names
+  `/sitemap.xml`; on the portal it disallows
   everything but the icons below; on every other host it says the same, and
   first names each path a school's host never lets in (`schools.paths.NEVER_INDEXED`:
   `/sit/`, `/check/`, the sign-in pages and every portal page).
@@ -348,13 +352,37 @@ The site is the only thing on the platform a search engine is asked to index.
   card), the pricing page, the terms (`#price`), every page's meta and share
   descriptions that carry `PRICE`, the structured data, and the tests that hold
   them (`website/tests/test_pricing.py`). It is not any school's fee.
-- **Structured data, on the homepage and each blog post only.** On a post it
-  is an Article (`docs/blog.md`). On the homepage: Organization (Classnode Edtech
-  Limited, its logo `https://classnode.co/icon-512.png`, `hello@classnode.co`,
-  no address), SoftwareApplication (EducationalApplication, a free first term
-  then ₦1,500 per student per term) and FAQPage. The FAQ on the page and in the data are drawn from one list,
-  `website.views.FAQ`. No ratings and no reviews: there are none to stand
-  behind.
+- **Structured data, on the homepage, `/faq/` and each blog post only.** On a
+  post it is an Article (`docs/blog.md`). On the homepage: Organization
+  (Classnode Edtech Limited, its logo `https://classnode.co/icon-512.png`,
+  `hello@classnode.co`, and an address that is Abeokuta, Ogun State, Nigeria
+  with no street, since there is no public office), SoftwareApplication
+  (EducationalApplication, a free first term then ₦1,500 per student per term)
+  and FAQPage. The Organization also carries `telephone` and `sameAs` (the
+  LinkedIn page and the Google Business Profile) **only when set**:
+  `SITE_PHONE`, `SITE_LINKEDIN_URL` and `SITE_GOOGLE_BUSINESS_URL`
+  (`deploy/production.env`; a `sameAs` address that is not `https://` is
+  dropped). Nothing is made up, so none is given until it is set. The FAQ on the
+  homepage and in its data are drawn from one list, `website.views.FAQ`;
+  `/faq/` is a FAQPage of its own ten questions from `website.views.faq_page`.
+  No ratings and no reviews: there are none to stand behind.
+- **`/faq/`** answers, in plain words and all open on the page, what a school
+  asks first: the best software for a Nigerian secondary school, what Classnode
+  does, the Ogun State report card, the price, the free first term, weak
+  networks and cheap phones, parents checking results, data, how fast to start,
+  and CBT. It is linked from the footer and listed in the sitemap. The CBT
+  answer reads the same "coming soon" settings as the pricing page, so it
+  changes the day a setting does.
+- **`/llms.txt`** (`website/llms.py`) is a Markdown summary for ChatGPT,
+  Gemini, Perplexity, Claude and the like: what Classnode is, who it is for,
+  every feature the pricing page lists (`website.features`, with "(coming soon)"
+  from the same settings), weak networks, data and backups, the price
+  (`website.views.PRICE`), the public pages with the descriptions they give
+  search engines, the newest 25 published blog posts, and how to reach us. Nothing
+  in it is typed twice, so it follows the pricing page. The privacy notice and
+  the terms join it, last, when `LEGAL_IN_DRAFT` goes, as they join the sitemap.
+  It is the site host's alone (the portal and every school host answer it with
+  their usual noindex 404).
 - **The share card.** Open Graph and a large Twitter card on every page, with
   `static/website/share.png` (1200 x 630, One Blue, the logo and the
   headline), drawn by `scripts/share_image.html`.
@@ -390,6 +418,13 @@ and this page both rely on that record being kept.
   60 KB, images sized, described and lazy below the hero, the one inline
   script and its sizes, motion only inside `no-preference`, and the contrast
   of every word on every blue.
+- `website/tests/test_ai_search.py`: robots.txt names the eight AI crawlers on
+  the site and lets none into the portal or a school, `/llms.txt` (shape, every
+  feature, the price, links that answer, coming soon following the settings,
+  drafts left out), the structured data against schema.org's shapes (address,
+  optional phone and `sameAs`, offers, both FAQPages), `/faq/` (the ten
+  questions in order, answers matching the data, footer link, sitemap, writing
+  rules), its budget, and a title and description audit of every sitemap address.
 - `website/tests/test_seo.py`: noindex in the header and the page on a school's
   host and the portal and not on the site, robots.txt on each, the sitemap,
   canonical addresses and the one-hop redirects, titles and descriptions, the

@@ -1,0 +1,28 @@
+{% extends "website/base.html" %}
+{% block head %}<script type="application/ld+json">{{ structured_data }}</script>
+{% endblock %}
+{% block main %}
+{% comment %}
+The questions and answers (`website.views.faq_page`): the ten things a school
+asks first, each answered in plain words under its own heading, all open so a
+reader, a search engine and an AI search tool see the same page. The same list
+is the page's FAQPage structured data (`website.views.faq_structured_data`), so
+what is shown and what is given cannot differ. Dressed as the legal pages are
+(`.legal`): the title in the top band and one reading column.
+{% endcomment %}
+<div class="top-band legal-top"><div class="wrap"><h1>Questions and answers</h1></div></div>
+<article class="legal wrap">
+  <div class="legal-body">
+    {% for question, answer in faq %}
+    <section id="q{{ forloop.counter }}">
+      <h2>{{ question }}</h2>
+      <p>{{ answer }}</p>
+    </section>
+    {% endfor %}
+    <section id="more">
+      <h2>Something else?</h2>
+      <p>Email <a href="mailto:hello@classnode.co">hello@classnode.co</a> or <a href="/#demo">book a demo</a> and we will call you.</p>
+    </section>
+  </div>
+</article>
+{% endblock %}

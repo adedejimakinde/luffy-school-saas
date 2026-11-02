@@ -799,7 +799,13 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 }
 .foot-col li:first-child a, .foot-small li:first-child a { padding-left: 0; }
 .foot-col a:hover, .foot-col a:focus-visible, .foot-small a:hover, .foot-small a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
-.foot-col [aria-current] { color: var(--card); }
+.foot-col [aria-current], .foot-small [aria-current] { color: var(--card); }
+/* Below 400px the bottom line (FAQ, Privacy, Terms and the email) is tightened
+   to its links' own width so all four stay on one 44px row at 320px. */
+@media (max-width: 399.98px) {
+  .foot-small a { padding: 0 4px; }
+  .foot-small li:first-child a { padding-left: 0; }
+}
 .foot-bottom { margin-top: 8px; border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent); }
 .foot-legal { margin: 8px 0 0; color: var(--on-deep-legal); }
 .foot-small a { color: var(--on-deep-legal); }

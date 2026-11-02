@@ -189,7 +189,7 @@ class TheSitemapTests(SiteSetUp):
         # And the blog's: its later pages, its posts and their pictures, each
         # held by `blog/tests/test_public.py` to published posts only.
         blog = {"blog-page", "blog-post", "blog-image", "blog-image-small"}
-        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap", *blog})
+        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap", "site-llms", *blog})
 
     def test_every_listed_page_answers_and_names_itself_canonical(self):
         for url in re.findall(r"<loc>([^<]*)</loc>", self.get("/sitemap.xml").content.decode()):
@@ -284,7 +284,8 @@ class TheStructuredDataTests(SiteSetUp):
         self.assertEqual(org["name"], "Classnode Edtech Limited")
         self.assertEqual(org["email"], "hello@classnode.co")
         self.assertEqual(org["url"], f"https://{SITE}/")
-        self.assertNotIn("address", org)
+        # The town and state, and no street (`website/tests/test_ai_search.py`).
+        self.assertNotIn("streetAddress", org)
         self.assertEqual(org["logo"]["url"], f"https://{SITE}/icon-512.png")
         self.assertEqual((org["logo"]["width"], org["logo"]["height"]), (512, 512))
         response = self.get(LOGO)
@@ -326,9 +327,9 @@ class TheStructuredDataTests(SiteSetUp):
         self.assertEqual(given, shown)
         self.assertEqual([q for q, _ in given], [q for q, _ in FAQ])
 
-    def test_no_ratings_reviews_or_address_anywhere(self):
+    def test_no_ratings_reviews_or_street_address_anywhere(self):
         raw = json.dumps(structured(self.page))
-        for word in ("aggregateRating", "review", "Review", "ratingValue", "address", "PostalAddress"):
+        for word in ("aggregateRating", "review", "Review", "ratingValue", "streetAddress", "postalCode"):
             with self.subTest(word=word):
                 self.assertNotIn(word, raw)
 
