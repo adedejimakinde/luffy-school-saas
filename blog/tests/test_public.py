@@ -205,6 +205,42 @@ class ScriptsAreStrippedTests(BlogSetUp):
         self.assertIn("Hi", html)
 
 
+SPOT_CHECK = (
+    "## 6. Before\n\nIntro with `inline` code.\n\n"
+    "## 7. Spot-check\n\nCheck that `100` is right.\n\n---\n\n"
+    "> A quote with **bold** and [a link](https://example.com) →\n\n"
+    "1. One\n2. Two with `code`\n\n- bullet **a**\n- bullet *b*\n\n"
+    "### The end\n\nDone.\n\n<script>alert('blog-xss')</script>"
+)
+ELEMENTS = ("<code>100</code>", "<hr>", "<blockquote>", "<ol>", "<ul>", "<li>", "<h2>7. Spot-check</h2>",
+            "<h3>The end</h3>", "<strong>bold</strong>", "<em>b</em>", 'href="https://example.com"')
+
+
+class RenderedBodyIsNotEscapedTests(BlogSetUp):
+    def setUp(self):
+        from .fixtures import complete
+
+        post = complete(workflow.new_post(self.writer), self.writer, slug="spot-check", body=SPOT_CHECK)
+        self.post_ = workflow.publish(self.editor, workflow.submit(self.writer, post))
+
+    def assert_drawn(self, page):
+        article = page.split('<div class="prose">', 1)[1].split("</article>", 1)[0]
+        self.assertNotIn("&lt;", article)
+        self.assertNotIn("blog-xss", article)
+        self.assertNotIn("<script", article)
+        for element in ELEMENTS:
+            with self.subTest(element=element):
+                self.assertIn(element, article)
+
+    def test_the_public_page_draws_every_element(self):
+        self.assert_drawn(self.site("/blog/spot-check/").content.decode())
+
+    def test_the_portal_view_page_draws_the_same_elements(self):
+        response = self.get(f"/write/posts/{self.post_.pk}/view/", user=self.writer)
+        self.assertEqual(response.status_code, 200)
+        self.assert_drawn(response.content.decode())
+
+
 class TheStylesheetTests(BlogSetUp):
     def test_tables_scroll_inside_the_article_and_long_words_wrap(self):
         css = (STATIC / "blog" / "blog.css").read_text()

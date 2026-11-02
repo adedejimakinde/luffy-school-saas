@@ -7,5 +7,5 @@ For the writer and the editors only, and noindex like all of /write/.
 {% endcomment %}
 {% block main %}
 <p class="preview-bar">{% include "blog/parts/status.html" %} Preview. {% if post.status == "published" %}This is on classnode.co.{% else %}Nobody else can see this.{% endif %} <a href="{% url 'write-post' post.pk %}">Back to the editor</a></p>
-<div class="site-preview">{% url 'write-post' post.pk as back %}{% include "blog/parts/article.html" with blog_home=back crumb="Editor" %}</div>
+<div class="site-preview">{% url 'write-post' post.pk as back %}{% with html=html|safe %}{% include "blog/parts/article.html" with blog_home=back crumb="Editor" %}{% endwith %}</div>
 {% endblock %}
