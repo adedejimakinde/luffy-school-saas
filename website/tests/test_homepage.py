@@ -407,7 +407,7 @@ class TheFooterTests(SiteSetUp):
             for column in columns
         ]
         self.assertEqual(found, [
-            ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/faq/", "FAQ"), ("/blog/", "Blog"),
+            ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
                          ("/#demo", "Book a demo")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
@@ -418,7 +418,7 @@ class TheFooterTests(SiteSetUp):
         self.assertLess(bottom.index("foot-legal"), bottom.index("foot-small"))
         self.assertEqual(
             [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', bottom, flags=re.S)],
-            [("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co")],
+            [("/faq/", "FAQ"), ("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co")],
         )
 
     def test_it_has_one_logo_and_no_second_call_to_action(self):
