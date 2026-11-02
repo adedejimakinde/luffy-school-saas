@@ -88,6 +88,14 @@ PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
 SITE_HOST = os.environ.get("SITE_HOST", "").strip().lower() or PLATFORM_DOMAIN
 SITE_URLCONF = "urls_site"
 
+#: Classnode's public profiles and phone line, which the site's structured data
+#: (`website.views.structured_data`) names when they are set and leaves out when
+#: they are not. Nothing is guessed: a deployment that has no Google Business
+#: Profile yet simply sets none. Each profile is a full `https://` address.
+SITE_PHONE = os.environ.get("SITE_PHONE", "").strip()
+SITE_LINKEDIN_URL = os.environ.get("SITE_LINKEDIN_URL", "").strip()
+SITE_GOOGLE_BUSINESS_URL = os.environ.get("SITE_GOOGLE_BUSINESS_URL", "").strip()
+
 #: How many demo requests one network address may leave in an hour. Counted from
 #: the saved requests themselves (`website.views`), so it holds across worker
 #: processes the way `accounts.throttling` explains a cache would not.
