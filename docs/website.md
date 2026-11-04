@@ -290,13 +290,12 @@ results and notices from the school's own email domain) priced "Contact us". No
 mailboxes are promised.
 
 Each feature was checked against `main` on 26 October 2026. Not on `main`, so
-labelled "Coming soon": the school website (public pages render, but there is no
-editor, so a school cannot yet publish one: `docs/school-sites.md` PR 4), the
+labelled "Coming soon": the
 three CBT items (CBT stops at exam PINs: `docs/cbt.md` steps 3 to 6), and both
 premium items (custom domains and sender domains, PRs 10 and 11).
 
 **One setting per label**, on by default, read on every request:
-`COMING_SOON_SCHOOL_WEBSITE`, `COMING_SOON_CBT_SCHOOL_TESTS`,
+`COMING_SOON_CBT_SCHOOL_TESTS`,
 `COMING_SOON_CBT_UTME_PRACTICE`, `COMING_SOON_CBT_WASSCE_PRACTICE`,
 `COMING_SOON_CUSTOM_DOMAIN` and `COMING_SOON_SENDER_DOMAIN`. When a feature
 ships, set its variable to `0` in `deploy/production.env` and deploy: the label

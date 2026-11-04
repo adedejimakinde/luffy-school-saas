@@ -51,7 +51,7 @@ INCLUDED = [
     ("Your school online", [
         ("A school website on its Classnode address",
          "A public website for the school at its own address on Classnode, built from the details "
-         "the school publishes.", "COMING_SOON_SCHOOL_WEBSITE"),
+         "the school publishes.", None),
     ]),
     ("Safe and separate", [
         ("Backups",

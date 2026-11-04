@@ -37,11 +37,9 @@ PREMIUM = [
     "Results and notices from the school's own email domain",
 ]
 
-#: What `main` does not have yet: the school's website has no editor (so a school
-#: cannot publish one), CBT stops at exam PINs (no question bank, no tests, no
+#: What `main` does not have yet: CBT stops at exam PINs (no question bank, no tests, no
 #: modes), and no domain or sender domain can be connected. `docs/website.md`.
 NOT_LIVE = {
-    "A school website on its Classnode address": "COMING_SOON_SCHOOL_WEBSITE",
     "CBT: school tests": "COMING_SOON_CBT_SCHOOL_TESTS",
     "CBT: UTME-style practice": "COMING_SOON_CBT_UTME_PRACTICE",
     "CBT: WASSCE-style practice": "COMING_SOON_CBT_WASSCE_PRACTICE",
