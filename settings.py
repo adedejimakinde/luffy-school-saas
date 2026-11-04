@@ -119,7 +119,6 @@ SHOW_LEGAL_TODOS = os.environ.get("SHOW_LEGAL_TODOS", "1" if DEBUG else "0") == 
 #: until the feature ships; set it to `0` (in `deploy/production.env`) and the
 #: label goes, with no code change. `website/features.py` lists the features
 #: and the setting that governs each, and a test holds the two to each other.
-COMING_SOON_SCHOOL_WEBSITE = os.environ.get("COMING_SOON_SCHOOL_WEBSITE", "1") == "1"
 COMING_SOON_CBT_SCHOOL_TESTS = os.environ.get("COMING_SOON_CBT_SCHOOL_TESTS", "1") == "1"
 COMING_SOON_CBT_UTME_PRACTICE = os.environ.get("COMING_SOON_CBT_UTME_PRACTICE", "1") == "1"
 COMING_SOON_CBT_WASSCE_PRACTICE = os.environ.get("COMING_SOON_CBT_WASSCE_PRACTICE", "1") == "1"
