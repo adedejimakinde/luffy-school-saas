@@ -37,16 +37,21 @@ served, for the oracle reason `home/views.py` gives.
           <p class="quiet">This page fills in once the office has added classes and students.</p>
         </section>
       {% else %}
+        {% comment %}
+        The reference screen (`docs/dashboard.md`): fees collected as the hero,
+        for the roles that may read the fee book and nobody else; the compact
+        stat cards; then what needs the reader, as one card of rows.
+        {% endcomment %}
+        {% if dash.fees %}{% include "home/parts/fees.html" %}{% endif %}
         {% if dash.tiles %}{% include "home/parts/tiles.html" %}{% endif %}
-        <div class="dash-cols">
+        <div class="dash-cols{% if not dash.week %} dash-cols-one{% endif %}">
           <div class="dash-col">
             {% include "home/parts/attention.html" %}
             {% if dash.activity %}{% include "home/parts/activity.html" %}{% endif %}
           </div>
-          {% if dash.fees or dash.week %}
+          {% if dash.week %}
           <div class="dash-col">
-            {% if dash.fees %}{% include "home/parts/fees.html" %}{% endif %}
-            {% if dash.week %}{% include "home/parts/week.html" %}{% endif %}
+            {% include "home/parts/week.html" %}
           </div>
           {% endif %}
         </div>

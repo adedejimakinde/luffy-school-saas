@@ -1,0 +1,6 @@
+{% comment %}
+The mark at the head of a page: the school's crest and name on its own host
+(`schools/brand.py` says to whom), its initials in a tile of the brand colour
+when it has no crest, and Classnode's mark everywhere else. `tag` is "a" in the
+shell (a link home) and "div" on the doors.
+{% endcomment %}{% if brand %}<{{ tag|default:"div" }} class="logo logo-school{{ extra }}"{% if href %} href="{{ href }}"{% endif %}><span class="crest" aria-hidden="true">{% if brand.crest_url %}<img src="{{ brand.crest_url }}" alt="" width="36" height="36">{% else %}{{ brand.initials }}{% endif %}</span><span class="logo-name">{{ brand.name }}</span></{{ tag|default:"div" }}>{% else %}<{{ tag|default:"div" }} class="logo{{ extra }}"{% if href %} href="{{ href }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg><span class="logo-word">classnode</span></{{ tag|default:"div" }}>{% endif %}

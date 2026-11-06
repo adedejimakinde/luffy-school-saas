@@ -1,9 +1,11 @@
-{% load typography %}<header class="dash-head">
+{% load typography %}{% comment %}
+The school's crest and name are the shell's header now (`schools/brand.py`), on
+every staff page, so this one greets and dates: the date on a desk, and on a
+phone in the term chip under it.
+{% endcomment %}<header class="dash-head">
   <div class="dash-id">
-    <span class="crest" aria-hidden="true">{% if dash.school.crest_url %}<img src="{{ dash.school.crest_url }}" alt="">{% else %}{{ dash.school.initials }}{% endif %}</span>
     <div>
-      {% comment %}On a desk the top bar names the school, so the eyebrow is the date.{% endcomment %}
-      <p class="eyebrow"><span class="dash-school">{{ dash.school.name }}</span><time class="dash-date" datetime="{{ dash.today|date:'Y-m-d' }}">{{ dash.today|date:"l j F" }}</time></p>
+      <p class="eyebrow dash-date"><time datetime="{{ dash.today|date:'Y-m-d' }}">{{ dash.today|date:"l j F" }}</time></p>
       <h1>{{ dash.greeting }}{% if dash.name %}, {{ dash.name }}{% endif %}</h1>
     </div>
   </div>

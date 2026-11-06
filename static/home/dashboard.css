@@ -6,6 +6,25 @@
  * there is no loading state to show and no script to wait for.
  */
 
+/*
+ * The hero figures' weight: Hanken Grotesk at 800, the cut the school websites
+ * already ship (`static/schoolsite/modern.css`), over the same letters as the
+ * 400 face. Declared here and not in design.css, so only a page that draws a
+ * hero figure (this one, and the onboarding pages that share this file) is
+ * asked for it; a browser fetches a face only when a figure uses it.
+ */
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-weight: 800;
+  font-display: swap;
+  src: url("../web/fonts/hanken-grotesk-800.woff2") format("woff2");
+  unicode-range: U+20-7E, U+A0-FF, U+131, U+152-153, U+2BC, U+2C6, U+2DA, U+2DC,
+    U+300-301, U+304, U+307-308, U+323, U+1E44-1E45, U+1E62-1E63,
+    U+1EB8-1EB9, U+1ECA-1ECD, U+1EE4-1EE5, U+2013-2015, U+2018-201A,
+    U+201C-201E, U+2020-2023, U+2025-2026, U+2030-2031, U+2039-203A, U+2044,
+    U+20A6, U+20AC, U+2122, U+2212, U+2215;
+}
+
 /* -- Tokens -----------------------------------------------------------------
  *
  * Six type sizes, an 8px spacing scale (4px is its half step, for the gap
@@ -27,10 +46,12 @@
   --s-3: 24px;
   --s-4: 32px;
 
-  --r-card: 12px;
-  --r-control: 8px;
+  --r-card: var(--radius-card);
+  --r-hero: var(--radius-hero);
+  --r-control: var(--radius);
 
-  --ease: 150ms ease;
+  /* The figures that lead. */
+  --heavy: 800;
 
   display: grid;
   gap: var(--s-2);
@@ -51,10 +72,16 @@
   min-width: 0;
   padding: var(--s-2);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--r-card);
   box-shadow: var(--shadow-1);
 }
+
+/* Something waits on the reader: the lightest amber, and the row tiles white on it. */
+.dash .panel.card-action { background: var(--action-bg); }
+.card-action .list-row-icon { background: var(--card); box-shadow: var(--shadow-1); }
+.card-action .list-rows > li + li::before { border-top-color: color-mix(in srgb, var(--warn) 16%, var(--action-bg)); }
+.card-action a.list-row:hover { background: color-mix(in srgb, var(--warn) 6%, transparent); }
 
 @media (min-width: 640px) {
   .dash .panel { padding: var(--s-3); }
@@ -86,14 +113,7 @@
 .panel-head a:hover { background: var(--brand-tint); }
 
 /* -- Labels, chips, change notes -------------------------------------------- */
-.eyebrow {
-  color: var(--muted);
-  font-size: var(--t-1);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.5;
-  text-transform: uppercase;
-}
+/* The small uppercase label is design.css's `.eyebrow`. */
 
 /* A status chip always carries an icon and a word, never a colour alone. */
 .chip {
@@ -140,14 +160,7 @@
 
 .dash-id { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
 
-.dash-id .crest {
-  width: 48px;
-  height: 48px;
-  border-radius: var(--r-card);
-  font-size: var(--t-4);
-}
-
-.dash-id h1 { font-size: var(--t-5); line-height: 1.2; }
+.dash-id h1 { font-size: var(--t-5); line-height: 1.2; letter-spacing: -0.01em; }
 .dash-date { display: none; }
 
 .dash-term { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1); }
@@ -159,65 +172,122 @@
   .dash-term-phone { display: flex; }
 }
 
-@media (min-width: 1024px) {
-  .dash-school { display: none; }
-  .dash-date { display: inline; }
-  .dash-id h1 { font-size: var(--t-6); }
-  .dash-id .crest { width: 56px; height: 56px; }
+@media (min-width: 640px) { .dash-date { display: block; } }
+@media (min-width: 1024px) { .dash-id h1 { font-size: var(--t-6); } }
+
+/* -- Fees collected: the hero ------------------------------------------------
+ *
+ * Full width: the amount, its share of what was billed on a green bar, this
+ * week's pill, then Outstanding and Expected side by side, each a link to the
+ * fee book. On a desk the term's sparkline stands to the right.
+ */
+.hero {
+  display: grid;
+  gap: var(--s-2);
+  padding: var(--s-3) var(--s-2) var(--s-2);
+  background: var(--card);
+  border-radius: var(--r-hero);
+  box-shadow: var(--shadow-1);
 }
 
-/* -- KPI tiles --------------------------------------------------------------
+.hero-main { display: grid; gap: var(--s-1); min-width: 0; }
+.hero-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-1); }
+.hero-top h2 { margin: 0; }
+
+.hero-figure {
+  justify-self: start;
+  max-width: 100%;
+  margin: var(--s-half) 0 0;
+  color: var(--text);
+  font-size: clamp(2rem, 9.5vw, 3rem);
+  font-weight: var(--heavy);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  text-decoration: none;
+  white-space: nowrap;
+  border-radius: var(--r-control);
+}
+.hero-figure:hover { color: var(--brand); }
+
+.hero-of { color: var(--muted); font-size: var(--t-3); }
+.hero .meter { height: 10px; margin-top: var(--s-1); }
+
+.hero-trend { display: none; }
+
+.hero-subs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-1); }
+
+.hero-sub {
+  display: grid;
+  align-content: start;
+  gap: var(--s-half);
+  min-width: 0;
+  min-height: 44px;
+  padding: 12px;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--page);
+  border-radius: var(--r-card);
+  transition: background-color var(--ease), transform var(--ease);
+}
+.hero-sub:hover { color: var(--text); background: var(--brand-tint); }
+.hero-sub:active { transform: scale(0.98); }
+.hero-sub-value { font-size: var(--t-5); font-weight: var(--heavy); line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }
+.hero-sub-meta { color: var(--muted); font-size: var(--t-3); line-height: 1.35; }
+
+@media (min-width: 640px) {
+  .hero { padding: var(--s-3); gap: var(--s-3); }
+  .hero-subs { gap: var(--s-2); }
+  .hero-sub { padding: var(--s-2); }
+}
+
+@media (min-width: 1024px) {
+  .hero { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: center; padding: var(--s-4); }
+  .hero-trend { display: block; }
+  .hero-subs { grid-column: 1 / -1; }
+}
+
+/* -- The compact stat cards ---------------------------------------------------
  *
- * Two by two on a phone, four across from 1024px. Each tile is the link to
- * the page that holds its figure in full.
+ * Three across at every width (a teacher's two). On a phone each is its label
+ * and its figure; the line under it is there for a screen reader and comes
+ * back from 640px.
  */
 .kpis {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.25rem), 1fr));
   gap: var(--s-1);
 }
 
-/* On a phone the tiles are as many across as fit at the reader's own text size
-   (rem, so it counts): two at 100%, one when the text is doubled. */
-@media (max-width: 639.98px) {
-  .kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); }
-}
-
-@media (min-width: 640px) { .kpis { gap: var(--s-2); } }
-/* A login with one tile (a bursar) gets it the width of the row. */
-.kpis > .kpi:only-child { grid-column: 1 / -1; }
-@media (min-width: 1024px) {
-  .kpis { grid-template-columns: repeat(var(--kpi-count, 4), minmax(0, 1fr)); }
+@media (min-width: 640px) {
+  .kpis { grid-template-columns: repeat(var(--kpi-count, 3), minmax(0, 1fr)); gap: var(--s-2); }
 }
 
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: var(--s-1);
+  gap: var(--s-half);
   min-width: 0;
-  padding: var(--s-2);
+  padding: 12px;
   color: var(--text);
   background: var(--card);
-  border: 1px solid var(--border);
   border-radius: var(--r-card);
   box-shadow: var(--shadow-1);
   text-decoration: none;
-  transition: border-color var(--ease), box-shadow var(--ease);
+  transition: box-shadow var(--ease), transform var(--ease);
 }
 
-a.kpi:hover {
-  color: var(--text);
-  border-color: var(--brand-soft);
-  box-shadow: var(--shadow-2);
-}
+a.kpi:hover { color: var(--text); box-shadow: var(--shadow-2); }
+a.kpi:active { transform: scale(0.98); }
 
-@media (min-width: 640px) { .kpi { padding: var(--s-3); } }
+@media (min-width: 640px) { .kpi { gap: var(--s-1); padding: var(--s-3); } }
 
-.kpi-top { display: flex; align-items: center; justify-content: space-between; gap: var(--s-1); }
+.kpi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--s-1); min-height: 2.25em; }
+@media (min-width: 640px) { .kpi-top { min-height: 0; align-items: center; } }
 
 .kpi-icon {
   display: none;
   place-items: center;
+  flex: none;
   width: 32px;
   height: 32px;
   color: var(--brand);
@@ -230,23 +300,30 @@ a.kpi:hover {
 @media (min-width: 640px) { .kpi-icon { display: grid; } }
 
 .kpi-value {
-  font-size: var(--t-6);
-  font-weight: 700;
+  font-size: clamp(1.125rem, 5.5vw, var(--t-6));
+  font-weight: var(--heavy);
   line-height: 1.15;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
   white-space: nowrap;
 }
 
 .kpi-value small { color: var(--muted); font-size: var(--t-3); font-weight: 400; letter-spacing: 0; }
 
+@media (min-width: 640px) { .stat-more { display: contents; } }
 .kpi-meta { color: var(--muted); font-size: var(--t-3); line-height: 1.4; }
-
 .kpi .change { margin-top: auto; padding-top: var(--s-1); border-top: 1px solid var(--divider); }
+
+@media (max-width: 639.98px) {
+  .stat-more, .kpi-value small {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+}
 
 /* The collection meter: a track and the share collected, drawn in the SVG. */
 .meter { display: block; width: 100%; height: 8px; }
 .meter .track { fill: var(--divider); }
 .meter .done { fill: var(--brand); }
+.meter-ok .done { fill: var(--ok); }
 
 /* -- Two columns under the tiles ------------------------------------------- */
 .dash-cols { display: grid; gap: var(--s-2); grid-template-columns: minmax(0, 1fr); align-items: start; }
@@ -261,7 +338,19 @@ a.kpi:hover {
 
 @media (min-width: 1024px) {
   .dash-cols { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--s-3); }
+  .dash-cols-one { grid-template-columns: minmax(0, 1fr); }
   .dash-col { gap: var(--s-3); }
+}
+
+/* -- Needs your attention: design.css's rows, with the pill placed by width -- */
+.list-rows .list-row-text .chip { justify-self: start; margin-top: var(--s-half); }
+@media (max-width: 639.98px) {
+  .list-rows .list-row { grid-template-columns: 40px minmax(0, 1fr) 20px; align-items: start; }
+  .list-rows .list-row-end { align-self: center; }
+  .list-rows .list-row-end .chip { display: none; }
+}
+@media (min-width: 640px) {
+  .list-rows .list-row-text .chip { display: none; }
 }
 
 /* -- Needs your attention --------------------------------------------------- */
@@ -325,11 +414,7 @@ a.kpi:hover {
 
 .all-clear .icon { color: var(--ok); }
 
-/* -- Fee collection --------------------------------------------------------- */
-.fee-total { display: grid; gap: var(--s-half); margin: 0 0 var(--s-2); }
-.fee-total .fig { font-size: var(--t-6); font-weight: 700; line-height: 1.15; letter-spacing: -0.01em; }
-.fee-total span { color: var(--muted); font-size: var(--t-3); }
-
+/* -- The sparkline in the hero --------------------------------------------- */
 .spark { display: block; width: 100%; height: auto; overflow: visible; }
 .spark .area { fill: var(--brand-tint); }
 .spark .line { fill: none; stroke: var(--brand); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
@@ -339,30 +424,10 @@ a.kpi:hover {
 .spark-axis {
   display: flex;
   justify-content: space-between;
-  margin: var(--s-1) 0 var(--s-2);
+  margin: var(--s-1) 0 0;
   color: var(--muted);
   font-size: var(--t-1);
 }
-
-.meter-row { display: flex; align-items: center; gap: var(--s-2); }
-.meter-row .meter { flex: 1; }
-.meter-row .fig { font-weight: 700; }
-
-.fee-split {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s-1);
-  margin: var(--s-2) 0 0;
-  padding: var(--s-2) 0 0;
-  border-top: 1px solid var(--divider);
-}
-
-@media (max-width: 639.98px) {
-  .fee-split { grid-template-columns: repeat(auto-fit, minmax(min(100%, 5.5rem), 1fr)); }
-}
-.fee-split div { display: grid; gap: var(--s-half); min-width: 0; }
-.fee-split dt { color: var(--muted); font-size: var(--t-1); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.fee-split dd { margin: 0; font-weight: 700; white-space: nowrap; }
 
 /* -- Attendance this week --------------------------------------------------- */
 .week { display: block; width: 100%; height: auto; }
@@ -428,8 +493,8 @@ a.kpi:hover {
   gap: var(--s-2);
   padding: var(--s-3) var(--s-2);
   background: var(--card);
-  border: 1px solid var(--brand-soft);
-  border-radius: var(--r-card);
+  border: 0;
+  border-radius: var(--r-hero);
   box-shadow: var(--shadow-2);
 }
 .next-card h2 { font-size: var(--t-5); line-height: 1.25; }
@@ -483,11 +548,13 @@ a.kpi:hover {
   color: var(--text);
   text-decoration: none;
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--r-card);
-  transition: border-color var(--ease), box-shadow var(--ease);
+  box-shadow: var(--shadow-1);
+  transition: box-shadow var(--ease), transform var(--ease);
 }
-a.first-action:hover { color: var(--text); border-color: var(--brand-soft); box-shadow: var(--shadow-2); }
+a.first-action:hover { color: var(--text); box-shadow: var(--shadow-2); }
+a.first-action:active { transform: scale(0.98); }
 .first-action .todo-text span { color: var(--muted); }
 .first-action.is-done { background: var(--bg); }
 .first-action.is-done strong { color: var(--muted); font-weight: 400; }

@@ -11,7 +11,7 @@
  * - **something a finger has to hit is under 44px tall**: a button, a field,
  *   a select, a nav or tab link;
  * - **text on a phone is under 15px.** At 360 only, and not for the small
- *   labels the design sets smaller on purpose (`.label`, `.tag`, `.revised`,
+ *   labels the design sets smaller on purpose (`.label`, `.tag`, `.pill`, `.revised`,
  *   `.nav-heading`, `.tab-label`);
  * - **a table is wider than a phone's screen.** Below 640px a list table is a
  *   stack of cards (`design.css`'s `table.stack`). Only the three whose columns
@@ -71,7 +71,11 @@ const PORTAL = `http://app.${DOMAIN}:${PORT}`;
 const SUNRISE = `http://sunrise-demo.${DOMAIN}:${PORT}`;
 const HARBOUR = `http://harbour-demo.${DOMAIN}:${PORT}`;
 
-export const WIDTHS = [360, 768, 1280];
+// `SCREENS_WIDTHS=320,390,1280 npm run screens` measures other widths: the
+// portal polish was held to a small Android, a common iPhone and a desk.
+export const WIDTHS = process.env.SCREENS_WIDTHS
+  ? process.env.SCREENS_WIDTHS.split(",").map(Number)
+  : [360, 768, 1280];
 
 // The class this file photographs and marks in, and the paper: `seed_demo`'s,
 // named rather than "the first", because the other files in `tests/ui/` add
@@ -98,7 +102,7 @@ const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet, table.og
  * drawings (`home/dashboard.css`).
  */
 const SMALL_ON_PURPOSE =
-  ".label, .tag, .revised, .nav-heading, .tab-label, .marks-summary, " +
+  ".label, .tag, .pill, .revised, .nav-heading, .tab-label, .marks-summary, " +
   ".eyebrow, .chip, .spark-axis, .week-labels, .fee-split dt, " +
   // The administrator's setup chip in the top bar: a status chip like `.chip`,
   // 13px so the bar still fits a 360px phone beside the logo and the avatar.
@@ -1045,7 +1049,8 @@ describe("the top bar is one row", () => {
   // The phone's top bar never wraps: the menu button, the logo and the account
   // menu share one row at every width from 320, and at the reader's own text
   // size doubled too, with the account menu at its right-hand end. A setup chip
-  // shrinks to "4 of 8" first, then the wordmark goes and the mark stays. Every
+  // shrinks to "4 of 8" first, then the wordmark (or the school's name) goes and
+  // the mark (or the crest) stays. Every
   // role is measured as it is served, and again with the administrator's chip
   // put in (the demo's school may have finished its setup, which takes it away).
   const CHIP =
@@ -1081,7 +1086,10 @@ describe("the top bar is one row", () => {
                   .filter((el) => el.getClientRects().length && el.getBoundingClientRect().height > 0)
                   .map((el) => ({ cls: String(el.className), ...el.getBoundingClientRect().toJSON() }));
                 const account = shown.find((box) => box.cls.includes("account"));
-                const logo = document.querySelector(".topbar-logo");
+                // The words beside the mark: Classnode's wordmark, or the school's
+                // name on its own host. Hidden, they stay the link's name for a
+                // screen reader, drawn 1px wide.
+                const words = document.querySelector(".topbar-logo :is(.logo-word, .logo-name)");
                 return {
                   barHeight: bar.height,
                   boxes: shown.map((box) => [box.cls, Math.round(box.top), Math.round(box.bottom)]),
@@ -1089,7 +1097,7 @@ describe("the top bar is one row", () => {
                   viewport: document.documentElement.clientWidth,
                   over: document.querySelector(".topbar").scrollWidth - document.querySelector(".topbar").clientWidth,
                   chip: [...document.querySelectorAll(".setup-chip span")].find((el) => el.getClientRects().length)?.textContent ?? null,
-                  wordmark: logo ? getComputedStyle(logo).fontSize !== "0px" : false,
+                  wordmark: words ? words.getBoundingClientRect().width > 1 : false,
                 };
               });
               const where = `${role} at ${width}px${large ? " and 200% text" : ""}${withChip ? " with the chip" : ""}`;

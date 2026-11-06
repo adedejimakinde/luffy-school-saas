@@ -1,13 +1,14 @@
 {% comment %}
 The app shell's opening half, from `menu.shell_open`: the sidebar and the top
-bar, built from the signed-in login's roles at this school. Closed by
+bar, built from the signed-in login's roles at this school, under the school's crest
+and name for a member of it (`schools/brand.py`). Closed by
 `shell_close.html`, around the page's own `.content > main`.
 {% endcomment %}
 <body class="has-shell{% if menu.tabs %} has-tabbar{% endif %}">
 {% include "design/icons.html" %}
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    <a class="logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
+    {% include "design/brand_mark.html" with tag="a" href=menu.home extra="" %}
     {% if menu.groups %}
     <div class="nav nav-links">
       {% for group in menu.groups %}
@@ -25,6 +26,7 @@ bar, built from the signed-in login's roles at this school. Closed by
     {% endcomment %}
     <div class="nav nav-help">
       <a href="/help/"{% if menu.current == "help" %} aria-current="page"{% endif %}><svg class="icon"><use href="#i-help"/></svg>Help and next steps</a>
+      {% if brand %}<a class="powered-by" href="{{ classnode_href }}"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg>Powered by Classnode</a>{% endif %}
     </div>
     {% endif %}
     {% if signed_in %}
@@ -51,8 +53,8 @@ bar, built from the signed-in login's roles at this school. Closed by
     <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
       <svg class="icon"><use href="#i-menu"/></svg>
     </button>
-    <a class="logo topbar-logo"{% if menu.home %} href="{{ menu.home }}"{% endif %}><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</a>
-    {% if school_name %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
+    {% include "design/brand_mark.html" with tag="a" href=menu.home extra=" topbar-logo" %}
+    {% if school_name and not brand %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
     <span class="spacer"></span>{% if setup_chip %}<a class="setup-chip" href="/start/" aria-label="Setup: {{ setup_chip.done }} of {{ setup_chip.total }} steps done. Open Start here"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span class="chip-full">Setup {{ setup_chip.done }} of {{ setup_chip.total }}</span><span class="chip-short" aria-hidden="true">{{ setup_chip.done }} of {{ setup_chip.total }}</span></a>{% endif %}{% if signed_in %}{% comment %}
     The account menu: who is signed in, as what, and Sign out. A `<details>`,
     so it opens and closes with no script, from a keyboard as from a finger.

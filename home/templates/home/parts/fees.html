@@ -1,25 +1,40 @@
-<section class="panel" aria-labelledby="fees-title">
-  <div class="panel-head">
-    <h2 id="fees-title">Fee collection</h2>
-    <a href="/fees/">Fee book</a>
+{% load typography %}{% comment %}
+The hero: fees collected this term, full width, above the tiles. Drawn only
+for `fees.authority.READING_ROLES` (`home.dashboard.build()` hands nobody else
+`dash.fees`). The amount in full, its share of what was billed on a green bar,
+this week's takings as a pill, then what is outstanding and what is expected,
+each a link to the fee book. On a desk the term's weeks are a sparkline beside it.
+{% endcomment %}<section class="hero" aria-labelledby="fees-title" data-tile="{{ dash.fees.key }}">
+  <div class="hero-main">
+    <div class="hero-top">
+      <h2 id="fees-title" class="eyebrow">Fees collected</h2>
+      {% if dash.fees.week.tone %}<span class="pill pill-{{ dash.fees.week.tone }} fig"><svg class="icon" aria-hidden="true"><use href="#{{ dash.fees.week.icon }}"/></svg>{{ dash.fees.week.text }}</span>{% else %}<span class="pill fig">{{ dash.fees.week.text }}</span>{% endif %}
+    </div>
+    <a class="hero-figure" href="/fees/"><span class="fig">{{ dash.fees.collected }}</span></a>
+    <p class="hero-of fig">{{ dash.fees.of_total|nobreak }}</p>
+    <svg class="meter meter-ok" role="img" aria-label="{{ dash.fees.percent_text }} collected"><rect class="track" width="100%" height="10" rx="5"/><rect class="done" width="{{ dash.fees.percent }}%" height="10" rx="5"/></svg>
   </div>
-  <p class="fee-total"><span class="fig">{{ dash.fees.collected }}</span><span>collected of {{ dash.fees.expected }} expected this term</span></p>
   {% if dash.fees.spark %}
-  <svg class="spark" viewBox="0 0 {{ dash.fees.spark.width }} {{ dash.fees.spark.height }}" role="img" aria-label="Fees collected each week this term, rising to {{ dash.fees.collected }} by week {{ dash.fees.weeks_so_far }}">
-    <path class="area" d="{{ dash.fees.spark.area }}"/>
-    {% if dash.fees.spark.end_x < dash.fees.spark.width %}<path class="rest" d="M{{ dash.fees.spark.end_x }} {{ dash.fees.spark.end_y }} H{{ dash.fees.spark.width }}"/>{% endif %}
-    <path class="line" d="{{ dash.fees.spark.line }}"/>
-    <circle class="now" cx="{{ dash.fees.spark.end_x }}" cy="{{ dash.fees.spark.end_y }}" r="4"/>
-  </svg>
-  <p class="spark-axis" aria-hidden="true"><span>Week 1</span><span>Week {{ dash.fees.weeks }}</span></p>
-  {% endif %}
-  <div class="meter-row">
-    <svg class="meter" role="img" aria-label="{{ dash.fees.percent_text }} collected"><rect class="track" width="100%" height="8" rx="4"/><rect class="done" width="{{ dash.fees.percent }}%" height="8" rx="4"/></svg>
-    <span class="fig">{{ dash.fees.percent_text }}</span>
+  <div class="hero-trend" aria-hidden="true">
+    <svg class="spark" viewBox="0 0 {{ dash.fees.spark.width }} {{ dash.fees.spark.height }}">
+      <path class="area" d="{{ dash.fees.spark.area }}"/>
+      {% if dash.fees.spark.end_x < dash.fees.spark.width %}<path class="rest" d="M{{ dash.fees.spark.end_x }} {{ dash.fees.spark.end_y }} H{{ dash.fees.spark.width }}"/>{% endif %}
+      <path class="line" d="{{ dash.fees.spark.line }}"/>
+      <circle class="now" cx="{{ dash.fees.spark.end_x }}" cy="{{ dash.fees.spark.end_y }}" r="4"/>
+    </svg>
+    <p class="spark-axis"><span>Week 1</span><span>Week {{ dash.fees.weeks }}</span></p>
   </div>
-  <dl class="fee-split">
-    <div><dt>This week</dt><dd class="fig">{{ dash.fees.this_week }}</dd></div>
-    <div><dt>Outstanding</dt><dd class="fig">{{ dash.fees.outstanding }}</dd></div>
-    <div><dt>Owing</dt><dd class="fig">{{ dash.fees.owing }} students</dd></div>
-  </dl>
+  {% endif %}
+  <div class="hero-subs">
+    <a class="hero-sub" href="/fees/" title="{{ dash.fees.outstanding_exact }}">
+      <span class="eyebrow">Outstanding</span>
+      <span class="hero-sub-value fig">{{ dash.fees.outstanding }}</span>
+      <span class="hero-sub-meta">{{ dash.fees.owing_text }}</span>
+    </a>
+    <a class="hero-sub" href="/fees/" title="{{ dash.fees.expected }}">
+      <span class="eyebrow">Expected this term</span>
+      <span class="hero-sub-value fig">{{ dash.fees.expected_short }}</span>
+      <span class="hero-sub-meta">Billed so far</span>
+    </a>
+  </div>
 </section>

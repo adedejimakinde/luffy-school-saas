@@ -7,8 +7,11 @@ nothing else: no page declares a colour.
 ## The rules
 
 - **One brand colour, `#143D8C`**, for buttons, links, the active nav item and
-  the logo. Text `#0E1726`, secondary text `#5B6475`, background `#F5F6F8`,
-  cards `#FFFFFF`, borders `#E3E6EB`, row dividers `#EEF0F3`. Lighter or darker
+  the logo; on a school's own host, the school's colour instead where it reads
+  on white (below, "School branding"). Text `#0E1726`, secondary text `#5B6475`
+  (5.9:1 on white, 5.3:1 on the page), the portal's page `#EEF2F8` under white
+  cards `#FFFFFF`, a hovered row or disabled field `#F5F6F8`, borders `#E3E6EB`
+  (fields and tables, never a card's edge), row dividers `#EEF0F3`. Lighter or darker
   is the same blue mixed (`--brand-tint`, `--brand-strong`; the public site
   mixes its own deeper blues and a wash in `website.css` the same way), not a
   second colour.
@@ -22,11 +25,19 @@ nothing else: no page declares a colour.
   blog's tab row on a phone (`static/write/write.css`), a mask rather than a
   colour, fading its last 32px so a tab past the edge reads as more to scroll
   to. `tests/test_design.py` names them.
-- **Status colour only on small labels** (`.label-ok`, `.label-warn`,
-  `.label-stop`): green `#16693F` on `#E7F4EC`, amber `#8A5A00` on `#FDF1DC`,
-  red `#B42318` on `#FDECEA`. A message is neutral and carries its label
+- **Colour only with meaning.** Green is good, amber is waiting or slightly
+  down, red only a real problem, navy the brand and the primary action. Status
+  colour sits on small pills (`.pill-ok`, `.label-ok` and the rest): green
+  `#16693F` on `#E7F4EC`, amber `#8A5A00` on `#FDF1DC`, red `#B42318` on
+  `#FDECEA`. A pill carries a dot or an arrow, never colour alone and never an
+  emoji. One more: **the light amber card** (`.card-action`, `#FFF7E8`) for
+  anything waiting on the reader. A message is neutral and carries its label
   (`.msg`).
-- **Hanken Grotesk**, self-hosted in `static/web/fonts/`, 400 and 700 only,
+- **Hanken Grotesk**, self-hosted in `static/web/fonts/`, 400 and 700 in
+  `design.css`, and 800 for hero figures only in a stylesheet that ships that
+  face itself (`static/home/dashboard.css`, the school websites'
+  `static/schoolsite/modern.css`: the one cut, `hanken-grotesk-800.woff2`), so
+  no other page is asked for it. No light weight anywhere. Was 400 and 700 only,
   `font-display: swap`, the system stack behind it. The files carry Latin and
   the letters a Nigerian name is written with: Yoruba's ẹ ọ ṣ and Igbo's ị ụ
   ṅ (both cases), the combining tone marks and underdots, and the naira sign.
@@ -57,11 +68,25 @@ nothing else: no page declares a colour.
   into the `screens` artifact. Its digits are already equal-width, so numbers
   line up without a feature switch; tables still say `tabular-nums` and
   right-align them (`.num`).
-- **Two shadows**, `--shadow-1` (resting) and `--shadow-2` (lifted: a card
-  under the pointer, the account menu), the text colour thinned. No others.
-- **Radii** 10px on buttons and fields, 12px on cards. The dashboard draws its
-  controls at 8px (below). **Buttons** are 44px
-  tall, and the primary action is 48px.
+- **Cards have no border.** White on the blue-grey page, with `--shadow-1`
+  resting and `--shadow-2` lifted (a card under the pointer, the account menu,
+  the floating tab bar), each a tight edge shadow and one wide faint lift of the
+  text colour thinned. A hairline border comes back only under
+  `forced-colors`, where shadows are not drawn. The header has a hairline
+  shadow (`--hairline`) instead of a rule.
+- **Radii** 12px on buttons and fields, 16px on cards, 20px on the hero card,
+  the doors' card and the tab bar. **Buttons** are 44px tall, and the primary
+  action is 48px. A press scales a control to 98% for 150ms; nothing moves
+  under `prefers-reduced-motion`.
+- **Spacing** is 4, 8, 12, 16, 20, 24 and 32 (`--sp-4` to `--sp-32`), with more
+  space between groups than inside them.
+- **Labels** over a figure or a group are `.eyebrow`: 12px, 700, uppercase,
+  spaced, in the secondary grey. Table headings take the same look from 640px
+  up and stay 15px on a phone.
+- **List rows** (`.list-rows > li > a.list-row`): a tinted icon tile, a bold title over a
+  muted line, a pill, a chevron, and dividers inset to where the text starts.
+- **Loading** is a skeleton: each page's `.state-loading` sentence, muted, over
+  the pulsing shape of a card, until its module's first answer.
 - **Icons** are inline stroke SVG (`<svg class="icon">`), drawn here: no icon
   pack, no emoji. The defs live once in `templates/design/icons.html`
   (a `<symbol>` sprite, invisible on its own) and a page includes it wherever
@@ -96,6 +121,10 @@ Mobile first, checked at 360, 768 and 1280.
   right. The school is named only to a member of it, and the pages the
   offline worker keeps on a shared phone (`/marking/`, `/register/`) name
   nobody: their account menu is a person icon and Sign out.
+- **The tab bar floats**: a white bar 12px clear of the screen's edges and the
+  phone's safe area, 20px corners, the lifted shadow, and a soft pill of the
+  brand colour behind the current tab's icon. The page's foot padding is the
+  bar's height and the shell's is the gap, so the last control clears it.
 - **The tab bar is the role's main screens**: Home first for every staff role;
   Fees for the principal and the bursar (the bursar has three tabs), Broadsheets
   for the vice principal.
@@ -123,6 +152,28 @@ Mobile first, checked at 360, 768 and 1280.
   scrolls sideways, and no scroller has a minimum height.
 - Forms and side panels (`.split`) stack into one column on a phone.
 - Touch targets are at least 44px. Body text on a phone is never under 15px.
+
+## School branding
+
+On a school's own host the portal wears the school, not Classnode
+(`schools/brand.py`; tests `schools/tests/test_brand.py`, two schools):
+
+- **The header and the sidebar** show the school's crest and name where the
+  Classnode mark was. With no crest, its initials in a tile of the brand colour.
+- **The browser tab's icon** is the crest (the upload service's 128px PNG).
+  With none, Classnode's icons stay.
+- **The brand colour** is the primary colour of the school's website look
+  settings, only when it reads on white at 4.5:1; otherwise navy. It replaces
+  `--brand` alone, so green, amber and red mean the same at every school.
+- **"Powered by Classnode"**, small, under Help in the menu, and under the
+  card on a door served on the school's host.
+- **Who sees it**: a member of the school on its host, and anybody at a door on
+  a school's host. A frame served to a stranger names no school, as the shell
+  always did. The doors are on the portal in production, which keeps Classnode's
+  own look; on a school's host they exist in the single-host demo.
+- **What it costs**: one statement and its search path per page drawn for a
+  member, never cached across requests, so no cache key can carry one school's
+  crest to another's host (`tests/test_budget.py` pins it).
 
 ## The picker
 
@@ -238,18 +289,85 @@ one of them:
   greeting on a phone) and 28px (KPI figures; the greeting on a desk). Every
   figure is tabular.
 - **Space:** an 8px scale (8, 16, 24, 32), with 4px as its half step.
-- **Radii:** 12px on cards, 8px on controls.
-- **Cards:** a 1px border in `--border`, `--shadow-1` resting, `--shadow-2`
-  when a tile is under the pointer. 150ms ease on every change of state, and
-  none under `prefers-reduced-motion`.
+- **Radii:** design.css's: 16px on cards, 20px on the hero, 12px on controls.
+- **Cards:** no border, `--shadow-1` resting, `--shadow-2` when a tile is under
+  the pointer. 150ms ease on every change of state, and none under
+  `prefers-reduced-motion`.
+- **Figures that lead** (the hero's amount, the stat cards') are 800, tight and
+  tabular; the face is declared at the top of `dashboard.css`.
 - **Colour:** white and greys, One Blue for figures that lead and for actions;
   green, amber and red only on status chips, and a chip always carries an
   icon and a word. A change note ("+14 this term", "−2 this week") is
   neutral grey: down is not always bad.
 - **Drawings** are inline SVG written by the server (`home/charts.py`): a
   sparkline, a meter and five bars. No chart library, no gradient.
-- **On a phone:** tiles two by two, everything else full width, one chip line
-  in the header, nothing scrolls sideways, every target 44px.
+- **On a phone:** the hero full width with Outstanding and Expected side by
+  side, the stat cards three across (label and figure; the line under each is
+  kept for a screen reader), one chip line in the header, nothing scrolls
+  sideways, every target 44px.
 - **Icons** only the dashboard draws live in `home/templates/home/parts/icons.html`,
   so other pages do not carry them.
 
+
+## design.css, part by part
+
+The notes that used to sit beside the rules in `static/web/design.css`, moved here because that file goes to every phone on every page and `tests/test_budget.py` counts its comments in each page's 150 KB. Each is keyed by the selector it explains.
+
+- **`(the rule below)`**: The blue, lighter and darker, for hover, the active nav item and bars. Mixed from the one colour rather than named as another.
+- **`(the rule below)`**: A field's edge has to be visible against white (3:1), which --border is not. It is the secondary text colour, thinned.
+- **`(the rule below)`**: Resting and lifted, each a tight edge and a wide faint lift: the text colour, thinned. A card has no border; the edge shadow is its edge.
+- **`body > main`**: A page without the app shell — the sign-in doors, the card, and every staff page until its role is restyled — is one white card on the grey. Each page's stylesheet gives it a width; this gives it everything else.
+- **`button, .btn`**: Every button is at least a finger tall. The plain one is white with a rule; a form's submit is the page's primary action and is the blue. Inline-block rather than flex, so a page's full-width, left-aligned list buttons (the register's names, the marking sheet's classes) keep their alignment.
+- **`button.signout, button.again, .btn-quiet`**: The quiet ones: sign out, try again. Not what the reader came to do, so they do not compete with what is — but still a whole target.
+- **`.switch-door`**: The way back from the wrong door: `signin.js` and `staff-signin.js` each carry one, to the other. Quiet and last in the form, because a stranger who opened the right door never reads this far.
+- **`input[type="file"]`**: A file field's "Choose file" is the secondary button: white, a rule, a finger tall. The rest of the input is the name of the chosen file. Shared by the crest on Setup and the roll import.
+- **`:is(.label-ok, .label-warn, .label-stop, .label-brand, .pill):not(:has(.icon))::before`**: A pill says its meaning with a dot or an arrow, never colour alone and never an emoji: a status label without an icon of its own gets the dot.
+- **`.eyebrow`**: The small uppercase label over a figure or a group. 12px, bold, spaced, in the secondary grey (5.9:1 on white, 5.3:1 on the page).
+- **`.scroll, .grid-scroll, .table-scroll`**: A table wider than its card scrolls sideways **inside** it; the page never does. The first column — the child, the class, the day — stays put while the numbers move under it, so a row can still be read at 360px.
+- **`.swipe-cue`**: Below 640px a list table (`table.stack`) is a stack of cards, one per row, each cell a "label  value" line from its `data-label`; `.stack-list` is the same for a `ul`. `stack-head` heads the card, `stack-full` is a block under it, `stack-hide` is left out. Only `.wide` tables scroll sideways. The whole rule, and why, is `docs/design.md`'s ("Widths").
+- **`(the rule below)`**: No gap between the parts of a value ("13" and "/20"); the label keeps its distance with its own padding.
+- **`table.stack td > small`**: A value's second line (a term under a charge, a teller number under a method) stays a second line, under the first.
+- **`.msg`**: A message is neutral: white, a rule, the sentence in body text. What kind of message it is rides on a small label at its start — `<div class="msg"> <span class="label label-stop">Not saved</span> <p>…</p></div>` — so status colour stays on labels, where the rules put it.
+- **`.list-rows`**: `<ul class="list-rows">` in a card: each `li > a.list-row` is a tinted icon tile, a bold title over a muted line, whatever the row ends with (a pill), and a chevron. The dividers start where the text does. `.list-row-icon.tone-warn` and the rest tint the tile by meaning.
+- **`.state-loading`**: Every page's first state, `<p class="state state-loading">Loading…</p>`, until its module's first fetch answers: the sentence, muted, over the shape of a card, so a slow connection shows a page arriving and not a bare line.
+- **`.brand-bar`**: Sign-in, the card index, a report card, the checker: pages with no shell. `.logo` is the shell's own mark, reused, and not a link: these pages have nowhere to send a reader back to (`results/views.py`).
+- **`body.has-shell`**: A white sidebar, a white top bar, the work on the grey. Below 1024px the sidebar is a `popover` from the menu button: light dismiss, Escape and focus return with no script, and shown above the page where unsupported.
+- **`.logo-mark`**: `i-brand-mark`, not a generic stroke `.icon`: it is drawn filled, in the square-and-`.logo`'s own colour plus white, not stroked in `currentColor` alone — see `templates/design/icons.html`.
+- **`.nav .nav-button`**: Sign out is a form's button, drawn as one more nav item: not the page's primary action, so none of a submit button's blue.
+- **`.sidebar .nav-links`**: Sign out sits at the foot of the sidebar and never scrolls out of it: the links above it take the height that is left and scroll inside themselves. A phone held in landscape is shorter than a principal's list of links, and a Sign out below the fold is one nobody finds on a shared handset. The padding and negative margin keep a focused link's ring inside the box that clips it.
+- **`.shell::before`**: The sidebar is a screen tall and stays put; this is the white column behind it, so a long page does not run out of sidebar below the fold.
+- **`body.has-tabbar .content`**: The bar's own height: the last control clears it. The gap under the floating bar, and the phone's safe area, are the shell's foot.
+- **`@font-face`**: Noto Sans draws only the Hausa hooks Hanken has no drawing of (`scripts/fonts.py`).
+- **`(the rule below)`**: The portal's page: a soft blue-grey the white cards stand on.
+- **`(the rule below)`**: A card asking the reader to act: the lightest amber.
+- **`(the rule below)`**: The spacing scale. More space between groups than inside them.
+- **`(the rule below)`**: the phone tab bar's height; the page's foot padding is the same
+- **`(the rule below)`**: the floating bar's distance from the screen's edges
+- **`(the rule below)`**: The header's hairline, under it rather than a border.
+- **`button:not(:disabled):active, .btn:active, .press:active`**: A press is felt, not seen as a jump: a touch smaller while held.
+- **`.field`**: A labelled field, one above the other: `<label class="field">Name <input></label>`.
+- **`.figure`**: A figure that leads: big, tight, every digit the same width.
+- **`.card-action`**: A card that asks the reader to do something: the lightest amber.
+- **`a.card`**: A card that is a link: lifts under the pointer, gives a little when pressed.
+- **`thead th`**: A column's name is a label, from a tablet up; on a phone it stays 15px.
+- **`table.stack tr > td:only-child`**: A row with no head (a form opened under the row it acts on) starts clean.
+- **`table.stack tfoot tr`**: A total is one line: what it totals, and the figure.
+- **`table.stack :is(th, td):first-child`**: Out of the scroller's sticky column: a card has no column to pin.
+- **`.problem`**: The notes pages already draw, until each is moved onto `.msg`.
+- **`.empty-card`**: An empty list (`emptyState()` in `web/html.js`): what is missing, one button.
+- **`.door-foot`**: Under a door's card: "Powered by Classnode" on a school's own host.
+- **`.crest`**: The school's crest; its initials on the school's own ground until one is uploaded.
+- **`.crest:has(img)`**: A crest is drawn whole, on white: a shield is not cropped to a square.
+- **`.logo-school`**: The school's crest and name where Classnode's mark is on the portal.
+- **`.nav .powered-by`**: "Powered by Classnode", under Help on a school's own host: small and quiet.
+- **`.sidebar .nav-help`**: Help and next steps, above Sign out inside the same rule.
+- **`.setup-chip`**: The administrator's setup chip (`onboarding`): a 36px pill, a 44px target.
+- **`(the rule below)`**: White, a little see-through over what scrolls under it, and a hairline.
+- **`.split`**: Two columns on a desktop — the work and a side panel — one on a phone.
+- **`.sidebar[popover]`**: Below 1024px: the sidebar slides out, and the bar grows a menu button.
+- **`(the rule below)`**: The visible height, so a phone's own toolbar does not cover the foot.
+- **`.sidebar,`**: Out of the popover and into the page: always there, never on top.
+- **`.tabbar`**: Below 640px staff pages also get a tab bar: the role's four main screens.
+- **`.tabbar`**: A floating bar, clear of the screen's edges, the lifted shadow under it.
+- **`.tabbar .icon`**: The tab you are on: a soft pill of the brand colour behind its icon.
+- **`.card, body > main, .empty-card, .tabbar, .account-menu, .topbar,`**: With no shadows to draw them, the cards and bars get a hairline.

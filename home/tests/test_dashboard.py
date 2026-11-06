@@ -161,9 +161,9 @@ class EachRoleSeesItsOwnTests(DashboardSetUp):
 
     def test_the_results_tile_is_one_short_word_and_says_whose_step_it_is(self):
         for member, label, meta in (
-            (self.head, "Approvals", "Results checked and waiting on you"),
-            (self.vp, "Checks", "Results submitted and waiting on you"),
-            (self.admin, "Approvals", "Results checked, with the principal"),
+            (self.head, "To approve", "Results checked and waiting on you"),
+            (self.vp, "To check", "Results submitted and waiting on you"),
+            (self.admin, "To approve", "Results checked, with the principal"),
         ):
             with self.subTest(role=member.role):
                 html = self.shown(member)[3]
@@ -192,7 +192,7 @@ class ATeacherSeesNoMoneyTests(DashboardSetUp):
         self.assertNotIn("fees", items)
         self.assertNotIn("payment", events)
         self.assertNotIn("₦", html)
-        self.assertNotIn("Fee collection", html)
+        self.assertNotIn("Fees collected", html)
         self.assertNotIn(self.children["ada"].user.full_name, html)
 
     def test_the_control_the_same_page_shows_the_bursar_the_money(self):
@@ -203,7 +203,7 @@ class ATeacherSeesNoMoneyTests(DashboardSetUp):
         html = self.shown(self.bursar)[3]
 
         self.assertIn("₦35,000", html)
-        self.assertIn("Fee collection", html)
+        self.assertIn("Fees collected", html)
 
 
 class ATeacherSeesTheirOwnClassTests(DashboardSetUp):
@@ -270,7 +270,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         tiles, items, events, html = self.shown(self.head)
 
-        self.assertIn("Attendance today", self.tile(html))
+        self.assertIn("Present today", self.tile(html))
         self.assertIn("3 of 4 present", self.tile(html))
         self.assertIn("<b class=\"fig\">75%</b>Sun", self.week(html))
         self.assertNotIn("No registers on a weekend", html)
@@ -283,7 +283,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         html = self.shown(self.head)[3]
 
-        self.assertNotIn("Attendance today", html)
+        self.assertNotIn("Present today", html)
         self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
         self.assertIn(">75%<", self.tile(html))
         self.assertNotIn("Sun</span>", self.week(html))
@@ -296,7 +296,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
         html = self.shown(self.head)[3]
 
         self.assertIn(f"Last school day: Tue{NBSP}16{NBSP}Sep", self.tile(html))
-        self.assertNotIn("Attendance today", html)
+        self.assertNotIn("Present today", html)
         self.assertIn("Not yet</b>Wed", self.week(html))
 
     def test_a_teacher_gets_the_same_rule_for_their_own_class(self):
@@ -306,7 +306,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
         html = self.shown(self.teacher)[3]
 
         self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
-        self.assertNotIn("Attendance today", html)
+        self.assertNotIn("Present today", html)
 
 
 class NumbersAndNamesTests(DashboardSetUp):

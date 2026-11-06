@@ -1,20 +1,25 @@
-{% load typography %}<section class="panel" aria-labelledby="attention-title">
+{% load typography %}{% comment %}
+Needs your attention: one card of list rows (`design.css`'s `.list-rows`), each a
+link to where the step is taken. Light amber while anything waits on the
+reader; white, with one green line, when nothing does. The icon tile is tinted
+by the item's meaning, and its pill says it in a word.
+{% endcomment %}<section class="panel{% if dash.attention %} card-action{% endif %}" aria-labelledby="attention-title">
   <div class="panel-head">
     <h2 id="attention-title">Needs your attention</h2>
-    {% if dash.attention %}<span class="chip">{{ dash.attention|length }}</span>{% endif %}
+    {% if dash.attention %}<span class="pill pill-warn">{{ dash.attention|length }} to do</span>{% endif %}
   </div>
   {% if dash.attention %}
-  <ul class="todo-list">
+  <ul class="list-rows">
     {% for item in dash.attention %}
     <li data-item="{{ item.key }}">
-      <a href="{{ item.href }}">
-        <span class="todo-icon" aria-hidden="true"><svg class="icon"><use href="#{{ item.icon }}"/></svg></span>
-        <span class="todo-text">
-          <strong>{{ item.title|nobreak }}</strong>
-          <span>{{ item.detail|nobreak }}</span>
+      <a class="list-row" href="{{ item.href }}">
+        <span class="list-row-icon tone-{{ item.chip.tone }}" aria-hidden="true"><svg class="icon"><use href="#{{ item.icon }}"/></svg></span>
+        <span class="list-row-text">
+          <span class="list-row-title">{{ item.title|nobreak }}</span>
+          <span class="list-row-sub">{{ item.detail|nobreak }}</span>
           {% include "home/parts/chip.html" with chip=item.chip %}
         </span>
-        <span class="todo-end">
+        <span class="list-row-end">
           {% include "home/parts/chip.html" with chip=item.chip %}
           <svg class="icon" aria-hidden="true"><use href="#i-chevron"/></svg>
         </span>
