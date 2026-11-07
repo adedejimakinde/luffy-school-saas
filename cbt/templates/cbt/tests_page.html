@@ -1,0 +1,27 @@
+{% load static shell %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tests</title>
+
+{% comment %}
+Modelled on `exam_slips_page.html`, whose stylesheets it shares. No `login_required`, for
+the oracle reason `cbt/views.py` gives. No question is in the frame: the page asks the API.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'setup/setup.css' %}">
+<link rel="stylesheet" href="{% static 'tests/tests.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'tests/app.js' %}"></script>
+
+{% shell_open "tests" %}
+    <main id="tests" data-portal="{{ portal_host }}">
+      <noscript>
+        <h1>Tests</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set
+        up this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading your school&hellip;</p>
+    </main>
+{% shell_close "tests" %}

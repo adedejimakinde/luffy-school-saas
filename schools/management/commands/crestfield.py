@@ -55,6 +55,6 @@ class Command(BaseCommand):
             "No email or text leaves for this school."
         )
         write(
-            "The question bank (30 questions in schools/crestfield/questions.py) is not loaded: "
-            "the bank is CBT step 3, which is not built yet."
+            "CBT: 30 questions in three JSS 2 banks, and one approved test for JSS 2A and JSS 2B "
+            "(sign in as cfc.teacher or cfc.principal and open Tests)."
         )

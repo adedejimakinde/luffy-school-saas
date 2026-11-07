@@ -21,6 +21,32 @@ EXAM_SLIPS_MODULES = (
 )
 
 
+#: The Tests page's modules, entry point last.
+TESTS_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "tests/api.js",
+    "tests/states.js",
+    "tests/app.js",
+)
+
+
+def tests_page(request):
+    """The frame for `/tests/`: question banks, setting a test, and approving one.
+
+    No question is in the frame. `cbt.bank_api` asks who is asking before it reads one,
+    and never answers the administrator, a bursar, a parent or a student with one.
+    """
+    return render(
+        request,
+        "cbt/tests_page.html",
+        {
+            "import_map": pages.import_map(*TESTS_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 def exam_slips_page(request):
     """The frame for `/exam-slips/`: print exam slips, and the principal names exam officers."""
     return render(
@@ -33,4 +59,4 @@ def exam_slips_page(request):
     )
 
 
-__all__ = ["EXAM_SLIPS_MODULES", "exam_slips_page"]
+__all__ = ["EXAM_SLIPS_MODULES", "TESTS_MODULES", "exam_slips_page", "tests_page"]

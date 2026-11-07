@@ -609,6 +609,8 @@ class TheAdministratorHasNoWayToBanksOrQuestionsTests(ExamSlipsSetUp):
                     self.assertTrue(access.can_read_banks(who.user, self.stmarys))
 
     def test_no_route_the_administrator_can_open_carries_a_bank_or_a_question(self):
+        """The slips say nothing of questions; the bank routes refuse the administrator
+        before they read a row (step 3, `test_banks_and_tests` has the rest)."""
         self.name(self.head, self.admin)
         self.print_class(self.head, self.jss1a_id)
         for path in (f"{BASE}slips/", f"{BASE}slips/classes/{self.jss1a_id}/"):
@@ -616,18 +618,12 @@ class TheAdministratorHasNoWayToBanksOrQuestionsTests(ExamSlipsSetUp):
                 response = self.as_(self.admin).get(path, HTTP_HOST=HOST)
                 self.assertEqual(response.status_code, 200)
                 self.assertNotRegex(response.content.decode().lower(), r"question|bank|correct|answer")
-        for path in (f"{BASE}banks/", f"{BASE}questions/", f"{BASE}tests/"):
+        for path in (f"{BASE}banks/", f"{BASE}banks/{self.maths_id}/1/", f"{BASE}questions/1/"):
             with self.subTest(path=path):
-                self.assertEqual(self.as_(self.admin).get(path, HTTP_HOST=HOST).status_code, 404)
+                self.assertEqual(self.as_(self.admin).get(path, HTTP_HOST=HOST).status_code, 403)
 
     def test_no_question_is_stored_or_seeded_by_cbt(self):
-        """Step 2 has no question tables, and its migrations write no rows."""
-        from django.apps import apps
-
-        self.assertEqual(
-            sorted(m.__name__ for m in apps.get_app_config("cbt").get_models()),
-            ["ExamOfficerGrant", "ExamPin", "PinSlipPrint"],
-        )
+        """No migration of `cbt` writes a row; the question tables start empty."""
         from pathlib import Path
 
         for migration in (Path(__file__).resolve().parent.parent / "migrations").glob("0*.py"):

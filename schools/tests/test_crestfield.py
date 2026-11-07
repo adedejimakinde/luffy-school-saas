@@ -182,6 +182,26 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             from cbt.models import ExamPin
 
             self.assertEqual(ExamPin.objects.filter(cancelled_at__isnull=True).count(), PER_CLASS)
+            # CBT step 3: the thirty questions in three JSS 2 banks, and one approved test.
+            from cbt.models import Question, QuestionBank, Test, TestItem
+
+            banks = {b.subject.name: b for b in QuestionBank.objects.select_related("subject")}
+            self.assertEqual(sorted(banks), sorted(questions.BANK))
+            self.assertEqual({b.level for b in banks.values()}, {crestfield.BANK_LEVEL})
+            for subject, bank in questions.BANK.items():
+                kept = sorted(Question.objects.filter(bank=banks[subject]).values_list("stem", flat=True))
+                self.assertEqual(kept, sorted(text for text, _, _ in bank), subject)
+            [test] = Test.objects.all()
+            self.assertEqual((test.title, test.state), (crestfield.TEST_TITLE, "published"))
+            self.assertEqual(
+                sorted(test.audience.values_list("class_group__name", flat=True)), sorted(crestfield.TEST_CLASSES)
+            )
+            self.assertGreater(test.opens_at, timezone.now())
+            items = list(TestItem.objects.filter(test=test))
+            self.assertEqual(len(items), 10)
+            self.assertEqual({i.origin_question.bank.subject.name for i in items}, {"Mathematics"})
+            moves = list(test.state_changes.order_by("id").values_list("to_state", flat=True))
+            self.assertEqual(moves, ["submitted", "published"])
 
     def test_the_parent_sees_two_released_cards(self):
         parent = User.objects.get(username="cfc.parent")
@@ -263,6 +283,10 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             score = Score.objects.filter(student_membership_id__in=ids_there).order_by("pk").first()
             Score.objects.filter(pk=score.pk).update(value=0)
             which = (score.assessment.subject.code, score.assessment.name, score.student_membership_id)
+            # And a question rewritten during the visit.
+            from cbt.models import Question
+
+            Question.objects.filter(pk=Question.objects.order_by("pk").first().pk).update(stem="Changed in a visit")
         Membership.objects.filter(pk=self.member("t03").pk).update(status=MembershipStatus.SUSPENDED)
         newcomer = enroll_student(User.objects.create_user("walk.in", None, full_name="Walk In"), self.school)
         stranger = User.objects.create_user("stranger", None, full_name="A Stranger")
@@ -282,6 +306,11 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             back = Score.objects.get(assessment__subject__code=which[0], assessment__name=which[1],
                                      student_membership_id=which[2])
             self.assertNotEqual(back.value, 0)
+            from cbt.models import Question, Test
+
+            self.assertEqual(Question.objects.count(), 30)
+            self.assertFalse(Question.objects.filter(stem="Changed in a visit").exists())
+            self.assertEqual(list(Test.objects.values_list("state", flat=True)), ["published"])
         self.assertTrue(User.objects.get(pk=principal.user_id).check_password(PASSWORDS["principal"]),
                         "a reset without passwords keeps them")
 

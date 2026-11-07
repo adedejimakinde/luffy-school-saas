@@ -35,7 +35,7 @@ ROBOTS_META = re.compile(r'<meta name="robots" content="([^"]*)">')
 #: Paths that must never be indexed, built or not, signed in or not.
 NEVER = (
     "/sit/", "/sit/abc123/", "/sit/a/b/c", "/website/", "/website/preview/home",
-    "/applicants/", "/applicants/42/", "/exam-slips/", "/check/", "/home/",
+    "/applicants/", "/applicants/42/", "/exam-slips/", "/tests/", "/check/", "/home/",
     "/register/", "/sign-in/", "/staff-sign-in/", "/api/csrf/",
 )
 

@@ -1,0 +1,34 @@
+/*
+ * Tests: the layout `setup/setup.css` does not already give. Colours, type and
+ * controls are `web/design.css`'s tokens; nothing here declares a colour of its own.
+ *
+ * Every row wraps rather than squeezes, so a 320px phone and text at 200% keep each
+ * question, option and button on its own line.
+ */
+.tests-tabs { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 0 0 12px; }
+.tests-tabs .tab { padding: 6px 0; border-bottom: 2px solid transparent; text-decoration: none; min-height: var(--control); display: inline-flex; align-items: center; }
+.tests-tabs .tab.current { border-bottom-color: currentColor; font-weight: 700; }
+.test-row, .banks-list .group { display: grid; gap: 4px; }
+.test-row .level, .banks-list .level { overflow-wrap: anywhere; }
+.test-row .btn, .banks-list .btn { justify-self: start; }
+.badge { font-size: var(--small); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 6px; white-space: nowrap; }
+.questions, .items { margin: 0; padding: 0 0 0 1.6em; display: grid; gap: 4px; }
+.questions li, .items > li { padding: 8px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
+.question { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: flex-start; }
+.question .number { display: none; }
+.question .what { flex: 1 1 14rem; min-width: 0; }
+.question .stem { display: block; }
+.question .who, .items .who { display: block; color: var(--muted); font-size: var(--small); }
+.question.retired .stem { color: var(--muted); }
+.items .stem { margin: 0 0 4px; }
+.items .options { margin: 0; padding-left: 1.6em; }
+.items .options .correct { font-weight: 700; }
+.picture { display: block; max-width: 100%; height: auto; margin: 4px 0; }
+.option { display: grid; gap: 4px; padding: 6px 0; }
+.option label { margin: 0; }
+label.choice.correct { min-height: var(--control); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 12px 0; }
+.actions button, .actions .btn, .confirm button { margin: 0; min-height: var(--control); }
+.confirm { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 12px 0; max-width: none; }
+.confirm p, .confirm fieldset, .confirm label, .confirm input { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
+.history { margin: 0; padding-left: 1.2em; font-size: var(--small); color: var(--muted); }

@@ -28,7 +28,7 @@ from accounts.views import (
     staff_sign_in_page,
 )
 from attendance.views import absences_page, register_page
-from cbt.views import exam_slips_page
+from cbt.views import exam_slips_page, tests_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
@@ -124,6 +124,9 @@ urlpatterns = [
     # Exam slips and exam officers (`docs/cbt.md`): the principal, the administrator and
     # an exam officer print; the principal names officers.
     path("exam-slips/", exam_slips_page, name="exam-slips"),
+    # Question banks and tests (`docs/cbt.md`, step 3): teachers write and set, the
+    # principal approves; the administrator sees the list with no question in it.
+    path("tests/", tests_page, name="tests"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),

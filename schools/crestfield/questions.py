@@ -5,11 +5,12 @@ Basic Science and English Language. Nothing here is from WAEC, NECO, JAMB or
 any other exam body or past paper (`docs/cbt.md`: "Nothing from JAMB, WAEC or
 NECO is seeded, scraped or copied").
 
-**Not loaded yet.** The question bank is CBT step 3 and is not built, so there
-is no table to put these in: `manage.py crestfield` says so when it runs. When
-step 3 lands, the builder writes them into Crestfield's bank as its teachers
-would, and nothing here changes. `tests/test_crestfield.py` checks that each
-question has four different options and one answer among them.
+**Loaded by `manage.py crestfield create` and `reset`** (CBT step 3): the builder
+writes each subject's ten into Crestfield's JSS 2 bank for that subject as its
+teacher would (`cbt.banks.add_as()`), and sets one test from the Mathematics bank
+(`schools.crestfield._cbt`). `schools/tests/test_crestfield.py` checks that each
+question has four different options and one answer among them, and that all
+thirty are in the banks after a build.
 
 Each question is `(text, (four options), the index of the right one)`.
 """

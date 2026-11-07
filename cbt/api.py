@@ -373,3 +373,9 @@ def end_officer(request, membership_id: int, payload: EndIn):
 
 
 __all__ = ["router"]
+
+
+# Question banks and tests (step 3) share this mount, `/api/cbt/`.
+from .bank_api import router as _bank_router  # noqa: E402
+
+router.add_router("", _bank_router)
