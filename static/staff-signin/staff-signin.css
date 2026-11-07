@@ -18,7 +18,7 @@ body.door {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, var(--bg)) 0, var(--bg) 360px) no-repeat, var(--bg);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, var(--page)) 0, var(--page) 360px) no-repeat, var(--page);
   font-variant-numeric: tabular-nums;
 }
 @media (min-width: 640px) { body.door { padding-top: 72px; } }
@@ -35,16 +35,19 @@ body.door {
 }
 .door-logo .logo-mark { width: 32px; height: 32px; }
 
+/* On a school's own host: its crest (or initials) over its name, centred. */
+.door-school { flex-direction: column; gap: 12px; max-width: 440px; color: var(--text); text-align: center; line-height: 1.3; }
+.door-school .crest { width: 56px; height: 56px; border-radius: 16px; font-size: 1.25rem; box-shadow: var(--shadow-1); }
+.door-name { text-wrap: balance; }
+
 body.door > main {
   width: 100%;
   max-width: 440px;
   margin: 0;
   padding: 24px;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
-    0 8px 32px color-mix(in srgb, var(--text) 5%, transparent);
+  border-radius: var(--radius-hero);
+  box-shadow: var(--shadow-1);
 }
 @media (min-width: 640px) { body.door > main { padding: 32px; } }
 
@@ -57,7 +60,7 @@ body.door > main {
 .step-ask h1, .step-ask .lede { margin-bottom: 0; }
 .step-ask .lede { margin-top: -12px; }
 .door .field label { display: block; margin: 0 0 8px; font-weight: 700; }
-.door .field input { width: 100%; min-height: 48px; padding: 12px 14px; border-radius: 8px; }
+.door .field input { width: 100%; min-height: 48px; padding: 12px 14px; border-radius: var(--radius); }
 .door .field input:focus-visible {
   outline: none;
   border-color: var(--brand);
@@ -81,7 +84,7 @@ body.door > main {
 }
 .door .problem .icon { width: 18px; height: 18px; margin-top: 1px; }
 
-.door .primary { width: 100%; min-height: 48px; border-radius: 8px; }
+.door .primary { width: 100%; min-height: 48px; border-radius: var(--radius); }
 .door a.primary { display: flex; color: var(--card); background: var(--brand); border-color: var(--brand); font-weight: 700; }
 .door a.primary:hover { color: var(--card); background: var(--brand-strong); }
 .door .primary:active { background: color-mix(in srgb, var(--brand) 70%, var(--text)); }

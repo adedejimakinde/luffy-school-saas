@@ -6,7 +6,7 @@ that true after the first restyle, when "just this once" a page wants its own
 shade of grey:
 
 - **One palette, in one file.** Every colour literal in `design.css` is one of
-  the palette's sixteen, and no stylesheet, module or page template anywhere
+  the palette's eighteen, and no stylesheet, module or page template anywhere
   else writes a colour of its own — they say `var(--muted)`, not `#5B6475`.
 - **No gradients but the ones named below, no emoji, no icon pack.**
 - **One font, two weights, served from here.** Hanken Grotesk at 400 and 700,
@@ -35,17 +35,20 @@ ROOT = Path(settings.BASE_DIR)
 STATIC = ROOT / "static"
 DESIGN = STATIC / "web" / "design.css"
 
-#: The whole palette: seven for the page, six for the three status labels.
+#: The whole palette: eight for the page, seven for the status labels and the
+#: card that asks the reader to act.
 PALETTE = {
     "#143D8C",  # brand: buttons, links, active nav, logo
     "#0E1726",  # text
     "#5B6475",  # secondary text
-    "#F5F6F8",  # background
+    "#F5F6F8",  # background of hovered rows, disabled fields, the public pages
+    "#EEF2F8",  # the portal's page, under its white cards
     "#FFFFFF",  # cards
     "#E3E6EB",  # borders
     "#EEF0F3",  # row dividers
     "#16693F", "#E7F4EC",  # green label
     "#8A5A00", "#FDF1DC",  # amber label
+    "#FFF7E8",  # the light amber card: something needs the reader
     "#B42318", "#FDECEA",  # red label
     # The public site's three accents, for its icon tiles and nothing else.
     "#0F766E",  # teal
@@ -97,6 +100,10 @@ WEASYPRINT_DOCUMENTS = {
     "results/templates/results/checker_slips.html",
     "cbt/templates/cbt/exam_slips.html",
 }
+
+#: The stylesheets that set a figure at 800, each shipping Hanken's 800 face itself
+#: (`hanken-grotesk-800.woff2`, the same cut), so only their pages are asked for it.
+HEAVY = {"static/schoolsite/modern.css", "static/home/dashboard.css"}
 
 HEX = re.compile(r"#[0-9A-Fa-f]{3,8}\b")
 FUNCTIONAL = re.compile(r"\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(", re.I)
@@ -267,14 +274,27 @@ class OneFontTwoWeightsTests(SimpleTestCase):
         self.assertRegex(DESIGN.read_text(), r'--font:\s*"Hanken Grotesk",\s*"Noto Sans",\s*system-ui')
 
     def test_no_stylesheet_asks_for_a_weight_that_is_not_there(self):
-        """400 and 700 everywhere; 800 only in the school websites' theme, which ships its face."""
+        """400 and 700 everywhere; 800 only in a stylesheet that ships the 800 face itself:
+        the school websites' theme, and the dashboard's hero figures."""
         for name, css in stylesheets():
             with self.subTest(stylesheet=name):
                 there = {"400", "700", "normal", "bold", "inherit"}
-                if name == "static/schoolsite/modern.css":
+                if name in HEAVY:
                     there |= {"800", "var(--heavy)"}
                 for weight in re.findall(r"font-weight:\s*([^;}\s]+)", css):
                     self.assertIn(weight, there)
+
+    def test_every_stylesheet_asking_for_800_declares_hankens_own_800_face(self):
+        """The control for the allowance above: each file in `HEAVY` carries the face,
+        from the one cut, over the 400 face's letters, so no weight is faked."""
+        regular = next(f for f in self.faces() if "font-weight: 400" in f and "Hanken" in f)
+        letters = re.sub(r"\s+", " ", re.search(r"unicode-range:\s*([^;]+);", regular).group(1))
+        for name in sorted(HEAVY):
+            with self.subTest(stylesheet=name):
+                (face,) = re.findall(r"@font-face\s*{(.*?)}", (ROOT / name).read_text(), re.S)
+                self.assertIn("font-weight: 800", face)
+                self.assertIn('url("../web/fonts/hanken-grotesk-800.woff2")', face)
+                self.assertEqual(re.sub(r"\s+", " ", re.search(r"unicode-range:\s*([^;]+);", face).group(1)), letters)
 
     def test_the_licences_ship_with_the_fonts(self):
         """SIL Open Font License 1.1: the files may be redistributed with it."""

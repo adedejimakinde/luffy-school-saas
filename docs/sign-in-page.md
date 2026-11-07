@@ -92,6 +92,17 @@ is about (both fields point at it with `aria-describedby`).
   account yet", one sentence naming the invitation, the account, and a quiet
   Sign out button.
 
+## Whose look a door wears
+
+On the portal both doors are Classnode's: its mark above the card, "Classnode"
+under it, and the views read nothing. Served on a school's own host (today, the
+single-host demo) a door wears that school: its crest above the card (its
+initials in a tile without one), its name, its colour where that reads on white,
+its crest as the tab's icon, and "Powered by Classnode" under the card. The
+view passes `door` and `brand` (`accounts.views._door_brand`,
+`schools/brand.py`), shown to anybody, because that host is already the school's
+public address. `schools/tests/test_brand.py` holds both, at two schools.
+
 ## The staff door: one step, and a landing that links where it can
 
 `POST /api/login/` takes an identifier and a password and answers one of four

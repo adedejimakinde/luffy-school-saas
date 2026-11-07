@@ -377,29 +377,15 @@ def tiles(facts, scope: Scope, today, term, week) -> list:
         before = people["placed_before"]
         out.append({
             "key": "students",
-            "label": "Students enrolled",
+            "label": "Students",
             "icon": "i-people",
             "href": "/roll/",
             "value": f"{placed:,}",
             "meta": f"In {plural(classes, 'class', 'classes')}",
             "change": f"{signed(placed - before)} this term" if before is not None else None,
         })
-    money = facts["money"]
-    if scope.may(FEE_READING_ROLES) and money is not None:
-        collected, billed = _collected(money), _billed(money)
-        share = percent(collected, billed)
-        this_week = _collected_in_week(money, term, today)
-        out.append({
-            "key": "fees",
-            "label": "Fees collected",
-            "icon": "i-fees",
-            "href": "/fees/",
-            "value": short_naira(collected),
-            "exact": f"{naira(collected)} of {naira(billed)}",
-            "meter": min(share, 100) if share is not None else None,
-            "meta": f"{pct(collected, billed)} of {short_naira(billed)}" if billed else "Nothing billed this term yet",
-            "change": f"{_signed_naira(this_week)} this week",
-        })
+    # Fees collected is not a tile: it is the hero card above them (`fee_card()`),
+    # shown on the same terms, to `FEE_READING_ROLES` alone.
     if week is not None and (week["school_wide"] or scope.classes):
         out.append(_attendance_tile(week, scope, today))
     if scope.may(chain.APPROVING_ROLES | chain.CHECKING_ROLES | {Role.ADMIN.value}) and facts["work"] is not None:
@@ -420,7 +406,9 @@ def _attendance_tile(week, scope: Scope, today: date) -> dict:
     shown = week["shown"]
     tile = {
         "key": "attendance",
-        "label": "Attendance today" if shown == today else "Attendance",
+        # "Present today" only for a day a register was taken today; else the
+        # day shown is named in the line under it ("Last school day: ...").
+        "label": "Present today" if shown == today else "Present",
         "icon": "i-register",
         "href": "/absences/" if week["school_wide"] else "/register/",
     }
@@ -454,11 +442,11 @@ def _attendance_tile(week, scope: Scope, today: date) -> dict:
 #: Which sheets wait on whom, and how the tile names them.
 def _results_tile(facts, scope: Scope) -> dict:
     if scope.may(chain.APPROVING_ROLES):
-        state, label, meta = "checked", "Approvals", "Results checked and waiting on you"
+        state, label, meta = "checked", "To approve", "Results checked and waiting on you"
     elif scope.may(chain.CHECKING_ROLES):
-        state, label, meta = "submitted", "Checks", "Results submitted and waiting on you"
+        state, label, meta = "submitted", "To check", "Results submitted and waiting on you"
     else:
-        state, label, meta = "checked", "Approvals", "Results checked, with the principal"
+        state, label, meta = "checked", "To approve", "Results checked, with the principal"
     sheets = [s for s in facts["work"]["sheets"] if s[0] in scope.classes]
     now = sum(1 for s in sheets if s[1] == state)
     before = sum(1 for s in sheets if s[5] == state)
@@ -515,17 +503,35 @@ def _collected_in_week(money, term, today) -> int:
 
 
 def fee_card(facts, term, today) -> dict:
+    """The hero card: fees collected this term, for `FEE_READING_ROLES` only.
+
+    The amount in full, its share of what was billed with a green bar, this
+    week's takings as a pill (green when money came in, amber when refunds
+    outweighed it, grey for a quiet week), then what is outstanding and what is
+    expected this term, each a link to the fee book.
+    """
     money = facts["money"]
     collected, billed = _collected(money), _billed(money)
     share = percent(collected, billed)
+    this_week = _collected_in_week(money, term, today)
+    owing = money["owing"]["n"]
     card = {
+        "key": "fees",
         "collected": naira(collected),
         "expected": naira(billed),
+        "expected_short": short_naira(billed),
         "percent": min(share or 0, 100),
         "percent_text": pct(collected, billed) or "0%",
-        "this_week": short_naira(_collected_in_week(money, term, today)),
+        "of_total": f"{pct(collected, billed)} of {naira(billed)} total" if billed else "Nothing billed this term yet",
+        "week": {
+            "text": f"{_signed_naira(this_week)} this week",
+            "tone": "ok" if this_week > 0 else ("warn" if this_week < 0 else ""),
+            "icon": "i-up" if this_week > 0 else ("i-down" if this_week < 0 else ""),
+        },
         "outstanding": short_naira(money["owing"]["kobo"]),
-        "owing": money["owing"]["n"],
+        "outstanding_exact": naira(money["owing"]["kobo"]),
+        "owing": owing,
+        "owing_text": f"{plural(owing, 'student')} {'owes' if owing == 1 else 'owe'}" if owing else "Nobody owes",
         "spark": None,
         "weeks": term["weeks"] if term else None,
         "weeks_so_far": None,

@@ -1,0 +1,13 @@
+{% comment %}
+The tab's icon, and the school's colour as the brand blue (`menu.brand_head`).
+The colour is six hex digits checked by `schools.brand.colour_for()` before it
+reaches here; it sets `--brand` on the root, so the tints mixed from it follow,
+and nothing else: the meaning colours are the same at every school.
+{% endcomment %}{% if brand.crest_url %}<link rel="icon" href="{{ brand.crest_url }}" type="image/png">
+<link rel="apple-touch-icon" href="{{ brand.crest_url }}">
+{% else %}<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+{% endif %}<link rel="manifest" href="/site.webmanifest">
+{% if brand.custom_colour %}<style>:root{--brand:{{ brand.colour }}}</style>
+{% endif %}

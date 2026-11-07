@@ -1,4 +1,4 @@
-{% load static %}<!doctype html>
+{% load static shell %}<!doctype html>
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -35,7 +35,12 @@ form, the schools and the empty state are all drawn into the same card
 <body class="door">
 {% include "design/icons.html" %}
 {% include "accounts/parts/door_icons.html" %}
-<div class="door-logo"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg>classnode</div>
+{% comment %}
+On a school's own host the door wears the school's crest (its initials in a tile
+when it has none) and name, and the foot says "Powered by Classnode"; on the
+portal it is Classnode's (`schools/brand.py`).
+{% endcomment %}
+{% if brand %}<div class="door-logo door-school"><span class="crest" aria-hidden="true">{% if brand.crest_url %}<img src="{{ brand.crest_url }}" alt="" width="56" height="56">{% else %}{{ brand.initials }}{% endif %}</span><span class="door-name">{{ brand.name }}</span></div>{% else %}<div class="door-logo"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg>classnode</div>{% endif %}
 <main id="staff-signin">
   {% comment %}
   What a reader sees if the module never loads. It has to be true on its own,
@@ -48,4 +53,4 @@ form, the schools and the empty state are all drawn into the same card
     your school office for help reaching your school's pages.</p>
   </noscript>
 </main>
-<p class="door-foot">Classnode</p>
+<p class="door-foot">{% if brand %}<a href="{{ classnode_href }}">Powered by Classnode</a>{% else %}Classnode{% endif %}</p>

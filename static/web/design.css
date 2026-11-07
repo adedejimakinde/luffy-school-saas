@@ -1,14 +1,9 @@
 /*
- * Classnode's design, "One Blue": the tokens and the parts every page shares,
- * loaded first on every page (`templates/design/head.html`); a page's own
- * stylesheet holds only its layout. **No page declares a colour**:
- * `tests/test_design.py` refuses one outside this file, and one here that is
- * not in the palette below. The rules are `docs/design.md`'s, not repeated
- * here, because this file goes to every phone on every page and the page
- * budget (`tests/test_budget.py`) counts its comments too.
+ * Classnode's design: the tokens and the parts every page shares. No page
+ * declares a colour (`tests/test_design.py`). Why each part is drawn as it is:
+ * `docs/design.md`, "design.css, part by part". Comments here cost every page.
  */
 
-/* Noto Sans draws only the Hausa hooks Hanken has no drawing of (`scripts/fonts.py`). */
 @font-face {
   font-family: "Hanken Grotesk";
   font-weight: 400;
@@ -55,15 +50,14 @@
   descent-override: 33.7%;
 }
 
-/* ------------------------------------------------------------------------ */
-/* Tokens                                                                    */
-/* ------------------------------------------------------------------------ */
+/* == Tokens == */
 
 :root {
   --brand: #143D8C;
   --text: #0E1726;
   --muted: #5B6475;
   --bg: #F5F6F8;
+    --page: #EEF2F8;
   --card: #FFFFFF;
   --border: #E3E6EB;
   --divider: #EEF0F3;
@@ -74,26 +68,35 @@
   --warn-bg: #FDF1DC;
   --stop: #B42318;
   --stop-bg: #FDECEA;
+    --action-bg: #FFF7E8;
 
   /* The public site's icon tiles only, never words. */
   --teal: #0F766E;
   --amber: #B45309;
   --coral: #C2452D;
 
-  /* The blue, lighter and darker, for hover, the active nav item and bars.
-     Mixed from the one colour rather than named as another. */
-  --brand-strong: color-mix(in srgb, var(--brand) 82%, var(--text));
+    --brand-strong: color-mix(in srgb, var(--brand) 82%, var(--text));
   --brand-tint: color-mix(in srgb, var(--brand) 8%, var(--card));
   --brand-soft: color-mix(in srgb, var(--brand) 30%, var(--card));
 
-  /* A field's edge has to be visible against white (3:1), which --border is
-     not. It is the secondary text colour, thinned. */
-  --field-border: color-mix(in srgb, var(--muted) 70%, var(--card));
+    --field-border: color-mix(in srgb, var(--muted) 70%, var(--card));
 
-  --radius: 10px;
-  --radius-card: 12px;
+  --radius: 12px;
+  --radius-card: 16px;
+  --radius-hero: 20px;
   --control: 44px;
   --control-lg: 48px;
+
+    --sp-4: 4px;
+  --sp-8: 8px;
+  --sp-12: 12px;
+  --sp-16: 16px;
+  --sp-20: 20px;
+  --sp-24: 24px;
+  --sp-32: 32px;
+
+  /* Short, and none under reduced motion (below). */
+  --ease: 150ms ease;
 
   --font: "Hanken Grotesk", "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
@@ -103,24 +106,22 @@
 
   --sidebar: 240px;
   --topbar: 64px;
-  --tabbar: 61px; /* the phone tab bar's links and rule; its foot padding is the same */
-
-  /* Resting and lifted: the text colour, thinned. */
-  --shadow-1: 0 1px 2px color-mix(in srgb, var(--text) 5%, transparent);
-  --shadow-2: 0 2px 4px color-mix(in srgb, var(--text) 5%, transparent),
-    0 8px 24px color-mix(in srgb, var(--text) 7%, transparent);
+  --tabbar: 61px;   --tabbar-gap: 12px;
+    --shadow-1: 0 1px 2px color-mix(in srgb, var(--text) 6%, transparent),
+    0 4px 16px -4px color-mix(in srgb, var(--text) 8%, transparent);
+  --shadow-2: 0 2px 4px color-mix(in srgb, var(--text) 6%, transparent),
+    0 12px 32px -6px color-mix(in srgb, var(--text) 14%, transparent);
+    --hairline: 0 1px 0 color-mix(in srgb, var(--text) 8%, transparent);
 }
 
-/* ------------------------------------------------------------------------ */
-/* Base                                                                      */
-/* ------------------------------------------------------------------------ */
+/* == Base == */
 
 *, *::before, *::after { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 /* WCAG 2.4.11: focus clear of the bars. */
 html:has(.topbar) { scroll-padding-top: var(--topbar); }
-@media (max-width: 639.98px) { html:has(.tabbar) { scroll-padding-bottom: calc(var(--tabbar) + 16px); } }
+@media (max-width: 639.98px) { html:has(.tabbar) { scroll-padding-bottom: calc(var(--tabbar) + var(--tabbar-gap) + 16px + env(safe-area-inset-bottom, 0px)); } }
 
 /* Quirks-mode defaults kept (doc_open.html). */
 :where(html.was-quirks) form { margin-block-end: 1em; }
@@ -129,7 +130,7 @@ html:has(.topbar) { scroll-padding-top: var(--topbar); }
 body {
   margin: 0;
   padding: 16px;
-  background: var(--bg);
+  background: var(--page);
   color: var(--text);
   font: 400 1rem/1.5 var(--font);
   overflow-wrap: break-word;
@@ -139,17 +140,12 @@ body {
   body { padding: 32px 24px; }
 }
 
-/*
- * A page without the app shell — the sign-in doors, the card, and every staff
- * page until its role is restyled — is one white card on the grey. Each page's
- * stylesheet gives it a width; this gives it everything else.
- */
 body > main {
   margin: 0 auto;
   padding: 20px 16px;
   background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius-hero);
+  box-shadow: var(--shadow-1);
 }
 
 @media (min-width: 640px) {
@@ -187,9 +183,7 @@ small { font-size: var(--small); }
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------------------------ */
-/* Icons: inline stroke SVG, no icon pack                                    */
-/* ------------------------------------------------------------------------ */
+/* == Icons: inline stroke SVG, no icon pack == */
 
 .icon {
   width: 20px;
@@ -202,16 +196,8 @@ small { font-size: var(--small); }
   stroke-linejoin: round;
 }
 
-/* ------------------------------------------------------------------------ */
-/* Buttons                                                                   */
-/* ------------------------------------------------------------------------ */
+/* == Buttons == */
 
-/*
- * Every button is at least a finger tall. The plain one is white with a rule;
- * a form's submit is the page's primary action and is the blue. Inline-block
- * rather than flex, so a page's full-width, left-aligned list buttons (the
- * register's names, the marking sheet's classes) keep their alignment.
- */
 button, .btn {
   display: inline-block;
   min-height: var(--control);
@@ -225,9 +211,12 @@ button, .btn {
   cursor: pointer;
   text-decoration: none;
   text-align: center;
+  transition: background-color var(--ease), border-color var(--ease), color var(--ease), transform var(--ease);
 }
 
 button:hover, .btn:hover { border-color: var(--field-border); }
+
+button:not(:disabled):active, .btn:active, .press:active { transform: scale(0.98); }
 
 button[type="submit"], button.submit, .btn-primary {
   min-height: var(--control-lg);
@@ -243,8 +232,6 @@ button[type="submit"]:hover, button.submit:hover, .btn-primary:hover {
   border-color: var(--brand-strong);
 }
 
-/* The quiet ones: sign out, try again. Not what the reader came to do, so they
-   do not compete with what is — but still a whole target. */
 button.signout, button.again, .btn-quiet {
   color: var(--muted);
   background: none;
@@ -265,14 +252,9 @@ button:disabled, .btn[aria-disabled="true"] {
 
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
-/* The way back from the wrong door: `signin.js` and `staff-signin.js` each
-   carry one, to the other. Quiet and last in the form, because a stranger who
-   opened the right door never reads this far. */
 .switch-door { margin: 12px 0 0; font-size: var(--small); color: var(--muted); text-align: center; }
 
-/* ------------------------------------------------------------------------ */
-/* Fields                                                                    */
-/* ------------------------------------------------------------------------ */
+/* == Fields == */
 
 input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea {
   min-height: var(--control);
@@ -285,9 +267,6 @@ input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea 
   border-radius: var(--radius);
 }
 
-/* A file field's "Choose file" is the secondary button: white, a rule, a
-   finger tall. The rest of the input is the name of the chosen file. Shared by
-   the crest on Setup and the roll import. */
 input[type="file"] { padding: 0; border: 0; background: none; min-height: 0; }
 input[type="file"]::file-selector-button {
   min-height: var(--control);
@@ -330,17 +309,16 @@ fieldset {
 
 legend { padding: 0 6px; font-weight: 700; }
 
-/* A labelled field, one above the other: `<label class="field">Name <input></label>`. */
 .field { display: grid; gap: 6px; font-weight: 700; }
 .field input, .field select, .field textarea { font-weight: 400; width: 100%; }
 .field .hint { color: var(--muted); font-weight: 400; }
 
-/* ------------------------------------------------------------------------ */
-/* Labels: the one place status colour goes                                  */
-/* ------------------------------------------------------------------------ */
+/* == Labels: the one place status colour goes == */
 
-.label, .tag {
-  display: inline-block;
+.label, .tag, .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 2px 10px;
   font-size: 0.8125rem;
   font-weight: 700;
@@ -353,22 +331,48 @@ legend { padding: 0 6px; font-weight: 700; }
   vertical-align: 0.1em;
 }
 
-.label-ok { color: var(--ok); background: var(--ok-bg); }
-.label-warn { color: var(--warn); background: var(--warn-bg); }
-.label-stop, .tag.held { color: var(--stop); background: var(--stop-bg); }
-.label-brand, .tag.revised { color: var(--brand); background: var(--brand-tint); }
+.label-ok, .pill-ok { color: var(--ok); background: var(--ok-bg); }
+.label-warn, .pill-warn { color: var(--warn); background: var(--warn-bg); }
+.label-stop, .tag.held, .pill-stop { color: var(--stop); background: var(--stop-bg); }
+.label-brand, .tag.revised, .pill-brand { color: var(--brand); background: var(--brand-tint); }
 
-/* ------------------------------------------------------------------------ */
-/* Cards                                                                     */
-/* ------------------------------------------------------------------------ */
+:is(.label-ok, .label-warn, .label-stop, .label-brand, .pill):not(:has(.icon))::before {
+  content: "";
+  flex: none;
+  width: 6px;
+  height: 6px;
+  background: currentColor;
+  border-radius: 50%;
+}
+.pill .icon { width: 14px; height: 14px; stroke-width: 2.25; }
+
+.eyebrow {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+  text-transform: uppercase;
+}
+
+.figure { font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* == Cards == */
 
 .card {
   min-width: 0;
-  padding: 20px;
+  padding: var(--sp-20);
   background: var(--card);
-  border: 1px solid var(--border);
+  border: 0;
   border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
 }
+
+.card-action { background: var(--action-bg); }
+
+a.card { display: block; color: var(--text); text-decoration: none; transition: box-shadow var(--ease), transform var(--ease); }
+a.card:hover { color: var(--text); box-shadow: var(--shadow-2); }
+a.card:active { transform: scale(0.99); }
 
 .card > h2:first-child, .card > h3:first-child { margin-top: 0; }
 
@@ -383,9 +387,7 @@ legend { padding: 0 6px; font-weight: 700; }
 
 .card-head h2 { margin: 0; }
 
-/* ------------------------------------------------------------------------ */
-/* Tables                                                                    */
-/* ------------------------------------------------------------------------ */
+/* == Tables == */
 
 table {
   border-collapse: collapse;
@@ -407,6 +409,10 @@ thead th {
   border-bottom-color: var(--border);
 }
 
+@media (min-width: 640px) {
+  thead th { font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; }
+}
+
 .num, td.num, th.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -415,11 +421,6 @@ thead th {
 
 td small { color: var(--muted); }
 
-/*
- * A table wider than its card scrolls sideways **inside** it; the page never
- * does. The first column — the child, the class, the day — stays put while the
- * numbers move under it, so a row can still be read at 360px.
- */
 .scroll, .grid-scroll, .table-scroll {
   max-width: 100%;
   overflow-x: auto;
@@ -437,13 +438,6 @@ td small { color: var(--muted); }
   box-shadow: inset -1px 0 0 var(--border);
 }
 
-/*
- * Below 640px a list table (`table.stack`) is a stack of cards, one per row,
- * each cell a "label  value" line from its `data-label`; `.stack-list` is the
- * same for a `ul`. `stack-head` heads the card, `stack-full` is a block under
- * it, `stack-hide` is left out. Only `.wide` tables scroll sideways. The whole
- * rule, and why, is `docs/design.md`'s ("Widths").
- */
 .swipe-cue { display: none; }
 
 @media (max-width: 639.98px) {
@@ -455,17 +449,16 @@ td small { color: var(--muted); }
     margin: 0 0 12px;
     padding: 4px 14px;
     background: var(--card);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1);
   }
   table.stack td, table.stack tfoot th {
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: baseline;
-    /* No gap between the parts of a value ("13" and "/20"); the label keeps
-       its distance with its own padding. */
-    gap: 2px 0;
+        gap: 2px 0;
     padding: 8px 0;
     text-align: right;
     white-space: normal;
@@ -491,19 +484,14 @@ td small { color: var(--muted); }
     font-weight: 700;
   }
   table.stack td.stack-full { display: block; text-align: left; }
-  /* A value's second line (a term under a charge, a teller number under a
-     method) stays a second line, under the first. */
-  table.stack td > small { flex: 1 1 100%; }
+    table.stack td > small { flex: 1 1 100%; }
   table.stack td.stack-full[data-label]::before { display: block; margin: 0 0 4px; }
   table.stack td.stack-hide, table.stack td[data-label]:empty, table.stack td.stack-full:empty { display: none; }
-  /* A row with no head (a form opened under the row it acts on) starts clean. */
-  table.stack tr > td:only-child { border-top: 0; }
-  /* A total is one line: what it totals, and the figure. */
-  table.stack tfoot tr { flex-direction: row; justify-content: space-between; font-weight: 700; }
+    table.stack tr > td:only-child { border-top: 0; }
+    table.stack tfoot tr { flex-direction: row; justify-content: space-between; font-weight: 700; }
   table.stack tfoot :is(th, td) { display: block; padding: 10px 0; border: 0; }
   table.stack tfoot :is(th, td):empty { display: none; }
-  /* Out of the scroller's sticky column: a card has no column to pin. */
-  table.stack :is(th, td):first-child {
+    table.stack :is(th, td):first-child {
     position: static;
     background: none;
     box-shadow: none;
@@ -514,8 +502,9 @@ td small { color: var(--muted); }
     margin: 0;
     padding: 12px 14px;
     background: var(--card);
-    border: 1px solid var(--border);
+    border: 0;
     border-radius: var(--radius-card);
+    box-shadow: var(--shadow-1);
   }
   .stack-list [data-label] { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; flex: 1 1 100%; }
   .stack-list [data-label]::before { content: attr(data-label); color: var(--muted); }
@@ -523,16 +512,8 @@ td small { color: var(--muted); }
   .swipe-cue { display: block; margin: 4px 0 0; color: var(--muted); font-size: var(--small); text-align: right; }
 }
 
-/* ------------------------------------------------------------------------ */
-/* Messages and empty states                                                 */
-/* ------------------------------------------------------------------------ */
+/* == Messages and empty states == */
 
-/*
- * A message is neutral: white, a rule, the sentence in body text. What kind of
- * message it is rides on a small label at its start — `<div class="msg">
- * <span class="label label-stop">Not saved</span> <p>…</p></div>` — so status
- * colour stays on labels, where the rules put it.
- */
 .msg {
   display: flex;
   flex-wrap: wrap;
@@ -547,7 +528,6 @@ td small { color: var(--muted); }
 
 .msg > p { flex: 1 1 16rem; margin: 0; }
 
-/* The notes pages already draw, until each is moved onto `.msg`. */
 .problem {
   margin: 16px 0 0;
   padding: 12px 14px;
@@ -567,10 +547,9 @@ td small { color: var(--muted); }
 .empty h2 { margin: 0 0 6px; }
 .empty p { margin: 0 auto 16px; max-width: 28rem; }
 
-/* An empty list (`emptyState()` in `web/html.js`): what is missing, one button. */
 .empty-card {
   display: grid; justify-items: center; gap: 8px; margin: 16px 0; padding: 32px 16px; text-align: center;
-  background: var(--card); border: 1px dashed var(--field-border); border-radius: var(--radius-card);
+  background: var(--card); border-radius: var(--radius-card); box-shadow: var(--shadow-1);
 }
 .empty-card .empty-icon {
   display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 8px;
@@ -592,30 +571,91 @@ td small { color: var(--muted); }
 
 .scorebar > span { display: block; height: 100%; background: var(--brand); border-radius: inherit; }
 
-/* ------------------------------------------------------------------------ */
-/* The brand bar: the family-facing pages                                    */
-/* ------------------------------------------------------------------------ */
+/* == List rows: a card of rows, each a link == */
 
-/*
- * Sign-in, the card index, a report card, the checker: pages with no shell.
- * `.logo` is the shell's own mark, reused, and not a link: these pages have
- * nowhere to send a reader back to (`results/views.py`).
- */
+.list-rows { margin: 0 calc(-1 * var(--sp-8)); padding: 0; list-style: none; }
+.list-rows > li { position: relative; }
+.list-rows > li + li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: var(--sp-8);
+  left: calc(var(--sp-8) + 40px + var(--sp-16));
+  border-top: 1px solid var(--divider);
+}
+
+.list-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-4) var(--sp-16);
+  min-height: 64px;
+  padding: var(--sp-12) var(--sp-8);
+  color: var(--text);
+  text-decoration: none;
+  border-radius: var(--radius);
+  transition: background-color var(--ease), transform var(--ease);
+}
+a.list-row:hover { color: var(--text); background: color-mix(in srgb, var(--brand) 4%, transparent); }
+a.list-row:active { transform: scale(0.99); }
+
+.list-row-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  color: var(--brand);
+  background: var(--brand-tint);
+  border-radius: var(--radius);
+}
+.list-row-icon.tone-ok { color: var(--ok); background: var(--ok-bg); }
+.list-row-icon.tone-warn { color: var(--warn); background: var(--warn-bg); }
+.list-row-icon.tone-stop { color: var(--stop); background: var(--stop-bg); }
+
+.list-row-text { display: grid; gap: 2px; min-width: 0; }
+.list-row-title { font-weight: 700; line-height: 1.35; }
+.list-row-sub { color: var(--muted); font-size: var(--small); line-height: 1.4; }
+.list-row-end { display: flex; align-items: center; gap: var(--sp-8); color: var(--muted); }
+.list-row-end > .icon { transition: transform var(--ease); }
+a.list-row:hover .list-row-end > .icon { color: var(--brand); transform: translateX(2px); }
+
+/* == Skeleton: the shape of what is coming == */
+
+.skeleton {
+  display: block;
+  height: 1em;
+  background: var(--divider);
+  border-radius: var(--sp-8);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.state-loading { color: var(--muted); }
+.state-loading::after {
+  content: "";
+  display: block;
+  height: 160px;
+  margin-top: var(--sp-16);
+  background: var(--card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-1);
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-pulse { 50% { opacity: 0.55; } }
+
+/* == The brand bar: the family-facing pages == */
+
 .brand-bar {
   display: flex;
   justify-content: center;
   margin: 0 0 16px;
 }
 
-/* ------------------------------------------------------------------------ */
-/* The app shell: the staff desktop                                          */
-/* ------------------------------------------------------------------------ */
+.door-foot { margin: 16px 0 0; color: var(--muted); font-size: var(--small); text-align: center; }
+.door-foot a { display: inline-flex; align-items: center; min-height: var(--control); color: var(--muted); }
+.door-foot a:hover { color: var(--brand); }
 
-/*
- * A white sidebar, a white top bar, the work on the grey. Below 1024px the
- * sidebar is a `popover` from the menu button: light dismiss, Escape and
- * focus return with no script, and shown above the page where unsupported.
- */
+/* == The app shell: the staff desktop == */
+
 body.has-shell { padding: 0; }
 
 .shell {
@@ -648,12 +688,8 @@ body.has-shell { padding: 0; }
   text-decoration: none;
 }
 
-/* `i-brand-mark`, not a generic stroke `.icon`: it is drawn filled, in the
-   square-and-`.logo`'s own colour plus white, not stroked in `currentColor`
-   alone — see `templates/design/icons.html`. */
 .logo-mark { width: 28px; height: 28px; flex: none; }
 
-/* The school's crest; its initials on the school's own ground until one is uploaded. */
 .crest {
   display: grid;
   place-items: center;
@@ -663,12 +699,21 @@ body.has-shell { padding: 0; }
   overflow: hidden;
   color: var(--card);
   background: var(--brand);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: var(--small);
   font-weight: 700;
+  letter-spacing: 0.02em;
 }
 
-.crest img { width: 100%; height: 100%; object-fit: cover; }
+.crest:has(img) { background: var(--card); }
+.crest img { width: 100%; height: 100%; object-fit: contain; }
+
+.logo-school { gap: 10px; color: var(--text); font-size: 1rem; line-height: 1.25; }
+.logo-school:hover { color: var(--text); }
+.logo-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.topbar-logo.logo-school { min-width: 0; padding: 0; }
+.topbar-logo.logo-school .crest { width: 32px; height: 32px; border-radius: 9px; font-size: var(--small); letter-spacing: 0; }
+.topbar-logo .logo-name { display: block; white-space: nowrap; text-overflow: ellipsis; }
 
 .nav { display: grid; gap: 2px; }
 
@@ -693,8 +738,6 @@ body.has-shell { padding: 0; }
   border-radius: var(--radius);
 }
 
-/* Sign out is a form's button, drawn as one more nav item: not the page's
-   primary action, so none of a submit button's blue. */
 .nav .nav-button {
   width: 100%;
   font: inherit;
@@ -716,16 +759,9 @@ body.has-shell { padding: 0; }
 .nav a .icon, .nav .nav-button .icon { color: var(--muted); }
 .nav a:hover .icon, .nav a[aria-current="page"] .icon, .nav .nav-button:hover .icon { color: var(--brand); }
 
-/*
- * Sign out sits at the foot of the sidebar and never scrolls out of it: the
- * links above it take the height that is left and scroll inside themselves.
- * A phone held in landscape is shorter than a principal's list of links, and
- * a Sign out below the fold is one nobody finds on a shared handset. The
- * padding and negative margin keep a focused link's ring inside the box that
- * clips it.
- */
 .sidebar .nav-links {
   flex: 1 1 auto;
+  align-content: start;
   min-height: 0;
   overflow-y: auto;
   margin: -4px;
@@ -739,11 +775,13 @@ body.has-shell { padding: 0; }
   border-top: 1px solid var(--divider);
 }
 
-/* Help and next steps, above Sign out inside the same rule. */
+.nav .powered-by { gap: 8px; color: var(--muted); font-size: var(--small); }
+.nav .powered-by .logo-mark { width: 16px; height: 16px; color: var(--muted); }
+.nav .powered-by:hover .logo-mark { color: var(--brand); }
+
 .sidebar .nav-help { flex: none; margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--divider); }
 .sidebar .nav-help + .nav-end { margin-top: 2px; padding-top: 0; border-top: 0; }
 
-/* The administrator's setup chip (`onboarding`): a 36px pill, a 44px target. */
 .setup-chip {
   position: relative; display: inline-flex; flex: none; align-items: center; gap: 6px;
   min-height: 36px; padding: 0 10px; color: var(--brand); background: var(--brand-tint);
@@ -766,8 +804,10 @@ body.has-shell { padding: 0; }
   container-type: inline-size;
   min-height: var(--topbar);
   padding: 8px 16px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+  -webkit-backdrop-filter: saturate(1.8) blur(12px);
+  backdrop-filter: saturate(1.8) blur(12px);
+  box-shadow: var(--hairline);
 }
 
 .icon-button {
@@ -791,7 +831,7 @@ body.has-shell { padding: 0; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
 @container (max-width: 21.8em) { .setup-chip .chip-full { display: none; } .setup-chip .chip-short { display: inline; } }
-@container (max-width: 19em) { .topbar-logo { font-size: 0; } }
+@container (max-width: 19em) { .topbar-logo :is(.logo-word, .logo-name) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 
 @media (min-width: 1024px) {
   .topbar-logo { display: none; }
@@ -806,7 +846,7 @@ body.has-shell { padding: 0; }
 .account-menu {
   position: absolute; top: calc(100% + 8px); right: 0; z-index: 20;
   min-width: 240px; max-width: calc(100vw - 32px); padding: 8px;
-  background: var(--card); border: 1px solid var(--border);
+  background: var(--card); border: 0;
   border-radius: var(--radius-card); box-shadow: var(--shadow-2);
 }
 .account-who { display: grid; margin: 0 0 8px; padding: 8px; border-bottom: 1px solid var(--divider); }
@@ -848,22 +888,19 @@ body.has-shell { padding: 0; }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 4px 0 0; color: var(--muted); }
 
-/* Two columns on a desktop — the work and a side panel — one on a phone. */
 .split { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
 
 @media (min-width: 1024px) {
   .split { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
 }
 
-/* Below 1024px: the sidebar slides out, and the bar grows a menu button. */
 @media (max-width: 1023.98px) {
   .sidebar[popover] {
     position: fixed;
     inset: 0 auto 0 0;
     width: min(300px, 85vw);
     height: 100%;
-    /* The visible height, so a phone's own toolbar does not cover the foot. */
-    height: 100dvh;
+        height: 100dvh;
     max-height: none;
     margin: 0;
     overflow-y: auto;
@@ -886,9 +923,7 @@ body.has-shell { padding: 0; }
     grid-template-rows: var(--topbar) 1fr;
   }
 
-  /* The sidebar is a screen tall and stays put; this is the white column
-     behind it, so a long page does not run out of sidebar below the fold. */
-  .shell::before {
+    .shell::before {
     content: "";
     position: absolute;
     top: 0;
@@ -901,8 +936,7 @@ body.has-shell { padding: 0; }
 
   .sidebar { z-index: 1; }
 
-  /* Out of the popover and into the page: always there, never on top. */
-  .sidebar,
+    .sidebar,
   .sidebar[popover] {
     display: flex;
     position: sticky;
@@ -920,22 +954,22 @@ body.has-shell { padding: 0; }
   .menu-button { display: none; }
 }
 
-/* Below 640px staff pages also get a tab bar: the role's four main screens. */
 .tabbar { display: none; }
 
 @media (max-width: 639.98px) {
-  .tabbar {
+    .tabbar {
     position: fixed;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    right: var(--tabbar-gap);
+    bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px));
+    left: var(--tabbar-gap);
     z-index: 10;
     display: grid;
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
-    padding: 0 4px env(safe-area-inset-bottom);
+    padding: 0 4px;
     background: var(--card);
-    border-top: 1px solid var(--border);
+    border-radius: var(--radius-hero);
+    box-shadow: var(--shadow-2);
   }
 
   .tabbar a {
@@ -945,21 +979,43 @@ body.has-shell { padding: 0; }
     justify-content: center;
     gap: 2px;
     min-width: 0;
-    min-height: calc(var(--tabbar) - 1px);
+    min-height: var(--tabbar);
     color: var(--muted);
     text-decoration: none;
+    border-radius: var(--radius-hero);
   }
 
+    .tabbar .icon {
+    width: 56px;
+    height: 30px;
+    padding: 5px 18px;
+    border-radius: 999px;
+    transition: background-color var(--ease);
+  }
   .tabbar a[aria-current="page"] { color: var(--brand); }
+  .tabbar a[aria-current="page"] .icon { background: var(--brand-tint); }
+  .tabbar a:active .icon { background: var(--divider); }
   .tabbar .tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 700; }
 
-  /* The bar's own height, safe area included: the last control clears it. */
-  body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + env(safe-area-inset-bottom, 0px)); }
+    body.has-tabbar .content { padding-bottom: var(--tabbar); }
+  body.has-tabbar .shell { padding-bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px)); }
 }
 
-/* ------------------------------------------------------------------------ */
-/* Paper                                                                     */
-/* ------------------------------------------------------------------------ */
+/* == Forced colours and reduced motion == */
+
+@media (forced-colors: active) {
+  .card, body > main, .empty-card, .tabbar, .account-menu, .topbar,
+  table.stack tr, .stack-list > li {
+    border: 1px solid CanvasText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+  button:active, .btn:active, .press:active, a.card:active, a.list-row:active { transform: none; }
+}
+
+/* == Paper == */
 
 @media print {
   body, body.has-shell { padding: 0; background: var(--card); }

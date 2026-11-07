@@ -230,6 +230,28 @@ def _role_names(roles) -> str:
     return ", ".join(Role(r).label for r in sorted(roles, key=lambda r: order.get(r, 99)))
 
 
+def _brand(context, door=False):
+    from schools.brand import for_request
+
+    return for_request(context.get("request"), door=door)
+
+
+@register.inclusion_tag("design/brand_head.html", takes_context=True)
+def brand_head(context):
+    """The tab's icon and the brand colour, in every page's head (`design/head.html`).
+
+    The school's on its own host, for a member of it or on a door there (the door
+    views pass `door`); Classnode's anywhere else.
+    """
+    return {"brand": _brand(context, door=bool(context.get("door")))}
+
+
+@register.inclusion_tag("design/brand_mark.html", takes_context=True)
+def brand_mark(context, tag="div", href="", extra=""):
+    """The crest and name, or Classnode's mark: the doors' and the family pages' head."""
+    return {"brand": _brand(context, door=bool(context.get("door"))), "tag": tag, "href": href, "extra": extra}
+
+
 @register.inclusion_tag("design/shell_open.html", takes_context=True)
 def shell_open(context, current):
     """`<body>` through the start of `.content`: the sidebar and the top bar.
@@ -276,7 +298,17 @@ def shell_open(context, current):
             else _role_names(getattr(request, "school_roles", ())) if personal else ""
         ),
         "setup_chip": setup_chip,
+        # The school's crest, name and colour in place of Classnode's, for a
+        # member here (`schools/brand.py`); "Powered by Classnode" under the menu.
+        "brand": _brand(context),
+        "classnode_href": _classnode_href(),
     }
+
+
+def _classnode_href():
+    from schools.brand import classnode_href
+
+    return classnode_href()
 
 
 @register.inclusion_tag("design/shell_close.html", takes_context=True)
@@ -285,4 +317,7 @@ def shell_close(context, current):
     return {"menu": _menu(context, current)}
 
 
-__all__ = ["LINKS", "Link", "Menu", "PLATFORM_LINKS", "TABS", "initials", "menu_for", "platform_menu", "register"]
+__all__ = [
+    "LINKS", "Link", "Menu", "PLATFORM_LINKS", "TABS", "brand_head", "brand_mark", "initials", "menu_for",
+    "platform_menu", "register",
+]

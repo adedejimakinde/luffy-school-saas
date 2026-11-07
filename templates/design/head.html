@@ -1,4 +1,4 @@
-{% load static %}{% comment %}
+{% load static shell %}{% comment %}
 The design every page shares, linked before the page's own stylesheet so the
 page's rules can narrow it. Included, not copied: one line in each page template
 and one place to change. `static/web/design.css` says what is in it.
@@ -15,12 +15,12 @@ sets). Default deny, so a new staff page cannot be indexed by forgetting:
 
 The icons are the header's mark (`scripts/favicons.py`), at fixed addresses at
 the root of whichever host drew the page (`WHITENOISE_ROOT` in settings.py):
-the public site, the portal and every school.
+the public site, the portal and every school. On a school's host, for a member
+of it (or on a door there: its view passes `door`), the tab's icon is the school's crest
+and its colour replaces the brand blue: `brand_head` in `menu.py`, and
+`schools/brand.py` for who is shown what.
 {% endcomment %}
 {% if not indexable %}<meta name="robots" content="noindex, nofollow">
-{% endif %}<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="manifest" href="/site.webmanifest">
+{% endif %}{% brand_head %}
 <link rel="preload" href="{% static 'web/fonts/hanken-grotesk-400.woff2' %}" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="{% static 'web/design.css' %}">

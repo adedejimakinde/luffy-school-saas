@@ -218,6 +218,8 @@ table.ogun-grid tr.department th { background: var(--card); font-weight: 700; pa
 .ogun-facts { margin: 0; display: grid; gap: 4px; }
 .ogun-facts > div { display: flex; justify-content: space-between; gap: 12px; }
 table.ogun-traits, table.ogun-health-table { border-collapse: collapse; width: 100%; }
+/* "Beginning of term" may wrap: at 320px the table has 254px. */
+table.ogun-health-table thead th { white-space: normal; }
 table.ogun-traits th, table.ogun-traits td, table.ogun-health-table th, table.ogun-health-table td { border-bottom: 1px solid var(--divider); padding: 4px 6px; text-align: left; }
 table.ogun-traits td.n, table.ogun-traits th.n { text-align: center; width: 2.2rem; }
 table.ogun-traits tr.total th, table.ogun-traits tr.total td { font-weight: 700; }

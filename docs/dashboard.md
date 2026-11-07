@@ -13,10 +13,10 @@ nothing to fetch after it and no script to run.
 
 | | |
 | --- | --- |
-| Header | Greeting, the school's crest (or its initials), name, session, term and week. On a phone, one chip: term, week and date. |
-| Tiles | Students enrolled, fees collected (naira and percent of what was billed, with a meter), attendance today, results waiting. A teacher gets attendance and scores entered for their own class instead. Each carries one change note against last week or last term where that exists. |
-| Needs your attention | Up to five items, each a link to the page that fixes it: a register not taken, fees owed, results waiting on this login, papers half marked, remarks missing, staff invitations not accepted, no contact email. |
-| Fee collection | Collected against billed, a sparkline of the term's weeks so far, the meter, and this week, outstanding and owing. |
+| Header | Greeting, date, session, term and week. The school's crest and name are the shell's header (`docs/design.md`, "School branding"). On a phone, one chip: term, week and date. |
+| Fees collected (the hero) | Full width, first, and only for `fees.authority.READING_ROLES`: the amount collected this term in full, "X% of N total" with a green bar, this week's takings as a pill (green when money came in, amber when refunds outweighed it, grey for a quiet week), then Outstanding (and how many owe) and Expected this term side by side, each a link to the fee book. On a desk the term's weeks are a sparkline beside it. Carries `data-tile="fees"`. |
+| Stat cards | Three compact cards: Students, Present today (or Present, with the last school day named under it), To approve (To check for the vice principal). A teacher gets Present and Scores entered for their own class instead. Each carries one change note against last week or last term where that exists. |
+| Needs your attention | One card of list rows, light amber while anything waits on the reader. Up to five items, each a link to the page that fixes it: a register not taken, fees owed, results waiting on this login, papers half marked, remarks missing, staff invitations not accepted, no contact email. |
 | Attendance this week | Monday to Friday as bars, plus a Saturday or Sunday only if a register was taken on it. A day with no register yet is a dashed empty slot labelled "Not yet" (or "None" once it has passed), never a low bar. |
 | Recent activity | The latest five lines from the logs the school already keeps (below). |
 | Your next step | The administrator, until setup is first finished: one card at the top with the next of the eight setup steps and one button (`docs/onboarding.md`). While the school has no students it stands instead of the figures; the principal then sees how far the administrator has got. |
@@ -80,7 +80,7 @@ imported from the modules that gate those pages, never written out again.
 | | principal | vice principal | admin | bursar | teacher |
 | --- | --- | --- | --- | --- | --- |
 | Students enrolled | yes | | yes | | |
-| Fees collected, fee collection | yes | yes | yes | yes | never |
+| Fees collected (the hero card) | yes | yes | yes | yes | never |
 | Attendance today | school | school | school | | own class |
 | Results tile | "Approvals" (waiting on you) | "Checks" (waiting on you) | "Approvals" (with the principal) | | |
 | Scores entered | | | | | own class |

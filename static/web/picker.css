@@ -28,7 +28,7 @@ dialog.picker {
   color: var(--text);
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--radius-card);
+  border-radius: var(--radius);
   box-shadow: var(--shadow-2);
   overflow: hidden;
   opacity: 0;

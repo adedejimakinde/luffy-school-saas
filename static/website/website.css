@@ -63,12 +63,15 @@
 @media (min-width: 768px) { :root { --section: 104px; --copy-lg: 1.0625rem; --copy-note: 1rem; } }
 
 body.site {
+  /* The public site keeps its own corners; the portal's are design.css's. */
+  --radius: 10px;
+  --radius-card: 12px;
   padding: 0;
   background: var(--card);
   font-variant-numeric: tabular-nums;
   overflow-x: clip;
 }
-body.site > main { margin: 0; padding: 0; background: none; border: 0; border-radius: 0; max-width: none; }
+body.site > main { margin: 0; padding: 0; background: none; border: 0; border-radius: 0; box-shadow: none; max-width: none; }
 
 .wrap { width: min(100% - 32px, var(--wrap)); margin-inline: auto; }
 @media (min-width: 640px) { .wrap { width: min(100% - 48px, var(--wrap)); } }

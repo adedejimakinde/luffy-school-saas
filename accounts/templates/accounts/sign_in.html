@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 {% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -27,7 +27,11 @@ imports is not.
 <script type="module" defer src="{% static 'signin/app.js' %}"></script>
 
 {% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+{% comment %}
+The school's crest and name on its own host, Classnode's mark on the portal
+(`schools/brand.py`); "Powered by Classnode" under the card when it is a school's.
+{% endcomment %}
+<div class="brand-bar">{% brand_mark %}</div>
 <main id="signin">
   {% comment %}
   What a reader sees if the module never loads. It has to be true on its own,
@@ -40,3 +44,4 @@ imports is not.
     school office for help reaching your child's report card.</p>
   </noscript>
 </main>
+{% if brand %}<p class="door-foot"><a href="{{ classnode_href }}">Powered by Classnode</a></p>{% endif %}

@@ -34,7 +34,7 @@
 
 /* design.css frames a portal page as a card on grey; a school's website is the whole page. */
 .site { margin: 0; padding: 0; background: var(--surface); color: var(--text); letter-spacing: -0.005em; }
-.site > main { margin: 0; padding: 0 0 32px; background: none; border: 0; border-radius: 0; }
+.site > main { margin: 0; padding: 0 0 32px; background: none; border: 0; border-radius: 0; box-shadow: none; }
 .site b, .site strong, .site th { font-weight: var(--heavy); }
 .site h1, .site h2, .site h3 { font-weight: var(--heavy); letter-spacing: -0.025em; color: var(--text); overflow-wrap: break-word; }
 .site h2 { font-size: clamp(1.75rem, 1.35rem + 1.6vw, 2.5rem); line-height: 1.12; margin: 0 0 16px; }

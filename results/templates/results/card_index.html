@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 {% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -27,7 +27,8 @@ empty where a deployment has no portal domain, and the state then renders its
 sentence without a link.
 {% endcomment %}
 {% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+{% comment %}The school's crest and name for a member of it on its host, else Classnode's mark (`schools/brand.py`).{% endcomment %}
+<div class="brand-bar">{% brand_mark %}</div>
 <main id="index" data-portal="{{ portal_host }}">
   <p class="state state-loading">Fetching your cards&hellip;</p>
 </main>

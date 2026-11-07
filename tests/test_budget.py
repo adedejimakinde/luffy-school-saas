@@ -125,6 +125,14 @@ QUERIES["/help/"] = 14
 for _path in SCHOOL_PAGES:
     if _path not in ("/", "/cards/", "/cards/1/1/", "/check/"):
         QUERIES[_path] += 2
+#: Every page drawn for a member of the school on its host wears the school's
+#: crest, name and colour (`schools/brand.py`): one statement and its search
+#: path, read once per request and never cached across requests, so one school's
+#: crest cannot reach another's host. The public page reads no session, has no
+#: member, and is not asked.
+for _path in SCHOOL_PAGES:
+    if _path != "/":
+        QUERIES[_path] += 2
 
 _ASSET = re.compile(r'<(?:link|script|img|iframe|source|video|audio)\b[^>]*?\b(?:src|href)="([^"]*)"', re.I)
 _IMPORT_MAP = re.compile(r'<script type="importmap">(.*?)</script>', re.S)
@@ -139,6 +147,7 @@ _SPECIFIER = re.compile(
     re.M,
 )
 _EXTERNAL = re.compile(r"^(?:[a-z]+:)?//", re.I)
+CREST = re.compile(r"^/media/[0-9a-f]+/site\.png$")
 
 
 def served_files():
@@ -326,7 +335,9 @@ class NoCdnAndNoFrameworkTests(SpeedBudgetSetUp):
                     # The icons are the one exception, and still this host's:
                     # fixed names at its root (`website.crawlers.ICONS`), fetched
                     # after the page has drawn, so not in its weight either.
-                    if url not in ICONS:
+                    # So is a school's crest, its tab icon and header mark on its own
+                    # host (`schools/brand.py`): the upload service's public file.
+                    if url not in ICONS and not CREST.match(url):
                         self.assertTrue(url.startswith(settings.STATIC_URL), url)
 
     def test_every_script_is_a_module_or_the_map_that_resolves_them(self):

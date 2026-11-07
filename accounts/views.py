@@ -74,7 +74,7 @@ def sign_in_page(request):
     return render(
         request,
         "accounts/sign_in.html",
-        {"import_map": pages.import_map(*MODULES)},
+        {"import_map": pages.import_map(*MODULES), **_door_brand(request)},
     )
 
 
@@ -94,8 +94,21 @@ def staff_sign_in_page(request):
     return render(
         request,
         "accounts/staff_sign_in.html",
-        {"import_map": pages.import_map(*STAFF_MODULES)},
+        {"import_map": pages.import_map(*STAFF_MODULES), **_door_brand(request)},
     )
+
+
+def _door_brand(request) -> dict:
+    """The school's crest, name and colour when a door is served on its own host.
+
+    On the portal, which is where the doors are in production, this is Classnode's
+    and reads nothing: `schools.brand.for_request()` answers None before any query.
+    On a school's host (the single-host demo) it is that school's, shown to anybody,
+    because the host is already the school's own public address.
+    """
+    from schools.brand import classnode_href, for_request
+
+    return {"door": True, "brand": for_request(request, door=True), "classnode_href": classnode_href()}
 
 
 #: The roll page's own modules.
