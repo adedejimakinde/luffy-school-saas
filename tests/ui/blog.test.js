@@ -29,7 +29,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { request } from "node:http";
 import { dirname, join, resolve } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, describe, test } from "./timed.js";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";

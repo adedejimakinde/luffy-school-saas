@@ -55,7 +55,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, describe, test } from "./timed.js";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
@@ -803,6 +803,10 @@ describe("every page, at every width", () => {
         if (screen.site) await page.emulateMedia({ reducedMotion: "reduce" });
         for (const width of [...WIDTHS, ...(screen.widths || [])]) {
           await page.setViewportSize({ width, height: 800 });
+          // A URL that differs from the page's own only by its `#` is a
+          // same-document navigation, and `goto` answers it with `null`:
+          // leave the page first, so every width loads the screen afresh.
+          if (screen.url.includes("#")) await page.goto("about:blank");
           const response = await page.goto(screen.url);
           assert.equal(response.status(), screen.status || 200, `${screen.url} at ${width}px`);
           await settle(page);

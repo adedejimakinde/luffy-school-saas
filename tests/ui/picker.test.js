@@ -27,7 +27,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, describe, test } from "./timed.js";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
