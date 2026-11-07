@@ -120,6 +120,17 @@ build that fails fails the job.
    one serves, swaps `web`, `worker` and `caddy`, and asks `/healthz/` inside
    the container and then through Caddy over HTTPS. Unhealthy: it puts the
    previous SHA's images back and exits non-zero.
+   - **The pull is retried.** `docker compose pull` gets up to 3 attempts,
+     waiting 10 seconds and then 30 seconds between them, because ghcr.io
+     sometimes drops a connection ("connection reset by peer", 2 November). If
+     all three fail the deploy fails before anything has changed, so the server
+     stays on the old version; the deploy workflow's read-back check still runs.
+   - **Old images are pruned after a good deploy.** Only once the new
+     containers are healthy and `deployed-sha` is written, `deploy.sh` runs
+     `docker image prune -af --filter "until=168h"`: images unused for over 7
+     days go, and the log says how much space that freed ("Total reclaimed
+     space"). Volumes are never pruned. A failed deploy prunes nothing, and a
+     failed prune does not fail a deploy that has already succeeded.
 
 Deploy after school hours: the web process restarts for a few seconds.
 
@@ -328,3 +339,12 @@ parameters are children's names), and tags every report with the school.
 | The first backup and restore drill | B2 bucket and key, a backup encryption key held offline |
 | Error reports, and the backup and restore heartbeats | Sentry (EU) project, its DSN, and two cron monitors (`nightly-backup`, `restore-check`) |
 | Real children's data | your confirmation on data residency (NDPA, OPEN-9) |
+
+## Flaky screen tests
+
+The `screens` job (`tests/ui/`, in a real browser) runs through
+`.github/scripts/run-screens.sh`, which runs a failed test once more. If it
+passes only on the retry, the log and the job's summary say
+`FLAKY: <test name>` and the job passes; a test that fails twice, or a failure
+outside any single test, fails the job. A `FLAKY:` line is a bug to fix, not
+noise to ignore.

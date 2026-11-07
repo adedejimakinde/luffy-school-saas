@@ -347,8 +347,11 @@ jobs:
           npm install --no-save --no-package-lock playwright@1.56.1
           npx playwright install --with-deps chromium
 
+      # A failed test is run once more. Passing only on the retry is printed
+      # as "FLAKY: <test name>" in the log and the job summary; failing twice
+      # fails the job. See .github/scripts/run-screens.sh.
       - name: Every page at 360, 768 and 1280
-        run: npm run screens
+        run: .github/scripts/run-screens.sh
 
       - name: The screenshots
         if: always()
