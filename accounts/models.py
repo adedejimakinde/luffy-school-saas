@@ -1172,6 +1172,13 @@ class SignInScope(models.TextChoices):
     #: bucket of its own for CHANNEL's reason. A writer's address guessed at
     #: here must not close anybody's guardian door, and the other way round.
     BLOG_EMAIL = "blog_email", "Blog sign-in email"
+    #: The exam door (`cbt.door`, `docs/cbt.md` "Student sign-in"): a test code, an
+    #: admission number and an exam PIN, counted against the admission number as
+    #: typed and against the address, each carrying the school, for CHECKER's
+    #: reason. Buckets of their own, so a wrong exam PIN never makes a family wait
+    #: at the result checker, and the other way round.
+    SIT_NUMBER = "sit_number", "Exam door admission number"
+    SIT_ADDRESS = "sit_address", "Exam door network address"
 
 
 class SignInAttempts(models.Model):

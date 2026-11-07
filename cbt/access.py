@@ -9,7 +9,7 @@ a grant or an assignment at one school is nothing at another.
 | | exam slips | exam officers | banks and questions | tests |
 | --- | --- | --- | --- | --- |
 | Principal | prints, any class | names and ends | reads and writes all | sets any; **approves** |
-| Vice principal | no, unless named | no | reads all | reads all, and their questions |
+| Vice principal | no, unless named | no | reads all | reads all, and their questions; **approves and sends back** |
 | Teacher | no, unless named | no | reads and writes their own subjects at their own levels | sets and reads their own subjects for their own classes |
 | Administrator | prints, any class | sees who they are | **never**, named officer or not | title, classes, window, size and code state; **never a question** |
 | Exam officer (named) | prints, any class | sees who they are | nothing beyond their own as a teacher | nothing beyond their role, in this step |
@@ -20,9 +20,9 @@ a grant or an assignment at one school is nothing at another.
 levels. A teacher with no assignment this term has no bank and no test. The marking
 switch ("Open marking to all teachers") opens marking, not banks.
 
-**Approving** a test is the principal's. The vice principal reads every bank and every
-test, and their questions, so they can review one, and approves nothing:
-`docs/cbt.md` gives the vice principal "All tests (read)".
+**Approving** a test, or sending it back with a reason, is the principal's and the vice
+principal's (decided 7 November 2026, CBT step 4). The vice principal reads every bank and
+every test and their questions, writes none and sets none.
 
 **A login holding the administrator role never reads a bank or a question**, whatever
 else it holds, and being named exam officer adds nothing (decided 20 October 2026).
@@ -141,8 +141,9 @@ TEST_ROLES = BANK_ROLES | frozenset({Role.ADMIN.value})
 #: Who writes into banks and sets tests, each within their reach.
 WRITING_ROLES = frozenset({Role.PRINCIPAL.value, Role.TEACHER.value})
 
-#: Who approves a test, which publishes it: the principal alone.
-APPROVING_ROLES = frozenset({Role.PRINCIPAL.value})
+#: Who approves a test, which publishes it, or sends it back: the principal and the vice
+#: principal (decided 7 November 2026). Neither the teacher who set it nor the office.
+APPROVING_ROLES = frozenset({Role.PRINCIPAL.value, Role.VICE_PRINCIPAL_ACADEMIC.value})
 
 
 @dataclass(frozen=True)
@@ -229,6 +230,69 @@ def reach(actor, school, term) -> Reach:
     )
 
 
+# -- sittings: step 4 -------------------------------------------------------------------
+#
+# `docs/cbt.md`, "The administrator", "Extra time" and "Exam officers". A **teacher of the
+# test** is one whose reach teaches its subject to one of its classes in its term
+# (`setting.teaches_it()`); the principal teaches every test. What each may do with a
+# sitting:
+#
+# | | test code, open and close by hand | extra time | retake | the sitting log |
+# | --- | --- | --- | --- | --- |
+# | Teacher of the test, principal | yes | yes | yes | yes |
+# | Administrator | yes | yes | no, unless named exam officer | yes, with no answer in it |
+# | Exam officer | no (decided: "nothing else") | yes, any test | yes, any test | yes |
+# | Vice principal | no | no, unless named | no, unless named | yes |
+# | Anybody else | no | no | no | no |
+
+
+def teaches_test(actor, school, test) -> bool:
+    """Is this login a teacher of this test here (or the principal)? Never the office."""
+    from . import setting
+
+    reach_ = reach(actor, school, test.term)
+    if reach_.sees_test_summaries:
+        return False
+    return reach_.writes_all or (bool(reach_.class_pairs) and setting.teaches_it(reach_, test))
+
+
+def runs_sitting(actor, school, test) -> bool:
+    """Sets the code, opens and closes the sitting by hand: its teachers, the principal and
+    the administrator (`docs/cbt.md`, "The administrator")."""
+    if not _here(school):
+        return False
+    if Role.ADMIN.value in _roles(actor, school):
+        return True
+    return teaches_test(actor, school, test)
+
+
+def gives_extra_time(actor, school, test) -> bool:
+    """A teacher of the test, an exam officer or the administrator (and the principal)."""
+    if not _here(school):
+        return False
+    if Role.ADMIN.value in _roles(actor, school):
+        return True
+    return teaches_test(actor, school, test) or is_exam_officer(actor, school)
+
+
+def grants_retake(actor, school, test) -> bool:
+    """A teacher of the test or an exam officer (and the principal). Not the administrator
+    by role (`docs/cbt.md`, "Settled in interpretation")."""
+    if not _here(school):
+        return False
+    return teaches_test(actor, school, test) or is_exam_officer(actor, school)
+
+
+def reads_sitting_log(actor, school, test) -> bool:
+    """Who reads the sitting log: who runs it or gives time, the vice principal."""
+    if not _here(school):
+        return False
+    roles = _roles(actor, school)
+    if roles & {Role.ADMIN.value, Role.VICE_PRINCIPAL_ACADEMIC.value, Role.PRINCIPAL.value}:
+        return True
+    return teaches_test(actor, school, test) or is_exam_officer(actor, school)
+
+
 def menu_keys(roles, actor, school) -> frozenset:
     """Links a login holds by a permission rather than a role: the exam slips page for an
     exam officer whose roles alone would not show it (`menu.py`).
@@ -255,7 +319,12 @@ __all__ = [
     "can_name",
     "can_print",
     "can_read_banks",
+    "gives_extra_time",
+    "grants_retake",
     "is_exam_officer",
+    "reads_sitting_log",
+    "runs_sitting",
+    "teaches_test",
     "may_open_tests",
     "menu_keys",
     "officer_memberships",

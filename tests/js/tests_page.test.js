@@ -260,3 +260,95 @@ test("a refused send-back says why beside the form", async () => {
   await root.submit({ note: "" }, { form: "send-back" });
   assert.match(root.innerHTML, /The reason cannot be empty\./);
 });
+
+// -- the sitting (CBT step 4) ----------------------------------------------------------------
+
+const LOG = {
+  test_id: 9,
+  title: "First CA <i>test</i>",
+  state: "published",
+  opens_at: "2026-11-09T08:00:00Z",
+  closes_at: "2026-11-09T11:00:00Z",
+  duration: 30,
+  late_window: 2,
+  code_set: true,
+  code: null,
+  may_run: true,
+  may_extend: true,
+  may_retake: true,
+  classes: [{ id: 3, name: "JSS 1A", open: true, by_hand: false, said: "As planned" }],
+  rows: [
+    {
+      student_id: 41, name: "Ada <b>Obi</b>", admission_number: "SM/001", class_name: "JSS 1A", state: "Sitting", number: 1,
+      started_at: "2026-11-09T08:05:00Z", deadline: "2026-11-09T08:45:00Z", submitted_at: null, ended_by: "",
+      extra_minutes: 10, computers: 2, replaced: 1, disconnects: 1, left_page: 3, late_refused: 0, answers_received: 7,
+      may_retake: false,
+      events: [{ kind: "left_page", what: "Left the test's tab or window", said_by: "device", at: "2026-11-09T08:10:00Z", seat: "Seat 4", detail: { seconds: 14 } }],
+    },
+    {
+      student_id: 42, name: "Emeka Nwosu", admission_number: "SM/002", class_name: "JSS 1A", state: "The student submitted", number: 1,
+      started_at: "2026-11-09T08:05:00Z", deadline: "2026-11-09T08:35:00Z", submitted_at: "2026-11-09T08:30:00Z", ended_by: "student",
+      extra_minutes: 0, computers: 1, replaced: 0, disconnects: 0, left_page: 0, late_refused: 0, answers_received: 20,
+      may_retake: true, events: [],
+    },
+  ],
+  code_changes: [],
+  controls: [],
+};
+
+test("the sitting: classes, the log's counts, and no answer in it", () => {
+  const html = states.sittingView(LOG);
+  assert.match(html, /First CA &lt;i&gt;test&lt;\/i&gt;: the sitting/);
+  assert.match(html, /Ada &lt;b&gt;Obi&lt;\/b&gt;/, "a name is text");
+  assert.match(html, /data-count="Left the page"><dt>Left the page<\/dt><dd>3</);
+  assert.match(html, /data-count="Computers"><dt>Computers<\/dt><dd>2</);
+  assert.match(html, /10 extra minutes/);
+  assert.match(html, /Close it now/);
+  assert.match(html, /Change the code/);
+  assert.match(html, /data-action="ask-extra-41"/);
+  assert.doesNotMatch(html, /data-action="ask-extra-42"/, "no extra time once an attempt is closed");
+  assert.match(html, /data-action="ask-retake-42"/);
+  assert.match(html, /No answer or score is shown here/);
+  assert.doesNotMatch(html, /correct|chosen|score:/i);
+});
+
+test("the code is shown once, in the answer that set it", () => {
+  assert.match(states.sittingView({ ...LOG, code_set: true }, { code: "KMTRWX" }), /<strong class="code">KMTRWX<\/strong>/);
+  assert.doesNotMatch(states.sittingView(LOG), /KMTRWX/);
+  assert.match(states.sittingView({ ...LOG, code_set: false }), /Set the test code/);
+});
+
+test("a login that may not run the sitting sees it and no button", () => {
+  const html = states.sittingView({ ...LOG, may_run: false, may_extend: false, rows: LOG.rows.map((r) => ({ ...r, may_retake: false })) });
+  assert.doesNotMatch(html, /Close it now|Change the code|Extra time|Allow a retake/);
+});
+
+test("closing by hand asks why, and offers to end the attempts in progress", () => {
+  const html = states.sittingView(LOG, { confirming: "close-3" });
+  assert.match(html, /data-form="control" data-kind="close" data-class="3"/);
+  assert.match(html, /name="end_attempts"/);
+  assert.match(html, /students already sitting carry on to their own time/);
+});
+
+test("the published test's row and page link to its sitting", () => {
+  assert.match(states.testsView({ tests: [{ ...ROW, state: "published" }], summaries_only: true }), /href="#sitting\/9"/);
+  assert.doesNotMatch(states.testsView({ tests: [{ ...ROW, state: "draft" }] }), /#sitting\//);
+});
+
+test("extra time is sent with its minutes and its reason, and the log is drawn again", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push([url, init.body ? JSON.parse(init.body) : null]);
+    if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+    return { status: 200, json: async () => ({ ...LOG, rows: [{ ...LOG.rows[0], extra_minutes: 25 }] }) };
+  };
+  forgetToken();
+  const root = fakeRoot();
+  const page = await mount(root, { fetchImpl, location: { hash: "#sitting/9" } });
+  assert.equal(page.state().step, "sitting");
+  await root.submit({ minutes: "15", reason: "Power cut" }, { form: "extra", student: "41" });
+  const sent = calls.find(([url]) => url.endsWith("/students/41/extra-time/"));
+  assert.deepEqual(sent[1], { minutes: 15, reason: "Power cut" });
+  assert.match(root.innerHTML, /25 extra minutes/);
+  assert.match(root.innerHTML, /Extra time given/);
+});

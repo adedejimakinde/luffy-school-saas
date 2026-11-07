@@ -45,7 +45,7 @@ from .models import (
 router = Router(auth=session_auth)
 
 _NOT_BANKS = "Question banks are read by teachers of the subject, the vice principal and the principal."
-_NOT_TESTS = "Tests are set by teachers and approved by the principal."
+_NOT_TESTS = "Tests are set by teachers and approved by the principal or the vice principal."
 _SUMMARY_ONLY = (
     "The administrator sees each test's title, classes, window and size on the list, and never its questions."
 )

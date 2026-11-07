@@ -3,7 +3,7 @@
  *
  * One page, routed by its hash so the browser's Back works and a link can be shared:
  * `#` the tests, `#banks`, `#bank/<subject>/<level>`, `#question/<subject>/<level>/<id|new>`,
- * `#new-test`, `#test/<id>`, `#edit-test/<id>`, `#preview/<id>`. Each view asks the
+ * `#new-test`, `#test/<id>`, `#edit-test/<id>`, `#preview/<id>`, `#sitting/<id>`. Each view asks the
  * school afresh, so what is drawn is the school's own answer, and every write redraws
  * from what the write answered.
  */
@@ -30,6 +30,8 @@ export function htmlFor(state, { portal = "" } = {}) {
       return states.testView(state.test, state);
     case "preview":
       return states.previewView(state.testId, state.paper);
+    case "sitting":
+      return states.sittingView(state.log, state);
     case REFUSAL.NOT_YOURS:
       return states.notYours(state);
     case REFUSAL.WRONG_HOST:
@@ -81,6 +83,11 @@ export async function load(route, { fetchImpl = fetch } = {}) {
     const answer = await api.fetchTest({ testId: a, fetchImpl });
     if (!answer.ok) return answer.rejected ? { step: REFUSAL.WRONG_HOST } : refusal(answer);
     return { step: "test", test: answer.body };
+  }
+  if (view === "sitting") {
+    const answer = await api.fetchSitting({ testId: a, fetchImpl });
+    if (!answer.ok) return answer.rejected ? { step: REFUSAL.NOT_YOURS, detail: answer.detail } : refusal(answer);
+    return { step: "sitting", log: answer.body };
   }
   if (view === "preview") {
     const answer = await api.fetchPreview({ testId: a, fetchImpl });
@@ -196,6 +203,13 @@ export async function mount(root, { fetchImpl = fetch, location = window.locatio
       const result = await call({ questionId: state.question.id, fetchImpl });
       return answered(result, () => go(`#bank/${state.bank.subject_id}/${state.bank.level}`));
     }
+    if (state.step === "sitting" && action === "set-code") {
+      const result = await api.setCode({ testId: state.log.test_id, fetchImpl });
+      return answered(result, (log) => {
+        state = { step: "sitting", log, code: log.code, done: "" };
+        draw();
+      });
+    }
     if (state.step === "test") {
       const testId = state.test.id;
       if (action === "delete-test") return answered(await api.deleteTest({ testId, fetchImpl }), () => go("#"));
@@ -271,6 +285,28 @@ export async function mount(root, { fetchImpl = fetch, location = window.locatio
       const result = await api.moveTest({ testId: state.test.id, act: "send-back", note: form.note.value, fetchImpl });
       answered(result, (test) => {
         state = { step: "test", test, done: "Sent back to its teacher, with your reason." };
+        draw();
+      });
+    } else if (state.step === "sitting" && (kind === "control" || kind === "extra" || kind === "retake")) {
+      const testId = state.log.test_id;
+      let result;
+      let said;
+      if (kind === "control") {
+        const opening = form.dataset.kind === "open";
+        result = await api.controlSitting({
+          testId, classId: form.dataset.class, kind: form.dataset.kind, reason: form.reason.value,
+          endAttempts: Boolean(form.end_attempts && form.end_attempts.checked), fetchImpl,
+        });
+        said = opening ? "Opened. Its students can start now. This is logged." : "Closed. Nobody new can start. This is logged.";
+      } else if (kind === "extra") {
+        result = await api.giveExtraTime({ testId, studentId: form.dataset.student, minutes: Number(form.minutes.value || 0), reason: form.reason.value, fetchImpl });
+        said = "Extra time given. Their timer grows when their computer next hears from the school.";
+      } else {
+        result = await api.allowRetake({ testId, studentId: form.dataset.student, reason: form.reason.value, fetchImpl });
+        said = "Retake allowed. They sign in again with the code and their slip.";
+      }
+      answered(result, (log) => {
+        state = { step: "sitting", log, done: said };
         draw();
       });
     } else if (kind === "classes") {

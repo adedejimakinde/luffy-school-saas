@@ -3,21 +3,21 @@
 A teacher sets a test of a subject they teach, for classes they teach it to this term,
 from that subject's bank at those classes' level. The principal may set any. The chain:
 
-    draft  --send for approval-->  submitted  --approve (principal)-->  published
-           <--send back (principal, with a reason) / withdraw (the teacher)--
+    draft  --send for approval-->  submitted  --approve (principal, vice principal)-->  published
+           <--send back (principal or vice principal, with a reason) / withdraw (the teacher)--
 
 **Sending for approval copies the paper.** The questions are drawn at random from the
 bank's questions in use, and each is copied into a `TestItem`: text, options, answer,
 marks, picture. From then on the test carries its own copy (operating rule 2): editing
-or retiring a bank question never reaches it, and the principal approves exactly the
+or retiring a bank question never reaches it, and the approver approves exactly the
 paper they reviewed. Sending it back discards the copy, and the next send draws again.
 
 **Once a test leaves draft, what it is cannot change** (the database's
 `a_set_test_keeps_its_paper` and `a_published_item_is_frozen`): only who sits it, and
 every change to that is a `TestAudienceChange` naming who and when.
 
-**Approving publishes it**, and only the principal approves (`access.APPROVING_ROLES`;
-`docs/cbt.md` gives the vice principal "All tests (read)"). A test can be approved only
+**Approving publishes it**, and only the principal or the vice principal approves or sends
+back (`access.APPROVING_ROLES`, decided 7 November 2026). A test can be approved only
 before it opens. Each move is a `TestStateChange` row.
 
 Every function asks who is asking before it reads anything else, and answers "no such
@@ -380,11 +380,11 @@ def withdraw_as(actor, school, test_id) -> Test:
 
 def _require_approver(actor, school, test):
     if not access.reach(actor, school, test.term).approves:
-        raise NotAllowed("A test is approved by the principal.")
+        raise NotAllowed("A test is approved or sent back by the principal or the vice principal.")
 
 
 def send_back_as(actor, school, test_id, note) -> Test:
-    """The principal sends a test back to its teacher, saying why."""
+    """The principal or the vice principal sends a test back to its teacher, saying why."""
     note = plain(note, limit=200, what="The reason", lines=False)
     with transaction.atomic():
         test, _ = _test_for(actor, school, test_id, lock=True)
@@ -397,7 +397,7 @@ def send_back_as(actor, school, test_id, note) -> Test:
 
 
 def approve_as(actor, school, test_id) -> Test:
-    """The principal approves the paper they reviewed, which publishes it."""
+    """The principal or the vice principal approves the paper they reviewed, which publishes it."""
     with transaction.atomic():
         test, _ = _test_for(actor, school, test_id, lock=True)
         _require_approver(actor, school, test)
