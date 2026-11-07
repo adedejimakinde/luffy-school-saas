@@ -9,7 +9,11 @@
 # Order, and why:
 #  0. Log in to ghcr.io from the root-only /root/ghcr-login (private repository).
 #  1. Pull the images CI built for this SHA — never a tag like `latest`, which
-#     names whatever was pushed last rather than what was tested.
+#     names whatever was pushed last rather than what was tested. A failed pull
+#     is tried again, up to 3 attempts in all (waiting 10s, then 30s), because
+#     ghcr.io sometimes resets a connection ("connection reset by peer", 2 Nov).
+#     If every attempt fails the deploy fails before anything has changed, and
+#     the server stays on the old version.
 #  2. Migrate with the NEW image while the OLD one is still serving. Additive
 #     migrations are safe to run under old code; a migration that is not
 #     (dropping or renaming something old code reads) has to ship in two
@@ -20,6 +24,8 @@
 #  5. Unhealthy: go back to the previous SHA's images. Migrations are NOT
 #     undone by that; a migration that broke the old code is a restore from
 #     backup (H3), which is why step 2's rule exists.
+#  6. Healthy: prune Docker images unused for over 7 days (never volumes, and
+#     only now that the new containers are answering), and log the space freed.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -84,3 +90,12 @@ fi
 
 echo "$SHA" > deployed-sha
 echo "DEPLOYED $SHA"
+
+# Healthy and recorded: now, and only now, drop images nothing has used for
+# over 7 days. Never volumes (no `--volumes`, and not `docker system prune`).
+# A failure here must not fail a deploy that has already succeeded.
+if prune_out="$(docker image prune -af --filter "until=168h" 2>&1)"; then
+  echo "Image prune: $(echo "$prune_out" | grep -i 'total reclaimed space' || echo 'Total reclaimed space: 0B')"
+else
+  echo "Image prune failed (the deploy itself succeeded): $prune_out" >&2
+fi
