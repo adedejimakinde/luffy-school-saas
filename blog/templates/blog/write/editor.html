@@ -51,6 +51,7 @@ by the bar's height so it never covers a word.
         </div>
         <label class="sr" for="id_body">The post, in Markdown</label>
         <textarea id="id_body" name="body" class="md" spellcheck="true" placeholder="Write the post. ## for a heading, **bold**, - for a list.">{{ form.body.value|default:"" }}</textarea>
+        <p class="md-help" data-pasted role="status" hidden>Pasted formatting was converted to Markdown. <a href="#" data-undo>Undo</a></p>
         <p class="md-help">## heading &middot; **bold** &middot; [words](https://...) &middot; - list &middot; &gt; quote &middot; | table |</p>
       </section>
       <section class="pane pane-preview" data-pane="preview" aria-labelledby="preview-head">

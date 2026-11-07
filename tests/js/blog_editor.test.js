@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { counter, format, insertBlock, keyboardHeight, pictureMarkdown, serpText } from "../../static/write/tools.js";
+import { counter, format, htmlToMarkdown, insertBlock, keyboardHeight, pasteAsMarkdown, pictureMarkdown, serpText } from "../../static/write/tools.js";
 
 test("bold wraps the selection, or a placeholder selected for typing over", () => {
   assert.deepEqual(format("bold", "say this now", 4, 8), { text: "say **this** now", start: 6, end: 10 });
@@ -56,4 +56,34 @@ test("the keyboard's height: none where the page shrinks for it, the gap where i
   assert.equal(keyboardHeight(800, 460, 0), 340);
   assert.equal(keyboardHeight(800, 460, 40), 300);
   assert.equal(keyboardHeight(800, 900, 0), 0);
+});
+
+const ENDING = `<hr><h2>Before you print</h2><ul><li><strong>Marks:</strong> every subject has one</li><li><strong>Comments</strong> are written</li></ul><p>Questions? <a href="https://classnode.co/help">Read the guide</a>.</p>`;
+
+test("the HTML at the end of a post becomes clean Markdown", () => {
+  assert.equal(
+    pasteAsMarkdown(ENDING, "Before you print ..."),
+    "---\n\n## Before you print\n\n- **Marks:** every subject has one\n- **Comments** are written\n\nQuestions? [Read the guide](https://classnode.co/help).",
+  );
+  // Tags in the pasted text itself count too, with no HTML on the clipboard.
+  assert.equal(pasteAsMarkdown("", ENDING), pasteAsMarkdown(ENDING, ""));
+});
+
+test("headings, emphasis, numbered lists, quotes and rules are kept; the rest is dropped", () => {
+  const out = htmlToMarkdown(
+    '<h1 class="t">Big</h1><p style="x">One <em>two</em> <span class="s">three</span></p><ol><li>a</li><li>b</li></ol><blockquote><p>said</p></blockquote><img src="https://other.site/a.png">',
+  );
+  assert.equal(out, "## Big\n\nOne *two* three\n\n1. a\n2. b\n\n> said");
+});
+
+test("a script, a style and a javascript: link are dropped", () => {
+  const out = htmlToMarkdown('<p>Hi</p><script>alert("x")</script><style>p{color:red}</style><p><a href="javascript:alert(1)">click</a></p>');
+  assert.equal(out, "Hi\n\nclick");
+  assert.doesNotMatch(out, /alert|color/);
+});
+
+test("plain Markdown pastes, and a code editor's spans, are left alone", () => {
+  assert.equal(pasteAsMarkdown("", "## Title\n\n**bold** and [a](https://x.y)\n- one"), null);
+  assert.equal(pasteAsMarkdown('<span style="color:red">## Title</span>', "## Title"), null);
+  assert.equal(pasteAsMarkdown("", "1 < 2 and 3 > 2"), null);
 });
