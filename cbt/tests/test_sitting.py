@@ -46,7 +46,9 @@ from cbt.models import (
     TimeExtension,
 )
 from cbt.sitting import ALREADY_SAT, NOT_OPEN_NOW, NOT_OPENED, WAIT
-from cbt.tests.test_banks_and_tests import BanksSetUp
+# The module, not the class: a class in this module's namespace is collected here too,
+# and `BanksSetUp` carries a helper whose name starts with `test`.
+from cbt.tests import test_banks_and_tests
 from results.tests.fixtures import HOST, THEIR_HOST
 from schools.tests.tenants import connected_to
 from tests.guardians import give_verified_channel
@@ -59,7 +61,7 @@ CODE = "KMTRWX"
 GRACE_CODE = "PQZHNB"
 
 
-class SittingSetUp(BanksSetUp):
+class SittingSetUp(test_banks_and_tests.BanksSetUp):
     def setUp(self):
         super().setUp()
         for handle, number in (("ada", "SM/001"), ("emeka", "SM/002"), ("bisi", "SM/003"), ("tunde", "SM/004")):
