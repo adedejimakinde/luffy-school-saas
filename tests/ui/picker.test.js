@@ -335,6 +335,14 @@ describe("the picker, open", () => {
       await open(page, `${SUNRISE}/roll/`);
       const field = page.locator("#class_group_id");
       await field.scrollIntoViewIfNeeded();
+      // The fixture: eight options, the most a 740px phone's sheet (70% tall, less its
+      // 56px head and the search) shows without scrolling. The roll's class list is every
+      // class `seed_ui` made, and each file that adds one (UI Sit, in step 4, made it
+      // nine) lengthens it; a list past the sheet's maximum scrolls, which is right, but
+      // is not what this test is about. Trim the tail, never the chosen row.
+      await field.evaluate((s) => {
+        while (s.options.length > 8) s.remove(s.options.length - 1 - (s.selectedIndex === s.options.length - 1 ? 1 : 0));
+      });
       assert.ok((await field.evaluate((s) => s.options.length)) > 6, "the control: a list longer than six");
       await field.tap();
       const sheet = await opened(page);
