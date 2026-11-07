@@ -950,3 +950,39 @@ reload through the worker, leaving the page counted in the log, a second compute
 finished screen, and the door on Slow 4G), the door and the Sitting view in
 `tests/ui/screens.test.js`, `/sit/` in `tests/test_budget.py` and `tests/test_pages.py`,
 and the Crestfield build in `schools/tests/test_crestfield.py`.
+
+#### Controls
+
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied in a
+separate git worktree at the committed tree, run over the whole of
+`cbt/tests/test_sitting.py` (54 tests) or, for step 0, `cbt/tests/test_banks_and_tests.py`
+(47), restored with `git checkout`, and the tree checked clean before the next. Counts are
+Django's, subtests included. Every one went red. The first four runs also carried one
+error unrelated to the break (the worktree had no collected static files, so the
+guardian test could not draw `/sit/`); it is left out of their rows, and the guardian
+control was run with them collected.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| Wrong code, number, PIN and somebody else's PIN get one refusal | a wrong PIN with a right code says "Wrong PIN." | 9: `test_every_wrong_answer_is_one_refusal` (409 for every PIN case), the proved-door test, and both throttle tests (the new refusal was not counted the same) |
+| The door is throttled, and the right answer waits too | skip the wait | 2: per number and per address (`200 != 429`) |
+| No key reaches a student's device | `correct_index` in `paper.SENT` and the payload | 1: `test_no_response_a_students_device_receives_carries_a_key`, on every `/sit/` response |
+| An answer after `deadline + late_window`, or chosen after the deadline, is not counted | drop both deadline checks | 1: the late-window test (late answers accepted) |
+| The server closes the attempt at `deadline + late_window` whatever the device does | `settle()` never closes | 2: the late-window test and `test_the_server_closes_the_attempt_on_any_read...` |
+| A second computer's sign-in ends the first, and one holds the attempt | skip ending the first | 3 errors: the database's `one_computer_holds_an_attempt` refused the second session in the takeover, the later-chosen and the tie tests (the index is the second layer) |
+| Of two answers the one chosen later counts, both kept | take the later-received | 2: the two-computers test and the tie test |
+| Every answer is kept | no `cbt_answer_events_are_append_only` | 1: `test_every_answer_and_the_log_are_kept` |
+| An attempt is closed once and never rewritten | no `cbt_an_attempt_is_closed_once` | 1: `test_an_attempt_is_closed_once_and_never_rewritten` |
+| Extra time only by a teacher of the test, an exam officer, the administrator (and the principal) | `gives_extra_time()` answers yes | 2: the extra-time test (another teacher, the vice principal, the bursar, another school's principal gave time) |
+| Extra time, retakes and sittings by hand need a reason | the reason optional | 3 errors: the database's `extra_time_says_why`, `a_retake_says_why` and `a_sitting_opened_or_closed_by_hand_says_why` refused the rows (the constraint is the second layer) |
+| The administrator gives extra time but allows no retake unless named | the administrator in `grants_retake()` | 2: the retake test (`200 != 403`) |
+| The code and the sitting are the test's teachers', the principal's and the administrator's, not an exam officer's | an exam officer in `runs_sitting()` | 2: the code-and-sitting test |
+| A teacher of the test is one who teaches its subject to its classes | `teaches_test()` answers yes | 11: extra time, retake, code and sitting, and the log's readers (another teacher in each) |
+| Closing a sitting never ends an attempt in progress unless it says so | a close always ends them | 1: `test_closing_keeps_an_attempt_in_progress_unless_it_says_to_end_them` |
+| The sitting log carries no answer | serve each attempt's counted answers in it | 1: `test_the_administrator_reads_it_and_it_carries_no_answer` (`"chosen"` in the log) |
+| A guardian's session never reaches `/sit/` | drop the check | 1: `test_a_guardian_session_never_reaches_the_door` (`200 != 403`) |
+| A student starts only while their class's sitting is open | the window and the controls ignored | 2 errors: the proved-door test and the by-hand test (the tests themselves broke on a start they did not expect) |
+| A test code at one school opens nothing at the other (isolation) | look the code up at every school | 1: `test_another_schools_code_opens_nothing_here` (St Mary's code opened Grace's test) |
+| The `/sit/` cookie opens one attempt at one school (isolation) | no schema check, and the session looked up at every school | 1 error: `test_the_cookie_is_refused_at_the_other_school...` (Grace's host answered with St Mary's attempt) |
+| Step 0: the vice principal approves and sends back | the principal alone in `APPROVING_ROLES` | 1: `test_the_vice_principal_approves_and_sends_back_like_the_principal` |
+| Step 0: nobody else does | a teacher in `APPROVING_ROLES` | 4: `test_nobody_else_approves_or_sends_back` (the teacher approved), and `test_the_chain_and_its_record` |
