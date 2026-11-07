@@ -287,5 +287,9 @@ export async function mount(root, { fetchImpl = fetch, location = window.locatio
 
 if (typeof document !== "undefined") {
   const root = document.getElementById("tests");
-  if (root) mount(root);
+  if (root) {
+    // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
+    mount(root);
+  }
 }

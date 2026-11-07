@@ -25,6 +25,7 @@ EXAM_SLIPS_MODULES = (
 TESTS_MODULES = (
     "web/html.js",
     "web/http.js",
+    "web/picker.js",
     "tests/api.js",
     "tests/states.js",
     "tests/app.js",

@@ -464,8 +464,10 @@ class ATestKeepsTheCopyItWasSentWithTests(BanksSetUp):
                 Test.objects.filter(pk=test_id).update(state="draft")
             with self.assertRefusedBy("a_set_tests_section_is_fixed"), transaction.atomic():
                 Test.objects.get(pk=test_id).sections.update(question_count=2)
+            # In SQL, past Django's own PROTECT, so it is the trigger that answers.
             with self.assertRefusedBy("a_set_test_keeps_its_paper"), transaction.atomic():
-                Test.objects.filter(pk=test_id).delete()
+                with connection.cursor() as cursor:
+                    cursor.execute("DELETE FROM cbt_test WHERE id = %s", [test_id])
 
     def test_a_draft_cannot_be_edited_once_sent_and_a_send_back_draws_again(self):
         self.fill(count=8)
