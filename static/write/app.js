@@ -8,6 +8,7 @@
  *   (`blog.write_views.preview`), which draws and sanitises it exactly as the
  *   published post is, so the preview is never this module's guess;
  * - counters on the fields with a length, and the search result's preview;
+ * - pasted HTML turned into clean Markdown, with a note and an Undo;
  * - the formatting buttons, and the picture box, which uploads a picture
  *   (saved as WebP by the server) and refuses one with no description;
  * - on a phone, the Write, Preview and Details tabs;
@@ -16,7 +17,7 @@
  * - a warning before leaving with changes not saved.
  */
 
-import { counter, format, insertBlock, keyboardHeight, pictureMarkdown, serpText } from "./tools.js";
+import { counter, format, insertBlock, keyboardHeight, pasteAsMarkdown, pictureMarkdown, serpText } from "./tools.js";
 
 const form = document.getElementById("post-form");
 if (form) start(form);
@@ -125,6 +126,38 @@ function start(form) {
     body.setSelectionRange(out.start, out.end);
     body.dispatchEvent(new Event("input", { bubbles: true }));
   }
+
+  /* -- pasted HTML becomes Markdown ---------------------------------------- */
+  const note = form.querySelector("[data-pasted]");
+  let pasted = null;
+  const forget = () => {
+    pasted = null;
+    if (note) note.hidden = true;
+  };
+  body?.addEventListener("paste", (event) => {
+    if (!editable || !event.clipboardData) return;
+    const html = event.clipboardData.getData("text/html");
+    const text = event.clipboardData.getData("text/plain");
+    const markdown = pasteAsMarkdown(html, text);
+    if (markdown === null) return;
+    event.preventDefault();
+    const { value, selectionStart: from, selectionEnd: to } = body;
+    const raw = text || html;
+    put({ text: value.slice(0, from) + markdown + value.slice(to), start: from + markdown.length, end: from + markdown.length });
+    pasted = { before: value.slice(0, from), after: value.slice(to), markdown, raw, value: body.value };
+    if (note) note.hidden = false;
+  });
+  body?.addEventListener("input", () => {
+    if (pasted && body.value !== pasted.value) forget();
+  });
+  note?.querySelector("[data-undo]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (!pasted) return;
+    const at = pasted.before.length + pasted.raw.length;
+    const { before, after, raw } = pasted;
+    forget();
+    put({ text: before + raw + after, start: at, end: at });
+  });
 
   /* -- the picture box ------------------------------------------------------ */
   const dialog = document.getElementById("img-dialog");

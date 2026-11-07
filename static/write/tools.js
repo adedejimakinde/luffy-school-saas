@@ -89,3 +89,150 @@ export function keyboardHeight(innerHeight, viewportHeight, offsetTop) {
 export function serpText(seo, fallback, placeholder) {
   return (seo || "").trim() || (fallback || "").trim() || placeholder;
 }
+
+/* -- pasted HTML, turned into Markdown ------------------------------------ */
+
+const HTML_TAG = /<\/?(p|div|h[1-6]|ul|ol|li|strong|b|em|i|a|blockquote|hr|br|pre|code|script|style|span|table)\b[^>]*>/i;
+const VOID = new Set(["br", "hr", "img", "meta", "link", "input", "wbr"]);
+const SKIP = new Set(["script", "style", "head", "noscript", "iframe", "svg", "template", "object", "form", "img"]);
+const BLOCK = new Set(["p", "div", "section", "article", "main", "header", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "blockquote", "hr", "pre", "table", "tr"]);
+const ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", ndash: "–", mdash: "—", hellip: "…", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”" };
+
+/** Does this text hold HTML tags worth converting? */
+export function looksLikeHtml(text) {
+  return HTML_TAG.test(text || "");
+}
+
+function parse(html) {
+  const root = { tag: "#root", kids: [] };
+  const stack = [root];
+  const top = () => stack[stack.length - 1];
+  const re = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:"[^"]*"|'[^']*'|[^>"'])*)>|<[^>]*>|[^<]+|</g;
+  let m;
+  while ((m = re.exec(html))) {
+    if (m[2] === undefined) {
+      if (m[0][0] !== "<") top().kids.push(m[0]);
+      continue;
+    }
+    const tag = m[2].toLowerCase();
+    if (m[1]) {
+      const at = stack.map((n) => n.tag).lastIndexOf(tag);
+      if (at > 0) stack.length = at;
+      continue;
+    }
+    // A new <p> or <li> ends the one still open.
+    if (tag === "p" && top().tag === "p") stack.pop();
+    if (tag === "li") {
+      const open = stack.map((n) => n.tag).lastIndexOf("li");
+      const list = Math.max(stack.map((n) => n.tag).lastIndexOf("ul"), stack.map((n) => n.tag).lastIndexOf("ol"));
+      if (open > list) stack.length = open;
+    }
+    const node = { tag, attrs: m[3], kids: [] };
+    top().kids.push(node);
+    if (SKIP.has(tag)) {
+      // Take everything up to the closing tag as nothing.
+      if (!VOID.has(tag)) {
+        const close = new RegExp(`</${tag}\\s*>`, "ig");
+        close.lastIndex = re.lastIndex;
+        const end = close.exec(html);
+        re.lastIndex = end ? close.lastIndex : html.length;
+      }
+    } else if (!VOID.has(tag) && !/\/\s*$/.test(m[3])) stack.push(node);
+  }
+  return root;
+}
+
+const decode = (s) =>
+  s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (all, e) => {
+    if (e[0] === "#") {
+      const code = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return code > 0 && code < 0x110000 ? String.fromCodePoint(code) : "";
+    }
+    return ENTITIES[e.toLowerCase()] ?? all;
+  });
+
+function href(attrs) {
+  const m = /\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(attrs || "");
+  const url = decode(m ? m[1] ?? m[2] ?? m[3] : "").trim();
+  return /^(https?:\/\/|mailto:)/i.test(url) ? url.replace(/ /g, "%20").replace(/\)/g, "%29") : "";
+}
+
+function inline(nodes) {
+  let out = "";
+  for (const n of nodes) {
+    if (typeof n === "string") {
+      out += decode(n).replace(/\s+/g, " ").replace(/([\\*_`[\]])/g, "\\$1");
+      continue;
+    }
+    if (SKIP.has(n.tag)) continue;
+    const inner = inline(n.kids);
+    const text = inner.trim();
+    const pad = (s) => (text ? inner.slice(0, inner.length - inner.trimStart().length) + s + inner.slice(inner.trimEnd().length) : inner);
+    if (n.tag === "br") out += "  \n";
+    else if (n.tag === "strong" || n.tag === "b") out += pad(`**${text}**`);
+    else if (n.tag === "em" || n.tag === "i") out += pad(`*${text}*`);
+    else if (n.tag === "code") out += text ? `\`${n.kids.map((k) => (typeof k === "string" ? decode(k) : "")).join("")}\`` : "";
+    else if (n.tag === "a") out += href(n.attrs) && text ? pad(`[${text}](${href(n.attrs)})`) : inner;
+    else out += inner;
+  }
+  return out;
+}
+
+function blocks(nodes, depth = 0) {
+  const out = [];
+  let run = [];
+  const flush = () => {
+    const text = inline(run).replace(/[ \t]*\n[ \t]*/g, "\n").trim();
+    if (text) out.push(text);
+    run = [];
+  };
+  for (const n of nodes) {
+    if (typeof n === "string" || !BLOCK.has(n.tag)) {
+      if (typeof n === "string" || !SKIP.has(n.tag)) run.push(n);
+      continue;
+    }
+    flush();
+    const tag = n.tag;
+    if (tag === "hr") out.push("---");
+    else if (/^h[1-6]$/.test(tag)) {
+      const text = inline(n.kids).replace(/\s+/g, " ").trim();
+      if (text) out.push(`${"#".repeat(Math.min(4, Math.max(2, Number(tag[1]))))} ${text}`);
+    } else if (tag === "ul" || tag === "ol") {
+      const items = n.kids.filter((k) => typeof k !== "string" && k.tag === "li");
+      const lines = items.map((li, i) => {
+        const mark = tag === "ol" ? `${i + 1}. ` : "- ";
+        const [first = "", ...rest] = blocks(li.kids, depth + 1);
+        const pad = " ".repeat(mark.length);
+        return mark + [first, ...rest].join("\n").replace(/\n/g, `\n${pad}`);
+      });
+      if (lines.length) out.push(lines.join("\n"));
+    } else if (tag === "blockquote") {
+      const inner = blocks(n.kids, depth).join("\n\n");
+      if (inner) out.push(inner.replace(/^/gm, "> "));
+    } else if (tag === "pre") {
+      const code = n.kids.map(function raw(k) { return typeof k === "string" ? decode(k) : k.kids.map(raw).join(""); }).join("").replace(/^\n|\n$/g, "");
+      if (code.trim()) out.push("```\n" + code + "\n```");
+    } else out.push(...blocks(n.kids, depth));
+  }
+  flush();
+  return out;
+}
+
+/** Clean Markdown from pasted HTML: headings, bold, italic, lists, links,
+ * quotes and rules kept; scripts, styles, classes, spans and pictures dropped. */
+export function htmlToMarkdown(html) {
+  return blocks(parse(String(html)).kids).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+const STRUCTURE = /<\/?(h[1-6]|ul|ol|li|p|blockquote|a|strong|b|em|i|hr|pre)\b/i;
+
+/** What a paste becomes, or null to let the browser paste as it would.
+ * Clipboard HTML counts only when it has structure (a code editor's coloured
+ * spans do not); plain text counts when it holds HTML tags. */
+export function pasteAsMarkdown(html, text) {
+  const fromClipboard = STRUCTURE.test(html || "");
+  const source = fromClipboard ? html : looksLikeHtml(text) ? text : "";
+  if (!source) return null;
+  const markdown = htmlToMarkdown(source);
+  return markdown || null;
+}
