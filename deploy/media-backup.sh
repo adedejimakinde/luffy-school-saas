@@ -7,7 +7,8 @@
 #   docker compose --profile backup run --rm --no-deps media-backup test     # the setup check
 #   docker compose --profile backup run --rm --no-deps media-backup check    # weekly (cron)
 #
-# - backup  every file under /srv/media except the incoming uploads, into the
+# - backup  every file under /srv/media except the incoming uploads and a class's
+#           printed report cards (kept for a day only), into the
 #           repository; then forgets snapshots past 14 daily, 8 weekly and
 #           12 monthly. Names never change once written (`files.storage`), so
 #           each night sends only what is new.
@@ -97,10 +98,14 @@ repository_exists() { r cat config >/dev/null; }
 backup() {
   [ -d "$FILES" ] || fail "$FILES does not exist in the container"
   repository_exists || fail "the repository cannot be opened (wrong key, prefix, endpoint or password; or 'test' was never run to make it)"
+  # A class's printed report cards (`*-class-cards.pdf`, docs/class-print.md)
+  # and the directory they are built in are kept for a day and then removed;
+  # a backup kept for a year must not keep them instead.
   r backup "$FILES" --tag media --exclude "$FILES/.incoming" --exclude '.part-*' --exclude "$FILES/.disk-alert-sent" \
+    --exclude "$FILES/.building" --exclude '*-class-cards.pdf' \
     || fail "restic backup did not finish"
   r forget --tag media --keep-daily 14 --keep-weekly 8 --keep-monthly 12 || fail "restic forget did not finish"
-  say "OK: $(find "$FILES" -type f -not -path "$FILES/.incoming/*" | wc -l) files are in the latest snapshot"
+  say "OK: $(find "$FILES" -type f -not -path "$FILES/.incoming/*" -not -path "$FILES/.building/*" -not -name '*-class-cards.pdf' | wc -l) files are in the latest snapshot"
   beat ok
 }
 
@@ -136,7 +141,7 @@ check() {
       bad=$((bad + 1)); say "could not restore $file"; continue
     fi
     cmp -s "$file" "$work/one" || { bad=$((bad + 1)); say "restored copy differs: $file"; }
-  done < <(find "$FILES" -type f -mtime +1 -not -path "$FILES/.incoming/*" -not -name '.*' -print0 | shuf -z -n 10)
+  done < <(find "$FILES" -type f -mtime +1 -not -path "$FILES/.incoming/*" -not -path "$FILES/.building/*" -not -name '.*' -not -name '*-class-cards.pdf' -print0 | shuf -z -n 10)
   rm -rf "$work"
   [ "$bad" = 0 ] || fail "$bad of $sample sampled files did not come back identical"
   say "OK: repository checked; $sample sampled files restored identically"

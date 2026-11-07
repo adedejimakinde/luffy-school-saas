@@ -3314,3 +3314,88 @@ class ConductSettingChange(models.Model):
 
     def __str__(self):
         return f"{self.at:%Y-%m-%d %H:%M} {self.summary}"
+
+
+class PrintState(models.TextChoices):
+    """Where one "Print report cards" job has got to.
+
+    `BUILDING` carries a heartbeat (`ClassCardPrint.heartbeat_at`), written after
+    every card. The queue hands a message to a second worker when the first has
+    held it past the broker's visibility timeout, and a long class can take that
+    long on a slow server: the second worker reads a fresh heartbeat and leaves
+    the job to the first. A heartbeat gone stale means the first worker died,
+    and then the job is taken over (`results.class_print.claim`).
+    """
+
+    PENDING = "pending", "Waiting to start"
+    BUILDING = "building", "Being made"
+    READY = "ready", "Ready to download"
+    FAILED = "failed", "Could not be made"
+
+
+class ClassCardPrint(models.Model):
+    """One press of "Print report cards": who asked, for what, and what was made.
+
+    **This row is the print log, and it is kept.** The file it made is removed
+    a day later (`files.service.sweep`), and this row stays, saying who printed
+    which class's cards for which term, whether they were a preview or the
+    released cards, and how many. `docs/class-print.md`.
+
+    Names are copied when the row is written, so the log still reads correctly
+    after a class or a person is renamed (`docs/operating-rules.md` rule 2).
+    The person is a bare id: users are in `public`, and a school's table does
+    not point across schemas (`docs/tenancy.md`).
+    """
+
+    class_group = models.ForeignKey(
+        "academics.ClassGroup", related_name="card_prints", on_delete=models.PROTECT
+    )
+    term = models.ForeignKey(
+        "academics.Term", related_name="card_prints", on_delete=models.PROTECT
+    )
+    class_group_name = models.CharField(max_length=255)
+    term_label = models.CharField(max_length=255)
+
+    requested_by_id = models.PositiveBigIntegerField()
+    requested_by_name = models.CharField(max_length=255)
+    #: The roles they printed in, as they were then ("principal", "teacher").
+    requested_by_roles = models.CharField(max_length=100, blank=True, default="")
+
+    #: The children asked for, by membership id; empty for the whole class.
+    student_ids = models.JSONField(default=list, blank=True)
+    #: What the job found and printed: a preview (not yet released, and
+    #: watermarked on every page) or the released cards. Null until it knows.
+    preview = models.BooleanField(null=True, blank=True)
+    #: How many cards are in the file. Null until it is made.
+    card_count = models.PositiveIntegerField(null=True, blank=True)
+
+    state = models.CharField(max_length=8, choices=PrintState, default=PrintState.PENDING)
+    #: Progress, for the page: cards done of cards to do.
+    done = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    #: The `files.StoredFile` key of the PDF, once made.
+    file_key = models.CharField(max_length=32, blank=True, default="")
+    #: What went wrong, for whoever debugs it. Not shown to the person.
+    error = models.TextField(blank=True, default="")
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    last_enqueued_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(state="ready") | (~Q(file_key="") & Q(card_count__isnull=False) & Q(preview__isnull=False)),
+                name="results_a_ready_print_has_its_file",
+            ),
+            models.CheckConstraint(
+                condition=~Q(state="failed") | ~Q(error=""),
+                name="results_a_failed_print_says_why",
+            ),
+        ]
+
+    def __str__(self):
+        kind = "preview" if self.preview else "cards"
+        return f"{self.class_group_name} {self.term_label} {kind} ({self.state})"

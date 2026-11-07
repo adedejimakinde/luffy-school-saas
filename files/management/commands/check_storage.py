@@ -3,7 +3,8 @@
 Run from `deploy/cron/classnode` every hour. For every school (and the
 platform's own blog) it tidies the uploads (`files.service.sweep`: gives up
 on one stuck in the queue, forgets old failures, removes replaced crests
-after their day), then looks at the disk the files are on.
+after their day, and removes a class's printed report cards a day after they
+were made), then looks at the disk the files are on.
 
 - **Always** prints one line: how full the disk is and how much the schools
   keep. That line is the cron log's record that the check ran.
@@ -55,7 +56,7 @@ class Command(BaseCommand):
         parser.add_argument("--no-sweep", action="store_true", help="Only look; change nothing.")
 
     def _sweep(self):
-        swept = {"gave_up": 0, "forgotten": 0, "removed": 0}
+        swept = {"gave_up": 0, "forgotten": 0, "removed": 0, "expired": 0}
         for schema in ["public", *School.objects.exclude(schema_name="public").values_list("schema_name", flat=True)]:
             with schema_context(schema):
                 for key, n in service.sweep().items():
@@ -81,7 +82,7 @@ class Command(BaseCommand):
             f"{len(rows)} schools keep {_mb(kept)} of files"
         )
         if swept:
-            line += f"; swept {swept['gave_up']} stuck, {swept['forgotten']} failed, {swept['removed']} replaced"
+            line += f"; swept {swept['gave_up']} stuck, {swept['forgotten']} failed, {swept['removed']} replaced, {swept['expired']} printed and a day old"
         if near_quota:
             line += "; near their quota: " + ", ".join(s.slug for s, _, _ in near_quota)
         self.stdout.write(line)

@@ -195,6 +195,11 @@ class SheetRowOut(Schema):
     #: How many children on this released class have a slip. Null for anybody
     #: who may not print them, and for a class not released.
     slips_printed: Optional[int] = None
+    #: "Print report cards" (`results.class_print`): the principal, the vice
+    #: principal (academic) and an administrator for any class, a class teacher
+    #: for their own. A preview until the class is released. A mirror of
+    #: `class_print.may_print()`, which every print route asks again.
+    may_print_cards: bool = False
 
 
 class ChainOut(Schema):
@@ -352,9 +357,17 @@ def chain(request):
                 **_told(telling, sheet, state),
                 **_printed(printing, sheet, state),
                 **_actions(state, roles, group.pk, mine),
+                may_print_cards=_may_print_cards(roles, group.pk, mine),
             )
         )
     return ChainOut(term_id=term.pk, term=str(term), rows=rows)
+
+
+def _may_print_cards(roles, group_id, mine):
+    """The chain's mirror of `class_print.may_print()`, from what it already read."""
+    from . import class_print
+
+    return bool(roles & class_print.PRINTING_ROLES) or (Role.TEACHER.value in roles and group_id in mine)
 
 
 def _telling(roles, sheets):
@@ -503,6 +516,7 @@ def _step(request, class_group_id, move, *, reason=None):
     state = moved.to_state
     released = [moved.sheet] if state == SheetState.RELEASED else []
     left_out = _left_out(roles, released)
+    mine = _my_class_groups(request, school, term)
     return 200, SheetRowOut(
         class_group_id=group.pk,
         class_group=group.name,
@@ -511,7 +525,8 @@ def _step(request, class_group_id, move, *, reason=None):
         state_label=SheetState(state).label,
         without_a_card=_no_card(left_out, moved.sheet, state),
         left_out_checked=_check_finished(left_out, moved.sheet, state),
-        **_actions(state, roles, group.pk, _my_class_groups(request, school, term)),
+        **_actions(state, roles, group.pk, mine),
+        may_print_cards=_may_print_cards(roles, group.pk, mine),
     )
 
 

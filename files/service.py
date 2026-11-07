@@ -39,7 +39,7 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from . import images, pdf, storage, video
-from .kinds import Family, profile_for
+from .kinds import PRINT_KEPT_FOR_HOURS, Family, Kind, profile_for
 from .models import State, StoredFile
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,8 @@ GIVE_UP_AFTER = timedelta(hours=6)
 FORGET_FAILED_AFTER = timedelta(days=7)
 #: A replaced public file is still sent this long (`State.RETIRED`).
 KEEP_RETIRED_FOR = timedelta(days=1)
+#: A file made on the server for one person (`Family.MADE`) is kept this long.
+KEEP_MADE_FOR = timedelta(hours=PRINT_KEPT_FOR_HOURS)
 
 GENERIC_FAILURE = (
     "That file could not be processed. Try saving it again, or send a different copy."
@@ -153,6 +155,9 @@ def _head(upload, n=1024) -> bytes:
 def check(kind, upload):
     """The checks `accept()` makes before it keeps anything. Raises `UploadRefused`."""
     profile = profile_for(kind)
+    if profile.family == Family.MADE:
+        # Made on the server (`keep_made()`), never sent to it.
+        raise UploadRefused(f"{profile.noun} cannot be uploaded.")
     size = _size_of(upload) if upload is not None else 0
     if not size:
         raise UploadRefused(f"Choose a file to upload. {profile.noun} cannot be empty.")
@@ -356,6 +361,48 @@ def _fail(stored, sentence, *, locked=False):
     return stored
 
 
+# -- made on the server --------------------------------------------------------
+
+
+def keep_made(kind, source, variant: str, *, by_id, pages=None) -> StoredFile:
+    """Keep a file the server made (`Family.MADE`), for the person it was made for.
+
+    `source` is a path from `storage.building_dir()`; it is moved into place,
+    hashed as it is read in chunks (never whole into memory), and written down
+    as `ready` in this schema. Its only reader is `by_id`, which the feature
+    that made it checks (`results.class_print`); the generic route never sends
+    it, because the kind has no `readers`. Removed after `KEEP_MADE_FOR`.
+    """
+    profile = profile_for(kind)
+    if profile.family != Family.MADE:
+        raise ValueError(f"{kind!r} is uploaded, not made")
+    schema = schema_here()
+    digest = hashlib.sha256()
+    with open(source, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    stored = StoredFile(schema_name=schema, kind=str(kind), public=False, uploaded_by_id=by_id, origin="made")
+    size = storage.place(schema, stored.key, variant, source)
+    try:
+        stored.state = State.READY
+        stored.variants = {variant: {"bytes": size}}
+        stored.bytes = size
+        stored.sha256 = digest.hexdigest()
+        stored.pages = pages
+        stored.processed_at = timezone.now()
+        stored.save()
+    except BaseException:
+        storage.delete_variants(schema, stored.key, [variant])
+        raise
+    return stored
+
+
+def is_expired(stored, now=None) -> bool:
+    """A made file past its day. Never sent again, whether or not it is gone yet."""
+    now = now or timezone.now()
+    return profile_for(stored.kind).family == Family.MADE and stored.created_at <= now - KEEP_MADE_FOR
+
+
 # -- reading -------------------------------------------------------------------
 
 
@@ -447,7 +494,14 @@ def sweep(now=None):
     replaced = list(_here().filter(state=State.RETIRED, processed_at__lt=now - KEEP_RETIRED_FOR))
     for stored in replaced:
         discard(stored)
-    return {"gave_up": len(stuck), "forgotten": len(old), "removed": len(replaced)}
+    # Made for one person and kept for a day: a class's cards (`Kind.CLASS_CARDS`).
+    made = [str(k) for k in Kind if profile_for(k).family == Family.MADE]
+    expired = list(_here().filter(kind__in=made, created_at__lte=now - KEEP_MADE_FOR))
+    for stored in expired:
+        discard(stored)
+    # And what a job killed halfway left in its build directory.
+    storage.forget_building(schema_here(), (now - KEEP_MADE_FOR).timestamp())
+    return {"gave_up": len(stuck), "forgotten": len(old), "removed": len(replaced), "expired": len(expired)}
 
 
 __all__ = [
@@ -459,6 +513,8 @@ __all__ = [
     "discard",
     "find",
     "find_many",
+    "is_expired",
+    "keep_made",
     "latest",
     "nudge",
     "pending_by",

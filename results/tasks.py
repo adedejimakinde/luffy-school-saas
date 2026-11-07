@@ -124,6 +124,46 @@ def render_card_pdf(schema_name, card_id):
     return len(content)
 
 
+class BuildClassCards(TenantTask):
+    """A class's cards as one file (`results.class_print`), its failure on the row."""
+
+    def on_failure(self, exc, task_id, args, kwargs, einfo):
+        """Say on the job that it failed, so the page stops showing progress.
+
+        Wrapped by `TenantTask.__init_subclass__` like `RenderACard.on_failure`,
+        and swallows its own exceptions for the same reason.
+        """
+        try:
+            job_id = kwargs.get("job_id", args[1] if len(args) > 1 else None)
+            if job_id is not None:
+                from . import class_print
+
+                class_print.record_failure(job_id, exc)
+        except Exception:  # noqa: BLE001 — see the docstring
+            logger.exception("Could not record a failed report-card print.")
+        super().on_failure(exc, task_id, args, kwargs, einfo)
+
+
+@shared_task(base=BuildClassCards)
+def build_class_cards(schema_name, job_id):
+    """Make one "Print report cards" file. Returns how many cards are in it.
+
+    **One job for the class, deliberately, against `render_card_pdf`'s one job
+    per card.** That one is per card because a card's file is the thing kept;
+    here the thing kept is one file of all of them, and it is made once. What
+    the per-card argument was protecting against is handled differently: the
+    job writes a heartbeat after every card, so a second worker handed the same
+    message after the broker's visibility timeout finds it fresh and does
+    nothing (`class_print.claim`), and a job whose worker died is taken over
+    once its heartbeat is stale. Re-rendering a class after a crash costs a
+    minute; nothing is lost, because nothing here is a record.
+    """
+    from . import class_print
+
+    job = class_print.build(job_id)
+    return job.card_count if job is not None else None
+
+
 def _card_id_from(args, kwargs):
     """The card this job was for, however the caller passed it."""
     if "card_id" in kwargs:
@@ -165,4 +205,4 @@ def _record_the_failure(card_id, exc):
         )
 
 
-__all__ = ["render_card_pdf", "RenderACard"]
+__all__ = ["render_card_pdf", "RenderACard", "build_class_cards", "BuildClassCards"]
