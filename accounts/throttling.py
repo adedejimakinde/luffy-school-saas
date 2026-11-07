@@ -78,6 +78,10 @@ def _limit(scope) -> int:
         return settings.CHECKER_MAX_FAILURES_PER_ADMISSION_NUMBER
     if scope == SignInScope.CHECKER_ADDRESS:
         return settings.CHECKER_MAX_FAILURES_PER_ADDRESS
+    if scope == SignInScope.SIT_NUMBER:
+        return settings.SIT_MAX_FAILURES_PER_ADMISSION_NUMBER
+    if scope == SignInScope.SIT_ADDRESS:
+        return settings.SIT_MAX_FAILURES_PER_ADDRESS
     return settings.SIGN_IN_MAX_FAILURES_PER_IDENTIFIER
 
 

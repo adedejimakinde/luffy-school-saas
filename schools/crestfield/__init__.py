@@ -22,8 +22,10 @@ school in Abeokuta at the end of its first term:
 - **CBT**: the vice principal named exam officer and JSS 3A's exam slips
   printed. The thirty questions in `questions.py` in three JSS 2 banks (Mathematics,
   Basic Science, English Language), each written by the subject's teacher, and one
-  test ready: JSS 2 Mathematics for JSS 2A and JSS 2B, set by `cfc.teacher` and
-  approved by the principal, opening on the next weekday morning.
+  test ready to sit: JSS 2 Mathematics for JSS 2A and JSS 2B, set by `cfc.teacher`,
+  approved by the principal, calculator on, **open from a minute after the reset for
+  twelve hours**, with a test code and three JSS 2A students' exam PINs that `reset`
+  prints (`SIT_DEMO_STUDENTS`), so a visit can sit it at `/sit/`.
 - **Its website**, Modern Campus with the school's details and drawn photos, published.
 
 ## What keeps it apart from real schools
@@ -484,7 +486,7 @@ def _school(school, staff, children, parents, by_class, rng, write):
     officers.name_as(principal, school, staff["vp"].pk, note="Runs the CBT room")
     pins.print_class_as(admin, school, groups[SLIPS_FOR].pk)
     write("  question banks and a test ...")
-    _cbt(school, staff, groups, subjects)
+    _cbt(school, staff, groups, subjects, write)
     site.publish(principal, school)
 
 
@@ -608,25 +610,30 @@ BANK_LEVEL = 2
 BANK_SUBJECTS = {"Mathematics": "MTH", "Basic Science": "BSC", "English Language": "ENG"}
 TEST_TITLE = "JSS 2 Mathematics: first CBT practice"
 TEST_CLASSES = ("JSS 2A", "JSS 2B")
+#: How long the demo test stays open after a reset, and each student's minutes.
+TEST_OPEN_HOURS = 12
+TEST_MINUTES = 20
+#: Whose exam PINs `reset` prints, so a visit can sit the test: three of JSS 2A.
+SIT_DEMO_CLASS = "JSS 2A"
+SIT_DEMO_STUDENTS = 3
 
 
-def test_opens(today):
-    """The next weekday after `today`, at 09:00 school time: always after a reset."""
-    from datetime import datetime, time
-
-    day = today + timedelta(days=1)
-    while day.weekday() >= 5:
-        day += timedelta(days=1)
-    return timezone.make_aware(datetime.combine(day, time(9, 0)))
+def test_opens(now):
+    """A minute after the reset: the test is approved before it opens, as every test
+    must be, and is open by the time the reset has finished."""
+    return (now + timedelta(minutes=1)).replace(second=0, microsecond=0) + timedelta(minutes=1)
 
 
-def _cbt(school, staff, groups, subjects):
-    """The banks, written by each subject's JSS teacher, and one approved test.
+def _cbt(school, staff, groups, subjects, write=print):
+    """The banks, written by each subject's JSS teacher, one approved test, open now.
 
-    Through the services a school uses (`cbt.banks`, `cbt.setting`), so each question
-    names its teacher and the test's record says who set and who approved it.
+    Through the services a school uses (`cbt.banks`, `cbt.setting`, `cbt.sittings`,
+    `cbt.pins`), so each question names its teacher, the test's record says who set and
+    who approved it, and the code and the PINs are logged as any school's would be. The
+    PINs and the code are printed once, here, for the visit; a school sees them only on
+    a slip and on its own Tests page.
     """
-    from cbt import banks, setting
+    from cbt import banks, pins, setting, sittings
 
     for subject_name, code in BANK_SUBJECTS.items():
         teacher = staff[SUBJECT_TEACHERS[code][0]].user
@@ -636,17 +643,29 @@ def _cbt(school, staff, groups, subjects):
                 banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1),
             )
     setter = staff[SUBJECT_TEACHERS["MTH"][0]].user
-    opens = test_opens(timezone.localdate())
+    principal = staff["principal"].user
+    opens = test_opens(timezone.now())
     test = setting.create_as(
         setter, school,
         setting.TestDraft(
             title=TEST_TITLE, subject_id=subjects["MTH"].pk, level=BANK_LEVEL,
             class_group_ids=[groups[name].pk for name in TEST_CLASSES], question_count=10,
-            opens_at=opens, closes_at=opens + timedelta(hours=3), duration=20,
+            opens_at=opens, closes_at=opens + timedelta(hours=TEST_OPEN_HOURS), duration=TEST_MINUTES,
+            calculator=True,
         ),
     )
     setting.submit_as(setter, school, test.pk, rng=random.Random(SLUG))
-    setting.approve_as(staff["principal"].user, school, test.pk)
+    setting.approve_as(principal, school, test.pk)
+    code = sittings.set_code_as(setter, school, test.pk)
+    group = groups[SIT_DEMO_CLASS]
+    slips = []
+    for student in pins.roster(school, group, pins.current_term())[:SIT_DEMO_STUDENTS]:
+        slips.extend(pins.print_student_as(staff["admin"].user, school, group.pk, student.pk).slips)
+    local = timezone.localtime(opens)
+    write(f"  CBT: {TEST_TITLE} opens {local:%H:%M} today for {TEST_OPEN_HOURS} hours. Sit it at /sit/ with")
+    write(f"    test code {code}")
+    for slip in slips:
+        write(f"    {slip.student_name} ({SIT_DEMO_CLASS}): admission number {slip.admission_number}, PIN {slip.printed_pin}")
     return test
 
 

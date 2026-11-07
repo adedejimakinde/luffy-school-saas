@@ -55,6 +55,6 @@ class Command(BaseCommand):
             "No email or text leaves for this school."
         )
         write(
-            "CBT: 30 questions in three JSS 2 banks, and one approved test for JSS 2A and JSS 2B "
-            "(sign in as cfc.teacher or cfc.principal and open Tests)."
+            "CBT: 30 questions in three JSS 2 banks, and one approved test for JSS 2A and JSS 2B, open now "
+            "(sign in as cfc.teacher or cfc.principal and open Tests; sit it at /sit/ with the code and a PIN above)."
         )

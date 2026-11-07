@@ -78,6 +78,8 @@ SCHOOL_PAGES = (
     "/subject-teachers/",
     "/exam-slips/",
     "/tests/",
+    # The exam door and screen (CBT step 4): a frame, opened here by a member of staff.
+    "/sit/",
     "/help/",
     # The website editor (docs/school-sites.md PR 4), its photos and albums (PR 5),
     # and its colours and animations (docs/school-sites-theme-modern.md).
@@ -123,9 +125,9 @@ QUERIES["/help/"] = 14
 #: the menu asks whether they are one (`cbt.access.menu_keys()`): one statement and
 #: its search path, once per page. The principal, the administrator, a bursar and a
 #: parent are never asked, and cost what they did; nor are the pages with no staff
-#: menu (the public page, the cards and the result checker).
+#: menu (the public page, the cards, the result checker and the exam door).
 for _path in SCHOOL_PAGES:
-    if _path not in ("/", "/cards/", "/cards/1/1/", "/check/"):
+    if _path not in ("/", "/cards/", "/cards/1/1/", "/check/", "/sit/"):
         QUERIES[_path] += 2
 #: Every page drawn for a member of the school on its host wears the school's
 #: crest, name and colour (`schools/brand.py`): one statement and its search

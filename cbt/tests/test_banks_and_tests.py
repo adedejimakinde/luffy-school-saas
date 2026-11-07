@@ -6,12 +6,14 @@ claims, each with a control in `docs/cbt.md` ("Built", step 3):
 
 - **A teacher reads and writes only the banks of the subjects and levels they teach this
   term**, and sets tests only for those subjects and classes. A teacher with none has
-  none. The vice principal reads every bank and test, and writes and approves nothing.
+  none. The vice principal reads every bank and test, writes and sets nothing, and
+  approves or sends back.
   The principal writes, sets and approves.
 - **The administrator never reads a bank or a question**, named exam officer or not: the
   Tests list, with no question in it, is all they get. Bursars, parents and students get
   nothing at all.
-- **Only the principal approves**, and only before the test opens. Sending back needs a
+- **Only the principal or the vice principal approves or sends back** (decided 7 November
+  2026), and only before the test opens. Sending back needs a
   reason. Every move, and every change of classes after a test leaves draft, is
   written down in a table that cannot be edited.
 - **A test keeps the copy it was sent with**: editing, retiring or re-answering a bank
@@ -237,12 +239,50 @@ class ATeacherReachesOnlyTheirOwnSubjectsAndLevelsTests(BanksSetUp):
         self.assertEqual(len(self.get(self.vp, f"banks/{self.maths_id}/1/").json()["questions"]), 6)
         detail = self.get(self.vp, f"tests/{test_id}/").json()
         self.assertEqual(len(detail["items"]), 4)
-        self.assertFalse(detail["may_approve"] or detail["may_edit"] or detail["may_withdraw"])
+        self.assertFalse(detail["may_edit"] or detail["may_withdraw"])
         self.assertEqual(self.get(self.vp, f"tests/{test_id}/preview/").status_code, 200)
         self.assertEqual(self.add(self.vp).status_code, 403)
         self.assertEqual(self.post(self.vp, "tests/", self.test_body()).status_code, 403)
-        self.assertEqual(self.post(self.vp, f"tests/{test_id}/approve/").status_code, 403)
-        self.assertEqual(self.post(self.vp, f"tests/{test_id}/send-back/", {"note": "No"}).status_code, 403)
+        # A write the vice principal does not reach is "no such test of yours".
+        self.assertIn(self.post(self.vp, f"tests/{test_id}/withdraw/").status_code, (403, 404))
+        with connected_to(self.stmarys):
+            self.assertEqual(Test.objects.get(pk=test_id).state, "submitted")
+
+    def test_the_vice_principal_approves_and_sends_back_like_the_principal(self):
+        """Decided 7 November 2026 (CBT step 4): the vice principal approves and sends back."""
+        self.fill()
+        first = self.set_test()
+        second = self.set_test(title="Second CA test")
+        for test_id in (first, second):
+            self.assertEqual(self.post(self.teacher, f"tests/{test_id}/submit/").status_code, 200)
+        self.assertTrue(self.get(self.vp, f"tests/{first}/").json()["may_approve"])
+        self.assertTrue(self.get(self.vp, "tests/").json()["approves"])
+
+        empty = self.post(self.vp, f"tests/{second}/send-back/", {"note": ""})
+        self.assertEqual(empty.status_code, 422)
+        sent_back = self.post(self.vp, f"tests/{second}/send-back/", {"note": "Question 3 is unclear"})
+        self.assertEqual(sent_back.status_code, 200, sent_back.content)
+        approved = self.post(self.vp, f"tests/{first}/approve/")
+        self.assertEqual(approved.status_code, 200, approved.content)
+
+        with connected_to(self.stmarys):
+            self.assertEqual(Test.objects.get(pk=first).state, "published")
+            self.assertEqual(Test.objects.get(pk=second).state, "draft")
+            moves = list(TestStateChange.objects.filter(by_id=self.vp.user.pk).order_by("id").values_list("to_state", "note"))
+        self.assertEqual(moves, [("draft", "Question 3 is unclear"), ("published", "")])
+
+    def test_nobody_else_approves_or_sends_back(self):
+        """The teacher who set it, another teacher, the office and the vice principal of
+        another school: 403, and the test stays where it was."""
+        grant_membership(self.their_vp.user, self.stmarys, Role.TEACHER)
+        self.fill()
+        test_id = self.set_test()
+        self.post(self.teacher, f"tests/{test_id}/submit/")
+        for who in (self.teacher, self.tayo, self.admin, self.bursar, self.their_vp):
+            for act, data in (("approve", {}), ("send-back", {"note": "No"})):
+                with self.subTest(who=who.user.username, act=act):
+                    # 403 for who reads it, 404 ("no such test of yours") for who does not.
+                    self.assertIn(self.post(who, f"tests/{test_id}/{act}/", data).status_code, (403, 404))
         with connected_to(self.stmarys):
             self.assertEqual(Test.objects.get(pk=test_id).state, "submitted")
 

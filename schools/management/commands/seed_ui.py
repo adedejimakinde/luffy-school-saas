@@ -13,6 +13,11 @@ register for or imports beside:
 - `marking_focus.test.js`: **UI Marking Focus**, six children (its English exam);
 - `roll_import_gap.test.js`: **UI Import**, empty (it admits its own three);
 - `teaching.test.js`: **UI Teaching**, empty (it gives it a class teacher and takes it back).
+- `sit.test.js`: **UI Sit**, six children who sit a test (CBT step 4): a Mathematics bank
+  at the class's level, one approved test for the class, its sitting opened by hand
+  now, a known test code (`SIT_CODE`) and known exam PINs (`sit_pin(n)`), so the browser
+  can sign in at `/sit/` as each child in turn. A PIN is otherwise random and shown only
+  on a slip; here, with DEBUG on and for fake children, it is fixed so a test can type it.
 
 `screens.test.js` keeps `seed_demo`'s JSS 1A and JSS 1B, the classes it
 photographs. Each file names its class, never "the first", and
@@ -48,7 +53,16 @@ CLASSES = (
     ("UI Marking Focus", "foc", 6),
     ("UI Import", "imp", 0),
     ("UI Teaching", "tch", 0),
+    ("UI Sit", "sit", 6),
 )
+
+#: The test code and the PINs `sit.test.js` types. Fake children, DEBUG only.
+SIT_CODE = "UISITQ"
+SIT_TITLE = "UI Sit: Mathematics practice"
+
+
+def sit_pin(n: int) -> str:
+    return f"2026{n:04d}"
 
 FIRST_NAMES = ("Ada", "Bayo", "Chidi", "Dayo", "Efe", "Funmi")
 
@@ -84,3 +98,40 @@ class Command(BaseCommand):
                     for child in children[name]:
                         academics.place_student(group, term, child)
                     self.stdout.write(f"  {name:<18} {len(children[name])} children")
+                sit_test(school, ClassGroup.objects.get(name="UI Sit"), children["UI Sit"])
+                self.stdout.write(f"  UI Sit's test     code {SIT_CODE}, PINs {sit_pin(1)} to {sit_pin(6)}")
+
+
+def sit_test(school, group, children):
+    """A test "UI Sit" can sit now: written, set, approved and opened as a school would."""
+    from datetime import timedelta
+    from unittest import mock
+
+    from django.utils import timezone
+
+    from cbt import banks, pins, setting, sittings
+    from cbt.models import SittingControl
+    from gradebook.models import Subject
+    from schools.crestfield.questions import BANK
+
+    principal = User.objects.get(username="sunrise.principal")
+    maths = Subject.objects.get(code="MTH")
+    for stem, options, answer in BANK["Mathematics"]:
+        banks.add_as(principal, school, maths.pk, LEVEL, banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1))
+    opens = timezone.now() + timedelta(minutes=1)
+    test = setting.create_as(
+        principal, school,
+        setting.TestDraft(
+            title=SIT_TITLE, subject_id=maths.pk, level=LEVEL, class_group_ids=[group.pk], question_count=10,
+            opens_at=opens, closes_at=opens + timedelta(days=60), duration=40, calculator=True,
+        ),
+    )
+    setting.submit_as(principal, school, test.pk)
+    setting.approve_as(principal, school, test.pk)
+    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.OPENED, "Browser tests")
+    sittings.set_code_as(principal, school, test.pk, code=SIT_CODE)
+    order = {child.pk: n for n, child in enumerate(children, start=1)}
+    minted = iter(sit_pin(order[s.pk]) for s in pins.roster(school, group, pins.current_term()))
+    with mock.patch("cbt.pins.new_pin", side_effect=lambda: next(minted)):
+        pins.print_class_as(principal, school, group.pk)
+    return test

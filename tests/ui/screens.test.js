@@ -299,6 +299,24 @@ export const SCREENS = [
   { name: "tests", as: "sunrise.principal", url: `${SUNRISE}/tests/` },
   { name: "tests-banks", as: "sunrise.principal", url: `${SUNRISE}/tests/#banks` },
   { name: "tests-office", as: "sunrise.admin", url: `${SUNRISE}/tests/` },
+  // The sitting (CBT step 4): its code, its classes opened or closed by hand, and the log
+  // with extra time and retakes, as the principal; and as the administrator, who runs it
+  // and reads no answer. Read only: `sit.test.js` sits the test.
+  {
+    name: "tests-sitting",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/tests/`,
+    steps: [["tests-sitting-log", 'a[href^="#sitting/"]']],
+  },
+  {
+    name: "tests-sitting-office",
+    as: "sunrise.admin",
+    url: `${SUNRISE}/tests/`,
+    steps: [["tests-sitting-office-log", 'a[href^="#sitting/"]']],
+  },
+  // The exam door (CBT step 4), which a student opens with no account: also at a small
+  // Android and a common iPhone. The exam screen itself is `sit.test.js`'s.
+  { name: "sit-door", as: null, url: `${SUNRISE}/sit/`, widths: [320, 390] },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
   // The OGSERA filler. The demo school prints the Standard card, so this is
   // the page telling the office where the Ogun template is chosen.
@@ -1034,6 +1052,8 @@ describe("keyboard focus and large text on a phone", () => {
     ["exam slips", "sunrise.principal", `${SUNRISE}/exam-slips/`, 320, false],
     ["tests", "sunrise.principal", `${SUNRISE}/tests/`, 375, true],
     ["tests", "sunrise.principal", `${SUNRISE}/tests/`, 320, false],
+    ["the exam door", null, `${SUNRISE}/sit/`, 375, true],
+    ["the exam door", null, `${SUNRISE}/sit/`, 320, false],
   ]) {
     test(`${name} at ${large ? "200% text" : "a 320px screen"} does not scroll sideways`, async () => {
       const context = await signedIn(as);

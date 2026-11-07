@@ -104,12 +104,15 @@ nothing protects. This note reserves it (§6, PR 1) so that no public page, news
 slug or album slug can ever take it. *(Done in PR 1: `schools.paths.RESERVED`
 holds `/sit/`, `/website/` and `/applicants/`, each a noindex 404 at the name
 and everywhere under it until its work is built. `/website/` moved to
-`schools.paths.PORTAL` when PR 4 built the editor there.)*
+`schools.paths.PORTAL` when PR 4 built the editor there, and `/sit/` when CBT step 4
+built the exam door there.)*
 
 The existing offline worker (`/sw.js`, `sync/worker.js`) is registered with
 scope `/` on every school host. It only intercepts navigations to `/marking/`
 and `/register/` and requests for `/static/`, so public pages pass straight
-through. The public site registers no worker of its own.
+through. The public site registers no worker of its own. The exam door registers its
+own, `/sit/sw.js` with scope `/sit/` (`cbt/sit_worker.js`, CBT step 4), which answers
+nothing outside `/sit/` but the static files the exam page itself loads.
 
 ### Images and files
 

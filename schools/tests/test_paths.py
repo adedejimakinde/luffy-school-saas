@@ -68,8 +68,13 @@ class EveryRouteIsSortedTests(SiteSetUp):
             {"", "about", "admissions", "news", "gallery", "contact", "pages", "media", "sitemap.xml", "robots.txt"},
         )
 
-    def test_sit_and_the_other_held_names_are_held_everywhere_under_them(self):
-        self.assertEqual(set(RESERVED), {"sit", "applicants"})
+    def test_sit_is_routed_now_and_the_other_held_names_are_held_everywhere_under_them(self):
+        # `/sit/` was held for CBT step 4, which routed it (`cbt.sit_views`).
+        from cbt import sit_views
+
+        self.assertEqual(set(RESERVED), {"applicants"})
+        self.assertIn("sit", PORTAL)
+        self.assertIs(resolve("/sit/", urlconf="urls").func, sit_views.sit_page)
         for name in RESERVED:
             for tail in ("", "x", "x/", "a/b/c", "preview/home"):
                 with self.subTest(path=f"/{name}/{tail}"):

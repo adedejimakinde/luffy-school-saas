@@ -303,7 +303,7 @@ class Test(models.Model):
 
     **States.** `draft` while the teacher writes it; `submitted` once they send it for
     approval, when its questions are drawn from the bank and copied into `TestItem`;
-    `published` once the principal approves it; `closed` after it (step 5). Sending it
+    `published` once the principal or the vice principal approves it; `closed` after it (step 5). Sending it
     back, or the teacher withdrawing it, returns it to `draft` and discards the copy.
     Each move is a `TestStateChange` row, and the database refuses any other move.
 
@@ -514,3 +514,364 @@ class TestItem(models.Model):
 
     def __str__(self):
         return f"item {self.position + 1} of test {self.test_id}"
+
+
+# -- Phase 2 step 4: sitting a test ---------------------------------------------------
+#
+# `docs/cbt.md`, "Sitting", "Offline" and "Power cuts and resuming". A student signs in
+# at `/sit/` with the test code, their admission number and their exam PIN, and sits
+# one `Attempt`. Every time here is the **server's**. Each table is append-only, or
+# takes exactly one change once (an attempt is closed once, a session ended once), and
+# the triggers that hold that are in migration 0003, named for their rules (operating
+# rule 3). **No score is stored**: marking is step 5, read from the answers on demand.
+
+#: The most extra minutes one grant may give.
+MAX_EXTRA_MINUTES = 120
+#: A reason, for extra time, a retake, opening or closing a sitting by hand.
+MAX_REASON = 200
+
+
+class TestCodeChange(models.Model):
+    """The test code set or changed: who and when. **Never the code itself.** Append-only.
+
+    The code is kept only as `Test.code_digest` (`cbt.sittings.code_digest()`); changing
+    it replaces the digest and writes this row (`docs/cbt.md`, "Change a test code"). A
+    student already inside an attempt is not signed out: the code is a gate to start and
+    to resume, not to continue.
+    """
+
+    test = models.ForeignKey(Test, related_name="code_changes", on_delete=models.PROTECT)
+    #: `set` for the first, `changed` after.
+    kind = models.CharField(max_length=8)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(kind__in=["set", "changed"]), name="a_test_code_is_set_or_changed"),
+        ]
+
+
+class SittingControl(models.Model):
+    """A sitting opened or closed by hand, for one class of one test. Append-only.
+
+    A sitting is a test open to a class. The test's window (`opens_at`, `closes_at`) is
+    the plan and is never rewritten; a row here overrides it, and **the latest row for
+    the (test, class) decides** whether that class's students can start. Closing never
+    discards an answer: an attempt in progress goes on to its own deadline unless
+    `end_attempts` says to end it now, and each attempt so ended is logged on it.
+    """
+
+    class Kind(models.TextChoices):
+        OPENED = "opened", "Opened"
+        CLOSED = "closed", "Closed"
+
+    test = models.ForeignKey(Test, related_name="sitting_controls", on_delete=models.PROTECT)
+    class_group = models.ForeignKey(ClassGroup, related_name="sitting_controls", on_delete=models.PROTECT)
+    class_group_name = models.CharField(max_length=64)
+    kind = models.CharField(max_length=8, choices=Kind)
+    end_attempts = models.BooleanField(default=False)
+    reason = models.CharField(max_length=MAX_REASON)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(kind__in=["opened", "closed"]), name="a_sitting_is_opened_or_closed"),
+            models.CheckConstraint(condition=~Q(reason=""), name="a_sitting_opened_or_closed_by_hand_says_why"),
+            models.CheckConstraint(
+                condition=Q(kind="closed") | Q(end_attempts=False), name="only_a_close_ends_attempts"
+            ),
+        ]
+
+
+class Attempt(models.Model):
+    """One student's sitting of one test. `docs/cbt.md`, "Sitting".
+
+    **Times are the server's.** `base_deadline` is fixed when they start:
+    `min(started_at + duration, closes_at)`, or `started_at + duration` for a sitting
+    opened by hand after the window closed. Extra time is never written here: the
+    deadline a student has is `base_deadline` plus the minutes of their
+    `TimeExtension` rows (`cbt.sitting.deadline_of()`), so the record of who gave how
+    much, and why, is the only place it lives (operating rule 4).
+
+    The paper's order is derived from `seed` (`cbt.paper.for_device()`), so a student who
+    signs in again on another computer gets the same paper in the same order.
+
+    **Closed once** (`an_attempt_is_closed_once`): `submitted_at` and `ended_by` go from
+    empty to set together, once, and nothing else of the row ever changes; it is never
+    deleted. One attempt per student per test, unless a `RetakeGrant` names the next
+    number.
+    """
+
+    class EndedBy(models.TextChoices):
+        STUDENT = "student", "The student submitted"
+        CLOCK = "clock", "Time ran out"
+        TEACHER = "teacher", "Ended when the sitting was closed"
+
+    test = models.ForeignKey(Test, related_name="attempts", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    #: As they read when the attempt started (rule 2).
+    student_name = models.CharField(max_length=255)
+    admission_number = models.CharField(max_length=64)
+    class_group = models.ForeignKey(ClassGroup, related_name="attempts", on_delete=models.PROTECT)
+    class_group_name = models.CharField(max_length=64)
+    number = models.PositiveSmallIntegerField(default=1)
+    seed = models.CharField(max_length=32)
+    started_at = models.DateTimeField()
+    base_deadline = models.DateTimeField()
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    ended_by = models.CharField(max_length=8, blank=True, default="")
+
+    class Meta:
+        ordering = ["test_id", "student_name", "number"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["test", "student_membership_id", "number"], name="one_attempt_per_student_per_number"
+            ),
+            models.CheckConstraint(condition=Q(number__gte=1), name="an_attempt_number_starts_at_one"),
+            models.CheckConstraint(
+                condition=Q(base_deadline__gt=models.F("started_at")), name="an_attempt_ends_after_it_starts"
+            ),
+            models.CheckConstraint(
+                condition=Q(submitted_at__isnull=True, ended_by="")
+                | Q(submitted_at__isnull=False, ended_by__in=["student", "clock", "teacher"]),
+                name="a_closed_attempt_says_how_it_ended",
+            ),
+        ]
+
+    @property
+    def is_open(self) -> bool:
+        return self.submitted_at is None
+
+    def __str__(self):
+        return f"attempt {self.number} of {self.student_name} at test {self.test_id}"
+
+
+class AttemptSession(models.Model):
+    """One computer holding an attempt. **At most one open per attempt** (the partial
+    unique index `one_computer_holds_an_attempt`). Signing in on a second computer ends
+    this one (`ended_by = replaced`) in the same transaction.
+
+    The device holds a random token in a cookie scoped to `/sit/`; only its digest is
+    kept. `sync_offset_ms` is the server's clock minus the device's at sign-in, as the
+    device measured it, kept so a teacher can see how far a seat's clock was out.
+    `last_seen_at` is the latest heartbeat or sync: the server notes a gap in it as a
+    `disconnect` on the attempt, and the gap, not this column, is the record.
+    """
+
+    class EndedBy(models.TextChoices):
+        STUDENT = "student", "Not me"
+        REPLACED = "replaced", "Another computer signed in"
+        SUBMIT = "submit", "Submitted"
+        CLOCK = "clock", "Time ran out"
+        TEACHER = "teacher", "Ended when the sitting was closed"
+
+    attempt = models.ForeignKey(Attempt, related_name="sessions", on_delete=models.PROTECT)
+    token_digest = models.CharField(max_length=64, unique=True)
+    #: A short description of the seat, from the browser, shown in the sitting log.
+    seat = models.CharField(max_length=80, blank=True, default="")
+    signed_in_at = models.DateTimeField()
+    sync_offset_ms = models.IntegerField(default=0)
+    last_seen_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    ended_by = models.CharField(max_length=8, blank=True, default="")
+
+    class Meta:
+        ordering = ["attempt_id", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["attempt"], condition=Q(ended_at__isnull=True), name="one_computer_holds_an_attempt"
+            ),
+            models.CheckConstraint(
+                condition=Q(ended_at__isnull=True, ended_by="")
+                | Q(ended_at__isnull=False, ended_by__in=["student", "replaced", "submit", "clock", "teacher"]),
+                name="an_ended_session_says_why",
+            ),
+        ]
+
+    @property
+    def is_open(self) -> bool:
+        return self.ended_at is None
+
+
+class TimeExtension(models.Model):
+    """Extra minutes for one student, with a reason. Append-only. `docs/cbt.md`, "Extra time".
+
+    Given before they start (`attempt` empty: it applies to their attempt `number` when
+    it starts), while they sit, or after a power cut; never after the attempt is closed,
+    which is a retake. It moves that student's deadline and nobody else's.
+    """
+
+    test = models.ForeignKey(Test, related_name="time_extensions", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    student_name = models.CharField(max_length=255)
+    #: The attempt number it applies to.
+    number = models.PositiveSmallIntegerField(default=1)
+    attempt = models.ForeignKey(Attempt, related_name="extensions", null=True, blank=True, on_delete=models.PROTECT)
+    minutes = models.PositiveSmallIntegerField()
+    reason = models.CharField(max_length=MAX_REASON)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        indexes = [models.Index(fields=["test", "student_membership_id", "number"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(minutes__gte=1, minutes__lte=MAX_EXTRA_MINUTES), name="extra_time_is_1_to_120_minutes"
+            ),
+            models.CheckConstraint(condition=~Q(reason=""), name="extra_time_says_why"),
+        ]
+
+
+class RetakeGrant(models.Model):
+    """A student may sit a test again, as attempt `number`, for a reason. Append-only."""
+
+    test = models.ForeignKey(Test, related_name="retake_grants", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    student_name = models.CharField(max_length=255)
+    number = models.PositiveSmallIntegerField()
+    reason = models.CharField(max_length=MAX_REASON)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["test", "student_membership_id", "number"], name="one_retake_grant_per_attempt_number"
+            ),
+            models.CheckConstraint(condition=Q(number__gte=2), name="a_retake_is_a_second_attempt_or_later"),
+            models.CheckConstraint(condition=~Q(reason=""), name="a_retake_says_why"),
+        ]
+
+
+class AnswerEvent(models.Model):
+    """One choice a device sent, accepted or refused. **Append-only.**
+
+    `(session, client_seq)` is the idempotency key: a resend of the same choice is the
+    same row, and the device is told so. `chosen` is the **original** option index
+    (`TestItem.options`), never a letter, or empty for a cleared answer. `chosen_at` is
+    the server's time as the device estimated it (its sync offset plus its own
+    monotonic clock, never its wall clock).
+
+    **The answer that counts for an item is the one chosen later** (`docs/cbt.md`,
+    "Power cuts"). Nothing is updated to say so: each row, when it arrives, names the row
+    it replaced (`supersedes`) or the row it lost to (`superseded_by`), so the counted
+    answer is the accepted row nobody superseded and that lost to nobody
+    (`cbt.sitting.counted_answers()`). A refused row (`late`, `after_submit`) is kept,
+    and counts for nothing.
+    """
+
+    class Refusal(models.TextChoices):
+        NONE = "", "Accepted"
+        LATE = "late", "Arrived after the deadline and its late window"
+        AFTER_TIME = "after_time", "Chosen after time ran out"
+        AFTER_SUBMIT = "after_submit", "Arrived after the attempt was closed"
+
+    attempt = models.ForeignKey(Attempt, related_name="answers", on_delete=models.PROTECT)
+    session = models.ForeignKey(AttemptSession, related_name="answers", on_delete=models.PROTECT)
+    item = models.ForeignKey(TestItem, related_name="answers", on_delete=models.PROTECT)
+    chosen = models.PositiveSmallIntegerField(null=True, blank=True)
+    client_seq = models.PositiveIntegerField()
+    chosen_at = models.DateTimeField()
+    received_at = models.DateTimeField()
+    accepted = models.BooleanField()
+    refusal = models.CharField(max_length=16, blank=True, default="")
+    supersedes = models.ForeignKey(
+        "self", related_name="superseded_rows", null=True, blank=True, on_delete=models.PROTECT
+    )
+    superseded_by = models.ForeignKey(
+        "self", related_name="losers", null=True, blank=True, on_delete=models.PROTECT
+    )
+    #: Settled by `received_at` because the two choices were too close to call.
+    tie = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["attempt_id", "received_at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["session", "client_seq"], name="one_answer_event_per_device_sequence"),
+            models.CheckConstraint(
+                condition=Q(accepted=True, refusal="")
+                | Q(accepted=False, refusal__in=["late", "after_time", "after_submit"]),
+                name="an_answer_is_accepted_or_refused_for_a_reason",
+            ),
+            models.CheckConstraint(
+                condition=Q(supersedes__isnull=True) | Q(superseded_by__isnull=True),
+                name="an_answer_wins_or_loses_not_both",
+            ),
+            models.CheckConstraint(
+                condition=Q(accepted=True) | Q(supersedes__isnull=True, superseded_by__isnull=True),
+                name="a_refused_answer_replaces_nothing",
+            ),
+            models.CheckConstraint(condition=Q(chosen__isnull=True) | Q(chosen__lt=5), name="an_answer_is_a_to_e_or_none"),
+        ]
+
+
+class AttemptEvent(models.Model):
+    """What happened in a sitting, by whose word, when. **Append-only.** The sitting log.
+
+    `said_by` is `server` for what the server saw (a start, a gap in the heartbeat, a
+    replaced computer, a late answer refused, extra time) and `device` for what the
+    student's computer reported when it could (its offline spans, the student leaving
+    the exam's tab or window). `attempt` is empty for what happened before one started
+    ("This is not me" at the door, extra time given ahead).
+
+    **Never an answer, an item or an option** in `detail`: the administrator reads this
+    log (`docs/cbt.md`, "The administrator").
+    """
+
+    class Kind(models.TextChoices):
+        START = "start", "Started"
+        NOT_ME = "not_me", "Said “This is not me”"
+        RESUME = "resume", "Signed in again"
+        REPLACED = "replaced", "Another computer took over"
+        DISCONNECT = "disconnect", "Lost the connection"
+        RECONNECT = "reconnect", "Back online"
+        LEFT_PAGE = "left_page", "Left the test's tab or window"
+        SUBMIT = "submit", "Submitted"
+        CLOCK_SUBMIT = "clock_submit", "Time ran out"
+        TEACHER_SUBMIT = "teacher_submit", "Ended when the sitting was closed"
+        LATE_REFUSED = "late_refused", "An answer arrived too late"
+        EXTRA_TIME = "extra_time", "Given extra time"
+        RETAKE = "retake", "Allowed a retake"
+
+    class SaidBy(models.TextChoices):
+        SERVER = "server", "The school's server"
+        DEVICE = "device", "The student's computer"
+
+    test = models.ForeignKey(Test, related_name="attempt_events", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    attempt = models.ForeignKey(Attempt, related_name="events", null=True, blank=True, on_delete=models.PROTECT)
+    session = models.ForeignKey(AttemptSession, related_name="events", null=True, blank=True, on_delete=models.PROTECT)
+    kind = models.CharField(max_length=16, choices=Kind)
+    said_by = models.CharField(max_length=8, choices=SaidBy, default=SaidBy.SERVER)
+    at = models.DateTimeField()
+    detail = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        indexes = [models.Index(fields=["test", "student_membership_id"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    kind__in=[
+                        "start", "not_me", "resume", "replaced", "disconnect", "reconnect", "left_page", "submit",
+                        "clock_submit", "teacher_submit", "late_refused", "extra_time", "retake",
+                    ]
+                ),
+                name="an_attempt_event_is_of_a_known_kind",
+            ),
+            models.CheckConstraint(condition=Q(said_by__in=["server", "device"]), name="an_attempt_event_says_who_said_it"),
+        ]

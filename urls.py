@@ -28,6 +28,7 @@ from accounts.views import (
     staff_sign_in_page,
 )
 from attendance.views import absences_page, register_page
+from cbt import sit_views
 from cbt.views import exam_slips_page, tests_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
@@ -125,7 +126,7 @@ urlpatterns = [
     # an exam officer print; the principal names officers.
     path("exam-slips/", exam_slips_page, name="exam-slips"),
     # Question banks and tests (`docs/cbt.md`, step 3): teachers write and set, the
-    # principal approves; the administrator sees the list with no question in it.
+    # principal or the vice principal approves; the administrator sees the list with no question in it.
     path("tests/", tests_page, name="tests"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
@@ -163,6 +164,19 @@ urlpatterns = [
     # The result checker: a family with no account opens a card with the
     # admission number and the PIN from a slip (docs/messaging.md D11).
     path("check/", checker_page, name="result-checker"),
+    # The exam door and the exam screen (`docs/cbt.md`, step 4): a student with no
+    # account sits a test with the code, their admission number and their exam PIN. Its
+    # own small API and service worker live under it, because the cookie it sets is
+    # scoped to `/sit/` and the worker's scope is where it is served from.
+    path("sit/", sit_views.sit_page, name="sit"),
+    path("sit/sw.js", sit_views.sit_worker, name="sit-worker"),
+    path("sit/api/door/", sit_views.door, name="sit-door"),
+    path("sit/api/not-me/", sit_views.not_me, name="sit-not-me"),
+    path("sit/api/start/", sit_views.start, name="sit-start"),
+    path("sit/api/attempt/", sit_views.attempt, name="sit-attempt"),
+    path("sit/api/sync/", sit_views.sync, name="sit-sync"),
+    path("sit/api/submit/", sit_views.submit, name="sit-submit"),
+    path("sit/pictures/<str:key>/<str:variant>", sit_views.picture, name="sit-picture"),
     # The school's website editor and its preview of the draft (`schoolsite.editor`,
     # `docs/school-sites.md` PR 4): a portal path, never indexed.
     path("website/", site_editor.editor_page, name="website-editor"),
@@ -173,8 +187,8 @@ urlpatterns = [
     path("website/preview/gallery/<slug:slug>/", site_editor.preview_album, name="website-preview-album"),
     path("website/pictures/<str:key>/<str:variant>", site_editor.picture, name="website-picture"),
     path("website/preview/<slug:key>/", site_editor.preview_page, name="website-preview-fixed"),
-    # Names held for work not yet built (`schools.paths.RESERVED`), `/sit/` among
-    # them: a 404 at the name and everywhere under it until the work is routed here.
+    # Names held for work not yet built (`schools.paths.RESERVED`): a 404 at the name
+    # and everywhere under it until the work is routed here.
     *(
         pattern
         for name in RESERVED

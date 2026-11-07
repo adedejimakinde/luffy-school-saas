@@ -568,6 +568,22 @@ CHECKER_MAX_FAILURES_PER_ADDRESS = int(
     os.environ.get("CHECKER_MAX_FAILURES_PER_ADDRESS", 50)
 )
 
+# The exam door's wrong answers (`cbt.door`, docs/cbt.md "Student sign-in"): a test
+# code, an admission number and an eight-digit PIN, in the same window.
+#
+# Ten per admission number, the checker's reason: a student who mistypes their PIN a
+# few times is nowhere near it, and a guesser at one number gets ten tries a quarter
+# hour against 10^8 PINs, behind a code that lives for one sitting.
+#
+# A hundred per address, not fifty, because a whole computer room signs in at once
+# through one address, forty children each allowed a slip of the finger or two.
+SIT_MAX_FAILURES_PER_ADMISSION_NUMBER = int(
+    os.environ.get("SIT_MAX_FAILURES_PER_ADMISSION_NUMBER", 10)
+)
+SIT_MAX_FAILURES_PER_ADDRESS = int(
+    os.environ.get("SIT_MAX_FAILURES_PER_ADDRESS", 100)
+)
+
 # ---------------------------------------------------------------------------
 # How many guardian verification codes may be SENT, and this counts successes
 # rather than failures — which is the opposite of the sign-in throttle above

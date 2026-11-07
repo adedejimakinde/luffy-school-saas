@@ -57,6 +57,9 @@ PORTAL = frozenset(
         "setup",
         "sign-in",
         "sign-out",
+        # The exam door and screen (`docs/cbt.md`, step 4): no account, a test code and
+        # an exam PIN. Never indexed.
+        "sit",
         "staff",
         "staff-sign-in",
         "start",
@@ -73,7 +76,6 @@ PORTAL = frozenset(
 
 #: Each held name, and what it is held for.
 RESERVED = {
-    "sit": "the CBT exam door (docs/cbt.md, CBT PR 4)",
     "applicants": "the admissions list (docs/school-sites.md, PR 9b)",
 }
 

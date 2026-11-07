@@ -295,7 +295,7 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
                 self.assertEqual(len(using), 1, f"{name} is named in {using}")
         owners = {"offline.test.js": "UI Offline", "marking_clear.test.js": "UI Marking Clear",
                   "marking_focus.test.js": "UI Marking Focus", "roll_import_gap.test.js": "UI Import",
-                  "teaching.test.js": "UI Teaching", "screens.test.js": "JSS 1A"}
+                  "teaching.test.js": "UI Teaching", "screens.test.js": "JSS 1A", "sit.test.js": "UI Sit"}
         # Files that write no school's data at all, so have no class to own:
         # the blog's, which writes only the blog (`docs/blog.md`), the
         # picker's, which refuses every write in the browser, and a school

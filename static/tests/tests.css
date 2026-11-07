@@ -32,3 +32,15 @@ label.choice.correct { min-height: var(--control); }
 .confirm { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 12px 0; max-width: none; }
 .confirm p, .confirm fieldset, .confirm label, .confirm input { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
 .history { margin: 0; padding-left: 1.2em; font-size: var(--small); color: var(--muted); }
+.row-actions { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.sit-class { display: grid; gap: 4px; }
+.sit-class .again { justify-self: start; }
+.sit-code .code { font-size: 1.75rem; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; margin-right: 8px; }
+.sitting-log { list-style: none; margin: 0; padding: 0; }
+.sit-student-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
+.sit-student-row p { margin: 0; }
+.sit-counts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; color: var(--muted); font-size: var(--small); }
+.sit-counts div { display: flex; gap: 6px; }
+.sit-counts dd { margin: 0; color: var(--text); font-weight: 700; }
+.sitting-log details { margin-top: 4px; }
+.sitting-log summary { min-height: var(--control); display: flex; align-items: center; cursor: pointer; }

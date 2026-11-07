@@ -181,7 +181,11 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             self.assertIsNotNone(live_revision(school), "the website is published")
             from cbt.models import ExamPin
 
-            self.assertEqual(ExamPin.objects.filter(cancelled_at__isnull=True).count(), PER_CLASS)
+            # JSS 3A's slips, and the demo sitters' (step 4), who are fewer than three here.
+            self.assertEqual(
+                ExamPin.objects.filter(cancelled_at__isnull=True).count(),
+                PER_CLASS + min(PER_CLASS, crestfield.SIT_DEMO_STUDENTS),
+            )
             # CBT step 3: the thirty questions in three JSS 2 banks, and one approved test.
             from cbt.models import Question, QuestionBank, Test, TestItem
 
@@ -196,12 +200,46 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             self.assertEqual(
                 sorted(test.audience.values_list("class_group__name", flat=True)), sorted(crestfield.TEST_CLASSES)
             )
-            self.assertGreater(test.opens_at, timezone.now())
+            # CBT step 4: sittable from a minute or two after the build, for twelve hours.
+            self.assertLessEqual(test.opens_at - timezone.now(), timedelta(minutes=2))
+            self.assertEqual(test.closes_at - test.opens_at, timedelta(hours=crestfield.TEST_OPEN_HOURS))
+            self.assertTrue(test.calculator)
+            self.assertTrue(test.code_digest)
             items = list(TestItem.objects.filter(test=test))
             self.assertEqual(len(items), 10)
             self.assertEqual({i.origin_question.bank.subject.name for i in items}, {"Mathematics"})
             moves = list(test.state_changes.order_by("id").values_list("to_state", flat=True))
             self.assertEqual(moves, ["submitted", "published"])
+
+    def test_a_reset_prints_a_code_and_pins_that_open_the_test_at_sit(self):
+        """`crestfield reset` prints the test code and three JSS 2A students' PINs (two
+        here, where a class has two), and they open the door once the test opens."""
+        import json
+        import re
+        from unittest import mock
+
+        said = []
+        crestfield.reset({}, write=said.append, per_class=PER_CLASS)
+        text = "\n".join(said)
+        code = re.search(r"test code ([A-Z]{6})", text).group(1)
+        sitters = re.findall(r"admission number (\S+), PIN (\d{4} \d{4})", text)
+        self.assertEqual(len(sitters), min(PER_CLASS, crestfield.SIT_DEMO_STUDENTS))
+        with schema_context(self.school.schema_name):
+            from cbt.models import Test
+
+            opens = Test.objects.get().opens_at
+        connection.set_schema_to_public()
+        with mock.patch("django.utils.timezone.now", return_value=opens + timedelta(minutes=5)):
+            for number, pin in sitters:
+                with self.subTest(number=number):
+                    response = self.client.post(
+                        "/sit/api/door/", data=json.dumps({"code": code, "admission_number": number, "pin": pin}),
+                        content_type="application/json", HTTP_HOST=DEMO,
+                    )
+                    connection.set_schema_to_public()
+                    self.assertEqual(response.status_code, 200, response.content)
+                    self.assertEqual(response.json()["student"]["class_name"], crestfield.SIT_DEMO_CLASS)
+                    self.assertTrue(response.json()["test"]["calculator"])
 
     def test_the_parent_sees_two_released_cards(self):
         parent = User.objects.get(username="cfc.parent")

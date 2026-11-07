@@ -1,6 +1,6 @@
 # CBT: computer-based tests
 
-Status: **Phase 2, steps 0 to 3 built** (see "Built", at the end). Steps 4 to 6 are
+Status: **Phase 2, steps 0 to 4 built** (see "Built", at the end). Steps 5 and 6 are
 still design. The screens are in [`docs/mockups/cbt/`](mockups/cbt/index.html), each at
 375 and 1280 px in `docs/mockups/cbt/shots/`. The owner's decisions of 20, 23 and 24
 October 2026 are folded in below and summarised next. No question is open.
@@ -14,7 +14,7 @@ October 2026 are folded in below and summarised next. No question is open.
 | Names | "UTME-style practice" and "WASSCE-style objectives". See "Names and claims". |
 | Sign-in | Option B: test code, admission number, exam PIN. Option A only as a per-test switch, only for tests that cannot send scores to CA, enforced on the server. Option C later. |
 | Cross-subject practice | UTME-style practice is set by the principal, who can name exam officers. Naming one is a permission, and it is logged. |
-| Vice principal | Sees banks and results. |
+| Vice principal | Sees banks and results. Approves and sends back tests, like the principal (7 Nov, CBT step 4). |
 | Administrator | Runs sittings, not content. Can print PIN slips, open and close sittings, change a test code, give extra time with a reason, and see the sitting log. Cannot see or edit banks, or see a test's questions before it opens. Sees scores only after release. See "The administrator". |
 | Late window | Default 2 minutes, at most 5. |
 | Release | Final, like results. Undoing it uses a restore action with a reason. |
@@ -34,7 +34,7 @@ One PR per step, each cut from `main`.
 1. Subject-teacher assignment. **Built**, #292 and #293.
 2. Student exam PIN and slips. **Built** (see "Built").
 3. Question bank and tests. **Built** (see "Built").
-4. Test screen, with offline and power-cut resume.
+4. Test screen, with offline and power-cut resume. **Built** (see "Built").
 5. Marking, send to CA and release.
 6. UTME-style and WASSCE-style modes.
 
@@ -381,7 +381,7 @@ by the clock: that is a retake.
 | Teacher | Banks for subjects and levels they teach | Tests for their subjects and classes | Their classes' attempts; send to CA; release |
 | Student | Never a bank | Only a test their class is in, while open, through `/sit/` | Their own score and corrections, after release |
 | Parent | Never | Never | Their own child's released scores; no questions, no answers, no class average |
-| Vice principal | All banks (read) | All tests (read) | All attempts and results (read); not release, not send to CA |
+| Vice principal | All banks (read) | All tests (read); approves and sends back (7 Nov 2026) | All attempts and results (read); not release, not send to CA |
 | Principal | All | All | All; release and restore; sets cross-subject practice; names exam officers |
 | Exam officer (a teacher, the vice principal or the administrator, named by the principal) | Their own, as a teacher | Cross-subject practice and, for extra time, PIN slips and retakes, any test in the school | No scores beyond what their role already shows |
 | Administrator | **None** | Title, class, window, size and code state; never the questions before the test opens. Opens and closes sittings, changes the code | The sitting log from the start; **scores only after release**. Prints PIN slips; gives extra time |
@@ -537,6 +537,12 @@ administrator").
 - The test screen's top band is solid One Blue, and nothing on it imitates a centre's
   branding. The flagged mark on the number grid
   is a small amber corner, always beside the legend and in the cell's label.
+  **As built (step 4)** the screen follows the design approved with the step 4 request
+  instead: a white top bar with the school's crest, the test and the school's name, a
+  navy countdown and the student; the flag a gold dot on the tile's corner; and the
+  school's own brand colour where the mockups have One Blue. Nothing on it imitates an
+  exam centre's branding, which is the rule this note was keeping. The mockups are left
+  as they were drawn.
 - Screen 7 is a teacher's view. The administrator's is its Students table without
   scores or answers, until release. The mockups do not draw it separately.
 - Every question shown was written for the mockups. Names and numbers are invented.
@@ -803,3 +809,180 @@ are Django's, subtests included. Every one went red; none was layered.
 | A send-back needs a reason | the reason is optional | 1: `test_a_draft_cannot_be_edited_once_sent_and_a_send_back_draws_again` |
 | Bursars, parents and students get nothing | add them to `TEST_ROLES` | 4: `tests/` answered the bursar, the parent and the student |
 | A teacher sets tests only for classes they teach | `teaches()` answers yes for any teacher with a pair | 2: a class not theirs was set, and a class not theirs was added to a published test |
+
+### Step 4, students sit the test
+
+Nothing from step 5 onward: no score is computed for anybody, nothing is marked, sent to
+CA or released, and no screen shows a score. The answers are kept so step 5 can mark
+them.
+
+**Where it lives.**
+
+| | |
+| --- | --- |
+| `cbt/models.py` | `TestCodeChange`, `SittingControl`, `Attempt`, `AttemptSession`, `TimeExtension`, `RetakeGrant`, `AnswerEvent`, `AttemptEvent` |
+| `cbt/migrations/0003_a_sitting_keeps_every_answer_and_an_attempt_closes_once.py` | the tables, their constraints (`one_computer_holds_an_attempt`, `one_answer_event_per_device_sequence`, `one_attempt_per_student_per_number`, `extra_time_says_why`, ...), and the triggers: `cbt_answer_events_are_append_only`, `cbt_attempt_events_are_append_only`, `cbt_time_extensions_are_append_only`, `cbt_retake_grants_are_append_only`, `cbt_sitting_controls_are_append_only`, `cbt_test_code_changes_are_append_only`, `cbt_an_attempt_is_closed_once`, `cbt_a_session_is_ended_once` |
+| `accounts/migrations/0019_exam_door_throttle_scopes.py` | `SignInScope.SIT_NUMBER` and `SIT_ADDRESS`, the door's own throttle buckets (`settings.SIT_MAX_FAILURES_*`: 10 per admission number, 100 per address, a quarter hour) |
+| `cbt/access.py` | `teaches_test()`, `runs_sitting()`, `gives_extra_time()`, `grants_retake()`, `reads_sitting_log()`; `APPROVING_ROLES` now holds the vice principal |
+| `cbt/sitting.py` | the student's side: `door()`, `not_me()`, `start()`, `sync()`, `submit()`, `settle()`, `counted_answers()`, `deadline_of()` |
+| `cbt/sittings.py` | the staff's side: `set_code_as()`, `control_as()`, `extend_as()`, `retake_as()`, `sitting_log_as()` |
+| `cbt/sit_views.py`, `cbt/templates/cbt/sit_page.html` | `/sit/` on the school's own host: the page, `/sit/sw.js`, `/sit/api/door/`, `not-me/`, `start/`, `attempt/`, `sync/`, `submit/`, and `/sit/pictures/` |
+| `cbt/sit_worker.js` | the exam page's own service worker, scope `/sit/` |
+| `cbt/sitting_api.py` | `/api/cbt/tests/{id}/sitting/`, `.../code/`, `.../classes/{id}/open/` and `close/`, `.../students/{id}/extra-time/` and `retake/` |
+| `static/sit/` | the door, "Is this you?", the exam screen, the calculator, the finished screen (`states.js`, `app.js`), the outbox (`outbox.js`, IndexedDB), the clock (`clock.js`) |
+| `static/tests/` | the Sitting view on the Tests page, `#sitting/<id>` |
+
+**The door.** `/sit/` takes the test code, the admission number and the exam PIN
+(`pins.check()`), behind the throttle. A wrong code, another school's code, a test not
+approved, an unknown number, a wrong PIN, somebody else's PIN, a cancelled PIN and a
+student not in the test's classes all get one sentence, and each is counted per number
+(as typed) and per address; while a wait lasts the right answer is refused too. Once the
+three are proved, and only then, the door may say that the sitting is not open to their
+class now, or that they have sat it already. A proved door shows "Is this you?" (name,
+class, admission number) and the clock has not started; "This is not me" writes
+`not_me` and starts nothing. A guardian's account session gets a refusal, page and API
+(D2). The test code is six letters with no I, L, O or U, kept as an HMAC under
+`EXAM_PIN_KEY` bound to the school, and shown once to whoever sets it.
+
+**The attempt.** `start()` writes the `Attempt` with the server's time and
+`base_deadline = min(started + duration, closes_at)` (or `started + duration` for a
+sitting opened by hand after the window), and an `AttemptSession` for the computer,
+whose random token is the `sit` cookie: `Path=/sit/`, `HttpOnly`, `SameSite=Strict`,
+`Secure` on HTTPS. It is the only credential under `/sit/`, and no staff route reads it.
+Extra time is never written onto the attempt: the deadline is the base plus that
+student's `TimeExtension` minutes, read each time. Signing in again (a power cut, another
+seat) resumes the open attempt with its deadline unchanged, ends the other computer's
+session as `replaced` and logs both seats; the first computer, when it next syncs, shows
+"This test is open on another computer". The paper is `paper.for_device()` from the
+seed stored on the attempt, so the order survives a change of seat, with no key and no
+explanation.
+
+**Answers.** Kept on the computer first (IndexedDB), then sent with a sequence number;
+`(session, seq)` is unique, so a resend is the same row. Accepted only if received by
+`deadline + late_window` and chosen by the deadline (as the device estimates server
+time: its sync plus its monotonic clock, never its wall clock, and never later than the
+server received it); otherwise kept, refused (`late`, `after_time`, `after_submit`) and
+logged `late_refused`. Of two accepted answers to one item, one computer's later sequence
+counts, and between two computers the later choice, or, within two seconds, the later
+arrival (marked `tie`). No row is updated: a winner names whom it replaced
+(`supersedes`), a loser whom it lost to (`superseded_by`). The server closes an attempt at
+`deadline + late_window` whatever the device does (`settle()`, asked by every read and
+write that touches it; there is no background job, so a log read or a sync is what
+writes the close, stamped at the time it was due).
+
+**The screen.** To the approved design (see "Notes on the mockups"): on a computer or a
+tablet a white top bar with the school's crest, the test and the school on the left, a
+large countdown in the middle, the student, number and class on the right; the question
+card (Question 7 of 20, Flag for review, the options as rows with a letter tile,
+Previous, "Answer saved", Next); and on the right the number grid six to a row (answered
+navy, not answered white, flagged a gold dot, this question a gold outline) with its
+legend, the summary (answered, flagged, Calculator, Submit test) and the keyboard hints.
+On a phone: a compact top bar, a strip of numbers, the question, and Prev, Calculator and
+Next fixed at the foot. The timer turns amber under five minutes and says the answers
+submit by themselves at 00:00, which they do, by the server's deadline. A to D choose,
+N and P move, F flags. The calculator (+ − × ÷, decimals) is drawn only when the test
+allows it. Submit asks "You have 3 unanswered and 2 flagged questions. Submit anyway?".
+The finished screen says what was answered and received, and that the score shows when
+the teacher releases it: **no score is shown**. Leaving the exam's tab or window is told
+to the student ("This has been recorded") and sent as `left_page`; offline, a banner says
+the answers are kept on the device. Safari and every browser on an iPhone get the
+OPEN-6 warning at the door.
+
+**The worker.** `/sit/sw.js`, scope `/sit/`: the `/sit/` page (network first), the
+static files the page itself names (kept first), and a paper's pictures from
+`/sit/pictures/`, in caches named `sit-*`; never an answer from `/sit/api/`, never
+another page, and never the root worker's caches. The page deletes its pictures' cache
+and every kept answer once the school confirms the submit, and on "This is not me".
+
+**Running a sitting.** On the Tests page, a published test's Sitting view: the code
+(set or changed, shown once), each class open or closed with whether by hand, and the
+students with their state, times, extra time, computers, disconnects, times they left
+the page, late answers refused and answers received, each event with who said it.
+**No answer, item, option or score is in it**, for anybody: it is the administrator's
+sitting log as `docs/cbt.md` gives it, and a teacher's screen 7 with answers is step 5.
+
+| | code, open and close by hand | extra time | retake | sitting log |
+| --- | --- | --- | --- | --- |
+| Teacher of the test | yes | yes | yes | yes |
+| Principal (a teacher of every test) | yes | yes | yes | yes |
+| Administrator | yes | yes | no, unless named exam officer | yes |
+| Exam officer | no | yes, any test | yes, any test | yes |
+| Vice principal | no | no, unless named | no, unless named | yes |
+| Another teacher, bursar, parent, student | no | no | no | no |
+
+Every act needs a reason except the code; each writes a row naming who, as which role,
+and when. Extra time is refused once the attempt is closed ("that is a retake"); a
+retake only once it is. Closing a class's sitting stops new starts and leaves attempts in
+progress to run to their own deadline, unless the close says to end them, each then
+logged `teacher_submit`.
+
+**Where this differs from the request that built it** (said in the PR): the vice
+principal approves and sends back (step 0 of the request, an owner's decision of 7
+November 2026, which replaces step 3's reading of "All tests (read)"); test codes and
+opening or closing a sitting are the test's teachers', the principal's and the
+administrator's, not an exam officer's (this note gives an exam officer "nothing
+else"); the finished screen shows no score, and the Crestfield test shows none at the
+end (this note releases scores, step 5); after a proved door, a closed sitting and an
+attempt already sat have their own sentences; the keys are A to D, N, P and F (no S).
+
+**Crestfield.** `crestfield reset` now leaves the JSS 2 Mathematics test sittable: it
+opens a minute or two after the reset for twelve hours, with the calculator on, a test
+code, and three JSS 2A students' exam slips printed as lost slips, whose admission
+numbers and PINs the command prints with the code. `seed_ui` gives `tests/ui/sit.test.js`
+a class, **UI Sit**, with a test opened by hand and known PINs (DEBUG only).
+
+**Left for step 5.** Marking the answers into a score (from `counted_answers()` and the
+test's keys, on read), key corrections, closing a test, sending scores into a CA column
+(`CaTransfer`), release and its restore, the student's and the parent's score pages, a
+teacher's results screen with the answers and the item analysis (screen 7), and a score
+shown at the end where a test allows it once released. Also left: the live invigilator
+screen ("Left for later"), and a job that closes attempts whose time is over without
+anybody reading them (today a read or a sync closes them, stamped when they were due).
+
+**Tests.** `cbt/tests/test_sitting.py` (two schools on their own hosts, whose first
+test, item, class and student share ids and whose first students share an admission
+number), the vice principal's approval in `cbt/tests/test_banks_and_tests.py`,
+`tests/js/sit.test.js` (the screens, the clock, the calculator, the outbox, and the page
+against a fake school: offline, reload, the clock at zero, a replaced computer),
+`tests/js/tests_page.test.js` (the Sitting view), `tests/ui/sit.test.js` (the exam
+screen at 320, 390 and 1280 and at 200% text, keys, the calculator, offline with a
+reload through the worker, leaving the page counted in the log, a second computer, the
+finished screen, and the door on Slow 4G), the door and the Sitting view in
+`tests/ui/screens.test.js`, `/sit/` in `tests/test_budget.py` and `tests/test_pages.py`,
+and the Crestfield build in `schools/tests/test_crestfield.py`.
+
+#### Controls
+
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied in a
+separate git worktree at the committed tree, run over the whole of
+`cbt/tests/test_sitting.py` (54 tests) or, for step 0, `cbt/tests/test_banks_and_tests.py`
+(47), restored with `git checkout`, and the tree checked clean before the next. Counts are
+Django's, subtests included. Every one went red. The first four runs also carried one
+error unrelated to the break (the worktree had no collected static files, so the
+guardian test could not draw `/sit/`); it is left out of their rows, and the guardian
+control was run with them collected.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| Wrong code, number, PIN and somebody else's PIN get one refusal | a wrong PIN with a right code says "Wrong PIN." | 9: `test_every_wrong_answer_is_one_refusal` (409 for every PIN case), the proved-door test, and both throttle tests (the new refusal was not counted the same) |
+| The door is throttled, and the right answer waits too | skip the wait | 2: per number and per address (`200 != 429`) |
+| No key reaches a student's device | `correct_index` in `paper.SENT` and the payload | 1: `test_no_response_a_students_device_receives_carries_a_key`, on every `/sit/` response |
+| An answer after `deadline + late_window`, or chosen after the deadline, is not counted | drop both deadline checks | 1: the late-window test (late answers accepted) |
+| The server closes the attempt at `deadline + late_window` whatever the device does | `settle()` never closes | 2: the late-window test and `test_the_server_closes_the_attempt_on_any_read...` |
+| A second computer's sign-in ends the first, and one holds the attempt | skip ending the first | 3 errors: the database's `one_computer_holds_an_attempt` refused the second session in the takeover, the later-chosen and the tie tests (the index is the second layer) |
+| Of two answers the one chosen later counts, both kept | take the later-received | 2: the two-computers test and the tie test |
+| Every answer is kept | no `cbt_answer_events_are_append_only` | 1: `test_every_answer_and_the_log_are_kept` |
+| An attempt is closed once and never rewritten | no `cbt_an_attempt_is_closed_once` | 1: `test_an_attempt_is_closed_once_and_never_rewritten` |
+| Extra time only by a teacher of the test, an exam officer, the administrator (and the principal) | `gives_extra_time()` answers yes | 2: the extra-time test (another teacher, the vice principal, the bursar, another school's principal gave time) |
+| Extra time, retakes and sittings by hand need a reason | the reason optional | 3 errors: the database's `extra_time_says_why`, `a_retake_says_why` and `a_sitting_opened_or_closed_by_hand_says_why` refused the rows (the constraint is the second layer) |
+| The administrator gives extra time but allows no retake unless named | the administrator in `grants_retake()` | 2: the retake test (`200 != 403`) |
+| The code and the sitting are the test's teachers', the principal's and the administrator's, not an exam officer's | an exam officer in `runs_sitting()` | 2: the code-and-sitting test |
+| A teacher of the test is one who teaches its subject to its classes | `teaches_test()` answers yes | 11: extra time, retake, code and sitting, and the log's readers (another teacher in each) |
+| Closing a sitting never ends an attempt in progress unless it says so | a close always ends them | 1: `test_closing_keeps_an_attempt_in_progress_unless_it_says_to_end_them` |
+| The sitting log carries no answer | serve each attempt's counted answers in it | 1: `test_the_administrator_reads_it_and_it_carries_no_answer` (`"chosen"` in the log) |
+| A guardian's session never reaches `/sit/` | drop the check | 1: `test_a_guardian_session_never_reaches_the_door` (`200 != 403`) |
+| A student starts only while their class's sitting is open | the window and the controls ignored | 2 errors: the proved-door test and the by-hand test (the tests themselves broke on a start they did not expect) |
+| A test code at one school opens nothing at the other (isolation) | look the code up at every school | 1: `test_another_schools_code_opens_nothing_here` (St Mary's code opened Grace's test) |
+| The `/sit/` cookie opens one attempt at one school (isolation) | no schema check, and the session looked up at every school | 1 error: `test_the_cookie_is_refused_at_the_other_school...` (Grace's host answered with St Mary's attempt) |
+| Step 0: the vice principal approves and sends back | the principal alone in `APPROVING_ROLES` | 1: `test_the_vice_principal_approves_and_sends_back_like_the_principal` |
+| Step 0: nobody else does | a teacher in `APPROVING_ROLES` | 4: `test_nobody_else_approves_or_sends_back` (the teacher approved), and `test_the_chain_and_its_record` |
