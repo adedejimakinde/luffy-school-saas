@@ -63,6 +63,8 @@ PORTAL = frozenset(
         "subject-teachers",
         "sw.js",
         "teaching",
+        # Question banks and tests (`docs/cbt.md`, step 3). Staff only.
+        "tests",
         "timetable",
         # The school's website editor and its preview (docs/school-sites.md, PR 4).
         "website",

@@ -365,6 +365,8 @@ PROCESSORS = {
     Family.SITE_PHOTO: site_photo,
     Family.MARK: mark,
     Family.BLOG: blog,
+    # A full WebP at most `widths[0]` wide and one half as wide: the blog's drawing.
+    Family.QUESTION: blog,
 }
 
 

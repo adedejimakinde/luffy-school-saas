@@ -38,6 +38,7 @@ from academics.services import PLACEMENT_ROLES, SETUP_ROLES
 from attendance.absences import VIEWING_ROLES as ABSENCE_ROLES
 from attendance.services import MARKING_ROLES as REGISTER_ROLES
 from cbt.access import PRINTING_ROLES as EXAM_SLIP_ROLES
+from cbt.access import TEST_ROLES
 from fees.authority import READING_ROLES as FEES_ROLES
 from gradebook.assignments import VIEWING_ROLES as SUBJECT_TEACHER_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
@@ -69,6 +70,9 @@ LINKS = (
     Link("marking", "/marking/", "i-marks", "Marks", MARK_ENTERING_ROLES, "Teaching"),
     Link("comments", "/comments/", "i-comments", "Remarks", REMARK_ROLES, "Teaching"),
     Link("timetable", "/timetable/", "i-calendar", "Timetable", TIMETABLE_ROLES, "Teaching"),
+    # Question banks and tests: teachers, the vice principal and the principal; the
+    # administrator for the list alone, with no question in it (`cbt.access`).
+    Link("tests", "/tests/", "i-book", "Tests", TEST_ROLES, "Teaching"),
     Link("results", "/results/", "i-results", "Results", CHAIN_ROLES, "Results"),
     Link("broadsheet", "/broadsheet/", "i-sheet", "Broadsheets", POSITION_VIEWING_ROLES, "Results"),
     Link("absences", "/absences/", "i-absent", "Absences", ABSENCE_ROLES, "Results"),

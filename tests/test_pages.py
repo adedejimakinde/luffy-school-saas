@@ -40,7 +40,7 @@ from accounts.views import (
 from academics.views import PROMOTION_MODULES, SETUP_MODULES
 from schools.views import PLATFORM_MODULES
 from blog.write_views import EDITOR_MODULES as BLOG_EDITOR_MODULES
-from cbt.views import EXAM_SLIPS_MODULES
+from cbt.views import EXAM_SLIPS_MODULES, TESTS_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import BANK_MODULES, FEES_MODULES
 from gradebook.views import MARKING_MODULES, SUBJECT_TEACHERS_MODULES, TEACHING_MODULES
@@ -94,6 +94,7 @@ PAGES = {
     "teaching": TEACHING_MODULES,
     "subject-teachers": SUBJECT_TEACHERS_MODULES,
     "exam-slips": EXAM_SLIPS_MODULES,
+    "tests": TESTS_MODULES,
     "blog-editor": BLOG_EDITOR_MODULES,
     "website-editor": WEBSITE_EDITOR_MODULES,
     "website-photos": WEBSITE_PHOTOS_MODULES,

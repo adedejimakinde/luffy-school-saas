@@ -30,7 +30,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, describe, test } from "./timed.js";
 
 import { chromium } from "playwright";
 

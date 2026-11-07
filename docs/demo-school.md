@@ -23,14 +23,11 @@ made up; any match with a real person is chance.
 | Term | twelve weeks ending on the day of the reset, less two days of mid-term; a register for every school day |
 | Results | the Ogun State sheet, every paper marked, both conduct sections rated, remarks written. Released: JSS 1A, JSS 2A, SS 1A (with result-checker slips printed). Waiting on the principal: six classes. Still open with the class teacher: JSS 2B, SS 3A, SS 3B |
 | Fees | every class billed (tuition and two levies); about half paid in full, a third part-paid, the rest owing |
-| CBT | the vice principal named exam officer; JSS 3A's exam slips printed |
+| CBT | the vice principal named exam officer; JSS 3A's exam slips printed; thirty questions written for Crestfield (Mathematics, Basic Science, English; nothing from WAEC, NECO or JAMB, `schools/crestfield/questions.py`) in three JSS 2 banks, each by its subject's teacher; one test approved and ready, JSS 2 Mathematics for JSS 2A and JSS 2B, set by `cfc.teacher`, opening the next weekday at 09:00 |
 | Website | Modern Campus: a slideshow of three stock photos of adult staff (a principal, a teacher and a bursar; no child is shown), the facts, the principal's message with her portrait, an album of the same three photos, the admissions band and Visit us; the motto on About. Published |
 | Setup | finished, with the contact email and the crest in the setup log |
 
-**Not in it, and why.** The CBT question bank is CBT step 3, which is not built:
-there is no table to put questions in. Thirty questions written for Crestfield
-(Mathematics, Basic Science, English; nothing from WAEC, NECO or JAMB) are in
-`schools/crestfield/questions.py`, ready for step 3 to load. There are no
+**Not in it, and why.** Nobody can sit the test yet: the door is CBT step 4. There are no
 notices to families: the only notices Classnode has are messages, and this
 school sends none. There is no noticeboard feature to fill.
 
@@ -182,4 +179,4 @@ node scripts/brochure_shots.mjs
 | `08-exam-slips-page.png`, `09-exam-slip.png` | the exam slips page, and a printed sheet of slips |
 | `10-report-card-desktop.png` | the whole report card at desk width |
 
-There is no question bank screenshot: the bank is not built (above).
+There is no question bank screenshot yet: the brochure's shots were taken before CBT step 3.

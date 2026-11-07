@@ -50,6 +50,10 @@ class Kind(models.TextChoices):
     #: A class's master broadsheet, as a PDF or an Excel file, made by
     #: `results.broadsheet_files` the same way and kept the same day.
     CLASS_BROADSHEET = "class_broadsheet", "Broadsheet for a class"
+    #: A picture in a CBT question (`cbt.images`). Private, and never sent on the
+    #: generic `/files/` route: `cbt`'s own route asks who may read the bank or the
+    #: test that names it.
+    QUESTION_IMAGE = "question_image", "Question picture"
 
 
 class Family(models.TextChoices):
@@ -61,6 +65,9 @@ class Family(models.TextChoices):
     DOCUMENT = "document"
     VIDEO = "video"
     BLOG = "blog"
+    #: A CBT question's picture: drawn as the blog's are (a full WebP and one half
+    #: as wide), and narrower, because it downloads with every student's paper.
+    QUESTION = "question"
     #: Made on the server, not uploaded: nothing processes it.
     MADE = "made"
 
@@ -188,6 +195,14 @@ PROFILES = {
         Profile(
             Kind.CLASS_BROADSHEET, Family.MADE, "A class's broadsheet", 50 * MB,
             formats=frozenset(), readers=frozenset(), typical_bytes=1 * MB,
+        ),
+        # A question's picture. `readers` is empty for the class print's reason: only
+        # `cbt.api`'s image route sends it, after asking whether this login may read
+        # a bank or a test that names it. 960 px wide at most, WebP, about 60 KB:
+        # the mockup's "keep it small, it downloads with the test".
+        Profile(
+            Kind.QUESTION_IMAGE, Family.QUESTION, "A picture", 5 * MB, max_pixels=40_000_000,
+            formats=MARK_FORMATS, widths=(960,), readers=frozenset(), typical_bytes=80 * 1024,
         ),
         Profile(
             Kind.BLOG_IMAGE, Family.BLOG, "A picture", 10 * MB, max_pixels=40_000_000,

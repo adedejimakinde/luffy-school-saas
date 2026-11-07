@@ -14,8 +14,14 @@ second="$tmp/screens-2.xml"
 files=(tests/ui/*.test.js)
 reporters=(--test-reporter=spec --test-reporter-destination=stdout
            --test-reporter=junit)
+# --test-force-exit: the retry names the failed tests, and a file none of them
+# is in has no test to run, but its top-level `before` still launches Chromium
+# and its `after` never runs, so the open browser kept `node` alive for ever:
+# the retry waited on a process that never exited. Every run ends when its
+# tests have. A single test that never settles is tests/ui/timed.js's to fail.
+runner=(node --test --test-force-exit)
 
-if node --test "${reporters[@]}" --test-reporter-destination="$first" "${files[@]}"; then
+if "${runner[@]}" "${reporters[@]}" --test-reporter-destination="$first" "${files[@]}"; then
   exit 0
 fi
 
@@ -34,7 +40,7 @@ for name in "${failed[@]}"; do
   patterns+=("--test-name-pattern=$(printf '%s' "$name" | sed -e 's/[][\\.^$*+?(){}|\/]/\\&/g')")
 done
 
-if node --test "${reporters[@]}" --test-reporter-destination="$second" "${patterns[@]}" "${files[@]}"; then
+if "${runner[@]}" "${reporters[@]}" --test-reporter-destination="$second" "${patterns[@]}" "${files[@]}"; then
   rc=0
 else
   rc=1

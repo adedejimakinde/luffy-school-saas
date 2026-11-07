@@ -55,7 +55,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { after, before, describe, test } from "node:test";
+import { after, before, describe, test } from "./timed.js";
 import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
@@ -294,6 +294,11 @@ export const SCREENS = [
     steps: [["exam-slips-confirm", '[data-action="ask-print-class"]']],
   },
   { name: "exam-slips-office", as: "sunrise.admin", url: `${SUNRISE}/exam-slips/` },
+  // Tests (CBT step 3): the principal's list and banks, a teacher's set-a-test form, and
+  // the administrator's list, which has no question in it.
+  { name: "tests", as: "sunrise.principal", url: `${SUNRISE}/tests/` },
+  { name: "tests-banks", as: "sunrise.principal", url: `${SUNRISE}/tests/#banks` },
+  { name: "tests-office", as: "sunrise.admin", url: `${SUNRISE}/tests/` },
   { name: "roll-import", as: "sunrise.admin", url: `${SUNRISE}/roll/import/` },
   // The OGSERA filler. The demo school prints the Standard card, so this is
   // the page telling the office where the Ogun template is chosen.
@@ -798,6 +803,10 @@ describe("every page, at every width", () => {
         if (screen.site) await page.emulateMedia({ reducedMotion: "reduce" });
         for (const width of [...WIDTHS, ...(screen.widths || [])]) {
           await page.setViewportSize({ width, height: 800 });
+          // A URL that differs from the page's own only by its `#` is a
+          // same-document navigation, and `goto` answers it with `null`:
+          // leave the page first, so every width loads the screen afresh.
+          if (screen.url.includes("#")) await page.goto("about:blank");
           const response = await page.goto(screen.url);
           assert.equal(response.status(), screen.status || 200, `${screen.url} at ${width}px`);
           await settle(page);
@@ -970,6 +979,7 @@ describe("keyboard focus and large text on a phone", () => {
     ["sunrise.admin", "/teaching/"],
     ["sunrise.principal", "/subject-teachers/"],
     ["sunrise.principal", "/exam-slips/"],
+    ["sunrise.principal", "/tests/"],
     ["sunrise.admin", "/roll/"],
     ["sunrise.principal", "/home/"],
     ["sunrise.teacher", "/marking/"],
@@ -1022,6 +1032,8 @@ describe("keyboard focus and large text on a phone", () => {
     ["who teaches what", "sunrise.principal", `${SUNRISE}/subject-teachers/`, 320, false],
     ["exam slips", "sunrise.principal", `${SUNRISE}/exam-slips/`, 375, true],
     ["exam slips", "sunrise.principal", `${SUNRISE}/exam-slips/`, 320, false],
+    ["tests", "sunrise.principal", `${SUNRISE}/tests/`, 375, true],
+    ["tests", "sunrise.principal", `${SUNRISE}/tests/`, 320, false],
   ]) {
     test(`${name} at ${large ? "200% text" : "a 320px screen"} does not scroll sideways`, async () => {
       const context = await signedIn(as);

@@ -20,7 +20,10 @@ school in Abeokuta at the end of its first term:
 - **Fees**: each class billed, about half the families paid in full, a third
   part-paid, the rest owing.
 - **CBT**: the vice principal named exam officer and JSS 3A's exam slips
-  printed. The question bank (`questions.py`) waits for CBT step 3.
+  printed. The thirty questions in `questions.py` in three JSS 2 banks (Mathematics,
+  Basic Science, English Language), each written by the subject's teacher, and one
+  test ready: JSS 2 Mathematics for JSS 2A and JSS 2B, set by `cfc.teacher` and
+  approved by the principal, opening on the next weekday morning.
 - **Its website**, Modern Campus with the school's details and drawn photos, published.
 
 ## What keeps it apart from real schools
@@ -62,6 +65,7 @@ from django.utils import timezone
 from django_tenants.utils import schema_context, schema_exists
 
 from . import people as cast
+from . import questions
 
 SLUG = "crestfield"
 SCHEMA = "crestfield"
@@ -479,6 +483,8 @@ def _school(school, staff, children, parents, by_class, rng, write):
 
     officers.name_as(principal, school, staff["vp"].pk, note="Runs the CBT room")
     pins.print_class_as(admin, school, groups[SLIPS_FOR].pk)
+    write("  question banks and a test ...")
+    _cbt(school, staff, groups, subjects)
     site.publish(principal, school)
 
 
@@ -595,6 +601,53 @@ def _results(groups, placed, term, staff, keeps, ability, rng):
             # after a release. The PINs are on paper only, so a salesperson
             # who wants to show the checker prints a lost slip on the page.
             checker.print_slips(sheet, actor=principal)
+
+
+#: The level the demo's questions are written for (`questions.py`: JSS 2), and the test.
+BANK_LEVEL = 2
+BANK_SUBJECTS = {"Mathematics": "MTH", "Basic Science": "BSC", "English Language": "ENG"}
+TEST_TITLE = "JSS 2 Mathematics: first CBT practice"
+TEST_CLASSES = ("JSS 2A", "JSS 2B")
+
+
+def test_opens(today):
+    """The next weekday after `today`, at 09:00 school time: always after a reset."""
+    from datetime import datetime, time
+
+    day = today + timedelta(days=1)
+    while day.weekday() >= 5:
+        day += timedelta(days=1)
+    return timezone.make_aware(datetime.combine(day, time(9, 0)))
+
+
+def _cbt(school, staff, groups, subjects):
+    """The banks, written by each subject's JSS teacher, and one approved test.
+
+    Through the services a school uses (`cbt.banks`, `cbt.setting`), so each question
+    names its teacher and the test's record says who set and who approved it.
+    """
+    from cbt import banks, setting
+
+    for subject_name, code in BANK_SUBJECTS.items():
+        teacher = staff[SUBJECT_TEACHERS[code][0]].user
+        for stem, options, answer in questions.BANK[subject_name]:
+            banks.add_as(
+                teacher, school, subjects[code].pk, BANK_LEVEL,
+                banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1),
+            )
+    setter = staff[SUBJECT_TEACHERS["MTH"][0]].user
+    opens = test_opens(timezone.localdate())
+    test = setting.create_as(
+        setter, school,
+        setting.TestDraft(
+            title=TEST_TITLE, subject_id=subjects["MTH"].pk, level=BANK_LEVEL,
+            class_group_ids=[groups[name].pk for name in TEST_CLASSES], question_count=10,
+            opens_at=opens, closes_at=opens + timedelta(hours=3), duration=20,
+        ),
+    )
+    setting.submit_as(setter, school, test.pk, rng=random.Random(SLUG))
+    setting.approve_as(staff["principal"].user, school, test.pk)
+    return test
 
 
 def _paid_on(days, rng):

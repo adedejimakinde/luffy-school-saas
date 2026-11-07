@@ -278,6 +278,10 @@ jobs:
   # `localhost` is not.
   screens:
     runs-on: ubuntu-24.04
+    # It takes about ten minutes. A hang must end the job, not wait for the
+    # six hours GitHub allows; each test has its own limit (tests/ui/timed.js)
+    # and fails by name long before this.
+    timeout-minutes: 30
     defaults:
       run:
         shell: bash

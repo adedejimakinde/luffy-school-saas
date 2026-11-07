@@ -1,6 +1,6 @@
 # CBT: computer-based tests
 
-Status: **Phase 2, steps 0 to 2 built** (see "Built", at the end). Steps 3 to 6 are
+Status: **Phase 2, steps 0 to 3 built** (see "Built", at the end). Steps 4 to 6 are
 still design. The screens are in [`docs/mockups/cbt/`](mockups/cbt/index.html), each at
 375 and 1280 px in `docs/mockups/cbt/shots/`. The owner's decisions of 20, 23 and 24
 October 2026 are folded in below and summarised next. No question is open.
@@ -32,8 +32,8 @@ One PR per step, each cut from `main`.
 
 0. Demo slug guard. **Built**, #279.
 1. Subject-teacher assignment. **Built**, #292 and #293.
-2. Student exam PIN and slips. **Built**, this step (see "Built").
-3. Question bank and tests.
+2. Student exam PIN and slips. **Built** (see "Built").
+3. Question bank and tests. **Built** (see "Built").
 4. Test screen, with offline and power-cut resume.
 5. Marking, send to CA and release.
 6. UTME-style and WASSCE-style modes.
@@ -684,3 +684,122 @@ in a separate worktree and run over the whole of `cbt` (43 tests), and over
 
 The three green runs are layered guards, each rerun with the next layer broken until it
 went red. The module passes again after every restore (43 tests, and 74 with the menu).
+
+### Step 3, question banks and tests
+
+Nothing from step 4 onward: no `/sit/` door, test code, sitting, attempt, answer, score,
+throttle or service worker. No student is sent anything. `paper.for_device()` exists, so
+the paper step 4 sends is the one a reviewer previews today.
+
+**Where it lives.**
+
+| | |
+| --- | --- |
+| `cbt/models.py` | `QuestionBank`, `Question`, `QuestionOption`, `Test`, `TestSection`, `TestAudience`, `TestAudienceChange`, `TestStateChange`, `TestItem` |
+| `cbt/migrations/0002_question_banks_and_tests_and_a_set_test_keeps_its_paper.py` | the tables, their constraints, and five triggers: `cbt_a_set_test_keeps_its_paper`, `cbt_a_published_item_is_frozen`, `cbt_a_set_tests_section_is_fixed`, `cbt_test_state_changes_are_append_only`, `cbt_test_audience_changes_are_append_only`, and `cbt_a_provider_question_is_read_only` (no provider exists) |
+| `cbt/access.py` | `reach()`: what one login reaches in banks and tests for a term; `TEST_ROLES`, `WRITING_ROLES`, `APPROVING_ROLES` |
+| `cbt/banks.py` | `add_as()`, `edit_as()` (a new version, refused over somebody else's newer one), `retire_as()`, `delete_as()` (only a question no test used) |
+| `cbt/setting.py` | `create_as()`, `update_as()`, `submit_as()` (draws and copies the paper), `withdraw_as()`, `send_back_as()`, `approve_as()`, `change_classes_as()`, `delete_as()` (a draft never sent) |
+| `cbt/paper.py` | `for_device()`: the paper in one student's order, with no key |
+| `cbt/bank_api.py` | `/api/cbt/`: `banks/`, `banks/{subject}/{level}/`, `.../questions/`, `.../pictures/`, `pictures/{key}/{variant}`, `questions/{id}/` (read, edit), `.../retire/`, `.../delete/`, `tests/` (list, create), `tests/{id}/` (read, edit), `.../submit/`, `.../withdraw/`, `.../send-back/`, `.../approve/`, `.../classes/`, `.../delete/`, `.../preview/` |
+| `cbt/views.py`, `static/tests/` | the `/tests/` page: the tests list, the banks, a bank, the question form, Set a test, a test with its paper and its chain, and "Try it as a student" |
+| `files/kinds.py` | `Kind.QUESTION_IMAGE`: private, at most 5 MB in, a WebP 960 px wide at most out, never on `/files/` |
+| `schools/crestfield/__init__.py` | `_cbt()`: the thirty questions of `questions.py` in three JSS 2 banks, and one approved test |
+
+**Banks.** One per subject and class level (`ClassGroup.level`, which the arms of a year
+share), made the first time a question is written into it. A teacher's banks are the
+subjects they teach this term (`gradebook.SubjectTeacher`) at those classes' levels; a
+teacher with no assignment this term has none, whatever the marking switch says (it
+opens marking, not banks). The level is named from its classes ("JSS 2A" and "JSS 2B"
+make "JSS 2").
+
+**Questions.** Plain text: trimmed, control characters other than a line break taken
+out, never parsed as markup, escaped wherever drawn; powers are typed as characters (x², 10³). Four or five options, each different, one correct (a constraint), 1 to 10
+marks, an optional topic, explanation and picture, and a description of the picture
+whenever there is one. Saving makes a new version; a save over a version somebody else
+saved since is refused with their name. A used question is retired, not deleted (its
+test items protect it), and a retired one is never drawn.
+
+**Pictures.** Through the upload service (`files.service.accept()`), as kind
+`question_image`, with no slot, so a replaced picture is never retired while a test's
+copy still names it. Sent only by `pictures/`, to a login that reads a bank or a test
+whose questions name it (or, before it is saved with a question, its uploader), with
+`Cache-Control: private, no-store`; the generic `/files/` route sends it to nobody.
+
+**Tests.** A teacher sets one from one bank for classes at its level that they teach
+the subject to; the principal for any. It says how many questions, when it opens and
+closes, the minutes each student has (no longer than it is open), the late window (0, 2
+or 5 minutes), whether questions and options are shuffled per student, going back, the
+grid, the calculator, and the exam PIN. The PIN off sets `may_send_to_ca` off too, and a
+constraint refuses the other combination. **No CA column is named on the test**: this
+note picks the column when scores are sent (step 5, "How scores reach CA"), so step 3
+stores only that flag, and no score at all.
+
+**The chain.** `draft`, then **sent for approval** (`submitted`): its questions are drawn
+at random from the bank's questions in use and copied into `TestItem`, so the principal
+approves exactly the paper they review. **Approved** (`published`) only by the
+principal, and only before it opens. Sent back by the principal with a reason, or
+withdrawn by its teacher, it is a draft again and its copy is discarded; the next send
+draws afresh. Each move is a `TestStateChange` row; after a test leaves draft each change
+of its classes is a `TestAudienceChange`. The database refuses any other move, any edit
+to what a set test is, any change to its section, and any edit to its copy.
+
+**Who does what, on the server.** Every route asks who is asking before it reads a row.
+
+| | banks and questions | tests | approve |
+| --- | --- | --- | --- |
+| Principal | reads and writes all | sets any; reads all, with their questions | yes |
+| Vice principal | reads all | reads all, with their questions and the preview | no |
+| Teacher | reads and writes their subjects at their levels, this term | sets and reads their subjects for their classes | no |
+| Teacher with no assignment this term | none (an empty list that says why) | none | no |
+| Administrator, named exam officer or not | **none: 403 on every bank, question and picture route** | the list: title, subject, classes, window, size, state, code set or not; **403 on a test's own page and its preview** | no |
+| Exam officer | as their role (steps 4 and 6 add their rights) | as their role | no |
+| Bursar, parent, student | none (403) | none (403) | no |
+
+**Answers.** `correct_index` and `explanation` are in a bank's and a test's own page,
+for staff who read them, and nowhere else. The preview is `paper.for_device()`, which
+reads only `paper.SENT` (no key, no explanation, no topic) and keeps each option's
+original index, so marking will follow the option, not the letter. One seed gives one
+order.
+
+**Where this differs from the request that built it** (said in the PR): approving is
+the principal's alone, because this note gives the vice principal "All tests (read)";
+the vice principal reviews every test and its paper. There is no CA mapping on a test,
+because this note maps a score into CA when it is sent (step 5). Crestfield's thirty
+questions are in three banks, not one, because a bank is one subject at one level.
+
+**Left for step 4 and later.** The test code (`code_digest` is empty, and the list says
+so), sittings opened and closed by hand, the door, attempts and answers, extra time and
+retakes, the throttle; marking, key corrections, send to CA and release (step 5); the
+exam modes (step 6). Also left: picking questions by hand or by topic (the draw is at
+random), option pictures, and the administrator seeing a test's questions after it has
+opened (allowed by "Settled in interpretation", served to nobody yet).
+
+**Tests.** `cbt/tests/test_banks_and_tests.py` (two schools on their own hosts whose
+first subject, class, term, bank, question and test share ids), `tests/js/tests_page.test.js`,
+the Crestfield build in `schools/tests/test_crestfield.py`, the page in
+`tests/test_pages.py`, `tests/test_budget.py` and `tests/test_menu.py`.
+
+#### Controls
+
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied to
+a clean committed tree, run over the whole of `cbt/tests/test_banks_and_tests.py` (45
+tests), restored with `git checkout`, and the tree checked clean before the next. Counts
+are Django's, subtests included. Every one went red; none was layered.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| The administrator never reads a bank or a question, named exam officer or not | let the administrator role into `can_read_banks()` and `reach()` | 23: every bank, question, picture and test route answered the administrator, before and after being named (21 subtests), and the list stopped being summaries only |
+| A teacher reaches only their own subjects and levels | a teacher's reach reads every bank | 7: another subject and another level opened, a teacher with no subject got banks, a test for a class not theirs was set, the principal-elsewhere case, and a picture reached a teacher of nothing |
+| Only the principal approves | add the vice principal to `APPROVING_ROLES` | 1: `test_the_vice_principal_reads_every_bank_and_test_and_writes_nothing` |
+| The paper sent to a device carries no key | add `correct_index` to `paper.SENT` and the payload | 2: the preview's keys, and `for_device()` itself |
+| A copied question cannot be edited | never create `cbt_a_published_item_is_frozen` | 1: `test_the_database_refuses_an_edit_to_a_copied_question` |
+| A test keeps its own copy, not the bank's | a test's page reads the stem from the bank question | 1: `test_editing_retiring_and_re_answering_the_bank_changes_nothing_in_the_test` |
+| A role at one school is nothing at another (isolation) | `_roles()` reads the login's roles at every school | 1: `test_a_principal_elsewhere_is_only_what_they_are_here` |
+| The reach is read only on the school's own connection (isolation) | drop the schema check in `_here()` | 1: `test_the_reach_is_read_only_on_the_schools_own_connection` |
+| A picture goes only to who reads it, at its own school (isolation, access) | `_reads_picture()` answers yes | 1: `test_a_picture_is_sent_only_at_its_own_school_and_to_who_reads_it` (another teacher and Grace's staff got it) |
+| A change of classes after draft is logged | `change_classes_as()` writes no log | 1: `test_changing_a_published_tests_classes_is_logged` |
+| The state log cannot be edited | never create `cbt_test_state_changes_are_append_only` | 1: `test_the_chain_and_its_record` |
+| A send-back needs a reason | the reason is optional | 1: `test_a_draft_cannot_be_edited_once_sent_and_a_send_back_draws_again` |
+| Bursars, parents and students get nothing | add them to `TEST_ROLES` | 4: `tests/` answered the bursar, the parent and the student |
+| A teacher sets tests only for classes they teach | `teaches()` answers yes for any teacher with a pair | 2: a class not theirs was set, and a class not theirs was added to a published test |
