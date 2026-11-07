@@ -1,0 +1,129 @@
+{% include "design/doc_open.html" %}
+{% comment %}
+One class's master broadsheet, for paper. Rendered by `results.broadsheet_files.html_for()`.
+
+Everything comes off `sheet`, a `results.broadsheet.Sheet`, as text already
+worked out: this template adds no figure and drops none, and a missing paper is
+the "-" the sheet printed it as. `{{ }}` escapes names; nothing is `|safe`.
+
+Landscape, on the paper the person chose. `size` is one of two literals checked
+by `broadsheet_files`, and `font_pt` is a number it worked out so that every
+column fits the page's width: the table is as wide as the page and no wider.
+Everything in the table is in `em`, so one number scales the lot.
+
+The colour is the school's one (a six-digit hex by a database constraint),
+on the heading's rule and on the table's header rule only, as the cards do.
+
+A preview is not marked here: the stamp that says PREVIEW, NOT RELEASED is
+drawn onto every page afterwards (`class_print.stamp_pages`), in the page's own
+content, so a viewer cannot hide it. The words in the heading are a courtesy.
+{% endcomment %}
+<meta charset="utf-8">
+<title>Broadsheet, {{ sheet.class_group }}, {{ sheet.term }}{% if sheet.preview %} (PREVIEW, NOT RELEASED){% endif %}</title>
+<style>
+  @font-face {
+    font-family: "Hanken Grotesk";
+    font-weight: 400;
+    src: url("{{ fonts }}/hanken-grotesk-400.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Hanken Grotesk";
+    font-weight: 700;
+    src: url("{{ fonts }}/hanken-grotesk-700.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Noto Sans";
+    font-weight: 400;
+    src: url("{{ fonts }}/noto-sans-hausa-400.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "Noto Sans";
+    font-weight: 700;
+    src: url("{{ fonts }}/noto-sans-hausa-700.woff2") format("woff2");
+  }
+
+  @page {
+    size: {{ paper }} landscape;
+    margin: 9mm 8mm 11mm 8mm;
+    @bottom-left {
+      content: "{{ paper }} landscape";
+      font: 7pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
+      color: #667;
+    }
+    @bottom-center {
+      content: "Page " counter(page) " of " counter(pages);
+      font: 7.5pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
+      color: #667;
+    }
+    @bottom-right {
+      content: "classnode";
+      font: 7pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif;
+      color: #8a8f99;
+    }
+  }
+
+  body { font: 8pt "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #111; margin: 0; }
+  h1 { margin: 0; font-size: 13pt; color: {{ look.colour }}; }
+  .sub { margin: 0.5mm 0 0; font-size: 9pt; color: #333; }
+  .rule { height: 1.6mm; margin: 1.5mm 0 2.5mm; background: {{ look.colour }}; }
+
+  table.sheet { width: 100%; border-collapse: collapse; font-size: {{ font_pt }}pt; }
+  table.sheet th, table.sheet td { border: .5px solid #999; padding: .25em .3em; text-align: center; }
+  table.sheet th { background: #f0f0f2; font-weight: 700; }
+  table.sheet thead th { border-bottom: 1.2px solid {{ look.colour }}; }
+  table.sheet thead { display: table-header-group; }
+  table.sheet tr { page-break-inside: avoid; }
+  table.sheet td.name, table.sheet th.name { text-align: left; white-space: nowrap; }
+  table.sheet td.promo { text-align: left; }
+  table.sheet th small { display: block; font-weight: 400; color: #555; }
+  table.sheet tfoot th { text-align: left; background: #f7f7f9; }
+  table.sheet tfoot td { background: #f7f7f9; font-weight: 700; }
+  /* A subject's group starts with a heavier line, so the eye finds the subject. */
+  table.sheet .first { border-left: 1.2px solid #555; }
+</style>
+
+<div class="head">
+  <h1>{{ sheet.school }}</h1>
+  <p class="sub">Master broadsheet, {{ sheet.class_group }}, {{ sheet.term }}{% if sheet.preview %}. Not released: these figures are live and may change.{% endif %}</p>
+</div>
+<div class="rule"></div>
+
+<table class="sheet">
+  <thead>
+    <tr>
+      <th class="name" rowspan="2">Name</th>
+      {% for name, span in subject_spans %}<th class="first" colspan="{{ span }}">{{ name }}</th>{% endfor %}
+      <th rowspan="2" class="first">Total</th>
+      <th rowspan="2">Average</th>
+      {% if sheet.show_position %}<th rowspan="2">Position</th>{% endif %}
+      {% if sheet.letters %}<th class="first" colspan="{{ sheet.letters|length }}">Grades</th>{% endif %}
+      <th rowspan="2" class="first">Promotion</th>
+    </tr>
+    <tr>
+      {% for column in header_columns %}<th{% if column.first %} class="first"{% endif %}>{{ column.label }}{% if column.out_of %}<small>{{ column.out_of }}</small>{% endif %}</th>{% endfor %}
+      {% for letter in sheet.letters %}<th{% if forloop.first %} class="first"{% endif %}>{{ letter }}</th>{% endfor %}
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in printed_rows %}
+    <tr>
+      <td class="name">{{ row.name|default:"A child with no name on record" }}</td>
+      {% for value, first in row.values %}<td{% if first %} class="first"{% endif %}>{{ value }}</td>{% endfor %}
+      <td class="first">{{ row.total }}</td>
+      <td>{{ row.average }}</td>
+      {% if sheet.show_position %}<td>{{ row.position }}</td>{% endif %}
+      {% for count, first in row.grades %}<td{% if first %} class="first"{% endif %}>{{ count }}</td>{% endfor %}
+      <td class="promo first">{{ row.promotion }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+  <tfoot>
+    {% for label, values in printed_footer %}
+    <tr>
+      <th class="name">{{ label }}</th>
+      {% for value, first in values %}<td{% if first %} class="first"{% endif %}>{{ value }}</td>{% endfor %}
+      <td class="first" colspan="{{ trailing }}"></td>
+    </tr>
+    {% endfor %}
+  </tfoot>
+</table>

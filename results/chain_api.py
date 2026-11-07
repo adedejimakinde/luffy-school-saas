@@ -200,6 +200,12 @@ class SheetRowOut(Schema):
     #: for their own. A preview until the class is released. A mirror of
     #: `class_print.may_print()`, which every print route asks again.
     may_print_cards: bool = False
+    #: The class's master broadsheet for this term (`results.broadsheet`), for a
+    #: login that may read it: the same people as `may_print_cards`, by the same
+    #: rule (`broadsheet.may_see` is `class_print.may_print`). Null for anybody
+    #: else, whose "Broadsheet" link goes to the broadsheet page as before. The
+    #: route behind the link asks again.
+    master_broadsheet_url: Optional[str] = None
 
 
 class ChainOut(Schema):
@@ -358,6 +364,7 @@ def chain(request):
                 **_printed(printing, sheet, state),
                 **_actions(state, roles, group.pk, mine),
                 may_print_cards=_may_print_cards(roles, group.pk, mine),
+                master_broadsheet_url=_master_broadsheet_url(roles, group.pk, mine, term),
             )
         )
     return ChainOut(term_id=term.pk, term=str(term), rows=rows)
@@ -387,6 +394,13 @@ def _telling(roles, sheets):
     ):
         counts[row["card__sheet_id"]] = row["n"]
     return counts
+
+
+def _master_broadsheet_url(roles, group_id, mine, term):
+    """Where this login opens the class's master broadsheet, or None if it may not."""
+    if not _may_print_cards(roles, group_id, mine):
+        return None
+    return f"/master-broadsheet/{group_id}/{term.pk}/"
 
 
 def _printing(roles, sheets):
@@ -527,6 +541,7 @@ def _step(request, class_group_id, move, *, reason=None):
         left_out_checked=_check_finished(left_out, moved.sheet, state),
         **_actions(state, roles, group.pk, mine),
         may_print_cards=_may_print_cards(roles, group.pk, mine),
+        master_broadsheet_url=_master_broadsheet_url(roles, group.pk, mine, term),
     )
 
 

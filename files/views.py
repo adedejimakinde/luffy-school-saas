@@ -58,8 +58,9 @@ def send(stored, variant, *, cache_control, download_name=None):
     response["X-Content-Type-Options"] = "nosniff"
     # Nothing served from here is a page: no script runs in it, whatever it is.
     response["Content-Security-Policy"] = "default-src 'none'; img-src 'self'; media-src 'self'; sandbox"
-    if variant.endswith(".pdf"):
-        response["Content-Disposition"] = f'attachment; filename="{download_name or "document.pdf"}"'
+    if variant.endswith((".pdf", ".xlsx")):
+        extension = variant.rsplit(".", 1)[1]
+        response["Content-Disposition"] = f'attachment; filename="{download_name or "document." + extension}"'
     return response
 
 

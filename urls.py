@@ -42,6 +42,7 @@ from schoolsite import views as site
 from files import views as files_views
 from results.views import (
     broadsheet_page,
+    master_broadsheet_page,
     card_index_page,
     card_page,
     chain_page,
@@ -136,6 +137,12 @@ urlpatterns = [
     # The third staff surface, on the same terms as the two above.
     path("results/", chain_page, name="results-chain"),
     path("broadsheet/", broadsheet_page, name="broadsheet"),
+    # One class's master broadsheet: the table, and its PDF and Excel files.
+    path(
+        "master-broadsheet/<int:class_group_id>/<int:term_id>/",
+        master_broadsheet_page,
+        name="master-broadsheet",
+    ),
     # The fourth staff surface, on the same terms as the three above.
     path("comments/", comments_page, name="comments"),
     path("ogsera/", ogsera_page, name="ogsera"),

@@ -1,0 +1,37 @@
+{% load static shell %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Broadsheet</title>
+
+{% comment %}
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning
+lines is not a comment and renders on the page.
+
+The title names no class and no school. This document is served to whoever
+opens the URL, with no `login_required` (`results/views.py` says why), and a
+tab title outlives the page in history.
+
+`data-class` and `data-term` are the two integers from the URL, written as they
+were given. Whether either exists, and whether this person may read it, is the
+route's question; `data-on-school` is the only fact the server adds, because
+the routes answer the portal with a 404 the page could not tell from a refusal.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'web/picker.css' %}">
+<link rel="stylesheet" href="{% static 'master/master.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'master/app.js' %}"></script>
+
+{% shell_open "results" %}
+    <main id="master" data-portal="{{ portal_host }}" data-on-school="{% if on_school %}yes{% endif %}"
+          data-class="{{ class_group_id }}" data-term="{{ term_id }}">
+      <noscript>
+        <h1>Broadsheet</h1>
+        <p>This page needs JavaScript. Please turn it on, or ask whoever set up
+        this system for you.</p>
+      </noscript>
+      <p class="state state-loading">Loading&hellip;</p>
+    </main>
+{% shell_close "results" %}

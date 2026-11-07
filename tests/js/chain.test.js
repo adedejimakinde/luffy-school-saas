@@ -403,6 +403,22 @@ test("every row links to its class's broadsheet", () => {
   assert.match(html, /<a class="broadsheet" href="\/broadsheet\/\?class=11">Broadsheet<\/a>/);
 });
 
+test("whoever may read the master broadsheet is sent to it, and everybody else to the plain one", () => {
+  // docs/broadsheet.md. The server says which (`master_broadsheet_url`), by the
+  // rule the routes behind the link ask again; the page decides nothing.
+  const html = states.chain({
+    term: "2025/2026 First term",
+    rows: [
+      { class_group_id: 11, class_group: "JSS 1A", state: "approved", state_label: "Approved", master_broadsheet_url: "/master-broadsheet/11/7/" },
+      { class_group_id: 12, class_group: "JSS 1B", state: "approved", state_label: "Approved", master_broadsheet_url: null },
+    ],
+  });
+
+  assert.match(html, /<a class="broadsheet" href="\/master-broadsheet\/11\/7\/">Broadsheet<\/a>/);
+  assert.match(html, /<a class="broadsheet" href="\/broadsheet\/\?class=12">Broadsheet<\/a>/);
+  assert.equal((html.match(/class="broadsheet"/g) || []).length, 2, "one Broadsheet link per row");
+});
+
 // -- a release asks first ----------------------------------------------------
 
 test("Release to parents asks first, and nothing is sent until it is answered", async () => {

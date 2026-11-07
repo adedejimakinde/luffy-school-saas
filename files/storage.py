@@ -25,7 +25,7 @@ from django.conf import settings
 
 #: A variant's name: lowercase letters, digits and hyphens, then an extension
 #: from a fixed list. Checked before any path is built from one.
-VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}\.(avif|webp|jpg|png|pdf|mp4)$")
+VARIANT = re.compile(r"^[a-z0-9][a-z0-9-]{0,23}\.(avif|webp|jpg|png|pdf|mp4|xlsx)$")
 KEY = re.compile(r"^[0-9a-f]{32}$")
 SCHEMA = re.compile(r"^[a-z0-9_]{1,63}$")
 
@@ -36,6 +36,7 @@ CONTENT_TYPES = {
     "png": "image/png",
     "pdf": "application/pdf",
     "mp4": "video/mp4",
+    "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 }
 
 INCOMING = ".incoming"

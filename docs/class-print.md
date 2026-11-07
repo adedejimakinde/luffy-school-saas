@@ -101,3 +101,6 @@ looked up only there. The test that holds the authority half is
 Grace who is a parent at St Mary's passes the middleware on St Mary's host, so
 only `may_print()` asking roles *here* stops them. With that line changed to
 ask roles at every school, the test fails (202 instead of 403).
+
+The class's master broadsheet (PDF and Excel) is made by this same path, with a
+different thing in the file: see [broadsheet.md](broadsheet.md).

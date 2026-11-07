@@ -47,6 +47,9 @@ class Kind(models.TextChoices):
     #: the one person who asked. Never uploaded, never sent on `/files/`, and
     #: removed a day after it was made (`PRINT_KEPT_FOR`).
     CLASS_CARDS = "class_cards", "Report cards for a class"
+    #: A class's master broadsheet, as a PDF or an Excel file, made by
+    #: `results.broadsheet_files` the same way and kept the same day.
+    CLASS_BROADSHEET = "class_broadsheet", "Broadsheet for a class"
 
 
 class Family(models.TextChoices):
@@ -181,6 +184,10 @@ PROFILES = {
         Profile(
             Kind.CLASS_CARDS, Family.MADE, "A class's report cards", 200 * MB,
             formats=frozenset(), readers=frozenset(), typical_bytes=3 * MB,
+        ),
+        Profile(
+            Kind.CLASS_BROADSHEET, Family.MADE, "A class's broadsheet", 50 * MB,
+            formats=frozenset(), readers=frozenset(), typical_bytes=1 * MB,
         ),
         Profile(
             Kind.BLOG_IMAGE, Family.BLOG, "A picture", 10 * MB, max_pixels=40_000_000,
