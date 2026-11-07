@@ -130,7 +130,13 @@ function classRow(row, note, { asking, telling, confirming, focus, printing }) {
       : `<span class="standing">${esc(row.state_label)}</span>`,
     // The sheet itself, so whoever is about to approve or release reads the
     // numbers first. The broadsheet route decides who may, as it always did.
-    `<a class="broadsheet" href="/broadsheet/?class=${encodeURIComponent(row.class_group_id)}">Broadsheet</a>`,
+    // The class teacher, vice principal, principal and administrator are sent
+    // to the class's master broadsheet (docs/broadsheet.md), which has the
+    // papers, the grades, the promotion and the PDF and Excel files; anybody
+    // else still reads the plain one. The routes behind each ask who may.
+    row.master_broadsheet_url
+      ? `<a class="broadsheet" href="${esc(row.master_broadsheet_url)}">Broadsheet</a>`
+      : `<a class="broadsheet" href="/broadsheet/?class=${encodeURIComponent(row.class_group_id)}">Broadsheet</a>`,
     actions.length
       ? `<span class="actions">${actions.join("")}</span>`
       : `<span class="actions quiet">${

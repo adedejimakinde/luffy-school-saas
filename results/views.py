@@ -248,6 +248,39 @@ def broadsheet_page(request):
     )
 
 
+#: The master broadsheet's own modules (`docs/broadsheet.md`).
+MASTER_BROADSHEET_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/picker.js",
+    "master/api.js",
+    "master/states.js",
+    "master/app.js",
+)
+
+
+def master_broadsheet_page(request, class_group_id: int, term_id: int):
+    """The frame for one class's master broadsheet. Holds no child and no number.
+
+    A shell like the chain's, for the same reasons: who may read the sheet is
+    `results.broadsheet.may_see()`'s question, asked by the routes behind it, and
+    **the two integers are trusted no further than the card page trusts its
+    own**, so the URL is no oracle for which classes exist. No `login_required`:
+    a redirect on a guessable URL would be one.
+    """
+    return render(
+        request,
+        "results/master_broadsheet_page.html",
+        {
+            "class_group_id": class_group_id,
+            "term_id": term_id,
+            "import_map": pages.import_map(*MASTER_BROADSHEET_MODULES),
+            "portal_host": portal_host(),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
 #: The result checker's own modules (`docs/messaging.md` D11). It reuses the
 #: card page's renderer and its withheld state rather than drawing a card of its
 #: own: the checker is a third reader of one payload, and a second renderer
@@ -292,6 +325,8 @@ def checker_page(request):
 
 
 __all__ = [
+    "MASTER_BROADSHEET_MODULES",
+    "master_broadsheet_page",
     "broadsheet_page",
     "card_page",
     "checker_page",

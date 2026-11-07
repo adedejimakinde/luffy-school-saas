@@ -3333,6 +3333,16 @@ class PrintState(models.TextChoices):
     FAILED = "failed", "Could not be made"
 
 
+class PrintKind(models.TextChoices):
+    """What a `ClassCardPrint` row made. All three go through the one job path."""
+
+    CARDS = "cards", "Report cards"
+    #: The master broadsheet as a landscape PDF (`results.broadsheet_files`).
+    BROADSHEET_PDF = "broadsheet_pdf", "Broadsheet (PDF)"
+    #: The same table as an Excel file.
+    BROADSHEET_XLSX = "broadsheet_xlsx", "Broadsheet (Excel)"
+
+
 class ClassCardPrint(models.Model):
     """One press of "Print report cards": who asked, for what, and what was made.
 
@@ -3361,12 +3371,21 @@ class ClassCardPrint(models.Model):
     #: The roles they printed in, as they were then ("principal", "teacher").
     requested_by_roles = models.CharField(max_length=100, blank=True, default="")
 
+    #: What was asked for. The report cards, or the class's master broadsheet
+    #: as a PDF or as an Excel file: one log and one job path for all three
+    #: (`docs/broadsheet.md`). A broadsheet is always the whole class.
+    kind = models.CharField(max_length=16, choices=PrintKind, default=PrintKind.CARDS)
+    #: The paper a broadsheet PDF was made for ("A3" or "A4", landscape). Blank
+    #: for report cards, which are A4 portrait, and for an Excel file.
+    paper = models.CharField(max_length=2, blank=True, default="")
+
     #: The children asked for, by membership id; empty for the whole class.
     student_ids = models.JSONField(default=list, blank=True)
     #: What the job found and printed: a preview (not yet released, and
     #: watermarked on every page) or the released cards. Null until it knows.
     preview = models.BooleanField(null=True, blank=True)
-    #: How many cards are in the file. Null until it is made.
+    #: How many cards are in the file (for a broadsheet, how many children it
+    #: has a row for). Null until it is made.
     card_count = models.PositiveIntegerField(null=True, blank=True)
 
     state = models.CharField(max_length=8, choices=PrintState, default=PrintState.PENDING)

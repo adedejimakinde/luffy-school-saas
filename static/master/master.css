@@ -1,0 +1,26 @@
+/*
+ * The master broadsheet. A wide table that scrolls sideways on a phone with
+ * the child's name held in place, and prints on paper.
+ *
+ * Colours, type, controls and tables are `web/design.css`'s, including the
+ * first column that stays put while the rest scrolls (`.scroll`): the first
+ * column here is the name, so nothing below has to pin it. This is the layout.
+ */
+.content > main { max-width: none; }
+.term { color: var(--muted); margin: 0 0 12px; }
+.chooser, .files { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 12px 0; }
+table.master th, table.master td { white-space: nowrap; }
+table.master thead th { text-align: center; vertical-align: bottom; }
+table.master thead th small { display: block; font-weight: 400; color: var(--muted); }
+/* The name may wrap, so the pinned column is a third of a phone and not half. */
+table.master td.name, table.master th.name { text-align: left; white-space: normal; min-width: 6.5rem; max-width: 9rem; }
+table.master td.promotion { text-align: left; }
+table.master tbody td.num { text-align: center; }
+table.master .group { border-left: 1px solid var(--border); }
+table.master tfoot th, table.master tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
+.files progress { width: 12rem; max-width: 100%; }
+@media print {
+  .chooser, .files, .back { display: none; }
+  table.master { font-size: 8pt; }
+  table.master th, table.master td { padding: 2px 4px; }
+}

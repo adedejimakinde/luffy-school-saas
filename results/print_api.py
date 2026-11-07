@@ -31,7 +31,7 @@ from academics.models import ClassGroup, Term
 from accounts.session import session_auth
 
 from . import class_print
-from .models import ClassCardPrint, PrintState
+from .models import ClassCardPrint, PrintKind, PrintState
 
 router = Router(auth=session_auth)
 
@@ -67,6 +67,10 @@ class JobOut(Schema):
     state_label: str
     class_group: str
     term: str
+    #: "cards", "broadsheet_pdf" or "broadsheet_xlsx".
+    kind: str = "cards"
+    #: "A3" or "A4" for a broadsheet PDF, else blank.
+    paper: str = ""
     done: int
     total: int
     #: Null until the job has looked: whether the file is a preview.
@@ -169,6 +173,20 @@ def job_status(request, job_id: int):
 )
 def job_pdf(request, job_id: int):
     """The file, through the upload service's sending (`files.views.send`)."""
+    return _send_the_file(request, job_id)
+
+
+@router.get(
+    "/print-jobs/{int:job_id}/file/",
+    response={200: None, 409: MessageOut, 410: MessageOut},
+    tags=["results"],
+)
+def job_file(request, job_id: int):
+    """The same, for a file that is not a PDF: the broadsheet's Excel export."""
+    return _send_the_file(request, job_id)
+
+
+def _send_the_file(request, job_id):
     from files import service
     from files.views import PRIVATE, send
 
@@ -178,7 +196,7 @@ def job_pdf(request, job_id: int):
     stored = service.find(job.file_key)
     if stored is None or service.is_expired(stored) or stored.uploaded_by_id != request.user.pk:
         return 410, MessageOut(detail=_GONE)
-    return send(stored, class_print.VARIANT, cache_control=PRIVATE, download_name=class_print.filename(job))
+    return send(stored, class_print.variant_of(job), cache_control=PRIVATE, download_name=class_print.filename(job))
 
 
 _GONE = (
@@ -207,27 +225,48 @@ def _job_out(job) -> JobOut:
         state_label=PrintState(job.state).label,
         class_group=job.class_group_name,
         term=job.term_label,
+        kind=job.kind,
+        paper=job.paper,
         done=job.done,
         total=job.total,
         preview=job.preview,
         card_count=job.card_count,
         created_at=job.created_at,
         expires_at=expires_at,
-        download_url=f"/api/results/print-jobs/{job.pk}/pdf/" if ready else None,
+        download_url=(
+            f"/api/results/print-jobs/{job.pk}/{'file' if job.kind == PrintKind.BROADSHEET_XLSX else 'pdf'}/"
+            if ready
+            else None
+        ),
         detail=_sentence(job, gone),
     )
 
 
 def _sentence(job, gone):
+    broadsheet = job.kind != PrintKind.CARDS
     if job.state == PrintState.PENDING:
         return "Waiting to start. This page will show progress."
     if job.state == PrintState.BUILDING:
+        if broadsheet:
+            return "Making the broadsheet."
         return f"Making the cards: {job.done} of {job.total} done."
     if job.state == PrintState.FAILED:
+        if broadsheet:
+            return "The broadsheet could not be made. Try again, and tell Classnode if it keeps happening."
         return "The cards could not be made. Try again, and tell Classnode if it keeps happening."
     if gone:
-        return _GONE
+        return _GONE_BROADSHEET if broadsheet else _GONE
     count = job.card_count or 0
+    if broadsheet:
+        pdf = job.kind == PrintKind.BROADSHEET_PDF
+        made = f"The {job.paper} PDF is" if pdf else "The Excel file is"
+        if job.preview:
+            stamped = "the PDF says" if pdf else "the file says"
+            return (
+                f"{made} ready, as a preview: these results are not released, so the figures are live and "
+                f"{stamped} PREVIEW, NOT RELEASED. The file is kept for a day."
+            )
+        return f"{made} ready to download. The file is kept for a day."
     cards = f"{count} report card{'' if count == 1 else 's'}"
     if job.preview:
         return (
@@ -235,6 +274,12 @@ def _sentence(job, gone):
             "says PREVIEW, NOT RELEASED. The file is kept for a day."
         )
     return f"{cards} ready to download and print. The file is kept for a day."
+
+
+_GONE_BROADSHEET = (
+    "This file was removed a day after it was made, as every printed class is. "
+    "Make the broadsheet again to get a new one."
+)
 
 
 __all__ = ["router"]

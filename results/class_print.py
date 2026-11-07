@@ -58,7 +58,7 @@ from django.utils.text import slugify
 
 from accounts.models import Role
 
-from .models import ClassCardPrint, PdfState, PrintState, ReleasedCard, ReleasedCardPdf, ResultSheet, SheetState
+from .models import ClassCardPrint, PdfState, PrintKind, PrintState, ReleasedCard, ReleasedCardPdf, ResultSheet, SheetState
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,7 @@ def start(actor, school, class_group, term, student_ids=None) -> ClassCardPrint:
         running = (
             ClassCardPrint.objects.select_for_update()
             .filter(
-                class_group=class_group, term=term, requested_by_id=actor.pk,
+                class_group=class_group, term=term, requested_by_id=actor.pk, kind=PrintKind.CARDS,
                 state__in=[PrintState.PENDING, PrintState.BUILDING], student_ids=wanted,
             )
             .first()
@@ -310,6 +310,12 @@ def build(job_id) -> ClassCardPrint | None:
     job = claim(job_id)
     if job is None:
         return None
+    if job.kind != PrintKind.CARDS:
+        # The class's broadsheet: the same job, claimed the same way, with a
+        # different thing in the file (`results.broadsheet_files`).
+        from . import broadsheet_files
+
+        return broadsheet_files.make(job)
     workdir = storage.building_dir(connection.schema_name)
     try:
         sheet = sheet_of(job.class_group, job.term)
@@ -434,7 +440,19 @@ def _title(job, preview):
     return f"{title} ({WATERMARK})" if preview else title
 
 
+def variant_of(job) -> str:
+    """The name of the one variant the job's stored file has."""
+    from . import broadsheet_files
+
+    return broadsheet_files.VARIANTS.get(job.kind, VARIANT)
+
+
 def filename(job) -> str:
+    """What the person's browser saves it as."""
+    from . import broadsheet_files
+
+    if broadsheet_files.is_broadsheet(job):
+        return broadsheet_files.filename(job)
     words = ["report cards", job.class_group_name, job.term_label.replace("/", "-")]
     if job.preview:
         words.append("preview not released")
@@ -489,29 +507,54 @@ def _width(text, size):
     return sum(_WIDTHS.get(ch, 722) for ch in text) * size / 1000
 
 
-def _stamp(pdf):
-    """One A4 Form XObject: the words three times on the diagonal, in red.
+def stamp_pages(source: Path, out_path: Path, *, preview: bool, title: str) -> int:
+    """Copy a one-piece PDF to `out_path`, stamped on every page if it is a preview.
 
-    A third opaque, so the card under it stays readable and the words cannot be
+    For a file made in one go (the class's broadsheet) rather than joined from
+    parts (`merge()`). The stamp is the same one, drawn to each page's own size
+    so that it crosses a landscape A3 as it crosses a portrait A4.
+    """
+    import pikepdf
+
+    with pikepdf.open(source) as out:
+        if preview:
+            stamps = {}
+            for page in out.pages:
+                box = tuple(round(float(v), 2) for v in page.mediabox)
+                if box not in stamps:
+                    stamps[box] = _stamp(out, box[2] - box[0], box[3] - box[1])
+                page.add_overlay(stamps[box], pikepdf.Rectangle(*box))
+        out.docinfo["/Title"] = title
+        out.docinfo["/Producer"] = "Classnode"
+        out.save(out_path)
+        return len(out.pages)
+
+
+def _stamp(pdf, width=595.28, height=841.89):
+    """One Form XObject the size of the page: the words three times on the diagonal, in red.
+
+    A third opaque, so the page under it stays readable and the words cannot be
     missed. It is drawn into each page's content, so a viewer cannot switch it
-    off the way it can hide an annotation or a layer.
+    off the way it can hide an annotation or a layer. A4 portrait unless told
+    another size; the type and the gap between the lines grow with the page.
     """
     import math
 
     import pikepdf
 
-    width, height = 595.28, 841.89
     angle = math.atan2(height, width)
     cos, sin = math.cos(angle), math.sin(angle)
+    scale = min(width, height) / 595.28
+    gap = 0.27319 * height  # 230 pt on A4 portrait
     lines = []
-    for size, offset in ((56, 0), (30, 230), (30, -230)):
+    for size, offset in ((56 * scale, 0), (30 * scale, gap), (30 * scale, -gap)):
         across = _width(WATERMARK, size)
         # Centre of the line, moved along the other diagonal by `offset`.
         cx, cy = width / 2 - sin * offset, height / 2 + cos * offset
         x = cx - cos * across / 2 + sin * size * 0.35
         y = cy - sin * across / 2 - cos * size * 0.35
         lines.append(
-            f"BT /F1 {size} Tf {cos:.5f} {sin:.5f} {-sin:.5f} {cos:.5f} {x:.2f} {y:.2f} Tm "
+            f"BT /F1 {size:.2f} Tf {cos:.5f} {sin:.5f} {-sin:.5f} {cos:.5f} {x:.2f} {y:.2f} Tm "
             f"({WATERMARK}) Tj ET"
         )
     content = "q /GS1 gs 0.80 0.05 0.05 rg " + " ".join(lines) + " Q"
@@ -554,5 +597,7 @@ __all__ = [
     "released_cards",
     "roster",
     "sheet_of",
+    "stamp_pages",
     "start",
+    "variant_of",
 ]

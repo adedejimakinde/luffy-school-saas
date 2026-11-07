@@ -51,6 +51,7 @@ from results.views import (
     CHECKER_MODULES,
     COMMENTS_MODULES,
     INDEX_MODULES,
+    MASTER_BROADSHEET_MODULES,
     OGSERA_MODULES,
 )
 from notices.views import SETTINGS_MODULES
@@ -81,6 +82,7 @@ PAGES = {
     "roll-import": ROLL_IMPORT_MODULES,
     "staff": STAFF_PAGE_MODULES,
     "broadsheet": BROADSHEET_MODULES,
+    "master-broadsheet": MASTER_BROADSHEET_MODULES,
     "invite": INVITE_MODULES,
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
