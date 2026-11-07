@@ -325,3 +325,9 @@ The card shows the child's own average and no class average or class position:
 the payload has no slot for either (`card_api`), and
 `test_no_class_position_or_class_average_is_on_the_card` reads the rendered
 page for both.
+
+## A whole class in one file
+
+"Print report cards" on the results page puts a class's cards into one PDF,
+through this file's renderer, off the request; before release it is a preview
+stamped on every page. See [class-print.md](class-print.md).

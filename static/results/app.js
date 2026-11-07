@@ -27,8 +27,11 @@ import {
   REFUSAL,
   STEP,
   fetchChain,
+  fetchPrintable,
+  fetchPrintJob,
   previewFamilies,
   printSlips,
+  startPrint,
   takeStep,
   tellFamilies,
 } from "./api.js";
@@ -70,8 +73,17 @@ export function fromChain(answer, { focus = null } = {}) {
     asking: null,
     telling: null,
     confirming: null,
+    printing: null,
     focus,
   };
+}
+
+/** How often the page asks how a print is getting on, in milliseconds. */
+export const PRINT_POLL_MS = 2000;
+
+/** Is this print job still being made? */
+export function stillMaking(job) {
+  return Boolean(job) && (job.state === "pending" || job.state === "building");
 }
 
 /**
@@ -161,7 +173,15 @@ export function slipsNote(result) {
   return { kind: "not-printed", detail: result.detail || "No slips were printed." };
 }
 
-export async function mount(root, { fetchImpl = fetch, download = saveFile, search = "" } = {}) {
+export async function mount(
+  root,
+  {
+    fetchImpl = fetch,
+    download = saveFile,
+    search = "",
+    wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  } = {},
+) {
   const portal = root.dataset.portal || "";
   const focus = focusFrom(search);
   let state = { step: "loading" };
@@ -214,6 +234,62 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile, sear
     draw();
   };
 
+  // "Print report cards" (docs/class-print.md). The job is made by a worker;
+  // the page asks how it is getting on every couple of seconds while it is
+  // being made, and stops when it is ready, has failed, or the box is closed.
+  const watchPrint = async (jobId) => {
+    while (state.printing && state.printing.job && state.printing.job.id === jobId && stillMaking(state.printing.job)) {
+      await wait(PRINT_POLL_MS);
+      if (!state.printing || !state.printing.job || state.printing.job.id !== jobId) return;
+      const result = await fetchPrintJob({ jobId, fetchImpl });
+      if (result.refusal) {
+        state = { step: result.refusal, ...(result.body || {}) };
+        draw();
+        return;
+      }
+      if (!state.printing || !state.printing.job || state.printing.job.id !== jobId) return;
+      if (!result.ok) {
+        const classGroupId = state.printing.class_group_id;
+        const notes = { ...state.notes, [classGroupId]: { kind: "cards-not-printed", detail: result.body.detail || "" } };
+        state = { ...state, notes, printing: null };
+        draw();
+        return;
+      }
+      state = { ...state, printing: { ...state.printing, job: result.body } };
+      draw();
+    }
+  };
+
+  const startPrinting = async (classGroupId) => {
+    const chosen = (state.printing && state.printing.chosen) || [];
+    const result = await startPrint({ classGroupId, termId: state.term_id, studentIds: chosen, fetchImpl });
+    if (result.refusal) {
+      state = { step: result.refusal, ...(result.body || {}) };
+      draw();
+      return;
+    }
+    if (!result.ok) {
+      const notes = { ...state.notes, [classGroupId]: { kind: "cards-not-printed", detail: result.body.detail || "" } };
+      state = { ...state, notes, printing: null };
+      draw();
+      return;
+    }
+    state = { ...state, printing: { ...state.printing, job: result.body } };
+    draw();
+    await watchPrint(result.body.id);
+  };
+
+  // A box ticked or unticked: remembered, not redrawn, so focus stays put.
+  root.addEventListener("change", (event) => {
+    const box = event.target && event.target.closest ? event.target.closest("[data-print-child]") : null;
+    if (!box || !state.printing) return;
+    const id = Number(box.dataset.printChild);
+    const chosen = new Set(state.printing.chosen || []);
+    if (event.target.checked) chosen.add(id);
+    else chosen.delete(id);
+    state = { ...state, printing: { ...state.printing, chosen: [...chosen].sort((a, b) => a - b) } };
+  });
+
   // Delegated from the root: every state is redrawn wholesale, so a listener
   // bound to a button would be bound to a node about to be replaced.
   root.addEventListener("click", async (event) => {
@@ -260,6 +336,37 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile, sear
       draw();
       return;
     }
+    if (action === "ask-print-cards") {
+      const classGroupId = Number(hit.dataset.class);
+      const result = await fetchPrintable({ classGroupId, termId: state.term_id, fetchImpl });
+      if (result.refusal) {
+        state = { step: result.refusal, ...(result.body || {}) };
+      } else if (!result.ok) {
+        const notes = { ...state.notes, [classGroupId]: { kind: "cards-not-printed", detail: result.body.detail || "" } };
+        state = { ...state, notes, printing: null };
+      } else {
+        const notes = { ...state.notes };
+        delete notes[classGroupId];
+        state = {
+          ...state,
+          notes,
+          printing: {
+            class_group_id: classGroupId,
+            preview: result.body.preview,
+            children: result.body.children,
+            chosen: [],
+            job: null,
+          },
+        };
+      }
+      draw();
+      return;
+    }
+    if (action === "cancel-print-cards") {
+      state = { ...state, printing: null };
+      draw();
+      return;
+    }
     if (action === "print-slips") {
       await printing(Number(hit.dataset.class), "");
       return;
@@ -286,6 +393,11 @@ export async function mount(root, { fetchImpl = fetch, download = saveFile, sear
 
   root.addEventListener("submit", async (event) => {
     const form = event.target;
+    if (form && form.dataset && form.dataset.print) {
+      if (event.preventDefault) event.preventDefault();
+      await startPrinting(Number(form.dataset.print));
+      return;
+    }
     if (form && form.admission_number && form.class_group_id) {
       // A lost slip. Sent as typed: the server trims it, and says so if no
       // child in the class has that number.

@@ -43,6 +43,10 @@ class Kind(models.TextChoices):
     #: Classnode's own blog (`blog`), on the platform's schema, not a school's.
     BLOG_COVER = "blog_cover", "Blog cover"
     BLOG_IMAGE = "blog_image", "Blog picture"
+    #: A class's report cards as one PDF, made by `results.class_print` for
+    #: the one person who asked. Never uploaded, never sent on `/files/`, and
+    #: removed a day after it was made (`PRINT_KEPT_FOR`).
+    CLASS_CARDS = "class_cards", "Report cards for a class"
 
 
 class Family(models.TextChoices):
@@ -54,6 +58,8 @@ class Family(models.TextChoices):
     DOCUMENT = "document"
     VIDEO = "video"
     BLOG = "blog"
+    #: Made on the server, not uploaded: nothing processes it.
+    MADE = "made"
 
 
 #: Raster formats Pillow decodes for us, by the name Pillow gives them. GIF is
@@ -168,6 +174,14 @@ PROFILES = {
             Kind.BLOG_COVER, Family.BLOG, "A picture", 10 * MB, max_pixels=40_000_000,
             formats=MARK_FORMATS, frames=(("full", 1200, 630),), typical_bytes=300 * 1024,
         ),
+        # A class's cards (`results.class_print`). `readers` is empty on
+        # purpose: the generic `/files/` route sends a file to anybody whose
+        # role is in `readers`, and this one goes only to the person who asked
+        # for it, through the results route that asks again who they are.
+        Profile(
+            Kind.CLASS_CARDS, Family.MADE, "A class's report cards", 200 * MB,
+            formats=frozenset(), readers=frozenset(), typical_bytes=3 * MB,
+        ),
         Profile(
             Kind.BLOG_IMAGE, Family.BLOG, "A picture", 10 * MB, max_pixels=40_000_000,
             formats=MARK_FORMATS, widths=(1600,), typical_bytes=300 * 1024,
@@ -190,6 +204,11 @@ PDF_MAX_PAGES = 200
 PDF_DOWNSAMPLE_ABOVE_DPI = 300
 PDF_TARGET_DPI = 200
 
+#: How long a made file (`Family.MADE`) is kept. The hourly check removes it
+#: after this (`files.service.sweep`), and the route that sends it refuses it
+#: from this moment on, so it is never sent late because the check runs hourly.
+PRINT_KEPT_FOR_HOURS = 24
+
 
 def profile_for(kind) -> Profile:
     try:
@@ -206,6 +225,7 @@ __all__ = [
     "PDF_DOWNSAMPLE_ABOVE_DPI",
     "PDF_MAX_PAGES",
     "PDF_TARGET_DPI",
+    "PRINT_KEPT_FOR_HOURS",
     "PROFILES",
     "Profile",
     "VIDEO_MAX_FPS",

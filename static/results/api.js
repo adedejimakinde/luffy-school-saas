@@ -263,3 +263,58 @@ async function jsonOf(response) {
     return null;
   }
 }
+
+export function printCardsUrl(classGroupId, termId) {
+  return `/api/results/print-cards/${encodeURIComponent(classGroupId)}/${encodeURIComponent(termId)}/`;
+}
+
+export function printJobUrl(jobId) {
+  return `/api/results/print-jobs/${encodeURIComponent(jobId)}/`;
+}
+
+/**
+ * "Print report cards" (`print_api`, docs/class-print.md): who could be
+ * printed for this class and term, and whether the file will be a preview.
+ * `{ok: true, body}`; `{ok: false, body}` for a refusal the row can say (403,
+ * 404); a page-level `refusal` for anything else, as every fetch here has.
+ */
+export async function fetchPrintable({ classGroupId, termId, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await getJson(printCardsUrl(classGroupId, termId), { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return printAnswer(answer, 200);
+}
+
+/**
+ * Start making the file: every child when `studentIds` is empty, else those.
+ * A 202 carries the job, which the page then watches with `fetchPrintJob()`.
+ */
+export async function startPrint({ classGroupId, termId, studentIds = [], fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await postJson(printCardsUrl(classGroupId, termId), { student_ids: studentIds }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return printAnswer(answer, 202);
+}
+
+/** How far the job has got. The server asks for a lost job again itself. */
+export async function fetchPrintJob({ jobId, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await getJson(printJobUrl(jobId), { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  return printAnswer(answer, 200);
+}
+
+function printAnswer(answer, expected) {
+  if (answer.status === expected && answer.body) return { ok: true, body: answer.body };
+  if ([403, 404, 409, 422].includes(answer.status)) return { ok: false, body: answer.body || {} };
+  return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}

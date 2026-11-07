@@ -42,6 +42,7 @@ export function chain({
   telling = null,
   confirming = null,
   focus = null,
+  printing = null,
 } = {}) {
   return [
     '<section class="state state-chain" data-state="chain">',
@@ -49,7 +50,7 @@ export function chain({
     `<p class="term">${esc(term)}</p>`,
     '<ul class="classes stack-list">',
     rows
-      .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus }))
+      .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus, printing }))
       .join(""),
     "</ul>",
     "</section>",
@@ -74,7 +75,7 @@ export function noTerm() {
  * is final — a wrong card is corrected by reissuing it, not by moving the
  * sheet back — so an empty row would read as a page that failed to draw.
  */
-function classRow(row, note, { asking, telling, confirming, focus }) {
+function classRow(row, note, { asking, telling, confirming, focus, printing }) {
   const actions = STEPS.filter(([flag]) => row[flag]).map(
     ([, step, label]) =>
       `<button type="button" data-action="step" data-step="${step}" ` +
@@ -111,6 +112,15 @@ function classRow(row, note, { asking, telling, confirming, focus }) {
         `data-class="${esc(row.class_group_id)}">Print checker slips</button>`,
     );
   }
+  if (row.may_print_cards) {
+    // docs/class-print.md: the class's cards as one PDF, made off the request.
+    // A preview until the class is released. Who may is asked again by every
+    // route behind the button; this flag is only a mirror of that.
+    actions.push(
+      `<button type="button" class="print-cards" data-action="ask-print-cards" ` +
+        `data-class="${esc(row.class_group_id)}">Print report cards</button>`,
+    );
+  }
   return [
     `<li id="class-${esc(row.class_group_id)}" class="row state-${esc(row.state)}` +
       `${focus === row.class_group_id ? " focus" : ""}${note ? ` ${esc(note.kind)}` : ""}">`,
@@ -134,6 +144,7 @@ function classRow(row, note, { asking, telling, confirming, focus }) {
       ? `<span class="told">${esc(row.families_told)} message${row.families_told === 1 ? "" : "s"} to families so far.</span>`
       : "",
     row.may_print_slips ? slips(row) : "",
+    printing && printing.class_group_id === row.class_group_id ? printCards(row, printing) : "",
     note ? noteFor(note) : "",
     "</li>",
   ].join("");
@@ -154,6 +165,7 @@ const NOTE_LABELS = {
   "not-told": ["label-stop", "Not sent"],
   "slips-printed": ["label-ok", "Downloading"],
   "not-printed": ["label-stop", "Not printed"],
+  "cards-not-printed": ["label-stop", "Not printed"],
 };
 
 function noteFor(note) {
@@ -236,6 +248,74 @@ function slips(row) {
     "</form>",
     "</div>",
   ].join("");
+}
+
+/**
+ * "Print report cards": choose the children, then watch the file being made.
+ *
+ * docs/class-print.md. Before the job: who could be printed, as boxes to tick,
+ * and a sentence saying that ticking none prints the whole class. A class not
+ * released says first, as a label, that the file is a **preview** with PREVIEW,
+ * NOT RELEASED across every page. During the job: the server's own sentence
+ * and a progress bar. After: a link to the file, which is the server's route
+ * and is kept for a day.
+ */
+export function printCards(row, printing) {
+  const id = esc(row.class_group_id);
+  const parts = ['<div class="telling print-cards-panel" role="group" aria-label="Print report cards">'];
+  if (printing.preview) {
+    parts.push(
+      '<div class="msg" role="status">',
+      '<span class="label label-warn">Preview</span>',
+      "<p>These results are not released, so the PDF is a preview: every page says ",
+      "PREVIEW, NOT RELEASED and it is not a report card to hand out.</p>",
+      "</div>",
+    );
+  }
+  const job = printing.job;
+  if (!job) {
+    const children = printing.children || [];
+    const n = children.length;
+    parts.push(
+      `<form class="print-cards-form" data-print="${id}">`,
+      "<fieldset>",
+      `<legend>Which children? Tick none to print the whole class (${n} card${n === 1 ? "" : "s"}).</legend>`,
+      children
+        .map((child) => {
+          const childId = esc(child.student_membership_id);
+          const ticked = (printing.chosen || []).includes(child.student_membership_id) ? " checked" : "";
+          return (
+            `<label><input type="checkbox" data-print-child="${childId}" value="${childId}"${ticked}> ` +
+            `${esc(child.name || "A child with no name on record")}</label>`
+          );
+        })
+        .join(""),
+      "</fieldset>",
+      '<span class="actions">',
+      '<button type="submit">Make the PDF</button>',
+      `<button type="button" data-action="cancel-print-cards" data-class="${id}">Cancel</button>`,
+      "</span>",
+      "</form>",
+    );
+  } else {
+    parts.push(`<p role="status">${esc(job.detail)}</p>`);
+    if (job.state === "pending" || job.state === "building") {
+      parts.push(
+        `<progress max="${esc(job.total || 1)}" value="${esc(job.done || 0)}">` +
+          `${esc(job.done || 0)} of ${esc(job.total || 0)}</progress>`,
+      );
+    }
+    parts.push('<span class="actions">');
+    if (job.download_url) {
+      parts.push(`<a class="btn btn-primary" href="${esc(job.download_url)}" download>Download the PDF</a>`);
+    }
+    parts.push(
+      `<button type="button" data-action="cancel-print-cards" data-class="${id}">Close</button>`,
+      "</span>",
+    );
+  }
+  parts.push("</div>");
+  return parts.join("");
 }
 
 /**

@@ -39,6 +39,9 @@ CONTENT_TYPES = {
 }
 
 INCOMING = ".incoming"
+#: Where a file made on the server (`Family.MADE`) is built before it is put in
+#: place: under the same root, so the last step is a rename, not a copy.
+BUILDING = ".building"
 
 
 class BadName(ValueError):
@@ -124,6 +127,44 @@ def drop_incoming(schema: str, key: str):
         pass
 
 
+def building_dir(schema: str) -> Path:
+    """A new, empty directory to build one made file in. The caller removes it."""
+    if not SCHEMA.match(schema or ""):
+        raise BadName(f"schema {schema!r}")
+    parent = root() / BUILDING / schema
+    parent.mkdir(parents=True, exist_ok=True)
+    return Path(tempfile.mkdtemp(dir=parent, prefix="job-"))
+
+
+def place(schema: str, key: str, variant: str, source: Path) -> int:
+    """Move a file built in `building_dir()` to where `key`'s variant lives.
+
+    A rename on one filesystem, so the file is never read into memory here and
+    no reader ever sees half of it. Returns its size.
+    """
+    target = path_of(schema, key, variant)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    os.chmod(source, 0o644)
+    os.replace(source, target)
+    return target.stat().st_size
+
+
+def forget_building(schema: str, older_than: float) -> int:
+    """Remove build directories a killed job left behind. Returns how many."""
+    parent = root() / BUILDING / schema
+    removed = 0
+    if not parent.is_dir():
+        return 0
+    for entry in parent.iterdir():
+        try:
+            if entry.is_dir() and entry.stat().st_mtime < older_than:
+                shutil.rmtree(entry, ignore_errors=True)
+                removed += 1
+        except FileNotFoundError:
+            pass
+    return removed
+
+
 def write_variant(schema: str, key: str, variant: str, data: bytes) -> int:
     return _write_atomically(path_of(schema, key, variant), [data])
 
@@ -154,16 +195,20 @@ def percent_used() -> float:
 
 
 __all__ = [
+    "BUILDING",
     "BadName",
     "CONTENT_TYPES",
     "INCOMING",
     "content_type",
+    "building_dir",
     "delete_variants",
+    "forget_building",
     "disk_usage",
     "drop_incoming",
     "incoming_path",
     "path_of",
     "percent_used",
+    "place",
     "read_incoming",
     "read_variant",
     "relative",
