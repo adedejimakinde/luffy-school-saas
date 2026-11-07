@@ -87,6 +87,9 @@ NOT_ON_THE_DESIGN = {
     # school's own crest and colour.
     "results/templates/results/report_card.html",
     "results/templates/results/report_card_ogun.html",
+    # The master broadsheet's paper (`results.broadsheet_files`): a WeasyPrint
+    # document in the school's own colour, like the cards.
+    "results/templates/results/broadsheet_print.html",
     "results/templates/results/checker_slips.html",
     # The exam slips are the checker slips' twin (`cbt/pdf.py`), printed the same way.
     "cbt/templates/cbt/exam_slips.html",

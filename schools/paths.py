@@ -46,6 +46,8 @@ PORTAL = frozenset(
         "help",
         "home",
         "marking",
+        # One class's master broadsheet (`results.broadsheet`): staff only.
+        "master-broadsheet",
         "notices",
         "ogsera",
         "promotion",
