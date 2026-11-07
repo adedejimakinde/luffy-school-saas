@@ -337,11 +337,14 @@ describe("the picker, open", () => {
       await field.scrollIntoViewIfNeeded();
       // The fixture: eight options, the most a 740px phone's sheet (70% tall, less its
       // 56px head and the search) shows without scrolling. The roll's class list is every
-      // class `seed_ui` made, and each file that adds one (UI Sit, in step 4, made it
-      // nine) lengthens it; a list past the sheet's maximum scrolls, which is right, but
-      // is not what this test is about. Trim the tail, never the chosen row.
+      // class `seed_ui` made, and each file that adds one lengthens it; a list past the
+      // sheet's maximum scrolls, which is right, but is not what this test is about. Keep
+      // the blank option and the chosen one, then the first options by position, to eight.
       await field.evaluate((s) => {
-        while (s.options.length > 8) s.remove(s.options.length - 1 - (s.selectedIndex === s.options.length - 1 ? 1 : 0));
+        const keep = new Set();
+        [...s.options].forEach((o, i) => { if (o.value === "" || i === s.selectedIndex) keep.add(o); });
+        for (const o of s.options) if (keep.size < 8) keep.add(o);
+        [...s.options].forEach((o) => { if (!keep.has(o)) o.remove(); });
       });
       assert.ok((await field.evaluate((s) => s.options.length)) > 6, "the control: a list longer than six");
       await field.tap();
