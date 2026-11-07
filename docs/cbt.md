@@ -779,3 +779,27 @@ opened (allowed by "Settled in interpretation", served to nobody yet).
 first subject, class, term, bank, question and test share ids), `tests/js/tests_page.test.js`,
 the Crestfield build in `schools/tests/test_crestfield.py`, the page in
 `tests/test_pages.py`, `tests/test_budget.py` and `tests/test_menu.py`.
+
+#### Controls
+
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied to
+a clean committed tree, run over the whole of `cbt/tests/test_banks_and_tests.py` (45
+tests), restored with `git checkout`, and the tree checked clean before the next. Counts
+are Django's, subtests included. Every one went red; none was layered.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| The administrator never reads a bank or a question, named exam officer or not | let the administrator role into `can_read_banks()` and `reach()` | 23: every bank, question, picture and test route answered the administrator, before and after being named (21 subtests), and the list stopped being summaries only |
+| A teacher reaches only their own subjects and levels | a teacher's reach reads every bank | 7: another subject and another level opened, a teacher with no subject got banks, a test for a class not theirs was set, the principal-elsewhere case, and a picture reached a teacher of nothing |
+| Only the principal approves | add the vice principal to `APPROVING_ROLES` | 1: `test_the_vice_principal_reads_every_bank_and_test_and_writes_nothing` |
+| The paper sent to a device carries no key | add `correct_index` to `paper.SENT` and the payload | 2: the preview's keys, and `for_device()` itself |
+| A copied question cannot be edited | never create `cbt_a_published_item_is_frozen` | 1: `test_the_database_refuses_an_edit_to_a_copied_question` |
+| A test keeps its own copy, not the bank's | a test's page reads the stem from the bank question | 1: `test_editing_retiring_and_re_answering_the_bank_changes_nothing_in_the_test` |
+| A role at one school is nothing at another (isolation) | `_roles()` reads the login's roles at every school | 1: `test_a_principal_elsewhere_is_only_what_they_are_here` |
+| The reach is read only on the school's own connection (isolation) | drop the schema check in `_here()` | 1: `test_the_reach_is_read_only_on_the_schools_own_connection` |
+| A picture goes only to who reads it, at its own school (isolation, access) | `_reads_picture()` answers yes | 1: `test_a_picture_is_sent_only_at_its_own_school_and_to_who_reads_it` (another teacher and Grace's staff got it) |
+| A change of classes after draft is logged | `change_classes_as()` writes no log | 1: `test_changing_a_published_tests_classes_is_logged` |
+| The state log cannot be edited | never create `cbt_test_state_changes_are_append_only` | 1: `test_the_chain_and_its_record` |
+| A send-back needs a reason | the reason is optional | 1: `test_a_draft_cannot_be_edited_once_sent_and_a_send_back_draws_again` |
+| Bursars, parents and students get nothing | add them to `TEST_ROLES` | 4: `tests/` answered the bursar, the parent and the student |
+| A teacher sets tests only for classes they teach | `teaches()` answers yes for any teacher with a pair | 2: a class not theirs was set, and a class not theirs was added to a published test |
