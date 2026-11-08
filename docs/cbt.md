@@ -1,7 +1,7 @@
 # CBT: computer-based tests
 
-Status: **Phase 2, steps 0 to 4 built** (see "Built", at the end). Steps 5 and 6 are
-still design. The screens are in [`docs/mockups/cbt/`](mockups/cbt/index.html), each at
+Status: **Phase 2, steps 0 to 5 built** (see "Built", at the end). Step 6 is still
+design. The screens are in [`docs/mockups/cbt/`](mockups/cbt/index.html), each at
 375 and 1280 px in `docs/mockups/cbt/shots/`. The owner's decisions of 20, 23 and 24
 October 2026 are folded in below and summarised next. No question is open.
 
@@ -35,7 +35,7 @@ One PR per step, each cut from `main`.
 2. Student exam PIN and slips. **Built** (see "Built").
 3. Question bank and tests. **Built** (see "Built").
 4. Test screen, with offline and power-cut resume. **Built** (see "Built").
-5. Marking, send to CA and release.
+5. Marking, send to CA and release. **Built** (see "Built").
 6. UTME-style and WASSCE-style modes.
 
 Two layers on one engine:
@@ -986,3 +986,155 @@ control was run with them collected.
 | The `/sit/` cookie opens one attempt at one school (isolation) | no schema check, and the session looked up at every school | 1 error: `test_the_cookie_is_refused_at_the_other_school...` (Grace's host answered with St Mary's attempt) |
 | Step 0: the vice principal approves and sends back | the principal alone in `APPROVING_ROLES` | 1: `test_the_vice_principal_approves_and_sends_back_like_the_principal` |
 | Step 0: nobody else does | a teacher in `APPROVING_ROLES` | 4: `test_nobody_else_approves_or_sends_back` (the teacher approved), and `test_the_chain_and_its_record` |
+
+### Step 5, marking, send to CA and release
+
+Nothing from step 6: no UTME-style or WASSCE-style mode. The live invigilator screen stays
+in "Left for later".
+
+**Where it lives.**
+
+| | |
+| --- | --- |
+| `cbt/models.py` | `KeyCorrection`, `TestRelease`, `TestReleaseRestore`, `ReleasedTestScore`, `CaTransfer`, `CaTransferLine` |
+| `cbt/migrations/0004_marking_ca_and_release_are_kept_and_a_release_is_final.py` | the tables, their constraints (`a_key_correction_says_why`, `a_restore_says_why`, `one_released_score_per_student`, `a_student_who_did_not_sit_gets_no_mark`, ...) and the triggers: `cbt_key_corrections_are_append_only`, `cbt_test_releases_are_append_only`, `cbt_release_restores_are_append_only`, `cbt_released_test_scores_are_append_only`, `cbt_ca_transfers_are_append_only`, `cbt_ca_transfer_lines_are_append_only`, `cbt_a_key_is_corrected_only_before_release` |
+| `cbt/access.py` | `marks_test()`, `reads_results()`, `reads_released_only()`, `restores()`, `classes_of()` |
+| `cbt/marking.py` | `keys_of()`, `answers_of()`, `mark()`, `scores_of()`, `round_half_up()`, `results_as()` (screen 7 and the item analysis), `correct_key_as()`, `close_test_as()` |
+| `cbt/ca.py` | `columns_as()`, `preview_as()`, `send_as()`, `lock_of()` |
+| `cbt/release.py` | `release_as()`, `restore_as()`, `student_scores()` (the student's door), `family_scores_as()` |
+| `cbt/jobs.py`, `cbt/management/commands/close_overdue_attempts.py` | the job that closes attempts nobody read |
+| `cbt/results_api.py` | `/api/cbt/`: `GET tests/{id}/results/`, `POST tests/{id}/items/{item}/key/`, `POST tests/{id}/close/`, `GET` and `POST tests/{id}/ca/`, `POST tests/{id}/classes/{class}/release/`, `POST releases/{id}/restore/`, `GET scores/` |
+| `cbt/views.py`, `static/test-results/` | `/tests/results/#<id>` (screen 7) and `#ca/<id>` (screens 8a, 8b), linked from each approved test on the Tests page |
+| `cbt/score_views.py`, `static/test-scores/` | `/test-scores/`: a parent's children's released scores (09b), and a student's own behind the door (09a); `POST /test-scores/api/open/` |
+| `cbt/demo.py` | finished attempts for `crestfield reset` and `seed_ui`, sat through `sitting.start()`, `sync()` and `submit()` |
+
+**Marking.** No score is stored while a test is live. A score is the marks of every item
+whose counted answer (the same rule as `sitting.counted_answers()`, read for the whole
+test in two queries) is its key; the key is the item's own or its latest
+`KeyCorrection`'s. The attempt that counts is a student's latest; one still open has no
+score. A blank is no answer and earns nothing.
+
+**Key corrections.** A teacher of the test or the principal picks the right option, with
+a reason. The item is never edited (it is frozen); the correction is a row, so every
+attempt is marked again the moment it exists, and the row keeps whose scores moved, from
+what to what, which the page lists. Refused while any class of the test has a release
+that is not restored, by the service and by the trigger.
+
+**Item analysis** (screen 7), over the closed attempts of the classes this login reads:
+per question, how many chose each option and how many left it blank, the facility
+(percent right), the wrong option chosen most (a tie goes to the earlier letter), and
+"Check the key" where the strongest third of students mostly chose a wrong option. The
+questions are listed hardest first, with the right answer marked; it is shown to staff
+who read results, and never to the administrator.
+
+**Scores into CA.** As "How scores reach CA" above. The teacher picks one of the
+subject's CA columns for the test's term (looked up in this school's schema, by term and
+subject as well as id) and keep or replace; the preview (8a) lists every student of their
+classes, with the test score, the scaled mark (`round_half_up()`, integers only), the mark
+in the column now, and what the send will do: new, replace, kept, already this mark, no
+mark (did not sit, or still sitting), or locked (the class's results are submitted or
+released, read as the gradebook reads them). A mark that this test's own earlier send did
+not write is marked **typed by hand**. The confirm (8b) sends back what the preview showed,
+student by student (score, mark, mark in the column, its version), and the send:
+
+- refuses the whole send if any test score has moved since the preview (a key
+  corrected, an attempt closed), so **what is written is what was previewed**;
+- refuses a replace that would overwrite a mark typed by hand unless the confirm ticks
+  "Replace the N marks typed on the marking sheet", which the screen asks for by name;
+- writes through `gradebook.services.set_score_as()` with the version shown, so a mark
+  typed since the preview raises `ScoreChangedMeanwhile` (line `changed_meanwhile`) and a
+  submitted or released class raises `MarksLocked` (line `locked`); a student who has
+  moved to a class the sender does not teach is refused by the gradebook's narrowing, and
+  that line says so as `locked`;
+- writes nothing for a student who did not sit (line `not_sat`, never a zero), and keeps
+  a mark under "keep" (line `kept`);
+- refuses a test without the exam PIN in the service (`Test.may_send_to_ca`), whatever
+  the request says.
+
+Each send is one `CaTransfer` (numbered per test) and one line per student. Sending again
+with "keep" writes only the new ones.
+
+**Release and restore.** A class is released when nobody in it is still sitting and its
+sitting is not open (closed by hand, or the window over), by a teacher of the test for a
+class they teach it to, or the principal. It freezes, in one transaction, each student's
+score, out of, questions right, and their corrections: their own paper in their own
+order and letters (from the attempt's seed, as `paper.for_device()` orders it), what they
+chose, the right answer and its explanation. Released is final. The principal alone
+restores, with a reason: the scores stop showing to the student and the parent, the
+frozen rows stay, a CA mark already sent is untouched, and the teacher sees who restored
+it and why. A later release is a new row with scores frozen afresh, after a key
+correction if one was needed.
+
+**The student's and the parent's pages** (`/test-scores/`). A student has no account, so
+their page is a door, like `/sit/`: the test code (the "review code" of 09a: the teacher
+reads it out, or sets a new one), their admission number and their exam PIN, behind the
+exam door's throttle and with its one sentence for every failure (and the student must
+have sat that test). Proved, it shows their own released score for that test with the
+questions they did not get right (all of them on request), and their other released
+scores; before release, or after a restore, it says the score has not been released. It
+sets no cookie and keeps nothing; "Done" or closing the page forgets it. It is not under
+`/sit/`, so the exam page's worker never sees it. A signed-in parent is shown each of
+their own children's released scores (title, subject, score, percent, when) and how many
+tests are waiting for release: no question, no answer, no class average, and never the
+student's door. The report cards page links to it, and it back.
+
+**Closing a test** (published to closed): a teacher of the test or the principal, once
+nobody is sitting it. Nobody starts it again, by window or by hand; its answers, scores
+and releases are kept, and it can still be released and sent to CA.
+
+**The job.** `manage.py close_overdue_attempts` walks every school and settles every
+approved test's attempts whose time and late window are over, each **stamped when it was
+due** (`settle()` closes at `closes_for_good_at()`), so a late run writes what a timely one
+would. Twice is harmless: an attempt is closed once. **Its cron line is not in this PR**
+(`deploy/` was out of bounds for it): until it is, a read or a sync still closes them, as
+in step 4.
+
+**Who does what, on the server.**
+
+| | results, item analysis | correct a key, close the test | send to CA | release | restore |
+| --- | --- | --- | --- | --- | --- |
+| Teacher of the test | their classes | yes | their classes | their classes | no |
+| Principal | all | yes | all | all | **yes, alone** |
+| Vice principal | all, read | no | no | no | no |
+| Administrator | **released scores only**, no answer and no item | no | no | no | no |
+| Exam officer | nothing beyond their role | no | no | no | no |
+| Another teacher | no (403) | no | no | no | no |
+| Bursar, parent, student | no (404) | no | no | no | no |
+
+A student sees their own released score, a parent their own child's, on `/test-scores/`.
+
+**Where this differs from the request that built it** (said in the PR; this note wins):
+
+- **The vice principal** reads every test's results and item analysis, and does not
+  correct keys, send to CA, release or restore: "Who sees what" gives them "All attempts
+  and results (read); not release, not send to CA" (the request gave them everything the
+  principal has, release and restore included). `set_score_as()` refuses them too.
+- **Restore is the principal's alone** ("TestReleaseRestore": "by the principal only").
+- **A teacher of the test releases** their own classes ("Who sees what": "Their classes'
+  attempts; send to CA; release"); the request gave release to the principal and the vice
+  principal only.
+- **The administrator sees released scores**, with no question, option or key ("The
+  administrator": "sees CBT scores only after release"); the request said no scores.
+- **The results are their own page**, `/tests/results/`, beside the Tests page rather
+  than inside it: the Tests page had under half a kilobyte left of its 150 KB budget.
+- **A re-release freezes afresh** rather than serving the earlier frozen rows again: the
+  rows are the same when nothing changed, and new rows when a key was corrected.
+
+**Crestfield.** `crestfield reset` now has eight of JSS 2B sit the JSS 2 Mathematics test
+before the visit, in a sitting opened and closed by hand, so its results, item analysis
+and Send to CA show real numbers; JSS 2A's sitting stays as step 4 left it, for the visit,
+and nothing is released. `seed_ui` gives `tests/ui/screens.test.js` "UI Results", a test
+six of Sunrise's JSS 1A sat and the principal released, with a fixed code and the first
+child's exam PIN (DEBUG only).
+
+**Tests.** `cbt/tests/test_marking.py` (two schools on their own hosts whose first class,
+term, subject, assessment, test and student share ids), `tests/js/tests_results.test.js`,
+`tests/js/test_scores.test.js`, the Crestfield build in `schools/tests/test_crestfield.py`,
+`seed_ui` in `schools/tests/test_seed_demo.py`, the pages in `tests/test_pages.py` and
+`tests/test_budget.py`, and `tests/ui/screens.test.js`: screen 7 as the principal and as
+the administrator, Send to CA's preview and confirm, the parent's page and the student's
+door and score, at 320, 390 and 1280 as well as the usual widths.
+
+#### Controls
+
+Being run: break, see red, restore, over the whole of `cbt/tests/test_marking.py`. The table follows in this PR.
