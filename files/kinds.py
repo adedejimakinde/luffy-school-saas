@@ -103,6 +103,10 @@ class Profile:
     widths: Tuple[int, ...] = ()
     #: Fixed-size variants (name, width, height) where a frame is fitted.
     frames: Tuple[Tuple[str, int, int], ...] = field(default_factory=tuple)
+    #: Square sides of the installed app's icon (`icon-<side>.png`): the mark inside
+    #: the maskable safe zone, on white, so a phone can cut it to any shape
+    #: (`files.images.app_icon`, `docs/pwa.md`).
+    icons: Tuple[int, ...] = ()
     #: About what one processed upload of this kind keeps, for the quota check
     #: made before anything is processed. The real size is checked afterwards.
     typical_bytes: int = 200 * 1024
@@ -111,6 +115,9 @@ class Profile:
     def max_mb(self) -> int:
         return self.max_bytes // MB
 
+
+#: The two sizes a browser asks of an installable app's icons.
+APP_ICON_SIDES = (192, 512)
 
 PROFILES = {
     p.kind: p
@@ -134,6 +141,7 @@ PROFILES = {
             Kind.CREST, Family.MARK, "A crest", 5 * MB, max_pixels=4096 * 4096,
             formats=MARK_FORMATS, public=True, master_side=1024,
             frames=(("card", 256, 256), ("site", 128, 128)), typical_bytes=300 * 1024,
+            icons=APP_ICON_SIDES,
         ),
         Profile(
             Kind.LOGO, Family.MARK, "A logo", 5 * MB, max_pixels=4096 * 4096,
@@ -240,6 +248,7 @@ def profile_for(kind) -> Profile:
 
 
 __all__ = [
+    "APP_ICON_SIDES",
     "Family",
     "Kind",
     "MB",

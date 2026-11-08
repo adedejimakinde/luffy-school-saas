@@ -130,15 +130,22 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
             card = cards.card_for(self.ada, self.term_of(self.stmarys, TermName.FIRST))
         page = self.get_page(self.mama).content.decode()
 
-        for absent in (
-            card.student_name,
-            card.class_group_name,
-            card.school_name,
-            str(card.total_scored),
-            str(card.own_average),
-        ):
+        for absent in (card.student_name, card.class_group_name, card.school_name):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, page, "the shell is carrying card content")
+
+        # The figures are held to what a person reads, not to the markup: a short number is
+        # bound to turn up inside an id (`data-student-membership-id="1162"` holds "162"),
+        # and the two ids the shell is allowed are in attributes (see `_STUDENT_ID_ATTR`). Scripts and
+        # styles are out, and so is every tag's attributes; the words between tags are in.
+        visible = re.sub(r"<(script|style)\b.*?</\1>", " ", page, flags=re.S | re.I)
+        visible = re.sub(r"<[^>]*>", " ", visible)
+        for absent in (str(card.total_scored), str(card.own_average)):
+            with self.subTest(absent=absent):
+                self.assertIsNone(
+                    re.search(rf"(?<![\w.]){re.escape(absent)}(?![\w.])", visible),
+                    "the shell is carrying a card figure in its text",
+                )
 
     def test_a_visitor_who_is_not_signed_in_gets_the_frame(self):
         """Not a redirect, and not a 403.

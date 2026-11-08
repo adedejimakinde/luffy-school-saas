@@ -22,11 +22,14 @@ export async function registerWorker({ navigator = globalThis.navigator } = {}) 
   }
 }
 
-/** Forget the worker's copies of the pages (they hold the signed-in menu). */
+/** Every cache the portal's worker keeps is named so; the exam's (`sit-`) are not (`docs/pwa.md`). */
+export const PORTAL_CACHES = "luffy-";
+
+/** Forget everything the worker kept: the pages (they hold the signed-in menu) and the shell. */
 export async function forgetPages({ caches = globalThis.caches } = {}) {
   if (!caches) return;
   try {
-    await caches.delete(PAGES_CACHE);
+    for (const name of await caches.keys()) if (name.startsWith(PORTAL_CACHES)) await caches.delete(name);
   } catch (error) {
     console.error("The cached pages could not be cleared.", error);
   }

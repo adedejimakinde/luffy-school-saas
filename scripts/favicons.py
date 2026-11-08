@@ -15,7 +15,8 @@ so the square fills the icon and a 16px tab icon spends no pixel on margin.
   icon-512.png           512 x 512, for site.webmanifest and the logo search
                          engines are given in the structured data
 
-`site.webmanifest` is written by hand and lives beside them. From the
+Classnode's own manifest is `schools.pwa.SITE_MANIFEST`, which names the two
+icons above; a school's is made from its crest (`docs/pwa.md`). From the
 repository root:
 
   python scripts/favicons.py
