@@ -285,20 +285,30 @@ class ItemAnalysisTests(MarkingSetUp):
         self.assertEqual(sum(items[self.item_ids[1]]["percent"]), 100)
 
     def test_only_the_answer_that_counts_is_counted(self):
-        """Ada answers question 1 with B, then changes it to A: the analysis counts her A
-        once, never the B she left, and her score is the A's."""
+        """Ada answers question 1 with B, changes it to A, and after her time is up her
+        computer sends C, which is refused and kept. The analysis counts her A once: never
+        the B she left, never the C that arrived last."""
         device = Client()
         self.started("SM/001", device=device)
         when = self.in_window(6)
         first = [{"seq": 1, "item": self.item_ids[0], "chosen": 1, "chosen_at": when.isoformat()}]
         second = [{"seq": 2, "item": self.item_ids[0], "chosen": 0, "chosen_at": (when + timedelta(seconds=30)).isoformat()}]
         with self.at(when + timedelta(seconds=40)):
-            self.sit("sync/", {"answers": first}, device=device)
-            self.sit("submit/", {"answers": second}, device=device)
+            self.sit("sync/", {"answers": first + second}, device=device)
+        with connected_to(self.stmarys):
+            deadline = Attempt.objects.get().base_deadline
+        late = [{"seq": 3, "item": self.item_ids[0], "chosen": 2, "chosen_at": (deadline + timedelta(seconds=30)).isoformat()}]
+        with self.at(deadline + timedelta(minutes=1)):
+            self.sit("sync/", {"answers": late}, device=device)
+        with connected_to(self.stmarys):
+            from cbt.models import AnswerEvent
+
+            self.assertEqual(AnswerEvent.objects.order_by("received_at", "id").last().refusal, "after_time")
         with self.after():
             body = self.results().json()
         item = next(i for i in body["items"] if i["item_id"] == self.item_ids[0])
         self.assertEqual((item["chose"], item["facility"]), ([1, 0, 0, 0], 100))
+        self.assertEqual(self.by_name(body)["Ada Obi"]["score"], 1)
 
     def test_a_blank_answer_is_counted_as_blank(self):
         self.finish("SM/001", [0, None, None, 0])
