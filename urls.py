@@ -20,6 +20,7 @@ from django.urls import path
 from api import api
 from academics.views import promotion_page, setup_page
 from accounts.views import (
+    invitation_page,
     roll_import_page,
     roll_page,
     sign_in_page,
@@ -35,7 +36,6 @@ from gradebook.views import marking_page, subject_teachers_page, subject_teacher
 from home.views import home_page
 from onboarding.views import help_page, start_again_page, start_here, step_page
 from notices.views import settings_page
-from schools.demo import only_in_the_single_host_demo
 from schools.paths import RESERVED
 from schools.views import reserved
 from schoolsite import editor as site_editor
@@ -77,20 +77,16 @@ urlpatterns = [
     # no connection. At the root because a worker's scope is where it is served
     # from. Identical for every school and for a caller with no session.
     path("sw.js", service_worker, name="service-worker"),
-    # Development only (`settings.DEMO_SINGLE_HOST`): the two doors on a
-    # school's own host too, so one forwarded port is the whole demo. A 404
-    # unless `schools.demo.single_host()`. `urls_public.py` serves the real
-    # ones on the portal, listed before these, so they win there.
-    path(
-        "sign-in/",
-        only_in_the_single_host_demo(sign_in_page),
-        name="demo-sign-in",
-    ),
-    path(
-        "staff-sign-in/",
-        only_in_the_single_host_demo(staff_sign_in_page),
-        name="demo-staff-sign-in",
-    ),
+    # The school's own two doors (`docs/sign-in-page.md`, "A school's own
+    # door"): its crest, name and colour, for its own members only, and a
+    # session good on this host alone. `urls_public.py` names the portal's,
+    # listed before these, so the portal's own names win there.
+    path("sign-in/", sign_in_page, name="school-sign-in"),
+    path("staff-sign-in/", staff_sign_in_page, name="school-staff-sign-in"),
+    # Where an invitation's link lands: the school it is for
+    # (`settings.INVITATION_ACCEPT_URL`), and the portal too, for every link
+    # sent before. Another school's invitation is a 404 here (`api._validated`).
+    path("invitations/<str:token>/", invitation_page, name="invitation"),
     # The first staff surface on a school's host, and the mirror image of the
     # two sign-in pages: they are portal-only because a door needs a host that
     # lets somebody with no membership through, and this needs the one host

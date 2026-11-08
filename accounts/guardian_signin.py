@@ -95,6 +95,8 @@ from .models import (
     GuardianContact,
     GuardianContactCode,
     GuardianSignIn,
+    Membership,
+    Role,
     SignInScope,
 )
 
@@ -234,6 +236,28 @@ def _contacts_typed(value: str):
     )
 
 
+def _at(school, contacts):
+    """The contacts whose guardian is a parent at `school` today, or all of them on the portal.
+
+    **What a school's own door is.** On `<school>.<domain>/sign-in/` a code is
+    sent to, answered by and opens a session for a guardian with an active
+    PARENT membership at that school and nobody else; a code session reaches
+    PARENT and nothing more (`SchoolAccessMiddleware`), so any other membership
+    would open a door onto a refusal. A guardian who is not one there is
+    treated as a number nobody holds: sent nothing, refused with the one
+    sentence, and never offered on a shared handset. Nothing is said about
+    another school.
+    """
+    if school is None:
+        return contacts
+    parents = set(
+        Membership.objects.with_access()
+        .filter(school=school, role=Role.PARENT, user_id__in={c.guardian.user_id for c in contacts})
+        .values_list("user_id", flat=True)
+    )
+    return [contact for contact in contacts if contact.guardian.user_id in parents]
+
+
 def _live_contacts_for(value: str):
     """The verified rows among `_contacts_typed(value)`: the ones a sign-in code may be minted for."""
     return [contact for contact in _contacts_typed(value) if contact.verified_at is not None]
@@ -257,7 +281,7 @@ def _eligible_for_a_code(contacts):
     ]
 
 
-def request_code(request, value: str) -> None:
+def request_code(request, value: str, *, school=None) -> None:
     """Send a sign-in code to `value`, if there is anything there to send to.
 
     Returns nothing, raises only `TooManyAttempts`, and the caller says
@@ -280,13 +304,16 @@ def request_code(request, value: str) -> None:
     limit slots to deliver the same six digits to the same person, and
     `sign_in_with_code()` is built to spend a code against whichever row is
     holding it.
+
+    `school` is the school whose own host this door is on (None on the
+    portal): there, only its parents are sent anything (`_at()`).
     """
     address = throttling.client_address(request)
     wait = _wait_before_retrying(value, address)
     if wait is not None:
         raise TooManyAttempts(wait)
 
-    eligible = _eligible_for_a_code(_live_contacts_for(value))
+    eligible = _eligible_for_a_code(_at(school, _live_contacts_for(value)))
     if not eligible:
         return None
 
@@ -334,7 +361,7 @@ def _spend(contacts, raw_code):
 
 
 
-def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=None):
+def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=None, school=None):
     """Answer a code and open a session. Returns the `User` signed in.
 
     Raises `TooManyAttempts` when the window is closed, `BadCode` for every
@@ -350,11 +377,20 @@ def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=
     key fixed by an attacker beforehand is not the one the guardian ends up
     holding — and rotates the CSRF token with it. It runs **after** the pick is
     resolved, so a session never exists as the wrong guardian even briefly.
+
+    `school` is the school whose own host this door is on (None on the
+    portal). There only its parents' rows are tried, offered and signed in
+    (`_at()`), the pick is held in the school's own session, and the session
+    opened is bound to the school (`schools.sessions`).
     """
+    from schools.sessions import begin_school_session
+
     address = throttling.client_address(request)
     wait = _wait_before_retrying(value, address)
     if wait is not None:
         raise TooManyAttempts(wait)
+    if school is not None:
+        begin_school_session(request)
 
     # A code on the request means this is the first call, always — even when a
     # pick is parked on the session. Reading the parked one first would let an
@@ -364,11 +400,11 @@ def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=
     # again. No code and something parked is the second call.
     pending = request.session.get(PENDING_PICK)
     if pending is not None and not raw_code:
-        return _finish_pick(request, value, pending, guardian_public_id)
+        return _finish_pick(request, value, pending, guardian_public_id, school)
     if raw_code:
         request.session.pop(PENDING_PICK, None)
 
-    code = _spend(_contacts_typed(value), raw_code)
+    code = _spend(_at(school, _contacts_typed(value)), raw_code)
     if code is None:
         _note_failure(value, address)
         raise BadCode(REFUSED)
@@ -387,11 +423,11 @@ def sign_in_with_code(request, value: str, raw_code: str, *, guardian_public_id=
     # holding a phone and an email is one offer: the email was never in this
     # list. Two offers means two people on one handset, which is the only case
     # the chooser is for.
-    offered = [contact.guardian for contact in _eligible_for_a_code(_live_contacts_for(value))]
-    return _open(request, value, offered, code, guardian_public_id)
+    offered = [contact.guardian for contact in _eligible_for_a_code(_at(school, _live_contacts_for(value)))]
+    return _open(request, value, offered, code, guardian_public_id, school)
 
 
-def _open(request, value, offered, code, guardian_public_id):
+def _open(request, value, offered, code, guardian_public_id, school=None):
     """Open the session, or hold the proof and ask who is holding the phone."""
     picked = _pick(offered, guardian_public_id)
     if picked is None:
@@ -402,14 +438,16 @@ def _open(request, value, offered, code, guardian_public_id):
             "code_id": code.pk,
             "offered": [str(g.public_id) for g in offered],
             "value": value,
+            # Where the handset was proved: the pick is finished at the same door.
+            "school": school.pk if school is not None else None,
         }
         raise MustChooseGuardian(offered)
 
     request.session.pop(PENDING_PICK, None)
-    return _start(request, offered, picked, code)
+    return _start(request, offered, picked, code, school)
 
 
-def _finish_pick(request, value, pending, guardian_public_id):
+def _finish_pick(request, value, pending, guardian_public_id, school=None):
     """The second half of a shared-handset sign-in. No code is spent here.
 
     The handset was proved on the first call and the code row is spent; what is
@@ -418,6 +456,8 @@ def _finish_pick(request, value, pending, guardian_public_id):
     poking at public_ids learns nothing from the difference.
     """
     if value != pending.get("value"):
+        raise BadCode(REFUSED)
+    if pending.get("school") != (school.pk if school is not None else None):
         raise BadCode(REFUSED)
 
     offered = list(
@@ -432,10 +472,10 @@ def _finish_pick(request, value, pending, guardian_public_id):
         raise BadCode(REFUSED)
 
     request.session.pop(PENDING_PICK, None)
-    return _start(request, offered, picked, code)
+    return _start(request, offered, picked, code, school)
 
 
-def _start(request, offered, picked, code):
+def _start(request, offered, picked, code, school=None):
     """Record the choice, then open the session. Never the other way round.
 
     `record()` returns None when this code has already opened a session —
@@ -452,6 +492,10 @@ def _start(request, offered, picked, code):
 
     start_session(request, picked.user)
     request.session[OPENED_BY_CODE] = row.pk
+    if school is not None:
+        from schools.sessions import bind_to_school
+
+        bind_to_school(request, school)
     return picked.user
 
 

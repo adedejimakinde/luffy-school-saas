@@ -45,6 +45,7 @@ own write is recognised and swallowed rather than counted twice. See
 across a re-login.
 """
 
+from django.conf import settings
 from ninja.security import SessionAuth
 
 #: The session cookie was presented and is no longer good: expired, flushed, or
@@ -63,6 +64,15 @@ class SchoolSessionAuth(SessionAuth):
     built later by the exception handler in `api.py`. Stamping is what carries
     the answer across that gap.
     """
+
+    def _get_key(self, request):
+        """The session cookie as sent: the portal's, or on a school's host the school's own.
+
+        ninja's reads `SESSION_COOKIE_NAME` alone, which would call a school's
+        lapsed session "never signed in". The CSRF check stays ninja's.
+        """
+        key = super()._get_key(request)
+        return key or request.COOKIES.get(settings.SCHOOL_SESSION_COOKIE_NAME)
 
     def authenticate(self, request, key):
         user = super().authenticate(request, key)

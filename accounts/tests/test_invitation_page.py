@@ -89,12 +89,15 @@ class InvitationPageTests(TestCase):
 
         self.assertEqual(real, guessed)
 
-    def test_a_schools_own_host_has_no_invitation_page(self):
+    def test_the_invited_schools_own_host_serves_the_page_too(self):
+        """Where the link goes now (`settings.INVITATION_ACCEPT_URL`'s `{host}`);
+        another school's host answers its API with a 404, in
+        `accounts/tests/test_school_door.py`."""
         _, raw = self.invite()
 
         response = self.client.get(f"/invitations/{raw}/", HTTP_HOST=SCHOOL_HOST)
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
 
     # -- the one state the page relies on ---------------------------------------
 

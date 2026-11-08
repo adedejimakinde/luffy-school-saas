@@ -282,10 +282,12 @@ class ThePreviewTests(EditorSetUp):
         return self.client.get(path, HTTP_HOST=host)
 
     def test_signed_out_goes_to_the_staff_sign_in_and_back(self):
+        """The school's own door on this host (the "Ready for the principal"
+        email links here), not the portal's."""
         response = self.preview("/website/preview/pages/boarding/")
         self.assertEqual(response.status_code, 302)
         door, back = response["Location"].split("?next=")
-        self.assertEqual(door, f"//{PORTAL}/staff-sign-in/")
+        self.assertEqual(door, "/staff-sign-in/")
         self.assertEqual(unquote(back), f"http://{ST_MARYS}/website/preview/pages/boarding/")
 
     def test_somebody_who_may_not_edit_is_refused_with_the_portals_403(self):

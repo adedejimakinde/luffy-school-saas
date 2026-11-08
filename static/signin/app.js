@@ -146,7 +146,7 @@ export function destination(state) {
   return school ? destinationOf(school) : null;
 }
 
-/** A school's cards, or `null`: a path in the single-host demo (`path_only`). */
+/** A school's cards, or `null`: a path at a school's own door or in the single-host demo (`path_only`). */
 function destinationOf(school) {
   return hostHref(school.host, "/cards/", { pathOnly: Boolean(school.path_only) }) || null;
 }

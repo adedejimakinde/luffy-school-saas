@@ -27,6 +27,7 @@ stamped at all is `accounts.checks.session_cookie_spans_every_host()`.
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import IntegrityError, connection, transaction
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -98,23 +99,23 @@ class SignInSetUp(TestCase):
 
 
 class WhereSignInLivesTests(SignInSetUp):
-    """The portal, and nowhere else."""
+    """The portal, for everybody, and each school's own host, for its members."""
 
     def test_the_portal_serves_it(self):
         self.assertEqual(self.sign_in().status_code, 200)
 
-    def test_a_schools_own_host_does_not(self):
-        """A 404: on this host there is no such route.
-
-        Not a redirect and not a 403. A school's host refuses anybody without an
-        active membership *there*, so a sign-in served from it would quietly
-        mean something narrower than sign-in — the parent with children at two
-        schools would need one session per school.
-        """
+    def test_a_schools_own_host_signs_in_its_own_member_there_alone(self):
+        """The school's own door: that school alone in the answer, and a session
+        in the school's own cookie rather than the portal's. The narrower
+        meaning is the point now (`accounts/tests/test_school_door.py` has the
+        two-school half); the parent with children at two schools still has the
+        portal's door, above."""
         response = self.sign_in(host=SCHOOL_HOST)
 
-        self.assertEqual(response.status_code, 404)
-        self.assertFalse(self.signed_in())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["slug"] for s in response.json()["schools"]], ["st-marys"])
+        self.assertIn(settings.SCHOOL_SESSION_COOKIE_NAME, response.cookies)
+        self.assertFalse(self.signed_in(), "no portal session is made at a school's door")
 
 
 class SigningInTests(SignInSetUp):

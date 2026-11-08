@@ -39,6 +39,7 @@ from accounts.refusals import (
     SchoolAccessRefused,
 )
 from accounts.tests.test_guardian_signin import (
+    PROBE,
     HANDSET,
     PASSWORD,
     PORTAL,
@@ -60,12 +61,9 @@ class TheStaffSignInPageIsPortalOnlyTests(GuardianSignInSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response["Content-Type"])
 
-    def test_a_schools_own_host_does_not(self):
-        """404 and not 403, matching what `/api/login/` answers there: the route
-        does not exist on this host."""
-        response = self.client.get(URL, HTTP_HOST=SCHOOL_HOST)
-
-        self.assertEqual(response.status_code, 404)
+    # A school's own host serves its own door too, in the school's look and for
+    # its members alone: `accounts/tests/test_school_door.py`, at two schools
+    # with real schemas (the door reads the school's crest and colour).
 
     def test_the_page_is_served_to_somebody_with_no_session(self):
         """It has to be. The page is what asks for the password that creates
@@ -202,7 +200,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         person on every credential."""
         self.client.force_login(self.mama)
 
-        response = self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        response = self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
 
         self.assertEqual(response.status_code, 200)
 
@@ -212,7 +210,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         same URL as the same person with a password."""
         self.sign_in_with_a_code()
 
-        response = self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        response = self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
 
         self.assertEqual(response.status_code, 403)
 
@@ -220,7 +218,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         """What this change closes. The sentence in `settings.py` and
         `accounts/middleware.py` has somewhere to send her."""
         self.sign_in_with_a_code()
-        self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
 
         page = self.client.get(URL, HTTP_HOST=PORTAL)
 
@@ -246,7 +244,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         """
         self.sign_in_with_a_code()
 
-        refused = self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        refused = self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
         body = refused.content.decode()
 
         self.assertEqual(refused.status_code, 403)
@@ -275,7 +273,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         """
         self.sign_in_with_a_code()
 
-        refused = self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        refused = self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
         body = refused.content.decode()
 
         self.assertEqual(refused.status_code, 403)
@@ -308,7 +306,7 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
         )
         self.client.force_login(stranger)
 
-        refused = self.client.get("/api/csrf/", HTTP_HOST=self.OTHER_HOST)
+        refused = self.client.get(PROBE, HTTP_HOST=self.OTHER_HOST)
         body = refused.content.decode()
 
         self.assertEqual(refused.status_code, 403)

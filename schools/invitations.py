@@ -169,7 +169,7 @@ def invite_staff_by_hand(actor, school, role, *, email=None, phone=None, full_na
     invitation, raw_token = _issue_for(
         actor, school, role, email=email, phone=phone, full_name=full_name, ttl=ttl
     )
-    return invitation, configured_accept_url(raw_token)
+    return invitation, configured_accept_url(raw_token, school)
 
 
 def _issue_for(actor, school, role, *, email=None, phone=None, full_name="", ttl=None):
@@ -360,7 +360,18 @@ def _issue(membership, actor, *, ttl=None, sent_to=""):
     return Invitation.create_with_token(membership, actor, sent_to=sent_to, **kwargs)
 
 
-def configured_accept_url(raw_token):
+def _school_host(school):
+    """The school's primary address, or None if it has none."""
+    from .models import Domain
+
+    if school is None:
+        return None
+    return (
+        Domain.objects.filter(tenant=school, is_primary=True).values_list("domain", flat=True).first()
+    )
+
+
+def configured_accept_url(raw_token, school=None):
     """The link that redeems `raw_token`, built from `INVITATION_ACCEPT_URL`.
 
     One setting, read here, used by every path that delivers an invitation —
@@ -395,11 +406,25 @@ def configured_accept_url(raw_token):
             f"so every invitation would be sent the same link. Include {{token}} "
             f"where the token belongs."
         )
+    # **`{host}` is the school's own address**, so an invitation opens on the
+    # school it is for (`/invitations/<token>/` is routed on every school's
+    # host), and its last step points at that school's own door. The portal's
+    # name where a school has no primary address yet: the portal still serves
+    # the page, for every link already sent. A template without `{host}` names
+    # one origin for every school, as it always could.
+    host = ""
+    if "{host}" in template:
+        host = _school_host(school) or getattr(settings, "PORTAL_HOST", None) or ""
+    if "{host}" in template and not host:
+        raise DeliveryNotConfigured(
+            f"INVITATION_ACCEPT_URL ({template!r}) has a {{host}} placeholder, and "
+            f"neither the school nor the portal has an address to put there."
+        )
     # `secrets.token_urlsafe()` only ever produces characters that are already
     # safe in both a path segment and a query value, so this changes nothing
     # today. It is here so that the setting can put the token in a query string
     # without the escaping question being reopened.
-    return template.format(token=quote(raw_token, safe=""))
+    return template.format(token=quote(raw_token, safe=""), host=host)
 
 
 def _deliver(invitation, raw_token, accept_url_for):
@@ -450,8 +475,10 @@ def _deliver(invitation, raw_token, accept_url_for):
     # than "that teacher has no email address", because the first is true for
     # everybody and blocks the admin's next attempt too, while the second is one
     # row they can fix by typing.
-    build_url = accept_url_for or configured_accept_url
-    accept_url = build_url(raw_token)
+    if accept_url_for is not None:
+        accept_url = accept_url_for(raw_token)
+    else:
+        accept_url = configured_accept_url(raw_token, invitation.membership.school)
 
     check_deliverable = getattr(channel, "check_deliverable", None)
     if check_deliverable is not None:

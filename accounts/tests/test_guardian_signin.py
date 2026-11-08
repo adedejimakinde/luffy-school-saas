@@ -33,6 +33,7 @@ one, aimed at the branch the test actually routes through.
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.db import connection
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -53,6 +54,12 @@ from accounts.signin import TOO_MANY_ATTEMPTS
 from schools.models import Domain
 from schools.tests.test_invitations import make_school
 from tests.guardians import give_verified_channel
+
+#: A route on a school's host that `SchoolAccessMiddleware` stands in front of
+#: and that reads nothing itself: the offline worker. Not `/api/csrf/`, which
+#: is a door now (`schools.paths.DOORS`), reached by a login with no membership
+#: there so that it can sign in at the school's own door.
+PROBE = "/sw.js"
 
 PASSWORD = "correct-horse-battery"
 PORTAL = "testserver"
@@ -156,16 +163,17 @@ class WhereTheGuardianDoorsLiveTests(GuardianSignInSetUp):
         self.assertEqual(self.ask_for_a_code().status_code, 200)
         self.assertEqual(self.answer(self.mint()).status_code, 200)
 
-    def test_a_schools_own_host_serves_neither(self):
-        """404 on both, and no session opened by the attempt.
+    def test_a_schools_own_host_serves_both_to_its_own_parent(self):
+        """The school's own door, for a parent there: that school alone, and a
+        session in the school's own cookie, not the portal's. The two-school
+        half is `accounts/tests/test_school_door.py`."""
+        self.assertEqual(self.ask_for_a_code(host=SCHOOL_HOST).status_code, 200)
+        answered = self.answer(self.mint(), host=SCHOOL_HOST)
 
-        CONTROL: dropping `_portal_only(request)` from either view turns that
-        route's assertion here green-to-red — the request is served and the 404
-        becomes a 200.
-        """
-        self.assertEqual(self.ask_for_a_code(host=SCHOOL_HOST).status_code, 404)
-        self.assertEqual(self.answer(self.mint(), host=SCHOOL_HOST).status_code, 404)
-        self.assertFalse(self.signed_in())
+        self.assertEqual(answered.status_code, 200, answered.content)
+        self.assertEqual([s["slug"] for s in answered.json()["schools"]], ["st-marys"])
+        self.assertIn(settings.SCHOOL_SESSION_COOKIE_NAME, answered.cookies)
+        self.assertFalse(self.signed_in(), "no portal session is made at a school's door")
 
 
 class TheCsrfCheckTests(GuardianSignInSetUp):
@@ -622,7 +630,7 @@ class ACodeSessionReachesPARENTAndNothingElseTests(GuardianSignInSetUp):
         middleware that refused this person outright."""
         self.client.force_login(self.mama)
 
-        response = self.client.get("/api/csrf/", HTTP_HOST=SCHOOL_HOST)
+        response = self.client.get(PROBE, HTTP_HOST=SCHOOL_HOST)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
@@ -673,7 +681,7 @@ class ACodeSessionReachesPARENTAndNothingElseTests(GuardianSignInSetUp):
         services.grant_membership(self.mama, grace, Role.BURSAR)
         self.answer(self.mint())
 
-        response = self.client.get("/api/csrf/", HTTP_HOST="grace.testserver")
+        response = self.client.get(PROBE, HTTP_HOST="grace.testserver")
 
         self.assertEqual(response.status_code, 403)
 
@@ -691,6 +699,6 @@ class ACodeSessionReachesPARENTAndNothingElseTests(GuardianSignInSetUp):
         self.mama.save(update_fields=["is_platform_staff"])
         self.answer(self.mint())
 
-        response = self.client.get("/api/csrf/", HTTP_HOST="grace.testserver")
+        response = self.client.get(PROBE, HTTP_HOST="grace.testserver")
 
         self.assertEqual(response.status_code, 403)

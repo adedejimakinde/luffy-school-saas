@@ -9,7 +9,7 @@ for every trace of the other school.
 """
 
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from accounts.models import Role, User
 from accounts.services import grant_membership
@@ -175,7 +175,6 @@ class TheDoorsTests(BrandSetUp):
                 self.assertNothingOfSunrise(html)
                 self.assertNotIn("Harbour College", html)
 
-    @override_settings(DEBUG=True, DEMO_SINGLE_HOST=True)
     def test_a_door_on_a_schools_host_wears_that_school(self):
         crest = f"/media/{self.crest}/site.png"
         for path in ("/staff-sign-in/", "/sign-in/"):

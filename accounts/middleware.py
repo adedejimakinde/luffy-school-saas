@@ -1,7 +1,7 @@
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
 
-from schools.paths import is_public_site_request
+from schools.paths import is_door, is_public_site_request
 
 from .guardian_signin import OPENED_BY_CODE
 from .refusals import CodeSessionCannotEscalate, NoMembershipHere
@@ -123,7 +123,12 @@ class SchoolAccessMiddleware:
             )
 
             request.school_roles = frozenset(user.roles_at(tenant))
-            if not request.school_roles:
+            # A door (`schools.paths.DOORS`) is for somebody not signed in
+            # here yet: a teacher signed in on the portal as a member of
+            # another school must still reach this school's sign-in page, and
+            # an invitee must reach the invitation. A door reads nothing of the
+            # school's, and grants nothing: the roles above are still empty.
+            if not request.school_roles and not is_door(request.path):
                 if user.parent_scoped_credential:
                     # Refused whatever else this login is, including platform
                     # staff. That bypass exists so somebody operating the

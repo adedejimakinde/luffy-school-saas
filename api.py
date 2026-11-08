@@ -1,10 +1,9 @@
 """The HTTP surface: sign-in and staff invitations here, the gradebook in its own module.
 
 `/api/login/` and `/api/logout/` are the door. Sign-in is unauthenticated by
-definition and is served on the **portal host only** — see `_portal_only()` for
-why that is a rule about which schools a login reaches rather than a routing
-preference. Sign-out is authenticated, which is what puts it behind a CSRF
-check.
+definition and is served on the portal, for every school a login reaches, and
+on each school's own host, for that school alone — see `_door_school()`.
+Sign-out is authenticated, which is what puts it behind a CSRF check.
 
 The invitation endpoints are five, in two halves that differ in who is on the
 other end.
@@ -35,7 +34,6 @@ docstring has the argument in full.
 
 from typing import Dict, List, Optional
 
-from django.contrib.auth import logout as end_session
 from django.db.models import Q
 from django.http import Http404
 from django.middleware.csrf import get_token
@@ -83,6 +81,7 @@ from onboarding.progress import LEAD_ROLES
 from onboarding.progress import progress_for as onboarding_progress
 from schools.delivery import DeliveryFailed, DeliveryNotConfigured, NoDeliveryAddress
 from schools.demo import single_host
+from schools.sessions import end_every_session
 from schools.models import (
     Domain,
     Invitation,
@@ -294,10 +293,12 @@ class SchoolOut(Schema):
     slug: str
     name: str
     host: Optional[str] = None
-    #: Development's single-host demo (`settings.DEMO_SINGLE_HOST`) only: every
-    #: link to this school is a path on the host the page is already on, never
-    #: `//host/path`. Behind a forwarded port the `Domain` row's name is not one
-    #: the browser can reach. Always false outside that mode.
+    #: Every link to this school is a path on the host the page is already on,
+    #: never `//host/path`: true when the door answering is the school's own
+    #: (the page is on the school's host, under whichever of its names the
+    #: browser used), and in development's single-host demo
+    #: (`settings.DEMO_SINGLE_HOST`), where behind a forwarded port the `Domain`
+    #: row's name is not one the browser can reach. False on the portal.
     path_only: bool = False
 
     #: May this login take a register at this school? The **same predicate the
@@ -370,7 +371,15 @@ class SignedInOut(Schema):
     csrf_token: str
     #: Classnode's own staff. Their home is `/platform/`, not a school, and a
     #: sign-in page that told them they had no school was wrong about them.
+    #: Only ever true on the portal, where `/platform/` is.
     is_platform_staff: bool = False
+    #: On a school's own host only: the path on this host to go to now, the
+    #: school's portal for this login. Start here for an administrator whose
+    #: school is not set up, the dashboard for its staff, the report cards for
+    #: its families, and None when this login has nothing to open there yet
+    #: (the page then says so). Always None on the portal, which lands on the
+    #: list of schools as it always has.
+    home: Optional[str] = None
 
 
 class RefusedOut(Schema):
@@ -389,38 +398,47 @@ class RefusedOut(Schema):
     retry_after: Optional[int] = None
 
 
-def _portal_only(request):
-    """Sign-in is served on the portal host and nowhere else.
+def _door_school(request):
+    """The school whose own door this is, or None for the portal's.
 
-    The portal is where a parent with children at three schools signs in once
-    and reaches all of them, and — per `SchoolAccessMiddleware` — the one host
-    where somebody with no membership anywhere is still allowed through the
-    door. A school's host is the opposite by design: it refuses anyone without
-    an active membership *there*, so serving sign-in from it would mean the
-    same credentials worked on one hostname and not another, and a teacher who
-    is also a parent elsewhere would need two sessions to see their own child.
+    The three sign-in routes answer on both, and they are two different doors.
+    **The portal's** signs in anybody with an account and names every school the
+    login reaches, which is what a parent with children at three schools and a
+    teacher who is also a parent elsewhere need. **A school's own**, on
+    `<school>.<domain>`, signs in that school's members and nobody else
+    (`accounts.signin`, `accounts.guardian_signin`), names that school alone,
+    and makes a session that is good on that host and on no other
+    (`schools.sessions`).
 
-    A 404 rather than a 403, matching the gradebook's answer on the portal:
-    the route does not exist on this host. Where it does exist is the client's
-    own deployment configuration — it knows its portal host, and having the
-    server name it would put the same fact in two places.
+    It used to be `_portal_only()`: a 404 on every school's host, because a
+    school's host refused anybody without a membership there and a door needs a
+    host that lets a stranger in. What changed is that the school's own door is
+    meant to refuse that stranger, with the same sentence as a wrong password,
+    and a teacher who is also a parent elsewhere still has the portal's.
     """
-    if getattr(request, "school", None) is not None:
-        raise Http404("Sign in on the portal host.")
+    return getattr(request, "school", None)
 
 
-def _door_host_only(request):
-    """`_portal_only()` for the three sign-in routes, and the one place the
-    development single-host demo (`settings.DEMO_SINGLE_HOST`) relaxes it.
+def _home_on(user, here, school: "SchoolOut", *, parent_scoped) -> Optional[str]:
+    """Where a sign-in on this school's own host goes: the school's portal for this login.
 
-    Only the doors: the platform screen's API keeps the strict rule above, so
-    the demo mode opens nothing but signing in.
+    Start here for an administrator whose school is not set up; the dashboard
+    (`/home/`, whose readers are `home.dashboard.HOME_ROLES`, every staff role)
+    for its staff; the report cards for its families. A code session is never
+    staff (`SchoolAccessMiddleware`), so it goes to the cards.
     """
-    if not single_host():
-        _portal_only(request)
+    if school.start_here:
+        return "/start/"
+    if not parent_scoped and (
+        user.memberships.with_access().filter(school=here, role__in=STAFF_ROLES).exists()
+    ):
+        return "/home/"
+    if school.has_children_here:
+        return "/cards/"
+    return None
 
 
-def _schools_of(user, *, parent_scoped=False):
+def _schools_of(user, *, parent_scoped=False, here=None):
     """Every school this login may act at, with where to go and what is there.
 
     **Four queries regardless of how many schools**, which matters for the
@@ -475,8 +493,17 @@ def _schools_of(user, *, parent_scoped=False):
     So the caller says which door it is rather than this function guessing from
     a request it does not have. `has_children_here` is untouched by it: her own
     children are exactly what the code is *for*.
+
+    ## `here` is a school's own door
+
+    Signed in on a school's own host, the answer is that school alone, linked by
+    path on this host, whatever else the login reaches: the session made there is
+    good nowhere else (`schools.sessions`), so naming another school would be a
+    link into a refusal.
     """
     schools = list(user.schools())
+    if here is not None:
+        schools = [school for school in schools if school.pk == here.pk]
     hosts = dict(
         Domain.objects.filter(tenant__in=schools, is_primary=True).values_list(
             "tenant_id", "domain"
@@ -532,7 +559,7 @@ def _schools_of(user, *, parent_scoped=False):
             slug=school.slug,
             name=school.name,
             host=hosts.get(school.pk),
-            path_only=single_host(),
+            path_only=single_host() or here is not None,
             may_take_a_register=not parent_scoped and school.pk in markers,
             may_see_absences=not parent_scoped and school.pk in absence_readers,
             may_see_fees=not parent_scoped and school.pk in book_readers,
@@ -542,6 +569,23 @@ def _schools_of(user, *, parent_scoped=False):
         )
         for school in schools
     ]
+
+
+def _signed_in(request, user, *, parent_scoped=False):
+    """The 200 both doors answer, on the portal or on a school's own host."""
+    here = _door_school(request)
+    schools = _schools_of(user, parent_scoped=parent_scoped, here=here)
+    return SignedInOut(
+        full_name=user.full_name,
+        schools=schools,
+        csrf_token=get_token(request),
+        is_platform_staff=bool(user.is_platform_staff) and here is None and not parent_scoped,
+        home=(
+            _home_on(user, here, schools[0], parent_scoped=parent_scoped)
+            if here is not None and schools
+            else None
+        ),
+    )
 
 
 #: A request that could not be shown to have been meant by the person sending
@@ -581,9 +625,9 @@ def sign_in(request, payload: SignInIn):
 
     The rules — one refusal for every kind of failure, a throttle that counts
     rather than locks — are in `accounts/signin.py`, where they hold for any
-    caller rather than only for this view.
+    caller rather than only for this view. On a school's own host they hold
+    there exactly as on the portal, with one more refusal: see `_door_school()`.
     """
-    _door_host_only(request)
 
     # CSRF, checked here by hand because ninja exempts its views from Django's
     # middleware and does the check inside cookie auth instead — which this
@@ -610,7 +654,9 @@ def sign_in(request, payload: SignInIn):
         )
 
     try:
-        user = signin.sign_in(request, payload.identifier, payload.password)
+        user = signin.sign_in(
+            request, payload.identifier, payload.password, school=_door_school(request)
+        )
     except signin.TooManyAttempts as exc:
         response = api.create_response(
             request,
@@ -631,12 +677,7 @@ def sign_in(request, payload: SignInIn):
             detail=str(exc), code=signin.BAD_CREDENTIALS, retryable=False
         )
 
-    return 200, SignedInOut(
-        full_name=user.full_name,
-        schools=_schools_of(user),
-        csrf_token=get_token(request),
-        is_platform_staff=bool(user.is_platform_staff),
-    )
+    return 200, _signed_in(request, user)
 
 
 class GuardianCodeIn(Schema):
@@ -729,16 +770,16 @@ def guardian_code(request, payload: GuardianCodeIn):
     `accounts.guardian_signin` explains why that is not an oracle: the window is
     counted against the value as typed, whether or not it resolves to anybody.
 
-    Portal-only and CSRF-checked by hand, for `/api/login/`'s reasons — this is
-    the other route a caller uses *before* it has a cookie.
+    CSRF-checked by hand, for `/api/login/`'s reasons — this is the other route
+    a caller uses *before* it has a cookie. On a school's own host only that
+    school's parents are sent anything, and the answer is the same sentence.
     """
-    _door_host_only(request)
     refusal = _guardian_csrf_failure(request)
     if refusal is not None:
         return refusal
 
     try:
-        guardian_signin.request_code(request, payload.value)
+        guardian_signin.request_code(request, payload.value, school=_door_school(request))
     except guardian_signin.TooManyAttempts as exc:
         return _throttled(request, exc)
 
@@ -772,7 +813,6 @@ def guardian_session(request, payload: GuardianSessionIn):
     is why the service raises it, and a guardian-facing one must not, which is
     why `guardian_signin` swallows it.
     """
-    _door_host_only(request)
     refusal = _guardian_csrf_failure(request)
     if refusal is not None:
         return refusal
@@ -783,6 +823,7 @@ def guardian_session(request, payload: GuardianSessionIn):
             payload.value,
             payload.code,
             guardian_public_id=payload.guardian,
+            school=_door_school(request),
         )
     except guardian_signin.TooManyAttempts as exc:
         return _throttled(request, exc)
@@ -801,13 +842,9 @@ def guardian_session(request, payload: GuardianSessionIn):
             detail=str(exc), code=guardian_signin.BAD_CODE, retryable=False
         )
 
-    return 200, SignedInOut(
-        full_name=user.full_name,
-        # This is the code door, so the answer is parent-scoped whatever else
-        # this login is. See `_schools_of()`.
-        schools=_schools_of(user, parent_scoped=True),
-        csrf_token=get_token(request),
-    )
+    # This is the code door, so the answer is parent-scoped whatever else this
+    # login is. See `_schools_of()`.
+    return 200, _signed_in(request, user, parent_scoped=True)
 
 
 @api.post("/logout/", response=MessageOut, auth=session_auth, tags=["session"])
@@ -821,9 +858,11 @@ def sign_out(request):
     which is a true answer to "sign me out" — there is nothing left to end.
 
     `logout()` flushes the session rather than only forgetting the user, so the
-    key that comes back is not one that was ever signed in.
+    key that comes back is not one that was ever signed in. On a school's host
+    the portal's session the browser holds beside the school's ends too
+    (`schools.sessions.end_every_session`).
     """
-    end_session(request)
+    end_every_session(request)
     return MessageOut(detail="Signed out.")
 
 
@@ -1141,17 +1180,24 @@ def revoke_invitation(request, slug: str, invitation_id: int):
 # -- the invitee's half, unauthenticated -------------------------------------
 
 
-def _validated(token: str):
+def _validated(request, token: str):
     invitation = Invitation.validate_token(token)
     if invitation is None:
         # One answer for unknown, spent, revoked and expired alike.
+        raise Http404("No such invitation.")
+    # On a school's host, that school's invitations and no other's: the link
+    # an invitation sends is its own school's host (`configured_accept_url()`),
+    # and another school's host answering it would be one school's page naming
+    # another. The same 404, so the host says nothing about the token either.
+    here = getattr(request, "school", None)
+    if here is not None and invitation.membership.school_id != here.pk:
         raise Http404("No such invitation.")
     return invitation
 
 
 @api.get("/invitations/{token}/", response=PreviewOut, auth=None, tags=["invitations"])
 def preview_invitation(request, token: str):
-    invitation = _validated(token)
+    invitation = _validated(request, token)
     return PreviewOut(
         school=invitation.school.name,
         role=invitation.intended_role,
@@ -1166,7 +1212,7 @@ def preview_invitation(request, token: str):
     "/invitations/{token}/accept/", response=AcceptedOut, auth=None, tags=["invitations"]
 )
 def accept_invitation(request, token: str, payload: AcceptIn):
-    invitation = _validated(token)
+    invitation = _validated(request, token)
     try:
         membership = invitation.accept(password=payload.password)
     except (PasswordRequired, WeakPassword) as exc:
