@@ -75,6 +75,8 @@ export function htmlFor(
     hello,
     '<section class="index" data-state="cards">',
     "<h1>Report cards</h1>",
+    // Tests sat on the computer at school, once released (CBT step 5): `/test-scores/`.
+    '<p class="test-scores-link"><a href="/test-scores/">Test scores</a> from tests on the computer at school.</p>',
     children.length > 1 ? switcher(children, active) : "",
     children
       .map((record) => child(record, record.student_membership_id === active, payInto[record.student_membership_id]))

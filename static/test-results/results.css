@@ -1,0 +1,35 @@
+/*
+ * A test's results, item analysis and Send to CA (CBT step 5). The layout `setup/setup.css`
+ * and `tests/tests.css` do not already give. Colours are `web/design.css`'s tokens; nothing
+ * here declares one. Every row wraps rather than squeezes, for 320px and text at 200%.
+ */
+.results-stats, .ca-counts { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 12px 0; }
+.results-stats div, .ca-counts div { display: grid; gap: 2px; min-width: 7rem; }
+.results-stats dt, .ca-counts dt { color: var(--muted); font-size: var(--small); }
+.results-stats dd, .ca-counts dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.results-stats dd.hint { font-weight: 400; color: var(--muted); font-size: var(--small); }
+.result-class { display: grid; gap: 4px; }
+.result-class > button { justify-self: start; }
+.item-analysis { margin: 0; padding: 0; list-style: none; }
+.item-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
+.item-row p { margin: 0; }
+.item-row > button { justify-self: start; }
+.item-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.item-head .facility { font-variant-numeric: tabular-nums; }
+.option-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.option-bars .opt { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; padding: 4px 8px; border-radius: var(--radius); border: 1px solid var(--divider); }
+.option-bars .opt .text { flex: 1 1 10rem; min-width: 0; }
+.option-bars .opt .n { font-variant-numeric: tabular-nums; color: var(--muted); }
+.option-bars .opt .letter { font-weight: 700; }
+.option-bars .is-key { border-color: var(--ok); background: var(--ok-bg); }
+.option-bars .is-wrong { border-color: var(--brand); background: var(--brand-tint); }
+.corrections-made .just { font-weight: 700; color: var(--text); }
+.ca-form { display: grid; gap: 6px; max-width: 32rem; }
+.ca-form label { margin: 0; }
+.ca-form .submit { justify-self: start; }
+.results-students, .ca-lines { width: 100%; }
+/* A checkbox or radio in a confirm sits beside its words, not stretched across the row
+   (`tests.css` gives every `.confirm input` the full row, which a text box wants). */
+.confirm label.choice { display: flex; gap: 10px; align-items: flex-start; }
+.confirm label.choice input { flex: none; width: auto; }
+.confirm fieldset { display: grid; gap: 4px; }

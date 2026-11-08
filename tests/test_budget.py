@@ -78,8 +78,11 @@ SCHOOL_PAGES = (
     "/subject-teachers/",
     "/exam-slips/",
     "/tests/",
+    "/tests/results/",
     # The exam door and screen (CBT step 4): a frame, opened here by a member of staff.
     "/sit/",
+    # Released test scores (CBT step 5): a parent's and a student's, with no staff menu.
+    "/test-scores/",
     "/help/",
     # The website editor (docs/school-sites.md PR 4), its photos and albums (PR 5),
     # and its colours and animations (docs/school-sites-theme-modern.md).
@@ -127,7 +130,7 @@ QUERIES["/help/"] = 14
 #: parent are never asked, and cost what they did; nor are the pages with no staff
 #: menu (the public page, the cards, the result checker and the exam door).
 for _path in SCHOOL_PAGES:
-    if _path not in ("/", "/cards/", "/cards/1/1/", "/check/", "/sit/"):
+    if _path not in ("/", "/cards/", "/cards/1/1/", "/check/", "/sit/", "/test-scores/"):
         QUERIES[_path] += 2
 #: Every page drawn for a member of the school on its host wears the school's
 #: crest, name and colour (`schools/brand.py`): one statement and its search

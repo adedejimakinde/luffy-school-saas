@@ -25,7 +25,9 @@ school in Abeokuta at the end of its first term:
   test ready to sit: JSS 2 Mathematics for JSS 2A and JSS 2B, set by `cfc.teacher`,
   approved by the principal, calculator on, **open from a minute after the reset for
   twelve hours**, with a test code and three JSS 2A students' exam PINs that `reset`
-  prints (`SIT_DEMO_STUDENTS`), so a visit can sit it at `/sit/`.
+  prints (`SIT_DEMO_STUDENTS`), so a visit can sit it at `/sit/`. Eight of JSS 2B
+  (`SAT_STUDENTS`) have sat it already, so its results, item analysis and Send to CA
+  show real numbers; nothing is released.
 - **Its website**, Modern Campus with the school's details and drawn photos, published.
 
 ## What keeps it apart from real schools
@@ -616,6 +618,9 @@ TEST_MINUTES = 20
 #: Whose exam PINs `reset` prints, so a visit can sit the test: three of JSS 2A.
 SIT_DEMO_CLASS = "JSS 2A"
 SIT_DEMO_STUDENTS = 3
+#: Who has sat the test already when `reset` finishes (CBT step 5): eight of JSS 2B.
+SAT_CLASS = "JSS 2B"
+SAT_STUDENTS = 8
 
 
 def test_opens(now):
@@ -633,7 +638,8 @@ def _cbt(school, staff, groups, subjects, write=print):
     PINs and the code are printed once, here, for the visit; a school sees them only on
     a slip and on its own Tests page.
     """
-    from cbt import banks, pins, setting, sittings
+    from cbt import banks, demo, pins, setting, sittings
+    from cbt.models import SittingControl
 
     for subject_name, code in BANK_SUBJECTS.items():
         teacher = staff[SUBJECT_TEACHERS[code][0]].user
@@ -657,6 +663,12 @@ def _cbt(school, staff, groups, subjects, write=print):
     setting.submit_as(setter, school, test.pk, rng=random.Random(SLUG))
     setting.approve_as(principal, school, test.pk)
     code = sittings.set_code_as(setter, school, test.pk)
+    # A few of JSS 2B have sat it already, in a sitting opened and closed by hand, so the
+    # results, the item analysis and Send to CA show real numbers (CBT step 5).
+    sat = groups[SAT_CLASS]
+    sittings.control_as(setter, school, test.pk, sat.pk, SittingControl.Kind.OPENED, "Sat in period 1, before the visit")
+    finished = demo.sit_finished(school, test, pins.roster(school, sat, pins.current_term())[:SAT_STUDENTS], rng=random.Random(SLUG))
+    sittings.control_as(setter, school, test.pk, sat.pk, SittingControl.Kind.CLOSED, "Period 1 is over")
     group = groups[SIT_DEMO_CLASS]
     slips = []
     for student in pins.roster(school, group, pins.current_term())[:SIT_DEMO_STUDENTS]:
@@ -664,6 +676,7 @@ def _cbt(school, staff, groups, subjects, write=print):
     local = timezone.localtime(opens)
     write(f"  CBT: {TEST_TITLE} opens {local:%H:%M} today for {TEST_OPEN_HOURS} hours. Sit it at /sit/ with")
     write(f"    test code {code}")
+    write(f"    ({len(finished)} of {SAT_CLASS} sat it earlier; their results are on Tests, not released)")
     for slip in slips:
         write(f"    {slip.student_name} ({SIT_DEMO_CLASS}): admission number {slip.admission_number}, PIN {slip.printed_pin}")
     return test

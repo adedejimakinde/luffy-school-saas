@@ -875,3 +875,213 @@ class AttemptEvent(models.Model):
             ),
             models.CheckConstraint(condition=Q(said_by__in=["server", "device"]), name="an_attempt_event_says_who_said_it"),
         ]
+
+
+# -- Phase 2 step 5: marking, key corrections, CA and release --------------------------
+#
+# `docs/cbt.md`, "Release and CA" and "How scores reach CA". **No live score is stored**:
+# a score is computed from the counted answers (`cbt.sitting.counted_answers()`) and the
+# keys on read (`cbt.marking`). What is kept is what happened: each key correction, each
+# send to CA and its lines, each release and the scores it froze, and each restore. Every
+# table here is append-only, by a trigger in migration 0004 named for its rule.
+
+#: Why a key was corrected, a release restored.
+MAX_WHY = 200
+
+
+
+class KeyCorrection(models.Model):
+    """A wrong key put right: one item's correct option, from `old_index` to `new_index`.
+
+    **Never an edit to the item** (`TestItem` is frozen, `a_published_item_is_frozen`):
+    the key an attempt is marked against is the item's own, or the latest correction's
+    (`cbt.marking.keys_of()`), so every attempt is marked again the moment this row exists.
+    Only before release: the database refuses a correction while any class of the test has
+    a release that has not been restored (`a_key_is_corrected_only_before_release`).
+
+    `changes` is what the correction did, written in the same transaction (rule 8): each
+    student whose score moved, with their score before and after. It is the list the
+    teacher is shown, and it is kept because the scores themselves are never stored.
+    """
+
+    test = models.ForeignKey(Test, related_name="key_corrections", on_delete=models.PROTECT)
+    item = models.ForeignKey(TestItem, related_name="key_corrections", on_delete=models.PROTECT)
+    old_index = models.PositiveSmallIntegerField()
+    new_index = models.PositiveSmallIntegerField()
+    reason = models.CharField(max_length=MAX_WHY)
+    #: `[{"student_id", "name", "class_name", "before", "after"}]`, and the paper's marks.
+    changes = models.JSONField(default=list, blank=True)
+    out_of = models.PositiveIntegerField()
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        constraints = [
+            models.CheckConstraint(condition=~Q(reason=""), name="a_key_correction_says_why"),
+            models.CheckConstraint(
+                condition=~Q(old_index=models.F("new_index")), name="a_key_correction_changes_the_key"
+            ),
+            models.CheckConstraint(condition=Q(new_index__lt=5), name="a_corrected_key_is_a_to_e"),
+        ]
+
+
+class TestRelease(models.Model):
+    """One class's scores of one test, released: final, like a results release.
+
+    The scores are frozen beside it as `ReleasedTestScore` rows in the same transaction, and
+    those, never live marks, are all a student's or a parent's page reads. **A release is
+    live until a `TestReleaseRestore` names it**; a later release of the same class is a new
+    row with its own frozen scores, so nothing frozen is ever edited.
+    """
+
+    test = models.ForeignKey(Test, related_name="releases", on_delete=models.PROTECT)
+    class_group = models.ForeignKey(ClassGroup, related_name="test_releases", on_delete=models.PROTECT)
+    class_group_name = models.CharField(max_length=64)
+    #: How many scores it froze.
+    count = models.PositiveIntegerField()
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+
+
+class TestReleaseRestore(models.Model):
+    """A release undone, by the principal, with a reason. Append-only, one per release.
+
+    It hides that release's scores from the student and the parent again and shows the
+    teacher why. Its frozen rows are not deleted or edited; a CA mark already sent is not
+    touched (`docs/cbt.md`, "Release and CA").
+    """
+
+    release = models.OneToOneField(TestRelease, related_name="restore", on_delete=models.PROTECT)
+    reason = models.CharField(max_length=MAX_WHY)
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        constraints = [models.CheckConstraint(condition=~Q(reason=""), name="a_restore_says_why")]
+
+
+class ReleasedTestScore(models.Model):
+    """One student's score as it was released. **Append-only**, names copied (rules 1, 2).
+
+    The only thing a student's or a parent's score page reads. `corrections` is the
+    student's own paper as they saw it (their numbering and letters, from the attempt's
+    seed), with what they chose, the right answer and its explanation: the "corrections"
+    a student is shown, and **never** served to a parent.
+    """
+
+    release = models.ForeignKey(TestRelease, related_name="scores", on_delete=models.PROTECT)
+    test = models.ForeignKey(Test, related_name="released_scores", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+    student_name = models.CharField(max_length=255)
+    admission_number = models.CharField(max_length=64, blank=True, default="")
+    class_group_name = models.CharField(max_length=64)
+    test_title = models.CharField(max_length=MAX_TITLE)
+    subject_name = models.CharField(max_length=64)
+    attempt_number = models.PositiveSmallIntegerField()
+    score = models.PositiveIntegerField()
+    out_of = models.PositiveIntegerField()
+    #: Questions right, and questions on the paper.
+    right = models.PositiveIntegerField()
+    questions = models.PositiveIntegerField()
+    corrections = models.JSONField(default=list, blank=True)
+    released_by_name = models.CharField(max_length=255)
+    released_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["-released_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["release", "student_membership_id"], name="one_released_score_per_student"),
+            models.CheckConstraint(condition=Q(score__lte=models.F("out_of")), name="a_released_score_is_at_most_its_marks"),
+        ]
+
+
+class CaTransfer(models.Model):
+    """One send of a test's scores into a CA column. Append-only.
+
+    `docs/cbt.md`, "How scores reach CA": each mark is `round_half_up(score / out_of x
+    max_score)` and goes through `gradebook.services.set_score_as()`, never a second write
+    path. `existing` is what the sender chose for a student who already had a mark: keep
+    it, or replace it with the one they were shown. `number` counts this test's sends.
+    """
+
+    class Existing(models.TextChoices):
+        KEEP = "keep", "Keep their mark"
+        REPLACE = "replace", "Replace it with the test mark"
+
+    test = models.ForeignKey(Test, related_name="ca_transfers", on_delete=models.PROTECT)
+    assessment = models.ForeignKey("gradebook.Assessment", related_name="cbt_transfers", on_delete=models.PROTECT)
+    assessment_name = models.CharField(max_length=64)
+    max_score = models.PositiveSmallIntegerField()
+    out_of = models.PositiveIntegerField()
+    #: The rule each mark was made by.
+    rounding = models.CharField(max_length=16, default="half_up")
+    existing = models.CharField(max_length=8, choices=Existing)
+    number = models.PositiveIntegerField()
+    by_id = models.PositiveBigIntegerField()
+    by_name = models.CharField(max_length=255)
+    role = models.CharField(max_length=24)
+    at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["at", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["test", "number"], name="one_ca_transfer_per_number"),
+            models.CheckConstraint(condition=Q(existing__in=["keep", "replace"]), name="a_ca_transfer_keeps_or_replaces"),
+        ]
+
+
+class CaTransferLine(models.Model):
+    """What one send did for one student. Append-only.
+
+    Four of five outcomes write nothing to the gradebook, so the line is their only record
+    (rule 8): `written` (through `set_score_as()`), `kept` (they had a mark, and the send
+    said keep), `not_sat` (no closed attempt: **no mark, never a zero**), `locked` (the
+    gradebook refused: the class's results are submitted or released), `changed_meanwhile`
+    (a mark was typed after the preview, so it was not overwritten).
+    """
+
+    class Outcome(models.TextChoices):
+        WRITTEN = "written", "Written"
+        KEPT = "kept", "Kept as it was"
+        NOT_SAT = "not_sat", "Did not sit, no mark"
+        LOCKED = "locked", "Results locked, not sent"
+        CHANGED_MEANWHILE = "changed_meanwhile", "Changed since the preview, not sent"
+
+    transfer = models.ForeignKey(CaTransfer, related_name="lines", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    student_name = models.CharField(max_length=255)
+    class_group_name = models.CharField(max_length=64)
+    test_score = models.PositiveIntegerField(null=True, blank=True)
+    mark = models.PositiveSmallIntegerField(null=True, blank=True)
+    outcome = models.CharField(max_length=20, choices=Outcome)
+    #: The mark in the column before, and its version, as the preview showed them.
+    previous_value = models.PositiveSmallIntegerField(null=True, blank=True)
+    previous_version = models.PositiveIntegerField(null=True, blank=True)
+    detail = models.CharField(max_length=300, blank=True, default="")
+
+    class Meta:
+        ordering = ["transfer_id", "class_group_name", "student_name", "id"]
+        constraints = [
+            models.UniqueConstraint(fields=["transfer", "student_membership_id"], name="one_ca_line_per_student"),
+            models.CheckConstraint(
+                condition=Q(outcome__in=["written", "kept", "not_sat", "locked", "changed_meanwhile"]),
+                name="a_ca_line_has_a_known_outcome",
+            ),
+            models.CheckConstraint(
+                condition=~Q(outcome="not_sat") | Q(mark__isnull=True, test_score__isnull=True),
+                name="a_student_who_did_not_sit_gets_no_mark",
+            ),
+            models.CheckConstraint(
+                condition=~Q(outcome="written") | Q(mark__isnull=False), name="a_written_line_names_its_mark"
+            ),
+        ]

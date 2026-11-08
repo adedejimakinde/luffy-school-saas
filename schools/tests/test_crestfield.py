@@ -210,6 +210,23 @@ class DemoSchoolTests(OwnFilesRoot, TestCase):
             self.assertEqual({i.origin_question.bank.subject.name for i in items}, {"Mathematics"})
             moves = list(test.state_changes.order_by("id").values_list("to_state", flat=True))
             self.assertEqual(moves, ["submitted", "published"])
+            # CBT step 5: some of JSS 2B have sat it, in a sitting opened and closed by
+            # hand, so its results and Send to CA have numbers; nothing is released.
+            from cbt import marking
+            from cbt.models import Attempt, SittingControl, TestRelease
+
+            attempts = list(Attempt.objects.filter(test=test))
+            self.assertEqual(len(attempts), min(PER_CLASS, crestfield.SAT_STUDENTS))
+            self.assertEqual({a.class_group_name for a in attempts}, {crestfield.SAT_CLASS})
+            self.assertTrue(all(not a.is_open and a.started_at < timezone.now() for a in attempts))
+            scores = marking.scores_of(test)
+            self.assertEqual(len(scores), len(attempts))
+            self.assertTrue(any(m.answered for m in scores.values()))
+            self.assertEqual(
+                list(SittingControl.objects.filter(test=test).values_list("class_group_name", "kind")),
+                [(crestfield.SAT_CLASS, "closed"), (crestfield.SAT_CLASS, "opened")],
+            )
+            self.assertFalse(TestRelease.objects.exists())
 
     def test_a_reset_prints_a_code_and_pins_that_open_the_test_at_sit(self):
         """`crestfield reset` prints the test code and three JSS 2A students' PINs (two

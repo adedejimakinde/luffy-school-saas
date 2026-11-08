@@ -293,6 +293,70 @@ def reads_sitting_log(actor, school, test) -> bool:
     return teaches_test(actor, school, test) or is_exam_officer(actor, school)
 
 
+
+# -- marking, CA and release: step 5 -----------------------------------------------------
+#
+# `docs/cbt.md`, "Who sees what", where it and the request that built step 5 differ the
+# note is followed (said in the PR):
+#
+# | | results, item analysis | correct a key, close the test | send to CA | release | restore |
+# | --- | --- | --- | --- | --- | --- |
+# | Teacher of the test | their classes | yes | their classes | their classes | no |
+# | Principal | all | yes | all | all | **yes, alone** |
+# | Vice principal | all, read | no | no | no | no |
+# | Administrator | **released scores only**, no answer and no item | no | no | no | no |
+# | Exam officer | nothing beyond their role | no | no | no | no |
+# | Bursar, parent, student | no | no | no | no | no |
+#
+# A student sees their own released score, and a parent their own child's, on
+# `/test-scores/` (`cbt.release`), never here.
+
+#: Who restores a release: the principal alone (`docs/cbt.md`, "TestReleaseRestore").
+RESTORING_ROLES = frozenset({Role.PRINCIPAL.value})
+
+
+def marks_test(actor, school, test) -> bool:
+    """Corrects its keys, closes it, sends to CA and releases: a teacher of the test, the
+    principal. Never the vice principal, the office or an exam officer as such."""
+    if not _here(school):
+        return False
+    return teaches_test(actor, school, test)
+
+
+def reads_results(actor, school, test) -> bool:
+    """Reads its results with the answers and the item analysis: who marks it, and the vice
+    principal (read). Not the administrator, who sees released scores only."""
+    if not _here(school):
+        return False
+    roles = _roles(actor, school)
+    if Role.ADMIN.value in roles:
+        return False
+    if Role.VICE_PRINCIPAL_ACADEMIC.value in roles or Role.PRINCIPAL.value in roles:
+        return True
+    return marks_test(actor, school, test)
+
+
+def reads_released_only(actor, school, test) -> bool:
+    """The administrator: a test's scores once released, with no answer and no item."""
+    return _here(school) and Role.ADMIN.value in _roles(actor, school)
+
+
+def restores(actor, school) -> bool:
+    return _here(school) and bool(_roles(actor, school) & RESTORING_ROLES)
+
+
+def classes_of(actor, school, test, audience) -> set:
+    """Which of the test's classes (`audience`, ids) this login's results reach: all of
+    them for the principal and the vice principal, a teacher's own for that subject."""
+    from . import setting
+
+    reach_ = reach(actor, school, test.term)
+    if reach_.reads_all:
+        return set(audience)
+    subject_id, _ = setting.subject_and_level(test)
+    return {c for c in audience if reach_.teaches(subject_id, c)}
+
+
 def menu_keys(roles, actor, school) -> frozenset:
     """Links a login holds by a permission rather than a role: the exam slips page for an
     exam officer whose roles alone would not show it (`menu.py`).
@@ -316,7 +380,13 @@ __all__ = [
     "NAMING_ROLES",
     "OFFICER_ROLES",
     "PRINTING_ROLES",
+    "RESTORING_ROLES",
     "can_name",
+    "classes_of",
+    "marks_test",
+    "reads_released_only",
+    "reads_results",
+    "restores",
     "can_print",
     "can_read_banks",
     "gives_extra_time",

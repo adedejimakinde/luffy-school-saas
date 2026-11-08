@@ -69,6 +69,9 @@ PORTAL = frozenset(
         "subject-teachers",
         "sw.js",
         "teaching",
+        # Released test scores (`docs/cbt.md`, step 5): a parent's children's, and a
+        # student's own behind the exam door's three. Never indexed.
+        "test-scores",
         # Question banks and tests (`docs/cbt.md`, step 3). Staff only.
         "tests",
         "timetable",

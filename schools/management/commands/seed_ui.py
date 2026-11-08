@@ -60,6 +60,14 @@ CLASSES = (
 SIT_CODE = "UISITQ"
 SIT_TITLE = "UI Sit: Mathematics practice"
 
+#: `screens.test.js`'s results (CBT step 5): a test JSS 1A has sat, and released, so the
+#: results, the item analysis, Send to CA and both score pages have real numbers. Its code
+#: and the first child's exam PIN are fixed, so the screens can open her score page.
+RESULTS_CODE = "RSWKTB"
+RESULTS_TITLE = "UI Results: Mathematics check"
+RESULTS_PIN = "20269001"
+RESULTS_SITTERS = 6
+
 
 def sit_pin(n: int) -> str:
     return f"2026{n:04d}"
@@ -98,8 +106,57 @@ class Command(BaseCommand):
                     for child in children[name]:
                         academics.place_student(group, term, child)
                     self.stdout.write(f"  {name:<18} {len(children[name])} children")
+                results_test(school)
+                self.stdout.write(f"  JSS 1A's results  code {RESULTS_CODE}, the first child's PIN {RESULTS_PIN}")
                 sit_test(school, ClassGroup.objects.get(name="UI Sit"), children["UI Sit"])
                 self.stdout.write(f"  UI Sit's test     code {SIT_CODE}, PINs {sit_pin(1)} to {sit_pin(6)}")
+
+
+def results_test(school):
+    """A test JSS 1A sat and the principal released, for `screens.test.js`'s results.
+
+    Written, set, approved, opened by hand, sat by six of JSS 1A (`cbt.demo`), closed by
+    hand and released, as a school would. Made before UI Sit's test, so the Tests list
+    still opens with UI Sit's.
+    """
+    import random
+    from datetime import timedelta
+    from unittest import mock
+
+    from django.utils import timezone
+
+    from cbt import banks, demo, pins, release, setting, sittings
+    from cbt.models import SittingControl
+    from gradebook.models import Subject
+    from schools.crestfield.questions import BANK
+
+    principal = User.objects.get(username="sunrise.principal")
+    maths = Subject.objects.get(code="MTH")
+    group = ClassGroup.objects.get(name="JSS 1A")
+    for stem, options, answer in BANK["Mathematics"]:
+        banks.add_as(principal, school, maths.pk, group.level, banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1))
+    opens = timezone.now() + timedelta(minutes=1)
+    test = setting.create_as(
+        principal, school,
+        setting.TestDraft(
+            title=RESULTS_TITLE, subject_id=maths.pk, level=group.level, class_group_ids=[group.pk], question_count=10,
+            opens_at=opens, closes_at=opens + timedelta(days=60), duration=20,
+        ),
+    )
+    setting.submit_as(principal, school, test.pk, rng=random.Random(RESULTS_CODE))
+    setting.approve_as(principal, school, test.pk)
+    sittings.set_code_as(principal, school, test.pk, code=RESULTS_CODE)
+    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.OPENED, "Sat in period 1")
+    roster = pins.roster(school, group, pins.current_term())
+    # The first child, whose score page the screens open, gets a few wrong, so it has
+    # corrections to show.
+    chances = (0.6, 0.9, 0.8, 0.7, 0.5, 0.85)
+    demo.sit_finished(school, test, roster[:RESULTS_SITTERS], rng=random.Random(RESULTS_TITLE), ability=lambda n: chances[n])
+    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.CLOSED, "Period 1 is over")
+    release.release_as(principal, school, test.pk, group.pk)
+    with mock.patch("cbt.pins.new_pin", return_value=RESULTS_PIN):
+        pins.print_student_as(principal, school, group.pk, roster[0].pk)
+    return test
 
 
 def sit_test(school, group, children):

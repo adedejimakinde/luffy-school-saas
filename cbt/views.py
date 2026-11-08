@@ -32,6 +32,34 @@ TESTS_MODULES = (
 )
 
 
+#: A test's results page's modules (CBT step 5), entry point last.
+RESULTS_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/picker.js",
+    "test-results/api.js",
+    "test-results/states.js",
+    "test-results/app.js",
+)
+
+
+def results_page(request):
+    """The frame for `/tests/results/`: a test's results, item analysis, release and Send to
+    CA. Its own page beside the Tests page, so neither carries the other's modules.
+
+    No score and no question is in the frame. `cbt.results_api` asks who is asking before
+    it reads one, and serves the administrator the released scores alone.
+    """
+    return render(
+        request,
+        "cbt/test_results_page.html",
+        {
+            "import_map": pages.import_map(*RESULTS_MODULES),
+            "portal_host": portal_host(),
+        },
+    )
+
+
 def tests_page(request):
     """The frame for `/tests/`: question banks, setting a test, and approving one.
 
@@ -60,4 +88,4 @@ def exam_slips_page(request):
     )
 
 
-__all__ = ["EXAM_SLIPS_MODULES", "TESTS_MODULES", "exam_slips_page", "tests_page"]
+__all__ = ["EXAM_SLIPS_MODULES", "RESULTS_MODULES", "TESTS_MODULES", "exam_slips_page", "results_page", "tests_page"]

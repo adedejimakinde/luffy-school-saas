@@ -270,6 +270,16 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
                     seen |= members
             demo = set(ClassPlacement.objects.filter(class_group__name__in=("JSS 1A", "JSS 1B")).values_list("student_membership_id", flat=True))
             self.assertFalse(seen & demo, "a test's child in a demo class")
+            # CBT step 5: JSS 1A has sat a test and had it released, for the screens.
+            from cbt.models import ReleasedTestScore, Test
+            from schools.management.commands.seed_ui import RESULTS_SITTERS, RESULTS_TITLE
+
+            released = Test.objects.get(title=RESULTS_TITLE)
+            frozen = ReleasedTestScore.objects.filter(test=released, release__restore__isnull=True)
+            self.assertEqual(frozen.count(), RESULTS_SITTERS)
+            self.assertEqual(set(frozen.values_list("class_group_name", flat=True)), {"JSS 1A"})
+            self.assertTrue(set(frozen.values_list("student_membership_id", flat=True)) <= demo)
+            self.assertEqual(Test.objects.order_by("-opens_at", "-id").first().title, "UI Sit: Mathematics practice")
         with self.assertRaisesMessage(CommandError, "already here"):
             call_command("seed_ui", stdout=StringIO())
 

@@ -60,6 +60,8 @@ from schoolsite.editor import PHOTOS_MODULES as WEBSITE_PHOTOS_MODULES
 from schoolsite.editor import LOOK_MODULES as WEBSITE_LOOK_MODULES
 from timetable.views import TIMETABLE_MODULES
 from cbt.sit_views import SIT_MODULES
+from cbt.score_views import SCORES_MODULES
+from cbt.views import RESULTS_MODULES
 
 #: The tree that is served, which is also the tree on disk — see
 #: `settings.STATICFILES_DIRS` for why those two being the same is the whole
@@ -98,6 +100,10 @@ PAGES = {
     "tests": TESTS_MODULES,
     # The exam door and screen (CBT step 4), kept by its own worker at `/sit/sw.js`.
     "sit": SIT_MODULES,
+    # Released test scores (CBT step 5): a parent's children's, and a student's own.
+    "test-scores": SCORES_MODULES,
+    # A test's results and Send to CA (CBT step 5), beside the Tests page.
+    "tests/results": RESULTS_MODULES,
     "blog-editor": BLOG_EDITOR_MODULES,
     "website-editor": WEBSITE_EDITOR_MODULES,
     "website-photos": WEBSITE_PHOTOS_MODULES,

@@ -40,11 +40,12 @@ function testRow(t, { summariesOnly }) {
   const size = `${plural(t.size, "question", "questions")}. ${t.code_set ? "Test code set." : "No test code yet."}`;
   const open = summariesOnly ? "" : `<a class="btn btn-quiet" href="#test/${esc(t.id)}">Open</a>`;
   const sitting = t.state === "published" ? `<a class="btn btn-quiet" href="#sitting/${esc(t.id)}" aria-label="The sitting of ${esc(t.title)}">Sitting</a>` : "";
+  const results = t.state === "published" || t.state === "closed" ? `<a class="btn btn-quiet" href="results/#${esc(t.id)}">Results</a>` : "";
   return [
     `<li class="test-row" data-test="${esc(t.id)}">`,
     `<span class="name">${esc(t.title)}</span> <span class="badge state-${esc(t.state)}">${esc(t.state_label)}</span>`,
     `<span class="level">${what} ${when} ${size} Set by ${esc(t.set_by)}.</span>`,
-    `<span class="row-actions">${open}${sitting}</span>`,
+    `<span class="row-actions">${open}${sitting}${results}</span>`,
     "</li>",
   ].join("");
 }
@@ -311,6 +312,7 @@ function actions(t, confirming) {
   }
   if (t.items.length) out.push(`<a class="btn btn-quiet" href="#preview/${esc(t.id)}">Try it as a student</a>`);
   if (t.state === "published") out.push(`<a class="btn btn-quiet" href="#sitting/${esc(t.id)}">The sitting</a>`);
+  if (t.state === "published" || t.state === "closed") out.push(`<a class="btn btn-quiet" href="results/#${esc(t.id)}">Results</a>`);
   if (t.may_delete) out.push('<button type="button" class="again" data-action="ask-delete">Delete draft</button>');
   return out.length ? `<div class="actions">${out.join("")}</div>` : "";
 }
