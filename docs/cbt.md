@@ -322,6 +322,11 @@ The test keeps going without a network; the server stays the timekeeper.
   sent stays until it can; the server refuses it if it is late.
 - Chrome on Android and desktop Chrome are in scope; Safari gets the warning
   `docs/offline.md` OPEN-6 already decided.
+- **The portal's worker (`/sw.js`, scope `/`, `docs/pwa.md`) and this one coexist.** The portal
+  worker answers, keeps and fetches nothing under `/sit/`, deletes only caches named `luffy-`
+  (this worker's are `sit-`), and never unregisters anything; a sign-out empties the portal's
+  caches and leaves this worker's page and pictures. `tests/ui/pwa.test.js` holds it in a
+  browser, with the `/sit/` outbox saving offline beside the portal worker.
 
 ## Power cuts and resuming
 
@@ -1123,9 +1128,12 @@ A student sees their own released score, a parent their own child's, on `/test-s
 **Crestfield.** `crestfield reset` now has eight of JSS 2B sit the JSS 2 Mathematics test
 before the visit, in a sitting opened and closed by hand, so its results, item analysis
 and Send to CA show real numbers; JSS 2A's sitting stays as step 4 left it, for the visit,
-and nothing is released. `seed_ui` gives `tests/ui/screens.test.js` "UI Results", a test
-six of Sunrise's JSS 1A sat and the principal released, with a fixed code and the first
-child's exam PIN (DEBUG only).
+and nothing is released. `seed_ui` gives `tests/ui/screens.test.js` a class of its own,
+**UI Results**: six children who sat a test of their own and had it released, a fixed
+code (`RSWKTB`), the first child's exam PIN and a parent of her own, and two Mathematics
+marks typed by hand for Send to CA to keep or replace (DEBUG only). Not JSS 1A, and not
+`sit_pin()`'s PINs, so nothing `sit.test.js` or `pwa.test.js` sits beside it moves under
+it.
 
 **Tests.** `cbt/tests/test_marking.py` (two schools on their own hosts whose first class,
 term, subject, assessment, test and student share ids), `tests/js/tests_results.test.js`,

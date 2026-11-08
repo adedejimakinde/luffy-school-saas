@@ -111,11 +111,14 @@ PAGES = {
     # A school's public website: one module and no import map, loaded only on a
     # page with a gallery, a hero video or a slideshow (`schoolsite.render`).
     "school-site": ("schoolsite/site-app.js",),
+    # The installed app's script, loaded by the menu's shell on every staff page with
+    # no import map, because it imports nothing (`web/portal-app.js`, `docs/pwa.md`).
+    "portal": ("web/portal-app.js",),
 }
 
 #: Pages whose modules build no markup of their own, and so import no escaping
 #: (`test_a_page_that_draws_no_markup_imports_no_escaping` says what holds them).
-DRAWS_NO_MARKUP = {"blog-editor", "school-site"}
+DRAWS_NO_MARKUP = {"blog-editor", "school-site", "portal"}
 
 #: `from "./x.js"` and `from "../web/x.js"`, and `import("../web/x.js")` for
 #: the one module a page loads only if it can (`web/picker.js`): a dynamic

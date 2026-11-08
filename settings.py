@@ -1023,8 +1023,9 @@ STATICFILES_DIRS = [BASE_DIR / "static"]
 
 # The few files a browser or a search engine asks for by a fixed name at the
 # root of a host, whatever the page says: `/favicon.ico`, `/favicon.svg`,
-# `/apple-touch-icon.png`, `/site.webmanifest` and the manifest's two icons
-# (`scripts/favicons.py` draws them). WhiteNoise serves them as they are, at
+# `/apple-touch-icon.png` and the two icons Classnode's manifest names
+# (`scripts/favicons.py` draws them). `/site.webmanifest` is the exception: it is
+# a view, in each host's own name (`schools/pwa.py`, `docs/pwa.md`). WhiteNoise serves them as they are, at
 # that one address, on every host, and before any tenant is resolved, so the
 # public site, the portal and every school answer each with a 200 and the
 # file, never a redirect and never a 404. Not hashed, so their addresses stay

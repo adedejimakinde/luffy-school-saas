@@ -86,6 +86,11 @@ const OPEN_CLASS = `[data-action="open"]:has-text("${OWN_CLASS}")`;
 const PICK_PAPER = `[data-action="pick-assessment"]:has-text("${OWN_PAPER}")`;
 const PICK_CLASS = `[data-action="pick-class"]:has-text("${OWN_CLASS}")`;
 
+// CBT step 5's results, released scores and Send to CA: `seed_ui`'s UI Results, a class,
+// children, a parent and a test code of their own, so `sit.test.js` and `pwa.test.js`,
+// which sit tests beside this file, never sit as, mark or sign in for one of them.
+const RESULTS = { code: "RSWKTB", number: "SUN/UI-RES-01", pin: "20269001", parent: "sunrise.uiresparent" };
+
 /** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
 export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
 
@@ -320,8 +325,9 @@ export const SCREENS = [
     url: `${SUNRISE}/tests/`,
     steps: [["tests-sitting-office-log", 'a[href^="#sitting/"]']],
   },
-  // A test's results (CBT step 5): `seed_ui`'s "UI Results" test, which JSS 1A sat and the
-  // principal released. The principal's screen 7 with the item analysis; the
+  // A test's results (CBT step 5): `seed_ui`'s UI Results class's test, which its six sat
+  // and the principal released (their own class, child, parent and code: nothing sit or
+  // pwa touches). The principal's screen 7 with the item analysis; the
   // administrator's, which is the released scores alone. Also at a small Android and a
   // common iPhone. Send to CA, whose preview arrives after a tap, is walked below.
   {
@@ -338,8 +344,8 @@ export const SCREENS = [
     widths: [320, 390],
     steps: [["test-results-office-page", '.test-row:has-text("UI Results") a[href^="results/#"]']],
   },
-  // A parent's children's released test scores (09b): Ada's is "UI Results".
-  { name: "test-scores-parent", as: "sunrise.parent", url: `${SUNRISE}/test-scores/`, widths: [320, 390] },
+  // A parent's children's released test scores (09b): UI Results' first child's parent.
+  { name: "test-scores-parent", as: RESULTS.parent, url: `${SUNRISE}/test-scores/`, widths: [320, 390] },
   // A student's door to their own (09a), which opens with no account; opened below.
   { name: "test-scores-door", as: null, url: `${SUNRISE}/test-scores/`, widths: [320, 390] },
   // The exam door (CBT step 4), which a student opens with no account: also at a small
@@ -890,7 +896,7 @@ describe("every page, at every width", () => {
 });
 
 describe("a student's released score", () => {
-  // `seed_ui`'s fixed test code and the first JSS 1A child's PIN (09a): her own score and
+  // `seed_ui`'s fixed test code and UI Results' first child's PIN (09a): her own score and
   // the questions she did not get right, at a small Android, a common iPhone and a desk.
   test("the door opens her own score and corrections", async () => {
     const context = await signedIn(null);
@@ -901,9 +907,9 @@ describe("a student's released score", () => {
         await page.setViewportSize({ width, height: 800 });
         await page.goto(`${SUNRISE}/test-scores/`);
         await settle(page);
-        await page.fill("#code", "RSWKTB");
-        await page.fill("#number", "SUN/001");
-        await page.fill("#pin", "20269001");
+        await page.fill("#code", RESULTS.code);
+        await page.fill("#number", RESULTS.number);
+        await page.fill("#pin", RESULTS.pin);
         await page.click('[data-form="door"] button[type="submit"]');
         await page.waitForSelector('[data-state="student"]', { timeout: 10_000 });
         await settle(page);
@@ -937,8 +943,8 @@ describe("send to CA", () => {
         await page.waitForSelector('[data-form="ca-preview"]', { timeout: 10_000 });
         await settle(page);
         problems.push(...(await check(page, width, "test-send-to-ca")));
-        // Replace, so the marks JSS 1A already has are shown being replaced, and the
-        // confirm asks again for the ones typed by hand.
+        // Replace, so the two marks typed by hand for UI Results (`seed_ui`) are shown
+        // being replaced, and the confirm asks again for them.
         await page.check('input[name="existing"][value="replace"]');
         await page.click('[data-form="ca-preview"] button[type="submit"]');
         await page.waitForSelector("table.ca-lines", { timeout: 10_000 });

@@ -68,6 +68,9 @@ class Brand:
     crest_url: Optional[str]
     #: `#RRGGBB`, checked: the school's primary if it reads on white, else navy.
     colour: str
+    #: The upload service's key for the crest, or None. The installed app's icons
+    #: are variants of it (`schools.pwa`).
+    crest_key: Optional[str] = None
 
     @property
     def custom_colour(self) -> bool:
@@ -96,7 +99,19 @@ def _read(school) -> Brand:
         initials=initials(school.name),
         crest_url=f"/media/{key}/site.png" if key else None,
         colour=colour_for(primary),
+        crest_key=key or None,
     )
+
+
+def of_school(school) -> Brand:
+    """The school's own identity, for a surface that is public by design on its host.
+
+    The installed app's manifest and its offline page (`schools.pwa`): like a door
+    (`for_request(door=True)`) they are fetched by a browser with no session and
+    name only what the school's public website already names. The caller is on
+    the school's schema; read afresh, never kept (see the module).
+    """
+    return _read(school)
 
 
 def for_request(request, *, door: bool = False) -> Optional[Brand]:
@@ -120,4 +135,4 @@ def classnode_href() -> str:
     return f"//{host}/" if host else "https://classnode.co/"
 
 
-__all__ = ["Brand", "NAVY", "classnode_href", "colour_for", "for_request"]
+__all__ = ["Brand", "NAVY", "classnode_href", "colour_for", "for_request", "of_school"]

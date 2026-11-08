@@ -7,3 +7,9 @@
   </nav>
 {% endif %}
 </div>
+{% load static %}{% comment %}
+The installed app's page script (`web/portal-app.js`, `docs/pwa.md`): the portal's worker, the
+Install app button, and sign-out emptying the worker's caches. A module with no imports, so
+it needs no place in a page's import map. Only here, on the pages with the menu: the
+school's public website and the exam door do not load it.
+{% endcomment %}<script type="module" src="{% static 'web/portal-app.js' %}"></script>

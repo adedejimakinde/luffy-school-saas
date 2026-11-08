@@ -18,14 +18,25 @@ register for or imports beside:
   now, a known test code (`SIT_CODE`) and known exam PINs (`sit_pin(n)`), so the browser
   can sign in at `/sit/` as each child in turn. A PIN is otherwise random and shown only
   on a slip; here, with DEBUG on and for fake children, it is fixed so a test can type it.
+- `pwa.test.js`: **UI PWA**, two children who sit a test of their own (`PWA_CODE`, the same
+  paper and the same fixed PINs): the installed app's worker beside the exam's, in a browser
+  that has signed in, with a child no other file sits as (`docs/pwa.md`).
+- `screens.test.js`'s results (CBT step 5): **UI Results**, six children who have all sat
+  a test of their own (`RESULTS_CODE`, from the same bank), closed and released, so the
+  results, the item analysis, Send to CA and both score pages have real numbers. The first
+  child has a fixed exam PIN (`RESULTS_PIN`) for the student's score page and a parent of
+  her own (`RESULTS_PARENT`, the demo's password) for the parent's; two children have a
+  Mathematics mark typed by hand, so Send to CA has marks to keep or replace. Nobody else
+  sits as, marks or signs in for these children, so nothing here moves under sit or pwa.
 
-`screens.test.js` keeps `seed_demo`'s JSS 1A and JSS 1B, the classes it
+`screens.test.js` also keeps `seed_demo`'s JSS 1A and JSS 1B, the classes it
 photographs. Each file names its class, never "the first", and
 `schools/tests/test_seed_demo.py` checks that no two files name the same one.
 
 The classes sit at level 9, after JSS 1A and JSS 1B, so every list the screens
 photograph starts as it always has. Sunrise's, in this term; the children have
-no password, as nobody signs in as one.
+no password, as nobody signs in as one. One Mathematics bank at level 9 serves all
+three tests.
 
 **Refuses unless `DEBUG` is on**, as `seed_demo` does, **unless Sunrise is
 there**, and **twice**: a second run has nothing to add.
@@ -39,7 +50,8 @@ from django_tenants.utils import schema_context
 from academics import services as academics
 from academics.models import ClassGroup, Term
 from accounts.models import User
-from accounts.services import enroll_student
+from accounts.services import activate_guardian_links, enroll_student, link_guardian
+from schools.management.commands.seed_demo import DEFAULT_PASSWORD
 from schools.models import School
 
 SLUG = "sunrise-demo"
@@ -54,18 +66,25 @@ CLASSES = (
     ("UI Import", "imp", 0),
     ("UI Teaching", "tch", 0),
     ("UI Sit", "sit", 6),
+    ("UI PWA", "pwa", 2),
+    ("UI Results", "res", 6),
 )
 
 #: The test code and the PINs `sit.test.js` types. Fake children, DEBUG only.
 SIT_CODE = "UISITQ"
 SIT_TITLE = "UI Sit: Mathematics practice"
+#: The same paper for `pwa.test.js`'s class, under a code and a title of its own.
+PWA_CODE = "UIPWAQ"
+PWA_TITLE = "UI PWA: Mathematics practice"
 
-#: `screens.test.js`'s results (CBT step 5): a test JSS 1A has sat, and released, so the
-#: results, the item analysis, Send to CA and both score pages have real numbers. Its code
-#: and the first child's exam PIN are fixed, so the screens can open her score page.
+#: `screens.test.js`'s results (CBT step 5): UI Results' test, sat by all six and released.
+#: Its code, the first child's exam PIN and her parent are fixed, so the screens can open
+#: her score page as her and as her parent. Not `sit_pin()`'s, which sit and pwa type.
+RESULTS_CLASS = "UI Results"
 RESULTS_CODE = "RSWKTB"
 RESULTS_TITLE = "UI Results: Mathematics check"
 RESULTS_PIN = "20269001"
+RESULTS_PARENT = "sunrise.uiresparent"
 RESULTS_SITTERS = 6
 
 
@@ -78,7 +97,11 @@ FIRST_NAMES = ("Ada", "Bayo", "Chidi", "Dayo", "Efe", "Funmi")
 class Command(BaseCommand):
     help = "Give each browser test file its own class and children in Sunrise. After seed_demo."
 
-    def handle(self, *args, **options):
+    def add_arguments(self, parser):
+        # The password `seed_demo` gave every login, for UI Results' parent, who signs in.
+        parser.add_argument("--password", default=DEFAULT_PASSWORD)
+
+    def handle(self, *args, password, **options):
         if not settings.DEBUG:
             raise CommandError("seed_ui only runs with DEBUG on: it adds fake children.")
         school = School.objects.filter(slug=SLUG).first()
@@ -106,68 +129,25 @@ class Command(BaseCommand):
                     for child in children[name]:
                         academics.place_student(group, term, child)
                     self.stdout.write(f"  {name:<18} {len(children[name])} children")
-                results_test(school)
-                self.stdout.write(f"  JSS 1A's results  code {RESULTS_CODE}, the first child's PIN {RESULTS_PIN}")
+                maths_bank(school)
+                # Before UI Sit's and UI PWA's, so the Tests list still opens with theirs.
+                results_test(school, ClassGroup.objects.get(name=RESULTS_CLASS), children[RESULTS_CLASS], password)
+                self.stdout.write(
+                    f"  UI Results' test code {RESULTS_CODE}, the first child's PIN {RESULTS_PIN}, "
+                    f"her parent {RESULTS_PARENT}"
+                )
                 sit_test(school, ClassGroup.objects.get(name="UI Sit"), children["UI Sit"])
                 self.stdout.write(f"  UI Sit's test     code {SIT_CODE}, PINs {sit_pin(1)} to {sit_pin(6)}")
+                sit_test(
+                    school, ClassGroup.objects.get(name="UI PWA"), children["UI PWA"],
+                    title=PWA_TITLE, code=PWA_CODE,
+                )
+                self.stdout.write(f"  UI PWA's test     code {PWA_CODE}, PINs {sit_pin(1)} and {sit_pin(2)}")
 
 
-def results_test(school):
-    """A test JSS 1A sat and the principal released, for `screens.test.js`'s results.
-
-    Written, set, approved, opened by hand, sat by six of JSS 1A (`cbt.demo`), closed by
-    hand and released, as a school would. Made before UI Sit's test, so the Tests list
-    still opens with UI Sit's.
-    """
-    import random
-    from datetime import timedelta
-    from unittest import mock
-
-    from django.utils import timezone
-
-    from cbt import banks, demo, pins, release, setting, sittings
-    from cbt.models import SittingControl
-    from gradebook.models import Subject
-    from schools.crestfield.questions import BANK
-
-    principal = User.objects.get(username="sunrise.principal")
-    maths = Subject.objects.get(code="MTH")
-    group = ClassGroup.objects.get(name="JSS 1A")
-    for stem, options, answer in BANK["Mathematics"]:
-        banks.add_as(principal, school, maths.pk, group.level, banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1))
-    opens = timezone.now() + timedelta(minutes=1)
-    test = setting.create_as(
-        principal, school,
-        setting.TestDraft(
-            title=RESULTS_TITLE, subject_id=maths.pk, level=group.level, class_group_ids=[group.pk], question_count=10,
-            opens_at=opens, closes_at=opens + timedelta(days=60), duration=20,
-        ),
-    )
-    setting.submit_as(principal, school, test.pk, rng=random.Random(RESULTS_CODE))
-    setting.approve_as(principal, school, test.pk)
-    sittings.set_code_as(principal, school, test.pk, code=RESULTS_CODE)
-    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.OPENED, "Sat in period 1")
-    roster = pins.roster(school, group, pins.current_term())
-    # The first child, whose score page the screens open, gets a few wrong, so it has
-    # corrections to show.
-    chances = (0.6, 0.9, 0.8, 0.7, 0.5, 0.85)
-    demo.sit_finished(school, test, roster[:RESULTS_SITTERS], rng=random.Random(RESULTS_TITLE), ability=lambda n: chances[n])
-    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.CLOSED, "Period 1 is over")
-    release.release_as(principal, school, test.pk, group.pk)
-    with mock.patch("cbt.pins.new_pin", return_value=RESULTS_PIN):
-        pins.print_student_as(principal, school, group.pk, roster[0].pk)
-    return test
-
-
-def sit_test(school, group, children):
-    """A test "UI Sit" can sit now: written, set, approved and opened as a school would."""
-    from datetime import timedelta
-    from unittest import mock
-
-    from django.utils import timezone
-
-    from cbt import banks, pins, setting, sittings
-    from cbt.models import SittingControl
+def maths_bank(school):
+    """Crestfield's Mathematics questions at level 9, written once: every class here sits from it."""
+    from cbt import banks
     from gradebook.models import Subject
     from schools.crestfield.questions import BANK
 
@@ -175,18 +155,86 @@ def sit_test(school, group, children):
     maths = Subject.objects.get(code="MTH")
     for stem, options, answer in BANK["Mathematics"]:
         banks.add_as(principal, school, maths.pk, LEVEL, banks.Draft(stem=stem, options=list(options), correct_index=answer, marks=1))
+
+
+def results_test(school, group, children, password):
+    """UI Results' test, for `screens.test.js`'s results: sat by all six, and released.
+
+    Written, set, approved, opened by hand, sat (`cbt.demo`), closed by hand and released,
+    as a school would. The first child gets a few wrong, so her score page has corrections
+    to show; she has a fixed PIN and a parent of her own. Two children have a Mathematics
+    mark typed by hand, so Send to CA's preview has marks to keep or replace.
+    """
+    import random
+    from datetime import timedelta
+    from unittest import mock
+
+    from django.utils import timezone
+
+    from cbt import demo, pins, release, setting, sittings
+    from cbt.models import SittingControl
+    from gradebook import services as gradebook
+    from gradebook.models import Assessment, Subject
+
+    principal = User.objects.get(username="sunrise.principal")
+    maths = Subject.objects.get(code="MTH")
     opens = timezone.now() + timedelta(minutes=1)
     test = setting.create_as(
         principal, school,
         setting.TestDraft(
-            title=SIT_TITLE, subject_id=maths.pk, level=LEVEL, class_group_ids=[group.pk], question_count=10,
+            title=RESULTS_TITLE, subject_id=maths.pk, level=LEVEL, class_group_ids=[group.pk], question_count=10,
+            opens_at=opens, closes_at=opens + timedelta(days=60), duration=20,
+        ),
+    )
+    setting.submit_as(principal, school, test.pk, rng=random.Random(RESULTS_CODE))
+    setting.approve_as(principal, school, test.pk)
+    sittings.set_code_as(principal, school, test.pk, code=RESULTS_CODE)
+    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.OPENED, "Sat in period 1")
+    order = {child.pk: n for n, child in enumerate(children)}
+    roster = sorted(pins.roster(school, group, pins.current_term()), key=lambda s: order[s.pk])
+    chances = (0.6, 0.9, 0.8, 0.7, 0.5, 0.85)
+    demo.sit_finished(school, test, roster[:RESULTS_SITTERS], rng=random.Random(RESULTS_TITLE), ability=lambda n: chances[n])
+    sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.CLOSED, "Period 1 is over")
+    release.release_as(principal, school, test.pk, group.pk)
+    with mock.patch("cbt.pins.new_pin", return_value=RESULTS_PIN):
+        pins.print_student_as(principal, school, group.pk, roster[0].pk)
+    column = Assessment.objects.filter(term_id=test.term_id, subject=maths).order_by("position", "name", "id").first()
+    for child, value in zip(children[1:3], (7, 12)):
+        gradebook.set_score_as(principal, column, child, min(value, column.max_score))
+    parent = User.objects.create_user(RESULTS_PARENT, password, full_name="Parent Results")
+    link_guardian(parent, children[0])
+    activate_guardian_links(parent, school)
+    return test
+
+
+def sit_test(school, group, children, *, title=SIT_TITLE, code=SIT_CODE):
+    """A test the class can sit now: written, set, approved and opened as a school would.
+
+    From `maths_bank()`, which every class at level 9 sits from.
+    """
+    from datetime import timedelta
+    from unittest import mock
+
+    from django.utils import timezone
+
+    from cbt import pins, setting, sittings
+    from cbt.models import SittingControl
+    from gradebook.models import Subject
+
+    principal = User.objects.get(username="sunrise.principal")
+    maths = Subject.objects.get(code="MTH")
+    opens = timezone.now() + timedelta(minutes=1)
+    test = setting.create_as(
+        principal, school,
+        setting.TestDraft(
+            title=title, subject_id=maths.pk, level=LEVEL, class_group_ids=[group.pk], question_count=10,
             opens_at=opens, closes_at=opens + timedelta(days=60), duration=40, calculator=True,
         ),
     )
     setting.submit_as(principal, school, test.pk)
     setting.approve_as(principal, school, test.pk)
     sittings.control_as(principal, school, test.pk, group.pk, SittingControl.Kind.OPENED, "Browser tests")
-    sittings.set_code_as(principal, school, test.pk, code=SIT_CODE)
+    sittings.set_code_as(principal, school, test.pk, code=code)
     order = {child.pk: n for n, child in enumerate(children, start=1)}
     minted = iter(sit_pin(order[s.pk]) for s in pins.roster(school, group, pins.current_term()))
     with mock.patch("cbt.pins.new_pin", side_effect=lambda: next(minted)):

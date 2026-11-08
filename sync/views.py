@@ -22,6 +22,12 @@ produces are the names the worker keeps. A third list written out here would be
 a list that could miss the module somebody adds next month, and the page would
 fail on it only for a phone with no connection.
 
+## The installed app
+
+Since `docs/pwa.md` this is also the portal's worker: it keeps the app shell and the offline
+page, answers an unreachable page with the latter, and deletes what it keeps at sign-out.
+`LEAVE` is what it never answers, the exam's `/sit/`.
+
 ## No caller's data in it
 
 The script is the same bytes for every school's host and for a caller with no
@@ -40,6 +46,7 @@ from django.templatetags.static import static
 from django.views.decorators.http import require_GET
 
 from attendance.views import REGISTER_MODULES
+from cbt.sit_views import PATH as SIT_PATH
 from gradebook.views import MARKING_MODULES
 
 #: The two pages the worker keeps, by path.
@@ -75,7 +82,26 @@ SOURCE = Path(__file__).parent / "worker.js"
 #: names) the shell's URLs alone would give the same version, and a phone
 #: would go on serving yesterday's module. 2: the register and marking pages
 #: learned their empty states (`onboarding`).
-CACHE_GENERATION = 2
+#: 3: the portal's app shell, offline page and the exam left alone (`docs/pwa.md`).
+CACHE_GENERATION = 3
+
+#: What the worker never answers or keeps: the exam, which has its own worker
+#: (`cbt/sit_worker.js`). Read from the route's own constant, not written again.
+LEAVE = (SIT_PATH,)
+
+#: The two ways to sign out: the menu's form and the API's button. The worker deletes
+#: what it keeps when the server has ended the session by either (`sync/worker.js`).
+SIGN_OUT = ("/sign-out/", "/api/logout/")
+
+#: Every cache the worker keeps is named so; the exam's (`sit-`) are not.
+CACHE_PREFIX = "luffy-"
+
+#: The page the worker shows when another cannot be reached (`schools.pwa.offline`).
+OFFLINE = "/offline/"
+
+#: The fixed-address marks, kept so the shell can draw an icon with no connection
+#: (`WHITENOISE_ROOT`, served on every host).
+ICONS = ("/favicon.svg", "/icon-192.png", "/icon-512.png")
 
 
 def config():
@@ -88,6 +114,12 @@ def config():
     return {
         "version": version,
         "pages": list(PAGES),
+        "leave": list(LEAVE),
+        "signOut": list(SIGN_OUT),
+        "api": "/api/",
+        "prefix": CACHE_PREFIX,
+        "offline": OFFLINE,
+        "icons": list(ICONS),
         "shell": shell,
         "static": prefix,
         # Hashed names never change their bytes, so the worker may keep them.

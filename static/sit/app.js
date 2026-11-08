@@ -321,6 +321,10 @@ export function mount(
         tick();
       }
       await outbox.update(() => ({ offset: clock.offset(), deadline: state.deadline }));
+      // A send that was in flight while the student submitted: the school's "closed" is
+      // their own submit's doing, and `finish` draws that screen. Drawing it here, from an
+      // outbox `finish` has cleared, would blank what the screen says.
+      if (state.closed || state.step === "finished") return null;
       if (answer.body.replaced) return show({ step: "replaced" });
       if (answer.body.closed) return closedByTheSchool(answer.body);
       return answer.body;

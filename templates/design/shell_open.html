@@ -19,6 +19,12 @@ and name for a member of it (`schools/brand.py`). Closed by
       {% endfor %}
     </div>
     {% endif %}
+    {% comment %}
+    Install app: hidden until `web/portal-app.js` knows the browser can (Android raises
+    `beforeinstallprompt`) or that a how-to is the way (iPhone). Without the script the
+    page is as it was.
+    {% endcomment %}
+    <div id="install" class="nav nav-install" hidden><button type="button" id="install-app" class="nav-button" aria-expanded="false"><svg class="icon"><use href="#i-install"/></svg>Install app</button><p id="install-howto" class="install-howto" hidden>Tap Share, then Add to Home Screen.</p></div>
     {% if menu.groups and not menu.platform %}
     {% comment %}
     Help and next steps, for every member of staff, at the foot of the sidebar
