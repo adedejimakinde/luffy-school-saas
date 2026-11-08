@@ -284,6 +284,22 @@ class ItemAnalysisTests(MarkingSetUp):
                 self.assertEqual((i["chose"], i["facility"], i["most_wrong"], i["blank"], i["key"]), (chose, facility, most_wrong, 0, 0))
         self.assertEqual(sum(items[self.item_ids[1]]["percent"]), 100)
 
+    def test_only_the_answer_that_counts_is_counted(self):
+        """Ada answers question 1 with B, then changes it to A: the analysis counts her A
+        once, never the B she left, and her score is the A's."""
+        device = Client()
+        self.started("SM/001", device=device)
+        when = self.in_window(6)
+        first = [{"seq": 1, "item": self.item_ids[0], "chosen": 1, "chosen_at": when.isoformat()}]
+        second = [{"seq": 2, "item": self.item_ids[0], "chosen": 0, "chosen_at": (when + timedelta(seconds=30)).isoformat()}]
+        with self.at(when + timedelta(seconds=40)):
+            self.sit("sync/", {"answers": first}, device=device)
+            self.sit("submit/", {"answers": second}, device=device)
+        with self.after():
+            body = self.results().json()
+        item = next(i for i in body["items"] if i["item_id"] == self.item_ids[0])
+        self.assertEqual((item["chose"], item["facility"]), ([1, 0, 0, 0], 100))
+
     def test_a_blank_answer_is_counted_as_blank(self):
         self.finish("SM/001", [0, None, None, 0])
         with self.after():
@@ -420,6 +436,20 @@ class SendToCaTests(MarkingSetUp):
                     self.assertEqual(self.send(preview, who=who).status_code, status)
             self.assertEqual(self.preview(who=self.head).status_code, 200)
         self.assertEqual(self.scores_in_column(), {})
+
+    def test_only_the_tests_subject_and_term_columns_can_be_named(self):
+        """A column of St Mary's own, but of another subject or another term, is refused."""
+        self.sat()
+        with connected_to(self.stmarys):
+            english = Assessment.objects.create(term_id=self.term_id, subject_id=self.english_id, name="English CA", max_score=10).pk
+            later = Assessment.objects.create(term_id=self.second_term.pk, subject_id=self.maths_id, name="Second term CA", max_score=10).pk
+        with self.after():
+            for column in (english, later):
+                with self.subTest(column=column):
+                    self.assertEqual(self.preview(assessment=column).status_code, 422)
+                    self.assertEqual(self.send({"lines": []}, assessment=column).status_code, 422)
+        with connected_to(self.stmarys):
+            self.assertFalse(Score.objects.filter(assessment_id__in=[english, later]).exists())
 
     def test_another_schools_assessment_cannot_be_named(self):
         self.sat()
