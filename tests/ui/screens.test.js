@@ -86,6 +86,11 @@ const OPEN_CLASS = `[data-action="open"]:has-text("${OWN_CLASS}")`;
 const PICK_PAPER = `[data-action="pick-assessment"]:has-text("${OWN_PAPER}")`;
 const PICK_CLASS = `[data-action="pick-class"]:has-text("${OWN_CLASS}")`;
 
+// CBT step 5's results, released scores and Send to CA: `seed_ui`'s UI Results, a class,
+// children, a parent and a test code of their own, so `sit.test.js` and `pwa.test.js`,
+// which sit tests beside this file, never sit as, mark or sign in for one of them.
+const RESULTS = { code: "RSWKTB", number: "SUN/UI-RES-01", pin: "20269001", parent: "sunrise.uiresparent" };
+
 /** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
 export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
 
@@ -320,6 +325,29 @@ export const SCREENS = [
     url: `${SUNRISE}/tests/`,
     steps: [["tests-sitting-office-log", 'a[href^="#sitting/"]']],
   },
+  // A test's results (CBT step 5): `seed_ui`'s UI Results class's test, which its six sat
+  // and the principal released (their own class, child, parent and code: nothing sit or
+  // pwa touches). The principal's screen 7 with the item analysis; the
+  // administrator's, which is the released scores alone. Also at a small Android and a
+  // common iPhone. Send to CA, whose preview arrives after a tap, is walked below.
+  {
+    name: "test-results",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/tests/`,
+    widths: [320, 390],
+    steps: [["test-results-page", '.test-row:has-text("UI Results") a[href^="results/#"]']],
+  },
+  {
+    name: "test-results-office",
+    as: "sunrise.admin",
+    url: `${SUNRISE}/tests/`,
+    widths: [320, 390],
+    steps: [["test-results-office-page", '.test-row:has-text("UI Results") a[href^="results/#"]']],
+  },
+  // A parent's children's released test scores (09b): UI Results' first child's parent.
+  { name: "test-scores-parent", as: RESULTS.parent, url: `${SUNRISE}/test-scores/`, widths: [320, 390] },
+  // A student's door to their own (09a), which opens with no account; opened below.
+  { name: "test-scores-door", as: null, url: `${SUNRISE}/test-scores/`, widths: [320, 390] },
   // The exam door (CBT step 4), which a student opens with no account: also at a small
   // Android and a common iPhone. The exam screen itself is `sit.test.js`'s.
   { name: "sit-door", as: null, url: `${SUNRISE}/sit/`, widths: [320, 390] },
@@ -865,6 +893,73 @@ describe("every page, at every width", () => {
       assert.deepEqual(problems, []);
     });
   }
+});
+
+describe("a student's released score", () => {
+  // `seed_ui`'s fixed test code and UI Results' first child's PIN (09a): her own score and
+  // the questions she did not get right, at a small Android, a common iPhone and a desk.
+  test("the door opens her own score and corrections", async () => {
+    const context = await signedIn(null);
+    const page = await context.newPage();
+    const problems = [];
+    try {
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${SUNRISE}/test-scores/`);
+        await settle(page);
+        await page.fill("#code", RESULTS.code);
+        await page.fill("#number", RESULTS.number);
+        await page.fill("#pin", RESULTS.pin);
+        await page.click('[data-form="door"] button[type="submit"]');
+        await page.waitForSelector('[data-state="student"]', { timeout: 10_000 });
+        await settle(page);
+        assert.match(await page.textContent("main"), /out of 10/);
+        problems.push(...(await check(page, width, "test-scores-student")));
+      }
+    } finally {
+      await page.close();
+    }
+    assert.deepEqual(problems, []);
+  });
+});
+
+describe("send to CA", () => {
+  // 8a and 8b on "UI Results": the column and the choice, the preview of every student
+  // (which arrives from a fetch after the tap, so each step waits for what it draws),
+  // and the confirm. Nothing is sent.
+  test("the preview and the confirm", async () => {
+    const context = await signedIn("sunrise.principal");
+    const page = await context.newPage();
+    const problems = [];
+    try {
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto("about:blank");
+        await page.goto(`${SUNRISE}/tests/`);
+        await settle(page);
+        await page.click('.test-row:has-text("UI Results") a[href^="results/#"]');
+        await page.waitForSelector('[data-state="results"]', { timeout: 10_000 });
+        await page.click('a[href^="#ca/"]');
+        await page.waitForSelector('[data-form="ca-preview"]', { timeout: 10_000 });
+        await settle(page);
+        problems.push(...(await check(page, width, "test-send-to-ca")));
+        // Replace, so the two marks typed by hand for UI Results (`seed_ui`) are shown
+        // being replaced, and the confirm asks again for them.
+        await page.check('input[name="existing"][value="replace"]');
+        await page.click('[data-form="ca-preview"] button[type="submit"]');
+        await page.waitForSelector("table.ca-lines", { timeout: 10_000 });
+        await settle(page);
+        problems.push(...(await check(page, width, "test-send-to-ca-preview")));
+        await page.click('[data-action="ask-send"]');
+        await page.waitForSelector('[data-form="ca-send"] input[name="confirm_replace"]', { timeout: 10_000 });
+        await settle(page);
+        problems.push(...(await check(page, width, "test-send-to-ca-confirm")));
+      }
+    } finally {
+      await page.close();
+    }
+    assert.deepEqual(problems, []);
+  });
 });
 
 describe("the phone menu", () => {

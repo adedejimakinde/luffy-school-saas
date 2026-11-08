@@ -29,8 +29,8 @@ from accounts.views import (
     staff_sign_in_page,
 )
 from attendance.views import absences_page, register_page
-from cbt import sit_views
-from cbt.views import exam_slips_page, tests_page
+from cbt import score_views, sit_views
+from cbt.views import exam_slips_page, results_page, tests_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
@@ -130,6 +130,8 @@ urlpatterns = [
     # Question banks and tests (`docs/cbt.md`, step 3): teachers write and set, the
     # principal or the vice principal approves; the administrator sees the list with no question in it.
     path("tests/", tests_page, name="tests"),
+    # A test's results, item analysis, release and Send to CA (`docs/cbt.md`, step 5).
+    path("tests/results/", results_page, name="test-results"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),
@@ -179,6 +181,11 @@ urlpatterns = [
     path("sit/api/sync/", sit_views.sync, name="sit-sync"),
     path("sit/api/submit/", sit_views.submit, name="sit-submit"),
     path("sit/pictures/<str:key>/<str:variant>", sit_views.picture, name="sit-picture"),
+    # Released test scores (`docs/cbt.md`, step 5): a parent's children's, signed in, and
+    # a student's own, opened with the test code, their admission number and exam PIN.
+    # Not under `/sit/`, so the exam page's worker never sees it.
+    path("test-scores/", score_views.scores_page, name="test-scores"),
+    path("test-scores/api/open/", score_views.open_scores, name="test-scores-open"),
     # The school's website editor and its preview of the draft (`schoolsite.editor`,
     # `docs/school-sites.md` PR 4): a portal path, never indexed.
     path("website/", site_editor.editor_page, name="website-editor"),

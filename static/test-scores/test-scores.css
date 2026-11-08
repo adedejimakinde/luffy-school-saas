@@ -1,0 +1,28 @@
+/*
+ * `/test-scores/`: a student's and a parent's released test scores (screens 09a, 09b).
+ * Colours, type and controls are `web/design.css`'s tokens; nothing here declares a
+ * colour. Every row wraps rather than squeezes, so 320px and text at 200% keep each line.
+ */
+.scores-card { max-width: 40rem; margin: 16px auto; display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.scores-card h1, .scores-card h2, .scores-card p { margin: 0; }
+.scores-card .who { color: var(--muted); font-weight: 700; }
+.scores-card .hint { color: var(--muted); font-size: var(--small); }
+.scores-form { display: grid; gap: 6px; max-width: 24rem; }
+.scores-form label { font-weight: 700; margin-top: 8px; }
+.scores-form input { min-width: 0; width: 100%; }
+.scores-form button { margin-top: 12px; justify-self: start; }
+.scores-card .note { color: var(--stop); }
+.scores-card .big { font-size: 1.25rem; }
+.scores-card .big strong { font-size: 2.25rem; font-variant-numeric: tabular-nums; }
+.scores-card .tally { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--muted); }
+.scores, .corrections { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.score-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
+.score-row .what { display: grid; gap: 2px; min-width: 0; flex: 1 1 14rem; }
+.score-row .figure { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
+.correction { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--divider); }
+.correction .answer { display: flex; gap: 8px; align-items: baseline; }
+.correction .letter { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.75rem; border-radius: var(--radius); border: 1px solid var(--border); font-weight: 700; flex: none; }
+.correction .right .letter { border-color: var(--ok); color: var(--ok); }
+.correction .why { color: var(--muted); }
+.child-switcher { display: flex; flex-wrap: wrap; gap: 8px; }
+.child-switcher .current { font-weight: 700; text-decoration: underline; }

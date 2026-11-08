@@ -270,6 +270,30 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
                     seen |= members
             demo = set(ClassPlacement.objects.filter(class_group__name__in=("JSS 1A", "JSS 1B")).values_list("student_membership_id", flat=True))
             self.assertFalse(seen & demo, "a test's child in a demo class")
+            # CBT step 5: UI Results' six have sat a test of their own and had it released,
+            # for the screens; its code, PIN and parent are nobody else's.
+            from accounts.models import Guardianship
+            from cbt.models import ReleasedTestScore, Test
+            from schools.management.commands.seed_ui import (
+                PWA_CODE, PWA_TITLE, RESULTS_CLASS, RESULTS_CODE, RESULTS_PARENT, RESULTS_PIN,
+                RESULTS_SITTERS, RESULTS_TITLE, SIT_CODE, sit_pin,
+            )
+
+            released = Test.objects.get(title=RESULTS_TITLE)
+            frozen = ReleasedTestScore.objects.filter(test=released, release__restore__isnull=True)
+            self.assertEqual(frozen.count(), RESULTS_SITTERS)
+            self.assertEqual(set(frozen.values_list("class_group_name", flat=True)), {RESULTS_CLASS})
+            own = set(ClassPlacement.objects.filter(class_group__name=RESULTS_CLASS, term=term).values_list("student_membership_id", flat=True))
+            self.assertEqual(set(frozen.values_list("student_membership_id", flat=True)), own)
+            self.assertFalse(own & demo, "a released score for a demo class's child")
+            self.assertNotIn(RESULTS_CODE, (SIT_CODE, PWA_CODE))
+            self.assertNotIn(RESULTS_PIN, [sit_pin(n) for n in range(1, 7)])
+            self.assertEqual(
+                set(Guardianship.objects.filter(guardian__username=RESULTS_PARENT).values_list("student_id", flat=True)),
+                {Membership.objects.get(school=school, reference="SUN/UI-RES-01").pk},
+            )
+            # Made before UI Sit's and UI PWA's, so the Tests list opens as it did.
+            self.assertEqual(Test.objects.order_by("-opens_at", "-id").first().title, PWA_TITLE)
         with self.assertRaisesMessage(CommandError, "already here"):
             call_command("seed_ui", stdout=StringIO())
 

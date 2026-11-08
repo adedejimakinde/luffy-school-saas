@@ -1,0 +1,23 @@
+{% load static %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test scores</title>
+
+{% comment %}
+A student's and a parent's released test scores (`docs/cbt.md`, step 5,
+`cbt/score_views.py`). The frame holds no student, no score and no question, and the
+title names none, because a tab title outlives the page on a shared computer. A parent's
+scores come from `/api/cbt/scores/`; a student opens theirs with the test code, their
+admission number and exam PIN, and nothing is kept when the page closes.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'test-scores/test-scores.css' %}">
+<script type="importmap">{{ import_map|safe }}</script>
+<script type="module" defer src="{% static 'test-scores/app.js' %}"></script>
+{% include "design/icons.html" %}
+<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+<main id="test-scores" data-school="{{ school_brand.name }}"{% if guardian %} data-guardian="1"{% endif %}>
+  <p class="state state-loading">Loading test scores&hellip;</p>
+</main>
