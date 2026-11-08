@@ -1,4 +1,4 @@
-"""The two sign-in pages. One hostname, no data in either.
+"""The two sign-in pages, on the portal and on each school's host. No data in either.
 
 Two doors, because there are two ways to prove who you are and they have almost
 nothing in common. A guardian signs in with a code on a channel the school
@@ -12,17 +12,15 @@ Like the report card page both are **shells**: a frame, a stylesheet and a few
 ES modules. Neither holds an account, a child or a school, and neither view
 reads anything from the database.
 
-## Portal-only, by routing rather than by a check
+## Two doors each: the portal's, and each school's own
 
-Both are mounted in `urls_public.py` and not in `urls.py`, so they exist on the
-portal host and nowhere else. That matches the routes they call —
-`guardian_code()`, `guardian_session()` and `sign_in()` all begin with
-`api._portal_only()` — and it matters for the reason that function gives: a
-school's host refuses anyone without an active membership *there*, so sign-in
-served from it would mean the same credentials worked on one hostname and not
-another, and a teacher who is also a parent elsewhere would need two sessions.
-
-A page mounted where its API is not would be a form that submits into a 404.
+Both pages are mounted on the portal (`urls_public.py`) and on every school's
+host (`urls.py`). On the portal they are Classnode's, sign in anybody with an
+account and name every school the login reaches, which is what a parent with
+children at three schools needs. On a school's host they wear the school and
+sign in its members alone, in a session good on that host and nowhere else
+(`api._door_school()`, `schools.sessions`). Same pages, same routes, same one
+refusal; `docs/sign-in-page.md` has the rest.
 
 ## Nothing is remembered on either, and the shared handset is why
 
@@ -35,7 +33,6 @@ a browser's storage is something the next person to pick up the phone can
 replay.
 """
 
-from django.contrib.auth import logout as end_session
 from django.http import HttpResponseRedirect
 from django.shortcuts import render
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -44,6 +41,7 @@ from django.views.decorators.http import require_POST
 import pages
 from schools.demo import single_host
 from schools.hosts import portal_host
+from schools.sessions import end_every_session, signed_in_here
 
 from .refusals import SchoolAccessRefused
 
@@ -101,10 +99,9 @@ def staff_sign_in_page(request):
 def _door_brand(request) -> dict:
     """The school's crest, name and colour when a door is served on its own host.
 
-    On the portal, which is where the doors are in production, this is Classnode's
-    and reads nothing: `schools.brand.for_request()` answers None before any query.
-    On a school's host (the single-host demo) it is that school's, shown to anybody,
-    because the host is already the school's own public address.
+    On the portal this is Classnode's and reads nothing: `schools.brand.for_request()`
+    answers None before any query. On a school's own host it is that school's, shown
+    to anybody, because the host is already the school's own public address.
     """
     from schools.brand import classnode_href, for_request
 
@@ -212,10 +209,12 @@ INVITE_MODULES = (
 def invitation_page(request, token):
     """The frame for accepting an invitation. Holds no token, name or school.
 
-    **Portal only** (`urls_public.py`): a token is a credential for a person,
-    not for a school, and the API routes it calls are the portal's. The page
-    reads the token out of its own address and asks the API about it, so the
-    frame served for a real token and for a guessed one are the same bytes.
+    On the invited school's own host, where the link now goes
+    (`settings.INVITATION_ACCEPT_URL`), and on the portal, where every link
+    sent before that went. On a school's host the API answers that school's
+    invitations alone (`api._validated`). The page reads the token out of its
+    own address and asks the API about it, so the frame served for a real
+    token and for a guessed one are the same bytes.
 
     `no-store`, because the address this was served from is a live credential
     until it is used, and a cached copy of the page is a copy of the address in
@@ -242,15 +241,17 @@ def sign_out(request):
     teacher's session in the middle of marking. POST only, so a link or a
     prefetch cannot sign anybody out.
 
-    It lands on the portal's staff sign-in, which is on another host, so the
-    link is the portal's full name. Where no portal is configured it goes back
-    to the page it came from, which draws its own "Please sign in"; `next` is
-    checked against this host first, so the form cannot be used to send
-    somebody anywhere else.
+    A session signed in on this school's own door lands back on that door, on
+    this host. Any other lands on the portal's staff sign-in, which is on
+    another host, so the link is the portal's full name. Where no portal is
+    configured it goes back to the page it came from, which draws its own
+    "Please sign in"; `next` is checked against this host first, so the form
+    cannot be used to send somebody anywhere else.
     """
-    end_session(request)
+    here = signed_in_here(request)
+    end_every_session(request)
     # The single-host demo has no other host to send anybody to.
-    if single_host():
+    if here or single_host():
         return HttpResponseRedirect("/staff-sign-in/")
     host = portal_host()
     if host:

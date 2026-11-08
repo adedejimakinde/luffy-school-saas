@@ -7,7 +7,8 @@ Code: `accounts/views.py`, the `sign-in/` and `staff-sign-in/` routes in
 `static/staff-signin/` with `static/web/` shared, and tests in
 `accounts/tests/test_sign_in_page.py` and
 `accounts/tests/test_staff_sign_in_page.py` (the shells),
-`accounts/tests/test_cross_host_session.py` (the cookie) and
+`accounts/tests/test_cross_host_session.py` (the cookie),
+`accounts/tests/test_school_door.py` (a school's own door, at two schools) and
 `tests/js/signin.test.js`, `tests/js/staff_signin.test.js` and
 `tests/js/signout.test.js` (the flows). The routes behind them are
 `guardian_code()`, `guardian_session()`, `sign_in()` and `sign_out()` in
@@ -15,15 +16,19 @@ Code: `accounts/views.py`, the `sign-in/` and `staff-sign-in/` routes in
 `accounts/signin.py`. Where the guardian page sends people is
 [report-card-page.md](report-card-page.md).
 
-## Two doors, on one hostname
+## Two doors, on the portal and on every school's host
 
-Both are mounted in `urls_public.py` and not in `urls.py`, so they exist on the
-portal and nowhere else — matching the routes they call, which all begin with
-`api._portal_only()`. A sign-in page on a school's host would be a form that
-submits into a 404, and a school's host refuses anybody without an active
-membership *there*, which is the opposite of what a door needs. A parent with
-children at two schools signs in once, and so does a teacher who is also a
-parent somewhere else.
+Both pages are mounted on the portal (`urls_public.py`) and on every school's
+own host (`urls.py`), and the routes behind them answer on both. They are two
+different doors with one form between them:
+
+- **The portal's** (`app.<domain>`) is Classnode's look. It signs in anybody
+  with an account and names every school the login reaches, which is what a
+  parent with children at two schools, a teacher who is also a parent
+  elsewhere, and platform staff need. It is exactly what it was.
+- **A school's own** (`<school>.<domain>/staff-sign-in/` and `/sign-in/`)
+  wears that school, signs in its members and nobody else, names that school
+  alone and goes straight to its portal. See "A school's own door" below.
 
 **Two routes and two documents, not one page with a flag.** The flows share no
 step: a guardian signs in with a code on a channel the school verified and there
@@ -31,10 +36,106 @@ is no password field, while staff send an identifier and a password in one
 request and there is nothing to keep between requests. A page whose form
 depended on a query parameter would also be a page nobody could link to.
 
-Both frames hold nothing: no account, no child, no school, and neither view
-reads anything from the database. Both are served to whoever opens the URL,
-because a page that asks for the credential that creates a session cannot
-require one.
+Both frames hold nothing: no account, no child, and neither view reads anything
+from the database but the school's crest and colour on its own host. Both are
+served to whoever opens the URL, because a page that asks for the credential
+that creates a session cannot require one.
+
+## A school's own door
+
+### Who gets in: that school's members, and the one refusal for everybody else
+
+`api._door_school()` is the school whose host the request is on, and the three
+sign-in routes pass it down. `accounts.signin.sign_in()` then refuses a login
+with no **active** membership at that school (`belongs_at()`) **exactly as it
+refuses a wrong password**: the same 401, the same `REFUSED` sentence, and a
+failure counted against the identifier and the address by the same throttle.
+A member of the school next door, a suspended or invited teacher, and platform
+staff with no membership there are all told the details are wrong. Anything
+else would say that the account exists somewhere: in the words, in the
+throttle (an uncounted right password would never lock), or in a 403.
+
+The code door does the same in `accounts.guardian_signin._at()`: on a school's
+host only that school's parents (an active PARENT membership; a code session
+reaches nothing else) are sent a code, have their code tried, or are offered on
+a shared handset. Anybody else's number is a number nobody holds: the same
+"if those details are on file" sentence, nothing sent, the one refusal. A
+shared handset's pick is finished at the door that proved it.
+
+Throttling, the CSRF check, the session key cycling and the token rotation are
+`signin.sign_in()`'s and `guardian_signin`'s, so they hold at a school's door as
+they do on the portal: one bucket per identifier whichever door the guesses
+arrive at (closed on a school's door, it is closed on the portal's too).
+
+### Where the session is good: that host, and nowhere else
+
+A session made at a school's door is **in a cookie of its own**,
+`settings.SCHOOL_SESSION_COOKIE_NAME` (`__Host-school_session` wherever
+cookies are `Secure`), with **no `Domain` attribute**: a browser sends it back
+to that school's host and to no other host, not another school's and not the
+portal (RFC 6265 §5.3). `__Host-` makes the browser refuse that name from any
+response that gives it a `Domain`, so a sibling host cannot plant one.
+
+It is also **bound to the school**: `schools.session_store.SIGNED_IN_AT`
+holds the school's id, and the session store (`settings.SESSION_ENGINE`)
+refuses a bound session on any other host, whatever cookie carries it there.
+That second lock is for everything a browser is not: a cookie copied by hand,
+and the test client, which keeps one jar for every host and is how the tests
+show it. A refused session is left alone for its own host; the request goes on
+as if no cookie had been sent, and the API says `session_expired`.
+
+A second cookie name rather than the portal's cookie scoped two ways, because
+two cookies of one name on one host reach the server in an order nothing
+promises. `schools.sessions.SessionMiddleware` picks: on a school's host the
+school's cookie when it names a live session there, otherwise the portal's, so
+a teacher signed in on the portal arrives at her school exactly as before. A
+portal session the browser brings to a school's door is put aside rather than
+cycled into the school's: Django's `login()` would otherwise flush or re-key
+the portal's session.
+
+The portal's own session is untouched by all of this: the same cookie, scoped
+to the platform domain, good on every host where `SchoolAccessMiddleware` finds
+a membership.
+
+### The doors are reachable by a stranger, and grant a stranger nothing
+
+`SchoolAccessMiddleware` refuses a signed-in login with no membership at the
+school whose host it is on. A door is for somebody not signed in there yet, so
+`schools.paths.DOORS` (the two pages, `/api/csrf/`, `/api/login/`,
+`/api/logout/`, the two guardian routes, and the invitation page and its API)
+are let through instead of refused: a teacher signed in on the portal as a
+member of another school still reaches this school's sign-in page. None of
+them reads the school's data, and the roles the middleware computed are still
+empty.
+
+### Where it lands
+
+On a school's host `SignedInOut` names that school alone, every link a path on
+this host (`path_only`), and carries `home`: Start here for an administrator
+whose school is not set up, the dashboard for its staff, the report cards for
+its families, or none when there is nothing to open yet (the landing then says
+so). The staff page goes there by itself (`landingRedirect()`), after a
+preview's `?next=`; the guardian page already went to the one school's cards.
+`is_platform_staff` is false there: the platform's page is on the portal.
+
+### Signing out on a school's host
+
+`schools.sessions.end_every_session()` ends the session in use and, on a
+school's host, the portal's session the browser sent beside it, so the next page
+on this host is not still signed in. The menu's Sign out then lands on this
+host's own door when the session was signed in there, and on the portal's
+otherwise, as before.
+
+### Links in emails
+
+An invitation's link is `settings.INVITATION_ACCEPT_URL` with `{host}` the
+invited school's primary address (the portal's where it has none), so it opens
+on the school it is for and its last step, "Sign in", is that school's door.
+The page is on the portal too, for every link sent before; on a school's host
+the API answers that school's invitations alone (another's is the flat 404).
+"Ready for the principal" already linked to the preview on the school's host;
+signed out, the preview now sends her to this host's door and back, rather than
+to the portal's.
 
 ## The guardian door: four steps, because the API has four answers
 
@@ -95,8 +196,8 @@ is about (both fields point at it with `aria-describedby`).
 ## Whose look a door wears
 
 On the portal both doors are Classnode's: its mark above the card, "Classnode"
-under it, and the views read nothing. Served on a school's own host (today, the
-single-host demo) a door wears that school: its crest above the card (its
+under it, and the views read nothing. Served on a school's own host a door
+wears that school: its crest above the card (its
 initials in a tile without one), its name, its colour where that reads on white,
 its crest as the tab's icon, and "Powered by Classnode" under the card. The
 view passes `door` and `brand` (`accounts.views._door_brand`,
@@ -200,7 +301,10 @@ signed-in teacher's browser to throw away the session they are marking with.
 `logout()` flushes the session rather than forgetting the user, and the cookie
 is scoped to a domain covering the portal and every school host, so **signing
 out on one host ends the session on both**. A button that ended one of several
-sessions would be worse than no button.
+sessions would be worse than no button, which is why signing out on a school's
+host ends the portal's session the browser sent as well as the school's own
+(see "Signing out on a school's host" above). A school's own session never
+reaches the portal, so signing out there leaves it, and it lapses on its own.
 
 **The asymmetry in what counts as signed out is the whole of `sessionEnded()`.**
 A 200 ends it, and so does a 401 — a caller whose session had already gone asks

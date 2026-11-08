@@ -26,6 +26,13 @@ counted against the identifier as typed, whether or not it resolves to
 anybody, so being throttled says nothing about whether the account is real.
 Were it counted only for accounts that exist, the 429 would be the oracle the
 401 refuses to be.
+
+**On a school's own host, a fifth failure joins the four.** The door at
+`<school>.<domain>/staff-sign-in/` signs in members of that school and nobody
+else, so a right password for somebody with no active membership there is
+refused with the same sentence, and counted as a failure like any other: told
+apart in the words, the timing or the throttle, it would say the account exists
+at another school. The portal's door is unchanged.
 """
 
 from django.contrib.auth import authenticate
@@ -102,7 +109,12 @@ def note_success(identifier: str) -> None:
     throttling.clear(SignInScope.IDENTIFIER, identifier)
 
 
-def sign_in(request, identifier: str, password: str):
+def belongs_at(user, school) -> bool:
+    """Has `user` an active membership at `school`? What a school's own door asks."""
+    return user.memberships.with_access().filter(school=school).exists()
+
+
+def sign_in(request, identifier: str, password: str, *, school=None):
     """Authenticate and open a session, or raise a `SignInError`.
 
     Order matters and is the security-relevant part of this function:
@@ -120,17 +132,29 @@ def sign_in(request, identifier: str, password: str):
     `start_session()` is Django's `login()`, which cycles the session key —
     so a session key fixed by an attacker before sign-in is not the key the
     person ends up holding — and rotates the CSRF token with it.
+
+    `school` is the school whose own host this door is on, or None on the
+    portal. With one, a login with no active membership there is refused as a
+    wrong password is (see the module), and the session made is the school's:
+    in its own cookie and bound to it (`schools.sessions`), so it is good on
+    that host and on no other.
     """
+    from schools.sessions import begin_school_session, bind_to_school
+
     address = throttling.client_address(request)
     wait = wait_before_retrying(identifier, address)
     if wait is not None:
         raise TooManyAttempts(wait)
 
     user = authenticate(request, username=identifier, password=password)
-    if user is None:
+    if user is None or (school is not None and not belongs_at(user, school)):
         note_failure(identifier, address)
         raise BadCredentials(REFUSED)
 
     note_success(identifier)
+    if school is not None:
+        begin_school_session(request)
     start_session(request, user)
+    if school is not None:
+        bind_to_school(request, school)
     return user

@@ -33,12 +33,9 @@ class TheSignInPageIsPortalOnlyTests(GuardianSignInSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertIn("text/html", response["Content-Type"])
 
-    def test_a_schools_own_host_does_not(self):
-        """404 and not 403, matching what the API answers there: the route does
-        not exist on this host."""
-        response = self.client.get(URL, HTTP_HOST=SCHOOL_HOST)
-
-        self.assertEqual(response.status_code, 404)
+    # A school's own host serves its own door too, in the school's look and for
+    # its members alone: `accounts/tests/test_school_door.py`, at two schools
+    # with real schemas (the door reads the school's crest and colour).
 
     def test_the_page_is_served_to_somebody_with_no_session(self):
         """It has to be. The page is what asks for the code that creates one,

@@ -539,3 +539,57 @@ test("landing with a preview to go back to goes there, and without one lands as 
   assert.equal(landingRedirect(landed, "https://evil.example/website/preview/"), null);
   assert.equal(landingRedirect(landed), null);
 });
+
+// -- a school's own door -------------------------------------------------------
+
+/** What `/api/login/` answers on a school's own host: that school, by path, and where to go. */
+const AT_SUNRISE = {
+  status: 200,
+  body: {
+    full_name: "Ada Sunrise",
+    schools: [{ slug: "sunrise", name: "Sunrise Academy", host: "sunrise.example.ng", path_only: true, may_take_a_register: true }],
+    home: "/home/",
+    is_platform_staff: false,
+  },
+};
+
+test("signed in at a school's own door, the page goes to that school's portal", () => {
+  const landed = advance(initialState(), AT_SUNRISE);
+  assert.equal(landed.step, "landed");
+  assert.equal(landingRedirect(landed), "/home/");
+  // A family lands on the cards, an unfinished school's administrator on Start here.
+  for (const home of ["/cards/", "/start/"]) {
+    const state = advance(initialState(), { ...AT_SUNRISE, body: { ...AT_SUNRISE.body, home } });
+    assert.equal(landingRedirect(state), home);
+  }
+});
+
+test("at a school's door, a preview to go back to still comes first", () => {
+  const landed = advance(initialState(), AT_SUNRISE);
+  assert.equal(
+    landingRedirect(landed, "https://sunrise.example.ng/website/preview/", "sunrise.example.ng"),
+    "https://sunrise.example.ng/website/preview/",
+  );
+});
+
+test("at a school's door with nothing to open, the landing stays and says so", () => {
+  const body = { ...AT_SUNRISE.body, home: null, schools: [{ ...AT_SUNRISE.body.schools[0], may_take_a_register: false }] };
+  const landed = advance(initialState(), { status: 200, body });
+  assert.equal(landingRedirect(landed), null);
+  assert.match(htmlFor(landed), /There is nothing for you to open here yet/);
+});
+
+test("the portal's answer has no home, and lands on the list exactly as before", () => {
+  const landed = advance(initialState(), TWO_SCHOOLS);
+  assert.equal(landingRedirect(landed), null);
+});
+
+test("a refusal at a school's door is the one sentence, whoever the account belongs to", () => {
+  const state = advance(initialState(), {
+    status: 401,
+    body: { detail: "That email, phone number or staff ID and password do not match an account.", code: "bad_credentials" },
+  });
+  assert.equal(state.step, "ask");
+  assert.match(htmlFor(state), /do not match an account/);
+  assert.doesNotMatch(htmlFor(state), /another school|elsewhere/i);
+});

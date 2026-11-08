@@ -11,8 +11,8 @@ Classnode's own (`docs/design.md`, "School branding").
   the family pages, which they reach only as a member.
 - **Anybody, on a door served on a school's host** (`door=True`): the door is
   the school's own address, whose public website already names it and shows
-  its crest. The doors are portal-only in production (`docs/sign-in-page.md`),
-  so today this is the single-host demo; a door on the portal is Classnode's.
+  its crest (`docs/sign-in-page.md`, "A school's own door"). A door on the
+  portal is Classnode's.
 - **Nobody else.** A frame served on a school's host to a stranger (signed
   out, or a member of another school) names no school, the rule the shell
   already kept for the school's name (`menu.shell_open`).

@@ -15,14 +15,13 @@
  * kept, only so a refusal does not make somebody retype the field that was not
  * wrong.
  *
- * ## Where this page is, and why it is not on a school's host
+ * ## Where this page is: the portal, and every school's own host
  *
- * The portal, mounted in `urls_public.py` alone, because `api.sign_in()` begins
- * with `_portal_only()`: a school's host refuses anybody without an active
- * membership *there*, so the same credentials would work on one hostname and
- * not another, and a teacher who is also a parent elsewhere would need two
- * sessions. A form mounted where its route is not is a form that submits into a
- * 404.
+ * On the portal it signs in anybody with an account and lists every school the
+ * login reaches. On a school's own host it is that school's door: the route
+ * signs in that school's members alone, answers with that school alone, and
+ * says where on this host to go (`home`), so the page goes straight there
+ * (`landingRedirect()`). Same page, same route, same one refusal.
  */
 
 import { failureNote, sessionEnded, signOut } from "../web/signout.js";
@@ -89,7 +88,8 @@ export function afterSignOut(state, answer) {
 /**
  * Where a successful sign-in goes by itself, or null to stay on the landing.
  *
- * Platform staff go to `/platform/`. Otherwise only an administrator whose
+ * Signed in on a school's own host, the server's `home` (Start here, the
+ * dashboard or the report cards). Platform staff go to `/platform/`. Otherwise only an administrator whose
  * school has never finished setup is sent on, to Start here, and only when that
  * is the one school this login reaches: with several, the landing lists Start
  * here first and lets them choose.
@@ -101,7 +101,7 @@ export function afterSignOut(state, answer) {
  * website editor's preview (`/website/preview/…`) on one of this person's own
  * schools, as the sign-in answer lists them. Anything else is ignored, so
  * `?next=` can never send anybody to a host of somebody else's choosing.
- * `here` is the host this page is on, for the single-host demo (`path_only`).
+ * `here` is the host this page is on, for a school's own door and the single-host demo (`path_only`).
  */
 export function returnTo(next, schools, here = "") {
   if (!next) return null;
@@ -122,6 +122,10 @@ export function landingRedirect(state, next = null, here = "") {
     const back = returnTo(next, state.body && state.body.schools, here);
     if (back) return back;
   }
+  // Signed in on a school's own door: that school's portal for this login,
+  // a path on this host the server chose (`SignedInOut.home`). None when
+  // there is nothing to open there yet, and the landing says so.
+  if (state.step === "landed" && state.body && state.body.home) return state.body.home;
   // Platform staff go to the platform's own page, whether or not they also
   // belong to a school: "No school on this account yet" is not true of them.
   if (state.body && state.body.is_platform_staff && (state.step === "landed" || state.step === "nowhere")) {

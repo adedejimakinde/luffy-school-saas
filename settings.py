@@ -127,15 +127,16 @@ COMING_SOON_SENDER_DOMAIN = os.environ.get("COMING_SOON_SENDER_DOMAIN", "1") == 
 
 #: **Development only: the whole demo through one host.** A Codespace forwards
 #: one port, which is one hostname, so the portal and a school cannot both be
-#: reached. With this on, that one host (a school's `Domain` row) also answers
-#: the two sign-in pages and the sign-in API, which are otherwise the portal's
-#: alone (`urls_public.py`, `api._portal_only()`). `schools.demo.single_host()`
-#: is the question every caller asks, and it asks `DEBUG` too.
+#: reached. With this on, the server trusts the forwarder's `X-Forwarded-Host`
+#: and every link after sign-in is a path on that one host (a school's `Domain`
+#: row), whose own doors sign its members in as every school's host does.
+#: `schools.demo.single_host()` is the question every caller asks, and it asks
+#: `DEBUG` too.
 #:
 #: **Impossible with `DEBUG` off, twice over.** Setting it there stops the
 #: process starting, below, so a production environment that carries it by
-#: accident fails loudly instead of serving a sign-in door on every school's
-#: host; and `single_host()` re-checks `DEBUG` at each request.
+#: accident fails loudly instead of trusting a header any client can send; and
+#: `single_host()` re-checks `DEBUG` at each request.
 DEMO_SINGLE_HOST = os.environ.get("DEMO_SINGLE_HOST", "0") == "1"
 
 #: Trusted in the single-host demo only, where a Codespace forwards the
@@ -144,8 +145,8 @@ DEMO_SINGLE_HOST = os.environ.get("DEMO_SINGLE_HOST", "0") == "1"
 USE_X_FORWARDED_HOST = DEMO_SINGLE_HOST
 if DEMO_SINGLE_HOST and not DEBUG:
     raise ImproperlyConfigured(
-        "DEMO_SINGLE_HOST=1 needs DJANGO_DEBUG=1. It puts the sign-in doors on a "
-        "school's own host, which production must never do."
+        "DEMO_SINGLE_HOST=1 needs DJANGO_DEBUG=1. It trusts X-Forwarded-Host, "
+        "which production must never do."
     )
 
 # **The `Domain` table is the real allowlist**, which is why this could be `*`
@@ -510,6 +511,21 @@ CSRF_FAILURE_VIEW = "accounts.views.csrf_failed"
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 
+# **A school's own door makes a session for that school's host alone.** Signing
+# in on `<school>.<domain>/staff-sign-in/` (or the parent door beside it) puts
+# the session in this cookie, which carries no `Domain` attribute, so a browser
+# returns it to that host and no other: not another school's, not the portal.
+# The session is bound to the school as well, and `schools.session_store`
+# refuses it on any other host whatever cookie it arrives in. The portal's
+# session above is untouched by either and still spans every host.
+#
+# `__Host-` wherever the cookie is `Secure`: the browser then refuses the name
+# from any response that gives it a `Domain`, so a sibling host cannot set one
+# for this school. Plain in development over HTTP, where a browser would refuse
+# a `__Host-` cookie that is not `Secure`.
+SESSION_ENGINE = "schools.session_store"
+SCHOOL_SESSION_COOKIE_NAME = ("__Host-" if SESSION_COOKIE_SECURE else "") + "school_session"
+
 # ---------------------------------------------------------------------------
 # Sign-in throttling
 #
@@ -753,8 +769,13 @@ PAYSTACK_CUSTOMER_EMAIL_DOMAIN = os.environ.get("PAYSTACK_CUSTOMER_EMAIL_DOMAIN"
 #: not a guessed origin, and not the host an admin happened to be standing on.
 #: Derived rather than written into `production.env`, so the domain is still
 #: named once. HTTPS, because a portal is only ever served behind the TLS proxy.
+#:
+#: **`{host}` is the invited school's own address** (its primary `Domain`), the
+#: portal's where it has none: the page is routed on every school's host as
+#: well, and opening the invitation where the school's own door is means its
+#: last step, "Sign in", is that school's (`docs/sign-in-page.md`).
 INVITATION_ACCEPT_URL = os.environ.get("INVITATION_ACCEPT_URL") or (
-    f"https://{PORTAL_HOST}/invitations/{{token}}/" if PORTAL_HOST else None
+    "https://{host}/invitations/{token}/" if PORTAL_HOST else None
 )
 
 #: Not the console backend, which is what this used to default to. An invite

@@ -90,10 +90,11 @@ class TheForwardedNameIsTheSchoolTests(ForwardedSetUp):
         self.assertEqual(response.status_code, 403)
 
     def test_a_login_at_one_school_does_not_open_the_other(self):
+        """The session signed in on Sunrise's door is not good on Harbour's host."""
         client, _, _ = self.sign_in(SUNRISE, "sunrise.teacher")
 
-        refused = client.get("/marking/", HTTP_HOST=FORWARDER, HTTP_X_FORWARDED_HOST=HARBOUR)
-        self.assertEqual(refused.status_code, 403)
+        refused = client.get("/api/home/", HTTP_HOST=FORWARDER, HTTP_X_FORWARDED_HOST=HARBOUR)
+        self.assertEqual(refused.status_code, 401)
 
     def test_every_school_in_the_answer_is_linked_by_path(self):
         for host, username in ((SUNRISE, "sunrise.teacher"), (HARBOUR, "harbour.teacher")):

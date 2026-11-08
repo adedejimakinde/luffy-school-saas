@@ -1,16 +1,17 @@
 """The development-only single-host demo (`settings.DEMO_SINGLE_HOST`).
 
-A Codespace forwards one port, so one hostname. With the flag on **and** `DEBUG`
-on, a school's own host answers the two sign-in pages and the sign-in API as
-well as the portal. Three things are pinned, each with its control:
+A Codespace forwards one port, so one hostname: a school's. Every school's host
+serves its own two doors now, demo or not (`docs/sign-in-page.md`, "A school's
+own door"), so what is pinned here is that the demo is one of them. Three
+things, each with its control:
 
-1. Off (the default) a school's host serves none of it: the portal-only rule
-   of `urls_public.py` and `api._portal_only()` is exactly as before.
+1. Off (the default) a school's host serves its own doors and signs its own
+   members in, at two schools: the demo mode is no longer what opens them.
 2. On, it works, school by school: a login made on one school's host reaches
    that school and not the other's (two schools throughout).
 3. **It cannot be had with `DEBUG` off.** Production settings refuse to start
    with the flag, in a separate process, under `deploy/production.env`; and
-   with the flag forced on but `DEBUG` off the routes are still 404.
+   with the flag forced on but `DEBUG` off, `single_host()` is still false.
 """
 
 import subprocess
@@ -68,26 +69,32 @@ class SingleHostSetUp(TestCase):
         return client, response
 
 
-class WithTheFlagOffAFixedHostServesNoDoorTests(SingleHostSetUp):
-    def test_no_door_page_on_either_school(self):
+class WithTheFlagOffEachSchoolHostServesItsOwnDoorsTests(SingleHostSetUp):
+    def test_both_door_pages_on_either_school(self):
         for host in (SUNRISE, HARBOUR):
             for url in DOORS:
                 with self.subTest(host=host, url=url):
-                    self.assertEqual(self.client.get(url, HTTP_HOST=host).status_code, 404)
+                    self.assertEqual(self.client.get(url, HTTP_HOST=host).status_code, 200)
 
-    def test_the_login_api_is_a_404_on_a_school_host(self):
+    def test_the_login_api_signs_a_member_in_on_her_schools_host(self):
         _, response = self.sign_in(SUNRISE, "sunrise.teacher")
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s["slug"] for s in response.json()["schools"]], ["sunrise"])
 
-    def test_the_flag_alone_with_debug_off_changes_nothing(self):
+    def test_and_refuses_a_member_of_the_other_school(self):
+        """The control: the door is open, and it is Sunrise's."""
+        _, response = self.sign_in(SUNRISE, "harbour.teacher")
+        self.assertEqual(response.status_code, 401)
+
+    def test_the_flag_alone_with_debug_off_is_not_the_demo(self):
         """The second lock: settings refuse this combination at start-up, and
         `schools.demo.single_host()` refuses it again per request."""
+        from schools.demo import single_host
+
         with override_settings(DEBUG=False, DEMO_SINGLE_HOST=True):
-            for url in DOORS:
-                with self.subTest(url=url):
-                    self.assertEqual(self.client.get(url, HTTP_HOST=SUNRISE).status_code, 404)
-            _, response = self.sign_in(SUNRISE, "sunrise.teacher")
-            self.assertEqual(response.status_code, 404)
+            self.assertFalse(single_host())
+        with override_settings(**DEMO):
+            self.assertTrue(single_host())
 
 
 @override_settings(**DEMO)
@@ -113,12 +120,14 @@ class WithTheFlagOnASchoolHostAnswersTheDoorsTests(SingleHostSetUp):
         self.assertEqual(client.get("/marking/", HTTP_HOST=SUNRISE).status_code, 200)
 
     def test_a_login_on_one_schools_host_does_not_open_the_other(self):
-        """Two schools: Ada signs in on Sunrise's host and Harbour's host
-        refuses her, as it does today."""
+        """Two schools: Ada signs in on Sunrise's host, and on Harbour's host
+        the session is not hers at all: the API says her session is not good
+        there, rather than that she is not a member."""
         client, _ = self.sign_in(SUNRISE, "sunrise.teacher")
 
-        response = client.get("/marking/", HTTP_HOST=HARBOUR)
-        self.assertEqual(response.status_code, 403)
+        response = client.get("/api/home/", HTTP_HOST=HARBOUR)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["code"], "session_expired")
 
     def test_only_the_doors_are_opened(self):
         """The platform screen's API stays portal only in the demo mode."""

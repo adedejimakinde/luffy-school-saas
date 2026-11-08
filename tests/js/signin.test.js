@@ -330,3 +330,12 @@ test("the number-or-email field gets a keyboard with letters and an @, not a dia
   assert.doesNotMatch(html, /inputmode="tel"/);
   assert.match(html, /autocapitalize="none"/);
 });
+
+test("at a school's own door, a parent goes to that school's cards on this host", () => {
+  const state = advance(
+    { ...initialState(), step: "code" },
+    { status: 200, body: { full_name: "Mama", schools: [{ name: "Sunrise Academy", host: "sunrise.example.ng", path_only: true }], home: "/cards/" } },
+  );
+  assert.equal(state.step, "leaving");
+  assert.equal(destination(state), "/cards/");
+});

@@ -109,10 +109,14 @@ def editor_page(request):
 
 
 def _sign_in_and_back(request):
-    portal = portal_host()
+    """The school's own staff door on this host, which comes back here once signed in.
+
+    "Ready for the principal" emails a link to this preview on the school's
+    own host (`schoolsite.notify`), so a principal who is not signed in signs in
+    at the school's own door, in the school's look, and is sent back.
+    """
     back = quote(request.build_absolute_uri(request.get_full_path()), safe="")
-    door = f"//{portal}/staff-sign-in/" if portal else "/staff-sign-in/"
-    return HttpResponseRedirect(f"{door}?next={back}")
+    return HttpResponseRedirect(f"/staff-sign-in/?next={back}")
 
 
 def _preview(request, key=None, slug=None, album=None):

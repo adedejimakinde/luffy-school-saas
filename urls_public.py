@@ -16,7 +16,7 @@ from django.contrib import admin
 from django.urls import path, re_path
 from django.views.generic import RedirectView
 
-from accounts.views import invitation_page, sign_in_page, staff_sign_in_page
+from accounts.views import sign_in_page, staff_sign_in_page
 from blog import write_views as write
 from fees.webhook_view import paystack_webhook
 from onboarding.views import handover_page
@@ -25,21 +25,17 @@ from urls import handler403, urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    # Sign-in is **here and only here**, which is why it is not in `urls.py`
-    # among the routes both hosts share. The API routes behind it begin with
-    # `api._portal_only()`, so a sign-in page on a school's host would be a
-    # form that submits into a 404 — and a school's host refuses anyone without
-    # an active membership there, which is the opposite of what a door needs.
+    # The portal's two doors: Classnode's look, for anybody with an account,
+    # naming every school the login reaches. Each school's host has its own
+    # pair as well (`urls.py`), in the school's look and for its members alone;
+    # named here so `reverse("sign-in")` is the portal's. Two routes and not one
+    # with a flag — the flows share no step, and a query parameter deciding
+    # which form a sign-in page shows is a page whose URL cannot be linked to.
     path("sign-in/", sign_in_page, name="sign-in"),
-    # The staff door, on the same host and for the same reason: `api.sign_in()`
-    # begins with `_portal_only()` too. Two routes and not one with a flag —
-    # the flows share no step, and a query parameter deciding which form a
-    # sign-in page shows is a page whose URL cannot be linked to.
     path("staff-sign-in/", staff_sign_in_page, name="staff-sign-in"),
-    # Where an invitation's link lands (settings.INVITATION_ACCEPT_URL). Here
-    # and only here, beside the two doors: the routes it calls answer on the
-    # portal, and what it ends in is a pointer to the staff door above.
-    path("invitations/<str:token>/", invitation_page, name="invitation"),
+    # The invitation page is in `urls.py`, served here as well by the splat
+    # below: every link sent before invitations went to a school's own host
+    # points here, and still opens.
     # The platform operator's screen: every school, and a way to add one. Here
     # and only here; its API answers 404 on a school's host and 403 to anyone
     # who is not platform staff.

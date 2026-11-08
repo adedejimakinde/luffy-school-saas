@@ -11,8 +11,8 @@ Cloudflare, the same compose stack as production (`deploy/compose.yml`,
 | address | what |
 |---|---|
 | `https://app.classnode.co/` | the portal: staff sign in at `/staff-sign-in/` |
-| `https://sunrise-demo.classnode.co/` | Sunrise Demo Academy's public page |
-| `https://harbour-demo.classnode.co/` | Harbour Demo College's public page |
+| `https://sunrise-demo.classnode.co/` | Sunrise Demo Academy's public page; its own staff and parents sign in at `/staff-sign-in/` and `/sign-in/` there |
+| `https://harbour-demo.classnode.co/` | Harbour Demo College's public page, and its own doors the same way |
 
 The server runs the same `deploy/deploy.sh` as production: the domain is
 `classnode.co` in `deploy/production.env`, so nothing is overridden.

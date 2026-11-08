@@ -112,10 +112,11 @@ class TheParentDomainIsNamedOnceTests(SimpleTestCase):
         self.assertEqual(derived["SESSION_COOKIE_DOMAIN"], f".{domain}")
         self.assertEqual(derived["ALLOWED_HOSTS"], [f".{domain}"])
         self.assertEqual(derived["DEFAULT_FROM_EMAIL"], f"no-reply@{domain}")
-        # The portal, and the accept page on it (urls_public.py).
+        # The portal; the accept page is on the invited school's own host,
+        # the portal's where it has none (`invitations.configured_accept_url`).
         self.assertEqual(derived["PORTAL_HOST"], f"app.{domain}")
         self.assertEqual(
-            derived["INVITATION_ACCEPT_URL"], f"https://app.{domain}/invitations/{{token}}/"
+            derived["INVITATION_ACCEPT_URL"], "https://{host}/invitations/{token}/"
         )
 
     def test_the_domain_appears_nowhere_else_in_the_deployment_files(self):

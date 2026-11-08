@@ -45,6 +45,9 @@ PORTAL = frozenset(
         "files",
         "help",
         "home",
+        # Where an invitation's link lands, on the school it is for (the portal
+        # keeps its own for links already sent).
+        "invitations",
         "marking",
         # One class's master broadsheet (`results.broadsheet`): staff only.
         "master-broadsheet",
@@ -110,17 +113,45 @@ def is_public_site_request(request) -> bool:
     return on_a_school and is_public_site(request.path)
 
 
+#: The doors on a school's host: the two sign-in pages, the invitation page and
+#: the API routes they call. Each is for somebody who is not (yet) signed in
+#: here, so `SchoolAccessMiddleware` lets a login with no membership at this
+#: school reach them instead of refusing it; none of them reads the school's
+#: data, and signing in through one is refused to anybody who is not a member
+#: (`accounts.signin`, `accounts.guardian_signin`).
+DOORS = frozenset(
+    {
+        "/sign-in/",
+        "/staff-sign-in/",
+        "/api/csrf/",
+        "/api/login/",
+        "/api/logout/",
+        "/api/guardian/code/",
+        "/api/guardian/session/",
+    }
+)
+DOOR_PREFIXES = ("/invitations/", "/api/invitations/")
+
+
+def is_door(path: str) -> bool:
+    """Is `path` one of the doors above?"""
+    return path in DOORS or path.startswith(DOOR_PREFIXES)
+
+
 def robots_path(segment: str) -> str:
     """The prefix `robots.txt` disallows for a segment: `/sit/`, but `/sw.js`."""
     return f"/{segment}" if "." in segment else f"/{segment}/"
 
 
 __all__ = [
+    "DOORS",
+    "DOOR_PREFIXES",
     "NEVER_INDEXED",
     "PORTAL",
     "PUBLIC_SITE",
     "RESERVED",
     "first_segment",
+    "is_door",
     "is_public_site",
     "is_public_site_request",
     "robots_path",

@@ -134,6 +134,12 @@ export const SCREENS = [
   { name: "sign-in", as: null, url: `${PORTAL}/sign-in/` },
   { name: "staff-sign-in", as: null, url: `${PORTAL}/staff-sign-in/` },
   { name: "invitation", as: null, url: `${PORTAL}/invitations/not-a-token/` },
+  // Each school's own doors, in its look: Sunrise has a crest, Harbour its
+  // initials. At a small Android and a common iPhone too, as the portal
+  // polish was held to (320, 390 and 1280 with the default widths).
+  { name: "school-staff-sign-in", as: null, url: `${SUNRISE}/staff-sign-in/`, widths: [320, 390] },
+  { name: "school-sign-in", as: null, url: `${SUNRISE}/sign-in/`, widths: [320, 390] },
+  { name: "school-staff-sign-in-initials", as: null, url: `${HARBOUR}/staff-sign-in/`, widths: [320, 390] },
   { name: "checker", as: null, url: `${SUNRISE}/check/` },
   // The school's own public page, at its root, open to anyone: Sunrise has not
   // published its website, so this is today's page.
@@ -1580,4 +1586,61 @@ describe("the homepage's motion", () => {
       }
     });
   }
+});
+
+describe("signing in at a school's own door", () => {
+  // A real browser, because the claim is about what a browser does with the
+  // cookie: one with no `Domain` goes back to Sunrise's host and to no other.
+  // The test client in `accounts/tests/test_school_door.py` keeps one jar for
+  // every host and cannot show this half.
+  test("Sunrise's teacher lands on Sunrise's dashboard, and the session stays on Sunrise's host", async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${SUNRISE}/staff-sign-in/`);
+      await settle(page);
+      assert.match(await page.locator(".door-name").textContent(), /Sunrise/);
+      assert.equal(await page.locator(".door-foot").textContent(), "Powered by Classnode");
+      await page.fill("input[name=identifier]", "sunrise.teacher");
+      await page.fill("input[name=password]", PASSWORD);
+      await Promise.all([page.waitForURL(`${SUNRISE}/home/`), page.locator("button[type=submit]").click()]);
+      await settle(page);
+
+      const cookies = await context.cookies();
+      const school = cookies.find((c) => c.name.endsWith("school_session"));
+      assert.ok(school, `no school session cookie: ${cookies.map((c) => c.name)}`);
+      assert.equal(school.domain, new URL(SUNRISE).hostname, "the school's cookie is host-only");
+      assert.ok(!cookies.some((c) => c.name === "sessionid"), "no portal session was made");
+
+      // Harbour's host and the portal get no session from it.
+      const there = await context.newPage();
+      const answer = await there.goto(`${HARBOUR}/api/results/cards/`);
+      assert.equal(answer.status(), 401, `Harbour answered ${answer.status()}`);
+      const portal = await there.goto(`${PORTAL}/api/results/cards/`);
+      assert.equal(portal.status(), 401);
+      await there.close();
+    } finally {
+      await page.close();
+      await context.close();
+    }
+  });
+
+  test("Harbour's teacher is refused at Sunrise's door with the one sentence", async () => {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const page = await context.newPage();
+    try {
+      await page.goto(`${SUNRISE}/staff-sign-in/`);
+      await settle(page);
+      await page.fill("input[name=identifier]", "harbour.teacher");
+      await page.fill("input[name=password]", PASSWORD);
+      await page.locator("button[type=submit]").click();
+      await page.waitForSelector("[role=alert], .error, .refusal", { timeout: 5000 }).catch(() => {});
+      await settle(page);
+      assert.equal(new URL(page.url()).pathname, "/staff-sign-in/");
+      assert.match(await page.locator("main").textContent(), /do not match an account/);
+    } finally {
+      await page.close();
+      await context.close();
+    }
+  });
 });
