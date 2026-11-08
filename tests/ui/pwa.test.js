@@ -33,6 +33,13 @@ const child = (n) => ({ number: `SUN/UI-PWA-0${n}`, pin: `2026000${n}` });
 const IPHONE =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 
+// Playwright 1.56 (the version CI pins) takes `context.setOffline()` to the page and not to a
+// service worker's own `fetch`: the worker reached the school, got a live page, and Chromium
+// refused to show it ("This page is not working") instead of the worker answering with the
+// offline page. With this on, the worker's requests go through the context's routes, so
+// `offline()` below cuts them as well. Read when a worker starts, so it is set before any does.
+process.env.PW_EXPERIMENTAL_SERVICE_WORKER_NETWORK_EVENTS = "1";
+
 let browser;
 
 before(async () => {
@@ -77,6 +84,15 @@ async function controlled(page) {
   await page.evaluate(() => navigator.serviceWorker.ready);
   if (!(await page.evaluate(() => Boolean(navigator.serviceWorker.controller)))) await page.reload();
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
+}
+
+const cutOff = (route) => route.abort("internetdisconnected");
+
+/** Take the whole context off the network, the portal's worker with the pages, or put it back. */
+async function offline(context, off) {
+  await context.setOffline(off);
+  if (off) await context.route("**/*", cutOff);
+  else await context.unroute("**/*", cutOff);
 }
 
 /** Every registration the page's origin holds, and the cache each name holds as pathnames. */
@@ -209,7 +225,7 @@ describe("the portal's worker and the exam's", () => {
       }
 
       // Offline saving with both installed.
-      await context.setOffline(true);
+      await offline(context, true);
       await page.evaluate(() => window.dispatchEvent(new Event("offline")));
       await page.click('.sit-option[data-key="A"]');
       await page.click('.sit-bar [data-action="next"]');
@@ -223,7 +239,7 @@ describe("the portal's worker and the exam's", () => {
       assert.equal(await page.evaluate(() => document.body.textContent.includes("Reconnect to continue")), false, "the portal's offline page never stands in for the exam");
       assert.equal((await inventory(page)).controller, "/sit/sw.js");
 
-      await context.setOffline(false);
+      await offline(context, false);
       await page.evaluate(() => window.dispatchEvent(new Event("online")));
       await page.waitForFunction(() => !document.querySelector(".sit-banner-offline"));
       await page.waitForTimeout(1500);
@@ -330,7 +346,13 @@ describe("what the portal's worker keeps", () => {
     try {
       await page.goto(`${SUNRISE}/home/`);
       await controlled(page);
-      await context.setOffline(true);
+      // The worker keeps the offline page while it installs, before it takes the page over:
+      // say so, so a failure names this and not the browser's error page.
+      assert.ok(
+        await page.evaluate(async () => Boolean(await caches.match("/offline/"))),
+        "the offline page is in a cache before the connection goes",
+      );
+      await offline(context, true);
       await page.goto(`${SUNRISE}/fees/`);
       assert.equal(await page.textContent("h1"), "You’re offline.");
       assert.match(await page.textContent("main"), /Reconnect to continue\./);
@@ -340,7 +362,7 @@ describe("what the portal's worker keeps", () => {
       await page.setViewportSize({ width: 375, height: 700 });
       await page.screenshot({ path: join(OUT, "375", "pwa-offline.png") });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "nothing scrolls sideways");
-      await context.setOffline(false);
+      await offline(context, false);
       await page.getByRole("link", { name: "Try again" }).click();
       await page.waitForURL(/\/home\//);
     } finally {
