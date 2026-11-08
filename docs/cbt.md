@@ -1137,4 +1137,40 @@ door and score, at 320, 390 and 1280 as well as the usual widths.
 
 #### Controls
 
-Being run: break, see red, restore, over the whole of `cbt/tests/test_marking.py`. The table follows in this PR.
+Broken, seen red, restored (`docs/operating-rules.md` rule 5). Each break was applied in a
+separate git worktree at a committed tree, run over the whole of
+`cbt/tests/test_marking.py` against a test database of its own, restored with
+`git checkout`, and the tree checked clean before the next. Rows 1 to 18, 20 and 21 ran at
+`5f3a163` (45 tests); rows 19 and 22 first stayed **green** there, because no test held
+them, so a test was added for each and they were run again at `d6c574e` and `3335113` (47
+tests). The code under test is the same at all three commits: only tests were added.
+Counts are Django's, subtests included.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| Send to CA writes only through `set_score_as()`, so a submitted class refuses | write `Score` directly | 2: `test_a_submitted_class_is_locked_and_untouched`, `test_replace_never_overwrites_a_mark_typed_after_the_preview` |
+| A student who did not sit gets no mark | write a zero for them | 2: the preview-is-what-is-written test (Tunde got a 0) and the submitted-class test |
+| "Keep" never overwrites | replace whatever the send said | 1: `test_keep_never_overwrites_a_mark_already_there` |
+| "Replace" never overwrites a mark typed after the preview | pass `ANY_VERSION` | 1: `test_replace_never_overwrites_a_mark_typed_after_the_preview` |
+| A mark typed by hand is replaced only when the send confirms it | skip the confirm | 1: `test_replacing_a_mark_typed_by_hand_is_shown_and_needs_confirming` |
+| A key correction re-marks every attempt | mark against the item's own key | 3: the re-mark test, the restore-then-re-release test, and the send refused after a score moved |
+| None after release (service) | drop the service's check | 1 error: `test_none_after_release_by_the_service_or_the_database`, refused by the trigger `a_key_is_corrected_only_before_release` (the second layer) |
+| (both layers) | also never create that trigger | 1: the same test, the correction accepted |
+| A released score never changes | never create `cbt_released_test_scores_are_append_only` | 2: the update and the delete of a released score (two subtests) |
+| No score reaches a student or a parent before release, or after a restore | drop the release check on the score pages | 1: `test_restore_needs_the_principal_and_a_reason_hides_the_scores_and_is_kept` |
+| A parent sees only their own child's released scores | drop the guardianship filter | 2: `test_after_release_each_sees_only_their_own`, `test_nothing_reaches_a_student_or_a_parent_before_release` |
+| A restore needs the principal | let a teacher restore | 2: the restore test (Kemi restored, a subtest) |
+| A restore needs a reason | the reason optional | 1 error: the restore test, refused by the constraint `a_restore_says_why` (the second layer) |
+| A test without the exam PIN never sends to CA | drop the check in the send service | 3: the preview and the send over HTTP, and `send_as()` called directly |
+| The administrator sees a score only after release, and no answer | serve the results page to the administrator | 1: `test_the_office_sees_scores_only_after_release_and_no_answer` |
+| An exam officer cannot release or send to CA | let an exam officer mark the test | 1: `test_every_role` (Tayo, named exam officer, read the results) |
+| The vice principal reads, and does not correct, send, release or close | let the vice principal mark the test | 7: the key, send, release and close tests for the vice principal, and `test_every_role` |
+| A teacher's results, sends and releases reach only their own classes | every class of the test | 1: `test_a_teacher_reads_only_their_own_classes` |
+| Only the test's subject and term columns take its scores | look the assessment up by id alone | **green at `5f3a163`**: another school's id resolves to nothing here (the schema is the guard). With `test_only_the_tests_subject_and_term_columns_can_be_named` added, at `d6c574e`: 2, the English column and the second-term column were accepted |
+| A class is released only once its sitting is over | skip the check | 1: `test_a_class_is_released_once_its_sitting_is_over` |
+| The job closes an attempt stamped when it was due | stamp the run's own time | 1: `test_the_job_closes_what_nobody_read_stamped_when_it_was_due` |
+| Item analysis counts the answers that count | count every answer received, the last winning | **green at `5f3a163`**: no attempt there changed an answer. With `test_only_the_answer_that_counts_is_counted` (a changed answer, then one refused after time arriving last), at `3335113`: 1 |
+
+**Isolation** is held by the schema as everywhere else, and asserted in
+`TwoSchoolsTests` (results, released scores, the student's door and a parent's page at the
+other school, with equal test ids) and `test_another_schools_assessment_cannot_be_named`.
