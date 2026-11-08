@@ -53,6 +53,9 @@ PORTAL = frozenset(
         "master-broadsheet",
         "notices",
         "ogsera",
+        # What the installed app shows with no connection (`schools.pwa`): the same for
+        # everybody, never indexed.
+        "offline",
         "promotion",
         "register",
         "results",
@@ -60,6 +63,8 @@ PORTAL = frozenset(
         "setup",
         "sign-in",
         "sign-out",
+        # This host's manifest (`schools.pwa`): a school's name and crest on its host.
+        "site.webmanifest",
         # The exam door and screen (`docs/cbt.md`, step 4): no account, a test code and
         # an exam PIN. Never indexed.
         "sit",
@@ -130,6 +135,11 @@ DOORS = frozenset(
         "/api/logout/",
         "/api/guardian/code/",
         "/api/guardian/session/",
+        # The installed app's manifest and offline page (`schools.pwa`): a browser asks
+        # for them with no say in who is signed in, and they name only what the school's
+        # public website already names.
+        "/site.webmanifest",
+        "/offline/",
     }
 )
 DOOR_PREFIXES = ("/invitations/", "/api/invitations/")

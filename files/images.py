@@ -303,6 +303,28 @@ def site_photo_from(source, profile: Profile, *, prefix=""):
     return result
 
 
+#: How much of an app icon's side the mark may fill. A phone cuts a maskable icon
+#: to a circle of 80% of its side; a crest's corners can reach out of a square
+#: filling more than this, so it stops short of them.
+ICON_FILL = 0.6
+
+
+def app_icon(master, side):
+    """`master` inside the maskable safe zone of an opaque white `side` x `side` square.
+
+    White and not transparent: a maskable icon must be opaque, and iOS paints a
+    transparent one black. A crest is drawn for white paper, so white suits any.
+    """
+    from PIL import Image
+
+    inside = master.convert("RGBA")
+    box = max(1, round(side * ICON_FILL))
+    inside.thumbnail((box, box), Image.LANCZOS)
+    tile = Image.new("RGB", (side, side), (255, 255, 255))
+    tile.paste(inside, ((side - inside.width) // 2, (side - inside.height) // 2), inside)
+    return tile
+
+
 def mark(raw: bytes, profile: Profile):
     """Trimmed lossless PNG: a master, and the frames each place draws it in."""
     source = trim(decode(raw, profile))
@@ -311,6 +333,9 @@ def mark(raw: bytes, profile: Profile):
     for name, width, height in profile.frames:
         framed = fit_in_frame(master, width, height)
         out[f"{name}.png"] = (framed, png(framed))
+    for side in profile.icons:
+        tile = app_icon(master, side)
+        out[f"icon-{side}.png"] = (tile, png(tile))
     result = _result(out, master, "master.png")
     result["colour"] = dominant_colour(master)
     return result
@@ -372,6 +397,7 @@ PROCESSORS = {
 
 __all__ = [
     "PROCESSORS",
+    "app_icon",
     "Refused",
     "avif",
     "blog",

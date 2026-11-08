@@ -779,6 +779,9 @@ body.has-shell { padding: 0; }
 .nav .powered-by .logo-mark { width: 16px; height: 16px; color: var(--muted); }
 .nav .powered-by:hover .logo-mark { color: var(--brand); }
 
+.nav-install[hidden], .nav-install [hidden] { display: none; }
+.install-howto { margin: 0; padding: 4px 12px 8px; color: var(--muted); font-size: var(--small); }
+
 .sidebar .nav-help { flex: none; margin: auto 0 0; padding-top: 12px; border-top: 1px solid var(--divider); }
 .sidebar .nav-help + .nav-end { margin-top: 2px; padding-top: 0; border-top: 0; }
 

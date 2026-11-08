@@ -14,6 +14,7 @@ happens on the portal's `/write/`, which is not routed here at all.
 from django.urls import path, re_path
 
 from blog import views as blog
+from schools.pwa import site_manifest
 from website.llms import llms
 from website.views import faq, homepage, pricing, privacy, sitemap, terms
 
@@ -28,6 +29,8 @@ urlpatterns = [
     re_path(r"^blog/images/(?P<key>[0-9a-f]{32})\.webp$", blog.image, name="blog-image"),
     re_path(r"^blog/images/(?P<key>[0-9a-f]{32})-small\.webp$", blog.image_small, name="blog-image-small"),
     path("blog/<slug:slug>/", blog.post, name="blog-post"),
+    # Classnode's manifest, which the shared head names on every host (`schools.pwa`).
+    path("site.webmanifest", site_manifest, name="site-manifest"),
     # `/robots.txt` points here; `website.crawlers` answers it on every host.
     path("sitemap.xml", sitemap, name="site-sitemap"),
     # For AI search tools: a plain Markdown summary of the site (`website.llms`).

@@ -339,6 +339,11 @@ touched** (tested in Python against the source, and in JS against a fake cache).
 Pages live in their own cache (`luffy-pages`) because a rendered page holds the
 signed-in person's menu; the static files hold nobody's.
 
+**Since the installed app (`docs/pwa.md`)** this worker is also the portal's: it keeps the app
+shell and an offline page, answers a page it cannot reach with that page, deletes everything
+it keeps at sign-out (`luffy-*`), and never answers `/sit/`. The two frames above remain the
+only signed-in pages it keeps.
+
 **The copies are the page's, not the worker's** (a choice: D10 left it open). They are
 in IndexedDB (`luffy-snapshots`, `static/web/snapshots.js`), keyed by host, person and
 name, because a worker cannot tell whose answer it is looking at. What is kept: the

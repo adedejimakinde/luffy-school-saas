@@ -451,6 +451,47 @@ def read(stored, variant: str) -> bytes:
     return storage.read_variant(stored.schema_name, stored.key, variant)
 
 
+def ensure_icons(stored) -> bool:
+    """Whether `stored` has its app icons, making them first if it was uploaded before they existed.
+
+    A crest's installed-app icons (`Profile.icons`) are made when it is processed.
+    A crest kept earlier has none, and is given them here from its master, once,
+    the first time an installed app asks (`schools.pwa`). Writing them is safe to
+    repeat: the two writers make the same bytes under the same names.
+    """
+    profile = profile_for(stored.kind)
+    wanted = [f"icon-{side}.png" for side in profile.icons]
+    if not wanted or stored.state != State.READY:
+        return False
+    if all(stored.has(name) for name in wanted):
+        return True
+    import io
+
+    from PIL import Image
+
+    try:
+        with Image.open(io.BytesIO(storage.read_variant(stored.schema_name, stored.key, "master.png"))) as master:
+            master.load()
+            tiles = {f"icon-{side}.png": images.app_icon(master, side) for side in profile.icons}
+        data = {name: images.png(tile) for name, tile in tiles.items()}
+        for name, blob in data.items():
+            storage.write_variant(stored.schema_name, stored.key, name, blob)
+    except (OSError, ValueError):
+        logger.exception("Making the app icons of %s failed", stored.key)
+        return False
+    with transaction.atomic():
+        row = _here().select_for_update().get(pk=stored.pk)
+        row.variants = {
+            **(row.variants or {}),
+            **{n: {"bytes": len(blob), "width": tiles[n].width, "height": tiles[n].height} for n, blob in data.items()},
+        }
+        row.bytes = sum(meta["bytes"] for meta in row.variants.values())
+        row.save(update_fields=["variants", "bytes"])
+    stored.variants = row.variants
+    stored.bytes = row.bytes
+    return True
+
+
 def status_of(slot: str) -> dict:
     """What a screen needs to say about a slot: ready, being processed, or why not."""
     newest = latest(slot)

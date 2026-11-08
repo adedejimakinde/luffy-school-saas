@@ -37,6 +37,7 @@ from home.views import home_page
 from onboarding.views import help_page, start_again_page, start_here, step_page
 from notices.views import settings_page
 from schools.paths import RESERVED
+from schools.pwa import manifest, offline
 from schools.views import reserved
 from schoolsite import editor as site_editor
 from schoolsite import views as site
@@ -77,6 +78,11 @@ urlpatterns = [
     # no connection. At the root because a worker's scope is where it is served
     # from. Identical for every school and for a caller with no session.
     path("sw.js", service_worker, name="service-worker"),
+    # The installed app (`schools/pwa.py`, `docs/pwa.md`): this host's manifest, in its
+    # school's name, crest and colour (Classnode's on the portal), and the page the
+    # worker shows when a page cannot be reached. Public, like the doors.
+    path("site.webmanifest", manifest, name="manifest"),
+    path("offline/", offline, name="offline"),
     # The school's own two doors (`docs/sign-in-page.md`, "A school's own
     # door"): its crest, name and colour, for its own members only, and a
     # session good on this host alone. `urls_public.py` names the portal's,

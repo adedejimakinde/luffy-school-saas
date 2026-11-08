@@ -322,6 +322,11 @@ The test keeps going without a network; the server stays the timekeeper.
   sent stays until it can; the server refuses it if it is late.
 - Chrome on Android and desktop Chrome are in scope; Safari gets the warning
   `docs/offline.md` OPEN-6 already decided.
+- **The portal's worker (`/sw.js`, scope `/`, `docs/pwa.md`) and this one coexist.** The portal
+  worker answers, keeps and fetches nothing under `/sit/`, deletes only caches named `luffy-`
+  (this worker's are `sit-`), and never unregisters anything; a sign-out empties the portal's
+  caches and leaves this worker's page and pictures. `tests/ui/pwa.test.js` holds it in a
+  browser, with the `/sit/` outbox saving offline beside the portal worker.
 
 ## Power cuts and resuming
 

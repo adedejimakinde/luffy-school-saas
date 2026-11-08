@@ -1,0 +1,22 @@
+{% load shell %}{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline</title>
+
+{% comment %}
+What the worker (`sync/worker.js`) shows when a page cannot be reached
+(`schools/pwa.py`, `docs/pwa.md`). The school's crest and name, as its doors wear them,
+one sentence, and a link back. It names no person, no page and no number, so one kept copy
+serves whoever opens the app next on a shared phone.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<style>.offline{max-width:28rem;margin:0 auto;padding:12vh 24px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}.offline h1{margin:16px 0 0}.offline p{margin:0}</style>
+<body class="offline-page">
+{% include "design/icons.html" %}
+<main class="offline">
+  {% brand_mark %}
+  <h1>You&rsquo;re offline.</h1>
+  <p>Reconnect to continue.</p>
+  <p><a class="btn" href="{{ retry }}">Try again</a></p>
+</main>

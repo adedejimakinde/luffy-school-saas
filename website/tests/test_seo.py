@@ -189,7 +189,7 @@ class TheSitemapTests(SiteSetUp):
         # And the blog's: its later pages, its posts and their pictures, each
         # held by `blog/tests/test_public.py` to published posts only.
         blog = {"blog-page", "blog-post", "blog-image", "blog-image-small"}
-        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap", "site-llms", *blog})
+        self.assertEqual({p.name for p in urlpatterns}, {*PAGES, "site-sitemap", "site-llms", "site-manifest", *blog})
 
     def test_every_listed_page_answers_and_names_itself_canonical(self):
         for url in re.findall(r"<loc>([^<]*)</loc>", self.get("/sitemap.xml").content.decode()):
@@ -410,8 +410,10 @@ class TheIconsTests(SchoolSetUp):
 
     def test_the_list_is_the_files(self):
         self.assertEqual(set(ICON_FILES), set(ICONS))
+        # The manifest is the one address on the list that is not a file: it is a view,
+        # in the host's own name and colour (`schools.pwa`, `schools/tests/test_pwa.py`).
         self.assertEqual({p.name for p in Path(settings.WHITENOISE_ROOT).iterdir()},
-                         {path.lstrip("/") for path in ICONS})
+                         {path.lstrip("/") for path in ICONS} - {"site.webmanifest"})
 
     def test_each_answers_200_with_its_type_on_every_host(self):
         for host in (SITE, PORTAL, SCHOOL):

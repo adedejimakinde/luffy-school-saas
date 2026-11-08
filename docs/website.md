@@ -330,7 +330,8 @@ The site is the only thing on the platform a search engine is asked to index.
   square, drawn by `scripts/favicons.py` into `webroot/`: `/favicon.ico` (16,
   32 and 48 inside), `/favicon.svg`, `/apple-touch-icon.png` (180, square to
   the edge for iOS to round), and `/icon-192.png` and `/icon-512.png` named in
-  `/site.webmanifest`. WhiteNoise serves that directory at the root of every
+  Classnode's manifest. (`/site.webmanifest` itself is no longer a file: it is a view
+  in each host's own name, `docs/pwa.md`.) WhiteNoise serves that directory at the root of every
   host (`WHITENOISE_ROOT`), above the tenant middleware, so each is a 200 with
   its image type on the site, the portal and every school, never a redirect;
   the addresses are fixed, not hashed. `templates/design/head.html` names them

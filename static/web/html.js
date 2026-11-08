@@ -22,33 +22,18 @@ export function esc(value) {
 }
 
 /**
- * A number that may legitimately be nought, rendered without lying about it.
- *
- * `0` and `null` are different answers and truthiness cannot tell them apart:
- * attendance is nullable until Phase 2 *and* legitimately nought, so a child
- * present on none of the days the school opened must read "0", while a school
- * that kept no register must read blank. A `value || fallback` here would print
- * the fallback for both, which is a parent being told nobody kept a register
- * when in fact their child was never there. The PDF template makes the same
- * distinction with `default_if_none`.
+ * A number that may legitimately be nought, rendered without lying about it: `0` and
+ * `null` are different answers (present on no day, versus no register kept), and
+ * `value || fallback` would print the fallback for both.
  */
 export function numberOrBlank(value, blank = "-") {
   return value === null || value === undefined ? blank : esc(value);
 }
 
 /**
- * Seconds to wait, in the unit a person reading it would use.
- *
- * Shared because the threshold is a rule rather than a sentence: both sign-in
- * doors answer 429 with the same `retry_after` — `guardian_signin` raises
- * `TooManyAttempts` carrying `signin.THROTTLED`, the password door's own
- * constant — so two pages print the same number and must round it the same way.
- * A copy per page is two places to change the threshold and one of them gets
- * missed.
- *
- * Whole minutes once seconds would read as precision nobody needs, and `""` for
- * an answer that carried no `retry_after` at all: the caller then says "too many
- * attempts" without inventing a wait it was not told.
+ * Seconds to wait, in the unit a person would use. Shared because both sign-in doors
+ * answer 429 with the same `retry_after` and must round it the same way: whole minutes
+ * once seconds read as false precision, and `""` when none was sent.
  */
 export function waitInWords(seconds) {
   if (seconds === null || seconds === undefined) return "";
