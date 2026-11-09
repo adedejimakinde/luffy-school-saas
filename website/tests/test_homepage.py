@@ -62,12 +62,6 @@ COPY = [
     "You approve and release results",
     "Check each class's broadsheet, approve it, and release. Parents read the report card online.",
     "One simple price.", "The first term is free, then", "per student, per term. No setup fee.",
-    "Results and report cards, including the Ogun State template",
-    "Fee tracking, with an account number for each child",
-    "Daily registers on staff phones",
-    "Logins for the principal, bursar and teachers",
-    "Parents read report cards online",
-    "We set up your school with you",
     "Leave your details and we will call you within two working days.",
     "Your name", "School name", "Phone number", "Email (optional)", "Number of students",
     "Request a call",
@@ -201,6 +195,15 @@ class TheWordsTests(SiteSetUp):
         for sentence in COPY:
             with self.subTest(sentence=sentence[:40]):
                 self.assertIn(sentence, text)
+
+    def test_every_listed_feature_is_in_the_price_card(self):
+        """The card reads `website.features`, so it names each feature there is and no other."""
+        from website import features
+
+        page = self.get().content.decode()
+        card = page.split('class="included"', 1)[1].split("</ul>", 1)[0]
+        shown = [html.unescape(name) for name in re.findall(r"</svg>([^<]+)</li>", card)]
+        self.assertEqual(shown, [feature.name for feature in features.FEATURES])
 
     def test_no_line_under_the_slider(self):
         """The owner took the line under the slider out (12 October 2026); each

@@ -30,29 +30,27 @@ from accounts.throttling import client_address
 from schools.hosts import portal_host
 
 from .crawlers import NOINDEX, site_url
-from .features import included, premium
+from . import price
+from .features import FEATURES, feature, groups
 from .forms import DemoRequestForm
 from .models import DemoRequest
 from .notify import demo_requested
 
-#: The price as the page prints it, comma and all. Structured data's `price`
-#: stays the bare number schema.org asks for; every sentence carries this.
-#: `docs/website.md` lists where it appears.
-PRICE = "The first term is free, then ₦1,500 per student, per term. No setup fee."
-
 #: Each public page's title and description, by route name, in the order the
-#: sitemap lists them. Every title is the page's own, starts or ends with the
-#: name, and is 60 characters or fewer, so a search result shows all of it; every
-#: description is under 155. A page added to `urls_site.py` is added here too,
-#: or its tests say so.
-PAGES = {
+#: sitemap lists them, as templates: `{price}` is the price's sentence and
+#: `{figure}` its figure (`website.price`), filled in on every request by
+#: `pages()` so the price is the setting's and nowhere else. Every title is the
+#: page's own, starts or ends with the name, and is 60 characters or fewer, so a
+#: search result shows all of it; every description is under 155. A page added
+#: to `urls_site.py` is added here too, or its tests say so.
+_PAGES = {
     "site-home": (
         "Classnode: School software for Nigerian schools",
-        "Results, report cards, fees and registers for Nigerian secondary schools. " + PRICE,
+        "Results, report cards, fees and registers for Nigerian secondary schools. {price}",
     ),
     "site-pricing": (
-        "Classnode pricing: first term free, then ₦1,500",
-        "Everything Classnode includes for every school, and the premium add-on. " + PRICE,
+        "Classnode pricing: first term free, then {figure}",
+        "Everything Classnode includes for every school. {price}",
     ),
     "site-faq": (
         "Classnode FAQ: Nigerian school software questions",
@@ -75,6 +73,16 @@ PAGES = {
         "results, fees, registers and the term in between.",
     ),
 }
+
+
+def pages():
+    """`_PAGES` with today's price in it: route name to (title, description)."""
+    fill = {"price": price.sentence(), "figure": price.figure()}
+    return {
+        name: (title.format(**fill), description.format(**fill))
+        for name, (title, description) in _PAGES.items()
+    }
+
 
 #: The homepage's questions and answers, drawn on the page and given to search
 #: engines as FAQPage structured data from this one list, so the two cannot
@@ -102,90 +110,63 @@ FAQ = [
 ]
 
 
-#: The CBT features by the name the page gives them, in the order the pricing
-#: page lists them; each is governed by its own "coming soon" setting
-#: (`website.features`).
-_CBT = {
-    "CBT: school tests": "school tests",
-    "CBT: UTME-style practice": "UTME-style practice",
-    "CBT: WASSCE-style practice": "WASSCE-style practice",
-}
-
-
-def _series(names):
-    """`names` as a plain English list: "a", "a and b", "a, b and c"."""
-    names = list(names)
-    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
-
-
-def _cbt_answer():
-    """Whether Classnode has CBT, as the pricing page says it today.
-
-    Read from the same "coming soon" settings as the pricing page on every
-    request, so this answer changes the day a setting does and not later.
-    """
-    items = {item["label"]: item["coming_soon"] for group in included() for item in group["items"]}
-    soon = [name for label, name in _CBT.items() if items[label]]
-    live = [name for label, name in _CBT.items() if not items[label]]
-    if not live:
-        return ("Not yet. CBT is coming soon: " + _series(soon) + ", all on questions the school "
-                "writes. Exam PIN slips are available now.")
-    if not soon:
-        return ("Yes. Teachers write questions, set timed tests, and the computer marks them. "
-                "UTME-style and WASSCE-style practice use questions the school writes.")
-    return ("Part of it. Available now: " + _series(live) + ". Coming soon: " + _series(soon)
-            + ". All of it uses questions the school writes.")
+def _text(*parts):
+    """`parts` joined as one paragraph."""
+    return " ".join(part for part in parts if part)
 
 
 def faq_page():
     """The questions on `/faq/`, as (question, answer) with the answer written in HTML.
 
     Drawn on the page and given to search engines as FAQPage structured data
-    from this one list, as the homepage's `FAQ` is. Every answer says what the
-    product does today, in the words the pricing page and the homepage use.
+    from this one list, as the homepage's `FAQ` is. Every answer about a feature
+    is that feature's own line and detail (`website.features`), and every answer
+    about the price is `website.price`, so none of them can say what the product
+    does not.
     """
+    results, cards, cbt = feature("results"), feature("report-cards"), feature("cbt")
+    parents, backups, fast = feature("parents"), feature("backups"), feature("fast")
+    portal, app, site = feature("portal"), feature("app"), feature("school-website")
+    names = ", ".join(
+        f.name if i == 0 else f.name[0].lower() + f.name[1:]
+        for i, f in enumerate(f for g in groups() for f in g["items"])
+    )
     return [
         ("What is the best school management software for Nigerian secondary schools?",
          "The best one is the one your teachers will really use every day. For a Nigerian secondary "
          "school, that means software that works on a phone, copes with a poor network, and follows "
          "the report sheet your state asks for. Classnode is built for exactly that. It covers results "
-         "and report cards, fees, registers and parent result checks. "
+         "and report cards, fees, registers, CBT and parent result checks. "
          'Book a <a href="/#demo">demo</a> and try it with your own classes.'),
         ("What does Classnode do?",
          "Classnode is school management software for Nigerian secondary schools, made by Classnode "
-         "Edtech Limited. Teachers enter CA and exam scores on their phones. Totals, grades, class "
-         "positions and remarks are worked out for you. You approve each class, print report cards "
-         "with affective and psychomotor ratings, track school fees, take registers and let parents "
-         'check results online. See everything in the price on the <a href="/pricing/">pricing page</a>.'),
+         f"Edtech Limited. It includes: {names}. See everything in the price on the "
+         '<a href="/pricing/">pricing page</a>.'),
         ("Does it support the Ogun State report card?",
-         "Yes. Switch on the Ogun State template in setup and your report cards follow the sheet "
-         "the Ministry asks for."),
+         _text("Yes.", cards.line, cards.detail)),
         ("How much does it cost?",
-         PRICE + " Everything on the "
-         '<a href="/pricing/">pricing page</a> is in that price. The premium add-on is priced by asking.'),
+         price.sentence() + " Everything on the "
+         '<a href="/pricing/">pricing page</a> is in that price.'),
         ("Is there a free trial?",
-         "Yes. Your school's first term is free, with no setup fee. After that it is ₦1,500 per "
-         "student, per term. If you would like to see it first, book a demo and we will call you "
+         f"Yes. Your school's first term is free, with no setup fee. After that it is {price.figure()} "
+         "per student, per term. If you would like to see it first, book a demo and we will call you "
          "within two working days."),
         ("Does it work on weak networks and cheap phones?",
-         "Yes. Classnode works in the browser on the phones your teachers already carry. There is "
-         "nothing to install and no laptop is needed. Pages are kept light, so they open quickly "
-         "on a slow connection. When the network drops, scores and registers stay on the phone and "
-         "send when the connection comes back."),
+         _text("Yes.", fast.line, "Classnode works in the browser on the phones your teachers already "
+               "carry, and nothing needs installing.", feature("fees-and-registers").detail)),
         ("Can parents check results on their phones?",
-         "Yes. A parent opens a child's report card in the browser with the admission number and "
-         "the PIN on a paper slip. No account is needed. Parents see a result only after you have "
-         "approved the class and released it."),
+         _text("Yes.", parents.line, parents.detail, "Parents see a result only after you have "
+               "approved the class and released it.")),
         ("Is our school's data safe and private?",
          "Your school's records are kept apart from every other school's. Only your staff, each "
          "according to their role, and parents for their own children can see them. A payment "
-         "cannot be edited or deleted, only reversed with a reason. The database is backed up every "
-         'night. Our <a href="/privacy/">privacy notice</a> has the details.'),
+         f"cannot be edited or deleted, only reversed with a reason. {backups.line} "
+         'Our <a href="/privacy/">privacy notice</a> has the details.'),
         ("How fast can we start?",
          "Book a demo and we will call you within two working days. To set up, send us your class "
          "lists and fee items, as an Excel or CSV file if you have one. We add your classes, "
          "students and staff, then walk your team through it. There is no setup fee."),
-        ("Does it have CBT?", _cbt_answer()),
+        ("Does it have CBT?", _text("Yes.", cbt.line, cbt.detail)),
     ]
 
 
@@ -193,16 +174,16 @@ def site_page(request, template, context=None, status=200):
     """A page of the public site: the one kind of page search engines are asked to index.
 
     Every view below draws through here, so each page carries its title and
-    description from `PAGES`, its canonical address (the bare domain over
+    description from `pages()`, its canonical address (the bare domain over
     https, no query) and the site's address for the share image, and says it
     is `indexable`, which is what keeps `templates/design/head.html` from
     writing its noindex.
 
-    A page that is not one of `PAGES` (a blog post, the blog's later pages)
+    A page that is not one of `pages()` (a blog post, the blog's later pages)
     passes its own `title`, `description` and `canonical` in `context`, which
     is read last.
     """
-    title, description = PAGES.get(request.resolver_match.url_name, ("", ""))
+    title, description = pages().get(request.resolver_match.url_name, ("", ""))
     return render(
         request,
         template,
@@ -213,6 +194,8 @@ def site_page(request, template, context=None, status=200):
             "site_url": site_url(),
             "canonical": site_url() + request.path,
             "portal_host": portal_host(),
+            "price": price.context(),
+            "contact_email": price.CONTACT_EMAIL,
             **(context or {}),
         },
         status=status,
@@ -306,7 +289,7 @@ def structured_data():
                 "operatingSystem": "Web browser",
                 "description": "School management software for Nigerian secondary schools: "
                                "results and report cards, fees and registers in one place. "
-                               + PRICE,
+                               + price.sentence(),
                 "publisher": {"@id": organization},
                 "offers": [
                     {
@@ -319,12 +302,12 @@ def structured_data():
                     {
                         "@type": "Offer",
                         "name": "Every term after the first",
-                        "price": "1500",
+                        "price": str(settings.PRICE_PER_STUDENT_NAIRA),
                         "priceCurrency": "NGN",
-                        "description": "₦1,500 per student, per term. No setup fee.",
+                        "description": f"{price.figure()} per student, per term. No setup fee.",
                         "priceSpecification": {
                             "@type": "UnitPriceSpecification",
-                            "price": "1500",
+                            "price": str(settings.PRICE_PER_STUDENT_NAIRA),
                             "priceCurrency": "NGN",
                             "unitText": "per student, per term",
                         },
@@ -371,12 +354,16 @@ def _without_todo_notes(page):
     return _EMPTY_SECTION.sub("", page)
 
 
+#: When the terms were last changed, as the page prints it. Change it with the wording.
+TERMS_UPDATED = "9 November 2026"
+
+
 def legal_page(request, template):
     """A legal page: its TODO notes only where the setting asks, and a draft's marks while it is one."""
     response = site_page(
         request,
         template,
-        {"indexable": not LEGAL_IN_DRAFT, "legal_draft": LEGAL_IN_DRAFT},
+        {"indexable": not LEGAL_IN_DRAFT, "legal_draft": LEGAL_IN_DRAFT, "terms_updated": TERMS_UPDATED},
     )
     if not settings.SHOW_LEGAL_TODOS:
         response.content = _without_todo_notes(response.content.decode())
@@ -429,6 +416,7 @@ def homepage(request):
             "refused": refused,
             "sent": request.method == "GET" and request.GET.get("sent") == "1",
             "faq": [(question, mark_safe(answer)) for question, answer in FAQ],
+            "features": FEATURES,
             "structured_data": structured_data(),
         },
         status=status,
@@ -437,9 +425,8 @@ def homepage(request):
 
 @require_http_methods(["GET", "HEAD"])
 def pricing(request):
-    """The price, everything it includes, and the premium add-on. Which features still wear
-    "Coming soon" is `website.features`, read from settings on every request."""
-    return site_page(request, "website/pricing.html", {"groups": included(), "premium": premium(), "nav_pricing": True})
+    """The price and everything it includes, from `website.features`."""
+    return site_page(request, "website/pricing.html", {"groups": groups(), "nav_pricing": True})
 
 
 @require_http_methods(["GET", "HEAD"])
@@ -471,7 +458,7 @@ def terms(request):
 
 @require_http_methods(["GET", "HEAD"])
 def sitemap(request):
-    """Every public page, `PAGES`, then every published blog post, and nothing on any other host.
+    """Every public page, `pages()`, then every published blog post, and nothing on any other host.
 
     The privacy notice and the terms are left out while `LEGAL_IN_DRAFT`.
 
@@ -487,7 +474,7 @@ def sitemap(request):
         {
             "urls": [
                 site_url() + reverse(name)
-                for name in PAGES
+                for name in pages()
                 if not (LEGAL_IN_DRAFT and name in LEGAL_PAGES)
             ],
             "posts": [

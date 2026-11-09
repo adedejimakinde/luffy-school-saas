@@ -88,11 +88,11 @@ PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
 SITE_HOST = os.environ.get("SITE_HOST", "").strip().lower() or PLATFORM_DOMAIN
 SITE_URLCONF = "urls_site"
 
-#: Classnode's public profiles and phone line, which the site's structured data
-#: (`website.views.structured_data`) names when they are set and leaves out when
-#: they are not. Nothing is guessed: a deployment that has no Google Business
-#: Profile yet simply sets none. Each profile is a full `https://` address.
-SITE_PHONE = os.environ.get("SITE_PHONE", "").strip()
+#: Classnode's phone line (the number the public site and `/llms.txt` give) and
+#: public profiles, which the site's structured data (`website.views.structured_data`)
+#: names when they are set and leaves out when they are not. Nothing is guessed:
+#: a deployment that has no Google Business Profile yet simply sets none. Each profile is a full `https://` address.
+SITE_PHONE = os.environ.get("SITE_PHONE", "+234 903 026 9294").strip()
 SITE_LINKEDIN_URL = os.environ.get("SITE_LINKEDIN_URL", "").strip()
 SITE_GOOGLE_BUSINESS_URL = os.environ.get("SITE_GOOGLE_BUSINESS_URL", "").strip()
 
@@ -115,15 +115,11 @@ DEMO_REQUEST_INBOX = os.environ.get(
 #: anywhere else; `docs/handover.md` lists every note still open.
 SHOW_LEGAL_TODOS = os.environ.get("SHOW_LEGAL_TODOS", "1" if DEBUG else "0") == "1"
 
-#: **"Coming soon" on the pricing page, one setting per feature.** Each is on
-#: until the feature ships; set it to `0` (in `deploy/production.env`) and the
-#: label goes, with no code change. `website/features.py` lists the features
-#: and the setting that governs each, and a test holds the two to each other.
-COMING_SOON_CBT_SCHOOL_TESTS = os.environ.get("COMING_SOON_CBT_SCHOOL_TESTS", "1") == "1"
-COMING_SOON_CBT_UTME_PRACTICE = os.environ.get("COMING_SOON_CBT_UTME_PRACTICE", "1") == "1"
-COMING_SOON_CBT_WASSCE_PRACTICE = os.environ.get("COMING_SOON_CBT_WASSCE_PRACTICE", "1") == "1"
-COMING_SOON_CUSTOM_DOMAIN = os.environ.get("COMING_SOON_CUSTOM_DOMAIN", "1") == "1"
-COMING_SOON_SENDER_DOMAIN = os.environ.get("COMING_SOON_SENDER_DOMAIN", "1") == "1"
+#: **The price, in whole naira per student per term** (the first term is free and
+#: there is no setup fee). The one place the number is written: the homepage, the
+#: pricing page, the FAQ, the terms, `/llms.txt`, every page's description and the
+#: structured data read it through `website/price.py`. `docs/website.md`.
+PRICE_PER_STUDENT_NAIRA = 1500
 
 #: **Development only: the whole demo through one host.** A Codespace forwards
 #: one port, which is one hostname, so the portal and a school cannot both be

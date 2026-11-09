@@ -1,97 +1,114 @@
-"""What the price includes, as the pricing page lists it (`docs/website.md`).
+"""What Classnode does today: the one list the public site draws from.
 
-Each feature is a label and one plain sentence, and the ones not yet on `main`
-name the setting that governs their "Coming soon" label (`settings.COMING_SOON_*`).
-Switching that setting off removes the label and nothing else; the page, the
-sitemap and the structured data do not change. A feature that has shipped has
-no setting at all, so a feature added here without one is live.
+The homepage's price card, the pricing page, the FAQ's feature answers and
+`/llms.txt` all read `GROUPS` and nothing else, so a feature is written once:
+a name, one plain line and, where there is more to say, a detail.
+
+**Only what is live.** A feature is added here the day it ships and not before.
+Nothing here is labelled "coming soon", and a test refuses the words anywhere on
+the public site. News posts, admissions forms, custom domains, a school's own
+email domain, ID cards and password reset are not built yet and are not listed
+(`docs/website.md`).
 """
 
-from django.conf import settings
+from dataclasses import dataclass
 
-#: (heading, [(label, sentence, setting or None)]). In the order the page draws them.
-INCLUDED = [
+
+@dataclass(frozen=True)
+class Feature:
+    key: str
+    name: str
+    line: str
+    detail: str = ""
+
+
+#: (heading, features). The headings are the pricing page's groups, in its order.
+GROUPS = [
     ("Results and report cards", [
-        ("Report cards, including the Ogun State sheet",
-         "Totals, grades, class positions and remarks worked out for you. Schools in Ogun State can "
-         "switch on the report sheet the Ministry asks for.", None),
-        ("CA and exam scores",
-         "Teachers enter scores once, on their phones, and you approve each class before release.", None),
-        ("Affective and psychomotor traits",
-         "Conduct and skills ratings, set up by the school and printed on the report card.", None),
-        ("Parent result checks",
-         "A parent opens a child's report card with the admission number and the PIN on a paper slip. "
-         "No account is needed.", None),
+        Feature(
+            "results", "Results",
+            "CA and exam scores go in once. Totals, averages, grades and class positions are "
+            "worked out for you.",
+            "Class positions follow your school's tie rule. A paper not yet marked shows as \"-\", "
+            "never as zero. Results go through the school's approval chain before release, and are "
+            "locked after release.",
+        ),
+        Feature(
+            "report-cards", "Report cards",
+            "Standard and Ogun State report cards, with a whole class printed as one PDF.",
+            "A preview stamp shows on every card until the results are released. The master "
+            "broadsheet opens on screen, as a PDF and in Excel.",
+        ),
     ]),
-    ("Registers, fees and notices", [
-        ("Attendance registers",
-         "Class teachers mark the register on their phones. If the network drops, it sends when it "
-         "comes back.", None),
-        ("Fees and payments tracking",
-         "Each child has their own account number, so a transfer lands on the right record.", None),
-        ("Notices",
-         "Absence alerts, fee reminders and payment receipts to parents.", None),
+    ("Tests", [
+        Feature(
+            "cbt", "CBT",
+            "Computer-based tests, set by your teachers and marked by the computer.",
+            "Teachers keep question banks for each subject and class. The principal or vice "
+            "principal approves a test before it opens. Students sit it on a phone or a computer, "
+            "on a JAMB-style screen with a timer, a question grid, flag for review and a "
+            "calculator. Answers are saved through a network drop or a power cut. Scores are sent "
+            "into CA, and results are released to students and parents. Teachers get item "
+            "analysis, to see how each question did.",
+        ),
     ]),
-    ("Staff and exams", [
-        ("Staff roles and subject-teacher assignment",
-         "The principal, bursar, teachers and others each see their own part. The principal says "
-         "who teaches which subject to which class.", None),
-        ("Exam PIN slips",
-         "Print a PIN slip for each student in a class, with exam officers the principal names.", None),
-        ("CBT: school tests",
-         "Teachers write questions, set timed tests, and the computer marks them.",
-         "COMING_SOON_CBT_SCHOOL_TESTS"),
-        ("CBT: UTME-style practice",
-         "Timed practice in the format the exam body publishes, on questions the school writes.",
-         "COMING_SOON_CBT_UTME_PRACTICE"),
-        ("CBT: WASSCE-style practice",
-         "Timed objective papers, one subject at a time, on questions the school writes.",
-         "COMING_SOON_CBT_WASSCE_PRACTICE"),
+    ("Fees, registers and parents", [
+        Feature(
+            "fees-and-registers", "Fees, attendance and registers",
+            "Each child has their own fee account, you see what is still owed, and class teachers "
+            "take the register on their phones.",
+            "The register and score entry keep working when the network drops, and send when it "
+            "comes back.",
+        ),
+        Feature(
+            "parents", "Parents",
+            "Parents see their children's released results and report cards online.",
+            "A parent can also use the result checker, with the PIN on a paper slip.",
+        ),
     ]),
-    ("Your school online", [
-        ("A school website on its Classnode address",
-         "A public website for the school at its own address on Classnode, built from the details "
-         "the school publishes.", None),
+    ("Your school, under its own name", [
+        Feature(
+            "portal", "Your school's own portal",
+            "The school's crest, name and colours are on the sign-in and on every page.",
+            "Your school signs in at its own address, such as school.classnode.co.",
+        ),
+        Feature(
+            "app", "Installable app",
+            "Staff and parents add the school's own app to the home screen of a phone or "
+            "computer.",
+            "No app store is needed.",
+        ),
+        Feature(
+            "school-website", "School website",
+            "The school's own website, in the Modern Campus theme with the school's colours and "
+            "a slideshow.",
+            "Up to 20 custom pages, pictures, albums, a hero video and a map. The editor shows a "
+            "preview, and the principal approves a change before it goes live.",
+        ),
     ]),
-    ("Safe and separate", [
-        ("Backups",
-         "The database is backed up every night, with the changes in between kept so it can be "
-         "restored to a recent moment.", None),
-        ("Each school's data kept apart",
-         "Every school's records are kept apart from every other school's.", None),
+    ("Fast and safe", [
+        Feature(
+            "fast", "Fast on slow networks and phones",
+            "Pages are kept light, so they open quickly on a cheap phone and a slow connection.",
+        ),
+        Feature(
+            "backups", "Nightly off-site backups",
+            "The database is backed up every night, to a place away from the server.",
+        ),
     ]),
 ]
 
-#: The premium add-on, priced by asking. Sending from the school's own email
-#: domain is the school's results and notices going out under its own name; it
-#: is not a mailbox, and nothing here promises one.
-PREMIUM = [
-    ("A custom domain for the school website",
-     "The school's website on an address the school owns.", "COMING_SOON_CUSTOM_DOMAIN"),
-    ("Results and notices from the school's own email domain",
-     "Results and notices sent from an address on the school's own domain.", "COMING_SOON_SENDER_DOMAIN"),
-]
+#: Every feature, in the order the pricing page draws them.
+FEATURES = [feature for _, features in GROUPS for feature in features]
 
-#: Every setting a feature above is governed by.
-SETTINGS = sorted({s for _, items in INCLUDED for *_, s in items if s} | {s for *_, s in PREMIUM if s})
+_BY_KEY = {feature.key: feature for feature in FEATURES}
 
 
-def coming_soon(setting):
-    """Whether the feature governed by `setting` still wears its label. No setting, no label."""
-    return bool(setting) and bool(getattr(settings, setting))
+def feature(key):
+    """The feature called `key`. A typo is an error, not a blank on a public page."""
+    return _BY_KEY[key]
 
 
-def _items(rows):
-    return [
-        {"label": label, "sentence": sentence, "coming_soon": coming_soon(setting)}
-        for label, sentence, setting in rows
-    ]
-
-
-def included():
-    """`INCLUDED` as the template draws it: a heading and its items, each with its label decided now."""
-    return [{"heading": heading, "items": _items(rows)} for heading, rows in INCLUDED]
-
-
-def premium():
-    return _items(PREMIUM)
+def groups():
+    """`GROUPS` as a template draws them: a heading and its features."""
+    return [{"heading": heading, "items": items} for heading, items in GROUPS]

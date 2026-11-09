@@ -280,26 +280,27 @@ final call to action, and the footer.
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
 
-## The pricing page and "Coming soon"
+## One list of features, one price
 
-`/pricing/` (`website.views.pricing`, `website/features.py`) shows the price, then
-everything it includes in groups (results and report cards; registers, fees and
-notices; staff and exams; the school online; safe and separate), then a separate
-**Premium add-on** group (a custom domain for the school website, and sending
-results and notices from the school's own email domain) priced "Contact us". No
-mailboxes are promised.
+**The features** are written once, in `website/features.py` (`GROUPS`): a name,
+one plain line and, where there is more to say, a detail. The homepage's price
+card, the pricing page (`/pricing/`, in the file's groups), the FAQ's feature
+answers and `/llms.txt` all read it, so none can say what another does not. It
+lists only what is live (checked against `main` on 9 November 2026): results,
+report cards, CBT, fees, attendance and registers, parents, the school's own
+portal, the installable app, the school website, speed on slow networks and
+nightly off-site backups. There is no "coming soon" label and no setting for
+one (the `COMING_SOON_*` settings and the premium add-on are gone). Not built,
+so never mentioned on a public page: news posts, admissions forms, custom
+domains, school email, ID cards and forgot-password. A feature is added to the
+list the day it ships.
 
-Each feature was checked against `main` on 26 October 2026. Not on `main`, so
-labelled "Coming soon": the
-three CBT items (CBT stops at exam PINs: `docs/cbt.md` steps 3 to 6), and both
-premium items (custom domains and sender domains, PRs 10 and 11).
-
-**One setting per label**, on by default, read on every request:
-`COMING_SOON_CBT_SCHOOL_TESTS`,
-`COMING_SOON_CBT_UTME_PRACTICE`, `COMING_SOON_CBT_WASSCE_PRACTICE`,
-`COMING_SOON_CUSTOM_DOMAIN` and `COMING_SOON_SENDER_DOMAIN`. When a feature
-ships, set its variable to `0` in `deploy/production.env` and deploy: the label
-goes and nothing else changes. No code change.
+**The price** is one setting, `PRICE_PER_STUDENT_NAIRA` in `settings.py`
+(1500), read through `website/price.py` on every request by the homepage, the
+pricing page, the FAQ, `/terms/` (`#price`), `/llms.txt`, every page's meta and
+share description and the structured data. A test fails if any public page
+shows a naira amount other than the setting (the showcase school's own figures
+in the homepage's screens are the only exception).
 
 ## Search engines and shared links
 
@@ -345,12 +346,12 @@ The site is the only thing on the platform a search engine is asked to index.
   `https://` and the bare domain with no query.
 - **The price is written "The first term is free, then ₦1,500 per student, per
   term. No setup fee."**, with its comma, in the description, the share card's
-  and the structured data's words (`website.views.PRICE`), as the page writes
+  and the structured data's words (`website.price`), as the page writes
   it. The structured data's `price` fields stay bare numbers (`0` for the first
   term, `1500` after it): schema.org asks for that, and a comma would read as a
   decimal point. Classnode's price is on the homepage (hero line and price
   card), the pricing page, the terms (`#price`), every page's meta and share
-  descriptions that carry `PRICE`, the structured data, and the tests that hold
+  descriptions that carry it, the structured data, and the tests that hold
   them (`website/tests/test_pricing.py`). It is not any school's fee.
 - **Structured data, on the homepage, `/faq/` and each blog post only.** On a
   post it is an Article (`docs/blog.md`). On the homepage: Organization
@@ -370,15 +371,15 @@ The site is the only thing on the platform a search engine is asked to index.
   asks first: the best software for a Nigerian secondary school, what Classnode
   does, the Ogun State report card, the price, the free first term, weak
   networks and cheap phones, parents checking results, data, how fast to start,
-  and CBT. It is linked from the footer and listed in the sitemap. The CBT
-  answer reads the same "coming soon" settings as the pricing page, so it
-  changes the day a setting does.
+  and CBT. It is linked from the footer and listed in the sitemap. Its
+  feature answers are the feature list's own words (`website.features`).
 - **`/llms.txt`** (`website/llms.py`) is a Markdown summary for ChatGPT,
   Gemini, Perplexity, Claude and the like: what Classnode is, who it is for,
-  every feature the pricing page lists (`website.features`, with "(coming soon)"
-  from the same settings), weak networks, data and backups, the price
-  (`website.views.PRICE`), the public pages with the descriptions they give
-  search engines, the newest 25 published blog posts, and how to reach us. Nothing
+  every feature the pricing page lists (`website.features`), data, the price
+  (`website.price`), the public pages (`/faq/` among them) with the descriptions
+  they give search engines, the newest 25 published blog posts (never a draft),
+  and how to reach us (hello@classnode.co, +234 903 026 9294). It is served as
+  `text/markdown`, public and cached for an hour. Nothing
   in it is typed twice, so it follows the pricing page. The privacy notice and
   the terms join it, last, when `LEGAL_IN_DRAFT` goes, as they join the sitemap.
   It is the site host's alone (the portal and every school host answer it with
@@ -420,7 +421,7 @@ and this page both rely on that record being kept.
   of every word on every blue.
 - `website/tests/test_ai_search.py`: robots.txt names the eight AI crawlers on
   the site and lets none into the portal or a school, `/llms.txt` (shape, every
-  feature, the price, links that answer, coming soon following the settings,
+  feature, the price, links that answer, the price from the setting, cache headers,
   drafts left out), the structured data against schema.org's shapes (address,
   optional phone and `sameAs`, offers, both FAQPages), `/faq/` (the ten
   questions in order, answers matching the data, footer link, sitemap, writing
