@@ -66,15 +66,15 @@ class TheRollFrameHoldsNoChildrenTests(EnrolmentSetUp):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(answer.status_code, 403)
 
-    def test_the_frame_names_the_portal_so_the_signed_out_state_can_offer_a_way_back(self):
-        self.assertIn('data-portal="testserver"', self.get_page(self.admin).content.decode())
+    def test_the_frame_names_this_schools_host_so_the_signed_out_state_can_offer_a_way_back(self):
+        self.assertIn(f'data-portal="{HOST}"', self.get_page(self.admin).content.decode())
 
-    def test_with_no_portal_domain_the_attribute_is_empty_rather_than_wrong(self):
-        """The pair the card page already has: this passes for a view that
-        never sets the variable, and the test above is what refuses that."""
+    def test_with_no_portal_domain_it_is_still_this_schools_host(self):
+        """The link is built from the host being used, so a deployment with no
+        portal row still has a way back on a school's host."""
         Domain.objects.filter(tenant__schema_name="public").delete()
 
-        self.assertIn('data-portal=""', self.get_page(self.admin).content.decode())
+        self.assertIn(f'data-portal="{HOST}"', self.get_page(self.admin).content.decode())
 
     def test_the_stylesheet_and_entry_point_are_the_roll_pages_own(self):
         page = self.get_page(self.admin).content.decode()

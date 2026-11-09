@@ -242,9 +242,17 @@ def _brand(context, door=False):
     (and an installed app never flashes Classnode's wordmark before the door).
     `for_request` still answers None on the portal and for any other host.
     """
+    from django.db import transaction
+
     from schools.brand import for_request
 
-    return for_request(context.get("request"), door=True)
+    # A look that cannot be read is Classnode's, never a broken page; the savepoint
+    # keeps the failed read from aborting the request's transaction.
+    try:
+        with transaction.atomic():
+            return for_request(context.get("request"), door=True)
+    except Exception:
+        return None
 
 
 @register.simple_tag(takes_context=True)
@@ -255,15 +263,7 @@ def school_brand(context):
     a database that is down is a reason to show Classnode's mark, not a second
     error.
     """
-    from django.db import transaction
-
-    try:
-        # A savepoint, so a failed read cannot leave the request's transaction
-        # aborted for whatever runs after the error page (the session save).
-        with transaction.atomic():
-            return _brand(context)
-    except Exception:
-        return None
+    return _brand(context)
 
 
 @register.inclusion_tag("design/brand_head.html", takes_context=True)
