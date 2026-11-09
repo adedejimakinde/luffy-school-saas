@@ -18,11 +18,14 @@ from django.urls import reverse
 
 from blog.tests.fixtures import BlogSetUp
 from tests.test_budget import BUDGET, STATIC, _ASSET, served_files, urls_in_css
-from website import features
+from website import features, price
 from website.crawlers import AI_CRAWLERS, CLOSED_ROBOTS, SCHOOL_ROBOTS
 from website.tests.test_homepage import BANNED, PORTAL, SITE, SiteSetUp, visible_text
 from website.tests.test_seo import SCHOOL, DASHES, SchoolSetUp, meta, structured
-from website.views import FAQ, LEGAL_PAGES, PAGES, PRICE
+from website.views import FAQ, LEGAL_PAGES, pages
+
+PAGES = pages()
+PRICE = price.sentence()
 
 #: The crawlers the brief names, spelled as their operators publish them.
 NAMED = [
@@ -43,8 +46,6 @@ QUESTIONS = [
     "How fast can we start?",
     "Does it have CBT?",
 ]
-
-CBT_SETTINGS = ("COMING_SOON_CBT_SCHOOL_TESTS", "COMING_SOON_CBT_UTME_PRACTICE", "COMING_SOON_CBT_WASSCE_PRACTICE")
 
 
 def parse_robots(body):
@@ -109,10 +110,26 @@ class LlmsTxtTests(BlogSetUp):
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
-    def test_it_is_plain_text_and_open_to_indexing(self):
+    def test_it_is_markdown_cached_public_and_open_to_indexing(self):
         response = self.llms()
-        self.assertEqual(response["Content-Type"], "text/plain; charset=utf-8")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "text/markdown; charset=utf-8")
+        self.assertIn("public", response["Cache-Control"])
+        self.assertRegex(response["Cache-Control"], r"max-age=\d+")
         self.assertFalse(response.has_header("X-Robots-Tag"))
+
+    def test_it_has_the_price_cbt_and_a_published_post_but_no_draft(self):
+        self.published(slug="a-live-post")
+        self.draft(slug="a-draft-post")
+        text = self.text()
+        self.assertIn("₦1,500", text)
+        self.assertIn(price.sentence(), text)
+        self.assertIn("CBT", text)
+        self.assertIn("/blog/a-live-post/", text)
+        self.assertNotIn("a-draft-post", text)
+        for needed in ("+234 903 026 9294", "hello@classnode.co", f"https://{SITE}/faq/",
+                       "private secondary schools in Nigeria"):
+            self.assertIn(needed.lower(), text.lower())
 
     def test_it_is_markdown_in_the_llms_txt_shape(self):
         text = self.text()
@@ -138,33 +155,23 @@ class LlmsTxtTests(BlogSetUp):
             with self.subTest(needed=needed):
                 self.assertIn(needed, text)
 
-    def test_it_lists_every_feature_the_pricing_page_does_and_cbt_is_coming_soon(self):
+    def test_it_lists_every_feature_the_pricing_page_does(self):
         text = self.text()
-        for group in features.included():
-            self.assertIn(f"### {group['heading']}", text)
-            for item in group["items"]:
-                with self.subTest(feature=item["label"]):
-                    suffix = " (coming soon)" if item["coming_soon"] else ""
-                    self.assertIn(f"- {item['label']}{suffix}: {item['sentence']}\n", text)
-        for label in ("CBT: school tests", "CBT: UTME-style practice", "CBT: WASSCE-style practice"):
-            self.assertIn(f"- {label} (coming soon):", text)
-        for needed in ("Report cards, including the Ogun State sheet", "CA and exam scores",
-                       "Affective and psychomotor traits", "Fees and payments tracking",
-                       "Attendance registers", "Parent result checks", "Exam PIN slips",
-                       "Staff roles and subject-teacher assignment"):
-            self.assertIn(f"- {needed}:", text)
-
-    def test_a_feature_that_ships_loses_its_label_with_the_setting_and_no_code(self):
-        with override_settings(**{name: False for name in CBT_SETTINGS}):
-            shipped = self.text()
-        self.assertIn("- CBT: school tests: Teachers write questions", shipped)
-        self.assertNotIn("(coming soon)", shipped.split("### Your school online")[0])
-        self.assertIn("- CBT: school tests (coming soon): Teachers write questions", self.text())
+        for heading, group in features.GROUPS:
+            self.assertIn(f"### {heading}", text)
+            for feature in group:
+                with self.subTest(feature=feature.key):
+                    self.assertIn(f"- {feature.name}: {feature.line}", text)
+                    if feature.detail:
+                        self.assertIn(feature.detail, text)
+        self.assertNotIn("oming soon", text)
 
     def test_the_price_is_the_pricing_pages_price_word_for_word(self):
         text = self.text()
         self.assertIn(f"## Price\n\n{PRICE}\n", text)
         self.assertEqual(PRICE, "The first term is free, then ₦1,500 per student, per term. No setup fee.")
+        with override_settings(PRICE_PER_STUDENT_NAIRA=1800):
+            self.assertIn("## Price\n\nThe first term is free, then ₦1,800 per student", self.text())
         self.assertNotIn("₦1500", text)
         self.assertNotIn("2,500", text)
         self.assertIn("₦1,500", visible_text(self.site("/pricing/").content.decode()))
@@ -222,10 +229,12 @@ class LlmsTxtTests(BlogSetUp):
         post.save()
         self.assertIn("): One line. Another line.\n", self.text())
 
-    def test_the_phone_is_named_only_when_one_is_set(self):
-        self.assertNotIn("Phone:", self.text())
+    def test_the_phone_is_classnodes_own_unless_a_deployment_sets_another(self):
+        self.assertIn("- Phone: +234 903 026 9294\n", self.text())
         with override_settings(SITE_PHONE="+234 800 000 0000"):
             self.assertIn("- Phone: +234 800 000 0000\n", self.text())
+        with override_settings(SITE_PHONE=""):
+            self.assertNotIn("Phone:", self.text())
 
     def test_the_writing_rules_hold(self):
         text = self.text()
@@ -280,10 +289,14 @@ class StructuredDataTests(SiteSetUp):
         self.assertNotIn("streetAddress", org)
         self.assertNotIn("postalCode", org)
 
-    def test_phone_and_profiles_are_left_out_until_they_are_configured(self):
+    def test_the_phone_is_classnodes_own_and_profiles_are_left_out_until_they_are_configured(self):
         org = self.organization()
-        self.assertNotIn("telephone", org)
+        self.assertEqual(org["telephone"], "+234 903 026 9294")
         self.assertNotIn("sameAs", org)
+
+    @override_settings(SITE_PHONE="")
+    def test_a_deployment_may_leave_the_phone_out(self):
+        self.assertNotIn("telephone", self.organization())
 
     @override_settings(
         SITE_PHONE="+234 800 000 0000",
@@ -388,30 +401,31 @@ class FaqPageTests(SiteSetUp):
 
     def test_the_answers_say_what_the_product_does(self):
         answers = self.answers()
-        self.assertIn("Switch on the Ogun State template", answers[QUESTIONS[2]])
-        self.assertIn("the sheet the Ministry asks for", answers[QUESTIONS[2]])
+        self.assertIn("Standard and Ogun State report cards", answers[QUESTIONS[2]])
+        self.assertIn("whole class printed as one PDF", answers[QUESTIONS[2]])
         self.assertIn(PRICE, answers[QUESTIONS[3]])
         self.assertIn("first term is free", answers[QUESTIONS[4]])
         self.assertIn("No setup fee", answers[QUESTIONS[3]])
-        self.assertIn("send when the connection comes back", answers[QUESTIONS[5]])
-        self.assertIn("admission number", answers[QUESTIONS[6]])
+        self.assertIn("send when it comes back", answers[QUESTIONS[5]])
+        self.assertIn("released results and report cards", answers[QUESTIONS[6]])
         self.assertIn("PIN", answers[QUESTIONS[6]])
         self.assertIn("kept apart from every other school's", answers[QUESTIONS[7]])
         self.assertIn("backed up every night", answers[QUESTIONS[7]])
         self.assertIn("two working days", answers[QUESTIONS[8]])
 
-    def test_cbt_is_coming_soon_as_the_pricing_page_says(self):
+    def test_cbt_is_answered_from_the_feature_list(self):
         answer = self.answers()[QUESTIONS[9]]
-        self.assertTrue(answer.startswith("Not yet. CBT is coming soon"), answer)
-        self.assertIn("school tests, UTME-style practice and WASSCE-style practice", answer)
+        cbt = features.feature("cbt")
+        self.assertTrue(answer.startswith("Yes."), answer)
+        self.assertIn(cbt.line, answer)
+        for needed in ("question banks", "JAMB-style", "network drop or a power cut", "item analysis"):
+            self.assertIn(needed, answer)
+        self.assertNotIn("oming soon", answer)
 
-    def test_cbt_answer_follows_the_settings_the_pricing_page_follows(self):
-        with override_settings(**{name: False for name in CBT_SETTINGS}):
-            self.assertTrue(self.answers()[QUESTIONS[9]].startswith("Yes."))
-        with override_settings(COMING_SOON_CBT_SCHOOL_TESTS=False):
-            answer = self.answers()[QUESTIONS[9]]
-        self.assertIn("Available now: school tests.", answer)
-        self.assertIn("Coming soon: UTME-style practice and WASSCE-style practice.", answer)
+    def test_the_what_does_it_do_answer_names_every_feature(self):
+        answer = self.answers()[QUESTIONS[1]]
+        for feature in features.FEATURES:
+            self.assertIn(feature.name.lower(), answer.lower())
 
     def test_the_price_is_written_one_way(self):
         page = html.unescape(self.page())

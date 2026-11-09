@@ -66,7 +66,7 @@
 
 <section id="price">
   <h2>Our price</h2>
-  <p>The first term is free. After that, schools pay &#8358;1,500 per student, per term. There is no setup fee. <span class="todo">TODO: when invoices are sent and when they must be paid.</span></p>
+  <p>{{ price.terms }} <span class="todo">TODO: when invoices are sent and when they must be paid.</span></p>
   <p>If a school does not pay, we will tell the school before we limit its access. <span class="todo">TODO: lawyer and owner to set the steps and notice.</span></p>
   <p>Parents pay Classnode nothing. <span class="todo">TODO: owner to confirm.</span></p>
 </section>
@@ -115,7 +115,7 @@
   <p>These terms are governed by the laws of the Federal Republic of Nigeria. <span class="todo">TODO: lawyer.</span></p>
   <p>If there is a disagreement, we will first try to settle it by talking. <span class="todo">TODO: lawyer to set what happens next, and where.</span></p>
   <p>If we change these terms, we will change the date below and tell schools before the change applies. <span class="todo">TODO: lawyer.</span></p>
-  <p><span class="todo">TODO: date. Write "Last updated" in front of it.</span></p>
+  <p>Last updated {{ terms_updated }}</p>
 </section>
 
 <section id="contact">

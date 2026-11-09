@@ -27,7 +27,10 @@ from schools.tests.tenants import make_school
 from tests.test_budget import STATIC, served_files
 from website.crawlers import CLOSED_ROBOTS, ICONS, NOINDEX, SCHOOL_ROBOTS
 from website.tests.test_homepage import PORTAL, SITE, SiteSetUp, words
-from website.views import FAQ, LEGAL_PAGES, LOGO, PAGES
+from website.views import FAQ, LEGAL_PAGES, LOGO, pages
+
+#: Each page's title and description at the setting's price.
+PAGES = pages()
 
 SCHOOL = "sunrise-school.classnode.testserver"
 PAGE_PATHS = {name: reverse(name, urlconf=settings.SITE_URLCONF) for name in PAGES}

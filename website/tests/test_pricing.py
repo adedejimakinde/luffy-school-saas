@@ -1,78 +1,95 @@
 """Classnode's own price, and the pricing page that lists what it includes.
 
 The price is the first term free, then ₦1,500 per student, per term, with no
-setup fee, written the same way everywhere (`website.views.PRICE`). The old
-₦2,500 is on no public page. The pricing page groups every feature in the
-price; a feature not yet on `main` wears "Coming soon", decided by one setting
-per feature (`website.features`), so the label goes with a setting and no code.
+setup fee: one setting (`settings.PRICE_PER_STUDENT_NAIRA`) read through
+`website.price`, so every public page says the same and none says another. The
+old ₦2,500 is on no public page. The pricing page groups every feature in the
+price, from `website.features`, and lists only what is live.
 """
 
 import html
 import re
 
-from django.conf import settings
 from django.test import override_settings
 
-from website import features
+from website import features, price
 from website.tests.test_homepage import BANNED, SiteSetUp, visible_text
 
 PRICE = "The first term is free, then ₦1,500 per student, per term. No setup fee."
 
-#: Every feature the pricing page lists in the price, by heading.
-LISTED = {
-    "Results and report cards": [
-        "Report cards, including the Ogun State sheet", "CA and exam scores",
-        "Affective and psychomotor traits", "Parent result checks",
-    ],
-    "Registers, fees and notices": ["Attendance registers", "Fees and payments tracking", "Notices"],
-    "Staff and exams": [
-        "Staff roles and subject-teacher assignment", "Exam PIN slips", "CBT: school tests",
-        "CBT: UTME-style practice", "CBT: WASSCE-style practice",
-    ],
-    "Your school online": ["A school website on its Classnode address"],
-    "Safe and separate": ["Backups", "Each school's data kept apart"],
-}
-PREMIUM = [
-    "A custom domain for the school website",
-    "Results and notices from the school's own email domain",
-]
+#: Every public page that carries the price or says what is in it.
+PAGES = ("/", "/pricing/", "/faq/", "/terms/", "/privacy/", "/llms.txt")
 
-#: What `main` does not have yet: CBT stops at exam PINs (no question bank, no tests, no
-#: modes), and no domain or sender domain can be connected. `docs/website.md`.
-NOT_LIVE = {
-    "CBT: school tests": "COMING_SOON_CBT_SCHOOL_TESTS",
-    "CBT: UTME-style practice": "COMING_SOON_CBT_UTME_PRACTICE",
-    "CBT: WASSCE-style practice": "COMING_SOON_CBT_WASSCE_PRACTICE",
-    "A custom domain for the school website": "COMING_SOON_CUSTOM_DOMAIN",
-    "Results and notices from the school's own email domain": "COMING_SOON_SENDER_DOMAIN",
-}
+#: Figures that are not the price: the showcase school's own fees and payments, drawn in the
+#: homepage's screens and floating cards (`schools/showcase.py`). The only other naira amounts
+#: any public page may show.
+DEMO_FIGURES = {"₦48.6m", "₦71.2m", "₦120,700", "₦125,000", "₦112,000", "₦48,620,500", "₦71,206,200"}
+
+NAIRA = re.compile(r"₦\s?[\d][\d,]*(?:\.\d+)?m?")
+OLD_PRICES = ("2,500", "2500", "1,250", "₦1500")
 
 
-def soon(page):
-    """The labelled features on a rendered pricing page, in order."""
-    return [html.unescape(label) for label in re.findall(r"<b>([^<]*)</b> <span class=\"chip\">Coming soon</span>", page)]
+def naira_amounts(text):
+    return [re.sub(r"\s", "", amount).rstrip(",") for amount in NAIRA.findall(text)]
 
 
 class ThePriceTests(SiteSetUp):
+    def public(self, path):
+        page = self.get(path).content.decode()
+        return page if path == "/llms.txt" else visible_text(page)
+
     def test_the_price_is_written_one_way_on_every_public_page(self):
         for path in ("/", "/pricing/", "/terms/"):
             with self.subTest(path=path):
                 page = self.get(path).content.decode()
-                text = visible_text(page)
-                self.assertIn("₦1,500", text)
-                self.assertNotIn("2,500", page)
-                self.assertNotIn("1,250", page)
-                self.assertNotIn("₦1500", text)
+                self.assertIn("₦1,500", visible_text(page))
+                for old in OLD_PRICES:
+                    self.assertNotIn(old, page)
+
+    def test_no_public_page_shows_a_price_other_than_the_setting(self):
+        """Every amount on every public page is the setting's, or a demo school's figure."""
+        for path in PAGES:
+            for amount in (price.figure(), "₦2,000"):
+                with self.subTest(path=path, setting=amount), override_settings(
+                    PRICE_PER_STUDENT_NAIRA=int(amount[1:].replace(",", ""))
+                ):
+                    text = self.public(path)
+                    for shown in naira_amounts(text):
+                        self.assertTrue(
+                            shown == amount or shown in DEMO_FIGURES,
+                            f"{path} shows {shown}; the price is {amount}",
+                        )
+                    for old in OLD_PRICES:
+                        self.assertNotIn(old, text)
+                    if path in ("/", "/pricing/", "/terms/", "/llms.txt"):
+                        self.assertIn(amount, text)
+
+    def test_a_changed_setting_changes_every_page_and_nothing_is_left_behind(self):
+        with override_settings(PRICE_PER_STUDENT_NAIRA=1800):
+            for path in PAGES:
+                with self.subTest(path=path):
+                    text = self.public(path)
+                    self.assertNotIn("₦1,500", text)
+                    if path in ("/", "/pricing/", "/faq/", "/terms/", "/llms.txt"):
+                        self.assertIn("₦1,800", text)
+            for path in ("/", "/pricing/", "/faq/"):
+                page = self.get(path).content.decode()
+                self.assertNotIn("₦1500", page)
+                self.assertNotIn("₦1,500", page)
 
     def test_the_homepage_hero_pricing_card_and_terms_say_the_same_thing(self):
         home = visible_text(self.get().content.decode())
         self.assertIn(PRICE, home)
-        self.assertIn("The first term is free, then ₦1,500 per student, per term. No setup fee.", home)
         self.assertIn(
-            "The first term is free. After that, schools pay ₦1,500 per student, per term. "
+            "A school's first term is free. After that, schools pay ₦1,500 per student, per term. "
             "There is no setup fee.",
             visible_text(self.get("/terms/").content.decode()),
         )
+
+    def test_the_price_sentences_come_from_the_setting(self):
+        self.assertEqual(price.sentence(), PRICE)
+        with override_settings(PRICE_PER_STUDENT_NAIRA=2000):
+            self.assertEqual(price.figure(), "₦2,000")
 
     def test_the_pricing_page_has_the_price_and_its_meta(self):
         page = self.get("/pricing/").content.decode()
@@ -88,29 +105,35 @@ class ThePriceTests(SiteSetUp):
                 self.assertIn('href="/pricing/"', self.get(path).content.decode())
 
 
+
 class ThePricingPageTests(SiteSetUp):
     def setUp(self):
         self.page = self.get("/pricing/").content.decode()
 
     def test_every_feature_is_listed_under_its_group(self):
-        for heading, labels in LISTED.items():
+        for heading, group_features in features.GROUPS:
             section = self.page.split(f">{heading}</h3>", 1)
             self.assertEqual(len(section), 2, heading)
             group = section[1].split("</ul>", 1)[0]
-            self.assertEqual([html.unescape(b) for b in re.findall(r"<b>([^<]*)</b>", group)], labels, heading)
+            self.assertEqual(
+                [html.unescape(b) for b in re.findall(r"<b>([^<]*)</b>", group)],
+                [feature.name for feature in group_features],
+                heading,
+            )
 
-    def test_the_premium_add_on_is_its_own_group_priced_by_asking(self):
-        premium = self.page.split('id="premium-title">Premium add-on</h2>', 1)[1]
-        self.assertIn("<b>Contact us</b>", premium)
-        found = re.findall(r"<li>.*?<b>([^<]*)</b>", premium.split("</ul>", 1)[0], flags=re.S)
-        self.assertEqual([html.unescape(label) for label in found], PREMIUM)
-        everything = visible_text(self.page).lower()
-        self.assertNotIn("mailbox", everything)
-        self.assertNotIn("inbox", everything)
-        # None of the premium items is among the features the price includes.
-        included = self.page.split('id="premium-title"', 1)[0]
-        for label in PREMIUM:
-            self.assertNotIn(label, included)
+    def test_every_feature_shows_its_line_and_its_detail(self):
+        text = visible_text(self.page)
+        for feature in features.FEATURES:
+            with self.subTest(feature=feature.key):
+                self.assertIn(feature.name, text)
+                self.assertIn(feature.line, text)
+                self.assertIn(feature.detail, text)
+
+    def test_nothing_that_is_not_built_is_listed(self):
+        text = visible_text(self.page).lower()
+        for word in ("custom domain", "news post", "admissions form", "email domain", "id card",
+                     "forgot password", "premium", "mailbox"):
+            self.assertNotIn(word, text)
 
     def test_the_writing_rules_hold(self):
         text = visible_text(self.page)
@@ -125,31 +148,9 @@ class ThePricingPageTests(SiteSetUp):
         self.assertIn("https://classnode.testserver/pricing/", sitemap)
 
 
-class ComingSoonTests(SiteSetUp):
-    def test_what_is_not_on_main_wears_the_label_and_nothing_else_does(self):
-        self.assertEqual(sorted(soon(self.get("/pricing/").content.decode())), sorted(NOT_LIVE))
-
-    def test_each_label_has_its_own_setting_and_switching_it_off_removes_only_that_label(self):
-        for label, setting in NOT_LIVE.items():
-            with self.subTest(feature=label), override_settings(**{setting: False}):
-                shown = soon(self.get("/pricing/").content.decode())
-                self.assertEqual(sorted(shown), sorted(set(NOT_LIVE) - {label}))
-
-    def test_with_every_setting_off_no_label_is_left_and_every_feature_still_is(self):
-        with override_settings(**{setting: False for setting in NOT_LIVE.values()}):
-            page = self.get("/pricing/").content.decode()
-        self.assertNotIn("Coming soon", page)
-        for label in [label for labels in LISTED.values() for label in labels] + PREMIUM:
-            self.assertIn(f"<b>{html.escape(label)}</b>", page)
-
-    def test_the_settings_are_the_ones_the_features_name_and_each_is_on_until_it_is_switched_off(self):
-        self.assertEqual(features.SETTINGS, sorted(NOT_LIVE.values()))
-        for setting in NOT_LIVE.values():
-            with self.subTest(setting=setting):
-                self.assertIs(getattr(settings, setting), True)
-
-    def test_a_feature_with_no_setting_is_live(self):
-        self.assertFalse(features.coming_soon(None))
-
-    def test_the_labels_are_not_on_the_homepage(self):
-        self.assertNotIn("Coming soon", self.get().content.decode())
+class NoComingSoonTests(SiteSetUp):
+    def test_nothing_public_says_coming_soon_for_a_feature_that_is_live(self):
+        for path in PAGES:
+            with self.subTest(path=path):
+                text = self.get(path).content.decode().lower()
+                self.assertNotIn("coming soon", text)

@@ -86,7 +86,11 @@ class TheLegalPagesTests(SiteSetUp):
             with self.subTest(path=path):
                 self.assertGreaterEqual(text.count("TODO"), at_least)
                 self.assertIn("TODO: lawyer", text)
-                self.assertIn("TODO: date.", text)
+                if path == "/terms/":
+                    self.assertIn("Last updated 9 November 2026", text)
+                    self.assertNotIn("TODO: date.", text)
+                else:
+                    self.assertIn("TODO: date.", text)
                 # Filled in: the company, its RC number and the address to
                 # write to. Still to come: the registered address.
                 self.assertIn("Classnode is run by Classnode Edtech Limited, RC 9926572.", text)

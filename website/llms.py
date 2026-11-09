@@ -5,12 +5,13 @@ sections of plain text and links. Written for ChatGPT, Gemini, Perplexity,
 Claude and the like to read in one go, and answered on `settings.SITE_HOST`
 only, like every page in `urls_site.py`.
 
-Nothing in it is typed in twice. The features come from `website.features`,
-which the pricing page draws and which reads its "coming soon" settings on
-every request; the price is `website.views.PRICE`; the pages and what they say
-about themselves are `website.views.PAGES`, the privacy notice and the terms
-listed last and only once they are no longer a draft (as the sitemap does); the blog's posts are the
-published ones. So the file moves when the pricing page does.
+Nothing in it is typed in twice. The features are `website.features`, which the
+homepage, the pricing page and the FAQ read too; the price is `website.price`,
+from `settings.PRICE_PER_STUDENT_NAIRA`; the pages and what they say about
+themselves are `website.views.pages()`, the privacy notice and the terms listed
+last and only once they are no longer a draft (as the sitemap does); and the
+blog's posts are the published ones, never a draft. So the file moves when the
+pricing page does.
 """
 
 import re
@@ -18,11 +19,13 @@ import re
 from django.conf import settings
 from django.http import HttpResponse
 from django.urls import reverse
+from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_http_methods
 
 from .crawlers import site_url
-from .features import included, premium
-from .views import LEGAL_IN_DRAFT, LEGAL_PAGES, PAGES, PRICE
+from . import price
+from .features import GROUPS
+from .views import LEGAL_IN_DRAFT, LEGAL_PAGES, pages
 
 #: How many of the newest blog posts the file lists. The blog has the rest.
 POSTS = 25
@@ -40,9 +43,8 @@ def _link(title, url, about):
     return f"- [{title}]({url}): {_line(about)}"
 
 
-def _feature(item):
-    soon = " (coming soon)" if item["coming_soon"] else ""
-    return f"- {item['label']}{soon}: {item['sentence']}"
+def _feature(feature):
+    return f"- {feature.name}: {_line(feature.line)}" + (f" {_line(feature.detail)}" if feature.detail else "")
 
 
 def llms_text():
@@ -56,46 +58,36 @@ def llms_text():
         "> Classnode is school management software for Nigerian secondary schools, made by "
         "Classnode Edtech Limited (RC 9926572) in Abeokuta, Ogun State. Teachers enter scores and "
         "take registers on their phones. The school approves results, prints report cards, tracks "
-        "fees and lets parents check results online. " + PRICE,
+        "fees and lets parents check results online. " + price.sentence(),
         "",
         "## Who it is for",
         "",
-        "Principals, bursars, exam officers and teachers at Nigerian secondary schools, and the "
-        "parents of their students. Schools in Ogun State can switch on the report sheet the "
-        "Ministry asks for.",
+        "Private secondary schools in Nigeria: their principals, bursars, exam officers and "
+        "teachers, and the parents of their students. Schools in Ogun State can print the Ogun "
+        "State report card.",
         "",
         "## What it includes",
         "",
     ]
-    for group in included():
-        lines += [f"### {group['heading']}", ""]
-        lines += [_feature(item) for item in group["items"]]
+    for heading, features in GROUPS:
+        lines += [f"### {heading}", ""]
+        lines += [_feature(feature) for feature in features]
         lines.append("")
     lines += [
-        "### Premium add-on (priced by asking)",
-        "",
-        *[_feature(item) for item in premium()],
-        "",
-        "## Works on weak networks and cheap phones",
-        "",
-        "Classnode runs in the browser on the phones teachers already carry. There is nothing to "
-        "install. When the network drops, scores and registers stay on the phone and send when the "
-        "connection comes back.",
-        "",
         "## Data",
         "",
         "Each school's records are kept apart from every other school's. Staff see only their own "
-        "part, by role, and parents see only their own children. The database is backed up every "
-        "night.",
+        "part, by role, and parents see only their own children.",
         "",
         "## Price",
         "",
-        PRICE,
+        price.sentence(),
         "",
         "## Pages",
         "",
     ]
-    for name, (title, about) in PAGES.items():
+    meta = pages()
+    for name, (title, about) in meta.items():
         if name not in LEGAL_PAGES:
             lines.append(_link(title, site + reverse(name), about))
     posts = list(
@@ -112,14 +104,14 @@ def llms_text():
     if not LEGAL_IN_DRAFT:
         lines += ["", "## Optional", ""]
         lines += [
-            _link(PAGES[name][0], site + reverse(name), PAGES[name][1])
+            _link(meta[name][0], site + reverse(name), meta[name][1])
             for name in sorted(LEGAL_PAGES)
         ]
     lines += [
         "",
         "## Contact",
         "",
-        "- Email: hello@classnode.co",
+        f"- Email: {price.CONTACT_EMAIL}",
         f"- Book a demo: {site}/#demo",
         "- Location: Abeokuta, Ogun State, Nigeria",
     ]
@@ -129,6 +121,12 @@ def llms_text():
     return "\n".join(lines)
 
 
+#: How long a reader may keep the file. An hour: a post published or a price changed shows
+#: within it, and a crawler fetching the file does not reach the database every time.
+CACHE_SECONDS = 3600
+
+
 @require_http_methods(["GET", "HEAD"])
+@cache_control(public=True, max_age=CACHE_SECONDS)
 def llms(request):
-    return HttpResponse(llms_text(), content_type="text/plain; charset=utf-8")
+    return HttpResponse(llms_text(), content_type="text/markdown; charset=utf-8")
