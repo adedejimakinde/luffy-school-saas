@@ -41,12 +41,14 @@ class TheCheckerFrameCarriesNoCardTests(ChainSetUp):
 
         self.assertEqual(response.status_code, 404)
 
-    def test_no_child_and_no_school_is_named_in_the_frame(self):
+    def test_no_child_and_no_other_school_is_named_in_the_frame(self):
         """Ada and Grace's child are real children at these two schools; the
-        frame is the same document for both hosts and names neither."""
-        for host in (HOST, THEIR_HOST):
+        frame holds no child, and names only the school whose host it is on
+        (its crest and name in the header, as its website does), never the other."""
+        for host, own, other in ((HOST, "St Mary", "Grace Academy"), (THEIR_HOST, "Grace Academy", "St Mary")):
             page = self.get_page(host).content.decode()
-            for absent in ("Ada Obi", "Emeka Nwosu", self.grace_child.name, "St Mary", "Grace Academy", "JSS 1A"):
+            self.assertIn(own, page)
+            for absent in ("Ada Obi", "Emeka Nwosu", self.grace_child.name, other, "JSS 1A"):
                 with self.subTest(host=host, absent=absent):
                     self.assertNotIn(absent, page)
 
@@ -55,10 +57,11 @@ class TheCheckerFrameCarriesNoCardTests(ChainSetUp):
 
         self.assertIn("<title>Result checker</title>", page)
 
-    def test_the_frame_names_the_portal_for_families_who_can_sign_in(self):
+    def test_the_frame_names_this_schools_host_for_families_who_can_sign_in(self):
         page = self.get_page().content.decode()
 
-        self.assertIn(f'data-portal="{PORTAL}"', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
+        self.assertNotIn(PORTAL, page)
 
     def test_the_page_names_its_own_assets_and_the_card_page_styles(self):
         page = self.get_page().content.decode()

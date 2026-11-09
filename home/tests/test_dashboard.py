@@ -512,8 +512,12 @@ class TheDoorsTests(DashboardSetUp):
         response = self.client.get(URL, HTTP_HOST=HOST)
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn('data-state="signed-out"', response.content.decode())
-        self.assertNotIn("St Mary", response.content.decode())
+        page = response.content.decode()
+        self.assertIn('data-state="signed-out"', page)
+        # Nothing of the school's data, but its crest and name in the header (it is its own
+        # public host), and the way in is this host's own door.
+        self.assertIn("St Mary", page)
+        self.assertIn(f'href="//{HOST}/staff-sign-in/"', page)
 
     def test_the_portal_points_to_the_schools_own_address(self):
         self.client.force_login(self.head.user)

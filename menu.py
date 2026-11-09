@@ -235,12 +235,13 @@ def _role_names(roles) -> str:
 
 
 def _brand(context, door=False):
-    """The school's look on its own host, for anybody: a signed-out page wears it too.
+    """The school's look on its own host, for a member and for somebody signed out.
 
-    The host is the school's own public address, whose website already shows its
-    crest and name, so a "Please sign in" page or a refusal on it names the school
-    (and an installed app never flashes Classnode's wordmark before the door).
-    `for_request` still answers None on the portal and for any other host.
+    A signed-out page wears it (the host is the school's own public address, whose
+    website already shows its crest and name; and an installed app never flashes
+    Classnode's wordmark before the door). A signed-in login that is not a member
+    here still gets Classnode's, as before. `for_request` answers None on the
+    portal and for any other host.
     """
     from django.db import transaction
 
@@ -248,9 +249,15 @@ def _brand(context, door=False):
 
     # A look that cannot be read is Classnode's, never a broken page; the savepoint
     # keeps the failed read from aborting the request's transaction.
+    request = context.get("request")
     try:
+        # Signed out, or a member: the school. Signed in but not a member here (another
+        # school's login, platform staff) is still told nothing of this school.
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and not getattr(request, "school_roles", None):
+            return None
         with transaction.atomic():
-            return for_request(context.get("request"), door=True)
+            return for_request(request, door=True)
     except Exception:
         return None
 

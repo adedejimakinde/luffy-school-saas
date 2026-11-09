@@ -157,9 +157,9 @@ def _host(school_host=""):
     host and never `app.<domain>` (`schools.hosts.sign_in_host`). Messages with no
     school (a blog writer's code) get the portal, as before.
     """
-    from schools.hosts import sign_in_host
+    from schools.hosts import current_school_host
 
-    return school_host or sign_in_host() or getattr(settings, "PORTAL_HOST", None)
+    return school_host or current_school_host() or getattr(settings, "PORTAL_HOST", None)
 
 
 def _where(school_host=""):

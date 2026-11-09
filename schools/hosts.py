@@ -71,6 +71,13 @@ def _on_a_school() -> bool:
     return tenant is not None and tenant.schema_name != get_public_schema_name()
 
 
+def current_school_host() -> str:
+    """The current school's primary host, or `""` where no school is current (no portal query)."""
+    if not _on_a_school():
+        return ""
+    return school_host(connection.tenant)
+
+
 def sign_in_host(request=None) -> str:
     """The host a person signs in on, from where they are now (host-aware, not a setting).
 
@@ -97,4 +104,4 @@ def sign_in_host(request=None) -> str:
     return portal_host()
 
 
-__all__ = ["portal_host", "school_host", "sign_in_host"]
+__all__ = ["current_school_host", "portal_host", "school_host", "sign_in_host"]
