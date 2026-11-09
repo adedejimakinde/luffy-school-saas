@@ -193,7 +193,7 @@ class TellingFamiliesTests(NoticesSetUp):
             words = f"{term.get_name_display()} {term.session}"
         self.assertEqual(
             self.texts(MAMA),
-            [f"St Mary's: Ada Obi's {words} report card is ready. Sign in on Classnode to read it."],
+            [f"St Mary's: Ada Obi's {words} report card is ready. Sign in at {HOST} to read it."],
         )
 
     def test_an_email_notice_carries_the_schools_own_contact_email_as_reply_to(self):
