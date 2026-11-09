@@ -276,9 +276,10 @@ describe("the portal's worker and the exam's", () => {
       const before = await inventory(page);
       assert.ok(portalCaches(before.held).length > 0 && examCaches(before.held).length > 0);
 
-      // The demo lands a sign-out on the portal over HTTPS, which nothing here serves: the POST
-      // is what counts. What is left is read at once, from the exam's own page: its worker
-      // answers that, and never keeps a file for the portal, so it shows what sign-out left.
+      // A sign-out lands on the school's own door, on this host, which the installed app then
+      // opens (it no longer leaves for the portal). What is left is read at once, from the
+      // exam's own page: its worker answers that, so it shows what sign-out left. The portal's
+      // worker may already have kept the door's own public files, and never a page.
       await Promise.all([
         page.waitForResponse((response) => response.url().endsWith("/sign-out/")),
         page.evaluate(() => document.querySelector('form[action="/sign-out/"]').requestSubmit()),
@@ -287,7 +288,13 @@ describe("the portal's worker and the exam's", () => {
       await reader.goto(`${SUNRISE}/sit/`);
       await reader.waitForSelector('[data-state="door"]');
       const names = await reader.evaluate(() => caches.keys());
-      assert.deepEqual(names.filter((n) => n.startsWith("luffy-")), [], "every cache of the portal is gone");
+      const kept = await inventory(reader);
+      for (const name of portalCaches(kept.held)) {
+        assert.ok(
+          kept.held[name].every((p) => p.startsWith("/static/")),
+          `${name} holds nothing of the signed-in session: ${kept.held[name]}`,
+        );
+      }
       assert.deepEqual(names.filter((n) => n.startsWith("sit-")).sort(), examCaches(before.held).sort(), "the exam's are not touched");
 
       // And the exam's frame is still there to open, and both workers still registered.
