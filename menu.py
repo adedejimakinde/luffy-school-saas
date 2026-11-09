@@ -243,23 +243,25 @@ def _brand(context, door=False):
     here still gets Classnode's, as before. `for_request` answers None on the
     portal and for any other host.
     """
-    from django.db import transaction
-
-    from schools.brand import for_request
-
-    # A look that cannot be read is Classnode's, never a broken page; the savepoint
-    # keeps the failed read from aborting the request's transaction.
-    request = context.get("request")
+    # A look that cannot be read is Classnode's, never a broken page.
     try:
-        # Signed out, or a member: the school. Signed in but not a member here (another
-        # school's login, platform staff) is still told nothing of this school.
-        user = getattr(request, "user", None)
-        if user is not None and user.is_authenticated and not getattr(request, "school_roles", None):
-            return None
-        with transaction.atomic():
-            return for_request(request, door=True)
+        return _look(context)
     except Exception:
         return None
+
+
+def _look(context):
+    from schools.brand import for_request
+
+    request = context.get("request")
+    # Signed out, or a member: the school. Signed in but not a member here (another
+    # school's login, platform staff) is still told nothing of this school. Read only
+    # off a user the middleware has already loaded: asking for it here would start a
+    # session read on the school website's public pages, which read none.
+    user = vars(request).get("_cached_user") if request is not None else None
+    if user is not None and user.is_authenticated and not getattr(request, "school_roles", None):
+        return None
+    return for_request(request, door=True)
 
 
 @register.simple_tag(takes_context=True)
@@ -270,7 +272,15 @@ def school_brand(context):
     a database that is down is a reason to show Classnode's mark, not a second
     error.
     """
-    return _brand(context)
+    from django.db import transaction
+
+    try:
+        # A savepoint, so a failed read cannot leave the request's transaction aborted
+        # for whatever runs after the error page (the session save).
+        with transaction.atomic():
+            return _look(context)
+    except Exception:
+        return None
 
 
 @register.inclusion_tag("design/brand_head.html", takes_context=True)

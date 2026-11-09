@@ -235,7 +235,7 @@ class UnderTheBudgetTests(ContractSetUp):
         # the key and twice by `results.look`) and the portal's hostname, for
         # the Sign in menu. From the cache: the tenant, the revision and the
         # look for the key. Each after its search path.
-        self.assertEqual(counts, [(11, 6), (11, 6)])
+        self.assertEqual(counts, [(10, 6), (10, 6)])
 
 
 class TheNigerianAlphabetsTests(ContractSetUp):
