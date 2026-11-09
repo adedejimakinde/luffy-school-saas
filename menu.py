@@ -235,9 +235,52 @@ def _role_names(roles) -> str:
 
 
 def _brand(context, door=False):
+    """The school's look on its own host, for a member and for somebody signed out.
+
+    A signed-out page wears it (the host is the school's own public address, whose
+    website already shows its crest and name; and an installed app never flashes
+    Classnode's wordmark before the door). A signed-in login that is not a member
+    here still gets Classnode's, as before. `for_request` answers None on the
+    portal and for any other host.
+    """
+    # A look that cannot be read is Classnode's, never a broken page.
+    try:
+        return _look(context)
+    except Exception:
+        return None
+
+
+def _look(context):
     from schools.brand import for_request
 
-    return for_request(context.get("request"), door=door)
+    request = context.get("request")
+    # Signed out, or a member: the school. Signed in but not a member here (another
+    # school's login, platform staff) is still told nothing of this school. Read only
+    # off a user the middleware has already loaded: asking for it here would start a
+    # session read on the school website's public pages, which read none.
+    user = vars(request).get("_cached_user") if request is not None else None
+    if user is not None and user.is_authenticated and not getattr(request, "school_roles", None):
+        return None
+    return for_request(request, door=True)
+
+
+@register.simple_tag(takes_context=True)
+def school_brand(context):
+    """The school's look for the error pages' own inline-styled head, or None.
+
+    Never raises: an error page is rendered when something is already wrong, and
+    a database that is down is a reason to show Classnode's mark, not a second
+    error.
+    """
+    from django.db import transaction
+
+    try:
+        # A savepoint, so a failed read cannot leave the request's transaction aborted
+        # for whatever runs after the error page (the session save).
+        with transaction.atomic():
+            return _look(context)
+    except Exception:
+        return None
 
 
 @register.inclusion_tag("design/brand_head.html", takes_context=True)

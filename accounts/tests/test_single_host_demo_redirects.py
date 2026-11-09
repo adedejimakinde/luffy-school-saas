@@ -130,13 +130,14 @@ class WithoutTheFlagNothingChangesTests(ForwardedSetUp):
             [(s["host"], s["path_only"]) for s in response.json()["schools"]], [(SUNRISE, False)]
         )
 
-    def test_sign_out_still_goes_to_the_portal(self):
+    def test_sign_out_on_a_schools_host_stays_on_that_school(self):
+        """Not the portal: a school's own door, on its own host (C2 follow-up)."""
         user = User.objects.get(username="sunrise.teacher")
         self.client.force_login(user)
 
         response = self.client.post("/sign-out/", {"next": "/marking/"}, HTTP_HOST=SUNRISE)
 
-        self.assertEqual(response["Location"], "//localhost/staff-sign-in/")
+        self.assertEqual(response["Location"], "/staff-sign-in/")
 
     def test_the_forwarded_name_is_not_trusted(self):
         """`Host: localhost:8000` is the portal's row here, whatever the header

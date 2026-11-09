@@ -145,11 +145,22 @@ class EachSchoolWearsItsOwnTests(BrandSetUp):
 
 
 class NoSchoolIsNamedToAStrangerTests(BrandSetUp):
-    def test_signed_out_on_a_schools_host_the_frame_is_classnodes(self):
+    def test_signed_out_on_a_schools_host_the_frame_wears_that_school(self):
+        """The host is the school's own public address, and the installed app opens
+        signed out first: its crest and name, never Classnode's wordmark. Nothing of
+        the other school."""
         status, html = self.page(None, SUNRISE, "/home/")
 
+        self.assertIn(f'<img src="/media/{self.crest}/site.png"', html)
+        self.assertIn('<span class="logo-name">Sunrise Academy</span>', html)
+        self.assertNotRegex(html, CLASSNODE_MARK)
+        self.assertNotIn("Harbour College", html)
+
+    def test_signed_out_on_the_other_schools_host_names_only_that_school(self):
+        status, html = self.page(None, HARBOUR, "/home/")
+
         self.assertNothingOfSunrise(html)
-        self.assertRegex(html, CLASSNODE_MARK)
+        self.assertIn('<span class="logo-name">Harbour College</span>', html)
 
     def test_a_member_of_the_other_school_is_not_shown_it(self):
         """Signed in at Harbour, asking Sunrise's host: refused, and told nothing of Sunrise's look."""

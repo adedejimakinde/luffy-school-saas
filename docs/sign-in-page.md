@@ -123,8 +123,38 @@ preview's `?next=`; the guardian page already went to the one school's cards.
 `schools.sessions.end_every_session()` ends the session in use and, on a
 school's host, the portal's session the browser sent beside it, so the next page
 on this host is not still signed in. The menu's Sign out then lands on this
-host's own door when the session was signed in there, and on the portal's
-otherwise, as before.
+host's own door, **whichever session it ended**: a portal session ended on a
+school's page still lands on that school's door, so the installed app is never
+handed to a browser tab on `app.<domain>`. On the portal it lands on the portal's.
+
+### Links stay on the host
+
+Every sign-in link on a school's host is built from the host being used, never
+from a setting (`schools.hosts.sign_in_host(request)`: the request's own host on
+a school, the portal's `portal_host()` where no school is current). It reaches
+the pages as `data-portal`, which each module builds "Sign in again" from.
+
+- A school's website (header, phone menu and footer) and its holding page use
+  relative `/sign-in/` and `/staff-sign-in/`, which cannot leave the host.
+- The staff door's "I'm a parent", the signed-out page's "Sign in again", the
+  result checker's "Sign in to see every card" and the 403's password link are
+  that host's.
+- Messages built inside a school, or for one (`messaging.kinds.render`,
+  `school_host=`), say that school's host where they say where to sign in or
+  type a code. Only a message with no school (a blog writer's code) names the
+  portal.
+- `app.<domain>` links stay on the portal and Classnode's public site
+  (`website/`), which have no school.
+- Every signed-out page on a school's host (the portal's "Please sign in", the
+  doors, the checker, the error pages) wears the school's crest and name, never
+  Classnode's wordmark (`menu._brand`, `menu.school_brand`). The 500 page does so
+  when it can read them and falls back to Classnode's mark when it cannot.
+
+Tests: `accounts/tests/test_school_links.py` (two schools),
+`schoolsite/tests/test_public.py`, and `tests/ui/school_links.test.js`, which
+opens each school's `start_url` signed out in a browser, follows "Sign in",
+signs in and out, and asserts every URL is on the school's host and inside the
+manifest's scope with the crest showing on every page.
 
 ### Links in emails
 

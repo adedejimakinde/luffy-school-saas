@@ -37,7 +37,7 @@ from django.http.request import split_domain_port
 from django.shortcuts import render
 from django.views.decorators.http import require_safe
 
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 import pages
 
 from files import service as files
@@ -86,7 +86,7 @@ def look_page(request):
     return render(
         request,
         "schoolsite/look_page.html",
-        {"import_map": pages.import_map(*LOOK_MODULES), "portal_host": portal_host()},
+        {"import_map": pages.import_map(*LOOK_MODULES), "portal_host": sign_in_host(request)},
     )
 
 
@@ -95,7 +95,7 @@ def photos_page(request):
     return render(
         request,
         "schoolsite/photos_page.html",
-        {"import_map": pages.import_map(*PHOTOS_MODULES), "portal_host": portal_host()},
+        {"import_map": pages.import_map(*PHOTOS_MODULES), "portal_host": sign_in_host(request)},
     )
 
 
@@ -104,7 +104,7 @@ def editor_page(request):
     return render(
         request,
         "schoolsite/editor_page.html",
-        {"import_map": pages.import_map(*EDITOR_MODULES), "portal_host": portal_host()},
+        {"import_map": pages.import_map(*EDITOR_MODULES), "portal_host": sign_in_host(request)},
     )
 
 

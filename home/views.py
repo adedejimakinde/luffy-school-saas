@@ -17,7 +17,7 @@ from django.shortcuts import render
 from gradebook import assignments
 from onboarding import first as first_days
 from onboarding import progress as onboarding
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 from . import dashboard, facts
 
@@ -30,7 +30,7 @@ def home_page(request):
         return render(request, TEMPLATE, {"state": "elsewhere"}, status=404)
     user = request.user
     if not user.is_authenticated:
-        return render(request, TEMPLATE, {"state": "signed-out", "portal_host": portal_host()})
+        return render(request, TEMPLATE, {"state": "signed-out", "portal_host": sign_in_host(request)})
     roles = request.school_roles
     if not roles & dashboard.HOME_ROLES:
         return render(request, TEMPLATE, {"state": "not-yours"}, status=403)

@@ -9,7 +9,7 @@ place that check could drift from.
 from django.shortcuts import render
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the page loads, entry point last.
 SETTINGS_MODULES = (
@@ -27,7 +27,7 @@ def settings_page(request):
         "notices/settings_page.html",
         {
             "import_map": pages.import_map(*SETTINGS_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )

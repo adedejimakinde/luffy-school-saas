@@ -1,4 +1,4 @@
-{% include "design/doc_open.html" %}
+{% load shell %}{% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
@@ -39,6 +39,9 @@ is a template include too many here.
   .brand { display: flex; align-items: center; justify-content: center; gap: 10px;
            margin: 24px 0 16px; color: #143D8C; font-size: 1.25rem; font-weight: 700; }
   .brand svg { width: 28px; height: 28px; }
+  .brand .crest { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px;
+                  border-radius: 8px; overflow: hidden; background: #143D8C; color: #FFFFFF; font-size: 1rem; }
+  .brand .crest img { width: 36px; height: 36px; object-fit: contain; background: #FFFFFF; }
   main { max-width: 34rem; margin: 0 auto; padding: 24px 20px; background: #FFFFFF;
          border: 1px solid #E3E6EB; border-radius: 12px; }
   h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 1rem; }
@@ -52,9 +55,12 @@ is a template include too many here.
   :focus-visible { outline: 2px solid #143D8C; outline-offset: 2px; }
 </style>
 
+{% school_brand as brand %}
 <div class="brand">
+  {% if brand %}<span class="crest" aria-hidden="true">{% if brand.crest_url %}<img src="{{ brand.crest_url }}" alt="" width="36" height="36">{% else %}{{ brand.initials }}{% endif %}</span>
+  {{ brand.name }}{% else %}
   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="1" y="1" width="22" height="22" rx="6" fill="#143D8C"/><path d="M7 8L17 8L12 17Z" fill="none" stroke="#FFFFFF" stroke-width="1.3" stroke-linejoin="round"/><circle cx="7" cy="8" r="2.1" fill="#FFFFFF"/><circle cx="17" cy="8" r="2.1" fill="#FFFFFF"/><circle cx="12" cy="17" r="2.1" fill="#FFFFFF"/></svg>
-  classnode
+  classnode{% endif %}
 </div>
 <main>
   <h1>{% block heading %}{% endblock %}</h1>

@@ -73,15 +73,15 @@ class TheCommentsFrameHoldsNoRemarksTests(TheCommentScreenSetUp):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(answer.status_code, 403)
 
-    def test_the_frame_names_the_portal_so_the_signed_out_state_can_offer_a_way_back(self):
-        self.assertIn('data-portal="testserver"', self.get_page(self.teacher).content.decode())
+    def test_the_frame_names_this_schools_host_so_the_signed_out_state_can_offer_a_way_back(self):
+        self.assertIn(f'data-portal="{HOST}"', self.get_page(self.teacher).content.decode())
 
-    def test_with_no_portal_domain_the_attribute_is_empty_rather_than_wrong(self):
+    def test_with_no_portal_domain_it_is_still_this_schools_host(self):
         """The pair the card page already has: this passes for a view that
         never sets the variable, and the test above is what refuses that."""
         Domain.objects.filter(tenant__schema_name="public").delete()
 
-        self.assertIn('data-portal=""', self.get_page(self.teacher).content.decode())
+        self.assertIn(f'data-portal="{HOST}"', self.get_page(self.teacher).content.decode())
 
     def test_the_stylesheet_and_entry_point_are_the_comments_pages_own(self):
         page = self.get_page(self.teacher).content.decode()

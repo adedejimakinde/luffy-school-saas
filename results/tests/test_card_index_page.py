@@ -70,7 +70,7 @@ class TheIndexFrameCarriesNoListTests(ReportCardApiSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("Location", response)
 
-    def test_the_frame_names_the_portal_so_the_401_state_can_offer_a_way_back(self):
+    def test_the_frame_names_this_schools_host_so_the_401_state_can_offer_a_way_back(self):
         """The only thing the server writes into this page.
 
         Sign-in is on the portal and this page is on a school's host, so the
@@ -81,9 +81,9 @@ class TheIndexFrameCarriesNoListTests(ReportCardApiSetUp):
         """
         page = self.get_page(self.mama).content.decode()
 
-        self.assertIn('data-portal="testserver"', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
-    def test_a_deployment_with_no_portal_domain_renders_an_empty_one(self):
+    def test_a_deployment_with_no_portal_domain_still_names_this_schools_host(self):
         """And the state then says its sentence without a link, rather than
         linking to `//undefined/sign-in/`. Asserted here because the alternative
         is a dead link on the page a parent reaches when their session lapses."""
@@ -91,7 +91,7 @@ class TheIndexFrameCarriesNoListTests(ReportCardApiSetUp):
 
         page = self.get_page(self.mama).content.decode()
 
-        self.assertIn('data-portal=""', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
     def test_the_page_names_its_own_assets(self):
         page = self.get_page(self.mama).content.decode()

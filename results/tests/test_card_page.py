@@ -69,7 +69,7 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
             self.client.logout()
         return self.client.get(self.page_url(self.ada), HTTP_HOST=host)
 
-    def test_the_frame_names_the_portal_so_the_401_state_can_offer_a_way_back(self):
+    def test_the_frame_names_this_schools_host_so_the_401_state_can_offer_a_way_back(self):
         """**This used to be missing, and the omission was a dead link.**
 
         The signed-out and expired states emitted `<a href="/">`, and `urls.py`
@@ -85,9 +85,9 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
         """
         page = self.get_page(self.mama).content.decode()
 
-        self.assertIn('data-portal="testserver"', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
-    def test_a_deployment_with_no_portal_domain_renders_an_empty_one(self):
+    def test_a_deployment_with_no_portal_domain_still_names_this_schools_host(self):
         """And the state then says its sentence without a link, rather than
         linking to `//undefined/sign-in/`. Same rule as the index, and the same
         rule the staff landing is on: no link is better than a dead one."""
@@ -95,7 +95,7 @@ class ThePageIsAFrameAndNotACardTests(ReportCardApiSetUp):
 
         page = self.get_page(self.mama).content.decode()
 
-        self.assertIn('data-portal=""', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
     def test_the_school_host_serves_the_page(self):
         response = self.get_page(self.mama)

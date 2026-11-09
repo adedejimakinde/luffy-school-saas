@@ -289,7 +289,8 @@ class SignOutTests(ChainSetUp):
         )
 
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], f"//{PORTAL}/staff-sign-in/")
+        # This school's own door, on this host: not `app.<domain>`.
+        self.assertEqual(response["Location"], "/staff-sign-in/")
         self.assertFalse(self.signed_in(client))
 
     def test_without_the_token_nobody_is_signed_out(self):
@@ -307,14 +308,16 @@ class SignOutTests(ChainSetUp):
         self.assertEqual(client.get("/sign-out/", HTTP_HOST=HOST).status_code, 405)
         self.assertTrue(self.signed_in(client))
 
-    def test_with_no_portal_it_goes_back_to_the_page_and_nowhere_else(self):
+    def test_on_a_schools_host_it_lands_on_that_door_whatever_next_says(self):
+        """With or without a portal row, and whatever `next` asks: the school's own door,
+        so the form cannot be used to send anybody anywhere else."""
         from schools.models import Domain
 
         Domain.objects.filter(tenant__schema_name="public").delete()
         for asked, landed in (
-            ("/results/", "/results/"),
-            ("//evil.example/steal/", "/"),
-            ("https://evil.example/", "/"),
+            ("/results/", "/staff-sign-in/"),
+            ("//evil.example/steal/", "/staff-sign-in/"),
+            ("https://evil.example/", "/staff-sign-in/"),
         ):
             with self.subTest(next=asked):
                 client, token = self.csrf_client(self.head)
@@ -363,6 +366,11 @@ class TheTopBarTests(ChainSetUp):
                 # Sign out is still there.
                 self.assertIn('form="sign-out"', bar)
 
-    def test_signed_out_the_bar_names_no_school(self):
-        self.assertNotIn("St Mary", self.page("/results/"))
+    def test_signed_out_the_bar_wears_the_school_but_names_nobody(self):
+        """The host is the school's own public address: its crest and name as the brand
+        (the installed app opens signed out first), but no person, role or school chip."""
+        bar = self.page("/results/")
+        self.assertIn("logo-school", bar)
+        self.assertNotIn("topbar-school", bar)
+        self.assertNotIn("account-who", bar)
 

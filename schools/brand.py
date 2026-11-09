@@ -13,9 +13,12 @@ Classnode's own (`docs/design.md`, "School branding").
   the school's own address, whose public website already names it and shows
   its crest (`docs/sign-in-page.md`, "A school's own door"). A door on the
   portal is Classnode's.
-- **Nobody else.** A frame served on a school's host to a stranger (signed
-  out, or a member of another school) names no school, the rule the shell
-  already kept for the school's name (`menu.shell_open`).
+- **A frame served on a school's host to a stranger** (signed out, or a member
+  of another school) wears the school's crest and name too, now: the host is
+  the school's own public address, and an installed app opens signed out
+  first. What a stranger is still not told is a person or a role: the top bar's
+  school name and the menu stay a member's (`menu.shell_open`).
+- **Nobody on the portal**: Classnode's own.
 
 ## What is read
 

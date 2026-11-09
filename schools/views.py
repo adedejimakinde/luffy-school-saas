@@ -5,7 +5,6 @@ from django.shortcuts import render
 
 import pages
 from results import look
-from schools.hosts import portal_host
 
 #: The platform page's own modules, entry point last.
 PLATFORM_MODULES = (
@@ -61,6 +60,5 @@ def school_site(request):
         {
             "school": school,
             "look": look.for_site(school.name),
-            "portal_host": portal_host(),
         },
     )

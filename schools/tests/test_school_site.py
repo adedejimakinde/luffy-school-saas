@@ -64,18 +64,18 @@ class ThePageTests(SiteSetUp):
         self.assertIn("hello@grace.example", theirs)
         self.assertNotIn("Ring Road", theirs)
 
-    def test_it_has_the_two_buttons_and_they_go_to_the_checker_and_the_portal_sign_in(self):
+    def test_it_has_the_two_buttons_and_they_go_to_the_checker_and_this_hosts_sign_in(self):
         html = self.page().content.decode()
 
         self.assertIn('href="/check/"', html)
         self.assertIn("Check a result", html)
-        self.assertIn(f'href="//{PORTAL}/sign-in/"', html)
+        self.assertIn('href="/sign-in/"', html)
         self.assertIn("Parent sign in", html)
 
-    def test_it_ends_with_a_staff_sign_in_link_to_the_portals_staff_door(self):
+    def test_it_ends_with_a_staff_sign_in_link_to_this_hosts_staff_door(self):
         html = self.page().content.decode()
 
-        self.assertIn(f'<footer><a href="//{PORTAL}/staff-sign-in/">Staff sign in</a></footer>', html)
+        self.assertIn('<footer><a href="/staff-sign-in/">Staff sign in</a></footer>', html)
         self.assertLess(html.index("Check a result"), html.index("Staff sign in"))
 
     def test_it_is_open_without_signing_in(self):

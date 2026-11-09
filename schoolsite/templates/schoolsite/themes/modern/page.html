@@ -57,13 +57,13 @@ are under "More".{% endcomment %}
       </ul>
     </nav>{% endif %}
     <div class="actions-bar">
-      {% if portal_host %}<details class="sign-in">
+      <details class="sign-in">
         <summary>Sign in</summary>
         <ul>
-          <li><a href="//{{ portal_host }}/sign-in/">Parent or guardian</a></li>
-          <li><a href="//{{ portal_host }}/staff-sign-in/">Staff</a></li>
+          <li><a href="/sign-in/">Parent or guardian</a></li>
+          <li><a href="/staff-sign-in/">Staff</a></li>
         </ul>
-      </details>{% endif %}
+      </details>
       {% if apply_href %}<a class="button accent apply" href="{{ apply_href }}">Apply now</a>{% endif %}
     </div>
     <details class="menu">
@@ -73,13 +73,13 @@ are under "More".{% endcomment %}
           <li><a href="{{ item.path }}"{% if item.current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>{% endfor %}
         </ul>{% endif %}
         <div class="panel-buttons">
-          {% if portal_host %}<details class="sign-in-big">
+          <details class="sign-in-big">
             <summary class="button">Sign in</summary>
             <ul>
-              <li><a class="button" href="//{{ portal_host }}/sign-in/">Parent or guardian</a></li>
-              <li><a class="button" href="//{{ portal_host }}/staff-sign-in/">Staff</a></li>
+              <li><a class="button" href="/sign-in/">Parent or guardian</a></li>
+              <li><a class="button" href="/staff-sign-in/">Staff</a></li>
             </ul>
-          </details>{% endif %}
+          </details>
           {% if apply_href %}<a class="button accent" href="{{ apply_href }}">Apply now</a>{% endif %}
         </div>
       </div>

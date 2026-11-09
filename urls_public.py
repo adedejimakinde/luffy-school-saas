@@ -21,7 +21,7 @@ from blog import write_views as write
 from fees.webhook_view import paystack_webhook
 from onboarding.views import handover_page
 from schools.views import platform_page
-from urls import handler403, urlpatterns as tenant_urlpatterns
+from urls import handler403, handler500, urlpatterns as tenant_urlpatterns
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -81,4 +81,4 @@ if settings.DEBUG:
 #: back to the default handler while every school's host used ours. Importing
 #: the name keeps one definition; writing the dotted path again would be a
 #: second copy to drift.
-__all__ = ["urlpatterns", "handler403"]
+__all__ = ["urlpatterns", "handler403", "handler500"]

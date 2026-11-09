@@ -88,14 +88,14 @@ class TheRegisterFrameHoldsNoRegisterTests(RegisterApiSetUp):
         self.assertEqual(page.status_code, 200)
         self.assertEqual(answer.status_code, 403)
 
-    def test_the_frame_names_the_portal_so_the_signed_out_state_can_offer_a_way_back(self):
+    def test_the_frame_names_this_schools_host_so_the_signed_out_state_can_offer_a_way_back(self):
         """`/staff-sign-in/` is on the portal and this page is on a school's
         host, so the link cannot be relative."""
         page = self.get_page(self.teacher.user).content.decode()
 
-        self.assertIn('data-portal="testserver"', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
-    def test_with_no_portal_domain_the_attribute_is_empty_rather_than_wrong(self):
+    def test_with_no_portal_domain_it_is_still_this_schools_host(self):
         """The pair `card_page()` already has: this test passes for a view that
         never sets the variable at all, and the one above it is what refuses
         that reading."""
@@ -103,7 +103,7 @@ class TheRegisterFrameHoldsNoRegisterTests(RegisterApiSetUp):
 
         page = self.get_page(self.teacher.user).content.decode()
 
-        self.assertIn('data-portal=""', page)
+        self.assertIn(f'data-portal="{HOST}"', page)
 
     def test_both_schools_frames_count_the_day_in_the_platforms_zone(self):
         """Requirement 7 of `docs/offline.md`: the register's day is the school's day.

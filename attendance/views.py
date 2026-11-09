@@ -36,7 +36,7 @@ page whose URL is guessable turns that URL into an oracle — it would answer
 
 What the page does instead is read the portal's hostname, so its signed-out
 state can offer a way back to a door that is on another host.
-`schools.hosts.portal_host()` says why that link cannot be relative, and the
+`schools.hosts.sign_in_host(request)` says why that link cannot be relative, and the
 403 page added with #122 is on the same rule.
 """
 
@@ -44,7 +44,7 @@ from django.conf import settings
 from django.shortcuts import render
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the register page loads, entry point last. `pages.import_map()`
 #: says why each one has to be listed rather than only the entry point:
@@ -80,7 +80,7 @@ def register_page(request):
         "attendance/register_page.html",
         {
             "import_map": pages.import_map(*REGISTER_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "time_zone": settings.TIME_ZONE,
         },
     )
@@ -111,7 +111,7 @@ def absences_page(request):
         "attendance/absences_page.html",
         {
             "import_map": pages.import_map(*ABSENCE_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )

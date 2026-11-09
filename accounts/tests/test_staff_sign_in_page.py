@@ -278,10 +278,11 @@ class TheEscalationRefusalHasSomewhereToPointTests(GuardianSignInSetUp):
 
         self.assertEqual(refused.status_code, 403)
         self.assertIn(
-            f"//{PORTAL}{URL}",
+            f"//{self.OTHER_HOST}{URL}",
             body,
-            "the refusal does not name the password door on the portal's host",
+            "the refusal does not name the password door on this school's own host",
         )
+        self.assertNotIn(f"//{PORTAL}{URL}", body)
         self.assertNotIn(
             f'href="{URL}"',
             body,

@@ -152,11 +152,27 @@ class AfterThePublishTests(PublicSiteSetUp):
             with self.subTest(path=path):
                 self.assertEqual(self.get(path).status_code, 404)
 
-    def test_sign_in_is_a_menu_to_the_portals_two_doors(self):
+    def test_sign_in_is_a_menu_to_this_schools_own_two_doors(self):
+        """Header (and its phone menu) offer this host's doors, never the portal's."""
         page = self.get("/").content.decode()
         self.assertIn('<summary>Sign in</summary>', page)
-        self.assertIn(f'<a href="//{PORTAL}/sign-in/">Parent or guardian</a>', page)
-        self.assertIn(f'<a href="//{PORTAL}/staff-sign-in/">Staff</a>', page)
+        self.assertIn('<a href="/sign-in/">Parent or guardian</a>', page)
+        self.assertIn('<a href="/staff-sign-in/">Staff</a>', page)
+        self.assertIn('<a class="button" href="/sign-in/">Parent or guardian</a>', page)
+        self.assertIn('<a class="button" href="/staff-sign-in/">Staff</a>', page)
+        self.assertNotIn(PORTAL, page)
+
+    def test_a_schools_pages_never_link_to_another_schools_host_or_the_portal(self):
+        """Two schools: every link on each one's pages is on its own host (or relative)."""
+        self.build(self.grace_principal, self.grace, "Welcome to Grace")
+        for host, other in ((ST_MARYS, GRACE), (GRACE, ST_MARYS)):
+            for path in ("/", "/about/"):
+                with self.subTest(host=host, path=path):
+                    page = self.get(path, host).content.decode()
+                    self.assertNotIn(other, page)
+                    self.assertNotIn(PORTAL, page)
+                    for href in re.findall(r'href="(//[^"/]+)', page):
+                        self.assertEqual(href, f"//{host}")
 
     def test_the_menu_lists_the_pages_switched_on_and_marks_this_one(self):
         page = self.get("/about/").content.decode()

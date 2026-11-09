@@ -47,7 +47,6 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
 from results import look
-from schools.hosts import portal_host
 
 from . import pictures, sections as section_rules, themes
 from .models import Album, PageKey, PageKind, SectionKind
@@ -612,7 +611,6 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
         "apply_href": within(apply) if apply else "",
         "classnode": CLASSNODE,
         "footer": _footer(snapshot.get("footer") or {}),
-        "portal_host": portal_host(),
         "structured_data": structured_data(school, root, snapshot) if key == PageKey.HOME and not preview else "",
     }
     html = render_to_string(f"schoolsite/themes/{theme}/page.html", context)

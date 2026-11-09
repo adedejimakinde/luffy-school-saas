@@ -10,6 +10,9 @@ and `accounts` importing from `results` would point the dependency backwards —
 `Domain` is a `schools` model, so this is the app the fact belongs to.
 """
 
+from django.db import connection
+from django_tenants.utils import get_public_schema_name
+
 from schools.models import Domain
 
 
@@ -51,4 +54,59 @@ def portal_host() -> str:
     )
 
 
-__all__ = ["portal_host"]
+def school_host(school) -> str:
+    """`school`'s own primary host, or `""` (no school, or none made yet)."""
+    if school is None:
+        return ""
+    return (
+        Domain.objects.filter(tenant_id=school.pk, is_primary=True)
+        .values_list("domain", flat=True)
+        .first()
+        or ""
+    )
+
+
+def _on_a_school() -> bool:
+    tenant = getattr(connection, "tenant", None)
+    return tenant is not None and tenant.schema_name != get_public_schema_name()
+
+
+def current_school_host() -> str:
+    """The current school's primary host, or `""` where no school is current (no portal query)."""
+    if not _on_a_school():
+        return ""
+    return (
+        Domain.objects.filter(tenant__schema_name=connection.tenant.schema_name, is_primary=True)
+        .values_list("domain", flat=True)
+        .first()
+        or ""
+    )
+
+
+def sign_in_host(request=None) -> str:
+    """The host a person signs in on, from where they are now (host-aware, not a setting).
+
+    **On a school's host, that host**: its own `/staff-sign-in/` and `/sign-in/`
+    (C2), so a link never takes anybody to `app.<domain>` and out of the school
+    they are using or the installed app. Wherever no school is current (the
+    portal, an old link, a deployment with no school hosts) it is the portal's,
+    `portal_host()`, which is where those pages are.
+
+    The request's own host is used when there is one: it is a host the tenant
+    middleware has already matched to a `Domain` row (an unknown host is a 404
+    before any view runs), so it is never a value the client chose. With no
+    request (a message being built in a task) the school's primary `Domain`.
+    """
+    if _on_a_school():
+        if request is not None:
+            return request.get_host()
+        return (
+            Domain.objects.filter(tenant__schema_name=connection.tenant.schema_name, is_primary=True)
+            .values_list("domain", flat=True)
+            .first()
+            or ""
+        )
+    return portal_host()
+
+
+__all__ = ["current_school_host", "portal_host", "school_host", "sign_in_host"]

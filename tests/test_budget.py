@@ -104,6 +104,13 @@ SCHOOL_PAGES = (
 #: fetch after it draws is the API's cost, and pinning those per page, at two
 #: sizes of school, is the follow-up to this file.
 QUERIES = {path: 16 for path in SCHOOL_PAGES}
+#: A frame's "sign in again" link is built from the host the request is on
+#: (`schools.hosts.sign_in_host`), which costs nothing: it no longer reads the
+#: portal's hostname, a statement and its search path. The pages that never read it
+#: (the public page, Home, Help, the exam door, released scores) are set below.
+for _path in SCHOOL_PAGES:
+    if _path not in ("/", "/home/", "/help/", "/sit/", "/test-scores/"):
+        QUERIES[_path] -= 2
 #: The school's public page, before the school has published its website: the
 #: tenant for this hostname, whether there is a published revision, its crest
 #: and colour (the row, read twice by `results.look.for_site`) and the portal's
