@@ -16,7 +16,7 @@ opinion free to disagree with it.
 from django.shortcuts import render
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the setup page loads, entry point last.
 SETUP_MODULES = (
@@ -36,7 +36,7 @@ def setup_page(request):
         "academics/setup_page.html",
         {
             "import_map": pages.import_map(*SETUP_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -59,7 +59,7 @@ def promotion_page(request):
         "academics/promotion_page.html",
         {
             "import_map": pages.import_map(*PROMOTION_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )

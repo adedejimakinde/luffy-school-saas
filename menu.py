@@ -235,9 +235,35 @@ def _role_names(roles) -> str:
 
 
 def _brand(context, door=False):
+    """The school's look on its own host, for anybody: a signed-out page wears it too.
+
+    The host is the school's own public address, whose website already shows its
+    crest and name, so a "Please sign in" page or a refusal on it names the school
+    (and an installed app never flashes Classnode's wordmark before the door).
+    `for_request` still answers None on the portal and for any other host.
+    """
     from schools.brand import for_request
 
-    return for_request(context.get("request"), door=door)
+    return for_request(context.get("request"), door=True)
+
+
+@register.simple_tag(takes_context=True)
+def school_brand(context):
+    """The school's look for the error pages' own inline-styled head, or None.
+
+    Never raises: an error page is rendered when something is already wrong, and
+    a database that is down is a reason to show Classnode's mark, not a second
+    error.
+    """
+    from django.db import transaction
+
+    try:
+        # A savepoint, so a failed read cannot leave the request's transaction
+        # aborted for whatever runs after the error page (the session save).
+        with transaction.atomic():
+            return _brand(context)
+    except Exception:
+        return None
 
 
 @register.inclusion_tag("design/brand_head.html", takes_context=True)

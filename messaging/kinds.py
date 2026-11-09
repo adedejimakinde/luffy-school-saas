@@ -150,14 +150,26 @@ _SUBJECT = {
 }
 
 
-def _where():
-    """Where a code a school sent is typed. The portal, when a deploy names one."""
-    host = getattr(settings, "PORTAL_HOST", None)
+def _host(school_host=""):
+    """Where a message's reader signs in: the current school's own host, else the portal.
+
+    A message is built inside the school it is from, so its link is that school's
+    host and never `app.<domain>` (`schools.hosts.sign_in_host`). Messages with no
+    school (a blog writer's code) get the portal, as before.
+    """
+    from schools.hosts import sign_in_host
+
+    return school_host or sign_in_host() or getattr(settings, "PORTAL_HOST", None)
+
+
+def _where(school_host=""):
+    """Where a code a school sent is typed. The school's own host."""
+    host = _host(school_host)
     return f" Enter it at {host}." if host else ""
 
 
-def _where_to_read():
-    host = getattr(settings, "PORTAL_HOST", None)
+def _where_to_read(school_host=""):
+    host = _host(school_host)
     return f"at {host}" if host else "on Classnode"
 
 
@@ -167,15 +179,20 @@ def naira(kobo: int) -> str:
     return f"NGN {whole:,}" + (f".{part:02d}" if part else "")
 
 
-def render(kind, *, channel_type, **params) -> str:
-    """The text of one message of `kind`. Raises `KeyError` for a parameter it lacks."""
+def render(kind, *, channel_type, school_host="", **params) -> str:
+    """The text of one message of `kind`. Raises `KeyError` for a parameter it lacks.
+
+    `school_host` is the host the reader signs in on when the caller is not inside
+    that school (a code task runs on the shared schema); otherwise the current
+    school's, and the portal's only where there is no school at all.
+    """
     what = "number" if channel_type == "phone" else "address"
     # ` Pay into: Wema Bank 1234567890, Ada Bello.` in a fee reminder and a
     # receipt, when the child has a virtual account; nothing when they have none,
     # and for every kind whose text has no place for it.
     params.setdefault("pay_into", "")
     return _TEXT[Kind(kind)].format(
-        what=what, where=_where(), where_to_read=_where_to_read(), **params
+        what=what, where=_where(school_host), where_to_read=_where_to_read(school_host), **params
     )
 
 

@@ -52,7 +52,7 @@ from django.http import Http404
 from django.shortcuts import render
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the card page loads, entry point last.
 #:
@@ -99,7 +99,7 @@ def card_page(request, student_membership_id: int, term_id: int):
 
     It reads one row it did not use to — the portal's hostname, for the two
     states that have to send a reader back to sign-in. See
-    `schools.hosts.portal_host()`.
+    `schools.hosts.sign_in_host(request)`.
     Still no card data of any kind: who may read this card is
     `GET /api/results/cards/<child>/<term>/`'s question.
     """
@@ -110,7 +110,7 @@ def card_page(request, student_membership_id: int, term_id: int):
             "student_membership_id": student_membership_id,
             "term_id": term_id,
             "import_map": pages.import_map(*CARD_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -133,7 +133,7 @@ def card_index_page(request):
         "results/card_index.html",
         {
             "import_map": pages.import_map(*INDEX_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -170,7 +170,7 @@ def ogsera_page(request):
     return render(
         request,
         "results/ogsera_page.html",
-        {"import_map": pages.import_map(*OGSERA_MODULES), "portal_host": portal_host()},
+        {"import_map": pages.import_map(*OGSERA_MODULES), "portal_host": sign_in_host(request)},
     )
 
 
@@ -187,7 +187,7 @@ def comments_page(request):
         "results/comments_page.html",
         {
             "import_map": pages.import_map(*COMMENTS_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -209,7 +209,7 @@ def chain_page(request):
         "results/chain_page.html",
         {
             "import_map": pages.import_map(*CHAIN_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -242,7 +242,7 @@ def broadsheet_page(request):
         "results/broadsheet_page.html",
         {
             "import_map": pages.import_map(*BROADSHEET_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )
@@ -275,7 +275,7 @@ def master_broadsheet_page(request, class_group_id: int, term_id: int):
             "class_group_id": class_group_id,
             "term_id": term_id,
             "import_map": pages.import_map(*MASTER_BROADSHEET_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )
@@ -319,7 +319,7 @@ def checker_page(request):
         "results/checker_page.html",
         {
             "import_map": pages.import_map(*CHECKER_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 

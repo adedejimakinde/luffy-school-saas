@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 {% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -38,7 +38,7 @@ has no portal domain, and the page then says nothing about signing in rather
 than drawing a dead link.
 {% endcomment %}
 {% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+<div class="brand-bar">{% brand_mark %}</div>
 <main id="checker" data-portal="{{ portal_host }}">
   {% comment %}
   What a reader sees before the module runs, and the only state written in HTML

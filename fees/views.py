@@ -10,7 +10,7 @@ one thing this frame says is whether the host is a school's. No
 from django.shortcuts import render
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the page loads, entry point last. `pages.import_map()` says why
 #: each has to be listed.
@@ -43,7 +43,7 @@ def bank_page(request):
         "fees/bank_page.html",
         {
             "import_map": pages.import_map(*BANK_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )
@@ -55,7 +55,7 @@ def fees_page(request):
         "fees/fees_page.html",
         {
             "import_map": pages.import_map(*FEES_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "on_school": getattr(request, "school", None) is not None,
         },
     )

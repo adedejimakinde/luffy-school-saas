@@ -1,4 +1,4 @@
-{% load static %}
+{% load static shell %}
 {% include "design/doc_open.html" %}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -17,7 +17,7 @@ admission number and exam PIN, and nothing is kept when the page closes.
 <script type="importmap">{{ import_map|safe }}</script>
 <script type="module" defer src="{% static 'test-scores/app.js' %}"></script>
 {% include "design/icons.html" %}
-<div class="brand-bar"><div class="logo"><svg class="logo-mark"><use href="#i-brand-mark"/></svg>classnode</div></div>
+<div class="brand-bar">{% brand_mark %}</div>
 <main id="test-scores" data-school="{{ school_brand.name }}"{% if guardian %} data-guardian="1"{% endif %}>
   <p class="state state-loading">Loading test scores&hellip;</p>
 </main>

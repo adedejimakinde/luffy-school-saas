@@ -34,7 +34,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 import pages
-from schools.hosts import portal_host
+from schools.hosts import sign_in_host
 
 #: Every module the marking page loads, entry point last. `pages.import_map()`
 #: says why each one is listed rather than only the entry point: `collectstatic`
@@ -59,7 +59,7 @@ def marking_page(request):
         "gradebook/marking_page.html",
         {
             "import_map": pages.import_map(*MARKING_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "time_zone": settings.TIME_ZONE,
         },
     )
@@ -87,7 +87,7 @@ def teaching_page(request):
         "gradebook/teaching_page.html",
         {
             "import_map": pages.import_map(*TEACHING_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -114,7 +114,7 @@ def subject_teachers_page(request):
         "gradebook/subject_teachers_page.html",
         {
             "import_map": pages.import_map(*SUBJECT_TEACHERS_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 

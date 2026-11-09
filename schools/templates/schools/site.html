@@ -21,7 +21,7 @@ set as an inline custom property on <body>, the one thing here that varies.
   {% if school.about %}<section><h2>About us</h2><p class="about">{{ school.about|linebreaksbr }}</p></section>{% endif %}
   <p class="actions">
     <a class="button primary" href="/check/">Check a result</a>
-    {% if portal_host %}<a class="button" href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
+    <a class="button" href="/sign-in/">Parent sign in</a>
   </p>
   {% if school.address or school.phone or school.contact_email %}
   <section class="contact"><h2>Find us</h2>
@@ -33,4 +33,4 @@ set as an inline custom property on <body>, the one thing here that varies.
   </section>
   {% endif %}
 </main>
-{% if portal_host %}<footer><a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a></footer>{% endif %}
+<footer><a href="/staff-sign-in/">Staff sign in</a></footer>

@@ -40,7 +40,7 @@ from django.views.decorators.http import require_POST
 
 import pages
 from schools.demo import single_host
-from schools.hosts import portal_host
+from schools.hosts import portal_host, sign_in_host
 from schools.sessions import end_every_session, signed_in_here
 
 from .refusals import SchoolAccessRefused
@@ -133,7 +133,7 @@ def roll_page(request):
         "accounts/roll_page.html",
         {
             "import_map": pages.import_map(*ROLL_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -160,7 +160,7 @@ def roll_import_page(request):
         "accounts/roll_import_page.html",
         {
             "import_map": pages.import_map(*ROLL_IMPORT_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
         },
     )
 
@@ -190,7 +190,7 @@ def staff_page(request):
         "accounts/staff_page.html",
         {
             "import_map": pages.import_map(*STAFF_PAGE_MODULES),
-            "portal_host": portal_host(),
+            "portal_host": sign_in_host(request),
             "school_slug": school.slug if school is not None else "",
         },
     )
@@ -249,9 +249,12 @@ def sign_out(request):
     cannot be used to send somebody anywhere else.
     """
     here = signed_in_here(request)
+    on_a_school = sign_in_host(request) == request.get_host()
     end_every_session(request)
+    # On a school's host, back to that school's own door whichever session
+    # ended (a portal session sent beside it included): never to the portal.
     # The single-host demo has no other host to send anybody to.
-    if here or single_host():
+    if here or on_a_school or single_host():
         return HttpResponseRedirect("/staff-sign-in/")
     host = portal_host()
     if host:
@@ -260,6 +263,21 @@ def sign_out(request):
     if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
         back = "/"
     return HttpResponseRedirect(back)
+
+
+def server_error(request):
+    """The 500 page, in the school's crest and name where that can be read.
+
+    Django's own handler renders it with no context. This tries once with the
+    request, so a school's host wears the school; if anything at all goes wrong
+    (the database being the likeliest) it falls back to that handler.
+    """
+    from django.views.defaults import server_error as default
+
+    try:
+        return render(request, "500.html", status=500)
+    except Exception:
+        return default(request)
 
 
 def refused(request, exception=None):
@@ -305,7 +323,7 @@ def refused(request, exception=None):
         {
             "detail": str(exception) if ours else "",
             "a_password_fixes_it": a_password_fixes_it,
-            "portal_host": portal_host() if a_password_fixes_it else "",
+            "portal_host": sign_in_host(request) if a_password_fixes_it else "",
         },
         status=403,
     )

@@ -1,8 +1,10 @@
 {% extends "errors/base.html" %}
 {% comment %}
-Rendered by Django's own `server_error` with **no context at all**, so nothing
-in this file may read a variable, a tag that needs the request, or the database:
-the fault being reported may be any of them.
+Rendered by `accounts.views.server_error` with the request when it can, and by
+Django's own handler with **no context at all** when that fails, so nothing in
+this file may need a variable, the request or the database: the fault being
+reported may be any of them. The frame's school crest is read by a tag that
+answers "no school" rather than raise.
 {% endcomment %}
 {% block title %}Something went wrong{% endblock %}
 {% block heading %}Something went wrong on our side{% endblock %}

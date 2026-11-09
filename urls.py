@@ -219,3 +219,4 @@ urlpatterns = [
 #: which rendered `ERROR_PAGE_TEMPLATE` with empty `details` and discarded the
 #: sentence each one carried.
 handler403 = "accounts.views.refused"
+handler500 = "accounts.views.server_error"

@@ -81,6 +81,8 @@ def send_code(code_id, kind, sealed):
     if raw_code is None or code.is_expired:
         return _record(delivery, Outcome.EXPIRED)
 
+    from schools.hosts import school_host
+
     contact = code.contact
     school = code.requested_by_school
     if _quiet(school, contact):
@@ -92,7 +94,9 @@ def send_code(code_id, kind, sealed):
         address=contact.value,
         kind=kind,
         params=params,
-        text=kinds.render(kind, channel_type=contact.channel_type, **params),
+        text=kinds.render(
+            kind, channel_type=contact.channel_type, school_host=school_host(school), **params
+        ),
         reference=f"code-{code.pk}",
         reply_to=(
             school.contact_email
