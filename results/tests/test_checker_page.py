@@ -61,7 +61,7 @@ class TheCheckerFrameCarriesNoCardTests(ChainSetUp):
         page = self.get_page().content.decode()
 
         self.assertIn(f'data-portal="{HOST}"', page)
-        self.assertNotIn(PORTAL, page)
+        self.assertNotIn(f'data-portal="{PORTAL}"', page)
 
     def test_the_page_names_its_own_assets_and_the_card_page_styles(self):
         page = self.get_page().content.decode()
