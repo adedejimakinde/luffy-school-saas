@@ -23,18 +23,23 @@ import re
 from django.db import connection
 from django.test import Client, override_settings
 
+from accounts import guardian_contacts
+from accounts.models import User
+from accounts.services import enroll_student, link_guardian
 from accounts.tests.test_school_door import (
+    HANDSET,
     HARBOUR,
+    PASSWORD,
     PORTAL,
     SUNRISE,
     SchoolDoorSetUp,
-    TheParentDoorTests,
 )
 from messaging import kinds
 from messaging.kinds import Kind
 from schools.hosts import sign_in_host
 from schools.tests.test_brand import give_crest, set_colour
 from schools.tests.tenants import connected_to
+from tests.guardians import give_verified_channel
 
 #: Pages a school's host serves as frames with a "sign in" way back (they hold no data, so a
 #: stranger gets them): each carries `data-portal`, which every module builds its link from.
@@ -221,13 +226,41 @@ class SignedOutPagesWearTheSchoolTests(SchoolDoorSetUp):
                 self.assertIn(host, {SUNRISE, "classnode.co"}, f"{path} links to {host}")
 
 
-class ParentEntryPointsStayOnTheHostTests(TheParentDoorTests):
+class ParentEntryPointsStayOnTheHostTests(SchoolDoorSetUp):
     """The parent door is the school's, every way into it stays there, and a guardian with
-    children at two schools sees one school's on each host."""
+    children at two schools sees one school's on each host.
+
+    Its own setup rather than a subclass of `test_school_door.TheParentDoorTests`: importing a
+    test class into this module makes discovery load its tests a second time here, and the CI
+    shard check (`scripts/shard_tests.py`) refuses a suite whose shards load more than it does.
+    """
 
     def setUp(self):
         super().setUp()
         self.crest = give_crest(self.sunrise)
+        self.mama = User.objects.create_user("mama", PASSWORD, full_name="Mama Both")
+        self.kid_here = enroll_student(
+            User.objects.create_user("SUN/1", PASSWORD, full_name="Sunny Child"), self.sunrise
+        )
+        self.kid_there = enroll_student(
+            User.objects.create_user("HAR/1", PASSWORD, full_name="Harry Child"), self.harbour
+        )
+        link_guardian(self.mama, self.kid_here)
+        link_guardian(self.mama, self.kid_there)
+        self.contact = give_verified_channel(self.mama, HANDSET)
+
+    def code_door(self, host, client):
+        token = client.get("/api/csrf/", HTTP_HOST=host).json()["csrf_token"]
+        _, raw = guardian_contacts.request_sign_in_code(self.contact)
+        response = client.post(
+            "/api/guardian/session/",
+            data={"value": HANDSET, "code": raw},
+            content_type="application/json",
+            HTTP_HOST=host,
+            HTTP_X_CSRFTOKEN=token,
+        )
+        connection.set_schema_to_public()
+        return response
 
     def page(self, host, path):
         response = self.client.get(path, HTTP_HOST=host)
