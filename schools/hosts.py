@@ -75,7 +75,12 @@ def current_school_host() -> str:
     """The current school's primary host, or `""` where no school is current (no portal query)."""
     if not _on_a_school():
         return ""
-    return school_host(connection.tenant)
+    return (
+        Domain.objects.filter(tenant__schema_name=connection.tenant.schema_name, is_primary=True)
+        .values_list("domain", flat=True)
+        .first()
+        or ""
+    )
 
 
 def sign_in_host(request=None) -> str:
