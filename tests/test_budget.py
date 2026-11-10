@@ -51,6 +51,11 @@ SCHOOLS = (("St Mary's", "st-marys", "st_marys"), ("Grace Academy", "grace", "gr
 #: The portal's own pages, opened by somebody not yet signed in.
 PORTAL_PAGES = ("/sign-in/", "/staff-sign-in/", "/invitations/not-a-token/", "/platform/")
 
+#: "Forgot password": asking for a link, and where a link lands (a dead one is
+#: the same frame, and a 404). On the portal and on each school's host, opened
+#: by somebody not signed in, which is who they are for.
+PASSWORD_PAGES = ("/forgot-password/", "/reset-password/not-a-token/")
+
 #: A school's pages, opened by a member of staff there.
 SCHOOL_PAGES = (
     "/home/",
@@ -236,9 +241,11 @@ class SpeedBudgetSetUp(TestCase):
 
     def pages(self):
         """(host, path, user) for every page, at both schools."""
-        for path in PORTAL_PAGES:
+        for path in (*PORTAL_PAGES, *PASSWORD_PAGES):
             yield PORTAL, path, None
         for host, user in self.hosts.items():
+            for path in PASSWORD_PAGES:
+                yield host, path, None
             for path in SCHOOL_PAGES:
                 yield host, path, user
             # The 403 page: signed in, but at the other school.
@@ -275,8 +282,10 @@ class EveryPageIsUnderBudgetTests(SpeedBudgetSetUp):
             assets = self.assets_of(html)
             weight = len(response.content) + sum((STATIC / a).stat().st_size for a in assets)
             with self.subTest(host=host, page=path, status=response.status_code):
-                self.assertIn(response.status_code, (200, 403))
-                if response.status_code == 200:
+                # A link nobody was sent is the dead-link page: a 404, drawn in full.
+                dead_link = path.startswith("/reset-password/")
+                self.assertIn(response.status_code, (404,) if dead_link else (200, 403))
+                if response.status_code in (200, 404):
                     self.assertIn("web/design.css", assets)
                 self.assertLess(
                     weight, BUDGET, f"{path} weighs {weight} bytes: {', '.join(assets)}"

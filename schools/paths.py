@@ -43,6 +43,9 @@ PORTAL = frozenset(
         "fees",
         # A school's private files: photos, signatures, documents (`files.views`).
         "files",
+        # "Forgot password" (`accounts.password_reset`): the page that asks for a
+        # link, and below, the page a link opens. Doors, for nobody signed in.
+        "forgot-password",
         "help",
         "home",
         # Where an invitation's link lands, on the school it is for (the portal
@@ -58,6 +61,7 @@ PORTAL = frozenset(
         "offline",
         "promotion",
         "register",
+        "reset-password",
         "results",
         "roll",
         "setup",
@@ -123,12 +127,13 @@ def is_public_site_request(request) -> bool:
     return on_a_school and is_public_site(request.path)
 
 
-#: The doors on a school's host: the two sign-in pages, the invitation page and
-#: the API routes they call. Each is for somebody who is not (yet) signed in
-#: here, so `SchoolAccessMiddleware` lets a login with no membership at this
-#: school reach them instead of refusing it; none of them reads the school's
-#: data, and signing in through one is refused to anybody who is not a member
-#: (`accounts.signin`, `accounts.guardian_signin`).
+#: The doors on a school's host: the two sign-in pages, the invitation page, the
+#: two "Forgot password" pages and the API routes they call. Each is for
+#: somebody who is not (yet) signed in here, so `SchoolAccessMiddleware` lets a
+#: login with no membership at this school reach them instead of refusing it;
+#: none of them reads the school's data, and signing in through one is refused
+#: to anybody who is not a member (`accounts.signin`,
+#: `accounts.guardian_signin`), as is a new password (`accounts.password_reset`).
 DOORS = frozenset(
     {
         "/sign-in/",
@@ -138,6 +143,8 @@ DOORS = frozenset(
         "/api/logout/",
         "/api/guardian/code/",
         "/api/guardian/session/",
+        # "Forgot password": somebody who cannot sign in, by definition.
+        "/forgot-password/",
         # The installed app's manifest and offline page (`schools.pwa`): a browser asks
         # for them with no say in who is signed in, and they name only what the school's
         # public website already names.
@@ -145,7 +152,7 @@ DOORS = frozenset(
         "/offline/",
     }
 )
-DOOR_PREFIXES = ("/invitations/", "/api/invitations/")
+DOOR_PREFIXES = ("/invitations/", "/api/invitations/", "/reset-password/")
 
 
 def is_door(path: str) -> bool:

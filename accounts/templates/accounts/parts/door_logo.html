@@ -1,0 +1,6 @@
+{% comment %}
+The mark above a door's card, for the two "Forgot password" pages: on a school's
+own host its crest (its initials in a tile when it has none) and name, on the
+portal Classnode's (`schools/brand.py`). The staff door draws the same thing
+(`accounts/staff_sign_in.html`), and the three read as one flow.
+{% endcomment %}{% if brand %}<div class="door-logo door-school"><span class="crest" aria-hidden="true">{% if brand.crest_url %}<img src="{{ brand.crest_url }}" alt="" width="56" height="56">{% else %}{{ brand.initials }}{% endif %}</span><span class="door-name">{{ brand.name }}</span></div>{% else %}<div class="door-logo"><svg class="logo-mark" aria-hidden="true"><use href="#i-brand-mark"/></svg>classnode</div>{% endif %}

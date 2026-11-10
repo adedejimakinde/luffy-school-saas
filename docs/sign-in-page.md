@@ -167,6 +167,155 @@ the API answers that school's invitations alone (another's is the flat 404).
 signed out, the preview now sends her to this host's door and back, rather than
 to the portal's.
 
+## Forgot password
+
+A member of staff signs in with a password, and one who forgot it used to have
+no way back in but a new invitation. Now both doors carry **"Forgot
+password?"**: under the password field on the staff door, and under "Are you a
+member of staff?" on the parents' door (a parent signs in with a code and needs
+no password, but may hold one). The rules are in `accounts/password_reset.py`,
+the two pages in `accounts/password_views.py`.
+
+### The flow
+
+1. **`/forgot-password/`**: the person types their email address or phone
+   number. The page then says, to everybody, *"If an account matches, we've
+   sent a link to its email address. It works once, for 30 minutes."*
+2. **The email**, through the provider every platform email goes through
+   (`messaging.providers`, which is Brevo's relay on the server): a link to
+   `/reset-password/<token>/` **on the host the request was made on**. Sent off
+   the request, by a worker, so the page answers in the same time whether or
+   not there was anybody to email.
+3. **`/reset-password/<token>/`**: "Choose a new password", typed twice, held
+   to the password rules the invitation page already uses
+   (`AUTH_PASSWORD_VALIDATORS`: ten characters).
+4. **On success** the password changes, every session that person has is signed
+   out, they are emailed "Your password was changed", and they land on
+   `/staff-sign-in/` **on the same host**: the door a password is typed at.
+
+Both pages are plain forms drawn by the server, with no module to load, in the
+staff door's look. On a school's host they wear the school's crest, name and
+colour, with "Powered by Classnode" under the card; on `app.<domain>` they are
+Classnode's. Every link on them is a path, so nothing carries anybody from
+their school's host to the portal.
+
+### One answer, whatever was typed
+
+The page after a request is **the same status and the same bytes** for an
+account that was emailed, one that was not, and nobody at all. Otherwise it
+would say, one guess at a time, who has an account and at which school. Only
+`PasswordResetLog` knows what came of a request.
+
+| what was typed | what happens | logged as |
+| --- | --- | --- |
+| an active member of this school, with an email address | a link is emailed | `sent` |
+| nobody | nothing | `no_account` |
+| a deactivated account | nothing | `deactivated` |
+| on a school's host, somebody who is not an active member of that school (a member of another school, invited, suspended, ended) | nothing | `not_a_member` |
+| **an account with a phone number and no email address** | nothing: see below | `no_email` |
+| platform staff, or a blog account | nothing | `not_eligible` |
+| a sixth request for one account in an hour, or a twenty-first from one address | nothing | `throttled` |
+| a member of Classnode's demo school, which sends nothing | nothing | `switched_off` |
+
+On the portal there is no school to be a member of, so any active account with
+an email address is sent a link, as the portal's door signs anybody in.
+
+**An account with only a phone number cannot reset its password this way
+yet.** The link goes by email and there is no SMS version; such a person sees
+the same sentence as everybody else, and the page's second paragraph says, to
+everybody, that an account with no email address cannot get a link and to ask
+the school office. The office can add an email address to the account, or
+invite the person again. Sending the link by SMS is the follow-up.
+
+**Platform staff are never reset by email**, on any host: that login reaches
+every school, and its password is changed by somebody with the server
+(`manage.py changepassword <username>`), not by whoever can read one mailbox.
+A blog account has no password at all (`docs/blog.md`).
+
+### The link
+
+- **Random, and stored only as a hash.** 32 bytes from `secrets`; the table
+  (`accounts.PasswordReset`) keeps its SHA-256. The token itself is in the
+  email and nowhere else, and crosses the queue sealed (`messaging.seal`).
+- **Thirty minutes** (`PASSWORD_RESET_TTL`).
+- **Once.** It is spent in the transaction that changes the password.
+- **Only the newest.** Asking again ends every earlier link the person holds,
+  on every host.
+- **Only on the host it was asked for from.** A link asked for on Sunrise's
+  host opens on Sunrise's host: Harbour's host and the portal answer it exactly
+  as they answer a token nobody made, and the other way round. A person who
+  teaches at both schools is no exception.
+- It also dies if its holder is deactivated, or stops being a member of the
+  school it was asked at, before it is used.
+
+A dead link is one page ("This link no longer works.", a 404) whatever killed
+it, with "Ask for a new link" on the same host.
+
+**The link page keeps the site's `same-origin` referrer policy, on purpose.**
+`no-referrer` looks stricter and breaks it: a browser then sends `Origin: null`
+with the form, and the CSRF check refuses it. Found by the browser test, which
+is why there is one.
+
+### Every session is signed out
+
+Changing the password is what does it. Each session carries a hash of the
+password it was signed in with, and Django refuses one whose hash no longer
+matches on its next request: on every host, in either cookie
+(`schools.sessions`), and for a session a parent opened with a code. Nothing
+has to go looking for the sessions, so none can be missed.
+
+### The throttle
+
+Requests are counted, not wrong answers, over an hour
+(`SignInScope.RESET_ACCOUNT`, `RESET_ADDRESS`):
+
+- **Five an hour for one account**, however it is named: its email address and
+  its phone number are one bucket.
+- **Twenty an hour from one address.** Not five, because a staff room is one
+  address with forty teachers behind it, and a throttled request is told the
+  same sentence as any other: the sixth teacher to ask on the first morning of
+  term would be told a link was on its way and never get one.
+
+They are buckets of their own, so asking for links never closes anybody's
+sign-in door. A completed reset also forgives the wrong passwords typed before
+it, so the new password is not held out by a window the old one closed.
+
+`PASSWORD_RESET_TTL`, `PASSWORD_RESET_THROTTLE_WINDOW`,
+`PASSWORD_RESET_MAX_PER_ACCOUNT` and `PASSWORD_RESET_MAX_PER_ADDRESS` are
+environment variables with those defaults (`settings.py`).
+
+### What is written down
+
+`accounts.PasswordResetLog`, append-only: one row for every request (the
+result above, the address it came from, a digest of what was typed, and the
+account it resolved to, if any) and one for every password changed. The same
+two lines go to the log stream (`accounts.password_reset`).
+
+A `PasswordReset` row points at its account, so
+`accounts.deletion.hard_delete_user()` lists it like any other reference;
+delete that account's rows in `accounts_passwordreset` first. The log holds
+bare ids and never stands in the way.
+
+### Deploying it
+
+One migration (`accounts.0020_password_reset`, shared tables only) and two new
+jobs for the worker (`accounts/tasks.py`), so **the worker has to be restarted
+with the web process**: until it is, a request is answered and logged and its
+email waits on the queue. No new setting is required; email goes through
+`MESSAGING_EMAIL_PROVIDER` as sign-in codes already do.
+
+### Tests
+
+`accounts/tests/test_password_reset.py`, two schools and the portal throughout:
+the one answer (same status, same bytes); the link (hashed, once, thirty
+minutes, replaced by a newer one, dead on another school's host and on the
+portal); who is sent one (deactivated, another school's member, phone only);
+sessions signed out and the confirmation email; the throttle; the log; and the
+pages in each host's look with every link a path. Each rule was broken by hand
+and seen to fail. `tests/ui/password_reset.test.js` opens every state at 320,
+390 and 1280 pixels on a school's host and on the portal, and walks the whole
+flow in a browser.
+
 ## The guardian door: four steps, because the API has four answers
 
 There is no password step and cannot be one: a guardian signs in with a code on

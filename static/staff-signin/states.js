@@ -51,10 +51,18 @@ export function ask({ error = "", identifier = "" } = {}) {
     `<input id="password" name="password" type="password" autocomplete="current-password" required${invalid}>`,
     problem(error),
     "</div>",
+    forgotLink(),
     '<button type="submit" class="primary">Sign in</button>',
     parentLink(),
     "</form>",
   ].join("");
+}
+
+/** The way to a new password, under the field it is about. A path, like the
+ * parent link below: it stays on the host this door is on, a school's or the
+ * portal's, and the page it opens is that host's (`accounts/password_views.py`). */
+function forgotLink() {
+  return '<p class="forgot"><a href="/forgot-password/">Forgot password?</a></p>';
 }
 
 /** The way to the guardian door, the same rule `signin.js`'s `staffLink()`

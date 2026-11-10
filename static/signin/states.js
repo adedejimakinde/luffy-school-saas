@@ -41,8 +41,17 @@ export function ask({ error = "", value = "" } = {}) {
     `inputmode="email" autocapitalize="none" spellcheck="false" required value="${esc(value)}">`,
     '<button type="submit">Send me a code</button>',
     staffLink(),
+    forgotLink(),
     "</form>",
   ].join("");
+}
+
+/** For a parent who signs in with a password and has lost it: no code step
+ * here sets one. A path, so it stays on this host; `from` is how that page
+ * knows which door to offer the way back to (`accounts/password_views.py`). */
+function forgotLink() {
+  return '<p class="switch-door forgot">Sign in with a password? ' +
+    '<a href="/forgot-password/?from=sign-in">Forgot password?</a></p>';
 }
 
 /** The way to the other door, from the one screen a stranger could land on
