@@ -596,6 +596,26 @@ SIT_MAX_FAILURES_PER_ADDRESS = int(
     os.environ.get("SIT_MAX_FAILURES_PER_ADDRESS", 100)
 )
 
+# "Forgot password" (`accounts.password_reset`, docs/sign-in-page.md "Forgot
+# password"). These count **requests**, not wrong answers, over an hour: each
+# request that reaches an account is an email to somebody who may not have asked
+# for it, and a link that is a password for the half hour it lives.
+#
+# Half an hour for the link. Long enough to find the email on a slow phone,
+# short for something that sits in an inbox.
+#
+# Five an hour per account: somebody whose first email is slow asks again once
+# or twice, and five is past anything honest. Twenty an hour per address, not
+# five, for the reason only failures are counted at the sign-in door: a staff
+# room is one address with forty teachers behind it, and the page says the same
+# sentence to a throttled request as to any other, so the sixth teacher to ask
+# on the first morning of term would be told a link was on its way and never get
+# one. Twenty still stops one machine working through a list of addresses.
+PASSWORD_RESET_TTL = int(os.environ.get("PASSWORD_RESET_TTL", 30 * 60))
+PASSWORD_RESET_THROTTLE_WINDOW = int(os.environ.get("PASSWORD_RESET_THROTTLE_WINDOW", 60 * 60))
+PASSWORD_RESET_MAX_PER_ACCOUNT = int(os.environ.get("PASSWORD_RESET_MAX_PER_ACCOUNT", 5))
+PASSWORD_RESET_MAX_PER_ADDRESS = int(os.environ.get("PASSWORD_RESET_MAX_PER_ADDRESS", 20))
+
 # ---------------------------------------------------------------------------
 # How many guardian verification codes may be SENT, and this counts successes
 # rather than failures — which is the opposite of the sign-in throttle above

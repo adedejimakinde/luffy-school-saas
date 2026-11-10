@@ -66,6 +66,17 @@ test("the form offers the guardian door, relative, since both live on the portal
   assert.match(html, /href="\/sign-in\/"/);
 });
 
+test("the form offers a way to a new password, as a path, under the password field", () => {
+  const html = htmlFor(initialState());
+  assert.match(html, /<a href="\/forgot-password\/">Forgot password\?<\/a>/);
+  // A path and nothing else: on a school's own host it stays on that host.
+  assert.doesNotMatch(html, /href="(https?:)?\/\/[^"]*forgot-password/);
+  assert.ok(html.indexOf('name="password"') < html.indexOf("Forgot password?"));
+  assert.ok(html.indexOf("Forgot password?") < html.indexOf('type="submit"'));
+  // And it is still there after a refusal, which is when it is wanted.
+  assert.match(htmlFor(advance(initialState(), REFUSED)), /href="\/forgot-password\/"/);
+});
+
 test("a password signs a member of staff in and names the account that answered", () => {
   const state = advance({ ...initialState(), identifier: "ada@stmarys.test" }, TWO_SCHOOLS);
 

@@ -19,6 +19,7 @@ from django.urls import path
 
 from api import api
 from academics.views import promotion_page, setup_page
+from accounts.password_views import forgot_password_page, reset_password_page
 from accounts.views import (
     invitation_page,
     roll_import_page,
@@ -89,6 +90,13 @@ urlpatterns = [
     # listed before these, so the portal's own names win there.
     path("sign-in/", sign_in_page, name="school-sign-in"),
     path("staff-sign-in/", staff_sign_in_page, name="school-staff-sign-in"),
+    # "Forgot password" (`accounts.password_views`, `docs/sign-in-page.md`): ask
+    # for a link, and the page the link opens. On every school's host in its
+    # look, for its members alone, and on the portal (the splat in
+    # `urls_public.py`) in Classnode's. A link opens only on the host it was
+    # asked for from.
+    path("forgot-password/", forgot_password_page, name="forgot-password"),
+    path("reset-password/<str:token>/", reset_password_page, name="reset-password"),
     # Where an invitation's link lands: the school it is for
     # (`settings.INVITATION_ACCEPT_URL`), and the portal too, for every link
     # sent before. Another school's invitation is a 404 here (`api._validated`).

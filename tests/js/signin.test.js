@@ -57,6 +57,14 @@ test("the first step offers the staff door, relative, since both live on the por
   assert.match(html, /href="\/staff-sign-in\/"/);
 });
 
+test("the first step offers a way to a new password, as a path that says which door it came from", () => {
+  const html = htmlFor(initialState());
+  assert.match(html, /<a href="\/forgot-password\/\?from=sign-in">Forgot password\?<\/a>/);
+  assert.doesNotMatch(html, /href="(https?:)?\/\/[^"]*forgot-password/);
+  // Only where a stranger could land: the code step is past it.
+  assert.doesNotMatch(htmlFor(atTheCodeStep()), /forgot-password/);
+});
+
 test("asking for a code moves to the code step and never promises delivery", () => {
   const state = atTheCodeStep();
   assert.equal(state.step, "code");

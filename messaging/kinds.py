@@ -49,6 +49,12 @@ class Kind(models.TextChoices):
     #: that person is known only by phone number. Carries a link, which is a
     #: credential: sent to the one number it was made for and stored nowhere.
     STAFF_INVITATION = "staff_invitation", "Staff invitation"
+    #: "Forgot password" (`accounts.password_reset`). Email only. The first
+    #: carries a link that sets a new password, once: sent to the one address
+    #: on the account it is for and stored nowhere. The second says a password
+    #: was changed, to the same address, and carries nothing.
+    PASSWORD_RESET = "password_reset", "Password reset link"
+    PASSWORD_CHANGED = "password_changed", "Password changed"
 
 
 #: The kinds that carry a one-time code. Their text is never stored anywhere
@@ -135,6 +141,29 @@ _TEXT[Kind.STAFF_INVITATION] = (
     "Accept here: {link}"
 )
 
+# **Says nothing about who asked, and nothing about the account but where it
+# is.** {place} is the school's name on a school's host and "Classnode" on the
+# portal: the reader already knows they have an account there, because this is
+# only ever sent to an account's own address. The last sentence is the one that
+# matters to somebody who did not ask: nothing has changed, and nothing will.
+_TEXT[Kind.PASSWORD_RESET] = (
+    "Someone asked to reset the password for your {place} account.\n\n"
+    "Choose a new password here:\n{link}\n\n"
+    "The link works once, for {minutes} minutes, and only on {host}. If you ask "
+    "for another, this one stops working.\n\n"
+    "If you did not ask for this, you can ignore this email. Your password has "
+    "not changed."
+)
+
+# {who} is who to tell: the school, with its contact email when it has one.
+_TEXT[Kind.PASSWORD_CHANGED] = (
+    "The password for your {place} account was changed on {when}.\n\n"
+    "Every device that was signed in to it has been signed out. Sign in again "
+    "at {host} with your new password.\n\n"
+    "If you did not do this, choose a new password straight away at "
+    "{host}/forgot-password/ and tell {who}."
+)
+
 _SUBJECT = {
     Kind.CHANNEL_CHECK: "Your Classnode code",
     Kind.SIGN_IN_CODE: "Your Classnode sign-in code",
@@ -147,6 +176,8 @@ _SUBJECT = {
     Kind.ABSENCE_ALERT: "Absence alert",
     Kind.DAILY_MONEY_SUMMARY: "Daily money summary",
     Kind.STAFF_INVITATION: "You have been invited to Classnode",
+    Kind.PASSWORD_RESET: "Reset your password",
+    Kind.PASSWORD_CHANGED: "Your password was changed",
 }
 
 
