@@ -113,6 +113,7 @@ ROLL_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/picker.js",
+    "web/dates.js",
     "web/classes.js",
     "roll/api.js",
     "roll/states.js",

@@ -1,13 +1,4 @@
-/**
- * Kobo, as a person reads naira. Never through a float.
- *
- * The API sends whole kobo as integers, and this formats them by cutting the
- * digit string — the last two digits are kobo — so there is no division
- * anywhere for binary floating point to get wrong. The sign is never dropped
- * silently: a balance is said in words ("owes", "in credit") because a minus
- * sign on a phone screen is the character most easily missed, and a family in
- * credit being chased for money is the mistake this page must not make.
- */
+/** Kobo, as a person reads naira. (docs/module-notes.md) */
 
 /** "₦1,500,050.00" for 150005000 kobo. The magnitude only; see `signed()`. */
 export function naira(kobo) {

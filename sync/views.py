@@ -55,6 +55,7 @@ PAGES = ("/marking/", "/register/")
 #: Stylesheets and fonts the two pages draw with besides their modules.
 STYLES = (
     "web/design.css",
+    "web/dates.css",
     "marking/marking.css",
     "register/register.css",
     "web/fonts/hanken-grotesk-400.woff2",
@@ -83,7 +84,8 @@ SOURCE = Path(__file__).parent / "worker.js"
 #: would go on serving yesterday's module. 2: the register and marking pages
 #: learned their empty states (`onboarding`).
 #: 3: the portal's app shell, offline page and the exam left alone (`docs/pwa.md`).
-CACHE_GENERATION = 3
+#: 4: the register's date field is the shared day-first picker (`web/dates.js`).
+CACHE_GENERATION = 4
 
 #: What the worker never answers or keeps: the exam, which has its own worker
 #: (`cbt/sit_worker.js`). Read from the route's own constant, not written again.

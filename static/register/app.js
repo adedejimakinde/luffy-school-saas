@@ -493,6 +493,7 @@ if (typeof document !== "undefined") {
   const root = document.getElementById("register");
   if (root) {
     registerWorker();
+    import("../web/dates.js").then((dates) => dates.enhanceDates(root), () => {});
     mount(root);
   }
 }

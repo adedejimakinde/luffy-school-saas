@@ -1,21 +1,4 @@
-/**
- * Fees: the classes for a term, a class's balances, one child's account, a
- * payment, an undo and a receipt; and (B2) each class's bill, charging the
- * class, and a child's concessions.
- *
- * `?student=` opens an account and `?receipt=` a receipt directly, which is
- * how a reprint is reached from a bookmark.
- *
- * **The form key.** Each payment form and each discount form drawn gets a
- * fresh key (`crypto.randomUUID()`), sent with what was typed. The server
- * records one entry per key, so a double click is one payment or one discount.
- * When the answer is lost — the connection dropped after the request left —
- * the page keeps the key and what was typed, and says so: sending it again
- * cannot record it twice. A concession's grant form works the same way.
- *
- * **A bill is redrawn from the server's answer** after every change, because
- * each bill write answers with the bill as it now stands.
- */
+/** Fees: the classes for a term, balances, an account, a payment, a receipt, and each class's bill. (docs/module-notes.md) */
 
 import {
   REFUSAL,
@@ -43,11 +26,7 @@ import {
 } from "./api.js";
 import * as states from "./states.js";
 
-/**
- * What one press of "Create accounts for this class" did, in words: how many were made,
- * how many already had one, each failure by name with its sentence, and how many are
- * left. `tone` is "done" only when nothing failed and nothing stopped it.
- */
+/** What one press of "Create accounts for this class" did, in words. (docs/module-notes.md) */
 export function classAccountsNote(result) {
   const { made = 0, skipped = 0, failed = [], remaining = 0, stopped = null } = result;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
@@ -181,16 +160,7 @@ export async function mount(
       ...extra,
     }));
   };
-  /**
-   * A bill write: the answer is the bill, drawn as it comes back. A lost
-   * answer keeps what was typed and says, in `lost`, why sending again is
-   * safe for that write.
-   *
-   * **A 404 here is a line that is no longer there** — another bursar removed
-   * it, or this page's own removal landed and its answer did not. The bill is
-   * read again rather than the page turned into "not something you can
-   * open": if the refusal is real, that read gets it too.
-   */
+  /** A bill write redraws the bill from the server's answer. (docs/module-notes.md) */
   const billWrite = async (answer, { draftField, draft, done, lost }) => {
     if (answer.ok) {
       state = { step: "bill", bill: answer.body, note: done, noteTone: "done" };
@@ -555,6 +525,7 @@ if (typeof document !== "undefined") {
   const root = document.getElementById("fees");
   if (root) {
     // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/dates.js").then((dates) => dates.enhanceDates(root), () => {});
     import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root, { search: window.location.search });
   }

@@ -52,6 +52,7 @@ EDITOR_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/picker.js",
+    "web/dates.js",
     "site-editor/api.js",
     "site-editor/forms.js",
     "site-editor/states.js",

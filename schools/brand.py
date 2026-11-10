@@ -48,6 +48,8 @@ from typing import Optional
 from django.conf import settings
 from django.db import connection
 
+from schools.models import short_name_of
+
 #: The design's navy, the brand colour when a school has none that reads on white.
 NAVY = "#143D8C"
 
@@ -74,6 +76,9 @@ class Brand:
     #: The upload service's key for the crest, or None. The installed app's icons
     #: are variants of it (`schools.pwa`).
     crest_key: Optional[str] = None
+    #: What the portal's header and sidebar call the school (`School.display_short_name`).
+    #: `name` stays the full name, for the sign-in page and printed documents.
+    short_name: str = ""
 
     @property
     def custom_colour(self) -> bool:
@@ -99,6 +104,7 @@ def _read(school) -> Brand:
         key, primary = cursor.fetchone()
     return Brand(
         name=school.name,
+        short_name=short_name_of(getattr(school, "short_name", ""), school.name),
         initials=initials(school.name),
         crest_url=f"/media/{key}/site.png" if key else None,
         colour=colour_for(primary),

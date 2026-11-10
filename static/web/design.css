@@ -713,7 +713,7 @@ body.has-shell { padding: 0; }
 .logo-name { min-width: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .topbar-logo.logo-school { min-width: 0; padding: 0; }
 .topbar-logo.logo-school .crest { width: 32px; height: 32px; border-radius: 9px; font-size: var(--small); letter-spacing: 0; }
-.topbar-logo .logo-name { display: block; white-space: nowrap; text-overflow: ellipsis; }
+.topbar-logo .logo-name { display: -webkit-box; font-size: 1rem; line-height: 1.2; overflow-wrap: anywhere; }
 
 .nav { display: grid; gap: 2px; }
 
@@ -834,7 +834,7 @@ body.has-shell { padding: 0; }
 .topbar-logo .logo-mark { width: 24px; height: 24px; }
 .topbar-school { display: none; }
 @container (max-width: 21.8em) { .setup-chip .chip-full { display: none; } .setup-chip .chip-short { display: inline; } }
-@container (max-width: 19em) { .topbar-logo :is(.logo-word, .logo-name) { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
+@container (max-width: 19em) { .topbar-logo .logo-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; } }
 
 @media (min-width: 1024px) {
   .topbar-logo { display: none; }
@@ -1000,7 +1000,7 @@ body.has-shell { padding: 0; }
   .tabbar a:active .icon { background: var(--divider); }
   .tabbar .tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 700; }
 
-    body.has-tabbar .content { padding-bottom: var(--tabbar); }
+    body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + var(--sp-16)); }
   body.has-tabbar .shell { padding-bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px)); }
 }
 

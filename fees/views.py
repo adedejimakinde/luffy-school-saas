@@ -18,6 +18,7 @@ FEES_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/picker.js",
+    "web/dates.js",
     "fees/money.js",
     "fees/api.js",
     "fees/states.js",

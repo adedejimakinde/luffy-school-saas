@@ -206,7 +206,7 @@ export function kept({ class_group = "", taken_on = "" } = {}) {
   return [
     '<section class="state state-kept" data-state="kept">',
     "<h1>Kept on this phone</h1>",
-    `<p>${esc(class_group)}, ${esc(taken_on)}. It has not been sent yet: it will be `,
+    `<p>${esc(class_group)}, ${esc(dayText(taken_on))}. It has not been sent yet: it will be `,
     "sent when you are connected, and this page will say if anything needs your answer.</p>",
     '<button type="button" class="again" data-action="back">Another class</button>',
     "</section>",

@@ -1,0 +1,8 @@
+/* Setup's sections: each a card under its heading, the cards stacked. */
+.state-setup { display: grid; gap: var(--sp-16); }
+.state-setup > h1 { margin: 0; }
+.setup-card { display: grid; gap: var(--sp-8); align-content: start; }
+.setup-card > h2 { margin: 0; }
+.setup-card > .hint, .setup-card > p { margin: 0; }
+.setup-card form { margin-top: var(--sp-8); }
+@media (min-width: 640px) { .setup-card { padding: var(--sp-24); } }

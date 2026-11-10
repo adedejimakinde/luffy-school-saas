@@ -8,7 +8,18 @@
 main { max-width: 60rem; }
 h2 { font-size: 1.1rem; margin: 20px 0 8px; }
 .chooser { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.classes { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+ul.classes:not(.list-rows) { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* The classes: list rows (design.css's .list-rows) in ONE card; a row is a button that opens the class. */
+.class-card { padding: var(--sp-8) var(--sp-16); margin: var(--sp-8) 0 var(--sp-16); }
+.classes.list-rows { margin: 0; }
+.classes.list-rows > li + li::before { left: 0; right: 0; }
+button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: var(--sp-12) 0; text-align: left; background: none; border: 0; font-weight: 400; }
+.class-money { display: flex; align-items: center; gap: var(--sp-8); }
+.class-figures { display: grid; gap: 2px; justify-items: end; }
+.class-collected { font-weight: 700; font-variant-numeric: tabular-nums; }
+.class-share { color: var(--muted); font-size: var(--small); }
+.bar { display: block; width: 72px; height: 6px; border-radius: 3px; background: var(--divider); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--ok); }
 tr.undone td { color: var(--muted); }
 .balance { font-weight: 700; }
 .balance.owes { color: var(--warn); }

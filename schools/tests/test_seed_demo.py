@@ -328,7 +328,7 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
         # signs the demo's two teachers in and out. Each must name
         # no class, which is what keeps it out of the others' way.
         classless = {"blog.test.js", "glyphs.test.js", "picker.test.js", "school_site.test.js",
-                    "school_links.test.js"}
+                    "school_links.test.js", "sweep1.test.js"}
         self.assertEqual(set(owners) | classless, set(files), "a browser test file with no class of its own")
         for file in classless:
             with self.subTest(file=file):

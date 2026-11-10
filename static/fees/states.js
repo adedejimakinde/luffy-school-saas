@@ -1,28 +1,6 @@
-/**
- * Every screen the fees page can show, as a pure function of API bodies.
- *
- * **Each form names its intent** in a hidden field, and `app.js` dispatches on
- * that rather than on which fields a form happens to have: a payment and a
- * discount both have an amount, and a discount and a reversal both have a
- * reason.
- *
- * **Every number is the server's**, in kobo, and `money.js` is the only thing
- * that turns one into naira. A balance is said in words — "owes", "in
- * credit", "nothing owed" — never left to a minus sign.
- *
- * **A receipt says what the entry recorded**, and says across its face when
- * the payment has since been undone.
- *
- * **A bill is a template (B2).** Beside every line it says how many children
- * that line has charged, because changing the line does not change them, and
- * a line that has charged anybody cannot be removed. Charging the class says
- * what it did, including who it did not charge and why.
- *
- * **A revoked concession stays on the account**, with who revoked it, when
- * and why — issue #75. Nothing about a concession is ever edited.
- */
+/** Every screen the fees page can show, as a pure function of API bodies. (docs/module-notes.md) */
 
-import { emptyState, esc } from "../web/html.js";
+import { dayFirst, emptyState, esc } from "../web/html.js";
 import { balanceWords, naira, signed } from "./money.js";
 
 function termOptions(terms, chosen) {
@@ -38,6 +16,37 @@ function termOptions(terms, chosen) {
 export function balance(kobo) {
   const { tone, text } = balanceWords(kobo);
   return `<span class="balance ${tone}" data-balance="${tone}">${esc(text)}</span>`;
+}
+
+/** What share of the class's bills has been paid, 0 to 100; null with nothing billed. */
+export function collectedShare(collected, billed) {
+  if (!(billed > 0)) return null;
+  return Math.max(0, Math.min(100, Math.floor((Number(collected) * 100) / Number(billed))));
+}
+
+/**
+ * One class as a list row: name over "25 children", what has been collected
+ * with a bar and its share at the right, and a chevron. A button, so the page's
+ * one click handler opens the class as it always did.
+ */
+function classRow(c) {
+  const share = collectedShare(c.collected_kobo, c.billed_kobo);
+  const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}`;
+  return (
+    `<li><button type="button" class="list-row class-row" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
+    `<span class="list-row-text"><span class="list-row-title">${esc(c.class_group)}</span>` +
+    `<span class="list-row-sub">${children}</span></span>` +
+    '<span class="list-row-end class-money">' +
+    '<span class="class-figures">' +
+    (share === null && !c.collected_kobo ? "" : `<span class="class-collected">${esc(naira(c.collected_kobo || 0))}</span>`) +
+    (share === null
+      ? '<span class="class-share">Not billed</span>'
+      : `<span class="class-share">${share}% collected</span>` +
+        `<span class="bar" role="img" aria-label="${share}% collected"><span style="width: ${share}%"></span></span>`) +
+    "</span>" +
+    '<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>' +
+    "</span></button></li>"
+  );
 }
 
 // -- the way in ---------------------------------------------------------------
@@ -66,16 +75,7 @@ export function books({
           who: "The bursar sets up fees.",
         }),
     classes.length
-      ? '<ul class="classes">' +
-        classes
-          .map(
-            (c) =>
-              `<li><button type="button" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
-              `${esc(c.class_group)}</button> <span class="quiet">${esc(c.children)} ` +
-              `${c.children === 1 ? "child" : "children"}</span></li>`,
-          )
-          .join("") +
-        "</ul>"
+      ? '<div class="card class-card"><ul class="list-rows classes">' + classes.map(classRow).join("") + "</ul></div>"
       : '<p class="blank">No class has anybody in it this term.</p>',
     note ? `<p class="note ${esc(noteTone)}" role="status">${esc(note)}</p>` : "",
     mayRemind
@@ -138,12 +138,7 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
 
 // -- fee reminders (docs/messaging.md D10) -------------------------------------
 
-/**
- * The question "Remind families" asks before it sends anything: the server's
- * preview, which children, who will be sent it, and how many messages. The
- * amounts are the whole account, as the class page shows them. With nothing to
- * send there is nothing to confirm, only a box to close.
- */
+/** The question "Remind families" asks before it sends anything. (docs/module-notes.md) */
 function remindingBox(reminding) {
   const { detail = "", messages = 0, children = [] } = reminding;
   const some = messages > 0;
@@ -205,12 +200,7 @@ function notSentSection(notSent, mayRemind, reminding) {
 
 // -- one child's account ------------------------------------------------------
 
-/**
- * `draft` is what was last submitted, drawn back in when the answer was not a
- * success — so a bursar corrects one field rather than typing the payment
- * again, and a retry after a lost answer resends the same payment under the
- * same form key.
- */
+/** `draft` is what was last submitted, drawn back in when the answer was not a success. (docs/module-notes.md) */
 function paymentForm(body, { termId, today, draft = {} }) {
   const methods = body.methods || [];
   const chosen = draft.method || "";
@@ -232,12 +222,7 @@ function paymentForm(body, { termId, today, draft = {} }) {
   ].join("");
 }
 
-/**
- * A discount given by hand, for one term, with its reason. Behind a button
- * rather than always open beside the payment form: waiving money is rarer
- * than taking it, and a form a bursar tabs into by accident is how it would
- * happen by mistake. `draft` as for a payment.
- */
+/** A discount given by hand, for one term, with its reason. (docs/module-notes.md) */
 function discountForm(body, { termId, draft = {} }) {
   return [
     '<form class="discount" data-discount>',
@@ -276,7 +261,7 @@ function entryRow(entry, { mayWrite, reversing }) {
   const undone = entry.reversed_by_id ? ' <span class="tag">undone</span>' : "";
   return [
     `<tr data-entry-row="${esc(entry.entry_id)}"${entry.reversed_by_id ? ' class="undone"' : ""}>`,
-    `<td data-label="Date">${esc(entry.effective_on)}</td>`,
+    `<td data-label="Date">${esc(dayFirst(entry.effective_on))}</td>`,
     `<td class="stack-head">${esc(entry.kind_label)}${undone}</td>`,
     `<td data-label="For">${esc(entry.narration)}<br><small>${esc(entry.term)}</small></td>`,
     `<td data-label="How">${esc(entry.method_label)}${entry.reference ? `<br><small>${esc(entry.reference)}</small>` : ""}</td>`,
@@ -564,7 +549,7 @@ export function receipt({ receipt: body = {} } = {}) {
     `<dt>Amount</dt><dd class="amount">${esc(naira(r.amount_kobo))}</dd>`,
     `<dt>Paid by</dt><dd>${esc(r.method_label)}</dd>`,
     r.payment_reference ? `<dt>Reference</dt><dd>${esc(r.payment_reference)}</dd>` : "",
-    `<dt>Date paid</dt><dd>${esc(r.effective_on)}</dd>`,
+    `<dt>Date paid</dt><dd>${esc(dayFirst(r.effective_on))}</dd>`,
     `<dt>Towards</dt><dd>${esc(r.term)}</dd>`,
     `<dt>For</dt><dd>${esc(r.narration)}</dd>`,
     r.received_by ? `<dt>Received by</dt><dd>${esc(r.received_by)}</dd>` : "",

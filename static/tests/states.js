@@ -1,15 +1,4 @@
-/**
- * Every screen the Tests page can show, as a pure function of what the school sent.
- *
- * Strings rather than DOM, for `exam-slips/states.js`' reason: `node --test` can assert
- * each one with no browser. Every interpolated value goes through `esc()`: a question is
- * plain text a teacher typed, and it is shown as text, never as markup.
- *
- * What is **not** here is any authority question. A button is drawn only where the
- * school's answer says this login may press it (`may_write`, `may_approve`, ...), and
- * every route refuses anybody else on the server. The administrator's list has no
- * question in it because the school sends none.
- */
+/** Every screen the Tests page can show, as a pure function of what the school sent. (docs/module-notes.md) */
 
 import { esc } from "../web/html.js";
 
@@ -28,7 +17,7 @@ function tabs(view, summariesOnly) {
   return `<nav class="tests-tabs" aria-label="Tests">${tab("tests", "Tests", "#")}${tab("banks", "Question bank", "#banks")}</nav>`;
 }
 
-// -- tests ---------------------------------------------------------------------------------
+// -- tests --
 
 function classNames(classes) {
   return classes && classes.length ? classes.map((c) => esc(c.name)).join(", ") : "No class yet";
@@ -76,7 +65,7 @@ export function testsView({ term = null, summaries_only = false, may_set = false
   ].join("");
 }
 
-// -- banks ---------------------------------------------------------------------------------
+// -- banks --
 
 export function banksView({ term = null, banks = [], empty_because = "" } = {}) {
   return [
@@ -131,11 +120,7 @@ export function bankView(bank, { done: said = "" } = {}) {
   ].join("");
 }
 
-/**
- * The question form. `q` is the saved question being edited, or null for a new one;
- * `values` is what the form holds now, when it is drawn again mid-edit (a picture
- * added, a fifth option asked for), so nothing typed is lost.
- */
+/** The question form. (docs/module-notes.md) */
 export function questionForm(bank, q, { detail = "", values = null, confirming = null } = {}) {
   const v = values || (q ? { ...q, image_key: q.picture ? q.picture.key : "" } : null) || {};
   const options = v.options || ["", "", "", ""];
@@ -199,7 +184,7 @@ function retireOrDelete(q, confirming) {
   return `<div class="actions"><button type="button" class="again" data-action="ask-retire">Retire question</button>${q.used_in ? "" : '<button type="button" class="again" data-action="ask-delete">Delete question</button>'}</div>`;
 }
 
-// -- setting a test ----------------------------------------------------------------------------
+// -- setting a test --
 
 /** "2026-11-09T09:00" in the browser's own time, for a datetime-local field. */
 export function localInput(iso) {
@@ -270,7 +255,7 @@ export function testForm(choices, test = null, { detail = "", choice = null } = 
   ].join("");
 }
 
-// -- one test --------------------------------------------------------------------------------
+// -- one test --
 
 function itemRow(i) {
   return [
@@ -383,7 +368,7 @@ export function previewView(testId, p) {
   ].join("");
 }
 
-// -- the sitting (CBT step 4) ---------------------------------------------------------------
+// -- the sitting (CBT step 4) --
 
 /** "Fri 13 Nov, 09:05" in the browser's time, or "". */
 export function shortTime(iso) {
@@ -504,7 +489,7 @@ export function sittingView(log, { detail = "", confirming = null, done: said = 
   ].join("");
 }
 
-// -- refusals ----------------------------------------------------------------------------------
+// -- refusals --
 
 export function notYours({ detail = "" } = {}) {
   return [

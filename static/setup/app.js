@@ -254,6 +254,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
           about: form.about.value,
           address: form.address.value,
           phone: form.phone.value,
+          short_name: form.short_name ? form.short_name.value : undefined,
           fetchImpl,
         }),
       );
@@ -303,6 +304,7 @@ if (typeof document !== "undefined") {
   const root = document.getElementById("setup");
   if (root) {
     // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/dates.js").then((dates) => dates.enhanceDates(root), () => {});
     import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root);
   }

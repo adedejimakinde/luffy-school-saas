@@ -12,7 +12,7 @@
  * panel's own boolean: ADMIN alone links and removes, and a principal reads.
  */
 
-import { emptyState, esc } from "../web/html.js";
+import { dayFirst, emptyState, esc } from "../web/html.js";
 import { classOptions } from "../web/classes.js";
 
 /** The roll: every child, where they sit, and what may be done about it. */
@@ -416,7 +416,7 @@ export function detailsPanel({ body = {}, note = null } = {}) {
           '<dl class="facts">',
           `<dt>Learner ID</dt><dd>${esc(learner_id) || "-"}</dd>`,
           `<dt>Sex</dt><dd>${esc(sexLabel[sex] || "") || "-"}</dd>`,
-          `<dt>Date of birth</dt><dd>${esc(date_of_birth) || "-"}</dd>`,
+          `<dt>Date of birth</dt><dd>${esc(dayFirst(date_of_birth)) || "-"}</dd>`,
           "</dl>",
           note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
         ].join(""),

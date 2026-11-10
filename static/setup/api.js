@@ -235,10 +235,11 @@ export async function saveTemplate({ template, fetchImpl = fetch }) {
  * What the school's public page says. A 422 is text that is too long or a
  * phone number that is not one, and says so; blank clears a field.
  */
-export async function savePublicPage({ about, address, phone, fetchImpl = fetch }) {
+export async function savePublicPage({ about, address, phone, short_name, fetchImpl = fetch }) {
   let answer;
   try {
-    answer = await putJson(publicPageUrl(), { about, address, phone }, { fetchImpl });
+    const body = short_name === undefined ? { about, address, phone } : { about, address, phone, short_name };
+    answer = await putJson(publicPageUrl(), body, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

@@ -660,6 +660,43 @@ class ClassBalancesTests(FeesApiSetUp):
             [(c["class_group"], c["children"]) for c in body["classes"]], [("JSS 1A", 2)]
         )
 
+    def test_each_class_says_what_was_billed_and_what_was_collected(self):
+        """The list draws "% collected" from these two, net of an undone payment."""
+        self.pay(child=self.chidi, amount="5,000")
+        undone = self.pay(child=self.ada, amount="1,000").json()["entry"]
+        self.post(self.bursar, f"entries/{undone['entry_id']}/reversal/", {"reason": "Wrong child"})
+
+        [row] = self.get(self.bursar, "classes/").json()["classes"]
+
+        self.assertEqual(row["billed_kobo"], TUITION)
+        self.assertEqual(row["collected_kobo"], 5_000 * KOBO_PER_NAIRA)
+
+    def test_a_class_nobody_was_billed_for_collects_nothing(self):
+        with connected_to(self.stmarys):
+            other = ClassGroup.objects.create(name="JSS 2A", level=2)
+            academics.place_student(other, Term.objects.get(pk=self.term_id), self.zainab_in_stmarys())
+
+        rows = {r["class_group"]: r for r in self.get(self.bursar, "classes/").json()["classes"]}
+
+        self.assertEqual((rows["JSS 2A"]["billed_kobo"], rows["JSS 2A"]["collected_kobo"]), (0, 0))
+
+    def zainab_in_stmarys(self):
+        return self.child("kunle", "Kunle Ade", self.stmarys)
+
+    def test_the_way_in_costs_the_same_with_one_class_or_two(self):
+        def queries():
+            self.client.force_login(self.bursar)
+            with CaptureQueriesContext(connection) as captured:
+                self.client.get("/api/fees/classes/", HTTP_HOST=HOST)
+            return len(captured.captured_queries)
+
+        one = queries()
+        with connected_to(self.stmarys):
+            other = ClassGroup.objects.create(name="JSS 2A", level=2)
+            academics.place_student(other, Term.objects.get(pk=self.term_id), self.zainab_in_stmarys())
+
+        self.assertEqual(queries(), one)
+
     def test_the_list_does_not_cost_more_as_the_class_grows(self):
         """A fixed number of queries per class, none per child. Every query is
         counted, and the login is outside the measured block."""

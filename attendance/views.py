@@ -55,6 +55,7 @@ REGISTER_MODULES = (
     "web/snapshots.js",
     "web/offline.js",
     "web/store.js",
+    "web/dates.js",
     "marking/outbox.js",
     "register/outbox.js",
     "register/api.js",

@@ -82,6 +82,15 @@ TOKEN_BYTES = 32
 LAGOS = ZoneInfo("Africa/Lagos")
 
 
+def short_name_of(short_name: str, name: str) -> str:
+    """The header's name for a school: its own short name, else the full name
+    cut before the first comma ("Crestfield College, Abeokuta" is "Crestfield College")."""
+    chosen = " ".join((short_name or "").split())
+    if chosen:
+        return chosen
+    return " ".join((name or "").split(",")[0].split()) or (name or "")
+
+
 class School(TenantMixin):
     """One customer school. Lives in the public schema; owns a private schema.
 
@@ -91,6 +100,11 @@ class School(TenantMixin):
     """
 
     name = models.CharField(max_length=200)
+    #: What the portal's header calls the school, short enough never to cut off
+    #: on a phone ("Crestfield College"). Blank means the name before its first
+    #: comma (`display_short_name`). The full name stays on the sign-in page and
+    #: on printed documents.
+    short_name = models.CharField(max_length=60, blank=True, default="")
     slug = models.SlugField(max_length=60, unique=True)
     is_active = models.BooleanField(default=True)
     #: This school's own address for a family or a provider to write back to.
@@ -113,6 +127,12 @@ class School(TenantMixin):
     #: brackets after the LGA on the Ogun State card. Optional; blank until set.
     school_code = models.CharField(max_length=20, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def display_short_name(self) -> str:
+        """The short name, or the name before its first comma."""
+        return short_name_of(self.short_name, self.name)
+
     #: When the administrator's setup steps were first all found done
     #: (`onboarding.progress`). Not a tick anybody sets: the steps are read
     #: from the school's own tables, and this only records the first time they
