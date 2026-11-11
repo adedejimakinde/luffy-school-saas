@@ -28,7 +28,8 @@ from typing import List, Optional
 from uuid import UUID
 
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, F, Q, Sum
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from django.utils import timezone
 from ninja import Query, Router, Schema
@@ -69,6 +70,11 @@ class ClassSummaryOut(Schema):
     class_group_id: int
     class_group: str
     children: int
+    #: What this term's bills asked of the class's children, and what the school
+    #: received from them against it: net of reversals, as `home.summary.fees()`
+    #: reckons the whole school's. The list draws "% collected" from the two.
+    collected_kobo: int = 0
+    billed_kobo: int = 0
 
 
 class BooksOut(Schema):
@@ -316,6 +322,31 @@ def _entry_out(school, entry, *, reversed_by_id=None, term=None) -> EntryOut:
 # -- reading ------------------------------------------------------------------
 
 
+def _class_money(term):
+    """{class id: (collected, billed)} for the term, in two reads whatever the
+    number of classes. Each entry counts as the kind it undoes (a reversal of a
+    payment is a payment taken back), the same reckoning as the dashboard."""
+    placed = dict(
+        ClassPlacement.objects.filter(term=term).values_list("student_membership_id", "class_group_id")
+    )
+    totals = {}
+    for row in (
+        FeeLedgerEntry.objects.filter(term=term, student_membership_id__in=list(placed))
+        .annotate(counts_as=Coalesce(F("reverses__kind"), F("kind")))
+        .values("student_membership_id", "counts_as")
+        .annotate(total=Sum("amount_kobo"))
+    ):
+        group = placed[row["student_membership_id"]]
+        collected, billed = totals.get(group, (0, 0))
+        kind, total = row["counts_as"], row["total"] or 0
+        if kind in (FeeEntryKind.PAYMENT, FeeEntryKind.REFUND):
+            collected -= total
+        elif kind in (FeeEntryKind.CHARGE, FeeEntryKind.DISCOUNT):
+            billed += total
+        totals[group] = (collected, billed)
+    return totals
+
+
 @router.get("/classes/", response=BooksOut)
 def books(request, term_id: Optional[int] = None):
     """The terms, and every class with children placed in the chosen one."""
@@ -332,13 +363,21 @@ def books(request, term_id: Optional[int] = None):
 
     classes = []
     if term is not None:
-        classes = [
-            ClassSummaryOut(class_group_id=g.pk, class_group=str(g), children=g.children)
-            for g in ClassGroup.objects.annotate(
-                children=Count("placements", filter=Q(placements__term=term))
-            )
+        groups = list(
+            ClassGroup.objects.annotate(children=Count("placements", filter=Q(placements__term=term)))
             .filter(children__gt=0)
             .order_by("level", "name")
+        )
+        money = _class_money(term)
+        classes = [
+            ClassSummaryOut(
+                class_group_id=g.pk,
+                class_group=str(g),
+                children=g.children,
+                collected_kobo=money.get(g.pk, (0, 0))[0],
+                billed_kobo=money.get(g.pk, (0, 0))[1],
+            )
+            for g in groups
         ]
     return BooksOut(
         terms=_term_choices(terms),

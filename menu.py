@@ -336,7 +336,7 @@ def shell_open(context, current):
         "path": path,
         # Named only to a member here: a frame is served to whoever opens the
         # URL, and names no school to a stranger (`results/views.py`).
-        "school_name": school.name if school is not None and getattr(request, "school_roles", None) else "",
+        "school_name": school.display_short_name if school is not None and getattr(request, "school_roles", None) else "",
         "user_name": name,
         "user_initials": initials(name) if name else "",
         "role_names": (

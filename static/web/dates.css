@@ -1,0 +1,4 @@
+/* Date fields (`web/dates.js`): day, month and year as three selects; the native input beside them, out of sight. */
+.date-field { position: relative; display: grid; grid-template-columns: 1fr 1.3fr 1.2fr; gap: var(--sp-8); }
+.date-field > input[type="time"] { grid-column: 1 / -1; width: auto; }
+.date-native { position: absolute; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }

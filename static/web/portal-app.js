@@ -1,12 +1,4 @@
-/**
- * The installed app's page script, loaded by the menu's shell (`docs/pwa.md`): ask for the
- * portal's worker, and run the "Install app" button. It imports nothing, so it needs no place
- * in a page's import map. Sign-out is the worker's (`sync/worker.js`).
- *
- * Nothing here lists or unregisters workers or touches a cache: `/sit/` keeps its own.
- * Android raises `beforeinstallprompt`; iPhone has no such event, so the button opens the
- * how-to instead. Opened from the home screen, neither shows.
- */
+/** The installed app's page script: the portal's worker and the "Install app" button (docs/pwa.md). Imports nothing. */
 export function mount(win, doc) {
   const nav = win.navigator;
   const box = doc.getElementById("install");

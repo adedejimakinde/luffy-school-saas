@@ -1,12 +1,4 @@
-/**
- * Tests: question banks, setting a test, and the principal's approval.
- *
- * One page, routed by its hash so the browser's Back works and a link can be shared:
- * `#` the tests, `#banks`, `#bank/<subject>/<level>`, `#question/<subject>/<level>/<id|new>`,
- * `#new-test`, `#test/<id>`, `#edit-test/<id>`, `#preview/<id>`, `#sitting/<id>`. Each view asks the
- * school afresh, so what is drawn is the school's own answer, and every write redraws
- * from what the write answered.
- */
+/** The Tests page: banks, questions, tests, approval and preview. (docs/module-notes.md) */
 
 import * as api from "./api.js";
 import * as states from "./states.js";
@@ -325,6 +317,7 @@ if (typeof document !== "undefined") {
   const root = document.getElementById("tests");
   if (root) {
     // An enhancement: if it cannot load, each select opens the system menu.
+    import("../web/dates.js").then((dates) => dates.enhanceDates(root), () => {});
     import("../web/picker.js").then((picker) => picker.enhanceSelects(root), () => {});
     mount(root);
   }

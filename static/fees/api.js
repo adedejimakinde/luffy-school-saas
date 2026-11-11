@@ -1,12 +1,4 @@
-/**
- * The fetches the fees page makes, and what each answer means.
- *
- * **A 404 is one answer here, on purpose.** Every read refuses a reader who
- * may not see the books with a flat 404 — the same as for a child or an entry
- * that does not exist — so the page says "not something you can open" for
- * both and never guesses which. A 403 is different: it goes only to somebody
- * who reads the books and may not write to them, and its sentence is shown.
- */
+/** The fetches the fees page makes, and what each answer means. (docs/module-notes.md) */
 
 import { deleteJson, getJson, postJson, putJson } from "../web/http.js";
 

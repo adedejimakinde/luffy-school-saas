@@ -1,11 +1,4 @@
-/**
- * The fetches the Tests page makes: banks and their questions, a question's picture,
- * tests and the chain that approves them, and the preview of a paper.
- *
- * Every write answers with the thing written, so the page redraws from the school's
- * own answer. A refusal is one of `REFUSAL` for the page, or a sentence (`rejected`)
- * the form says beside itself.
- */
+/** The fetches the Tests page makes. (docs/module-notes.md) */
 
 import { csrfToken, getJson, postJson } from "../web/http.js";
 
@@ -66,7 +59,7 @@ export const moveTest = ({ testId, act, note = "", fetchImpl = fetch }) => write
 export const changeClasses = ({ testId, classGroupIds, fetchImpl = fetch }) =>
   write(`tests/${id(testId)}/classes/`, { class_group_ids: classGroupIds }, fetchImpl);
 
-// -- the sitting (CBT step 4) -------------------------------------------------------------
+// -- the sitting (CBT step 4) --
 
 export const fetchSitting = ({ testId, fetchImpl = fetch }) => send(() => getJson(`${BASE}tests/${id(testId)}/sitting/`, { fetchImpl }), { write: true });
 export const setCode = ({ testId, fetchImpl = fetch }) => write(`tests/${id(testId)}/code/`, {}, fetchImpl);
@@ -78,10 +71,7 @@ export const giveExtraTime = ({ testId, studentId, minutes, reason, fetchImpl = 
 export const allowRetake = ({ testId, studentId, reason, fetchImpl = fetch }) =>
   write(`tests/${id(testId)}/students/${id(studentId)}/retake/`, { reason }, fetchImpl);
 
-/**
- * A picture for a question, as multipart. Not `postJson()`, because the body is a file;
- * the CSRF rule is `web/http.js`'s all the same, with one retry on a stale token.
- */
+/** A picture for a question, as multipart. (docs/module-notes.md) */
 export async function uploadPicture({ subjectId, level, file, fetchImpl = fetch }) {
   const url = `${BASE}banks/${id(subjectId)}/${id(level)}/pictures/`;
   const post = async (token) => {

@@ -26,6 +26,7 @@ TESTS_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/picker.js",
+    "web/dates.js",
     "tests/api.js",
     "tests/states.js",
     "tests/app.js",

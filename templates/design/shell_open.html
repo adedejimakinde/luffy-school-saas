@@ -8,7 +8,7 @@ and name for a member of it (`schools/brand.py`). Closed by
 {% include "design/icons.html" %}
 <div class="shell">
   <nav id="sidebar" class="sidebar" popover aria-label="Main">
-    {% include "design/brand_mark.html" with tag="a" href=menu.home extra="" %}
+    {% include "design/brand_mark.html" with tag="a" href=menu.home extra="" short=1 %}
     {% if menu.groups %}
     <div class="nav nav-links">
       {% for group in menu.groups %}
@@ -59,7 +59,7 @@ and name for a member of it (`schools/brand.py`). Closed by
     <button type="button" class="icon-button menu-button" popovertarget="sidebar" aria-label="Menu">
       <svg class="icon"><use href="#i-menu"/></svg>
     </button>
-    {% include "design/brand_mark.html" with tag="a" href=menu.home extra=" topbar-logo" %}
+    {% include "design/brand_mark.html" with tag="a" href=menu.home extra=" topbar-logo" short=1 %}
     {% if school_name and not brand %}<span class="topbar-school">{{ school_name }}</span>{% endif %}
     <span class="spacer"></span>{% if setup_chip %}<a class="setup-chip" href="/start/" aria-label="Setup: {{ setup_chip.done }} of {{ setup_chip.total }} steps done. Open Start here"><svg class="icon" aria-hidden="true"><use href="#i-flag"/></svg><span class="chip-full">Setup {{ setup_chip.done }} of {{ setup_chip.total }}</span><span class="chip-short" aria-hidden="true">{{ setup_chip.done }} of {{ setup_chip.total }}</span></a>{% endif %}{% if signed_in %}{% comment %}
     The account menu: who is signed in, as what, and Sign out. A `<details>`,

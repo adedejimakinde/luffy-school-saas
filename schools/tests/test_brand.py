@@ -222,3 +222,81 @@ class TheColourTests(TestCase):
         self.assertIn("--brand:#7A1F2B", html)
         for token in ("--ok", "--warn", "--stop"):
             self.assertNotIn(token, html)
+
+
+class TheShortNameTests(BrandSetUp):
+    """The header says "Crestfield College", so it never cuts off; the full name
+    stays on the sign-in page and on anything printed (docs/design.md)."""
+
+    FULL = "Crestfield College, Abeokuta South Local Government Area, Ogun State"
+
+    def test_the_default_is_the_name_before_its_first_comma(self):
+        from schools.models import short_name_of
+
+        self.assertEqual(short_name_of("", self.FULL), "Crestfield College")
+        self.assertEqual(short_name_of("", "Sunrise Academy"), "Sunrise Academy")
+        self.assertEqual(short_name_of("  CC  ", self.FULL), "CC")
+        self.assertEqual(short_name_of("", ",odd"), ",odd")
+
+    def rename(self, short_name=""):
+        self.sunrise.name = self.FULL
+        self.sunrise.short_name = short_name
+        self.sunrise.save(update_fields=["name", "short_name"])
+
+    def test_the_header_and_sidebar_wear_the_short_name(self):
+        self.rename()
+
+        _, html = self.page(self.ada, SUNRISE)
+
+        self.assertEqual(html.count('<span class="logo-name">Crestfield College</span>'), 2)
+        self.assertNotIn("Abeokuta South", html)
+
+    def test_a_short_name_the_office_chose_wins(self):
+        self.rename("Crestfield")
+
+        _, html = self.page(self.ada, SUNRISE)
+
+        self.assertIn('<span class="logo-name">Crestfield</span>', html)
+
+    def test_the_sign_in_page_keeps_the_full_name(self):
+        self.rename()
+
+        for path in ("/staff-sign-in/", "/sign-in/"):
+            with self.subTest(path=path):
+                _, html = self.page(None, SUNRISE, path)
+                self.assertIn("Crestfield College, Abeokuta South", html)
+
+    def test_the_office_sets_it_with_the_public_page_and_the_setup_page_reports_it(self):
+        admin = User.objects.create_user("sunrise.admin", PASSWORD, full_name="Ayo Admin")
+        grant_membership(admin, self.sunrise, Role.ADMIN)
+        self.rename()
+        self.client.force_login(admin)
+
+        before = self.client.get("/api/academics/setup/", HTTP_HOST=SUNRISE).json()
+        self.assertEqual((before["short_name"], before["short_name_default"]), ("", "Crestfield College"))
+
+        put = self.client.put(
+            "/api/academics/public-page/",
+            {"about": "", "address": "", "phone": "", "short_name": "  Crestfield  "},
+            content_type="application/json",
+            HTTP_HOST=SUNRISE,
+        )
+        self.assertEqual((put.status_code, put.json()["short_name"]), (200, "Crestfield"))
+
+        # Left out, it is unchanged: the old public-page form never sent it.
+        again = self.client.put(
+            "/api/academics/public-page/",
+            {"about": "x", "address": "", "phone": ""},
+            content_type="application/json",
+            HTTP_HOST=SUNRISE,
+        )
+        self.assertEqual(again.json()["short_name"], "Crestfield")
+
+        too_long = self.client.put(
+            "/api/academics/public-page/",
+            {"about": "", "address": "", "phone": "", "short_name": "x" * 61},
+            content_type="application/json",
+            HTTP_HOST=SUNRISE,
+        )
+        self.assertEqual(too_long.status_code, 422)
+        connection.set_schema_to_public()

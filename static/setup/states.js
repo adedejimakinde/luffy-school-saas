@@ -5,7 +5,13 @@
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  */
 
-import { emptyState, esc, numberOrBlank } from "../web/html.js";
+import { dayFirst, emptyState, esc, numberOrBlank } from "../web/html.js";
+
+/** One setup section in its own card, under its heading; nothing to show, no card. */
+function card(parts) {
+  const html = Array.isArray(parts) ? parts.join("") : parts;
+  return html ? `<section class="card setup-card">${html}</section>` : "";
+}
 
 /**
  * The school's shape: its terms and its class groups.
@@ -16,41 +22,46 @@ import { emptyState, esc, numberOrBlank } from "../web/html.js";
  * unset a term first, and never shows two as current.
  */
 export function shape({
-  terms = [], classes = [], card = null, contact_email = "", about = "", address = "", phone = "",
+  terms = [], classes = [], card: card_ = null, contact_email = "", about = "", address = "", phone = "",
+  short_name = "", short_name_default = "",
   lga = "", lga_choices = [], school_code = "", subjects = [], departments = [], conduct = null, notes = {},
 } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
     "<h1>School setup</h1>",
 
-    '<h2 id="terms">Terms</h2>',
-    terms.length
-      ? `<ul class="terms">${terms.map((t) => termRow(t)).join("")}</ul>`
-      : '<p class="blank">No terms yet. The first one opens the school\'s calendar.</p>',
-    newTermForm(notes.term),
+    card([
+      '<h2 id="terms">Terms</h2>',
+      terms.length
+        ? `<ul class="terms">${terms.map((t) => termRow(t)).join("")}</ul>`
+        : '<p class="blank">No terms yet. The first one opens the school\'s calendar.</p>',
+      newTermForm(notes.term),
+    ]),
 
-    '<h2 id="classes">Classes</h2>',
-    classes.length
-      ? `<ul class="classes">${classes.map(classRow).join("")}</ul>`
-      : emptyState({
-          key: "classes",
-          icon: "i-sheet",
-          title: "No classes yet",
-          text: "Add JSS 1 to SS 3, one class for each arm. Registers, marks and report cards all belong to a class.",
-          action: { href: "#class_name", label: "Add your first class" },
-        }),
-    newClassForm(notes.class),
+    card([
+      '<h2 id="classes">Classes</h2>',
+      classes.length
+        ? `<ul class="classes">${classes.map(classRow).join("")}</ul>`
+        : emptyState({
+            key: "classes",
+            icon: "i-sheet",
+            title: "No classes yet",
+            text: "Add JSS 1 to SS 3, one class for each arm. Registers, marks and report cards all belong to a class.",
+            action: { href: "#class_name", label: "Add your first class" },
+          }),
+      newClassForm(notes.class),
+    ]),
 
-    card ? cardLook(card, notes) : "",
+    card(card_ ? cardLook(card_, notes) : ""),
 
-    conduct ? conductSettings(conduct, notes) : "",
+    card(conduct ? conductSettings(conduct, notes) : ""),
 
-    localGovernment(lga, lga_choices, notes, school_code),
-    card && card.template === "ogun" ? subjectDepartments(subjects, departments, notes) : "",
+    card(localGovernment(lga, lga_choices, notes, school_code)),
+    card(card_ && card_.template === "ogun" ? subjectDepartments(subjects, departments, notes) : ""),
 
-    contactEmail(contact_email, notes),
+    card(contactEmail(contact_email, notes)),
 
-    publicPage({ about, address, phone }, notes),
+    card(publicPage({ about, address, phone, short_name, short_name_default }, notes)),
 
     "</section>",
   ].join("");
@@ -131,12 +142,16 @@ function subjectDepartments(subjects, departments, notes) {
  * What the school's public page says, beside the crest and colour set above.
  * Its contact email, above, is shown there too.
  */
-function publicPage({ about, address, phone }, notes) {
+function publicPage({ about, address, phone, short_name = "", short_name_default = "" }, notes) {
   return [
     '<h2 id="public-page">Your school\'s web page</h2>',
     '<p class="hint">Families see this on your school\'s own address, with your crest, ',
     "colour and contact email. Leave a box empty to leave it off the page.</p>",
     `<form class="public-page-form${notes.public_page ? ` ${esc(notes.public_page.kind)}` : ""}" data-form="public-page">`,
+    '<label for="short_name">Short name</label>',
+    `<input id="short_name" name="short_name" value="${esc(short_name)}" maxlength="60" autocomplete="off" placeholder="${esc(short_name_default)}">`,
+    '<span class="hint">Shown in the top bar, so it never cuts off on a phone. Blank uses the name before its first comma. ',
+    "The full name stays on the sign-in page and on printed documents.</span>",
     '<label for="about">About the school</label>',
     `<textarea id="about" name="about" rows="4" maxlength="600">${esc(about)}</textarea>`,
     '<label for="address">Address</label>',
@@ -161,7 +176,7 @@ function termRow(t) {
   return [
     `<li class="term${t.is_current ? " current" : ""}">`,
     `<span class="name">${esc(t.session)} &middot; ${esc(t.name_label)}</span>`,
-    `<span class="dates">${esc(t.starts_on)} to ${esc(t.ends_on)}</span>`,
+    `<span class="dates">${esc(dayFirst(t.starts_on))} to ${esc(dayFirst(t.ends_on))}</span>`,
     `<span class="days">${numberOrBlank(t.school_days)} school days</span>`,
     t.is_current
       ? '<span class="standing">Current</span>'

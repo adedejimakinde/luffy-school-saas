@@ -207,6 +207,9 @@ class SetUpOut(Schema):
     about: str = ""
     address: str = ""
     phone: str = ""
+    #: What the header calls the school; blank means the name before its first comma.
+    short_name: str = ""
+    short_name_default: str = ""
     #: The local government area the school sits in, printed on the Ogun
     #: State card beside its name, and the twenty Ogun ones to offer.
     lga: str = ""
@@ -297,6 +300,8 @@ def setup(request):
         about=school.about,
         address=school.address,
         phone=school.phone,
+        short_name=school.short_name,
+        short_name_default=short_name_of("", school.name),
         lga=school.lga,
         lga_choices=list(contact.OGUN_LGAS),
         school_code=school.school_code,
@@ -589,6 +594,7 @@ def card_crest(request):
 # ---------------------------------------------------------------------------
 
 from schools import contact  # noqa: E402
+from schools.models import short_name_of  # noqa: E402
 
 
 class ContactEmailIn(Schema):
@@ -626,12 +632,15 @@ class PublicDetailsIn(Schema):
     about: str = ""
     address: str = ""
     phone: str = ""
+    #: Left out, the short name is unchanged; blank goes back to the default.
+    short_name: Optional[str] = None
 
 
 class PublicDetailsOut(Schema):
     about: str
     address: str
     phone: str
+    short_name: str = ""
 
 
 @router.put("/public-page/", response={200: PublicDetailsOut, 403: MessageOut, 422: MessageOut})
@@ -643,13 +652,16 @@ def set_public_page(request, payload: PublicDetailsIn):
         return refused
     try:
         school = contact.set_public_details_as(
-            request.user, school, about=payload.about, address=payload.address, phone=payload.phone
+            request.user, school, about=payload.about, address=payload.address,
+            phone=payload.phone, short_name=payload.short_name,
         )
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
     except contact.PublicDetailsRefused as exc:
         return 422, MessageOut(detail=str(exc))
-    return 200, PublicDetailsOut(about=school.about, address=school.address, phone=school.phone)
+    return 200, PublicDetailsOut(
+        about=school.about, address=school.address, phone=school.phone, short_name=school.short_name
+    )
 
 
 class LgaIn(Schema):

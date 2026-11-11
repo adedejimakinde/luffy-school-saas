@@ -124,7 +124,8 @@ Mobile first, checked at 360, 768 and 1280.
 - **The tab bar floats**: a white bar 12px clear of the screen's edges and the
   phone's safe area, 20px corners, the lifted shadow, and a soft pill of the
   brand colour behind the current tab's icon. The page's foot padding is the
-  bar's height and the shell's is the gap, so the last control clears it.
+  bar's height plus 16px and the shell's is the 12px gap, so the last item of
+  every list page ends 16px above the bar (`tests/ui/sweep1.test.js`).
 - **The tab bar is the role's main screens**: Home first for every staff role;
   Fees for the principal and the bursar (the bursar has three tabs), Broadsheets
   for the vice principal.
@@ -158,8 +159,12 @@ Mobile first, checked at 360, 768 and 1280.
 On a school's own host the portal wears the school, not Classnode
 (`schools/brand.py`; tests `schools/tests/test_brand.py`, two schools):
 
-- **The header and the sidebar** show the school's crest and name where the
-  Classnode mark was. With no crest, its initials in a tile of the brand colour.
+- **The header and the sidebar** show the school's crest and its **short name**
+  where the Classnode mark was (`School.short_name`, set under Setup, "Your
+  school's web page"; blank means the name before its first comma, so
+  "Crestfield College, Abeokuta South" reads "Crestfield College"). It wraps to
+  two lines rather than cut off, at 320px too. The full name stays on the
+  sign-in page and on printed documents. With no crest, its initials in a tile of the brand colour.
 - **The browser tab's icon** is the crest (the upload service's 128px PNG).
   With none, Classnode's icons stay.
 - **The brand colour** is the primary colour of the school's website look
@@ -236,6 +241,30 @@ Every `<select>` in the portal opens one picker (`static/web/picker.js`,
 `tests/ui/picker.test.js` opens it on a phone and a desk, photographs it, walks
 its keys, and checks that every page with a select still sends what was
 chosen, at two schools.
+
+## Dates
+
+Every date is day first. Shown: "8 Nov 2026" (`dayFirst()` in `web/html.js`),
+never `11/08/2026`; stored values stay `yyyy-mm-dd`. Entered: `web/dates.js`
+turns each `<input type="date">` (and `datetime-local`, which adds a time box)
+into a Day, a Month and a Year select, each opened by the shared picker, and
+the native input stays the field (name, value, `required`, `min`, `max`),
+drawn out of sight; the browser's own box would show `mm/dd/yyyy` on a phone
+set to US English, and `lang` does not change that. A day past a month's end
+(31 February) becomes its last day. A page that draws a date field loads
+`web/dates.js` and `web/dates.css` beside the picker (`docs/module-notes.md`
+says where the long comments of the shared modules went, to keep every page
+under 150 KB).
+
+## Fees list and setup
+
+- **The fees list** is `.list-rows` in ONE white card: the class in bold, "25
+  children" muted under it, the amount collected with a bar and "% collected"
+  (or "Not billed") at the right, and a chevron. Each row is the button that
+  opens the class, as before. `GET /api/fees/classes/` carries `collected_kobo`
+  and `billed_kobo` per class, reckoned as the dashboard does.
+- **Setup** is stacked cards, one per section (`.setup-card`, `setup/cards.css`),
+  each under its own heading, 16px apart. Forms are unchanged.
 
 ## What holds it
 
