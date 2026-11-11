@@ -1042,7 +1042,8 @@ describe("a phone's 390px", () => {
             };
           });
           assert.ok(found.controls > 0, `${name}: no control on the page`);
-          assert.ok(Math.abs(found.padding - found.barHeight) <= 1, `${name}: ${found.padding}px of bottom padding under a ${found.barHeight}px bar`);
+          // The page's foot is the bar's height plus 16px (docs/design.md), so the last item ends 16px above the bar.
+          assert.ok(Math.abs(found.padding - (found.barHeight + 16)) <= 1, `${name}: ${found.padding}px of bottom padding under a ${found.barHeight}px bar`);
           assert.ok(found.foot <= found.barTop + 0.5, `${name}: the last control ends at ${found.foot}px, under the bar at ${found.barTop}px`);
           assert.ok(found.content <= found.barTop + 0.5, `${name}: content runs to ${found.content}px, under the bar at ${found.barTop}px`);
         } finally {
@@ -1231,11 +1232,15 @@ describe("the top bar is one row", () => {
                   over: document.querySelector(".topbar").scrollWidth - document.querySelector(".topbar").clientWidth,
                   chip: [...document.querySelectorAll(".setup-chip span")].find((el) => el.getClientRects().length)?.textContent ?? null,
                   wordmark: words ? words.getBoundingClientRect().width > 1 : false,
+                  school: !!document.querySelector(".topbar-logo .logo-name"),
                 };
               });
               const where = `${role} at ${width}px${large ? " and 200% text" : ""}${withChip ? " with the chip" : ""}`;
               const boxes = JSON.stringify(found.boxes);
-              assert.ok(found.barHeight <= 72, `${where}: the top bar is ${found.barHeight}px tall ${boxes}`);
+              // 72px is one line of the name; at 200% text the school's short name wraps to two lines
+              // by design (docs/design.md), which is 93px. Every box must still share one row, below.
+              const tall = large && found.school ? 100 : 72;
+              assert.ok(found.barHeight <= tall, `${where}: the top bar is ${found.barHeight}px tall ${boxes}`);
               const rowTop = Math.min(...found.boxes.map((box) => box[1]));
               for (const [cls, top] of found.boxes) assert.ok(top < rowTop + 20, `${where}: ${cls} is on a second row ${boxes}`);
               assert.ok(found.accountRight !== null, `${where}: no account menu`);
@@ -1248,7 +1253,10 @@ describe("the top bar is one row", () => {
                 if (width >= 390) assert.match(found.chip, /^Setup \d+ of \d+$/, `${where}: the chip has room`);
                 if (width >= 360) assert.ok(found.wordmark, `${where}: the wordmark stays until the chip has shrunk`);
               }
-              if (width === 320 || large) assert.ok(!found.wordmark, `${where}: only the mark is left`);
+              // Classnode's wordmark goes when the row is short of room; a school's short name never does:
+              // it wraps to two lines at 320 and at 200% text (docs/design.md), inside the bar's 72px.
+              if ((width === 320 || large) && found.school) assert.ok(found.wordmark, `${where}: the school's name is hidden`);
+              else if (width === 320 || large) assert.ok(!found.wordmark, `${where}: only the mark is left`);
             }
           }
         } finally {
