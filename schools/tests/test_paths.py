@@ -37,6 +37,8 @@ NEVER = (
     "/sit/", "/sit/abc123/", "/sit/a/b/c", "/website/", "/website/preview/home",
     "/applicants/", "/applicants/42/", "/exam-slips/", "/tests/", "/check/", "/home/",
     "/register/", "/sign-in/", "/staff-sign-in/", "/api/csrf/",
+    # "Forgot password": the page that asks for a link, and the one a link opens.
+    "/forgot-password/", "/reset-password/abc123/",
 )
 
 

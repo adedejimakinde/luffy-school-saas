@@ -11,6 +11,8 @@ The shape to keep in mind:
                     other school's answer — two signatures, one transfer
     GuardianAccount one guardian, once, and the opaque handle for them
     GuardianContact the channel they are reached and verified on, append-only
+    PasswordReset   one emailed link that sets a new password, once, on one host
+    PasswordResetLog every request for one and every reset completed, kept
 
 A person is not "a teacher"; a person *is a teacher at a school*, and may
 simultaneously be a parent at that school and at two others. So role is an
@@ -1179,6 +1181,14 @@ class SignInScope(models.TextChoices):
     #: at the result checker, and the other way round.
     SIT_NUMBER = "sit_number", "Exam door admission number"
     SIT_ADDRESS = "sit_address", "Exam door network address"
+    #: "Forgot password" (`accounts.password_reset`): how many reset links one
+    #: account and one address may ask for in an hour. **Requests, not failures**:
+    #: every request is counted, because each one that reaches an account is an
+    #: email to somebody who may not have asked for it. Buckets of their own, so
+    #: asking for links never closes anybody's sign-in door, and a window of
+    #: their own (`settings.PASSWORD_RESET_THROTTLE_WINDOW`, an hour).
+    RESET_ACCOUNT = "reset_account", "Password reset account"
+    RESET_ADDRESS = "reset_address", "Password reset network address"
 
 
 class SignInAttempts(models.Model):
@@ -1650,3 +1660,131 @@ class GuardianSignIn(models.Model):
             return None
         row.offered.set(offered)
         return row
+
+
+# -- forgot password -----------------------------------------------------------
+
+#: How long an emailed reset link works. Short, because the link is a password
+#: for the half hour it lives, and it sits in an inbox.
+DEFAULT_PASSWORD_RESET_TTL = timedelta(minutes=30)
+
+
+class PasswordResetQuerySet(models.QuerySet):
+    def live(self):
+        """Not used, not replaced by a newer one, and not past its half hour."""
+        return self.filter(
+            used_at__isnull=True, superseded_at__isnull=True, expires_at__gt=timezone.now()
+        )
+
+
+class PasswordReset(models.Model):
+    """One emailed link that lets one person choose a new password, once.
+
+    `accounts.password_reset` mints, checks and spends these, and says why each
+    rule is what it is. The four the row itself holds:
+
+    - **Only the hash is kept** (`token_hash`, SHA-256, `schools.models.hash_token`).
+      The link's own token is in the email and nowhere else, so this table,
+      read by somebody who should not have it, resets nobody's password.
+    - **Thirty minutes** (`expires_at`).
+    - **Once** (`used_at`), and **only the newest** (`superseded_at`): asking
+      for another link kills every earlier one this person holds.
+    - **On the host it was asked for from** (`school`, or null for the portal).
+      A link asked for on one school's host opens on that host and on no
+      other: not another school's, and not the portal.
+
+    Shared, in `public`, like the login it is for.
+    """
+
+    user = models.ForeignKey(User, related_name="password_resets", on_delete=models.CASCADE)
+    #: The school whose own host the link was asked for on, or null: the portal.
+    school = models.ForeignKey(
+        "schools.School", null=True, blank=True, related_name="+", on_delete=models.CASCADE
+    )
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    expires_at = models.DateTimeField()
+    used_at = models.DateTimeField(null=True, blank=True)
+    #: When a newer link for the same person replaced this one.
+    superseded_at = models.DateTimeField(null=True, blank=True)
+    #: The worker's claim, taken before the email provider is called, so a task
+    #: that runs twice sends once (`messaging.models.CodeDelivery`'s reason),
+    #: and what the provider said (`messaging.models.Outcome`), or "" if nothing yet.
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    outcome = models.CharField(max_length=16, blank=True, default="")
+    #: The same claim for the "your password was changed" email, sent after use.
+    told_at = models.DateTimeField(null=True, blank=True)
+
+    objects = PasswordResetQuerySet.as_manager()
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [models.Index(fields=["user", "-created_at"])]
+
+    def __str__(self):
+        return f"Password reset for {self.user_id}, asked {self.created_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @property
+    def is_live(self) -> bool:
+        return self.used_at is None and self.superseded_at is None and not self.is_expired
+
+
+class PasswordResetEvent(models.TextChoices):
+    REQUESTED = "requested", "A link was asked for"
+    COMPLETED = "completed", "A password was changed"
+
+
+class PasswordResetLogIsKept(Exception):
+    """A row of the password reset log was asked to change or go. It never does."""
+
+
+class PasswordResetLog(models.Model):
+    """Every request for a reset link, and every reset completed. Kept.
+
+    **Every request, whatever came of it**: the page says the same sentence to
+    everybody, so this is the only place that knows whether a request reached
+    an account, was throttled, or was for nobody. `result` says which, in the
+    short keys `accounts.password_reset` names.
+
+    **What was typed is kept as a digest**, for `SignInAttempts`'s reason: the
+    box takes whatever is typed into it, and people type passwords into such
+    boxes. The address is in the clear: it is what an incident is investigated
+    from.
+
+    **The ids are bare**, as `audit.Change`'s are: `account_id` is the
+    `accounts.User` a request resolved to (when it resolved to one),
+    `host_school_id` the school whose own host it happened on (null: the
+    portal) and `reset_id` the `PasswordReset` it made or spent. A record does
+    not go when the person does, and it must not be what stops
+    `accounts.deletion.hard_delete_user()`, which refuses while any row still
+    points at the account.
+
+    Append-only: `save()` refuses a second save and `delete()` refuses outright.
+    """
+
+    at = models.DateTimeField(default=timezone.now, db_index=True)
+    event = models.CharField(max_length=16, choices=PasswordResetEvent)
+    result = models.CharField(max_length=24)
+    address = models.CharField(max_length=64, blank=True, default="")
+    identifier_digest = models.CharField(max_length=64, blank=True, default="")
+    account_id = models.PositiveBigIntegerField(null=True, blank=True, db_index=True)
+    host_school_id = models.PositiveBigIntegerField(null=True, blank=True)
+    reset_id = models.PositiveBigIntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-at", "-id"]
+
+    def __str__(self):
+        return f"{self.at:%Y-%m-%d %H:%M} {self.event}: {self.result}"
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise PasswordResetLogIsKept(f"Password reset log row {self.pk} is a record and does not change.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PasswordResetLogIsKept(f"Password reset log row {self.pk} is a record and is never deleted.")

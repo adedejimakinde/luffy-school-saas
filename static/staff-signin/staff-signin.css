@@ -84,6 +84,11 @@ body.door > main {
 }
 .door .problem .icon { width: 18px; height: 18px; margin-top: 1px; }
 
+/* "Forgot password?", under the password and before the button: small to the
+   eye, a finger tall, and pulled up so it reads as the field's own line. */
+.door .forgot { margin: -16px 0 -8px; font-size: 0.9375rem; text-align: right; }
+.door .forgot a { display: inline-flex; align-items: center; min-height: 44px; font-weight: 700; }
+
 .door .primary { width: 100%; min-height: 48px; border-radius: var(--radius); }
 .door a.primary { display: flex; color: var(--card); background: var(--brand); border-color: var(--brand); font-weight: 700; }
 .door a.primary:hover { color: var(--card); background: var(--brand-strong); }

@@ -324,11 +324,12 @@ class SeedUiTests(SendsThroughTheFake, TestCase):
         # Files that write no school's data at all, so have no class to own:
         # the blog's, which writes only the blog (`docs/blog.md`), the
         # picker's, which refuses every write in the browser, and a school
-        # website's, which only reads Harbour's published pages, and the sign-in links', which only
-        # signs the demo's two teachers in and out. Each must name
+        # website's, which only reads Harbour's published pages, the sign-in links', which only
+        # signs the demo's two teachers in and out, and forgot password's, which makes one
+        # parent of its own with no child. Each must name
         # no class, which is what keeps it out of the others' way.
         classless = {"blog.test.js", "glyphs.test.js", "picker.test.js", "school_site.test.js",
-                    "school_links.test.js", "sweep1.test.js"}
+                    "school_links.test.js", "password_reset.test.js", "sweep1.test.js"}
         self.assertEqual(set(owners) | classless, set(files), "a browser test file with no class of its own")
         for file in classless:
             with self.subTest(file=file):

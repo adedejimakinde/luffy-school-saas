@@ -57,8 +57,15 @@ from .models import SignInAttempts, SignInScope
 _COUNTER_COLLISION = "one_signin_counter_per_key"
 
 
-def _window() -> timedelta:
+#: "Forgot password"'s two scopes, which count requests over an hour
+#: (`accounts.password_reset`), not wrong answers over a quarter of one.
+_RESET_SCOPES = (SignInScope.RESET_ACCOUNT, SignInScope.RESET_ADDRESS)
+
+
+def _window(scope=None) -> timedelta:
     """The counting window, read per call so `override_settings` is honoured."""
+    if scope in _RESET_SCOPES:
+        return timedelta(seconds=settings.PASSWORD_RESET_THROTTLE_WINDOW)
     return timedelta(seconds=settings.SIGN_IN_THROTTLE_WINDOW)
 
 
@@ -82,6 +89,10 @@ def _limit(scope) -> int:
         return settings.SIT_MAX_FAILURES_PER_ADMISSION_NUMBER
     if scope == SignInScope.SIT_ADDRESS:
         return settings.SIT_MAX_FAILURES_PER_ADDRESS
+    if scope == SignInScope.RESET_ACCOUNT:
+        return settings.PASSWORD_RESET_MAX_PER_ACCOUNT
+    if scope == SignInScope.RESET_ADDRESS:
+        return settings.PASSWORD_RESET_MAX_PER_ADDRESS
     return settings.SIGN_IN_MAX_FAILURES_PER_IDENTIFIER
 
 
@@ -134,11 +145,13 @@ def key_for(scope, value: str) -> str:
 
     The checker's admission number is hashed without `canonical_username()`,
     which would read it as a phone number or an email. Its caller has already
-    put the school in front of it.
+    put the school in front of it. So is a password reset's account key, which
+    its caller has already made one key for one account
+    (`accounts.password_reset._account_key`).
     """
-    if scope in (SignInScope.ADDRESS, SignInScope.CHECKER_ADDRESS):
+    if scope in (SignInScope.ADDRESS, SignInScope.CHECKER_ADDRESS, SignInScope.RESET_ADDRESS):
         return value
-    if scope == SignInScope.CHECKER_NUMBER:
+    if scope in (SignInScope.CHECKER_NUMBER, SignInScope.RESET_ACCOUNT):
         return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
     normalized = canonical_username((value or "").strip()).casefold()
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -161,7 +174,7 @@ def blocked_for(scope, value: str):
     if row is None or row.failures < _limit(scope):
         return None
 
-    ends_at = row.window_started_at + _window()
+    ends_at = row.window_started_at + _window(scope)
     remaining = (ends_at - timezone.now()).total_seconds()
     if remaining <= 0:
         # The window has run out; the count is stale and the next failure
@@ -212,11 +225,22 @@ def record_failure(scope, value: str) -> None:
     with transaction.atomic():
         row = _locked_counter(scope, key_for(scope, value))
         now = timezone.now()
-        if now - row.window_started_at >= _window():
+        if now - row.window_started_at >= _window(scope):
             row.window_started_at = now
             row.failures = 0
         row.failures += 1
         row.save(update_fields=["failures", "window_started_at"])
+
+
+def record_request(scope, value: str) -> None:
+    """Count one request against `value`: the same counter, for a scope that counts asking.
+
+    "Forgot password" counts every request for a link, not wrong answers
+    (`SignInScope.RESET_ACCOUNT`). The arithmetic is `record_failure()`'s, and
+    `blocked_for()` reads it the same way; the name is what differs, so a call
+    site does not read as though asking for a link were a mistake.
+    """
+    record_failure(scope, value)
 
 
 def clear(scope, value: str) -> None:
