@@ -352,6 +352,40 @@ class AllOrNothingTests(PromotionSetUp):
 
         self.assertNothingMoved(before)
 
+    def test_a_destination_class_in_the_chain_refuses_the_whole_promotion(self):
+        """Audit finding F-01, at the one placement path that writes for itself.
+
+        JSS 2A's results for next term are already with a signatory. Rare, and
+        the same rule as every other placement: nobody joins a class whose
+        results are submitted, checked or approved. A send-back opens it.
+        """
+        from results import services as results
+
+        office = grant_membership(
+            User.objects.create_user("ola", PASSWORD, full_name="Ola Office"),
+            self.stmarys,
+            Role.ADMIN,
+        )
+        with connected_to(self.stmarys):
+            sheet = results.open_sheet(self.jss2a, self.next_term, self.head.user)
+            results.submit(sheet, office.user)
+        plan = self.default_plan()
+        before = self.snapshot()
+
+        response = self.post(plan)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["detail"],
+            "JSS 2A's results are waiting for approval. Send them back first to "
+            "change the class.",
+        )
+        self.assertNothingMoved(before)
+
+        with connected_to(self.stmarys):
+            results.send_back(sheet, self.head.user, "Opened by mistake.")
+        self.assertEqual(self.post(plan).status_code, 200)
+
     def test_a_plan_that_leaves_a_child_out_is_refused(self):
         plan = self.default_plan()
         row = self.class_named(plan, "JSS 1A")

@@ -19,7 +19,6 @@ and sheet share ids, so a guard that read the wrong schema would refuse (or
 allow) on the other school's sheet.
 """
 
-from academics import promotion
 from academics import services as academics
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role, User
@@ -260,16 +259,6 @@ class ARosterInTheChainStaysPutTests(GuardSetUp):
             self.assertEqual(
                 academics.carry_forward_placements(self.term_now(), second), 5
             )
-
-    def test_promotion_asks_the_same_guard(self):
-        """`promote()` writes placements itself, so it has to ask for itself."""
-        with connected_to(self.stmarys):
-            second = Term.objects.get(pk=self.second_term.pk)
-            sheet = services.open_sheet(self.jss1a, second, self.head.user)
-            services.submit(sheet, self.admin.user)
-            with self.assertRaises(academics.ResultsInTheChain):
-                promotion._require_results_not_in_the_chain(second, self.jss1a_id)
-            promotion._require_results_not_in_the_chain(second, self.jss1b_id)
 
 
 class TheRollRoutesRefuseTooTests(GuardSetUp):
@@ -824,6 +813,13 @@ class TheChainRoutesSayItTooTests(UnmarkedSetUp):
 
         self.assertEqual(response.status_code, 428)
         self.assertEqual(response.json()["unmarked"], 7)
+
+    def test_a_count_that_is_not_a_whole_number_is_nothing_seen(self):
+        for junk in ("7", True, 7.0, None, [7]):
+            with self.subTest(junk=junk):
+                self.assertEqual(self.step(self.teacher, "submit", unmarked=junk).status_code, 428)
+        with connected_to(self.stmarys):
+            self.assertEqual(self.log(), [])
 
     def test_a_whole_class_is_a_plain_200(self):
         with connected_to(self.stmarys):
