@@ -18,11 +18,10 @@ main { max-width: 34rem; margin: 0 auto; }
 
 label { display: block; margin: 12px 0 4px; font-weight: 700; }
 
-input[type="date"] { width: 100%; }
 
-.classes, .roster { list-style: none; margin: 8px 0 0; padding: 0; }
+.roster { list-style: none; margin: 8px 0 0; padding: 0; }
 
-.classes button, .roster button {
+.roster button {
   text-align: left;
   width: 100%;
   /* 48px is the smallest target that survives a thumb in a corridor. */
@@ -55,3 +54,14 @@ input[type="date"] { width: 100%; }
 .warn { color: var(--warn); }
 
 button.submit, button.again, button.back { margin: 4px 8px 4px 0; }
+
+/* The day, then which class: a gap between them, and the classes one card of list rows like the fees list. */
+.state-choose label[for="on"] { margin-top: 20px; }
+.which-class { margin: 32px 0 8px; font-size: 1.1rem; }
+.class-card { padding: var(--sp-8) var(--sp-16); margin: 0 0 var(--sp-16); }
+.classes.list-rows { margin: 0; }
+.classes.list-rows > li + li::before { left: 0; right: 0; }
+.classes button.class-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; margin: 0; padding: var(--sp-12) 0;
+  background: none; border: 0; font-weight: 400; text-align: left;
+}

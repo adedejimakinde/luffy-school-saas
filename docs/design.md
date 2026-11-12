@@ -247,14 +247,38 @@ chosen, at two schools.
 Every date is day first. Shown: "8 Nov 2026" (`dayFirst()` in `web/html.js`),
 never `11/08/2026`; stored values stay `yyyy-mm-dd`. Entered: `web/dates.js`
 turns each `<input type="date">` (and `datetime-local`, which adds a time box)
-into a Day, a Month and a Year select, each opened by the shared picker, and
-the native input stays the field (name, value, `required`, `min`, `max`),
-drawn out of sight; the browser's own box would show `mm/dd/yyyy` on a phone
-set to US English, and `lang` does not change that. A day past a month's end
-(31 February) becomes its last day. A page that draws a date field loads
-`web/dates.js` and `web/dates.css` beside the picker (`docs/module-notes.md`
-says where the long comments of the shared modules went, to keep every page
-under 150 KB).
+into **one line** and a calendar sheet, and the native input stays the field
+(name, value, `required`, `min`, `max`), drawn out of sight; the browser's own
+box would show `mm/dd/yyyy` on a phone set to US English, and `lang` does not
+change that. There are no selects for a date.
+
+- **The line** is a button: "Today, Thu 12 Nov" (Today, Yesterday and Tomorrow
+  are said; any other day is "Wed 4 Nov 2026"), with a calendar icon. "Today"
+  is the school's day (`data-time-zone`, else Lagos), as the register's is.
+- **Chips.** `data-dates="recent"` adds "Today" and "Yesterday" chips under the
+  line, for a date near today: the register's day and a payment's date. A chip
+  outside `min`/`max` is greyed out.
+- **The sheet** is a branded bottom sheet on a phone (the picker's handle,
+  title and close button; swipe-free, Escape or the backdrop closes it) and a
+  popover under the field on a desk. It is a month calendar, Monday first:
+  the chosen day is navy, today is ringed, month arrows move on. A field with
+  `min`/`max` (the register's, bound to the current term; a payment's, up to
+  today) greys out the days outside it: they are `aria-disabled` and cannot be
+  chosen, and an arrow that would leave the range is disabled too. There is no
+  year list.
+- **Date of birth** (`data-dates="birth"`) is the one field that needs other
+  years: Year (newest first), then Month, then Day, with the year and month
+  above the days to go back to.
+- **Keyboard and screen readers.** The sheet is a modal dialog named for the
+  field; the days are a `grid` of buttons with their full date as the name,
+  `aria-selected` on the chosen one and `aria-current="date"` on today. Arrows
+  move by a day or a week, Home and End to the week's ends, PageUp and
+  PageDown by a month (with Shift, a year), Enter and Space choose, Escape
+  closes and gives focus back to the line. Days are 44px tall and the sheet
+  fits 320px and 200% text.
+- A page that draws a date field loads `web/dates.js` and `web/dates.css`
+  (`docs/module-notes.md` says where the long comments of the shared modules
+  went, to keep every page under 150 KB). Without them the native input shows.
 
 ## Fees list and setup
 

@@ -111,7 +111,7 @@ test("today is the default day and it is still editable", () => {
   // tests below it are what make it a claim about the page and not the markup.
   assert.equal(today(new Date("2025-09-17T09:30:00Z")), "2025-09-17");
   const html = htmlFor(fromWhere({ ok: true, body: WHERE }, { on: "2025-09-17" }));
-  assert.match(html, /<input id="on" name="on" type="date" data-field="on" value="2025-09-17">/);
+  assert.match(html, /<input id="on" name="on" type="date" data-field="on" data-dates="recent" value="2025-09-17">/);
 });
 
 test("the register names its day the way the home does, not as ISO", () => {

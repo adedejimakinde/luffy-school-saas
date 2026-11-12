@@ -144,3 +144,12 @@ comes from and states the rule every caller keeps: with no portal domain
 configured there is no link, only the sentence, because a dead link is worse
 than being told to go back the way you came. The card page and the 403 page
 added with issue #122 are the other two callers.
+
+## The day and the class list
+
+The day is a date field (`web/dates.js`, `docs/design.md`, "Dates"): "Today, Thu
+12 Nov" with Today and Yesterday chips, and a calendar sheet bound to the
+current term. `GET /api/attendance/where/` carries `term_starts_on` and
+`term_ends_on` for that, and a copy kept before they existed simply has no bounds.
+"Which class?" sits a clear 32px under the day, and the classes are list rows
+inside one card, as the fees list is (`class-card`, `list-rows`).

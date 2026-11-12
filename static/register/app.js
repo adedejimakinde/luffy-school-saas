@@ -145,6 +145,8 @@ export function fromWhere(answer, { on = "" } = {}) {
     step: "choose",
     term: answer.body.term,
     term_id: answer.body.term_id,
+    starts_on: answer.body.term_starts_on || "",
+    ends_on: answer.body.term_ends_on || "",
     classes: answer.body.classes || [],
     may_set_up: Boolean(answer.body.may_set_up),
     on,

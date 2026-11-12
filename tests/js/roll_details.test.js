@@ -63,7 +63,7 @@ test("the office sees the forms, filled in, and the photo", () => {
   assert.match(html, /Details of Ada Obi/);
   assert.match(html, /name="learner_id" value="OG\/ABS\/0042"/);
   assert.match(html, /<option value="female" selected>Female<\/option>/);
-  assert.match(html, /name="date_of_birth" type="date" value="2013-05-02"/);
+  assert.match(html, /name="date_of_birth" type="date" data-dates="birth" value="2013-05-02"/);
   assert.match(html, /src="\/api\/enrolment\/roll\/1\/photo\/\?v=171"/);
   assert.match(html, /data-action="remove-photo"/);
 });
