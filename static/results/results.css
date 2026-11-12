@@ -69,3 +69,14 @@
   border-radius: var(--radius);
 }
 .confirm-release p { margin: 0 0 10px; }
+
+/* A step refused for unmarked papers: the count per subject, and "anyway". */
+.confirm-unmarked {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.confirm-unmarked p { margin: 6px 0 8px; }
+.confirm-unmarked .unmarked-subjects { margin: 0 0 10px; padding-left: 20px; }

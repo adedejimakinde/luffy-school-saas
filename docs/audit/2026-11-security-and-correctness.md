@@ -9,30 +9,34 @@ test idea that follows from the code path named, not an observed failure.
 Where a path could not be followed to the end it says **Needs checking** and
 what would settle it. Line numbers are those of `95a751d`.
 
+**Status.** The audit itself changed no code. Fixes are recorded here as they
+land: the Status column in the summary, and a **Status** line under the
+finding saying what was done and what was left.
+
 Not everything was read to the same depth. Section 3 says what was traced and
 found sound; section 4 says what was only skimmed or not opened, so nobody
 takes silence here for a clean bill.
 
 ## 1. Summary
 
-| ID | Title | Severity | Area | File |
-| --- | --- | --- | --- | --- |
-| F-01 | A class's roster can change after its results are submitted, checked or approved | High | Correctness, approval chain | `accounts/enrolment_api.py`, `academics/services.py` |
-| F-02 | A paper added mid-chain makes a whole subject "incomplete" for classes already locked | High | Correctness, totals and positions | `gradebook/curriculum.py`, `results/positions.py` |
-| F-03 | A child who does not take a subject is "not ranked", and papers are school-wide, not per class | High | Correctness, subjects taken | `results/positions.py` |
-| F-04 | Children's data has no retention period, no erasure route and several open legal items | High | Data protection (NDPA) | `website/templates/website/privacy.html`, `accounts/deletion.py` |
-| F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` |
-| F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` |
-| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` |
-| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` |
-| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` |
-| F-10 | Signed-in pages have no Content-Security-Policy and escaping is by hand; one value is not escaped | Medium | XSS | `static/web/html.js`, `static/signin/app.js` |
-| F-11 | Report card and fee answers carry no `Cache-Control: no-store` | Low | Privacy, shared computers | `results/card_api.py` |
-| F-12 | Result-checker PINs are stored as a plain SHA-256 | Low | Secrets at rest | `results/checker.py` |
-| F-13 | After one card is revised, its position and class size can disagree with the rest of the class | Low | Correctness, revisions | `results/revision.py` |
-| F-14 | A mark can land just after a class is submitted, when the sheet row did not exist yet | Low | Correctness, locking | `results/services.py`, `gradebook/services.py` |
-| F-15 | Offline copies of a marking sheet or register are shown to whoever opens the phone | Low | Privacy, shared devices | `static/web/snapshots.js` |
-| F-16 | Roles to confirm: every teacher and the bursar read every child's released card; the administrator writes the fee books | Low | Roles | `results/card_api.py`, `fees/authority.py` |
+| ID | Title | Severity | Area | File | Status |
+| --- | --- | --- | --- | --- | --- |
+| F-01 | A class's roster can change after its results are submitted, checked or approved | High | Correctness, approval chain | `accounts/enrolment_api.py`, `academics/services.py` | Fixed in PR #PRNUM |
+| F-02 | A paper added mid-chain makes a whole subject "incomplete" for classes already locked | High | Correctness, totals and positions | `gradebook/curriculum.py`, `results/positions.py` | Fixed in PR #PRNUM |
+| F-03 | A child who does not take a subject is "not ranked", and papers are school-wide, not per class | High | Correctness, subjects taken | `results/positions.py` | Open |
+| F-04 | Children's data has no retention period, no erasure route and several open legal items | High | Data protection (NDPA) | `website/templates/website/privacy.html`, `accounts/deletion.py` | Open |
+| F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` | Fixed in PR #PRNUM |
+| F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` | Fixed in PR #PRNUM |
+| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Open |
+| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Open |
+| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Open |
+| F-10 | Signed-in pages have no Content-Security-Policy and escaping is by hand; one value is not escaped | Medium | XSS | `static/web/html.js`, `static/signin/app.js` | Open |
+| F-11 | Report card and fee answers carry no `Cache-Control: no-store` | Low | Privacy, shared computers | `results/card_api.py` | Open |
+| F-12 | Result-checker PINs are stored as a plain SHA-256 | Low | Secrets at rest | `results/checker.py` | Open |
+| F-13 | After one card is revised, its position and class size can disagree with the rest of the class | Low | Correctness, revisions | `results/revision.py` | Open |
+| F-14 | A mark can land just after a class is submitted, when the sheet row did not exist yet | Low | Correctness, locking | `results/services.py`, `gradebook/services.py` | Open |
+| F-15 | Offline copies of a marking sheet or register are shown to whoever opens the phone | Low | Privacy, shared devices | `static/web/snapshots.js` | Open |
+| F-16 | Roles to confirm: every teacher and the bursar read every child's released card; the administrator writes the fee books | Low | Roles | `results/card_api.py`, `fees/authority.py` | Open |
 
 No finding is rated Critical. Nothing was found that lets one school read or
 change another school's data, lets a parent open another family's child, or
@@ -41,6 +45,16 @@ lets a student see an answer key before release.
 ## 2. Findings
 
 ### F-01. A class's roster can change after its results are submitted, checked or approved (High)
+
+**Status.** Fixed in PR #PRNUM. `academics.services.place_student()`,
+`move_student()`, `remove_placement()`, `carry_forward_placements()` and
+`academics.promotion.promote()` refuse with `ResultsInTheChain` while the sheet
+of a class being joined or left is submitted, checked or approved, under the
+sheet's row lock: "JSS 2A's results are waiting for approval. Send them back
+first to change the class." The roll routes (place, move, admit, import) answer
+422 with that sentence. A send-back opens the class again. A released class is
+as before. Tests: `results/tests/test_chain_guards.py`. Not closed: a class
+with no sheet row yet has nothing to lock, the same narrow race as F-14.
 
 **What is wrong.** Marks are locked once a sheet leaves draft, but the list of
 children the sheet is about is not. `PUT /api/enrolment/roll/{id}/class/`
@@ -75,6 +89,16 @@ with the sentence the marks lock already uses ("ask for the sheet to be sent
 back"). A released class is the separate case F-06 covers.
 
 ### F-02. A paper added mid-chain makes a whole subject "incomplete" for classes already locked (High)
+
+**Status.** Fixed in PR #PRNUM. `create_paper_as()` and `delete_paper_as()`
+refuse while a class that has a mark in the subject this term is submitted,
+checked or approved, naming the class: "JSS 2A's results are waiting for
+approval. Send them back first to add a paper to Mathematics." The teaching
+route answers 422. "A subject in a class" is read off the marks, as
+`class_results()` reads it, so a class with no mark in the subject does not
+refuse; a released class does not refuse either, its cards being frozen.
+`results.ogun.apply_assessments()` was left alone: it replaces papers only for
+a subject with no marks at all. Tests: `results/tests/test_chain_guards.py`.
 
 **What is wrong.** A principal or administrator can add a paper to a subject in
 the current term at any time (`gradebook/curriculum.py:149-163`,
@@ -191,6 +215,17 @@ rows from one school's schema and writes an audit line, and a dated purge of
 
 ### F-05. Results can be submitted, approved and released with papers unmarked and nothing says so (Medium)
 
+**Status.** Fixed in PR #PRNUM. `submit`, `check` and `approve` count the
+class's unmarked papers per subject under the sheet's lock
+(`results/unmarked.py`) and refuse with `UnmarkedPapers` unless the caller
+sends that count back; the routes answer 428 with the count per subject, and
+the page shows it with "Submit anyway", "Check anyway" or "Approve anyway".
+The count is written on the step's row,
+`ResultSheetTransition.unmarked_papers` (migration `results/0039`). A subject
+nobody in the class has a mark in is not counted, for F-03's reason. `release`
+was not changed. Tests: `results/tests/test_chain_guards.py`,
+`tests/js/chain.test.js`.
+
 **What is wrong.** `submit`, `check`, `approve` and `release`
 (`results/services.py:633-816`) check who is asking and the sheet's state.
 None looks at whether every child has every mark. The only check at release is
@@ -220,6 +255,15 @@ per sheet, the number of children with an unmarked paper (it is
 and have `submit` refuse or ask for confirmation when it is not zero.
 
 ### F-06. "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move (Medium, partly known as issue #34)
+
+**Status.** Fixed in PR #PRNUM, in the service. Both lookups now ask
+`results.cards.a_card_went_home()`. Tests:
+`gradebook/tests/test_release_guard.py`, where the test that asserted the gap
+is replaced by one that asserts the lock. **Still open:** the database trigger
+`gradebook_scores_stop_at_release` (`gradebook/0002`) asks
+`results_releasedtraitrating` in the same way, so a write that goes round the
+service (an import, a shell) for a moved child at a school with conduct off is
+still accepted. Re-keying it is a migration and was outside the two-line fix.
 
 **What is wrong.** The guard that stops a mark changing after release has two
 halves. One asks whether the child's **current** class's sheet is open

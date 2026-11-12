@@ -65,6 +65,16 @@ nobody.
 The same rows come back on the release step itself, because the check that
 writes them commits with the release, before this module builds its answer.
 
+## A step on a class with papers unmarked asks first
+
+`submit`, `check` and `approve` answer **428** with `UnmarkedOut` when the class
+has papers unmarked and the request did not carry that count: how many, per
+subject. The same request with `{"unmarked": <the count>}` is taken, and the
+count is written on the step's row in the log. The service counts under the
+sheet's lock and is the gate (`services._require_unmarked_acknowledged()`);
+the list above still carries no count, for the reason given there. Audit
+finding F-05.
+
 ## Actions are computed here, and enforced in `services`
 
 Each row carries the steps this login may take. That is a **convenience for

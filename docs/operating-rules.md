@@ -38,12 +38,16 @@ migration `0011` was already keying on the ratings table one table over. Release
 JSS 1A, move the child, and the write was accepted at both the service and the
 trigger. See `f2d682b`, and issues #33, #34 and #31 for the residue.
 
-**The residue is real and is not closed.** `freeze_for_release()` returns early
-when no trait group is enabled, so a school with the conduct section switched off
-freezes nothing for anybody and the artefact check finds nothing to trip on.
-That is a **per-school** gap, not a per-child one, and it is what issue #34 and
-issue #52 are about. If you add a new released artefact, this is the first
-question to ask of it: *is there a row that exists unconditionally?*
+**The residue, and where it stands.** `ratings.freeze_for_release()` returns
+early when no trait group is enabled, so a school with the conduct section
+switched off freezes no rating for anybody, and a guard that asks the ratings
+table finds nothing to trip on. `ReleasedCard` (#44) is the row that exists
+unconditionally, and `results.cards.a_card_went_home()` asks it. The marks lock
+in `gradebook.services` and `cbt.ca` moved to it in November 2026 (audit
+finding F-06, issue #34). The database trigger behind the marks lock,
+`gradebook_scores_stop_at_release`, still asks the ratings table. If you add a
+new released artefact, this is the first question to ask of it: *is there a row
+that exists unconditionally?*
 
 ---
 

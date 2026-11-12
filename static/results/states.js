@@ -43,6 +43,7 @@ export function chain({
   confirming = null,
   focus = null,
   printing = null,
+  unmarked = null,
 } = {}) {
   return [
     '<section class="state state-chain" data-state="chain">',
@@ -50,7 +51,7 @@ export function chain({
     `<p class="term">${esc(term)}</p>`,
     '<ul class="classes stack-list">',
     rows
-      .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus, printing }))
+      .map((row) => classRow(row, notes[row.class_group_id], { asking, telling, confirming, focus, printing, unmarked }))
       .join(""),
     "</ul>",
     "</section>",
@@ -75,7 +76,7 @@ export function noTerm() {
  * is final — a wrong card is corrected by reissuing it, not by moving the
  * sheet back — so an empty row would read as a page that failed to draw.
  */
-function classRow(row, note, { asking, telling, confirming, focus, printing }) {
+function classRow(row, note, { asking, telling, confirming, focus, printing, unmarked }) {
   const actions = STEPS.filter(([flag]) => row[flag]).map(
     ([, step, label]) =>
       `<button type="button" data-action="step" data-step="${step}" ` +
@@ -143,6 +144,7 @@ function classRow(row, note, { asking, telling, confirming, focus, printing }) {
           row.state === "released" ? "Released: nothing further" : "Nothing for you here"
         }</span>`,
     confirming === row.class_group_id && row.may_release ? releaseQuestion(row) : "",
+    unmarked && unmarked.class_group_id === row.class_group_id ? unmarkedQuestion(row, unmarked) : "",
     asking === row.class_group_id ? sendBackForm(row) : "",
     telling && telling.class_group_id === row.class_group_id ? tellingQuestion(row, telling) : "",
     leftOut(row),
@@ -201,6 +203,37 @@ function releaseQuestion(row) {
     '<span class="actions">',
     `<button type="button" class="btn-primary" data-action="step" data-step="release" data-class="${id}">Release ${name}</button>`,
     `<button type="button" data-action="cancel-release" data-class="${id}">Cancel</button>`,
+    "</span>",
+    "</div>",
+  ].join("");
+}
+
+/**
+ * What a submit, check or approve says when the class has papers unmarked.
+ *
+ * The step did not happen. The numbers are the server's (`results.unmarked`),
+ * one per subject: a child and a paper with no mark counts one. The "anyway"
+ * button sends the same step with the total, which the server checks against
+ * its own count and writes on the step's row in the log. The page decides
+ * nothing: a POST without the number is refused whatever is drawn here.
+ */
+function unmarkedQuestion(row, { step, unmarked, subjects }) {
+  const found = STEPS.find(([, name]) => name === step);
+  if (!found) return "";
+  const id = esc(row.class_group_id);
+  const name = esc(row.class_group);
+  return [
+    '<div class="confirm-unmarked msg" role="alert">',
+    '<span class="label label-warn">Unmarked papers</span>',
+    `<p>${name} has ${esc(unmarked)} ${unmarked === 1 ? "paper" : "papers"} still unmarked. `,
+    "A child with a paper unmarked gets no total in that subject and is not ranked.</p>",
+    '<ul class="unmarked-subjects">',
+    subjects.map((s) => `<li>${esc(s.subject)}: ${esc(s.unmarked)}</li>`).join(""),
+    "</ul>",
+    '<span class="actions">',
+    `<button type="button" data-action="step" data-step="${found[1]}" data-class="${id}" ` +
+      `data-unmarked="${esc(unmarked)}">${found[2]} anyway</button>`,
+    `<button type="button" data-action="cancel-unmarked" data-class="${id}">Cancel</button>`,
     "</span>",
     "</div>",
   ].join("");

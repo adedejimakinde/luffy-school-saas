@@ -36,10 +36,16 @@ export const STEP = {
    * happen. Nothing went home, and releasing again is the recovery.
    */
   NOT_CHECKED: "not-checked",
+  /**
+   * A submit, check or approve of a class with papers unmarked. Nothing moved.
+   * Carries the count per subject; sending the total back is "anyway".
+   */
+  UNMARKED: "unmarked",
 };
 
 const SESSION_EXPIRED = "session_expired";
 const LEFT_OUT_NOT_CHECKED = "left_out_not_checked";
+const UNMARKED_PAPERS = "unmarked_papers";
 
 export function chainUrl() {
   return "/api/results/chain/";
@@ -92,7 +98,9 @@ export async function fetchChain({ fetchImpl = fetch } = {}) {
  * sentences: **already signed** names the step this person took and tells them
  * to ask somebody else; **moved** means somebody else advanced it and the page
  * should reload; **needs a reason** is a box to fill in; **not allowed** is a
- * standing they do not have. A fifth belongs to release alone: **not checked**
+ * standing they do not have. **Unmarked** (a 428) is a submit, check or approve
+ * of a class with papers unmarked: the body has the count per subject, and the
+ * same step sent again with that count is taken. A last one belongs to release alone: **not checked**
  * is a release that could not say who it left out and so did not happen, and
  * its remedy is the same button again.
  *
@@ -101,14 +109,14 @@ export async function fetchChain({ fetchImpl = fetch } = {}) {
  * because the world changed", and they are told apart by the body — which is
  * why `AlreadySignedThisCycle` was given one.
  */
-export async function takeStep({ classGroupId, step, reason, fetchImpl = fetch }) {
+export async function takeStep({ classGroupId, step, reason, unmarked, fetchImpl = fetch }) {
   let answer;
   try {
-    answer = await postJson(
-      stepUrl(classGroupId, step),
-      reason === undefined ? {} : { reason },
-      { fetchImpl },
-    );
+    const body = reason === undefined ? {} : { reason };
+    // The count a 428 answered with, sent back: "Approve anyway". The server
+    // counts again under its lock and refuses a number that is no longer true.
+    if (unmarked !== undefined) body.unmarked = unmarked;
+    answer = await postJson(stepUrl(classGroupId, step), body, { fetchImpl });
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
@@ -123,6 +131,9 @@ export async function takeStep({ classGroupId, step, reason, fetchImpl = fetch }
   }
   if (answer.status === 422) {
     return { ok: false, outcome: STEP.NEEDS_A_REASON, body: answer.body || {} };
+  }
+  if (answer.status === 428 && answer.body && answer.body.code === UNMARKED_PAPERS) {
+    return { ok: false, outcome: STEP.UNMARKED, body: answer.body };
   }
   if (answer.status === 403) {
     return { ok: false, outcome: STEP.NOT_ALLOWED, body: answer.body || {} };
