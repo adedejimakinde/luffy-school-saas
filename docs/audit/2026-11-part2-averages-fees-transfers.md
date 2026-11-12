@@ -25,9 +25,9 @@ not read, so silence is not taken for a clean bill.
 
 | ID | Title | Severity | Area | File | Status |
 | --- | --- | --- | --- | --- | --- |
-| G-01 | Moving to a new term empties every class: nothing carries the rosters forward | High | Term change, rosters | `academics/api.py`, `academics/services.py` | Fixed in PR #PRNUM |
-| G-02 | The session line is built from live marks and part-marked subjects, so it can disagree with the term cards and with the card it is printed on | High | Session averages | `results/sessions.py`, `results/positions.py` | Fixed in PR #PRNUM |
-| G-03 | Releasing one class's CBT scores gives out the answers while other classes have still to sit the same paper | High | CBT, answers | `cbt/release.py` | Fixed in PR #PRNUM |
+| G-01 | Moving to a new term empties every class: nothing carries the rosters forward | High | Term change, rosters | `academics/api.py`, `academics/services.py` | Fixed in PR #343 |
+| G-02 | The session line is built from live marks and part-marked subjects, so it can disagree with the term cards and with the card it is printed on | High | Session averages | `results/sessions.py`, `results/positions.py` | Fixed in PR #343 |
+| G-03 | Releasing one class's CBT scores gives out the answers while other classes have still to sit the same paper | High | CBT, answers | `cbt/release.py` | Fixed in PR #343 |
 | G-04 | Promotion moves children with no reference to results or to the principal's decision, and the decision, the weighting and the pass mark have no screen or route | Medium | Promotion | `academics/promotion.py`, `results/sessions.py` | Open |
 | G-05 | Graduating or "leaving" a child at promotion locks the family out of the final report card | Medium | Promotion, parent access | `accounts/services.py`, `academics/promotion.py` | Open |
 | G-06 | The Ogun card's promotion line is worked out from next term's class, read live | Medium | Ogun card | `results/ogun_card.py` | Open |
@@ -99,7 +99,7 @@ term is in the same session as the old one. It already skips children who have
 left and children already placed, and running it twice does nothing. Leave the
 third-to-first change to promotion.
 
-**Status.** Fixed in PR #PRNUM. `PUT /api/academics/terms/{id}/current/` now
+**Status.** Fixed in PR #343. `PUT /api/academics/terms/{id}/current/` now
 calls `academics.term_change.carry()`, which calls the existing
 `carry_forward_placements()`, inside the transaction that makes the term
 current, when the new term is a later term of the same session. Sent twice it
@@ -166,7 +166,7 @@ does at `results/ogun_card.py:164-182`) and record a term with no released card
 as absent with its own reason. This changes a stated rule
 (`positions.py:303-306`), so it needs the owner's word first.
 
-**Status.** Fixed in PR #PRNUM, on the owner's instruction (the rule in
+**Status.** Fixed in PR #343, on the owner's instruction (the rule in
 `positions.py` that the year's line used `averages` is changed).
 `sessions._lines_for()` reads no live mark. The term being released is the
 card's own `card_averages`, over whole subjects only, from the read the release
@@ -219,7 +219,7 @@ not passed, with the sentence "JSS 2B has not finished sitting this test".
 If a school needs early scores, release the score without the corrections
 until the test is closed for every class.
 
-**Status.** Fixed in PR #PRNUM, by the second option above: a class can still
+**Status.** Fixed in PR #343, by the second option above: a class can still
 be released early, and it is shown its scores only. `cbt.release.
 classes_still_to_finish()` names the classes that have not finished the paper,
 and while it names any, `student_scores()` sends the score, an empty
