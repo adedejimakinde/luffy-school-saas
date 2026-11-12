@@ -28,6 +28,7 @@ from django.utils import timezone
 from academics.models import ClassGroup, Term
 from accounts.models import Role, User
 from academics import services as academics
+from results import unmarked
 from accounts.services import enroll_student, grant_membership
 from attendance import services as registers
 from attendance.tests.fixtures import A_SCHOOL_DAY
@@ -99,8 +100,9 @@ class DashboardSetUp(ChainSetUp):
             )
             gradebook.set_score(self.first_ca, ada, 14, by=self.teacher.user)
             sheet = chain.open_sheet(ClassGroup.objects.get(pk=self.jss1a_id), term, self.teacher.user)
-            chain.submit(sheet, self.teacher.user)
-            chain.check(sheet, self.vp.user)
+            seen = unmarked.count(sheet.class_group, term)
+            chain.submit(sheet, self.teacher.user, unmarked=seen)
+            chain.check(sheet, self.vp.user, unmarked=seen)
         invitations.invite_staff(
             self.admin.user, self.stmarys, Role.TEACHER, email="new.teacher@example.com",
             full_name="New Teacher", accept_url_for=lambda token: f"https://portal/i/{token}/",
