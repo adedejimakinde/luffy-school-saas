@@ -21,12 +21,12 @@ takes silence here for a clean bill.
 
 | ID | Title | Severity | Area | File | Status |
 | --- | --- | --- | --- | --- | --- |
-| F-01 | A class's roster can change after its results are submitted, checked or approved | High | Correctness, approval chain | `accounts/enrolment_api.py`, `academics/services.py` | Fixed in PR #PRNUM |
-| F-02 | A paper added mid-chain makes a whole subject "incomplete" for classes already locked | High | Correctness, totals and positions | `gradebook/curriculum.py`, `results/positions.py` | Fixed in PR #PRNUM |
+| F-01 | A class's roster can change after its results are submitted, checked or approved | High | Correctness, approval chain | `accounts/enrolment_api.py`, `academics/services.py` | Fixed in PR #340 |
+| F-02 | A paper added mid-chain makes a whole subject "incomplete" for classes already locked | High | Correctness, totals and positions | `gradebook/curriculum.py`, `results/positions.py` | Fixed in PR #340 |
 | F-03 | A child who does not take a subject is "not ranked", and papers are school-wide, not per class | High | Correctness, subjects taken | `results/positions.py` | Open |
 | F-04 | Children's data has no retention period, no erasure route and several open legal items | High | Data protection (NDPA) | `website/templates/website/privacy.html`, `accounts/deletion.py` | Open |
-| F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` | Fixed in PR #PRNUM |
-| F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` | Fixed in PR #PRNUM |
+| F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` | Fixed in PR #340 |
+| F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` | Fixed in PR #340 |
 | F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Open |
 | F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Open |
 | F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Open |
@@ -46,7 +46,7 @@ lets a student see an answer key before release.
 
 ### F-01. A class's roster can change after its results are submitted, checked or approved (High)
 
-**Status.** Fixed in PR #PRNUM. `academics.services.place_student()`,
+**Status.** Fixed in PR #340. `academics.services.place_student()`,
 `move_student()`, `remove_placement()`, `carry_forward_placements()` and
 `academics.promotion.promote()` refuse with `ResultsInTheChain` while the sheet
 of a class being joined or left is submitted, checked or approved, under the
@@ -90,7 +90,7 @@ back"). A released class is the separate case F-06 covers.
 
 ### F-02. A paper added mid-chain makes a whole subject "incomplete" for classes already locked (High)
 
-**Status.** Fixed in PR #PRNUM. `create_paper_as()` and `delete_paper_as()`
+**Status.** Fixed in PR #340. `create_paper_as()` and `delete_paper_as()`
 refuse while a class that has a mark in the subject this term is submitted,
 checked or approved, naming the class: "JSS 2A's results are waiting for
 approval. Send them back first to add a paper to Mathematics." The teaching
@@ -215,7 +215,7 @@ rows from one school's schema and writes an audit line, and a dated purge of
 
 ### F-05. Results can be submitted, approved and released with papers unmarked and nothing says so (Medium)
 
-**Status.** Fixed in PR #PRNUM. `submit`, `check` and `approve` count the
+**Status.** Fixed in PR #340. `submit`, `check` and `approve` count the
 class's unmarked papers per subject under the sheet's lock
 (`results/unmarked.py`) and refuse with `UnmarkedPapers` unless the caller
 sends that count back; the routes answer 428 with the count per subject, and
@@ -256,7 +256,7 @@ and have `submit` refuse or ask for confirmation when it is not zero.
 
 ### F-06. "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move (Medium, partly known as issue #34)
 
-**Status.** Fixed in PR #PRNUM, in the service. Both lookups now ask
+**Status.** Fixed in PR #340, in the service. Both lookups now ask
 `results.cards.a_card_went_home()`. Tests:
 `gradebook/tests/test_release_guard.py`, where the test that asserted the gap
 is replaced by one that asserts the lock. **Still open:** the database trigger
