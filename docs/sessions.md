@@ -45,6 +45,32 @@ quietly favours third term by a hundredth. So the mode is stored and the weights
 are *absent* when it is `EQUAL`, rather than left at whatever they were: a stale
 20/20/60 under a mode that says `EQUAL` is a field that lies to the next reader.
 
+## Only what went home counts
+
+Audit finding G-02. A term's figure in the year's summary is **the average on the
+card that was released for that term** (`ReleasedCard.own_average`, the earliest
+release and its highest version), read from the frozen card and never worked out
+again from the marks.
+
+- The "third term" in the summary is the average at the top of the third-term
+  card it is printed on. Both are over **whole subjects only**: a subject with a
+  paper unmarked never enters the year, as it never entered the card.
+- The "first term" and "second term" are what those terms' cards showed. A mark
+  that moves after a card went home does not move the year.
+- A term whose results never reached release counts for nothing, whatever marks
+  its sheet holds, and is recorded as `TermAbsence.NOT_RELEASED`. A card that
+  went home with no average on it is `UNMARKED`.
+- The promotion **suggestion** is taken from the same line, so it is never made
+  on a figure no card showed.
+
+Before the third term is released, `session_line()` is the cards released so
+far under today's weighting; the term in progress is `NOT_RELEASED`.
+
+One thing this leaves as it was: a first- or second-term card **revised after**
+the third term was released does not rewrite the year's summary already frozen
+on the third-term card. That line is a released artefact and changes only by a
+revision of the third-term card, which re-reads the earlier terms' cards.
+
 ## An absent term renormalises. It is never a zero
 
 This is the whole point of the module.
@@ -148,7 +174,7 @@ Why a copy at all, when every term is still in the database:
 | the school does this | the session average would |
 | --- | --- |
 | switches from 20/20/60 to a straight mean | move, on every past session |
-| revises a first-term result (task 8) | move, after the card went home |
+| revises a first-term result (task 8) | move, after the third-term card went home |
 | corrects a placement for a term long closed | gain or lose a whole term |
 
 None of those are misuse, and every one silently rewrites a number a parent is

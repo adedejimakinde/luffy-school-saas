@@ -39,10 +39,28 @@ hundred**, and the average is the average of the year the child had.
     sat          —  /  ✓ /  ✓
     applied      —  / 25 / 75
 
-The same is true of a term the child *was* enrolled for and nobody marked, and
-of a term the school never created. All three renormalise identically — but
-they are recorded as three different causes, because they need three different
-responses from staff. `TermAbsence` has that argument.
+The same is true of a term the child *was* enrolled for whose results never
+reached release, of a card that went home with no average on it, and of a term
+the school never created. All of them renormalise identically — but they are
+recorded as different causes, because they need different responses from
+staff. `TermAbsence` has that argument.
+
+## Only what went home counts (audit finding G-02)
+
+A term's figure in the year's summary is **the average on the card that was
+released for that term**, read from the frozen `ReleasedCard` and never worked
+out again from the marks. Three things follow, and each was wrong before:
+
+- the "third term" in the summary is the average at the top of the third-term
+  card it is printed on, over whole subjects only: a subject with a paper
+  unmarked never enters the year;
+- the "first term" and "second term" are what those terms' cards showed. A
+  mark changed after a card went home does not move the year's summary;
+- a term whose results were never released counts for nothing, whatever marks
+  its sheet holds, and is recorded as `NOT_RELEASED`.
+
+The promotion suggestion is taken from the same line (`decide()`), so a child
+is never suggested "repeated" on a figure no card showed.
 
 ## What a parent must not see
 
@@ -352,29 +370,42 @@ def _terms_of(session) -> dict[str, Term]:
 def _lines_for(student_ids, session, snapshot=None) -> dict[int, tuple[TermLine, ...]]:
     """Every named child's three term lines. Batched, because release calls it.
 
-    `snapshot` is the `positions.ClassResults` a release or a revision read
-    under its lock, or `None` for the ordinary live reads. Where it is given,
-    **the term it was read for is answered from it** rather than by querying
-    `ClassPlacement` again — issues #46 and #60, and the note on
-    `freeze_for_release()` below says what that was costing. The other two terms
-    of the session are historical and are read live either way: no lock covers
-    them and no snapshot was taken of them.
+    **Each term's figure is the one on the card that went home for it, and
+    nothing else** (audit finding G-02). No live mark is read here:
 
-    **The query count is per (term, class group), not per child.** The obvious
-    implementation asks `positions.overall_percentages()` once per child per
-    term, and `overall_percentages()` builds a whole class's broadsheet — so
-    freezing a class of forty-five would compute a hundred and thirty-five
-    broadsheets to read forty-five numbers off them. Here each term does one
-    placement query and then one broadsheet per distinct class group those
-    children sat in, which for an ordinary class is one.
+    - **The term being released** is answered from `snapshot`, the
+      `positions.ClassResults` the release or revision read under its lock: its
+      placements say who sat (issues #46 and #60, and the note on
+      `freeze_for_release()` below), and its `card_averages` is the very figure
+      `cards.freeze_for_release()` wrote to `ReleasedCard.own_average` a moment
+      earlier in the same transaction. So the "third term" in the year's
+      summary is the average at the top of the card it is printed on.
+    - **Every other term** is read off the child's released card for that term
+      (`cards.cards_for()`: the earliest release, its highest version), so the
+      "first term" in the year's summary is the average the first-term card
+      showed. A mark changed after that card went home moves nothing here.
 
-    That the children of *one* sheet may sit in several class groups across the
-    session is not an edge case — it is the mid-session transfer this whole
-    module renormalises for.
+    `card_averages` and `own_average` are over **whole subjects only**: a
+    subject with a paper unmarked never enters the year's figure, as it never
+    entered the card's.
+
+    A term with no released card contributes nothing and says why: the child
+    was in no class that term (`NOT_ENROLLED`), or was in one and its results
+    never reached release (`NOT_RELEASED`), whatever marks the sheet holds. A
+    card that went home with no average on it is `UNMARKED`. All of them
+    renormalise the same way.
+
+    With no `snapshot` (the staff's read before the third term is released, and
+    a decision recorded then) every term is read from its released card, so the
+    term in progress is `NOT_RELEASED` until it is.
+
+    **The query count is per term, not per child**: two for the cards, and one
+    for the placements of the children who have none.
     """
+    from . import cards as cards_module
+
     lines = {student_id: {} for student_id in student_ids}
     terms = _terms_of(session)
-    wanted = set(student_ids)
 
     for term_name in TERM_ORDER:
         name = term_name.value
@@ -385,69 +416,58 @@ def _lines_for(student_ids, session, snapshot=None) -> dict[int, tuple[TermLine,
                 lines[student_id][name] = TermLine(name, None, None, TermAbsence.NO_TERM)
             continue
 
-        from_snapshot = snapshot is not None and term.pk == snapshot.term.pk
+        if snapshot is not None and term.pk == snapshot.term.pk:
+            # The term being released: who sat, and the card's own average,
+            # from the one read the locked block made. A child the snapshot
+            # does not place was not in this class this term (#46).
+            for student_id in student_ids:
+                if student_id not in snapshot.placements:
+                    lines[student_id][name] = TermLine(
+                        name, term.pk, None, TermAbsence.NOT_ENROLLED
+                    )
+                    continue
+                average = snapshot.card_averages.get(student_id)
+                if average is None:
+                    lines[student_id][name] = TermLine(
+                        name, term.pk, None, TermAbsence.UNMARKED
+                    )
+                    continue
+                lines[student_id][name] = TermLine(name, term.pk, average)
+            continue
 
-        if from_snapshot:
-            # The term being released, answered from the read the locked block
-            # already made. This line and the card now come from one instant,
-            # which is the whole of #46: a placement deleted or moved between
-            # the two used to write a session row contradicting the card written
-            # moments earlier in the same transaction — the card carrying her
-            # third-term marks and the line calling her NOT_ENROLLED for third
-            # term, renormalised over two.
-            placements = {
-                student_id: placement
-                for student_id, placement in snapshot.placements.items()
-                if student_id in wanted
-            }
-        else:
-            # Live, and correctly so: a term nobody is releasing is not covered
-            # by any lock or any snapshot, and its placements are history.
-            placements = {
-                placement.student_membership_id: placement
-                for placement in ClassPlacement.objects.filter(
-                    term=term, student_membership_id__in=student_ids
-                ).select_related("class_group")
-            }
-
-        # One broadsheet per class group any of these children sat in that term.
-        #
-        # `positions.overall_percentages()` *is* `class_results().averages`, so
-        # for the term being released it is the same read the locked block
-        # already made — a third answer to the question the card was written
-        # from. Taking the averages off the snapshot is the other half of #60:
-        # without it a placement deleted mid-release drops the child out of this
-        # fresh read and the line calls her `UNMARKED` instead of
-        # `NOT_ENROLLED`, which is a different sentence and the same lie.
-        percentages = {}
-        for placement in placements.values():
-            if placement.class_group_id in percentages:
-                continue
-            if from_snapshot and placement.class_group_id == snapshot.class_group.pk:
-                percentages[placement.class_group_id] = snapshot.averages
-            else:
-                percentages[placement.class_group_id] = positions.overall_percentages(
-                    placement.class_group, term
-                )
+        released = cards_module.cards_for(student_ids, term)
+        without = [student_id for student_id in student_ids if student_id not in released]
+        # Asked only to choose the sentence for a child with no card: "was not
+        # here" or "was here and the term was never released". Never to find a
+        # mark.
+        placed = (
+            set(
+                ClassPlacement.objects.filter(
+                    term=term, student_membership_id__in=without
+                ).values_list("student_membership_id", flat=True)
+            )
+            if without
+            else set()
+        )
 
         for student_id in student_ids:
-            placement = placements.get(student_id)
-            if placement is None:
+            card = released.get(student_id)
+            if card is None:
                 lines[student_id][name] = TermLine(
-                    name, term.pk, None, TermAbsence.NOT_ENROLLED
+                    name,
+                    term.pk,
+                    None,
+                    TermAbsence.NOT_RELEASED
+                    if student_id in placed
+                    else TermAbsence.NOT_ENROLLED,
                 )
                 continue
-
-            average = percentages[placement.class_group_id].get(student_id)
-            if average is None:
-                # Placed, and nobody entered a mark. Same arithmetic as a
-                # transfer and a different thing to tell staff about.
+            if card.own_average is None:
                 lines[student_id][name] = TermLine(
                     name, term.pk, None, TermAbsence.UNMARKED
                 )
                 continue
-
-            lines[student_id][name] = TermLine(name, term.pk, average)
+            lines[student_id][name] = TermLine(name, term.pk, card.own_average)
 
     return {
         student_id: tuple(by_name[term.value] for term in TERM_ORDER)
@@ -571,12 +591,15 @@ def _weigh(terms, config, session) -> SessionLine:
 
 
 def session_line(membership, session, *, config=None) -> SessionLine:
-    """One child's year as it stands **right now**, computed from live rows.
+    """One child's year as it stands **right now**: the cards released so far,
+    combined under the school's weighting as it is today.
 
-    The read every staff screen wants, and the one a card must *not* use once
-    the third term has been released — `released_session_line()` is that, and
-    `card_session_line()` picks between them the way `ratings.card_sections()`
-    does.
+    Each term is the average on its released card and a term not yet released
+    is absent (`_lines_for()`), so no live mark reaches this either. What is
+    live is which cards exist and the weighting. Once the third term has been
+    released a card must *not* use this — `released_session_line()` is that,
+    and `card_session_line()` picks between them the way
+    `ratings.card_sections()` does.
 
     `config` is accepted so a caller freezing a whole class reads the settings
     row once rather than once per child.
@@ -711,9 +734,9 @@ def released_session_line(membership, session) -> ReleasedSessionResult | None:
     returned the **superseded** line, so `card_session_line()` — and through it
     `decide()`, which freezes `session_average` and the promotion *suggestion*
     off this row — read version 1 while `card_api` served version 2 to the
-    family. The two genuinely differ: the frozen line is recomputed from live
-    first- and second-term marks and live `ReportCardSettings` weights, and a
-    third-term release locks neither.
+    family. The two genuinely differ: the revised line carries the revised
+    card's third-term average, and is weighted as the school weights the year
+    on the day of the revision.
 
     So: earliest sheet, then its highest version. Exactly the rule
     `cards.card_for()` states, and it has to be the same rule or the card and

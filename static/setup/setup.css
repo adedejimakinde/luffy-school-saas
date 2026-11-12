@@ -24,6 +24,17 @@ form button { justify-self: start; margin-top: 8px; }
 .note { font-size: var(--small); color: var(--stop); }
 form.rejected, form.not-allowed { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
 
+/* Before a term is made current: what goes into it, and who does not. */
+.term-change { margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.term-change h3 { margin: 0 0 8px; color: inherit; }
+.term-change h4 { margin: 12px 0 4px; font-size: var(--small); }
+.term-change table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+.term-change th, .term-change td { text-align: left; padding: 6px 8px 6px 0; border-bottom: 1px solid var(--divider); }
+.term-change .not-carried { margin: 0 0 8px; padding-left: 1.2rem; }
+.term-change .not-carried .name { font-weight: 700; }
+.term-change button { margin: 8px 8px 0 0; min-height: var(--control); }
+.done { color: var(--ok); font-size: var(--small); }
+
 /* The report card's look: a miniature of the card's header, on white. Its
    colour is the school's own, from the API. */
 .hint { color: var(--muted); font-size: var(--small); font-weight: 400; }

@@ -88,3 +88,18 @@ test("the door posts the three and keeps no PIN in the form it draws again", asy
   assert.match(root.innerHTML, /value="SM\/001"/);
   assert.doesNotMatch(root.innerHTML, /12345678/);
 });
+
+test("09a: while another class has still to sit, the score shows and no answer does (audit G-03)", () => {
+  const held = {
+    ...MINE,
+    this: { ...MINE.this, corrections: [], answers_held: true, answers_held_why: "Your answers and the right ones will show here once every class has finished this test." },
+  };
+  const html = states.student(held);
+  assert.match(html, /<strong>18<\/strong> out of 20/);
+  assert.match(html, /once every class has finished this test/);
+  assert.doesNotMatch(html, /Right answer/);
+  assert.doesNotMatch(html, /class="corrections"/);
+  // One wrong of two, and nothing to list yet: never "you got every question right".
+  assert.doesNotMatch(html, /You got every question right/);
+  assert.doesNotMatch(html, /data-action="show-all"/);
+});

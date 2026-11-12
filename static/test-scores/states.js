@@ -78,7 +78,11 @@ export function student(s, { all = false } = {}) {
     `<p class="hint">${esc(t.subject)}. Released by ${esc(t.released_by)} on ${esc(day(t.released_at))}.</p>`,
     `<p class="big"><strong>${esc(t.score)}</strong> out of ${esc(t.out_of)}</p>`,
     `<p class="tally"><span>${plural(t.right, "right", "right")}</span> <span>${plural(t.questions - t.right, "not right", "not right")}</span></p>`,
-    wrong.length || all
+    // Another class has still to sit this paper, so the server sent the score and
+    // no answers. Said in its own words; never "you got every question right".
+    t.answers_held
+      ? `<p class="note held" role="status">${esc(t.answers_held_why || "Your answers will show here once every class has finished this test.")}</p>`
+      : wrong.length || all
       ? `<h2>${all ? "Every question" : `The ${wrong.length === 1 ? "one" : wrong.length} you did not get right`}</h2>`
       : '<p class="done" role="status">You got every question right.</p>',
     shown.length ? `<ol class="corrections">${shown.map((c) => (c.right ? rightOne(c) : correction(c))).join("")}</ol>` : "",

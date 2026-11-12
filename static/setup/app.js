@@ -21,6 +21,7 @@ import {
   createClass,
   createTerm,
   fetchSetup,
+  fetchTermChange,
   makeCurrent,
   removeCrest,
   saveOrder,
@@ -107,6 +108,13 @@ export function movedOrder(state, group, traitId, by) {
   return ids;
 }
 
+/** What a term change did, in a sentence: the term, and how many children went with it. */
+export function changedSentence(row) {
+  const term = row.name_label || "The term";
+  if (!row.carried) return `${term} is now the current term.`;
+  return `${term} is now the current term. ${row.carried} ${row.carried === 1 ? "child was" : "children were"} carried into it, each in the same class.`;
+}
+
 const POLLS = 30;
 const POLL_MS = 2000;
 
@@ -169,10 +177,30 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       return;
     }
     if (hit.dataset.action === "make-current") {
-      await after(
-        "term",
-        await makeCurrent({ termId: Number(hit.dataset.term), fetchImpl }),
-      );
+      // Nothing is switched yet: first the review of what the switch carries
+      // into the new term and who it leaves (audit G-01), then a second press.
+      const review = await fetchTermChange({ termId: Number(hit.dataset.term), fetchImpl });
+      if (review.ok) {
+        state = { ...state, changing: { review: review.body } };
+        draw();
+        return;
+      }
+      await after("term", review);
+      return;
+    }
+    if (hit.dataset.action === "keep-term") {
+      state = { ...state, changing: null };
+      draw();
+      return;
+    }
+    if (hit.dataset.action === "confirm-current") {
+      const result = await makeCurrent({ termId: Number(hit.dataset.term), fetchImpl });
+      if (result.ok) {
+        // Said once, under the terms, until the page is next opened.
+        await load({ ...state.notes, term: undefined, term_changed: { kind: "done", detail: changedSentence(result.row) } });
+        return;
+      }
+      await after("term", result);
     }
   });
 

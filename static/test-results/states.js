@@ -63,12 +63,21 @@ export function mostScored(distribution) {
   return lo === hi ? `Half of them scored ${lo}.` : `Half of them scored ${lo} to ${hi}.`;
 }
 
+/** "JSS 2B" / "JSS 2B and JSS 2C" / "JSS 2B, JSS 2C and JSS 2D". */
+function namesOf(names) {
+  if (names.length < 2) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 function classPart(r, c, { confirming }) {
+  // The classes that have still to finish the paper: while there are any, a
+  // release shows scores and no answers (audit G-03).
+  const held = r.answers_held_for || [];
   const head = `<li class="group result-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${
     c.released ? '<span class="label label-ok">Released</span>' : '<span class="label">Not released</span>'
   }</span>`;
   const lines = [];
-  if (c.released) lines.push(`<span class="level">Released by ${esc(c.released_by)}, ${esc(shortTime(c.released_at))}. Each student sees their own score and corrections, each parent their own child&#39;s score.</span>`);
+  if (c.released) lines.push(`<span class="level">Released by ${esc(c.released_by)}, ${esc(shortTime(c.released_at))}. ${held.length ? `Each student sees their own score, each parent their own child&#39;s. The answers stay hidden until ${esc(namesOf(held))} ${held.length === 1 ? "has" : "have"} finished this test.` : "Each student sees their own score and corrections, each parent their own child&#39;s score."}</span>`);
   else if (c.why_not) lines.push(`<span class="level">${esc(c.why_not)}</span>`);
   for (const h of c.history || []) {
     if (h.restored) lines.push(`<span class="level hint">Released ${esc(shortTime(h.at))} by ${esc(h.by)}; restored ${esc(shortTime(h.restored_at))} by ${esc(h.restored_by)}: ${esc(h.reason)}</span>`);
@@ -76,7 +85,7 @@ function classPart(r, c, { confirming }) {
   let act = "";
   if (c.may_release) {
     act = confirming === `release-${c.id}`
-      ? `<div class="confirm"><p>Release ${esc(c.name)}&#39;s scores? Each student then sees their own score and corrections, and each parent their own child&#39;s score. A release is final; only the principal can restore it, with a reason.</p><button type="button" class="submit" data-action="release" data-class="${esc(c.id)}">Release scores</button><button type="button" class="again" data-action="keep">Not now</button></div>`
+      ? `<div class="confirm"><p>Release ${esc(c.name)}&#39;s scores? ${held.length ? `Each student then sees their own score, and each parent their own child&#39;s. The answers stay hidden from every student until ${esc(namesOf(held))} ${held.length === 1 ? "has" : "have"} finished this test.` : "Each student then sees their own score and corrections, and each parent their own child&#39;s score."} A release is final; only the principal can restore it, with a reason.</p><button type="button" class="submit" data-action="release" data-class="${esc(c.id)}">Release scores</button><button type="button" class="again" data-action="keep">Not now</button></div>`
       : `<button type="button" class="submit" data-action="ask-release-${esc(c.id)}">Release scores</button>`;
   } else if (c.released && r.may_restore) {
     act = confirming === `restore-${c.id}`

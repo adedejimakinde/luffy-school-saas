@@ -93,6 +93,7 @@ def results_out(r: marking.Results) -> dict:
         "may_restore": r.may_restore,
         "sends_to_ca": r.sends_to_ca,
         "open_attempts": r.open_attempts,
+        "answers_held_for": r.answers_held_for,
     }
 
 
