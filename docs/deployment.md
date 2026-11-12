@@ -411,6 +411,38 @@ parameters are children's names), and tags every report with the school.
 | Error reports, and the backup and restore heartbeats | Sentry (EU) project, its DSN, and two cron monitors (`nightly-backup`, `restore-check`) |
 | Real children's data | your confirmation on data residency (NDPA, OPEN-9) |
 
+## Actions minutes
+
+The repository is private, so CI draws on the plan's 3,000 included minutes a
+month. `.github/workflows/tests.yml` spends them like this:
+
+- **A newer push cancels the older run** on the same pull request
+  (`concurrency`, `cancel-in-progress`). A run on `main` is never cancelled:
+  `deploy` needs `test`, `image` and `publish` on the exact SHA, and the deploy
+  workflow itself never cancels a running deploy.
+- **A push to `main` does not re-run the suite.** The code already passed on the
+  pull request, so `main` runs `pins`, `image` and `publish`. The four test
+  shards and `screens` are skipped, and the `test` check still reports green
+  (a skipped suite counts only on a push; on a pull request it is a failure),
+  so the deploy guard, which reads the check names `test`, `image` and
+  `publish`, is unchanged.
+- **`screens` runs only when a pull request touches** `templates/`, `static/`,
+  `web/` (and `website/`, `webroot/`), `tests/ui/`, any `.css`/`.js` file, or
+  `run-screens.sh`/`package.json`. A skipped `screens` counts as passed in `test`.
+- **Cached:** pip (keyed on `requirements.txt`), npm's download cache and the
+  Playwright Chromium (keyed on the pinned Playwright version).
+
+Estimated minutes, from the job durations in `tests.yml` (about 10 a shard; a
+measured run should replace these): a typical pull request that touches no page
+is about 4 × 10 (shards) + 8 (`image`) + 3 (`pins`, `changes`, `test`) ≈
+**50 minutes a push**; one that touches pages adds about 10 for `screens`,
+≈ **60**. A merge to `main` is about **12** (`image`, `pins`, `publish`). A
+push that cancels the one before it bills the cancelled run only up to the
+moment it stopped. At 50 a push,
+3,000 minutes is about 55 pushes a month, so push to a pull request when it is
+ready for CI rather than on every save. Check actual use under Settings →
+Billing → Usage.
+
 ## Flaky screen tests
 
 The `screens` job (`tests/ui/`, in a real browser) runs through
