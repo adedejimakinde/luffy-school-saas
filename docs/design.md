@@ -278,7 +278,7 @@ change that. There are no selects for a date.
   fits 320px and 200% text.
 - A page that draws a date field loads `web/dates.js` and `web/dates.css`
   (`docs/module-notes.md` says where the long comments of the shared modules
-  went, to keep every page under 150 KB). Without them the native input shows.
+  went; a page with a date field is allowed 170 KB, see `tests/test_budget.py`). Without them the native input shows.
 
 ## Fees list and setup
 
@@ -295,7 +295,7 @@ change that. There are no selects for a date.
 - `tests/test_design.py`: the palette is the whole palette and lives in one
   file. It also checks that the three gradients are the only ones, and for emoji and icon packs, the font's two
   weights, and that every page includes the head.
-- `tests/test_budget.py`: every page stays under 150 KB with its fonts and
+- `tests/test_budget.py`: every page stays under 170 KB with its fonts and
   modules, uses no CDN and no package, and keeps a pinned query count.
 - `tests/ui/screens.test.js`: every page in Chromium at the three widths. It
   checks sideways scrolling, target sizes and phone text sizes, and
