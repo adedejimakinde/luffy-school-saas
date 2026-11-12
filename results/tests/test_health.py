@@ -19,6 +19,7 @@ from results.models import HealthRecord, ReleasedCard
 from results.tests.fixtures import HOST, PASSWORD, THEIR_HOST, ChainSetUp
 from schools.tests.tenants import connected_to
 from tests.guardians import give_verified_channel
+from results import unmarked
 
 MARKER = "Sickle-cell crisis QX7"
 
@@ -74,9 +75,9 @@ class HealthSetUp(ChainSetUp):
             exam = Assessment.objects.get(term=self.term, subject=self.maths, name="Exam")
             gradebook.set_score(exam, self.ada, 61, by=self.teacher.user)
             sheet = results_services.open_sheet(self.jss1a, self.term, self.head.user)
-            results_services.submit(sheet, self.teacher.user)
-            results_services.check(sheet, self.vp.user)
-            results_services.approve(sheet, self.head.user)
+            results_services.submit(sheet, self.teacher.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.check(sheet, self.vp.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.approve(sheet, self.head.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
             results_services.release(sheet, self.head.user)
 
 

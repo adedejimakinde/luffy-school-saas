@@ -109,6 +109,21 @@ class ReleaseIsFinal(ResultsError):
     """A released result cannot be moved. It can only be revised."""
 
 
+class UnmarkedPapers(ResultsError):
+    """The class has papers unmarked and the signatory has not said go on anyway.
+
+    Carries the count per subject (`results.unmarked.SubjectUnmarked`) and the
+    total. Passing that total back as `unmarked=` is the "anyway": it says the
+    number was seen, and the step then records it on its transition row. A
+    number that no longer matches is refused again with the new one.
+    """
+
+    def __init__(self, message, *, subjects, total):
+        super().__init__(message)
+        self.subjects = subjects
+        self.total = total
+
+
 class LeftOutNotChecked(ResultsError):
     """A release could not check who it was leaving without a card, so it did not happen.
 
@@ -391,6 +406,33 @@ def _require_not_already_signed(sheet, actor, to_state):
     )
 
 
+def _require_unmarked_acknowledged(sheet, step, acknowledged) -> int:
+    """How many papers this class has unmarked, refusing unless that was seen.
+
+    Nought needs nothing said. Anything else needs `acknowledged` to be exactly
+    that number: the signatory was shown it and pressed "anyway". A stale
+    number is refused with the new one, so what is recorded is never a count
+    nobody read. Audit finding F-05.
+    """
+    from . import unmarked
+
+    subjects = unmarked.for_class(sheet.class_group, sheet.term)
+    count = unmarked.total(subjects)
+    # `type(...) is int`: `True == 1`, and a careless `unmarked=True` must not
+    # stand for having read "1".
+    if count and not (type(acknowledged) is int and acknowledged == count):
+        raise UnmarkedPapers(
+            f"{sheet.class_group} has {count} "
+            f"{'paper' if count == 1 else 'papers'} still unmarked: "
+            + ", ".join(f"{s.subject} {s.unmarked}" for s in subjects)
+            + f". A child with a paper unmarked gets no total in that subject "
+            f"and is not ranked. Mark them, or {step} anyway.",
+            subjects=subjects,
+            total=count,
+        )
+    return count
+
+
 def _locked(sheet):
     """Re-read the sheet under a row lock. Everything decides on this copy.
 
@@ -533,6 +575,8 @@ def _move(
     step,
     class_teacher_only=False,
     freeze=None,
+    count_unmarked=False,
+    unmarked=None,
 ):
     """One step. Locked, checked, recorded and applied in a single transaction.
 
@@ -571,6 +615,14 @@ def _move(
 
         _require_not_already_signed(locked, actor, to_state)
 
+        # Last of the refusals, so nobody is shown a count for a step that was
+        # never theirs to take, and inside the lock, which a mark also takes
+        # (`gradebook.services._require_the_sheet_is_open()`): the number
+        # recorded is the number that was true when the step was written.
+        unmarked_papers = None
+        if count_unmarked:
+            unmarked_papers = _require_unmarked_acknowledged(locked, step, unmarked)
+
         recorded = ResultSheetTransition.objects.create(
             sheet=locked,
             from_state=locked.state,
@@ -578,6 +630,7 @@ def _move(
             cycle=locked.cycle,
             actor_id=actor.pk,
             reason=reason,
+            unmarked_papers=unmarked_papers,
         )
 
         locked.state = to_state
@@ -630,7 +683,7 @@ def open_sheet(class_group, term, actor):
     return sheet
 
 
-def submit(sheet, actor):
+def submit(sheet, actor, *, unmarked=None):
     """Teacher: these results are ready to be checked.
 
     **Scoped to the class teacher of this group**, not to teachers in general —
@@ -645,10 +698,12 @@ def submit(sheet, actor):
         roles=SUBMITTING_ROLES,
         step="submit",
         class_teacher_only=True,
+        count_unmarked=True,
+        unmarked=unmarked,
     )
 
 
-def check(sheet, actor):
+def check(sheet, actor, *, unmarked=None):
     """Vice principal: I have looked at these and they are right."""
     return _move(
         sheet,
@@ -657,10 +712,12 @@ def check(sheet, actor):
         to_state=SheetState.CHECKED,
         roles=CHECKING_ROLES,
         step="check",
+        count_unmarked=True,
+        unmarked=unmarked,
     )
 
 
-def approve(sheet, actor):
+def approve(sheet, actor, *, unmarked=None):
     """Principal: these may go out."""
     return _move(
         sheet,
@@ -669,6 +726,8 @@ def approve(sheet, actor):
         to_state=SheetState.APPROVED,
         roles=APPROVING_ROLES,
         step="approve",
+        count_unmarked=True,
+        unmarked=unmarked,
     )
 
 
@@ -871,6 +930,7 @@ __all__ = [
     "NotAllowedToActOnResults",
     "ReleaseIsFinal",
     "ResultsError",
+    "UnmarkedPapers",
     "WrongState",
     "approve",
     "as_ids",

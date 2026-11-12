@@ -513,6 +513,10 @@ def _admit(request, school, source):
         # A learner's ID claimed by another child between the check and the
         # write. Nothing was written, for the same reason.
         return 422, MessageOut(detail=str(exc))
+    except academics.ResultsInTheChain as exc:
+        # A class in the file has results submitted, checked or approved
+        # (audit finding F-01). Nothing was written: one transaction.
+        return 422, MessageOut(detail=str(exc))
     return 200, _report_out(report)
 
 

@@ -146,6 +146,61 @@ def _out_of(value):
     return out_of
 
 
+def _require_no_class_in_the_chain(term, subject, doing):
+    """Refuse while a class marked in this subject has results with a signatory.
+
+    A child is whole in a subject only with a mark in every one of its papers
+    (`results.positions`). So a paper added to Mathematics while JSS 2A is
+    submitted, checked or approved makes Mathematics incomplete for all of
+    JSS 2A, and the new paper cannot be marked because the sheet is locked: the
+    class would release with no Mathematics total and nobody ranked. Removing
+    an unmarked paper moves the same totals the other way. Audit finding F-02.
+
+    **"A subject in a class" is read off the marks**, as `class_results()`
+    reads it: the class has the subject when a child on its roster has a mark
+    in it this term. There is no other record of which class takes what, and a
+    class with no mark in the subject is not changed by its papers.
+
+    A draft, an unopened class and a released class do not refuse. A released
+    card is frozen and a paper cannot reach it.
+
+    **The term's sheets are locked, and the caller writes in the same
+    transaction**, so a submit either lands first and is seen here or waits.
+    `order_by("pk")` for the reason `academics.services` gives. Must be called
+    inside `transaction.atomic()`.
+
+    A late import: `results` imports this app.
+    """
+    from academics.models import ClassPlacement
+    from results.models import ResultSheet, SheetState
+
+    in_the_chain = {
+        SheetState.SUBMITTED: "are waiting for approval",
+        SheetState.CHECKED: "are waiting for approval",
+        SheetState.APPROVED: "have been approved",
+    }
+    sheets = (
+        ResultSheet.objects.select_for_update(of=("self",))
+        .filter(term=term)
+        .order_by("pk")
+    )
+    for sheet in sheets:
+        if sheet.state not in in_the_chain:
+            continue
+        roster = ClassPlacement.objects.filter(
+            term=term, class_group_id=sheet.class_group_id
+        ).values("student_membership_id")
+        if Score.objects.filter(
+            assessment__term=term,
+            assessment__subject=subject,
+            student_membership_id__in=roster,
+        ).exists():
+            raise CurriculumRefused(
+                f"{sheet.class_group}'s results {in_the_chain[sheet.state]}. "
+                f"Send them back first to {doing} {subject.name}."
+            )
+
+
 def create_paper_as(actor, school, subject, name, max_score):
     _require_authority(actor, school)
     term = current_term()
@@ -155,6 +210,7 @@ def create_paper_as(actor, school, subject, name, max_score):
     if Assessment.objects.filter(term=term, subject=subject, name__iexact=name).exists():
         raise CurriculumRefused(f"{subject.name} already has a paper called {name} this term.")
     with transaction.atomic():
+        _require_no_class_in_the_chain(term, subject, "add a paper to")
         last = Assessment.objects.filter(term=term, subject=subject).aggregate(m=Max("position"))["m"]
         paper = Assessment(
             term=term, subject=subject, name=name, max_score=out_of,
@@ -189,6 +245,7 @@ def delete_paper_as(actor, school, paper):
         paper = Assessment.objects.select_for_update().get(pk=paper.pk)
         if _marks_in(paper):
             raise CurriculumRefused(f"{paper.name} already has marks, so it cannot be removed.")
+        _require_no_class_in_the_chain(paper.term, paper.subject, "remove a paper from")
         paper.delete()
 
 

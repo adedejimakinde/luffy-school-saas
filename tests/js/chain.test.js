@@ -493,3 +493,108 @@ test("?class= marks the row the home page linked to, and nothing else", () => {
   assert.match(html, /<li id="class-12" class="row state-draft focus">/);
   assert.match(html, /<li id="class-11" class="row state-draft">/);
 });
+
+// -- unmarked papers: the step says how many, and "anyway" sends the number --
+
+const UNMARKED = {
+  status: 428,
+  body: {
+    detail: "JSS 1A has 7 papers still unmarked: Mathematics 4, English 3.",
+    code: "unmarked_papers",
+    unmarked: 7,
+    subjects: [
+      { subject: "English", unmarked: 3 },
+      { subject: "Mathematics", unmarked: 4 },
+    ],
+  },
+};
+
+test("a 428 with the code is the unmarked outcome, and without it is not", async () => {
+  const fetchImpl = serve([["/api/results/chain/11/submit/", UNMARKED]]);
+  const result = await takeStep({ classGroupId: 11, step: "submit", fetchImpl });
+  assert.equal(result.outcome, STEP.UNMARKED);
+  assert.equal(result.body.unmarked, 7);
+
+  const bare = await takeStep({
+    classGroupId: 11,
+    step: "submit",
+    fetchImpl: serve([["/api/results/chain/11/submit/", { status: 428, body: {} }]]),
+  });
+  assert.notEqual(bare.outcome, STEP.UNMARKED);
+});
+
+test("a class with papers unmarked is not submitted: the row says how many per subject", async () => {
+  forgetToken();
+  const root = fakeRoot({ portal: "portal.example.test" });
+  const sent = [];
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/chain/11/submit/", (options) => {
+        const body = JSON.parse(options.body || "{}");
+        sent.push(body);
+        return body.unmarked === 7
+          ? { status: 200, body: row({ state: "submitted", state_label: "Submitted by teacher" }) }
+          : UNMARKED;
+      }],
+      ["/api/results/chain/", { status: 200, body: CHAIN }],
+    ]),
+  });
+
+  await root.click({ "data-action": "step", "data-step": "submit", "data-class": "11" });
+
+  assert.deepEqual(sent, [{}], "the first press sends no count");
+  assert.match(root.innerHTML, /JSS 1A has 7 papers still unmarked/);
+  assert.match(root.innerHTML, /<li>English: 3<\/li><li>Mathematics: 4<\/li>/);
+  assert.match(root.innerHTML, /data-unmarked="7">Submit anyway</);
+  assert.doesNotMatch(root.innerHTML, /Submitted by teacher/, "it must not read as submitted");
+
+  await root.click({
+    "data-action": "step", "data-step": "submit", "data-class": "11", "data-unmarked": "7",
+  });
+
+  assert.deepEqual(sent[1], { unmarked: 7 }, "anyway sends the number the server gave");
+  assert.match(root.innerHTML, /Submitted by teacher/);
+  assert.doesNotMatch(root.innerHTML, /still unmarked/, "the question outlived its answer");
+});
+
+test("the anyway button is named for the step that was refused", () => {
+  for (const [step, label] of [["check", "Check anyway"], ["approve", "Approve anyway"]]) {
+    const html = states.chain({
+      ...state(),
+      unmarked: { class_group_id: 11, step, unmarked: 1, subjects: [{ subject: "Mathematics", unmarked: 1 }] },
+    });
+    assert.match(html, new RegExp(`data-step="${step}" data-class="11" data-unmarked="1">${label}<`));
+    assert.match(html, /JSS 1A has 1 paper still unmarked/);
+  }
+});
+
+test("Cancel closes the unmarked question and sends nothing", async () => {
+  forgetToken();
+  const root = fakeRoot({ portal: "portal.example.test" });
+  let posts = 0;
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/results/chain/11/submit/", () => { posts += 1; return UNMARKED; }],
+      ["/api/results/chain/", { status: 200, body: CHAIN }],
+    ]),
+  });
+  await root.click({ "data-action": "step", "data-step": "submit", "data-class": "11" });
+  assert.match(root.innerHTML, /Submit anyway/);
+
+  await root.click({ "data-action": "cancel-unmarked", "data-class": "11" });
+
+  assert.doesNotMatch(root.innerHTML, /Submit anyway/);
+  assert.equal(posts, 1);
+  assert.match(root.innerHTML, /data-step="submit"/, "the Submit button is still there");
+});
+
+test("a subject name in the unmarked list is text, not markup", () => {
+  const html = states.chain({
+    ...state(),
+    unmarked: {
+      class_group_id: 11, step: "submit", unmarked: 2,
+      subjects: [{ subject: "<img src=x onerror=alert(1)>", unmarked: 2 }],
+    },
+  });
+  assert.doesNotMatch(html, /<img/);
+});

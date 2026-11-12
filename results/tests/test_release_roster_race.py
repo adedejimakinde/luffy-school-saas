@@ -302,10 +302,14 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
         def run():
             try:
                 with connected_to(self.school):
-                    academics.place_student(
-                        ClassGroup.objects.get(pk=self.group_id),
-                        Term.objects.get(pk=self.terms[TermName.THIRD.value]),
-                        self.bola,
+                    # Round the service: `academics.place_student()` refuses
+                    # a class that still reads approved, as one being released
+                    # does (audit finding F-01). What the release has to
+                    # survive is the write that does not ask.
+                    ClassPlacement.objects.create(
+                        class_group_id=self.group_id,
+                        term_id=self.terms[TermName.THIRD.value],
+                        student_membership_id=self.bola.pk,
                     )
             except Exception as exc:  # noqa: BLE001 — reported, never swallowed
                 failed.append(exc)
@@ -352,18 +356,20 @@ class ReleaseUnderARosterChangeSetUp(TransactionTestCase):
         *committed* work landing between two statements of the releasing
         transaction, which a `TestCase` cannot produce.
 
-        `academics.remove_placement()` rather than a queryset delete, because the
-        office's own path is what the release has to survive.
+        A queryset delete, not `academics.remove_placement()`: the office's
+        own path now refuses a class that still reads approved, as one being
+        released does (audit finding F-01), so what the release has to survive
+        is the delete that does not ask.
         """
         failed = []
 
         def run():
             try:
                 with connected_to(self.school):
-                    academics.remove_placement(
-                        Term.objects.get(pk=self.terms[TermName.THIRD.value]),
-                        self.ada,
-                    )
+                    ClassPlacement.objects.filter(
+                        term_id=self.terms[TermName.THIRD.value],
+                        student_membership_id=self.ada.pk,
+                    ).delete()
             except Exception as exc:  # noqa: BLE001 — reported, never swallowed
                 failed.append(exc)
             finally:

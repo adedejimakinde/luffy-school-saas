@@ -50,6 +50,7 @@ from results.models import (
 )
 from results.tests.test_positions import PASSWORD, make_school
 from schools.tests.tenants import connected_to
+from results import unmarked
 
 SESSION = "2025/2026"
 
@@ -180,9 +181,9 @@ class SessionSetUp(TestCase):
             self.term(school, TermName.THIRD.value),
             people[Role.PRINCIPAL],
         )
-        results_services.submit(sheet, people[Role.TEACHER])
-        results_services.check(sheet, people[Role.VICE_PRINCIPAL_ACADEMIC])
-        results_services.approve(sheet, people[Role.PRINCIPAL])
+        results_services.submit(sheet, people[Role.TEACHER], unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.check(sheet, people[Role.VICE_PRINCIPAL_ACADEMIC], unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.approve(sheet, people[Role.PRINCIPAL], unmarked=unmarked.count(sheet.class_group, sheet.term))
         results_services.release(sheet, people[Role.PRINCIPAL])
         return sheet
 
@@ -543,9 +544,9 @@ class TheFreezeTests(SessionSetUp):
             sheet = results_services.open_sheet(
                 self.group(self.stmarys), self.term(self.stmarys, "first"), self.principal
             )
-            results_services.submit(sheet, self.teacher)
-            results_services.check(sheet, self.vp)
-            results_services.approve(sheet, self.principal)
+            results_services.submit(sheet, self.teacher, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.check(sheet, self.vp, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.approve(sheet, self.principal, unmarked=unmarked.count(sheet.class_group, sheet.term))
             results_services.release(sheet, self.principal)
 
             self.assertEqual(ReleasedSessionResult.objects.count(), 0)
@@ -1091,9 +1092,9 @@ class TheChildWhoMovedAfterReleaseTests(SessionSetUp):
         move_student(other, third, self.ada)
 
         sheet = results_services.open_sheet(other, third, self.principal)
-        results_services.submit(sheet, self.teacher)
-        results_services.check(sheet, self.vp)
-        results_services.approve(sheet, self.principal)
+        results_services.submit(sheet, self.teacher, unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.check(sheet, self.vp, unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.approve(sheet, self.principal, unmarked=unmarked.count(sheet.class_group, sheet.term))
         results_services.release(sheet, self.principal)
         return sheet
 

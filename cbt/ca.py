@@ -76,9 +76,9 @@ def lock_of(assessment, student_id, class_group_id) -> str:
     asks the gradebook itself, under its lock; this is only what the preview says.
     """
     from results import services as results_services
-    from results.models import ReleasedTraitRating
+    from results.cards import a_card_went_home
 
-    if ReleasedTraitRating.objects.filter(sheet__term=assessment.term, student_membership_id=student_id).exists():
+    if a_card_went_home(student_id, assessment.term):
         return "released"
     placement = placement_of(student_id, assessment.term)
     if placement is None:

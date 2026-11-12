@@ -35,7 +35,7 @@ from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook import services
 from gradebook.models import Assessment, Score
-from results import ratings, services as results_services
+from results import cards, ratings, services as results_services
 from results.models import TraitGroup
 from results.tests.test_positions import (
     PASSWORD,
@@ -150,9 +150,9 @@ class ReleaseGuardSetUp(RefusalAssertions, PositionSetUp):
         """Turn the affective section on, which is what makes a release freeze.
 
         Off is the default and the ordinary state of a school that has never
-        heard of the feature, so every test that wants a frozen card has to say
-        so. That asymmetry is the point of
-        `test_a_ratings_disabled_school_is_the_residue_issue_34_closes` below.
+        heard of the feature, so every test that wants a frozen rating has to
+        say so. `test_a_moved_child_is_refused_with_the_conduct_section_off`
+        below is the case where it is left off.
         """
         return ratings.set_group_enabled(TraitGroup.AFFECTIVE, True)
 
@@ -457,21 +457,17 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
                 self.mark_ada()
             self.assertIsNone(self.ada_score())
 
-    # -- the residue that is left ---------------------------------------------
+    # -- issue #34: the school with the conduct section off --------------------
 
-    def test_a_ratings_disabled_school_is_the_residue_issue_34_closes(self):
-        """What is left after the artefact check, stated rather than denied.
+    def test_a_moved_child_is_refused_with_the_conduct_section_off(self):
+        """Issue #34, audit finding F-06: the lock no longer needs a frozen rating.
 
-        `freeze_for_release()` returns early when no group is enabled, so a
-        school with the conduct section off freezes nothing for anybody and the
-        artefact check finds nothing to refuse with. That leaves the moved child
-        of such a school looked up against the new class's draft — a per-*school*
-        gap now, where before it was every school's.
-
-        Asserted, so that the day #34's unconditional per-child marker lands,
-        this fails and is deleted rather than quietly going stale. The
-        precondition is asserted too: if some future default turned the section
-        on, this test would pass for the wrong reason and stop guarding anything.
+        `ratings.freeze_for_release()` writes nothing when no group is enabled,
+        so the guard that asked `ReleasedTraitRating` found nothing for this
+        school and the moved child's mark was accepted against the new class's
+        draft. `ReleasedCard` is written for every child on every release, and
+        the guard now asks that. The precondition is asserted: with a group on
+        this would pass on the old guard too.
         """
         with connected_to(self.stmarys):
             self.assertEqual(ratings.enabled_groups(), [])
@@ -480,8 +476,49 @@ class TheChainReachesTheMarksTests(ReleaseGuardSetUp):
             self.walk_to("released")
             self.move_ada_to_a_new_class()
 
-            services.set_score(self.first_ca(), self.ada, 3, expected_version=1)
-            self.assertEqual(self.ada_score(), 3)
+            with self.assertRaises(services.MarksLocked) as refused:
+                services.set_score(self.first_ca(), self.ada, 3, expected_version=1)
+            self.assertIn("released to a parent", str(refused.exception))
+            self.assertEqual(self.ada_score(), 15)
+
+    def test_send_to_ca_calls_the_moved_child_released_with_conduct_off(self):
+        """The same question in `cbt.ca.lock_of()`, which the Send to CA preview reads."""
+        from cbt import ca
+
+        with connected_to(self.stmarys):
+            self.assertEqual(ratings.enabled_groups(), [])
+            self.assertEqual(ca.lock_of(self.first_ca(), self.ada.pk, self.group_id), "")
+
+            self.walk_to("released")
+            other = self.move_ada_to_a_new_class()
+
+            self.assertEqual(ca.lock_of(self.first_ca(), self.ada.pk, other.pk), "released")
+
+    def test_the_other_schools_release_does_not_lock_this_schools_child(self):
+        """Two schools: a card that went home at Grace locks nothing at St Mary's.
+
+        The two schools' first child, term and class usually share ids, so a
+        lookup that left its own schema would find Grace's card for Ada.
+        """
+        theirs = self.enrol(
+            self.grace, "bisi", "Bisi Ade", self.their_group_id, self.their_term_id
+        )
+        with connected_to(self.grace):
+            group, term = self.group_and_term(self.their_group_id, self.their_term_id)
+            sheet = results_services.open_sheet(group, term, self.their_principal)
+            office = User.objects.create_user("goffice", PASSWORD, full_name="Grace Office")
+            grant_membership(office, self.grace, Role.ADMIN)
+            results_services.submit(sheet, office)
+            vp = User.objects.create_user("gvp", PASSWORD, full_name="Grace VP")
+            grant_membership(vp, self.grace, Role.VICE_PRINCIPAL_ACADEMIC)
+            results_services.check(sheet, vp)
+            results_services.approve(sheet, self.their_principal)
+            results_services.release(sheet, self.their_principal)
+            self.assertTrue(cards.a_card_went_home(theirs, term))
+
+        with connected_to(self.stmarys):
+            self.mark_ada()
+            self.assertEqual(self.ada_score(), 15)
 
     def test_the_child_who_stayed_put_is_refused_either_way(self):
         """The common case, and it does not depend on the conduct section.

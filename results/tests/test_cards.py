@@ -108,6 +108,7 @@ def historical_apps():
 
 from results.tests.test_positions import PASSWORD, make_school
 from schools.tests.tenants import connected_to
+from results import unmarked
 
 SESSION = "2025/2026"
 
@@ -207,9 +208,9 @@ class CardSetUp(TestCase):
         sheet = results_services.open_sheet(
             self.group(school), self.term(school, term_name), self.principal
         )
-        results_services.submit(sheet, self.teacher)
-        results_services.check(sheet, self.vp)
-        results_services.approve(sheet, self.principal)
+        results_services.submit(sheet, self.teacher, unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.check(sheet, self.vp, unmarked=unmarked.count(sheet.class_group, sheet.term))
+        results_services.approve(sheet, self.principal, unmarked=unmarked.count(sheet.class_group, sheet.term))
         results_services.release(sheet, self.principal)
         return sheet
 

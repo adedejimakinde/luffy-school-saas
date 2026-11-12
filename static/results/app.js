@@ -109,8 +109,30 @@ function replace(rows, row) {
  * somebody else moved the sheet — because leaving the old buttons up offers a
  * step that will fail for the same reason a second time.
  */
-export function applyStep(state, classGroupId, result) {
+export function applyStep(state, classGroupId, result, stepName) {
   const notes = { ...state.notes };
+  // Any answer closes the unmarked question; only another 428 opens it again.
+  state = { ...state, unmarked: null };
+  if (result.outcome === STEP.UNMARKED) {
+    // Nothing moved. The row asks, with the server's numbers, and its
+    // "anyway" button sends the same step back with the count.
+    delete notes[classGroupId];
+    return {
+      state: {
+        ...state,
+        notes,
+        asking: null,
+        confirming: null,
+        unmarked: {
+          class_group_id: classGroupId,
+          step: stepName,
+          unmarked: result.body.unmarked,
+          subjects: result.body.subjects || [],
+        },
+      },
+      reload: false,
+    };
+  }
   if (result.ok) {
     delete notes[classGroupId];
     return {
@@ -200,9 +222,9 @@ export async function mount(
     if (row && typeof row.scrollIntoView === "function") row.scrollIntoView({ block: "center" });
   }
 
-  const step = async (classGroupId, name, reason) => {
-    const result = await takeStep({ classGroupId, step: name, reason, fetchImpl });
-    const applied = applyStep(state, classGroupId, result);
+  const step = async (classGroupId, name, reason, unmarked) => {
+    const result = await takeStep({ classGroupId, step: name, reason, unmarked, fetchImpl });
+    const applied = applyStep(state, classGroupId, result, name);
     state = applied.state;
     if (applied.reload) {
       // Keep the note that explains why, then refresh the rows under it.
@@ -315,7 +337,20 @@ export async function mount(
       return;
     }
     if (action === "step") {
-      await step(Number(hit.dataset.class), hit.dataset.step);
+      // `data-unmarked` is on the "anyway" button alone: the count the server
+      // gave, sent back to say it was read.
+      const seen = hit.dataset.unmarked;
+      await step(
+        Number(hit.dataset.class),
+        hit.dataset.step,
+        undefined,
+        seen === undefined ? undefined : Number(seen),
+      );
+      return;
+    }
+    if (action === "cancel-unmarked") {
+      state = { ...state, unmarked: null };
+      draw();
       return;
     }
     if (action === "tell-families") {

@@ -50,6 +50,7 @@ from .models import ClassGroup, ClassPlacement, Term, TermName
 from .services import (
     AcademicsError,
     NotAllowedToPlace,
+    _require_results_not_in_the_chain,
     _stamp,
     can_place_students,
 )
@@ -321,6 +322,10 @@ def promote(plan, *, by=None) -> Outcome:
                 f"Nothing was moved; clear those placements or place the rest by hand."
             )
 
+        # A class of the new term whose results are already with a signatory
+        # takes nobody new (audit finding F-01). Rare at a promotion, and the
+        # same rule as every other placement.
+        _require_results_not_in_the_chain(to_term, *{class_id for class_id, _ in writes})
         ClassPlacement.objects.bulk_create(
             ClassPlacement(
                 class_group_id=class_id,

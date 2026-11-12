@@ -164,35 +164,21 @@ def _require_this_card_has_not_gone_home(assessment, membership):
     artefact, not off the child's current placement**, because placement is a
     live fact that changes while release is an event that happened.
 
-    **This was written up as unclosable, and it was not.** The first draft of
-    this module justified the placement key with "nothing freezes marks until
-    task 3", and that conflated two different claims. Nothing freezes the
-    *marks* — true, and still task 3's to fix. But the guarantee being enforced
-    here is *a card went home for this child*, and `ReleasedTraitRating` answers
-    exactly that: one row per child per visible trait, written by
-    `ratings.freeze_for_release()` inside the same transaction that writes the
-    release row. Whether the marks were frozen has no bearing on whether the
-    release is knowable, and `0011` was already keying on it one table over.
-
-    **What is left is a per-school gap, not a per-child one.**
-    `freeze_for_release()` returns early when no group is enabled and again when
-    no trait is visible, so a school with the conduct section off freezes
-    nothing for anybody and this finds nothing to refuse with. That residue — a
-    ratings-disabled release, for a child who is then moved — is what the
-    unconditional per-child marker required by
-    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34)
-    closes, and it is the same residue `ratings` documents for the same reason.
-    The child who stayed put is refused by the check below either way.
+    **Asked of `ReleasedCard`, which every release writes for every child.**
+    This used to ask `ReleasedTraitRating`, and `ratings.freeze_for_release()`
+    writes none of those when the school has no conduct group switched on or no
+    trait visible, so such a school lost this lock for a child who was then
+    moved (issue #34, audit finding F-06). `results.cards.a_card_went_home()`
+    reads the one row that exists unconditionally, so the answer no longer
+    depends on what the card carried.
     """
     # Deferred on purpose, like the import below. See that docstring.
-    from results.models import ReleasedTraitRating, SheetState
+    from results.cards import a_card_went_home
+    from results.models import SheetState
 
-    # Through `sheet__term`, because `ReleasedTraitRating` stores the sheet and
-    # not the term — the sheet is what was released, and it carries the term.
-    if ReleasedTraitRating.objects.filter(
-        sheet__term=assessment.term,
-        student_membership_id=membership.pk,
-    ).exists():
+    # Asked of `ReleasedCard`, the row every release writes for every child on
+    # the roster, whatever the school has switched on.
+    if a_card_went_home(membership, assessment.term):
         # **Not "correcting one is a revision rather than an edit".** That
         # is what this said until task 8 was built and found it false: a
         # revision re-freezes a card from these tables, and these tables
@@ -254,10 +240,9 @@ def _require_the_sheet_is_open(assessment, membership):
     that subject. So this asks where the child sits *today*, which is the wrong
     key for a released card and the only key available here.
     `_require_this_card_has_not_gone_home()` runs first and asks the right one,
-    off the frozen artefact — so a moved child reaches this function only at a
-    school whose conduct section is off. That function has what is left and why
-    [issue #34](https://github.com/adedejimakinde/luffy-school-saas/issues/34)
-    is what closes it.
+    off `ReleasedCard`, which every release writes for every child — so a
+    child whose card went home never reaches this function, wherever they sit
+    now.
 
     **The pre-sheet race, which the lock above does not close.**
     `locked_sheet_for()` returns `None` and locks nothing when no sheet exists,

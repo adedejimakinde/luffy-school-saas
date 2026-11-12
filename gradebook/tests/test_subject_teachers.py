@@ -44,6 +44,7 @@ from results.models import ReleasedAssessmentScore, ReleasedCard
 from results.tests.fixtures import HOST, PASSWORD, THEIR_HOST, ChainSetUp
 from schools.tests.tenants import connected_to
 from tests.refusals import RefusalAssertions
+from results import unmarked
 
 BASE = "/api/subject-teachers/"
 
@@ -464,9 +465,9 @@ class ReleasedResultsAreNeverAffectedTests(SubjectTeachersSetUp):
             set_score(self.first_ca, ada, 17, by=self.teacher.user)
             term = Term.objects.get(pk=self.term_id)
             sheet = chain.open_sheet(self.jss1a, term, self.head.user)
-            chain.submit(sheet, self.teacher.user)
-            chain.check(sheet, self.vp.user)
-            chain.approve(sheet, self.head.user)
+            chain.submit(sheet, self.teacher.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            chain.check(sheet, self.vp.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            chain.approve(sheet, self.head.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
             chain.release(sheet, self.head.user)
             frozen = sorted(ReleasedAssessmentScore.objects.values_list("id", "score"))
             cards = sorted(ReleasedCard.objects.values_list("id", flat=True))
@@ -681,9 +682,9 @@ class ThePrincipalsSwitchTests(RefusalAssertions, SubjectTeachersSetUp):
             set_score(self.first_ca, ada, 17, by=self.teacher.user)
             term = Term.objects.get(pk=self.term_id)
             sheet = chain.open_sheet(self.jss1a, term, self.head.user)
-            chain.submit(sheet, self.teacher.user)
-            chain.check(sheet, self.vp.user)
-            chain.approve(sheet, self.head.user)
+            chain.submit(sheet, self.teacher.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            chain.check(sheet, self.vp.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            chain.approve(sheet, self.head.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
             chain.release(sheet, self.head.user)
             frozen = sorted(ReleasedAssessmentScore.objects.values_list("id", "score"))
         mark = self.score(self.first_ca_id, ada)

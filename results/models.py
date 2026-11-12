@@ -220,6 +220,14 @@ class ResultSheetTransition(models.Model):
     #: back to a sheet of forty-five scores with no idea which one to look at.
     reason = models.TextField(blank=True)
 
+    #: How many papers the class still had unmarked when this step was taken
+    #: (`results.unmarked`), counted under the sheet's lock. Above nought means
+    #: the signatory was shown that number and went on anyway, and this row is
+    #: the record that they did. Null on a send-back and a release, which count
+    #: nothing, and on every row written before the count existed. Audit
+    #: finding F-05.
+    unmarked_papers = models.PositiveIntegerField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

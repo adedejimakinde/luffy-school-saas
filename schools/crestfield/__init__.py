@@ -573,6 +573,7 @@ def _results(groups, placed, term, staff, keeps, ability, rng):
     """Ratings and both remarks, then each class walked as far as its stage."""
     from results import checker, comments, ratings
     from results import services as chain
+    from results import unmarked
     from results.models import CommentAuthor, TraitGroup
 
     principal, vp = staff["principal"].user, staff["vp"].user
@@ -596,10 +597,12 @@ def _results(groups, placed, term, staff, keeps, ability, rng):
                 comments.write(term, child, CommentAuthor.PRINCIPAL, _said(PRINCIPAL_SAYS, average, rng), by=principal)
         if still_open:
             continue
-        chain.submit(sheet, teacher)
-        chain.check(sheet, vp)
+        # Nobody to show the unmarked warning to: the seed says the count itself.
+        seen = unmarked.count(sheet.class_group, sheet.term)
+        chain.submit(sheet, teacher, unmarked=seen)
+        chain.check(sheet, vp, unmarked=seen)
         if name in RELEASED:
-            chain.approve(sheet, principal)
+            chain.approve(sheet, principal, unmarked=seen)
             chain.release(sheet, principal)
             # The result checker's slips, printed as the office prints them
             # after a release. The PINs are on paper only, so a salesperson

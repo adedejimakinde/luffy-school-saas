@@ -280,6 +280,7 @@ def _results(term, group, members, staff, star, rng, *, release):
     """Both remarks on every card, then the sheet walked to checked, or on to released."""
     from results import comments, ratings
     from results import services as chain
+    from results import unmarked
     from results.models import CommentAuthor, TraitGroup
 
     principal = staff["principal"].user
@@ -300,10 +301,12 @@ def _results(term, group, members, staff, star, rng, *, release):
             for trait_group in TraitGroup:
                 for trait in ratings.traits(trait_group):
                     ratings.rate(term, trait, child, 5 if child is star else rng.randint(3, 5), by=teacher)
-    chain.submit(sheet, teacher)
-    chain.check(sheet, staff["vp"].user)
+    # Nobody to show the unmarked warning to: the seed says the count itself.
+    seen = unmarked.count(sheet.class_group, sheet.term)
+    chain.submit(sheet, teacher, unmarked=seen)
+    chain.check(sheet, staff["vp"].user, unmarked=seen)
     if release:
-        chain.approve(sheet, principal)
+        chain.approve(sheet, principal, unmarked=seen)
         chain.release(sheet, principal)
 
 
