@@ -5,7 +5,59 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same pull request cancels the run still going for the
+# older one: its result is already out of date, and it is minutes spent on
+# nothing. Never on `main`: those runs are grouped by SHA, so no two share a
+# group and none is cancelled, because `deploy.yml` asks for `test`, `image`
+# and `publish` on the exact SHA it is given, and a cancelled `publish` would
+# leave that SHA undeployable.
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # Which of the optional jobs a pull request needs. `screens` is the only one
+  # that is optional: it is the longest job after the suite, and a change that
+  # touches no page, style or script cannot alter what it photographs. Asked of
+  # the pull request's own file list through the API, so it needs no checkout
+  # and bills about a minute. If the API cannot answer, the screens run: a
+  # failure to ask must never be read as "nothing changed". On `main` it
+  # answers false, because `main` runs no screens (see `shard` below).
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      screens: ${{ steps.filter.outputs.screens }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            echo "screens=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename'); then
+            echo "::warning::Could not list the pull request's files; running the screens."
+            echo "screens=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # templates/, static/, web/ (and website/, webroot/), tests/ui/, any
+          # CSS or JS file, and the script and package file the job runs with.
+          pattern='^(templates|static|web|website|webroot|tests/ui)/|\.(css|js|mjs|cjs)$|^\.github/scripts/run-screens\.sh$|^package\.json$'
+          if printf '%s\n' "$files" | grep -Eq "$pattern"; then
+            echo "screens=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "screens=false" >> "$GITHUB_OUTPUT"
+            echo "No page, style or script changed: the screens job is skipped."
+          fi
+
   # The suite, dealt into four jobs that run side by side on four runners.
   #
   # One job ran it in 36–47 minutes. The suite is about 9,660 seconds of worker
@@ -17,8 +69,14 @@ jobs:
   # Each job is a whole copy of the old one: its own Postgres, its own Redis,
   # its own test database. Nothing is shared between them, so nothing one job
   # does can make another pass.
+  #
+  # Pull requests only. The same code has already passed the whole suite on the
+  # pull request, so a push to `main` does not run it a second time: it runs
+  # `pins`, `image` and `publish`, and `test` reports on them (below). `main`
+  # has no screens either, for the same reason.
   shard:
     name: tests ${{ matrix.shard }}/4
+    if: github.event_name == 'pull_request'
     # Pinned to the server's release, Ubuntu 24.04, not ubuntu-latest, which
     # moves to Ubuntu 26.04 on 19 October 2026. The same pin is on every job.
     runs-on: ubuntu-24.04
@@ -238,24 +296,35 @@ jobs:
   #
   # `always()` so that a failed or cancelled job turns this red rather than
   # skipping it: a skipped check is easy to read as one that did not matter.
+  # Two skips are legitimate and are the only ones accepted: `screens` skipped
+  # because `changes` found nothing it photographs, and the suite skipped on a
+  # push to `main`, where the pull request already ran it. On a pull request a
+  # skipped suite is a failure. `changes` itself must have succeeded, so a skip
+  # that follows from a failed `changes` is not mistaken for either.
   test:
     name: test
-    needs: [shard, screens, pins]
+    needs: [changes, shard, screens, pins]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: All four jobs, the screens and the pins passed
         env:
+          EVENT: ${{ github.event_name }}
+          CHANGES: ${{ needs.changes.result }}
           SHARDS: ${{ needs.shard.result }}
           SCREENS: ${{ needs.screens.result }}
           PINS: ${{ needs.pins.result }}
         run: |
-          if [ "$SHARDS" != success ]; then
+          if [ "$CHANGES" != success ]; then
+            echo "::error::The changes job finished '$CHANGES', not 'success'."
+            exit 1
+          fi
+          if [ "$SHARDS" != success ] && ! { [ "$EVENT" = push ] && [ "$SHARDS" = skipped ]; }; then
             echo "::error::The suite's jobs finished '$SHARDS', not 'success'."
             exit 1
           fi
-          if [ "$SCREENS" != success ]; then
-            echo "::error::The screens job finished '$SCREENS', not 'success'."
+          if [ "$SCREENS" != success ] && [ "$SCREENS" != skipped ]; then
+            echo "::error::The screens job finished '$SCREENS', not 'success' or 'skipped'."
             exit 1
           fi
           if [ "$PINS" != success ]; then
@@ -277,6 +346,8 @@ jobs:
   # domain so the session cookie is scoped to a domain Chromium accepts, which
   # `localhost` is not.
   screens:
+    needs: changes
+    if: needs.changes.outputs.screens == 'true'
     runs-on: ubuntu-24.04
     # It takes about ten minutes. A hang must end the job, not wait for the
     # six hours GitHub allows; each test has its own limit (tests/ui/timed.js)
@@ -347,6 +418,18 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+
+      # npm's download cache and the Chromium Playwright downloads, kept between
+      # runs. There is no lockfile for `setup-node`'s own cache to key on, so
+      # the key is the pinned Playwright version: a new pin is a new cache. On a
+      # hit `playwright install` finds the browser and downloads nothing; the
+      # system libraries `--with-deps` adds are apt packages and still install.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/ms-playwright
+          key: playwright-1.56.1-${{ runner.os }}-ubuntu-24.04
 
       # For this job only, and not written to package.json: nothing served
       # depends on it. Pinned so a new release cannot change what "passed" means.
