@@ -138,7 +138,8 @@ def confirm(request, payload: PlanIn):
     except services.NotAllowedToPlace:
         return 403, MessageOut(detail=_NOT_YOURS)
     except (promotion.NotEndOfSession, promotion.NoFirstTermNext,
-            promotion.ReviewOutOfDate, promotion.AlreadyPlacedNext) as exc:
+            promotion.ReviewOutOfDate, promotion.AlreadyPlacedNext,
+            services.ResultsInTheChain) as exc:
         return 409, MessageOut(detail=str(exc))
     except promotion.PromotionError as exc:
         return 422, MessageOut(detail=str(exc))

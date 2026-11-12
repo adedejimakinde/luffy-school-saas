@@ -76,6 +76,17 @@ class NotPlaced(AcademicsError):
     """There is no placement to move, so there is nothing to change."""
 
 
+class ResultsInTheChain(AcademicsError):
+    """The class being joined or left has results submitted, checked or approved.
+
+    What the vice principal checked and the principal approved was reckoned from
+    a roster, and a release reads the roster afresh: positions, the class
+    average and "of N" on every card. A child placed or moved in between would
+    send home numbers nobody signed. Sending the sheet back opens the class
+    again. Audit finding F-01.
+    """
+
+
 class NotAllowedToPlace(AcademicsError):
     """The actor holds no role at this school that may place children.
 
@@ -181,6 +192,49 @@ def _stamp(by):
     return getattr(by, "pk", by)
 
 
+def _require_results_not_in_the_chain(term, *class_groups):
+    """Refuse while any of these classes' results for `term` are with a signatory.
+
+    Submitted, checked and approved refuse. A draft, a class nobody has opened
+    and a released class do not: a released card is frozen and is not changed
+    by a placement, which is how it was before this guard.
+
+    **The sheets are locked, and the caller writes the placement in the same
+    transaction**, so this serialises with `results.services._move()`, which
+    takes the same row lock: a submit either lands first and is seen here, or
+    waits until the placement has committed. In `pk` order, so two moves
+    between the same pair of classes cannot deadlock on the pair.
+    `order_by("pk")` also replaces `ResultSheet.Meta.ordering`, which would
+    otherwise join and lock a term and a class row
+    (`results.services.locked_sheet_for()`). A class with no sheet has no row
+    to lock, the residue `gradebook.services._require_the_sheet_is_open()`
+    describes.
+
+    A late import: `results.services` imports this module.
+    """
+    from results.models import ResultSheet, SheetState
+
+    in_the_chain = {
+        SheetState.SUBMITTED: "are waiting for approval",
+        SheetState.CHECKED: "are waiting for approval",
+        SheetState.APPROVED: "have been approved",
+    }
+    ids = sorted({getattr(group, "pk", group) for group in class_groups if group is not None})
+    if not ids:
+        return
+    sheets = (
+        ResultSheet.objects.select_for_update(of=("self",))
+        .filter(term=term, class_group_id__in=ids)
+        .order_by("pk")
+    )
+    for sheet in sheets:
+        if sheet.state in in_the_chain:
+            raise ResultsInTheChain(
+                f"{sheet.class_group}'s results {in_the_chain[sheet.state]}. "
+                f"Send them back first to change the class."
+            )
+
+
 def placement_of(membership_id, term):
     """Where this child sits this term, or None."""
     return ClassPlacement.objects.filter(
@@ -215,6 +269,7 @@ def place_student(class_group, term, membership, *, by=None):
         # `transaction.atomic()` and catching AlreadyPlaced could otherwise not
         # go on to place the next child.
         with transaction.atomic():
+            _require_results_not_in_the_chain(term, class_group)
             return ClassPlacement.objects.create(
                 class_group=class_group,
                 term=term,
@@ -274,6 +329,10 @@ def move_student(class_group, term, membership, *, by=None):
         if current.class_group_id == class_group.pk:
             return current
 
+        # Both classes: the one being left loses a child from its positions
+        # and its average, the one being joined gains one.
+        _require_results_not_in_the_chain(term, current.class_group_id, class_group)
+
         current.class_group = class_group
         current.placed_by_id = _stamp(by)
         # `updated_at` is listed so that `auto_now` fires for it. Unlike a
@@ -292,10 +351,17 @@ def remove_placement(term, membership) -> bool:
     the end state that holds.
     """
     _require_student_of_this_school(membership)
-    deleted, _ = ClassPlacement.objects.filter(
-        term=term, student_membership_id=membership.pk
-    ).delete()
-    return bool(deleted)
+    with transaction.atomic():
+        current = (
+            ClassPlacement.objects.select_for_update()
+            .filter(term=term, student_membership_id=membership.pk)
+            .first()
+        )
+        if current is None:
+            return False
+        _require_results_not_in_the_chain(term, current.class_group_id)
+        current.delete()
+        return True
 
 
 def carry_forward_placements(from_term, to_term, *, by=None) -> int:
@@ -383,6 +449,9 @@ def carry_forward_placements(from_term, to_term, *, by=None) -> int:
         # a placement to `to_term` inside this window would be counted here too,
         # and that is the one inaccuracy, in a number used for reporting rather
         # than for any decision.
+        _require_results_not_in_the_chain(
+            to_term, *{placement.class_group_id for placement in carried}
+        )
         before = ClassPlacement.objects.filter(term=to_term).count()
         ClassPlacement.objects.bulk_create(carried, ignore_conflicts=True)
         after = ClassPlacement.objects.filter(term=to_term).count()
@@ -790,6 +859,7 @@ __all__ = [
     "CLASS_TEACHER_ROLES",
     "NotAllowedToAssignClassTeachers",
     "NotAllowedToPlace",
+    "ResultsInTheChain",
     "NotAllowedToSetTermLength",
     "NotPlaced",
     "NotThisSchoolsStudent",
