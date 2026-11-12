@@ -71,4 +71,14 @@ def total(subjects) -> int:
     return sum(s.unmarked for s in subjects)
 
 
-__all__ = ["SubjectUnmarked", "for_class", "total"]
+def count(class_group, term) -> int:
+    """The one number: what a step on this class has to be told was seen.
+
+    For a caller with nobody to show a warning to (a demo seed, a test's
+    fixture) that means to take the step whatever is unmarked, and says so by
+    passing this as `unmarked=`. The number still goes on the step's row.
+    """
+    return total(for_class(class_group, term))
+
+
+__all__ = ["SubjectUnmarked", "count", "for_class", "total"]

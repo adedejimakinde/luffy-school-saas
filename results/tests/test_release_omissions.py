@@ -111,10 +111,15 @@ class TheDetectorUnderARealRace(ReleaseUnderARosterChangeSetUp):
         def run():
             try:
                 with connected_to(school):
-                    academics.place_student(
-                        ClassGroup.objects.get(pk=group_id),
-                        Term.objects.get(pk=terms[THIRD]),
-                        child,
+                    # Round the service, as an import or a shell would write
+                    # it: `academics.place_student()` now refuses a class whose
+                    # results are approved, which is what a class reads as
+                    # until its release commits (audit finding F-01). The
+                    # detector is what is left for a write that does not ask.
+                    ClassPlacement.objects.create(
+                        class_group_id=group_id,
+                        term_id=terms[THIRD],
+                        student_membership_id=child.pk,
                     )
             except Exception as exc:  # noqa: BLE001 — reported, never swallowed
                 failed.append(exc)
@@ -154,6 +159,60 @@ class TheDetectorUnderARealRace(ReleaseUnderARosterChangeSetUp):
         if landing is not None:
             self.assertEqual(landed, [True], "the placement never landed mid-release")
         return sheet_id
+
+    def test_the_offices_own_placement_is_refused_while_the_release_runs(self):
+        """Audit finding F-01, at the moment it is hardest to see.
+
+        Until a release commits, every other session reads the class as
+        approved. So `academics.place_student()` arriving between two of the
+        release's statements is refused at once, without waiting on the
+        release's lock, and the child is not on the class. The tests around
+        this one stage the same arrival round the service, because that is the
+        write the detector is left to catch.
+        """
+        for school, child in ((self.school, self.bola), (self.other_school, self.emeka)):
+            with self.subTest(school=school.name):
+                sheet_id = self.approve(school)
+                group_id, terms, (_, _, principal) = self._parts(school)
+                real = cards.freeze_for_release
+                refusals = []
+
+                def place_through_the_service():
+                    try:
+                        with connected_to(school):
+                            academics.place_student(
+                                ClassGroup.objects.get(pk=group_id),
+                                Term.objects.get(pk=terms[THIRD]),
+                                child,
+                            )
+                    except academics.ResultsInTheChain as exc:
+                        refusals.append(str(exc))
+                    finally:
+                        connections.close_all()
+
+                def freeze_then_let_the_office_try(*args, **kwargs):
+                    card_by_student = real(*args, **kwargs)
+                    thread = threading.Thread(target=place_through_the_service)
+                    thread.start()
+                    thread.join(15)
+                    self.assertFalse(thread.is_alive(), "the placement waited on the release")
+                    return card_by_student
+
+                with connected_to(school):
+                    with mock.patch.object(
+                        cards, "freeze_for_release", freeze_then_let_the_office_try
+                    ):
+                        services.release(ResultSheet.objects.get(pk=sheet_id), principal)
+                    self.assertEqual(len(refusals), 1)
+                    self.assertIn("results have been approved", refusals[0])
+                    self.assertNotIn(
+                        child.pk,
+                        ClassPlacement.objects.student_ids(
+                            ClassGroup.objects.get(pk=group_id),
+                            Term.objects.get(pk=terms[THIRD]),
+                        ),
+                    )
+                self.assertEqual(self.recorded(school), [])
 
     def recorded(self, school):
         with connected_to(school):

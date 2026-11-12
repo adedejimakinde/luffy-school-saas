@@ -68,6 +68,7 @@ from results.models import (
 )
 from schools.models import Domain, School
 from schools.tests.tenants import connected_to, make_school
+from results import unmarked
 
 PASSWORD = "correct-horse-battery"
 SESSION = "2025/2026"
@@ -248,9 +249,9 @@ class ReportCardApiSetUp(TestCase):
                 self.term_of(school, term_name),
                 people[Role.PRINCIPAL],
             )
-            results_services.submit(sheet, people[Role.TEACHER])
-            results_services.check(sheet, people[Role.VICE_PRINCIPAL_ACADEMIC])
-            results_services.approve(sheet, people[Role.PRINCIPAL])
+            results_services.submit(sheet, people[Role.TEACHER], unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.check(sheet, people[Role.VICE_PRINCIPAL_ACADEMIC], unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.approve(sheet, people[Role.PRINCIPAL], unmarked=unmarked.count(sheet.class_group, sheet.term))
             results_services.release(sheet, people[Role.PRINCIPAL])
             return sheet
 

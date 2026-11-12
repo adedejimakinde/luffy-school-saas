@@ -26,6 +26,7 @@ from results.models import (
 )
 from results.tests.fixtures import HOST, THEIR_HOST, ChainSetUp
 from schools.tests.tenants import connected_to
+from results import unmarked
 
 TEMPLATE = "/api/academics/card/template/"
 OGUN_PAPERS = [("1st Test", 10), ("2nd Test", 10), ("Assignment", 10), ("Exam", 70)]
@@ -176,9 +177,9 @@ class NeverOverAMarkOrARatingTests(OgunSetUp):
         with connected_to(self.stmarys):
             gradebook.set_score(self.first_ca, self.children["ada"], 17, by=self.teacher.user)
             sheet = results_services.open_sheet(self.jss1a, self.term, self.head.user)
-            results_services.submit(sheet, self.teacher.user)
-            results_services.check(sheet, self.vp.user)
-            results_services.approve(sheet, self.head.user)
+            results_services.submit(sheet, self.teacher.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.check(sheet, self.vp.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.approve(sheet, self.head.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
             results_services.release(sheet, self.head.user)
             released = ReleasedAssessmentScore.objects.count()
             self.assertGreater(released, 0)
@@ -310,9 +311,9 @@ class ChoosingATemplateSetsTheTraitListTests(OgunSetUp):
         self.rate_every_trait(self.stmarys, self.children["ada"].pk)
         with connected_to(self.stmarys):
             sheet = results_services.open_sheet(self.jss1a, self.term, self.head.user)
-            results_services.submit(sheet, self.teacher.user)
-            results_services.check(sheet, self.vp.user)
-            results_services.approve(sheet, self.head.user)
+            results_services.submit(sheet, self.teacher.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.check(sheet, self.vp.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
+            results_services.approve(sheet, self.head.user, unmarked=unmarked.count(sheet.class_group, sheet.term))
             results_services.release(sheet, self.head.user)
             from results.models import ReleasedTraitRating
 

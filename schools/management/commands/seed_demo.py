@@ -400,6 +400,7 @@ class Command(BaseCommand):
         from notices import services as notices_service
         from results import comments, ratings
         from results import services as chain
+        from results import unmarked
         from results.models import CommentAuthor, TraitGroup
 
         principal = staff["principal"].user
@@ -422,9 +423,11 @@ class Command(BaseCommand):
             for trait_group in TraitGroup:
                 for trait in ratings.traits(trait_group):
                     ratings.rate(term, trait, child, rng.randint(3, 5), by=teacher)
-        chain.submit(sheet, staff["admin"].user)
-        chain.check(sheet, staff["vp"].user)
-        chain.approve(sheet, principal)
+        # Nobody to show the unmarked warning to: the seed says the count itself.
+        seen = unmarked.count(sheet.class_group, sheet.term)
+        chain.submit(sheet, staff["admin"].user, unmarked=seen)
+        chain.check(sheet, staff["vp"].user, unmarked=seen)
+        chain.approve(sheet, principal, unmarked=seen)
         chain.release(sheet, principal)
 
         if not self.tell_families:

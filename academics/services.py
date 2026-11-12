@@ -199,9 +199,15 @@ def _require_results_not_in_the_chain(term, *class_groups):
     and a released class do not: a released card is frozen and is not changed
     by a placement, which is how it was before this guard.
 
-    **The sheets are locked, and the caller writes the placement in the same
-    transaction**, so this serialises with `results.services._move()`, which
-    takes the same row lock: a submit either lands first and is seen here, or
+    **Read first without a lock, then again with one.** The first read is what
+    refuses nearly every time, and it never waits. A class in the middle of
+    being released still reads `approved` from here, because the release has
+    not committed, so a placement arriving mid-release is refused at once and
+    does not queue behind the freeze to land the moment it commits.
+
+    The second read is for the open sheet: it takes the row lock
+    `results.services._move()` takes, and the caller writes the placement in
+    the same transaction, so a submit either landed first and is seen here or
     waits until the placement has committed. In `pk` order, so two moves
     between the same pair of classes cannot deadlock on the pair.
     `order_by("pk")` also replaces `ResultSheet.Meta.ordering`, which would
@@ -222,17 +228,29 @@ def _require_results_not_in_the_chain(term, *class_groups):
     ids = sorted({getattr(group, "pk", group) for group in class_groups if group is not None})
     if not ids:
         return
-    sheets = (
-        ResultSheet.objects.select_for_update(of=("self",))
-        .filter(term=term, class_group_id__in=ids)
-        .order_by("pk")
+
+    def refuse_any(sheets):
+        for sheet in sheets:
+            if sheet.state in in_the_chain:
+                raise ResultsInTheChain(
+                    f"{sheet.class_group}'s results {in_the_chain[sheet.state]}. "
+                    f"Send them back first to change the class."
+                )
+
+    sheets = list(
+        ResultSheet.objects.filter(term=term, class_group_id__in=ids).order_by("pk")
     )
-    for sheet in sheets:
-        if sheet.state in in_the_chain:
-            raise ResultsInTheChain(
-                f"{sheet.class_group}'s results {in_the_chain[sheet.state]}. "
-                f"Send them back first to change the class."
-            )
+    refuse_any(sheets)
+    # By `pk`, not by `state=draft`: a row that a submit changed while this
+    # waited would fail a re-checked `WHERE state = 'draft'` and vanish from
+    # the answer, which would read as "nothing to refuse".
+    open_ids = [sheet.pk for sheet in sheets if sheet.state == SheetState.DRAFT]
+    if open_ids:
+        refuse_any(
+            ResultSheet.objects.select_for_update(of=("self",))
+            .filter(pk__in=open_ids)
+            .order_by("pk")
+        )
 
 
 def placement_of(membership_id, term):
