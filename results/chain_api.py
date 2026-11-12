@@ -81,6 +81,7 @@ group — the hole issue #25 closed. An ADMIN is unaffected by that scope and so
 is not asked about it.
 """
 
+import json
 from typing import List, Optional
 
 from django.db.models import Count
@@ -118,6 +119,32 @@ LEFT_OUT_NOT_CHECKED = "left_out_not_checked"
 class NotCheckedOut(Schema):
     detail: str
     code: str = LEFT_OUT_NOT_CHECKED
+
+
+#: A submit, check or approve refused because the class has papers unmarked
+#: and the request did not say the number was seen. Audit finding F-05.
+UNMARKED_PAPERS = "unmarked_papers"
+
+
+class UnmarkedSubjectOut(Schema):
+    subject: str
+    unmarked: int
+
+
+class UnmarkedOut(Schema):
+    """The papers still unmarked, per subject, and the number to send back.
+
+    **428, Precondition Required**: nothing is wrong with the request or the
+    caller, and the same request with `{"unmarked": <this number>}` is taken.
+    That second request is the page's "Submit anyway", and the number goes on
+    the step's row in the log. Its own status so that this body does not share
+    a schema with the 409s, which carry a signatory.
+    """
+
+    detail: str
+    code: str = UNMARKED_PAPERS
+    unmarked: int
+    subjects: List[UnmarkedSubjectOut]
 
 
 class SignatoryOut(Schema):
@@ -470,7 +497,7 @@ def _signatory(transition):
     )
 
 
-def _step(request, class_group_id, move, *, reason=None):
+def _step(request, class_group_id, move, *, reason=None, unmarked=None, counts=False):
     """Open the sheet for this class and take one step on it.
 
     The sheet is opened rather than looked up, because a class nobody has
@@ -480,9 +507,10 @@ def _step(request, class_group_id, move, *, reason=None):
     Every refusal the chain can raise is mapped to the status that says what
     kind of refusal it is: **403** for authority, **409** for the
     same-signatory rule (with the step they already took), **409** for a state
-    that moved under them, **422** for a send-back with nothing in it, and
-    **503** for a release that could not check who it left out and so did not
-    happen.
+    that moved under them, **422** for a send-back with nothing in it, **428**
+    for a submit, check or approve of a class with papers unmarked that did not
+    say the number was seen (`UnmarkedOut`), and **503** for a release that
+    could not check who it left out and so did not happen.
     """
     school = _school_of(request)
     roles = set(request.user.roles_at(school))
@@ -499,8 +527,20 @@ def _step(request, class_group_id, move, *, reason=None):
 
     try:
         sheet = services.open_sheet(group, term, request.user)
-        moved = move(sheet, request.user) if reason is None else move(
-            sheet, request.user, reason
+        if counts:
+            moved = move(sheet, request.user, unmarked=unmarked)
+        elif reason is None:
+            moved = move(sheet, request.user)
+        else:
+            moved = move(sheet, request.user, reason)
+    except services.UnmarkedPapers as exc:
+        return 428, UnmarkedOut(
+            detail=str(exc),
+            unmarked=exc.total,
+            subjects=[
+                UnmarkedSubjectOut(subject=s.subject, unmarked=s.unmarked)
+                for s in exc.subjects
+            ],
         )
     except services.AlreadySignedThisCycle as exc:
         return 409, AlreadySignedOut(
@@ -550,26 +590,48 @@ _STEP_RESPONSES = {
     403: MessageOut,
     409: AlreadySignedOut,
     422: MessageOut,
+    428: UnmarkedOut,
     503: NotCheckedOut,
 }
+
+
+def _seen(request):
+    """The unmarked count the caller says it was shown, or None.
+
+    Read off the body by hand and not through a schema: these three routes took
+    no body before the count existed, and a declared one makes a request with
+    an empty body a 400. Anything that is not `{"unmarked": <whole number>}`
+    is "nothing was seen", which the service answers with the count.
+    """
+    try:
+        seen = json.loads(request.body or b"{}").get("unmarked")
+    except (ValueError, AttributeError):
+        return None
+    return seen if type(seen) is int else None
 
 
 @router.post("/chain/{int:class_group_id}/submit/", response=_STEP_RESPONSES)
 def submit(request, class_group_id: int):
     """Teacher: these results are ready to be checked."""
-    return _step(request, class_group_id, services.submit)
+    return _step(
+        request, class_group_id, services.submit, unmarked=_seen(request), counts=True
+    )
 
 
 @router.post("/chain/{int:class_group_id}/check/", response=_STEP_RESPONSES)
 def check(request, class_group_id: int):
     """Vice principal (academic): the academic check."""
-    return _step(request, class_group_id, services.check)
+    return _step(
+        request, class_group_id, services.check, unmarked=_seen(request), counts=True
+    )
 
 
 @router.post("/chain/{int:class_group_id}/approve/", response=_STEP_RESPONSES)
 def approve(request, class_group_id: int):
     """Principal: approved."""
-    return _step(request, class_group_id, services.approve)
+    return _step(
+        request, class_group_id, services.approve, unmarked=_seen(request), counts=True
+    )
 
 
 @router.post("/chain/{int:class_group_id}/release/", response=_STEP_RESPONSES)
