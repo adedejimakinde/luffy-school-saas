@@ -1,18 +1,15 @@
-/** Day-first date fields: a one-line button and a calendar sheet. `docs/design.md`, "Dates". */
+/** Date fields: a one-line button and a calendar sheet (docs/module-notes.md, `web/dates.js`). */
 const MONTHS = "January February March April May June July August September October November December".split(" ");
 const DAYS = "Sunday Monday Tuesday Wednesday Thursday Friday Saturday".split(" ");
-const PHONE = "(max-width: 639.98px)";
-const ZONE = "Africa/Lagos";
 const pad = (n) => String(n).padStart(2, "0");
-const short = (s) => s.slice(0, 3);
+const svg = (d) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
 
-/** "2026-11-12" as {y, m, d}; anything else, or a day that is not on the calendar, as null. */
 export function parse(text) {
-  const found = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(text ?? ""));
-  if (!found) return null;
-  const [y, m, d] = [Number(found[1]), Number(found[2]), Number(found[3])];
-  const real = new Date(Date.UTC(y, m - 1, d));
-  return real.getUTCMonth() === m - 1 && real.getUTCDate() === d ? { y, m, d } : null;
+  const f = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(text ?? ""));
+  if (!f) return null;
+  const [y, m, d] = [+f[1], +f[2], +f[3]];
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCMonth() === m - 1 && t.getUTCDate() === d ? { y, m, d } : null;
 }
 export const iso = ({ y, m, d }) => `${y}-${pad(m)}-${pad(d)}`;
 const utc = ({ y, m, d }) => Date.UTC(y, m - 1, d);
@@ -20,11 +17,15 @@ export const shift = (day, n) => {
   const t = new Date(utc(day) + n * 864e5);
   return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1, d: t.getUTCDate() };
 };
-const daysIn = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
-const weekday = (day) => new Date(utc(day)).getUTCDay();
+const dim = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+const wd = (day) => new Date(utc(day)).getUTCDay();
+const months = (y, m, n) => {
+  const t = new Date(Date.UTC(y, m - 1 + n, 1));
+  return { y: t.getUTCFullYear(), m: t.getUTCMonth() + 1 };
+};
 
-/** Today in the school's zone, as `yyyy-mm-dd`: Lagos is an hour ahead of Greenwich, and a register is the school's day. */
-export function todayIn(zone = ZONE, now = new Date()) {
+/** Today in the school's zone as `yyyy-mm-dd`. */
+export function todayIn(zone = "Africa/Lagos", now = new Date()) {
   try {
     return new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   } catch {
@@ -32,184 +33,98 @@ export function todayIn(zone = ZONE, now = new Date()) {
   }
 }
 
-/** "Today, Thu 12 Nov" near today; else "Wed 4 Nov 2026" (no weekday for a birthday: "4 Nov 2012"). */
+/** "Today, Thu 12 Nov" near today, else "Wed 4 Nov 2026" ("4 Nov 2012" with no weekday). */
 export function say(value, today, { weekdays = true } = {}) {
   const day = parse(value);
   if (!day) return "";
   const near = { 0: "Today", "-1": "Yesterday", 1: "Tomorrow" }[Math.round((utc(day) - utc(parse(today))) / 864e5)];
-  const name = `${weekdays ? `${short(DAYS[weekday(day)])} ` : ""}${day.d} ${short(MONTHS[day.m - 1])}`;
+  const name = `${weekdays ? `${DAYS[wd(day)].slice(0, 3)} ` : ""}${day.d} ${MONTHS[day.m - 1].slice(0, 3)}`;
   return near && weekdays ? `${near}, ${name}` : `${name} ${day.y}`;
 }
 
-/** A month as Monday-first weeks: a day, or null where the week spills into the next or last month. */
+/** A month as Monday-first weeks: a day, or null where a week spills over. */
 export function cells(y, m) {
-  const lead = (weekday({ y, m, d: 1 }) + 6) % 7;
-  const total = Math.ceil((lead + daysIn(y, m)) / 7) * 7;
-  return Array.from({ length: total }, (_, i) => (i >= lead && i < lead + daysIn(y, m) ? { y, m, d: i - lead + 1 } : null));
+  const lead = (wd({ y, m, d: 1 }) + 6) % 7;
+  const n = dim(y, m);
+  return Array.from({ length: Math.ceil((lead + n) / 7) * 7 }, (_, i) => (i >= lead && i < lead + n ? { y, m, d: i - lead + 1 } : null));
 }
 
-/** Whether `day` is within [min, max] (either may be empty). */
 export const within = (day, min, max) => (!min || iso(day) >= min) && (!max || iso(day) <= max);
 
-function el(tag, attributes = {}, ...children) {
-  const node = document.createElement(tag);
-  for (const [name, value] of Object.entries(attributes)) {
-    if (name === "text") node.textContent = value;
-    else node.setAttribute(name, value);
-  }
-  node.append(...children);
-  return node;
-}
-
-function icon(d) {
-  const ns = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(ns, "svg");
-  const path = document.createElementNS(ns, "path");
-  svg.setAttribute("class", "icon");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  path.setAttribute("d", d);
-  svg.append(path);
-  return svg;
-}
-const CALENDAR = "M5 6h14v13H5zM5 10h14M9 4v4M15 4v4";
-const PREVIOUS = "M15 6l-6 6 6 6";
-const NEXT = "M9 6l6 6-6 6";
-
-let ui = null; // the one dialog
-let open = null; // what is open: { field, step, view, at, phone }
+let ui = null;
+let open = null; // { field, step, view, at, phone }
+const PHONE = "(max-width: 639.98px)";
+const hit = (e, sel) => e.target.closest && e.target.closest(sel);
+const off = (ok) => (ok ? "" : ' aria-disabled="true"');
 
 function build() {
-  const title = el("h2", { class: "date-title", id: "date-title" });
-  const shut = el("button", { type: "button", class: "icon-button", "aria-label": "Close" }, icon("M6 6l12 12M18 6L6 18"));
-  const head = el("div", { class: "date-head" }, el("div", { class: "date-handle" }), title, shut);
-  const body = el("div", { class: "date-body" });
-  const status = el("p", { class: "sr", "aria-live": "polite" });
-  const dialog = el("dialog", { class: "date-sheet", "aria-labelledby": "date-title" }, head, body, status);
-  dialog.addEventListener("cancel", (event) => {
-    event.preventDefault();
-    close();
-  });
-  dialog.addEventListener("close", () => dialog.open || close());
-  dialog.addEventListener("click", (event) => event.target === dialog && close());
-  shut.addEventListener("click", () => close());
-  dialog.addEventListener("click", onClick);
-  dialog.addEventListener("keydown", onKey);
-  document.body.append(dialog);
-  return { dialog, title, body, status };
+  const d = document.createElement("dialog");
+  d.className = "date-sheet";
+  d.setAttribute("aria-labelledby", "date-title");
+  d.innerHTML = `<div class="date-head"><h2 id="date-title"></h2><button type="button" class="icon-button" data-close aria-label="Close">${svg("M6 6l12 12M18 6L6 18")}</button></div><div class="date-body"></div><p class="sr" aria-live="polite"></p>`;
+  d.addEventListener("cancel", (e) => (e.preventDefault(), close()));
+  d.addEventListener("close", () => d.open || close());
+  d.addEventListener("click", (e) => (e.target === d || hit(e, "[data-close]") ? close() : click(e)));
+  d.addEventListener("keydown", key);
+  document.body.append(d);
+  return { d, title: d.querySelector("h2"), body: d.querySelector(".date-body"), say: d.querySelector(".sr") };
 }
 
-/** The years a birthday may be in: newest first. */
-function yearsOf(field) {
-  const [hi, lo] = [field.max ? parse(field.max).y : parse(field.today).y, field.min ? parse(field.min).y : parse(field.today).y - 30];
-  const own = (parse(field.native.value) || {}).y;
-  const [top, bottom] = [Math.max(hi, own || hi), Math.min(lo, own || lo)];
-  return Array.from({ length: top - bottom + 1 }, (_, i) => top - i);
-}
-
-const monthOpen = (field, y, m) => (!field.min || iso({ y, m, d: daysIn(y, m) }) >= field.min) && (!field.max || iso({ y, m, d: 1 }) <= field.max);
-
-function draw(focus = true) {
-  const { field, step, view } = open;
-  const value = parse(field.native.value);
-  const today = parse(field.today);
-  const { body } = ui;
-  const kids = [];
-  const crumbs = () =>
-    el("div", { class: "date-crumbs" },
-      el("button", { type: "button", "data-step": "year", text: String(view.y) }),
-      step === "day" ? el("button", { type: "button", "data-step": "month", text: MONTHS[view.m - 1] }) : "");
-  let aim = null;
+function draw() {
+  const { field: f, step, view: v } = open;
+  const val = parse(f.native.value);
+  const t = parse(f.today);
+  const lo = f.min;
+  const hi = f.max;
+  const crumbs = `<div class="date-crumbs"><button type="button" data-step="year">${v.y}</button>${step === "day" ? `<button type="button" data-step="month">${MONTHS[v.m - 1]}</button>` : ""}</div>`;
+  let html;
   if (step === "year") {
-    const years = yearsOf(field);
-    const grid = el("div", { class: "date-pick", "data-cols": "4", role: "group", "aria-label": "Year" });
-    const at = years.includes((value || {}).y) ? value.y : years.includes(view.y) ? view.y : years[0];
-    for (const y of years) {
-      const b = el("button", { type: "button", "data-year": y, text: String(y), tabindex: y === at ? "0" : "-1", "aria-pressed": String(value ? value.y === y : false) });
-      grid.append(b);
-      if (y === at) aim = b;
-    }
-    kids.push(grid);
+    const top = Math.max(hi ? parse(hi).y : t.y, val ? val.y : 0);
+    const bottom = Math.min(lo ? parse(lo).y : t.y - 30, val ? val.y : 9999);
+    const at = val ? val.y : v.y;
+    html = `<div class="date-pick" data-cols="4" role="group" aria-label="Year">${Array.from({ length: top - bottom + 1 }, (_, i) => top - i)
+      .map((y) => `<button type="button" data-year="${y}" tabindex="${y === at || (y === top && at > top) ? 0 : -1}" aria-pressed="${!!val && val.y === y}">${y}</button>`).join("")}</div>`;
   } else if (step === "month") {
-    kids.push(crumbs());
-    const grid = el("div", { class: "date-pick", "data-cols": "3", role: "group", "aria-label": "Month" });
-    const at = open.at && open.at.y === view.y ? open.at.m : view.m;
-    MONTHS.forEach((name, i) => {
-      const ok = monthOpen(field, view.y, i + 1);
-      const b = el("button", { type: "button", "data-month": i + 1, text: short(name), tabindex: i + 1 === at ? "0" : "-1", "aria-pressed": String(Boolean(value) && value.y === view.y && value.m === i + 1) });
-      if (!ok) b.setAttribute("aria-disabled", "true");
-      grid.append(b);
-      if (i + 1 === at) aim = b;
-    });
-    kids.push(grid);
+    html = `${crumbs}<div class="date-pick" data-cols="3" role="group" aria-label="Month">${MONTHS.map((n, i) => {
+      const ok = (!lo || iso({ y: v.y, m: i + 1, d: dim(v.y, i + 1) }) >= lo) && (!hi || iso({ y: v.y, m: i + 1, d: 1 }) <= hi);
+      return `<button type="button" data-month="${i + 1}" tabindex="${i + 1 === v.m ? 0 : -1}"${off(ok)} aria-pressed="${!!val && val.y === v.y && val.m === i + 1}">${n.slice(0, 3)}</button>`;
+    }).join("")}</div>`;
   } else {
-    const first = { y: view.y, m: view.m, d: 1 };
-    const last = { ...first, d: daysIn(view.y, view.m) };
-    const before = !field.birth && (!field.min || iso(first) > field.min);
-    const after = !field.birth && (!field.max || iso(last) < field.max);
-    kids.push(
-      field.birth
-        ? crumbs()
-        : el("div", { class: "date-month" },
-            el("button", { type: "button", class: "icon-button", "data-move": "-1", "aria-label": "Previous month", ...(before ? {} : { "aria-disabled": "true" }) }, icon(PREVIOUS)),
-            el("h3", { class: "date-month-name", "aria-live": "polite", text: `${MONTHS[view.m - 1]} ${view.y}` }),
-            el("button", { type: "button", class: "icon-button", "data-move": "1", "aria-label": "Next month", ...(after ? {} : { "aria-disabled": "true" }) }, icon(NEXT)),
-          ),
-    );
-    const grid = el("div", { class: "date-grid", role: "grid", "aria-label": `${MONTHS[view.m - 1]} ${view.y}` });
-    const heads = el("div", { class: "date-week date-heads", role: "row" });
-    [1, 2, 3, 4, 5, 6, 0].forEach((n) => heads.append(el("span", { role: "columnheader", "aria-label": DAYS[n], text: DAYS[n].slice(0, 2) })));
-    grid.append(heads);
-    const all = cells(view.y, view.m);
-    const want = open.at && open.at.y === view.y && open.at.m === view.m ? open.at.d : value && value.y === view.y && value.m === view.m ? value.d : within(today, field.min, field.max) && today.y === view.y && today.m === view.m ? today.d : 0;
-    const enabled = all.filter((c) => c && within(c, field.min, field.max));
-    const fallback = (enabled.find((c) => c.d >= want) || enabled[0] || { d: 1 }).d;
-    for (let week = 0; week < all.length; week += 7) {
-      const row = el("div", { class: "date-week", role: "row" });
-      for (const day of all.slice(week, week + 7)) {
-        if (!day) {
-          row.append(el("span", { role: "gridcell", "aria-hidden": "true" }));
-          continue;
-        }
-        const ok = within(day, field.min, field.max);
-        const mine = value && iso(value) === iso(day);
-        const b = el("button", {
-          type: "button", role: "gridcell", class: "date-day", "data-day": iso(day), text: String(day.d),
-          "aria-label": `${DAYS[weekday(day)]} ${day.d} ${MONTHS[day.m - 1]} ${day.y}`, "aria-selected": String(Boolean(mine)),
-          tabindex: day.d === (want || fallback) ? "0" : "-1",
-        });
-        if (!ok) b.setAttribute("aria-disabled", "true");
-        if (iso(day) === field.today) {
-          b.classList.add("is-today");
-          b.setAttribute("aria-current", "date");
-        }
-        if (day.d === (want || fallback)) aim = b;
-        row.append(b);
-      }
-      grid.append(row);
+    const all = cells(v.y, v.m);
+    const ok = (c) => c && within(c, lo, hi);
+    const same = (c) => c && c.y === v.y && c.m === v.m;
+    const want = same(open.at) ? open.at.d : same(val) ? val.d : same(t) ? t.d : 1;
+    const aim = (all.filter(ok).find((c) => c.d >= want) || all.find(ok) || { d: 0 }).d;
+    const first = { ...v, d: 1 };
+    const nav = (by, can) => `<button type="button" class="icon-button" data-move="${by}" aria-label="${by < 0 ? "Previous" : "Next"} month"${off(can)}>${svg(by < 0 ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6")}</button>`;
+    html = `${f.birth ? crumbs : `<div class="date-month">${nav(-1, !lo || iso(first) > lo)}<h3 aria-live="polite">${MONTHS[v.m - 1]} ${v.y}</h3>${nav(1, !hi || iso({ ...v, d: dim(v.y, v.m) }) < hi)}</div>`}`;
+    html += `<div class="date-grid" role="grid" aria-label="${MONTHS[v.m - 1]} ${v.y}"><div class="date-week date-heads" role="row">${[1, 2, 3, 4, 5, 6, 0].map((n) => `<span role="columnheader" aria-label="${DAYS[n]}">${DAYS[n].slice(0, 2)}</span>`).join("")}</div>`;
+    for (let i = 0; i < all.length; i += 7) {
+      html += `<div class="date-week" role="row">${all.slice(i, i + 7).map((c) => !c ? '<span role="gridcell"></span>'
+        : `<button type="button" role="gridcell" class="date-day${iso(c) === f.today ? " is-today" : ""}" data-day="${iso(c)}" tabindex="${c.d === aim ? 0 : -1}" aria-label="${DAYS[wd(c)]} ${c.d} ${MONTHS[c.m - 1]} ${c.y}" aria-selected="${!!val && iso(val) === iso(c)}"${iso(c) === f.today ? ' aria-current="date"' : ""}${off(ok(c))}>${c.d}</button>`).join("")}</div>`;
     }
-    kids.push(grid);
+    html += "</div>";
+    if (!f.native.required && !f.recent && f.native.value) html += '<button type="button" class="date-clear" data-clear>Clear the date</button>';
   }
-  if (!field.native.required && !field.recent && field.native.value && step === "day") {
-    kids.push(el("button", { type: "button", class: "date-clear", "data-clear": "1", text: "Clear the date" }));
+  ui.body.innerHTML = html;
+  ui.say.textContent = step === "day" ? `${MONTHS[v.m - 1]} ${v.y}` : `Choose a ${step}`;
+  const aimed = ui.body.querySelector('[tabindex="0"]');
+  if (aimed) {
+    aimed.focus({ preventScroll: true });
+    if (step !== "day") aimed.scrollIntoView({ block: "center" });
   }
-  body.replaceChildren(...kids);
-  ui.status.textContent = step === "day" ? `${MONTHS[view.m - 1]} ${view.y}` : step === "month" ? `Choose a month in ${view.y}` : "Choose a year";
-  if (focus && aim) aim.focus({ preventScroll: true });
-  if (aim && step !== "day") aim.scrollIntoView({ block: "center" });
 }
 
 function show(field) {
   if (open) return;
   ui = ui || build();
-  const value = parse(field.native.value);
-  const today = parse(field.today);
-  const base = value || (within(today, field.min, field.max) ? today : parse(field.min) || (parse(field.max) && { ...parse(field.max), d: 1 }) || today);
-  open = { field, view: { y: base.y, m: base.m }, at: value, step: field.birth && !value ? "year" : "day", phone: matchMedia(PHONE).matches };
+  const val = parse(field.native.value);
+  const t = parse(field.today);
+  const base = val || (within(t, field.min, field.max) ? t : parse(field.min) || (field.max && { ...parse(field.max), d: 1 }) || t);
+  open = { field, view: { y: base.y, m: base.m }, at: val, step: field.birth && !val ? "year" : "day", phone: matchMedia(PHONE).matches };
   ui.title.textContent = field.name;
-  ui.dialog.className = `date-sheet ${open.phone ? "is-sheet" : "is-pop"}`;
-  ui.dialog.showModal();
-  place();
+  ui.d.className = `date-sheet ${open.phone ? "is-sheet" : "is-pop"}`;
+  ui.d.showModal();
   addEventListener("resize", place);
   draw();
   place();
@@ -220,107 +135,84 @@ function close(day = null) {
   if (!was) return;
   open = null;
   removeEventListener("resize", place);
-  if (ui.dialog.open) ui.dialog.close();
-  const { field } = was;
-  if (field.button.isConnected) field.button.focus({ preventScroll: true });
-  if (day !== null) field.set(day);
+  if (ui.d.open) ui.d.close();
+  if (was.field.button.isConnected) was.field.button.focus({ preventScroll: true });
+  if (day !== null) was.field.set(day);
 }
 
-/** A phone's sheet rises from the bottom; a desk's opens under the field, or over it when there is no room below. */
+/** A phone's sheet rises from the bottom; a desk's opens under the field, or over it with no room below. */
 function place() {
   if (!open) return;
   if (open.phone !== matchMedia(PHONE).matches || !open.field.button.isConnected) return close();
   if (open.phone) return;
-  const { style } = ui.dialog;
-  const box = open.field.button.getBoundingClientRect();
-  const width = Math.min(Math.max(box.width, 320), innerWidth - 16);
-  const below = innerHeight - box.bottom - 12;
-  const up = ui.dialog.offsetHeight > below && box.top - 12 > below;
-  style.setProperty("--left", `${Math.round(Math.min(Math.max(box.left, 8), innerWidth - width - 8))}px`);
-  style.setProperty("--width", `${Math.round(width)}px`);
-  style.setProperty("--room", `${Math.round(Math.max(Math.min(up ? box.top - 12 : below, 460), 200))}px`);
-  style.top = up ? "auto" : `${Math.round(box.bottom + 4)}px`;
-  style.bottom = up ? `${Math.round(innerHeight - box.top + 4)}px` : "auto";
+  const s = ui.d.style;
+  const b = open.field.button.getBoundingClientRect();
+  const w = Math.min(Math.max(b.width, 320), innerWidth - 16);
+  const below = innerHeight - b.bottom - 12;
+  const up = ui.d.offsetHeight > below && b.top - 12 > below;
+  s.setProperty("--left", `${Math.round(Math.min(Math.max(b.left, 8), innerWidth - w - 8))}px`);
+  s.setProperty("--width", `${Math.round(w)}px`);
+  s.setProperty("--room", `${Math.round(Math.max(Math.min(up ? b.top - 12 : below, 460), 200))}px`);
+  s.top = up ? "auto" : `${Math.round(b.bottom + 4)}px`;
+  s.bottom = up ? `${Math.round(innerHeight - b.top + 4)}px` : "auto";
 }
 
-function onClick(event) {
+function click(e) {
   if (!open) return;
-  const hit = (sel) => event.target.closest && event.target.closest(sel);
-  let node;
-  if ((node = hit("[data-day]"))) {
-    if (node.getAttribute("aria-disabled") === "true") return;
-    close(node.dataset.day);
-  } else if ((node = hit("[data-year]"))) {
-    open.view = { y: Number(node.dataset.year), m: open.view.m };
-    open.step = "month";
-    draw();
-  } else if ((node = hit("[data-month]"))) {
-    if (node.getAttribute("aria-disabled") === "true") return;
-    open.view = { y: open.view.y, m: Number(node.dataset.month) };
-    open.step = "day";
-    draw();
-  } else if ((node = hit("[data-step]"))) {
-    open.step = node.dataset.step;
-    draw();
-  } else if ((node = hit("[data-move]"))) {
-    if (node.getAttribute("aria-disabled") !== "true") move(Number(node.dataset.move));
-  } else if (hit("[data-clear]")) close("");
-}
-
-/** One month on; the day in view stays where it can. */
-function move(by, day = null) {
-  const to = new Date(Date.UTC(open.view.y, open.view.m - 1 + by, 1));
-  open.view = { y: to.getUTCFullYear(), m: to.getUTCMonth() + 1 };
-  open.at = day || (open.at && { ...open.at, y: open.view.y, m: open.view.m, d: Math.min(open.at.d, daysIn(open.view.y, open.view.m)) });
+  const n = hit(e, "button");
+  if (!n || n.getAttribute("aria-disabled") === "true") return;
+  const { dataset: d } = n;
+  if (d.day) return close(d.day);
+  if (d.clear !== undefined) return close("");
+  if (d.year) (open.view = { y: +d.year, m: open.view.m }), (open.step = "month");
+  else if (d.month) (open.view = { y: open.view.y, m: +d.month }), (open.step = "day");
+  else if (d.step) open.step = d.step;
+  else if (d.move) return go(+d.move);
+  else return;
   draw();
 }
 
-function onKey(event) {
-  if (!open) return;
-  const { key } = event;
-  if (key === "Escape") {
-    event.preventDefault();
-    return close();
-  }
-  const cell = event.target.closest && event.target.closest("[data-day], [data-year], [data-month]");
-  if (!cell || event.ctrlKey || event.metaKey || event.altKey) return;
-  if (key === "Enter" || key === " ") {
-    event.preventDefault();
-    return cell.click();
-  }
-  if (cell.dataset.day) {
-    const here = parse(cell.dataset.day);
-    const by = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[key];
-    let to = by ? shift(here, by) : key === "Home" ? shift(here, -((weekday(here) + 6) % 7)) : key === "End" ? shift(here, 6 - ((weekday(here) + 6) % 7)) : null;
-    if (key === "PageUp" || key === "PageDown") {
-      const dir = key === "PageUp" ? -1 : 1;
-      const months = event.shiftKey ? 12 * dir : dir;
-      const y = new Date(Date.UTC(here.y, here.m - 1 + months, 1));
-      to = { y: y.getUTCFullYear(), m: y.getUTCMonth() + 1, d: Math.min(here.d, daysIn(y.getUTCFullYear(), y.getUTCMonth() + 1)) };
-    }
-    if (!to) return;
-    event.preventDefault();
-    if (open.field.birth && (to.y !== open.view.y || to.m !== open.view.m)) return;
-    if (open.field.min && iso(to) < open.field.min.slice(0, 10)) to = parse(open.field.min.slice(0, 10));
-    if (open.field.max && iso(to) > open.field.max.slice(0, 10)) to = parse(open.field.max.slice(0, 10));
-    if (!to) return;
+/** Months on; `to` is the day to land on. */
+function go(by, to = null) {
+  const v = months(open.view.y, open.view.m, by);
+  open.view = v;
+  open.at = to || (open.at && { ...v, d: Math.min(open.at.d, dim(v.y, v.m)) });
+  draw();
+}
+
+function key(e) {
+  if (!open || e.ctrlKey || e.metaKey || e.altKey) return;
+  const n = hit(e, "[data-day], [data-year], [data-month]");
+  if (!n) return;
+  if (e.key === "Enter" || e.key === " ") return e.preventDefault(), n.click();
+  const f = open.field;
+  if (n.dataset.day) {
+    const here = parse(n.dataset.day);
+    const pg = e.key === "PageUp" ? -1 : e.key === "PageDown" ? 1 : 0;
+    let to = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (to) to = shift(here, to);
+    else if (pg) to = { ...months(here.y, here.m, pg * (e.shiftKey ? 12 : 1)), d: here.d };
+    else return;
+    e.preventDefault();
+    to.d = Math.min(to.d, dim(to.y, to.m));
+    if (f.min && iso(to) < f.min) to = parse(f.min);
+    if (f.max && iso(to) > f.max) to = parse(f.max);
+    if (f.birth && (to.y !== open.view.y || to.m !== open.view.m)) return;
     if (to.y === open.view.y && to.m === open.view.m) {
       open.at = to;
-      ui.body.querySelectorAll("[data-day]").forEach((b) => b.setAttribute("tabindex", b.dataset.day === iso(to) ? "0" : "-1"));
-      return ui.body.querySelector(`[data-day="${iso(to)}"]`).focus();
+      const all = [...ui.body.querySelectorAll("[data-day]")];
+      all.forEach((b) => b.setAttribute("tabindex", b.dataset.day === iso(to) ? "0" : "-1"));
+      return all.find((b) => b.dataset.day === iso(to)).focus();
     }
-    return move((to.y - open.view.y) * 12 + (to.m - open.view.m), to);
+    return go((to.y - open.view.y) * 12 + to.m - open.view.m, to);
   }
-  const grid = cell.parentElement;
-  const all = [...grid.children];
-  const cols = Number(grid.dataset.cols);
-  const at = all.indexOf(cell);
-  const to = { ArrowLeft: at - 1, ArrowRight: at + 1, ArrowUp: at - cols, ArrowDown: at + cols, Home: 0, End: all.length - 1 }[key];
-  if (to === undefined) return;
-  event.preventDefault();
-  if (to < 0 || to >= all.length) return;
-  all.forEach((b) => b.setAttribute("tabindex", b === all[to] ? "0" : "-1"));
-  all[to].focus();
+  const all = [...n.parentElement.children];
+  const cols = +n.parentElement.dataset.cols;
+  const i = all.indexOf(n) + ({ ArrowLeft: -1, ArrowRight: 1, ArrowUp: -cols, ArrowDown: cols }[e.key] ?? NaN);
+  if (!all[i]) return;
+  e.preventDefault();
+  all.forEach((b) => b.setAttribute("tabindex", b === all[i] ? "0" : "-1"));
+  all[i].focus();
 }
 
 /** One date field: the native input stays the field, out of sight; a button says the day and opens the sheet. */
@@ -330,71 +222,63 @@ function upgrade(native, zone) {
   const timed = native.type === "datetime-local";
   const mode = native.dataset.dates || "";
   const name = (native.labels && native.labels[0] ? native.labels[0].textContent : "Date").trim();
-  const field = {
+  const f = {
     native, name, birth: mode === "birth", recent: mode === "recent", today: todayIn(zone),
     get min() { return native.min.slice(0, 10); },
     get max() { return native.max.slice(0, 10); },
   };
-  const text = el("span", { class: "date-text" });
-  const button = el("button", { type: "button", class: "date-button", "aria-haspopup": "dialog" }, text, icon(CALENDAR));
-  field.button = button;
-  const time = timed ? Object.assign(document.createElement("input"), { type: "time", className: "date-time" }) : null;
+  const wrap = document.createElement("span");
+  wrap.className = "date-field";
+  wrap.innerHTML = `<button type="button" class="date-button" aria-haspopup="dialog"><span class="date-text"></span>${svg("M5 6h14v13H5zM5 10h14M9 4v4M15 4v4")}</button>${timed ? '<input type="time" class="date-time">' : ""}${
+    f.recent ? '<span class="date-chips" role="group"><button type="button" class="date-chip" data-back="0">Today</button><button type="button" class="date-chip" data-back="1">Yesterday</button></span>' : ""}`;
+  const button = (f.button = wrap.querySelector(".date-button"));
+  const text = wrap.querySelector(".date-text");
+  const time = wrap.querySelector(".date-time");
   if (time) time.setAttribute("aria-label", `${name}: Time`);
-  const chips = mode === "recent" ? el("div", { class: "date-chips", role: "group", "aria-label": `${name}: quick picks` }) : null;
-  const quick = [];
-  if (chips) {
-    for (const [label, back] of [["Today", 0], ["Yesterday", 1]]) {
-      const chip = el("button", { type: "button", class: "date-chip", text: label });
-      chip.addEventListener("click", () => field.set(iso(shift(parse(field.today), -back))));
-      chips.append(chip);
-      quick.push([chip, back]);
-    }
-  }
+  const chips = [...wrap.querySelectorAll(".date-chip")];
   const paint = () => {
     const [date, clock = ""] = native.value.split("T");
-    const said = say(date, field.today, { weekdays: !field.birth });
-    text.textContent = said || (field.birth ? "Choose the date" : "Choose a date");
+    const said = say(date, f.today, { weekdays: !f.birth });
+    text.textContent = said || "Choose a date";
     text.classList.toggle("is-empty", !said);
     button.setAttribute("aria-label", `${name}: ${said || "not set"}`);
     if (time) time.value = clock.slice(0, 5);
-    for (const [chip, back] of quick) {
-      const day = shift(parse(field.today), -back);
-      chip.setAttribute("aria-pressed", String(date === iso(day)));
-      if (within(day, field.min, field.max)) chip.removeAttribute("aria-disabled");
-      else chip.setAttribute("aria-disabled", "true");
+    for (const c of chips) {
+      const day = shift(parse(f.today), -c.dataset.back);
+      c.setAttribute("aria-pressed", String(date === iso(day)));
+      if (within(day, f.min, f.max)) c.removeAttribute("aria-disabled");
+      else c.setAttribute("aria-disabled", "true");
     }
   };
   let own = false;
-  field.set = (day) => {
-    if (day && !within(parse(day), field.min, field.max)) return;
-    const clock = time && (time.value || "08:00");
-    native.value = day ? `${day}${timed ? `T${clock}` : ""}` : "";
+  f.set = (day) => {
+    if (day && !within(parse(day), f.min, f.max)) return;
+    native.value = day ? `${day}${timed ? `T${time.value || "08:00"}` : ""}` : "";
     paint();
     own = true;
-    ["input", "change"].forEach((type) => native.dispatchEvent(new Event(type, { bubbles: true })));
+    ["input", "change"].forEach((t) => native.dispatchEvent(new Event(t, { bubbles: true })));
     own = false;
   };
-  button.addEventListener("click", () => show(field));
-  if (time) {
-    time.addEventListener("change", () => {
-      if (parse(native.value)) field.set(native.value.slice(0, 10));
-    });
-  }
+  wrap.addEventListener("click", (e) => {
+    const c = hit(e, ".date-chip");
+    if (c) f.set(iso(shift(parse(f.today), -c.dataset.back)));
+    else if (hit(e, ".date-button")) show(f);
+  });
+  if (time) time.addEventListener("change", () => parse(native.value) && f.set(native.value.slice(0, 10)));
   native.addEventListener("change", () => own || paint());
   native.addEventListener("focus", () => button.focus());
   native.classList.add("date-native");
   native.tabIndex = -1;
   native.setAttribute("aria-hidden", "true");
-  const wrap = el("span", { class: "date-field" });
   native.before(wrap);
-  wrap.append(button, ...(time ? [time] : []), ...(chips ? [chips] : []), native);
+  wrap.append(native);
   paint();
 }
 
 /** Every date field under `root`, and any a redraw brings. */
 export function enhanceDates(root) {
   if (!root || typeof HTMLDialogElement === "undefined" || !HTMLDialogElement.prototype.showModal) return;
-  const zone = () => (root.closest("[data-time-zone]") || root).dataset.timeZone || ZONE;
+  const zone = () => (root.closest("[data-time-zone]") || root).dataset.timeZone || "Africa/Lagos";
   const all = () => root.querySelectorAll('input[type="date"], input[type="datetime-local"]').forEach((n) => upgrade(n, zone()));
   all();
   new MutationObserver(all).observe(root, { childList: true, subtree: true });
