@@ -196,6 +196,10 @@ class WhereToMarkOut(Schema):
 
     term_id: Optional[int]
     term: Optional[str]
+    #: The current term's first and last day, so the day picker can grey out
+    #: the days a register cannot belong to. `None` with the term.
+    term_starts_on: Optional[date] = None
+    term_ends_on: Optional[date] = None
     classes: List[MarkableClassOut]
     #: Who is asking, so the page can keep its copy of what it was shown under
     #: that person's name (`docs/offline.md` D8). The caller's own id and
@@ -317,6 +321,8 @@ def where_to_mark(request):
     return WhereToMarkOut(
         term_id=term.pk if term else None,
         term=str(term) if term else None,
+        term_starts_on=term.starts_on if term else None,
+        term_ends_on=term.ends_on if term else None,
         classes=[
             MarkableClassOut(id=group.pk, name=group.name, level=group.level)
             for group in ClassGroup.objects.filter(is_active=True)

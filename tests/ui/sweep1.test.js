@@ -146,32 +146,14 @@ describe("dates", () => {
       try {
         const text = await page.evaluate(() => document.body.innerText);
         assert.doesNotMatch(text, US_DATE, `${path} shows a mm/dd/yyyy date`);
-        // A date field is selects and an invisible native input: never the browser's own mm/dd/yyyy box.
+        // A date field is a button and an invisible native input: never the browser's own mm/dd/yyyy box (`dates.test.js` has the sheet).
         const bare = await page.evaluate(() =>
           [...document.querySelectorAll('input[type="date"], input[type="datetime-local"]')].filter((i) => !i.classList.contains("date-native")).length);
         assert.equal(bare, 0, `${path} has a native date box`);
+        assert.equal(await page.locator(".date-field select").count(), 0, `${path} has a select for a date`);
       } finally {
         await page.close();
       }
-    }
-  });
-
-  test("a term's start date is chosen day, month, year and stored as yyyy-mm-dd", async () => {
-    const page = await open("sunrise.admin", 390, `${SUNRISE}/setup/`);
-    try {
-      const form = page.locator('form[data-form="term"]');
-      const field = form.locator(".date-field").first();
-      assert.deepEqual(await field.locator("select").evaluateAll((s) => s.map((x) => x.getAttribute("aria-label").split(": ")[1])), ["Day", "Month", "Year"]);
-      await field.locator("select").nth(0).selectOption("8");
-      await field.locator("select").nth(1).selectOption("11");
-      assert.equal(await form.locator("#starts_on").inputValue(), "", "not a date until the year is chosen");
-      await field.locator("select").nth(2).selectOption("2026");
-      assert.equal(await form.locator("#starts_on").inputValue(), "2026-11-08");
-      await field.locator("select").nth(0).selectOption("31");
-      await field.locator("select").nth(1).selectOption("2");
-      assert.equal(await form.locator("#starts_on").inputValue(), "2026-02-28");
-    } finally {
-      await page.close();
     }
   });
 });

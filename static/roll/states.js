@@ -390,7 +390,7 @@ export function detailsPanel({ body = {}, note = null } = {}) {
             .join(""),
           "</select>",
           '<label for="date_of_birth">Date of birth</label>',
-          `<input id="date_of_birth" name="date_of_birth" type="date" value="${esc(shown("date_of_birth", date_of_birth))}">`,
+          `<input id="date_of_birth" name="date_of_birth" type="date" data-dates="birth" value="${esc(shown("date_of_birth", date_of_birth))}">`,
           '<button type="submit">Save details</button>',
           note && note.form === "details" ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
           "</form>",
