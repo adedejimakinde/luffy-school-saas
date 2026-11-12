@@ -216,7 +216,7 @@ function paymentForm(body, { termId, today, draft = {} }) {
       .join(""),
     "</select></label>",
     `<label>Teller or transfer reference <input name="reference" maxlength="64" autocomplete="off" value="${esc(draft.reference || "")}"></label>`,
-    `<label>Date paid <input type="date" name="effective_on" value="${esc(draft.effective_on || today)}" max="${esc(today)}" required></label>`,
+    `<label>Date paid <input type="date" name="effective_on" data-dates="recent" value="${esc(draft.effective_on || today)}" max="${esc(today)}" required></label>`,
     '<button type="submit">Record payment</button>',
     "</fieldset></form>",
   ].join("");

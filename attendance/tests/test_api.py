@@ -290,6 +290,17 @@ class WhereToMarkTests(RegisterApiSetUp):
             ["JSS 1A", "JSS 1B"],
         )
 
+    def test_the_term_comes_with_its_first_and_last_day_for_the_day_picker(self):
+        with connected_to(self.stmarys):
+            Term.objects.filter(pk=self.term_id).update(is_current=True)
+            term = Term.objects.get(pk=self.term_id)
+        self.client.force_login(self.teacher.user)
+
+        body = self.where().json()
+
+        self.assertEqual(body["term_starts_on"], term.starts_on.isoformat())
+        self.assertEqual(body["term_ends_on"], term.ends_on.isoformat())
+
     def test_every_class_is_listed_and_not_only_the_ones_she_is_answerable_for(self):
         """**Asserted because it is a gap, not because it is a feature.**
 
@@ -324,6 +335,8 @@ class WhereToMarkTests(RegisterApiSetUp):
 
         self.assertIsNone(body["term_id"])
         self.assertIsNone(body["term"])
+        self.assertIsNone(body["term_starts_on"])
+        self.assertIsNone(body["term_ends_on"])
 
     def test_a_bursar_is_refused_before_anything_is_looked_up(self):
         """The authority check runs first, so this cannot become a directory of

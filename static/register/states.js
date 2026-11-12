@@ -43,7 +43,7 @@ export function dayText(iso) {
  * `MARKING_ROLES` admits principals and administrators for.
  */
 export function choose({
-  term = "", classes = [], on = "", asOf = null, timeZone, now, held = [], may_set_up = false,
+  term = "", starts_on = "", ends_on = "", classes = [], on = "", asOf = null, timeZone, now, held = [], may_set_up = false,
 } = {}) {
   // Only from a live answer: never from a failed fetch or the phone's copy.
   if (!classes.length && !asOf) {
@@ -67,18 +67,20 @@ export function choose({
     heldNote(held),
     `<p class="term">${esc(term)}</p>`,
     '<label for="on">Which day</label>',
-    `<input id="on" name="on" type="date" data-field="on" value="${esc(on)}">`,
-    "<p>Which class?</p>",
-    '<ul class="classes">',
+    `<input id="on" name="on" type="date" data-field="on" data-dates="recent" value="${esc(on)}"` +
+      `${starts_on ? ` min="${esc(starts_on)}"` : ""}${ends_on ? ` max="${esc(ends_on)}"` : ""}>`,
+    '<h2 class="which-class">Which class?</h2>',
+    '<div class="card class-card"><ul class="list-rows classes">',
     classes
       .map(
         (group) =>
-          `<li><button type="button" data-action="open" data-class="${esc(
-            group.id,
-          )}">${esc(group.name)}</button></li>`,
+          `<li><button type="button" class="list-row class-row" data-action="open" data-class="${esc(group.id)}">` +
+          `<span class="list-row-text"><span class="list-row-title">${esc(group.name)}</span></span>` +
+          '<span class="list-row-end"><svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>' +
+          "</button></li>",
       )
       .join(""),
-    "</ul>",
+    "</ul></div>",
     "</section>",
   ].join("");
 }

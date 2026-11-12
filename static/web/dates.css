@@ -1,4 +1,39 @@
-/* Date fields (`web/dates.js`): day, month and year as three selects; the native input beside them, out of sight. */
-.date-field { position: relative; display: grid; grid-template-columns: 1fr 1.3fr 1.2fr; gap: var(--sp-8); }
-.date-field > input[type="time"] { grid-column: 1 / -1; width: auto; }
+/* Date fields (`web/dates.js`). */
+.date-field { position: relative; display: grid; gap: var(--sp-8); }
 .date-native { position: absolute; bottom: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.date-field > input[type="time"] { width: auto; }
+.date-button { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-12); width: 100%; min-height: var(--control); padding: 8px 12px; background: var(--card); font-weight: 400; text-align: left; }
+.date-button .icon { flex: none; color: var(--muted); }
+.date-text.is-empty { color: var(--muted); }
+.date-chips { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
+.date-chip { padding: 8px 16px; font-weight: 400; border-radius: 999px; }
+[aria-pressed="true"].date-chip, .date-day[aria-selected="true"], .date-pick [aria-pressed="true"] { color: var(--card); background: var(--brand); border-color: var(--brand); font-weight: 700; }
+.date-sheet [aria-disabled="true"], .date-chip[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
+dialog.date-sheet { position: fixed; inset: auto; margin: 0; padding: 0; color: var(--text); background: var(--card); border: 1px solid var(--border); overflow: hidden; flex-direction: column; box-shadow: var(--shadow-2); }
+dialog.date-sheet[open] { display: flex; }
+dialog.date-sheet::backdrop { background: transparent; }
+.date-head { display: flex; flex: none; align-items: center; justify-content: space-between; padding: 0 4px 0 20px; }
+.date-head h2 { margin: 0; padding: 12px 0; font-size: 1rem; }
+.date-body { flex: 1 1 auto; min-height: 0; padding: 0 12px 12px; overflow-y: auto; overscroll-behavior: contain; }
+dialog.is-pop { left: var(--left, 8px); width: var(--width, 320px); max-width: calc(100vw - 16px); max-height: var(--room, 460px); border-radius: var(--radius); }
+dialog.is-sheet { right: 0; bottom: 0; left: 0; width: 100%; max-width: none; max-height: min(85dvh, 560px); border: 0; border-radius: 16px 16px 0 0; animation: date-rise 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+dialog.is-sheet::backdrop { background: color-mix(in srgb, var(--text) 20%, transparent); }
+dialog.is-sheet::before { content: ""; align-self: center; width: 36px; height: 4px; margin-top: 6px; background: var(--border); border-radius: 999px; }
+dialog.is-sheet .date-body { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+html:has(dialog.is-sheet[open]) { overflow: hidden; }
+@keyframes date-rise { from { transform: translateY(100%); } }
+@media (prefers-reduced-motion: reduce) { dialog.is-sheet { animation: none; } }
+.date-month { display: grid; grid-template-columns: var(--control) minmax(0, 1fr) var(--control); align-items: center; }
+.date-month h3 { margin: 0; font-size: 1rem; text-align: center; }
+.date-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.date-heads span { padding: 8px 0; color: var(--muted); font-size: 0.8125rem; font-weight: 700; text-align: center; }
+.date-day, .date-pick button { min-height: var(--control); padding: 0; font-weight: 400; background: none; border: 0; border-radius: 999px; }
+.date-day { margin: 1px 0; }
+.date-day.is-today { box-shadow: inset 0 0 0 2px var(--brand); }
+.date-day[aria-selected="true"].is-today { box-shadow: inset 0 0 0 2px var(--card), 0 0 0 1px var(--brand); }
+.date-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.date-pick[data-cols="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.date-crumbs { display: flex; flex-wrap: wrap; gap: var(--sp-8); margin-bottom: var(--sp-8); }
+.date-crumbs button { padding: 0 16px; color: var(--brand); font-weight: 700; background: var(--brand-tint); border-color: transparent; border-radius: 999px; }
+.date-clear { margin-top: var(--sp-8); width: 100%; }
+@media (forced-colors: active) { .date-day[aria-selected="true"], .date-pick [aria-pressed="true"] { outline: 2px solid Highlight; } }
