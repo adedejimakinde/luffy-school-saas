@@ -612,3 +612,35 @@ class TheCiGuardReadsTheRightCheckRunsTests(SimpleTestCase):
         runs[0]["details_url"] = None
 
         self.assertEqual(self.guard(runs).returncode, 1)
+
+    # The three decisions docs/deployment.md ("Dry run: the guard's decision")
+    # shows. On main the shards and `screens` are skipped by design; their
+    # check-runs are in the listing but are not named `test`, `image` or
+    # `publish`, so they must change nothing.
+    def skipped_on_main(self):
+        return [
+            self.run_(f"tests {n}/4", self.TESTS_RUN, 110 + n, conclusion="skipped")
+            for n in range(1, 5)
+        ] + [self.run_("screens", self.TESTS_RUN, 120, conclusion="skipped")]
+
+    def test_decision_all_green_allows_the_deploy(self):
+        self.assertEqual(self.guard(self.good()).returncode, 0)
+
+    def test_decision_shards_skipped_on_main_allows_the_deploy(self):
+        self.assertEqual(self.guard(self.good() + self.skipped_on_main()).returncode, 0)
+
+    def test_decision_publish_failed_refuses_the_deploy(self):
+        runs = self.good()
+        runs[2]["conclusion"] = "failure"
+
+        result = self.guard(runs + self.skipped_on_main())
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("CI has not passed", result.stdout)
+
+    def test_decision_publish_skipped_refuses_the_deploy(self):
+        # The state 4a74985 was in: a skipped `publish` is not a pass.
+        runs = self.good()
+        runs[2]["conclusion"] = "skipped"
+
+        self.assertEqual(self.guard(runs + self.skipped_on_main()).returncode, 1)
