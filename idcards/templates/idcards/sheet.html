@@ -1,0 +1,115 @@
+{% comment %}
+One run of up to ten children's ID cards as A4 pages: a page of fronts, then
+the page of backs. Rendered by `idcards.render.html_for()`.
+
+Every position and size is a finished number from `idcards.render`; nothing
+here does arithmetic. A card is 85.6 x 54 mm and holds nothing nearer than
+3 mm to its edge. The cards touch, and the hairlines in the margin are the cut
+marks.
+
+**What a card says is what `Face` carries**, and a face has no parent's number
+and no field this template could print by mistake: the emergency line is the
+school's phone (`school.phone`), never a guardian's contact.
+
+`school.colour` is six hex digits by a database constraint (`results.look`), and
+`school.tint` is computed from it, which is what makes both safe to write into
+the stylesheet below. The colour is on the school's name, a thin rule and the
+initials; everything else is dark ink, so a school printing a class on a cheap
+printer does not streak.
+
+The font is the design's own Hanken Grotesk, with Noto Sans behind it for the
+Hausa letters and DejaVu Sans for anything else, as the report card has.
+{% endcomment %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ID cards, {{ class_name }}</title>
+<style>
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 400; src: url("{{ fonts }}/hanken-grotesk-400.woff2") format("woff2"); }
+  @font-face { font-family: "Hanken Grotesk"; font-weight: 700; src: url("{{ fonts }}/hanken-grotesk-700.woff2") format("woff2"); }
+  @font-face { font-family: "Noto Sans"; font-weight: 400; src: url("{{ fonts }}/noto-sans-hausa-400.woff2") format("woff2"); }
+  @font-face { font-family: "Noto Sans"; font-weight: 700; src: url("{{ fonts }}/noto-sans-hausa-700.woff2") format("woff2"); }
+
+  @page { size: 210mm 297mm; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "Hanken Grotesk", "Noto Sans", "DejaVu Sans", sans-serif; color: #1a1a1a; font-size: 8pt; line-height: 1.2; }
+
+  .sheet { position: relative; width: 210mm; height: {{ page_h }}; overflow: hidden; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+  .caption { position: absolute; font-size: 6.5pt; color: #555; }
+  .mark { position: absolute; background: #000; }
+
+  .card { position: absolute; overflow: hidden; background: #fff; }
+  .card .bar { position: absolute; left: 0; width: 85.6mm; height: 1.1mm; background: {{ school.colour }}; }
+  .card .abs { position: absolute; }
+  .card .cell { display: flex; align-items: center; }
+
+  .crest { left: 3.5mm; top: 2.4mm; width: 9.4mm; height: 9.4mm; }
+  .crest img { width: 9.4mm; height: 9.4mm; object-fit: contain; }
+  .crest .initials { width: 9.4mm; height: 9.4mm; border-radius: 50%; background: {{ school.colour }}; color: #fff; font-weight: 700; font-size: 9pt; text-align: center; line-height: 9.4mm; }
+  .school { left: 14.5mm; top: 2.4mm; width: 67.6mm; height: 9.4mm; font-weight: 700; font-size: 8.4pt; line-height: 1.15; color: {{ school.colour }}; overflow: hidden; }
+
+  .tag { left: 27.5mm; top: 15.6mm; width: 54.6mm; font-size: 5.2pt; letter-spacing: 0.14em; font-weight: 700; color: #555; text-transform: uppercase; }
+  .photo { left: 3.5mm; top: 16.2mm; width: 21mm; height: 27mm; border: 0.2mm solid #b8b8b8; overflow: hidden; }
+  .photo img { width: 100%; height: 100%; object-fit: cover; }
+  .photo.none { background: {{ school.tint }}; border-color: {{ school.tint }}; }
+  .photo.none { justify-content: center; color: {{ school.colour }}; font-weight: 700; font-size: 20pt; }
+  .name { left: 27.5mm; top: 19.2mm; width: 54.6mm; height: 9.2mm; font-weight: 700; font-size: 10.5pt; line-height: 1.12; overflow: hidden; overflow-wrap: anywhere; }
+  .facts { left: 27.5mm; top: 29.6mm; width: 54.6mm; }
+  .facts .row { display: table; width: 54.6mm; height: 4.4mm; }
+  .facts .row > span { display: table-cell; vertical-align: middle; }
+  .facts .k { width: 17mm; font-size: 5.4pt; letter-spacing: 0.08em; text-transform: uppercase; color: #555; }
+  .facts .v { font-size: 8pt; font-weight: 700; overflow-wrap: anywhere; }
+  .valid { left: 3.5mm; top: 46.8mm; width: 78.6mm; height: 4.6mm; font-size: 6.6pt; color: #333; }
+  .valid b { color: #1a1a1a; }
+
+  .back .name-line { left: 4mm; top: 2.8mm; width: 77.6mm; text-align: center; font-weight: 700; font-size: 8pt; color: {{ school.colour }}; }
+  .back .address { left: 4mm; top: 7.4mm; width: 77.6mm; text-align: center; font-size: 5.6pt; color: #555; overflow: hidden; height: 5.4mm; }
+  .back .qr { left: 3mm; top: 14.2mm; width: 26mm; height: 26mm; padding: 3mm; background: #fff; border: 0.2mm solid #b8b8b8; }
+  .back .qr img { width: 20mm; height: 20mm; image-rendering: crisp-edges; }
+  .back .scan { left: 2mm; top: 41mm; width: 28mm; text-align: center; font-size: 5.4pt; color: #555; line-height: 1.2; }
+  .back .info { left: 33mm; top: 14.6mm; width: 49.6mm; }
+  .back .emergency { font-weight: 700; font-size: 7pt; line-height: 1.2; }
+  .back .phone { font-weight: 700; font-size: 12pt; color: {{ school.colour }}; margin: 0.8mm 0 2.4mm; }
+  .back .own { font-size: 5.8pt; color: #444; line-height: 1.3; }
+</style>
+</head>
+<body>
+{% for page in pages %}<div class="sheet">
+  <div class="caption" style="{{ caption_style }}">{{ class_name }}, {{ page.caption }}</div>
+  {% for mark in page.marks %}<div class="mark" style="{{ mark.style }}"></div>
+  {% endfor %}{% for cell in page.cells %}{% with face=cell.face %}<div class="card {{ page.side }}" style="{{ cell.style }}">
+    {% if page.side == "front" %}
+    <div class="bar" style="top:12.9mm"></div>
+    <div class="abs crest">{% if school.crest %}<img src="{{ school.crest }}" alt="">{% else %}<div class="initials">{{ school.initials }}</div>{% endif %}</div>
+    <div class="abs school cell"><span>{{ school.name }}</span></div>
+    <div class="abs tag">Student ID card</div>
+    {% if face.photo %}<div class="abs photo"><img src="{{ face.photo }}" alt=""></div>
+    {% else %}<div class="abs photo none cell">{{ face.initials }}</div>{% endif %}
+    <div class="abs name">{{ face.name }}</div>
+    <div class="abs facts">
+      <div class="row"><span class="k">Admission no.</span><span class="v">{{ face.admission_number|default:"-" }}</span></div>
+      <div class="row"><span class="k">Class</span><span class="v">{{ face.class_name }}</span></div>
+      <div class="row"><span class="k">Session</span><span class="v">{{ face.session }}</span></div>
+    </div>
+    <div class="abs valid">Valid until <b>{{ face.expires_on|date:"j F Y" }}</b></div>
+    {% else %}
+    <div class="bar" style="top:0"></div>
+    <div class="abs name-line">{{ school.name }}</div>
+    {% if school.address %}<div class="abs address">{{ school.address }}</div>{% endif %}
+    <div class="abs qr"><img src="{{ face.qr }}" alt="QR code to check this card"></div>
+    <div class="abs scan">Scan to check this card is valid</div>
+    <div class="abs info">
+      {% if school.phone %}<div class="emergency">In an emergency call the school:</div>
+      <div class="phone">{{ school.phone }}</div>
+      {% else %}<div class="emergency">In an emergency, contact the school office.</div>
+      <div class="phone"></div>{% endif %}
+      <div class="own">This card belongs to {{ school.name }} and must be returned on request. Valid until {{ face.expires_on|date:"j F Y" }}.</div>
+    </div>
+    {% endif %}
+  </div>{% endwith %}
+  {% endfor %}
+</div>
+{% endfor %}</body>
+</html>

@@ -1,0 +1,49 @@
+{% load static shell %}
+{% include "design/doc_open.html" %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check a student ID card</title>
+
+{% comment %}
+What a card's QR code opens. `result` is `idcards.cards.Verification` or None,
+and **that object is all this template can see**: a name, a valid flag, a class
+and a photo. There is no admission number, date, contact or id in scope to be
+printed by mistake. The title names nobody, because a tab title outlives the
+page in history.
+
+`{% comment %}` and never a multi-line `{#` block: a `{#` comment spanning lines
+is not a comment and renders on the page.
+{% endcomment %}
+
+{% include "design/head.html" %}
+<link rel="stylesheet" href="{% static 'staff-signin/staff-signin.css' %}">
+<link rel="stylesheet" href="{% static 'id-cards/verify.css' %}">
+
+<body class="door">
+{% include "design/icons.html" %}
+{% include "accounts/parts/door_logo.html" %}
+<main id="verify">
+{% if result and result.valid %}
+  <section class="verdict verdict-valid" data-verdict="valid">
+    <p class="verdict-word" role="status">Valid</p>
+    <p class="lede">This is a current student ID card.</p>
+    {% if result.photo %}<img class="holder" src="{{ result.photo }}" alt="Photo of {{ result.name }}" width="168" height="216">{% endif %}
+    <h1>{{ result.name }}</h1>
+    {% if result.class_name %}<p class="class-name">{{ result.class_name }}</p>{% endif %}
+    {% if result.photo %}<p class="hint">Check that the person in front of you looks like this photo.</p>{% endif %}
+  </section>
+{% elif result %}
+  <section class="verdict verdict-expired" data-verdict="expired">
+    <p class="verdict-word" role="status">Expired</p>
+    <h1>{{ result.name }}</h1>
+    <p class="lede">This card is no longer valid. Please ask the school for a new one.</p>
+  </section>
+{% else %}
+  <section class="verdict verdict-unknown" data-verdict="unknown">
+    <p class="verdict-word" role="status">Not recognised</p>
+    <h1>We cannot confirm this card</h1>
+    <p class="lede">This school did not issue a card with this code. Do not accept it as identification.</p>
+  </section>
+{% endif %}
+</main>
+<p class="door-foot">{% if brand %}<a href="{{ classnode_href }}">Powered by Classnode</a>{% else %}Classnode{% endif %}</p>

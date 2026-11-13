@@ -48,6 +48,8 @@ PORTAL = frozenset(
         "forgot-password",
         "help",
         "home",
+        # Student ID cards (`idcards`): the staff page that prints them.
+        "id-cards",
         # Where an invitation's link lands, on the school it is for (the portal
         # keeps its own for links already sent).
         "invitations",
@@ -84,6 +86,9 @@ PORTAL = frozenset(
         # Question banks and tests (`docs/cbt.md`, step 3). Staff only.
         "tests",
         "timetable",
+        # What a student ID card's QR code opens (`idcards.views.verify_page`): valid or
+        # expired, with a name, class and photo. For anybody, on the school's own host.
+        "verify",
         # The school's website editor and its preview (docs/school-sites.md, PR 4).
         "website",
     }
@@ -128,10 +133,11 @@ def is_public_site_request(request) -> bool:
 
 
 #: The doors on a school's host: the two sign-in pages, the invitation page, the
-#: two "Forgot password" pages and the API routes they call. Each is for
-#: somebody who is not (yet) signed in here, so `SchoolAccessMiddleware` lets a
-#: login with no membership at this school reach them instead of refusing it;
-#: none of them reads the school's data, and signing in through one is refused
+#: two "Forgot password" pages, the page a student ID card's QR code opens and
+#: the API routes they call. Each is for somebody who is not (yet) signed in
+#: here, so `SchoolAccessMiddleware` lets a login with no membership at this
+#: school reach them instead of refusing it; none of them reads the school's
+#: data but the ID card's page (below), and signing in through one is refused
 #: to anybody who is not a member (`accounts.signin`,
 #: `accounts.guardian_signin`), as is a new password (`accounts.password_reset`).
 DOORS = frozenset(
@@ -152,7 +158,10 @@ DOORS = frozenset(
         "/offline/",
     }
 )
-DOOR_PREFIXES = ("/invitations/", "/api/invitations/", "/reset-password/")
+#: `/verify/` is the page a student ID card's QR code opens: for anybody with a phone,
+#: signed in at another school or at none. It does read this school's data, and says
+#: only a name, a class, a photo and valid or expired (`idcards.cards.Verification`).
+DOOR_PREFIXES = ("/invitations/", "/api/invitations/", "/reset-password/", "/verify/")
 
 
 def is_door(path: str) -> bool:

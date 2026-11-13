@@ -91,6 +91,10 @@ const PICK_CLASS = `[data-action="pick-class"]:has-text("${OWN_CLASS}")`;
 // which sit tests beside this file, never sit as, mark or sign in for one of them.
 const RESULTS = { code: "RSWKTB", number: "SUN/UI-RES-01", pin: "20269001", parent: "sunrise.uiresparent" };
 
+// The two ID cards `seed_ui` issues (docs/id-cards.md): the pages their QR codes open.
+const ID_CARD_VALID = "UIidcardvalid001";
+const ID_CARD_EXPIRED = "UIidcardexpire01";
+
 /** The public site's extra widths: a small Android, a small iPhone, a current iPhone, a large phone, a tablet held sideways, a desk monitor. */
 export const SITE_WIDTHS = [320, 375, 390, 414, 1024, 1920];
 
@@ -307,6 +311,23 @@ export const SCREENS = [
     steps: [["exam-slips-confirm", '[data-action="ask-print-class"]']],
   },
   { name: "exam-slips-office", as: "sunrise.admin", url: `${SUNRISE}/exam-slips/` },
+  // Student ID cards (docs/id-cards.md): the principal's page with a class's choosing panel
+  // open, and the administrator's; at a small Android and a common iPhone as well as the
+  // defaults, so 320, 390 and 1280 are all held. Nothing is printed: the file is made by a
+  // worker this job does not run.
+  {
+    name: "id-cards",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/id-cards/`,
+    widths: [320, 390],
+    steps: [["id-cards-choose", '[data-action="ask-print"]']],
+  },
+  { name: "id-cards-office", as: "sunrise.admin", url: `${SUNRISE}/id-cards/`, widths: [320, 390] },
+  // The page a card's QR code opens, on a phone, for anybody: valid, expired, and a code
+  // nobody issued (a 404, with its own sentence).
+  { name: "id-card-valid", as: null, url: `${SUNRISE}/verify/${ID_CARD_VALID}/`, widths: [320, 390] },
+  { name: "id-card-expired", as: null, url: `${SUNRISE}/verify/${ID_CARD_EXPIRED}/`, widths: [320, 390] },
+  { name: "id-card-unknown", as: null, url: `${SUNRISE}/verify/not-a-card-code/`, widths: [320, 390], status: 404 },
   // Tests (CBT step 3): the principal's list and banks, a teacher's set-a-test form, and
   // the administrator's list, which has no question in it.
   { name: "tests", as: "sunrise.principal", url: `${SUNRISE}/tests/` },

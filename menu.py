@@ -43,6 +43,7 @@ from fees.authority import READING_ROLES as FEES_ROLES
 from gradebook.assignments import VIEWING_ROLES as SUBJECT_TEACHER_ROLES
 from gradebook.services import MARK_ENTERING_ROLES
 from home.dashboard import HOME_ROLES
+from idcards.access import PRINTING_ROLES as ID_CARD_ROLES
 from notices.services import SETTINGS_ROLES as NOTICES_ROLES
 from results.api import POSITION_VIEWING_ROLES
 from results.comments_api import VIEWING_ROLES as REMARK_ROLES
@@ -84,6 +85,8 @@ LINKS = (
     # The principal and the administrator by role; an exam officer by the principal's
     # naming, which `cbt.access.menu_keys()` reads (`menu_for()`'s `also`).
     Link("exam-slips", "/exam-slips/", "i-flag", "Exam slips", EXAM_SLIP_ROLES, "Office"),
+    # The principal, the vice principal (academic) and the administrator, as `idcards.api` admits.
+    Link("id-cards", "/id-cards/", "i-people", "ID cards", ID_CARD_ROLES, "Office"),
     Link("promotion", "/promotion/", "i-promote", "Promotion", PLACEMENT_ROLES, "Office"),
     # The roll is read by whoever may admit a child or place one: the wider of
     # the two sets `enrolment_api._refuse_outsiders()` admits on.

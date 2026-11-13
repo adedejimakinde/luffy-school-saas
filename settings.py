@@ -277,6 +277,10 @@ TENANT_APPS = [
     # The school's uploads: crests, photos, signatures, website pictures,
     # documents and the hero loop. Rows here, bytes on disk (`files`).
     "files",
+    # Student ID cards (`docs/id-cards.md`): the QR code's record and the print
+    # log. Its own app because it reads the roll, the placements and the report
+    # card's look without any of them depending on it.
+    "idcards",
 ]
 
 INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]

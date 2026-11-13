@@ -1,0 +1,16 @@
+/*
+ * The page a card's QR code opens: one verdict, large, readable at arm's length
+ * on a phone in daylight. The door's own stylesheet draws the frame; this is the
+ * verdict and the holder's photo. Colours are `design.css` tokens.
+ */
+#verify { max-width: 26rem; margin: 0 auto; padding: 16px; text-align: center; }
+.verdict { display: grid; gap: 10px; justify-items: center; padding: 20px 16px; border-radius: var(--radius); border: 2px solid var(--border); background: var(--card); }
+.verdict-valid { border-color: var(--ok); }
+.verdict-expired, .verdict-unknown { border-color: var(--stop); background: var(--stop-bg); }
+.verdict-word { margin: 0; font-size: 1.6rem; font-weight: 700; }
+.verdict-valid .verdict-word { color: var(--ok); }
+.verdict-expired .verdict-word, .verdict-unknown .verdict-word { color: var(--stop); }
+.verdict h1 { margin: 0; font-size: 1.4rem; overflow-wrap: anywhere; }
+.verdict .lede, .verdict .class-name, .verdict .hint { margin: 0; overflow-wrap: anywhere; }
+.verdict .class-name { font-weight: 700; font-size: 1.1rem; }
+.holder { width: 168px; max-width: 60%; height: auto; border-radius: var(--radius); border: 1px solid var(--border); object-fit: cover; }

@@ -63,6 +63,7 @@ from gradebook.api import MessageOut, router as gradebook_router
 from gradebook.assignments_api import router as subject_teachers_router
 from gradebook.teaching_api import router as teaching_router
 from home.api import router as home_router
+from idcards.api import router as id_cards_router
 from schoolsite.api import router as website_router
 from notices.api import router as notices_router
 from results.api import router as results_router
@@ -100,6 +101,10 @@ from timetable.services import READING_ROLES as TIMETABLE_READING_ROLES
 api = NinjaAPI(title="Luffy School API", version="1.0.0")
 
 api.add_router("/gradebook/", gradebook_router, tags=["gradebook"])
+
+# Student ID cards: `/id-cards/`. Tenant-host only, and the principal, the vice
+# principal (academic) and the administrator alone, asked on every route.
+api.add_router("/id-cards/", id_cards_router, tags=["id-cards"])
 
 # The office's subjects, papers and class teachers: `/teaching/`. Tenant-host only, like the rest.
 api.add_router("/teaching/", teaching_router, tags=["teaching"])

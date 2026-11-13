@@ -87,6 +87,13 @@ RESULTS_PIN = "20269001"
 RESULTS_PARENT = "sunrise.uiresparent"
 RESULTS_SITTERS = 6
 
+#: `screens.test.js`'s ID card pages (`docs/id-cards.md`): two cards of UI Results' first two
+#: children, one valid and one expired, under fixed tokens so the browser can open the page
+#: a card's QR code opens. A card is otherwise made by a print, in a worker the screens job
+#: does not run.
+ID_CARD_VALID = "UIidcardvalid001"
+ID_CARD_EXPIRED = "UIidcardexpire01"
+
 
 def sit_pin(n: int) -> str:
     return f"2026{n:04d}"
@@ -143,6 +150,23 @@ class Command(BaseCommand):
                     title=PWA_TITLE, code=PWA_CODE,
                 )
                 self.stdout.write(f"  UI PWA's test     code {PWA_CODE}, PINs {sit_pin(1)} and {sit_pin(2)}")
+                id_cards(children[RESULTS_CLASS][:2], term)
+                self.stdout.write(f"  ID cards          /verify/{ID_CARD_VALID}/ and /verify/{ID_CARD_EXPIRED}/")
+
+
+def id_cards(children, term):
+    """Two ID cards for the screens: the first child's valid for a year, the second's lapsed yesterday."""
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    from idcards.models import IdCard
+
+    today = timezone.localdate()
+    for child, token, expires_on in zip(
+        children, (ID_CARD_VALID, ID_CARD_EXPIRED), (today + timedelta(days=365), today - timedelta(days=1))
+    ):
+        IdCard.objects.create(token=token, student_membership_id=child.pk, session=term.session, expires_on=expires_on)
 
 
 def maths_bank(school):
