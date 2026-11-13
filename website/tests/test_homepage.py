@@ -411,7 +411,10 @@ class TheFooterTests(SiteSetUp):
         ]
         self.assertEqual(found, [
             ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
-                         ("/#demo", "Book a demo")]),
+                         ("/about/", "About and security"), ("/#demo", "Book a demo")]),
+            ("Contact", [("tel:+2349030269294", "+234 903 026 9294"),
+                         ("https://www.linkedin.com/company/classnode/", "LinkedIn"),
+                         ("https://share.google/1MOPiuTETX2wehGWA", "Google")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
         ])
@@ -423,6 +426,21 @@ class TheFooterTests(SiteSetUp):
             [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', bottom, flags=re.S)],
             [("/faq/", "FAQ"), ("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co")],
         )
+
+    def test_every_page_shows_the_rc_number_in_the_footer(self):
+        for path in ("/", "/pricing/", "/faq/", "/about/", "/privacy/", "/terms/", "/blog/"):
+            with self.subTest(path=path):
+                self.assertIn("RC 9926572", words(self.footer(path)))
+
+    def test_the_contacts_in_the_footer_come_from_the_settings(self):
+        with override_settings(SITE_PHONE="+2348000000000", SITE_LINKEDIN_URL="https://example.com/li",
+                               SITE_GOOGLE_BUSINESS_URL=""):
+            footer = self.footer()
+        self.assertIn('href="tel:+2348000000000"', footer)
+        self.assertIn("+234 800 000 0000", words(footer))
+        self.assertIn('href="https://example.com/li"', footer)
+        self.assertNotIn("Google", words(footer))
+        self.assertNotIn("9030269294", footer)
 
     def test_it_has_one_logo_and_no_second_call_to_action(self):
         footer = self.footer()
@@ -602,7 +620,9 @@ class TheBudgetsTests(SiteSetUp):
         for srcset in re.findall(r'srcset="([^"]+)"', page):
             for url, _ in _CANDIDATE.findall(srcset):
                 self.assertTrue(url.startswith(settings.STATIC_URL), url)
-        self.assertNotRegex(page, r'(src|href|srcset)="https?://')
+        # Only the footer's two profile links (`website.contact`) leave the host, and each is a link, not an asset.
+        outside = re.sub(r'<a href="https://[^"]+" rel="noopener">', "", page)
+        self.assertNotRegex(outside, r'(src|href|srcset)="https?://')
 
     def test_images_are_webp_sized_described_and_only_the_hero_eager(self):
         top, below = self.page.split('<section class="proof"', 1)

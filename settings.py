@@ -88,13 +88,15 @@ PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
 SITE_HOST = os.environ.get("SITE_HOST", "").strip().lower() or PLATFORM_DOMAIN
 SITE_URLCONF = "urls_site"
 
-#: Classnode's phone line (the number the public site and `/llms.txt` give) and
-#: public profiles, which the site's structured data (`website.views.structured_data`)
-#: names when they are set and leaves out when they are not. Nothing is guessed:
-#: a deployment that has no Google Business Profile yet simply sets none. Each profile is a full `https://` address.
-SITE_PHONE = os.environ.get("SITE_PHONE", "+234 903 026 9294").strip()
-SITE_LINKEDIN_URL = os.environ.get("SITE_LINKEDIN_URL", "").strip()
-SITE_GOOGLE_BUSINESS_URL = os.environ.get("SITE_GOOGLE_BUSINESS_URL", "").strip()
+#: **Classnode's contact details: the one place they are written.** The support
+#: phone line, the LinkedIn page and the Google Business Profile. The footer, the
+#: About page, the FAQ, `/llms.txt` and the structured data all read them through
+#: `website/contact.py`. The phone is the support number until the dedicated line
+#: exists; set `SITE_PHONE` then and nothing else changes. Each profile is a full
+#: `https://` address; a deployment may set one to empty to leave it out.
+SITE_PHONE = os.environ.get("SITE_PHONE", "+2349030269294").strip()
+SITE_LINKEDIN_URL = os.environ.get("SITE_LINKEDIN_URL", "https://www.linkedin.com/company/classnode/").strip()
+SITE_GOOGLE_BUSINESS_URL = os.environ.get("SITE_GOOGLE_BUSINESS_URL", "https://share.google/1MOPiuTETX2wehGWA").strip()
 
 #: How many demo requests one network address may leave in an hour. Counted from
 #: the saved requests themselves (`website.views`), so it holds across worker

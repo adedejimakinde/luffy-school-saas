@@ -280,6 +280,28 @@ final call to action, and the footer.
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
 
+## About and security, and the contact settings
+
+- **`/about/`** (`website/templates/website/about.html`) is in the header, the
+  phone menu, the footer's Product group, the sitemap and `/llms.txt`. It says
+  who runs Classnode (Classnode Edtech Limited, RC 9926572, Abeokuta, Ogun
+  State; the founder, Adedeji Makinde, named **in text only, no photo**), the
+  four security facts (nightly off-site backups, each school's data kept
+  separate, staff see only their part by role, parents only their own
+  children) and how to reach us. The backups sentence is the feature list's
+  own (`website.features`), so it cannot say more than the product does.
+- **The RC number** is in the footer's legal line on every page
+  (`website/base.html`), and a test holds it there.
+- **Contacts come from one place**, `settings.py`, read through
+  `website/contact.py` by the footer, `/about/`, `/faq/`, `/llms.txt` and the
+  structured data: `SITE_PHONE` (the support number, `+2349030269294` until
+  the dedicated line exists; set it then and nothing else changes),
+  `SITE_LINKEDIN_URL` and `SITE_GOOGLE_BUSINESS_URL`. A value set to empty is
+  left out everywhere; a profile that is not `https://` is never linked. The
+  phone is shown grouped (`+234 903 026 9294`) and linked as `tel:`.
+- There is no separate contact page: the "Talk to us" section of `/about/`
+  and the FAQ's "Something else?" are where the contacts sit.
+
 ## One list of features, one price
 
 **The features** are written once, in `website/features.py` (`GROUPS`): a name,
@@ -360,10 +382,9 @@ The site is the only thing on the platform a search engine is asked to index.
   with no street, since there is no public office), SoftwareApplication
   (EducationalApplication, a free first term then ₦1,500 per student per term)
   and FAQPage. The Organization also carries `telephone` and `sameAs` (the
-  LinkedIn page and the Google Business Profile) **only when set**:
-  `SITE_PHONE`, `SITE_LINKEDIN_URL` and `SITE_GOOGLE_BUSINESS_URL`
-  (`deploy/production.env`; a `sameAs` address that is not `https://` is
-  dropped). Nothing is made up, so none is given until it is set. The FAQ on the
+  LinkedIn page and the Google Business Profile) from the contact settings
+  below (a `sameAs` address that is not `https://` is dropped, and one set to
+  empty is left out). The FAQ on the
   homepage and in its data are drawn from one list, `website.views.FAQ`;
   `/faq/` is a FAQPage of its own ten questions from `website.views.faq_page`.
   No ratings and no reviews: there are none to stand behind.
@@ -375,10 +396,13 @@ The site is the only thing on the platform a search engine is asked to index.
   feature answers are the feature list's own words (`website.features`).
 - **`/llms.txt`** (`website/llms.py`) is a Markdown summary for ChatGPT,
   Gemini, Perplexity, Claude and the like: what Classnode is, who it is for,
-  every feature the pricing page lists (`website.features`), data, the price
-  (`website.price`), the public pages (`/faq/` among them) with the descriptions
+  every feature the pricing page lists (`website.features`), an "About and
+  security" section (the company, RC number, Abeokuta, the founder, nightly
+  backups, separate school data, access by role), the price
+  (`website.price`), the public pages (`/faq/` and `/about/` among them) with the descriptions
   they give search engines, the newest 25 published blog posts (never a draft),
-  and how to reach us (hello@classnode.co, +234 903 026 9294). It is served as
+  and how to reach us (email, support phone, LinkedIn, Google Business Profile,
+  from the contact settings). It is served as
   `text/markdown`, public and cached for an hour. Nothing
   in it is typed twice, so it follows the pricing page. The privacy notice and
   the terms join it, last, when `LEGAL_IN_DRAFT` goes, as they join the sitemap.
@@ -398,6 +422,12 @@ The site is the only thing on the platform a search engine is asked to index.
 | `photos/principal-*.webp` | hero | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
 | `photos/bursar-*.webp` | fees row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
 | `photos/teacher-*.webp` | register row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
+
+The same three photos are used on classnode.co. **Their licence is not known
+yet: it is not written here because it has not been confirmed, and nothing is
+guessed.** The owner is asked in the pull request that added the About page;
+write the answer (the licence's name, the photographers and where each was
+bought) into the table above when it comes.
 
 All three are licensed stock photos of adults. They are also the photos of the
 Crestfield demo school's website (`schools/crestfield/site.py`), **for the demo

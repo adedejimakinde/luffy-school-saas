@@ -230,11 +230,30 @@ class LlmsTxtTests(BlogSetUp):
         self.assertIn("): One line. Another line.\n", self.text())
 
     def test_the_phone_is_classnodes_own_unless_a_deployment_sets_another(self):
-        self.assertIn("- Phone: +234 903 026 9294\n", self.text())
-        with override_settings(SITE_PHONE="+234 800 000 0000"):
-            self.assertIn("- Phone: +234 800 000 0000\n", self.text())
+        self.assertIn("- Support phone: +234 903 026 9294\n", self.text())
+        with override_settings(SITE_PHONE="+2348000000000"):
+            self.assertIn("- Support phone: +234 800 000 0000\n", self.text())
         with override_settings(SITE_PHONE=""):
-            self.assertNotIn("Phone:", self.text())
+            self.assertNotIn("phone:", self.text())
+
+    def test_the_profiles_come_from_the_settings(self):
+        text = self.text()
+        self.assertIn("- LinkedIn: https://www.linkedin.com/company/classnode/\n", text)
+        self.assertIn("- Google Business Profile: https://share.google/1MOPiuTETX2wehGWA\n", text)
+        with override_settings(SITE_LINKEDIN_URL="https://example.com/in", SITE_GOOGLE_BUSINESS_URL=""):
+            text = self.text()
+            self.assertIn("- LinkedIn: https://example.com/in\n", text)
+            self.assertNotIn("Google Business Profile", text)
+
+    def test_it_says_who_runs_classnode_and_how_data_is_kept(self):
+        text = self.text()
+        self.assertIn("## About and security", text)
+        for fact in ("Classnode Edtech Limited, RC 9926572", "Abeokuta, Ogun State", "Adedeji Makinde",
+                     "backed up every night", "kept apart from every other school's",
+                     "Staff see only their own part, by role", "Parents see only their own children",
+                     f"https://{SITE}/about/"):
+            with self.subTest(fact=fact):
+                self.assertIn(fact, text)
 
     def test_the_writing_rules_hold(self):
         text = self.text()
@@ -289,10 +308,11 @@ class StructuredDataTests(SiteSetUp):
         self.assertNotIn("streetAddress", org)
         self.assertNotIn("postalCode", org)
 
-    def test_the_phone_is_classnodes_own_and_profiles_are_left_out_until_they_are_configured(self):
+    def test_the_phone_and_profiles_are_classnodes_own_by_default(self):
         org = self.organization()
-        self.assertEqual(org["telephone"], "+234 903 026 9294")
-        self.assertNotIn("sameAs", org)
+        self.assertEqual(org["telephone"], "+2349030269294")
+        self.assertEqual(org["sameAs"], ["https://www.linkedin.com/company/classnode/",
+                                         "https://share.google/1MOPiuTETX2wehGWA"])
 
     @override_settings(SITE_PHONE="")
     def test_a_deployment_may_leave_the_phone_out(self):

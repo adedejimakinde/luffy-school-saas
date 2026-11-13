@@ -29,6 +29,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.throttling import client_address
 from schools.hosts import portal_host
 
+from .contact import contact
 from .crawlers import NOINDEX, site_url
 from . import price
 from .features import FEATURES, feature, groups
@@ -56,6 +57,11 @@ _PAGES = {
         "Classnode FAQ: Nigerian school software questions",
         "Plain answers on what Classnode does, the Ogun State report card, the price, weak "
         "networks, parents' results, your data and CBT.",
+    ),
+    "site-about": (
+        "About Classnode and how we protect your data",
+        "Classnode Edtech Limited, RC 9926572, Abeokuta: nightly off-site backups, separate "
+        "school data, access by role, and how to reach us.",
     ),
     "site-privacy": (
         "Privacy notice: Classnode",
@@ -196,6 +202,7 @@ def site_page(request, template, context=None, status=200):
             "portal_host": portal_host(),
             "price": price.context(),
             "contact_email": price.CONTACT_EMAIL,
+            "contact": contact(),
             **(context or {}),
         },
         status=status,
@@ -257,13 +264,10 @@ def _organization(site):
             "addressCountry": "NG",
         },
     }
+    details = contact()
     if settings.SITE_PHONE:
         organization["telephone"] = settings.SITE_PHONE
-    profiles = [
-        url
-        for url in (settings.SITE_LINKEDIN_URL, settings.SITE_GOOGLE_BUSINESS_URL)
-        if url.startswith("https://")
-    ]
+    profiles = [url for url in (details["linkedin"], details["google"]) if url]
     if profiles:
         organization["sameAs"] = profiles
     return organization
@@ -442,6 +446,12 @@ def faq(request):
             "nav_faq": True,
         },
     )
+
+
+@require_http_methods(["GET", "HEAD"])
+def about(request):
+    """Who runs Classnode, how a school's data is kept, and how to reach us."""
+    return site_page(request, "website/about.html", {"nav_about": True, "backups": feature("backups")})
 
 
 @require_http_methods(["GET", "HEAD"])

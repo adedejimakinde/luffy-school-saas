@@ -48,8 +48,8 @@ covers a line of the page. Its background is solid; once the page scrolls it
 turns white and gains a hairline and a shadow (`is-scrolled`, set by the
 script below). The phone menu is the small card it always was, hung from the
 header at its right. The footer is one short, calm
-block: the logo and one line, two groups of links that run inline and wrap
-(Product, Sign in), and a bottom line with the copyright, Privacy, Terms and
+block: the logo and one line, three groups of links that run inline and wrap
+(Product, Contact, Sign in), and a bottom line with the copyright, Privacy, Terms and
 the email.
 
 The one script is inline and a module, so it waits for the page: it marks the
@@ -77,6 +77,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       <a href="/pricing/"{% if nav_pricing %} aria-current="page"{% endif %}>Pricing</a>
       <a href="/#faq">Questions</a>
       <a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a>
+      <a href="/about/"{% if nav_about %} aria-current="page"{% endif %}>About</a>
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
     </nav>
@@ -89,6 +90,7 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
       <a href="/pricing/"{% if nav_pricing %} aria-current="page"{% endif %}>Pricing</a>
       <a href="/#faq">Questions</a>
       <a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a>
+      <a href="/about/"{% if nav_about %} aria-current="page"{% endif %}>About</a>
       {% if portal_host %}<a href="//{{ portal_host }}/staff-sign-in/">Staff sign in</a>
       <a href="//{{ portal_host }}/sign-in/">Parent sign in</a>{% endif %}
       <a class="btn btn-primary" href="/#demo">Book a demo</a>
@@ -112,7 +114,16 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
             <li><a href="/#features">Features</a></li>
             <li><a href="/pricing/"{% if nav_pricing %} aria-current="page"{% endif %}>Pricing</a></li>
             <li><a href="/blog/"{% if nav_blog %} aria-current="page"{% endif %}>Blog</a></li>
+            <li><a href="/about/"{% if nav_about %} aria-current="page"{% endif %}>About and security</a></li>
             <li><a href="/#demo">Book a demo</a></li>
+          </ul>
+        </div>
+        <div class="foot-col">
+          <h2 class="foot-heading">Contact</h2>
+          <ul>
+            {% if contact.phone %}<li><a href="{{ contact.tel }}">{{ contact.phone }}</a></li>{% endif %}
+            {% if contact.linkedin %}<li><a href="{{ contact.linkedin }}" rel="noopener">LinkedIn</a></li>{% endif %}
+            {% if contact.google %}<li><a href="{{ contact.google }}" rel="noopener">Google</a></li>{% endif %}
           </ul>
         </div>
         {% if portal_host %}<div class="foot-col">

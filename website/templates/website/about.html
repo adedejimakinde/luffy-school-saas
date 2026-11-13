@@ -1,0 +1,41 @@
+{% extends "website/base.html" %}
+{% block main %}
+{% comment %}
+About and security (`website.views.about`): who runs Classnode, how a school's
+data is kept, and how to reach us. Dressed as the FAQ and the legal pages are
+(`.legal`): the title in the top band and one reading column. Every fact here is
+one the system or the company record already states (RC number, nightly
+backups: `website.features`); the contacts are `website.contact`, read from
+settings. The founder is named in text only: no photo.
+{% endcomment %}
+<div class="top-band legal-top"><div class="wrap"><h1>About Classnode and how we protect your data</h1></div></div>
+<article class="legal wrap">
+  <div class="legal-body">
+    <section id="who">
+      <h2>Who we are</h2>
+      <p>Classnode is run by Classnode Edtech Limited, RC 9926572, in Abeokuta, Ogun State. We make school management software for Nigerian secondary schools: results and report cards, fees, registers and CBT.</p>
+      <p>Classnode was founded by Adedeji Makinde.</p>
+    </section>
+    <section id="security">
+      <h2>How we keep your data safe</h2>
+      <ul>
+        <li><strong>Nightly off-site backups.</strong> {{ backups.line }}</li>
+        <li><strong>Each school's data is kept separate.</strong> Your records are kept apart from every other school's.</li>
+        <li><strong>Staff see only their part, by role.</strong> A teacher sees their own classes. The bursar sees fees. The principal sees the whole school.</li>
+        <li><strong>Parents see only their own children.</strong> A parent can open a result only after the school has approved and released it.</li>
+      </ul>
+      <p>Our <a href="/privacy/">privacy notice</a> has the details.</p>
+    </section>
+    <section id="contact">
+      <h2>Talk to us</h2>
+      <ul>
+        <li>Email: <a href="mailto:{{ contact.email }}">{{ contact.email }}</a></li>
+        {% if contact.phone %}<li>Support line: <a href="{{ contact.tel }}">{{ contact.phone }}</a></li>{% endif %}
+        {% if contact.linkedin %}<li><a href="{{ contact.linkedin }}" rel="noopener">Classnode on LinkedIn</a></li>{% endif %}
+        {% if contact.google %}<li><a href="{{ contact.google }}" rel="noopener">Classnode on Google</a></li>{% endif %}
+      </ul>
+      <p>Or <a href="/#demo">book a demo</a> and we will call you within two working days.</p>
+    </section>
+  </div>
+</article>
+{% endblock %}

@@ -26,7 +26,7 @@
  * artifact: `<width>/<screen>.png`.
  *
  * Classnode's own public site (`website/`, on the bare platform domain: the
- * homepage, the privacy notice and the terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
+ * homepage, pricing, about, privacy notice and terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
@@ -132,6 +132,8 @@ export const SCREENS = [
   // Classnode's own public site, on the bare domain.
   { name: "homepage", as: null, url: `${SITE}/`, widths: SITE_WIDTHS, site: true },
   { name: "pricing", as: null, url: `${SITE}/pricing/`, widths: SITE_WIDTHS, site: true },
+  // About and security: 320, 390 and 1280 are among `SITE_WIDTHS` and the default widths.
+  { name: "about", as: null, url: `${SITE}/about/`, widths: SITE_WIDTHS, site: true },
   { name: "privacy", as: null, url: `${SITE}/privacy/`, widths: SITE_WIDTHS, site: true },
   { name: "terms", as: null, url: `${SITE}/terms/`, widths: SITE_WIDTHS, site: true },
 
