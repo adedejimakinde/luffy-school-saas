@@ -289,11 +289,20 @@ final call to action, and the footer.
   separate, staff see only their part by role, parents only their own
   children) and how to reach us. The backups sentence is the feature list's
   own (`website.features`), so it cannot say more than the product does.
+- **The footer's separators.** Each row of links (Product, Sign in, the bottom
+  line) wraps on a phone. A "·" is drawn in the 16px gap before every item but
+  the first, outside the item's box, and the row clips everything left of its
+  own edge, so the dot of an item that starts a line is never drawn, and no dot
+  follows an item, so none ends a line. Links have no side padding, so every
+  line starts at the same left edge. `tests/ui/screens.test.js` ("the footer's
+  separators", 320, 390 and 1280) measures it. Its phone height caps are the
+  smallest that pass (437px below 400 wide, 416px above).
 - **The RC number** is in the footer's legal line on every page
   (`website/base.html`), and a test holds it there.
 - **Contacts come from one place**, `settings.py`, read through
-  `website/contact.py` by the footer, `/about/`, `/faq/`, `/llms.txt` and the
-  structured data: `SITE_PHONE` (the support number, `+2349030269294` until
+  `website/contact.py` by the footer (support phone and LinkedIn only; the Google Business Profile
+  is on `/about/` and in the structured data, not in the footer), `/about/`,
+  `/faq/`, `/llms.txt` and the structured data: `SITE_PHONE` (the support number, `+2349030269294` until
   the dedicated line exists; set it then and nothing else changes),
   `SITE_LINKEDIN_URL` and `SITE_GOOGLE_BUSINESS_URL`. A value set to empty is
   left out everywhere; a profile that is not `https://` is never linked. The
@@ -427,23 +436,40 @@ The site is the only thing on the platform a search engine is asked to index.
 
 ### Photo sources and licences
 
-| photo | where | source | licence |
+**All the stock photos on classnode.co are from Pexels**, under the
+[Pexels licence](https://www.pexels.com/license/): free for commercial use, and
+**no attribution is required**. Nothing is credited on the page.
+
+| file (`static/website/photos/`) | where | Pexels page | photographer |
 | --- | --- | --- | --- |
-| `photos/principal-*.webp` | hero | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
-| `photos/bursar-*.webp` | fees row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
-| `photos/teacher-*.webp` | register row | supplied by the owner, 11 October 2026 | to be confirmed by the owner before launch |
+| `principal-300.webp`, `principal-600.webp` | hero | TODO: owner to fill in | TODO |
+| `bursar-440.webp`, `bursar-880.webp` | fees row | TODO: owner to fill in | TODO |
+| `teacher-440.webp`, `teacher-880.webp` | register row | TODO: owner to fill in | TODO |
 
-The same three photos are used on classnode.co. **Their licence is not known
-yet: it is not written here because it has not been confirmed, and nothing is
-guessed.** The owner is asked in the pull request that added the About page;
-write the answer (the licence's name, the photographers and where each was
-bought) into the table above when it comes.
+The three photos were supplied by the owner on 11 October 2026 and cut to their
+spaces (two sizes each). The files carry no metadata, and their names do not
+say where they came from, so the Pexels page and the photographer of each are
+**still to be filled in by the owner** (open the photo on Pexels, copy its page
+address and the photographer's name into the row). The licence above is
+recorded; these two columns are only for traceability.
 
-All three are licensed stock photos of adults. They are also the photos of the
-Crestfield demo school's website (`schools/crestfield/site.py`), **for the demo
-only** (`docs/demo-school.md`). The licence's name, the photographers and where
-each was bought are still to be written into this table by the owner; the demo
-and this page both rely on that record being kept.
+**Rules we follow with them:**
+
+- **People shown are never presented as customers, or as endorsing Classnode.**
+  No quote, testimonial, rating or "what schools say" sits beside a stock face.
+  The homepage's "What schools say" section (`.proof`) is hidden until real
+  quotes and school logos exist; when it is filled, it uses the school's own
+  name and words with its written permission, and never one of these faces.
+- **Not used in a negative light:** no photo is used for a problem, a failure,
+  a complaint or anything the person shown could be embarrassed by.
+- **Not redistributed as stock:** the photos are used on the page and are not
+  offered for download, sold or put in a pack. The blog does not reuse them as
+  free images.
+- No photo shows a child's face; all three are of adults.
+
+They are also the photos of the Crestfield demo school's website
+(`schools/crestfield/site.py`), **for the demo only** (`docs/demo-school.md`),
+under the same rules.
 
 ## What holds it
 

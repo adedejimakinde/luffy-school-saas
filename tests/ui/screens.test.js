@@ -557,11 +557,12 @@ function measureSite({ width }) {
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
     // The footer on a phone: short, all of it on the left, small type, and every
-    // link a thumb tall by its padding. It was about 330px (cap 350 and 340); the
-    // About link and the contacts (support phone, LinkedIn, Google) each add a
-    // wrapped 44px row at phone widths, so the cap is 440 (owner to confirm).
+    // link a thumb tall by its height. It was about 330px; the About link and
+    // the contacts (support phone, LinkedIn) each add a wrapped 44px row on a
+    // phone. The caps are the smallest that pass: 436.1px measured from 320 to
+    // 390 wide, 415.1px at 414 (rounded up); lower them if a row is removed.
     const foot = document.querySelector(".site-foot");
-    const limit = 440;
+    const limit = width < 400 ? 437 : 416;
     if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
       if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
@@ -1769,4 +1770,80 @@ describe("signing in at a school's own door", () => {
       await context.close();
     }
   });
+});
+
+describe("the footer's separators", () => {
+  // The footer's rows of links wrap on a phone. A "·" belongs between two links
+  // on the same line and nowhere else: never first on a line, never last. Each
+  // dot is drawn in the gap before its item (`.foot-col li + li::before`, 10px to
+  // 6px left of the item) and the row clips everything left of its own edge, so
+  // the dot of an item that starts a line is cut off. This measures that: where
+  // every dot lands, which items start a line, and that nothing is drawn after
+  // an item.
+  for (const width of [320, 390, 1280]) {
+    for (const path of ["/", "/about/"]) {
+      test(`no line of the footer begins or ends with a separator at ${width}px (${path})`, async () => {
+        const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
+        const page = await context.newPage();
+        try {
+          await page.goto(`${SITE}${path}`);
+          await settle(page);
+          const { problems, rows } = await page.evaluate(() => {
+            const problems = [];
+            let rows = 0;
+            const lists = document.querySelectorAll(".site-foot .foot-col ul, .site-foot .foot-small");
+            for (const ul of lists) {
+              const row = ul.getBoundingClientRect();
+              const clip = getComputedStyle(ul).clipPath;
+              const items = [...ul.children];
+              const where = `${ul.closest(".foot-col")?.querySelector("h2")?.textContent || "bottom line"}`;
+              items.forEach((li, i) => {
+                const box = li.getBoundingClientRect();
+                const text = li.textContent.trim();
+                if (getComputedStyle(li, "::after").content !== "none" && getComputedStyle(li, "::after").content !== "normal") {
+                  problems.push(`${where}: "${text}" has something drawn after it`);
+                }
+                const before = getComputedStyle(li, "::before");
+                const hasDot = before.content !== "none" && before.content !== "normal";
+                const startsLine = i === 0 || box.top > items[i - 1].getBoundingClientRect().top + 1;
+                if (startsLine) rows += 1;
+                if (i === 0 && hasDot) problems.push(`${where}: the first item "${text}" has a separator`);
+                if (i === 0 || !hasDot) return;
+                const left = box.left + parseFloat(before.left);
+                const right = left + parseFloat(before.width);
+                if (startsLine) {
+                  // Begins a line: its dot must be wholly outside the row, and the row must clip there.
+                  if (right > row.left + 0.5) problems.push(`${where}: a line begins with a separator before "${text}"`);
+                  if (!/inset\(/.test(clip) || !/\s0(px)?\)$|\s0(px)? *\)/.test(clip)) {
+                    problems.push(`${where}: the row does not clip at its left edge (${clip}), so the dot before "${text}" shows`);
+                  }
+                } else {
+                  const previous = items[i - 1].getBoundingClientRect();
+                  if (left < previous.right - 0.5 || right > box.left + 0.5) {
+                    problems.push(`${where}: the separator before "${text}" is not between it and the item before it`);
+                  }
+                }
+              });
+            }
+            return { problems, rows };
+          });
+          assert.deepEqual(problems, []);
+          assert.ok(rows >= 3, `only ${rows} rows measured`);
+          if (width === 320) {
+            const wrapped = await page.evaluate(() => {
+              const bottom = [...document.querySelector(".site-foot .foot-small").children].map((li) => Math.round(li.getBoundingClientRect().top));
+              return new Set(bottom).size;
+            });
+            assert.ok(wrapped >= 2, "the bottom line does not wrap at 320px, so this proves nothing there");
+          }
+          mkdirSync(join(OUT, String(width)), { recursive: true });
+          await page.locator(".site-foot").screenshot({
+            path: join(OUT, String(width), `footer-separators${path === "/" ? "" : "-about"}.png`),
+          });
+        } finally {
+          await context.close();
+        }
+      });
+    }
+  }
 });
