@@ -213,6 +213,22 @@ read, as `total_for()` does for marks. It is frozen at release.
 | `TestRelease` | test, class_group, released_by, at | **Final, like a results release.** The frozen scores never change. |
 | `TestReleaseRestore` | release, restored_by, reason, at | Append-only. **Undoing a release is a restore with a reason**, by the principal only. It hides the scores from students and parents again and shows the teacher why. The frozen rows are not deleted or edited; a later release serves them again, or a key correction (before a re-release) makes new frozen rows at the next version. A restore never touches a CA mark already sent. |
 | `ReleasedTestScore` | release, student_membership_id, student_name, test_title, subject_name, score, out_of, section scores | Append-only, names copied (rules 1, 2). The only thing a student or parent score page reads. |
+
+**Answers wait for every class** (audit finding G-03). A test is one paper and may be
+set for several classes, and scores are released a class at a time. A release shows
+that class **its scores only** while any class has still to finish the paper: the
+student's page gets the score, an empty `corrections` and `answers_held: true`. The
+corrections are frozen at release as before and are handed out once
+`cbt.release.classes_still_to_finish(test)` is empty. A class has finished when the
+test is closed for good; or its window has closed and its sitting has not been opened
+again by hand; or its sitting was closed by hand after somebody in it sat. A sitting
+closed by hand before anybody sat, with the window still running, has not finished. An
+attempt still running holds the answers until its own time and late window are over. It
+is asked on every read and never stored, so a sitting opened again by hand (which is
+also the only way a retake can start) holds the answers again for everybody. The
+teacher's results page names the classes still to finish (`answers_held_for`). A test
+has no setting for whether corrections are shown: once nothing holds them, they show,
+as they did before.
 | `CaTransfer` | test, assessment, rule (scale, rounding), existing (`keep` / `replace`), by, at | One per send. |
 | `CaTransferLine` | transfer, student, test score, mark, outcome (`written`, `kept`, `not_sat`, `locked`, `changed_meanwhile`), previous value | Append-only. Four of five outcomes write nothing to the gradebook, so the line is their only record (rule 8). |
 
@@ -384,7 +400,7 @@ by the clock: that is a retake.
 | | banks and questions | tests | answers and scores |
 | --- | --- | --- | --- |
 | Teacher | Banks for subjects and levels they teach | Tests for their subjects and classes | Their classes' attempts; send to CA; release |
-| Student | Never a bank | Only a test their class is in, while open, through `/sit/` | Their own score and corrections, after release |
+| Student | Never a bank | Only a test their class is in, while open, through `/sit/` | Their own score after release; their corrections once every class has finished the paper |
 | Parent | Never | Never | Their own child's released scores; no questions, no answers, no class average |
 | Vice principal | All banks (read) | All tests (read); approves and sends back (7 Nov 2026) | All attempts and results (read); not release, not send to CA |
 | Principal | All | All | All; release and restore; sets cross-subject practice; names exam officers |
@@ -471,6 +487,7 @@ or under "Built" below.
 | results | An answer arriving after `deadline + late_window` is not counted | drop the deadline check |
 | results | A key correction re-marks every attempt, and none after release | skip the re-mark; allow it after release |
 | release | No score or correction reaches a student before release | drop the release check on the student page |
+| release | No right answer reaches any student while another class has still to finish the paper | set `held = False` in `student_scores()` (`cbt/tests/test_answers_wait.py`: 8 red) |
 | release | A parent sees only their own child's released scores | drop the guardianship filter |
 | release | A released score never changes | drop the trigger on `ReleasedTestScore` |
 | release | The paper sent to a device carries no keys or explanations | add `correct_index` to the payload |

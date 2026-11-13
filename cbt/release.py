@@ -13,6 +13,15 @@ open, by a teacher of the test for a class they teach it to, or by the principal
 
 ## The two pages
 
+## Answers wait for every class (audit G-03)
+
+A test is one paper and may be set for several classes, and scores are released a class at
+a time. A release shows that class **its scores only** while any other class has still to
+finish the paper: the corrections (what was right, and why) are frozen with the score as
+before, and the student's page does not hand them out until `classes_still_to_finish()`
+is empty. It is asked on every read, never stored, so a sitting opened again by hand, or
+a retake still running, holds the answers again for everybody.
+
 - **A student** has no account to sign in with (`docs/cbt.md`, "Student sign-in"), so
   their page is a door, like `/sit/`: the test code, their admission number and their
   exam PIN, behind the same throttle and with the same one refusal for every failure of
@@ -39,6 +48,7 @@ from .models import (
     MAX_WHY,
     Attempt,
     ReleasedTestScore,
+    SittingControl,
     Test,
     TestAudience,
     TestItem,
@@ -48,6 +58,69 @@ from .models import (
 from .sittings import NotAllowed, _role_word
 
 NOT_RELEASED = "Your score for this test has not been released yet. Your teacher releases it."
+#: Said on a student's page in place of the corrections while another class still sits.
+ANSWERS_HELD = (
+    "Your answers and the right ones will show here once every class has finished this test."
+)
+
+
+# -- has every class finished the paper ----------------------------------------------------------
+
+
+def classes_still_to_finish(test, now=None) -> List[str]:
+    """The names of the classes that have not finished sitting this test, sorted.
+
+    While this is not empty, no student of any class is shown a right answer (audit
+    G-03): the paper is the same for every class, so one class's corrections are the
+    next class's answer key.
+
+    A class has **finished** when nobody in it has an attempt still running and nobody
+    in it can start one:
+
+    - the test is closed for good (`Test.State.CLOSED`); or
+    - its window has closed (`closes_at` has passed) and the class's sitting has not
+      been opened again by hand; or
+    - its sitting was closed by hand after somebody in the class sat it.
+
+    A sitting closed by hand **before anybody in the class sat**, with the window still
+    running, has not finished: that is a class waiting its turn, and it can be opened
+    again. A sitting opened by hand has not finished whatever the window says, which
+    also covers a retake, since a retake can only start while the sitting is open.
+
+    An attempt still running holds the answers whichever class it belongs to, until its
+    own time and late window are over (the moment the server would close it).
+
+    Reads only; nothing is settled or written here.
+    """
+    now = now or timezone.now()
+    still = set()
+    for attempt in Attempt.objects.filter(test=test, submitted_at__isnull=True):
+        if sitting.closes_for_good_at(attempt, test) > now:
+            still.add(attempt.class_group_name)
+    if test.state == Test.State.PUBLISHED:
+        latest = {}
+        for control in SittingControl.objects.filter(test=test).order_by("id"):
+            latest[control.class_group_id] = control.kind
+        sat = set(
+            Attempt.objects.filter(test=test, submitted_at__isnull=False).values_list("class_group_id", flat=True)
+        )
+        window_over = now >= test.closes_at
+        for audience in TestAudience.objects.filter(test=test).select_related("class_group"):
+            kind = latest.get(audience.class_group_id)
+            if kind == SittingControl.Kind.OPENED:
+                finished = False
+            elif window_over:
+                finished = True
+            else:
+                finished = kind == SittingControl.Kind.CLOSED and audience.class_group_id in sat
+            if not finished:
+                still.add(audience.class_group.name)
+    return sorted(still)
+
+
+def answers_held(test, now=None) -> bool:
+    """Are this test's right answers still held back from every student?"""
+    return bool(classes_still_to_finish(test, now))
 
 
 # -- release -------------------------------------------------------------------------------------
@@ -95,7 +168,10 @@ def corrections_for(test, items, keys, attempt, answers) -> List[dict]:
 
 
 def release_as(actor, school, test_id, class_group_id) -> TestRelease:
-    """Release one class's scores: freeze them, with each student's corrections."""
+    """Release one class's scores: freeze them, with each student's corrections.
+
+    The corrections are frozen here whether or not they may be shown yet; whether a
+    student's page hands them out is `answers_held()`'s question, asked on each read."""
     from gradebook.models import Subject
 
     from .setting import subject_and_level
@@ -213,8 +289,11 @@ def _proved_for_scores(school, code, number, pin):
     return test, student
 
 
-def student_scores(school, *, code, admission_number, pin, address) -> StudentScores:
-    """A student's own released scores, behind the door's three and its throttle."""
+def student_scores(school, *, code, admission_number, pin, address, now=None) -> StudentScores:
+    """A student's own released scores, behind the door's three and its throttle.
+
+    The corrections are left out, and `answers_held` says so, while any class has still
+    to finish the paper (`classes_still_to_finish()`): the score shows, the answers wait."""
     if not sitting._here(school):
         raise sitting.NotOpened()
     number = sitting._number(admission_number)
@@ -238,10 +317,20 @@ def student_scores(school, *, code, admission_number, pin, address) -> StudentSc
         if r.test_id not in seen:
             seen.add(r.test_id)
             earlier.append(_summary(r))
+    held = answers_held(test, now)
     return StudentScores(
         name=this.student_name,
         class_name=this.class_group_name,
-        this={**_summary(this), "right": this.right, "questions": this.questions, "corrections": this.corrections},
+        this={
+            **_summary(this),
+            "right": this.right,
+            "questions": this.questions,
+            # Never the frozen list while it is held: an empty one, so that nothing
+            # downstream can show what this left in.
+            "corrections": [] if held else this.corrections,
+            "answers_held": held,
+            "answers_held_why": ANSWERS_HELD if held else "",
+        },
         earlier=earlier,
     )
 
@@ -282,8 +371,11 @@ def family_scores_as(actor, school) -> List[dict]:
 
 
 __all__ = [
+    "ANSWERS_HELD",
     "NOT_RELEASED",
     "StudentScores",
+    "answers_held",
+    "classes_still_to_finish",
     "corrections_for",
     "family_scores_as",
     "live_scores",

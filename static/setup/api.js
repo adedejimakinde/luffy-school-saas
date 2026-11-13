@@ -37,6 +37,10 @@ export function currentTermUrl(termId) {
   return `/api/academics/terms/${encodeURIComponent(termId)}/current/`;
 }
 
+export function currentReviewUrl(termId) {
+  return `/api/academics/terms/${encodeURIComponent(termId)}/current/review/`;
+}
+
 export function classesUrl() {
   return "/api/academics/classes/";
 }
@@ -140,7 +144,28 @@ export async function createTerm({ term, fetchImpl = fetch }) {
   }
 }
 
-/** Say which term the school is teaching now. The old one is cleared server-side. */
+/**
+ * What making this term current would do to the class lists, before it is done:
+ * each class, how many children go into the new term with it, and who does not
+ * (audit G-01). Reads only.
+ */
+export async function fetchTermChange({ termId, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await getJson(currentReviewUrl(termId), { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  if (answer.status === 200 && answer.body) return { ok: true, body: answer.body };
+  if (answer.status === 403) return { ok: false, outcome: SAVE.NOT_ALLOWED, body: answer.body || {} };
+  return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
+}
+
+/**
+ * Say which term the school is teaching now. The old one is cleared server-side,
+ * and within a session every class list is carried into the new term in the same
+ * act; the answer's `carried` says how many children.
+ */
 export async function makeCurrent({ termId, fetchImpl = fetch }) {
   try {
     return classify(await putJson(currentTermUrl(termId), {}, { fetchImpl }), 200);

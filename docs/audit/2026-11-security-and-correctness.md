@@ -13,6 +13,14 @@ what would settle it. Line numbers are those of `95a751d`.
 land: the Status column in the summary, and a **Status** line under the
 finding saying what was done and what was left.
 
+Part 2 (`docs/audit/2026-11-part2-averages-fees-transfers.md`) covers the areas
+section 4 below says were only skimmed, and keeps its own Status column. Of the
+items section 4 lists, **term changes** (part 2's G-01: class lists are now
+carried when a term is made current) and **session averages** (G-02: the year's
+summary is built from released cards only) were fixed in PR #343, with G-03
+(CBT answers wait until every class has finished the paper). Nothing in this
+part's own table changed status in that PR.
+
 Not everything was read to the same depth. Section 3 says what was traced and
 found sound; section 4 says what was only skimmed or not opened, so nobody
 takes silence here for a clean bill.
@@ -680,12 +688,14 @@ not cover them.
 
 - **Attendance** (`attendance/`): the register, who may mark, and how days
   present reach the card. Only the card side was read.
-- **Promotion and the end of a session** (`academics/promotion.py`,
+- **Promotion and the end of a session** (covered in part 2: G-02 fixed in
+  PR #343, G-04 open) (`academics/promotion.py`,
   `results/sessions.py`): session averages across three terms, a child who
   joined mid-session, promotion decisions. Not traced. Given
   `docs/claude-memory/luffy-session-arithmetic.md` records past bugs here, this
   deserves its own pass.
-- **Term changes**: `set_current_term` and carry-forward of placements and
+- **Term changes** (covered in part 2: G-01, fixed in PR #343):
+  `set_current_term` and carry-forward of placements and
   subject teachers were read (`academics/services.py:301-389`, `:488-510`) but
   not what each module does with a term that stops being current mid-work
   (papers and placements are tied to "the current term").

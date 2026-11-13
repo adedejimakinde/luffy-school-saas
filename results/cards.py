@@ -639,6 +639,33 @@ def card_for(membership, term) -> ReleasedCard | None:
     )
 
 
+def cards_for(student_ids, term) -> dict[int, ReleasedCard]:
+    """`card_for()` for many children at once: `{student_id: card}`.
+
+    A child with no card for the term is absent from the mapping. The same rule
+    as `card_for()`, read in two queries for the whole list: each child's
+    earliest release for the term, then that release's highest version.
+    """
+    ids = [getattr(student, "pk", student) for student in student_ids]
+    if not ids:
+        return {}
+    first_sheet = {}
+    for student_id, sheet_id in (
+        ReleasedCard.objects.filter(term=term, student_membership_id__in=ids, version=1)
+        .order_by("created_at", "id")
+        .values_list("student_membership_id", "sheet_id")
+    ):
+        first_sheet.setdefault(student_id, sheet_id)
+    found = {}
+    for card in ReleasedCard.objects.filter(
+        term=term, student_membership_id__in=list(first_sheet), sheet_id__in=set(first_sheet.values())
+    ).order_by("version", "id"):
+        if first_sheet[card.student_membership_id] == card.sheet_id:
+            # Ascending, so the last one kept is the highest version.
+            found[card.student_membership_id] = card
+    return found
+
+
 def a_card_went_home(membership, term) -> bool:
     """The question every release guard asks, and the one row that answers it.
 
@@ -743,6 +770,7 @@ __all__ = [
     "a_card_went_home",
     "cards_by_student",
     "card_for",
+    "cards_for",
     "card_lines",
     "cards_on",
     "freeze_for_release",

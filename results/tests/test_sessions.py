@@ -36,16 +36,18 @@ from academics.services import assign_class_teacher, move_student, place_student
 from accounts.models import Role, User
 from accounts.services import enroll_student, grant_membership
 from gradebook.models import Assessment, Score, Subject
-from results import cards, sessions
+from results import cards, positions, sessions
 from results import services as results_services
 from results.models import (
     PromotionDecision,
     PromotionDecisionsAreAppendOnly,
     PromotionStatus,
     ReleasedSessionResult,
+    ResultSheet,
     SessionAveraging,
     SessionResultsAreFrozenAtRelease,
     SessionSettings,
+    SheetState,
     TermAbsence,
 )
 from results.tests.test_positions import PASSWORD, make_school
@@ -172,13 +174,13 @@ class SessionSetUp(TestCase):
     def group(self, school):
         return ClassGroup.objects.get(pk=self.group_id[school.pk])
 
-    def release_the_third_term(self, school=None):
-        """Walk the third term's sheet all the way. Releasing is what freezes."""
+    def release_term(self, name, school=None):
+        """Walk one term's sheet all the way, as a school does at the end of it."""
         school = school or self.stmarys
         people = self.staff[school.pk]
         sheet = results_services.open_sheet(
             self.group(school),
-            self.term(school, TermName.THIRD.value),
+            self.term(school, str(name)),
             people[Role.PRINCIPAL],
         )
         results_services.submit(sheet, people[Role.TEACHER], unmarked=unmarked.count(sheet.class_group, sheet.term))
@@ -186,6 +188,35 @@ class SessionSetUp(TestCase):
         results_services.approve(sheet, people[Role.PRINCIPAL], unmarked=unmarked.count(sheet.class_group, sheet.term))
         results_services.release(sheet, people[Role.PRINCIPAL])
         return sheet
+
+    def release_terms(self, *names, school=None):
+        """Release these terms in the order they are sat: all three when none is named.
+
+        A term already released is left alone. **A year is read from the cards
+        that went home** (audit G-02), so a test that wants a term to count has
+        to send its card home first, exactly as a school does.
+        """
+        school = school or self.stmarys
+        wanted = [str(n) for n in names] or [t.value for t in sessions.TERM_ORDER]
+        sheets = {}
+        for term in sessions.TERM_ORDER:
+            if term.value not in wanted:
+                continue
+            already = ResultSheet.objects.filter(
+                class_group=self.group(school),
+                term=self.term(school, term.value),
+                state=SheetState.RELEASED,
+            ).first()
+            sheets[term.value] = already or self.release_term(term.value, school)
+        return sheets
+
+    def release_the_third_term(self, school=None):
+        """Release the third term, the first and second having gone home before it.
+
+        Releasing the third term is what freezes the year, and the year is made
+        of the earlier terms' released cards.
+        """
+        return self.release_terms(school=school)[TermName.THIRD.value]
 
 
 class TheStraightMeanTests(SessionSetUp):
@@ -202,6 +233,7 @@ class TheStraightMeanTests(SessionSetUp):
         self.mark(self.stmarys, "third", self.ada, 80)
 
         with connected_to(self.stmarys):
+            self.release_terms()
             line = sessions.session_line(self.ada, SESSION)
 
         self.assertEqual(line.average, Decimal("70.00"))
@@ -233,6 +265,7 @@ class TheStraightMeanTests(SessionSetUp):
         self.mark(self.stmarys, "third", self.ada, 100)
 
         with connected_to(self.stmarys):
+            self.release_terms()
             line = sessions.session_line(self.ada, SESSION)
 
         # Exact mean: 100/3 = 33.333... -> 33.33
@@ -252,13 +285,19 @@ class TheStraightMeanTests(SessionSetUp):
             ("second", "third"): "joined at second term",
             ("third",): "joined at third term",
         }
+        children = {}
         for terms, description in cases.items():
+            child = self.child(
+                self.stmarys, f"c-{len(terms)}-{description[:4]}", "A Child", list(terms)
+            )
+            for name in terms:
+                self.mark(self.stmarys, name, child, 50)
+            children[description] = child
+        # One release of each term, with all three children on their rosters.
+        with connected_to(self.stmarys):
+            self.release_terms()
+        for description, child in children.items():
             with self.subTest(description):
-                child = self.child(
-                    self.stmarys, f"c-{len(terms)}-{description[:4]}", "A Child", list(terms)
-                )
-                for name in terms:
-                    self.mark(self.stmarys, name, child, 50)
                 with connected_to(self.stmarys):
                     line = sessions.session_line(child, SESSION)
                 self.assertEqual(sum(line.weights.values()), Decimal("100.00"))
@@ -281,6 +320,8 @@ class TheTwoTermCaseTests(SessionSetUp):
         )
         self.mark(self.stmarys, "second", self.bisi, 70)
         self.mark(self.stmarys, "third", self.bisi, 80)
+        with connected_to(self.stmarys):
+            self.release_terms()
 
     def test_equal_weights_renormalise_to_fifty_fifty(self):
         """Two terms sat, so each is half the year rather than a third of it."""
@@ -354,6 +395,7 @@ class WhyATermIsAbsentTests(SessionSetUp):
         self.mark(self.stmarys, "third", joined_late, 80)
 
         with connected_to(self.stmarys):
+            self.release_terms()
             line = sessions.session_line(joined_late, SESSION)
 
         first, second, third = line.terms
@@ -366,9 +408,11 @@ class WhyATermIsAbsentTests(SessionSetUp):
         """The data-entry gap. Same arithmetic as a transfer, opposite response."""
         self.mark(self.stmarys, "second", self.ada, 70)
         self.mark(self.stmarys, "third", self.ada, 80)
-        # First term: placed, and nobody entered a mark.
+        # First term: placed, and nobody entered a mark. Its card went home
+        # all the same, with no average on it.
 
         with connected_to(self.stmarys):
+            self.release_terms()
             line = sessions.session_line(self.ada, SESSION)
 
         self.assertEqual(line.terms[0].absence, TermAbsence.UNMARKED)
@@ -398,7 +442,9 @@ class WhyATermIsAbsentTests(SessionSetUp):
                 ends_on=date(2027, 4, 1),
             )
             group = self.group(self.stmarys)
+            teaching = self.teacher.memberships.get(school=self.stmarys, role=Role.TEACHER)
             for term, mark in ((first, 60), (second, 70)):
+                assign_class_teacher(group, term, teaching)
                 place_student(group, term, self.ada)
                 assessment = Assessment.objects.create(
                     term=term,
@@ -411,6 +457,12 @@ class WhyATermIsAbsentTests(SessionSetUp):
                     student_membership_id=self.ada.pk,
                     value=mark,
                 )
+                # Each term's card goes home: that is what the year is read from.
+                sheet = results_services.open_sheet(group, term, self.principal)
+                results_services.submit(sheet, self.teacher, unmarked=0)
+                results_services.check(sheet, self.vp, unmarked=0)
+                results_services.approve(sheet, self.principal, unmarked=0)
+                results_services.release(sheet, self.principal)
 
             line = sessions.session_line(self.ada, running)
 
@@ -449,6 +501,7 @@ class WhyATermIsAbsentTests(SessionSetUp):
 
         with connected_to(self.stmarys):
             sessions.use_a_weighting(0, 0, 100)
+            self.release_terms("first", "second")
             line = sessions.session_line(left_early, SESSION)
 
         self.assertIsNone(line.average)
@@ -567,14 +620,19 @@ class TheFreezeTests(SessionSetUp):
         self.assertNotEqual(before, Decimal("74.00"))  # 60*.2 + 70*.2 + 80*.6
 
     def test_the_live_computation_really_does_move_when_the_freeze_is_absent(self):
-        """The control. Without it the test above proves only that nothing ran."""
+        """The control. Without it the test above proves only that nothing ran.
+
+        Two terms' cards have gone home and the third has not, so no line is
+        frozen and the year so far is those two cards under today's weighting.
+        """
         with connected_to(self.stmarys):
+            self.release_terms("first", "second")
             before = sessions.card_session_line(self.ada, SESSION).average
-            sessions.use_a_weighting(20, 20, 60)
+            sessions.use_a_weighting(20, 60, 20)
             after = sessions.card_session_line(self.ada, SESSION).average
 
-        self.assertEqual(before, Decimal("70.00"))
-        self.assertEqual(after, Decimal("74.00"))
+        self.assertEqual(before, Decimal("65.00"))  # (60 + 70) / 2
+        self.assertEqual(after, Decimal("67.50"))  # (60*20 + 70*60) / 80
 
     def test_the_frozen_line_records_why_a_term_was_absent(self):
         joined_late = self.child(self.stmarys, "late", "Late Joiner", ["third"])
@@ -639,6 +697,7 @@ class TheFreezeTests(SessionSetUp):
 
         with connected_to(self.stmarys):
             sessions.use_a_weighting(0, 0, 100)
+            self.release_terms("first", "second")
             live = sessions.session_line(unmarked_third, SESSION)
             self.release_the_third_term()
             frozen = sessions.card_session_line(unmarked_third, SESSION)
@@ -804,7 +863,8 @@ class ThePromotionDecisionTests(SessionSetUp):
         The suggestion exists, is `PROMOTED`, and reading it writes nothing.
         """
         with connected_to(self.stmarys):
-            line = sessions.session_line(self.ada, SESSION)
+            self.release_terms()
+            line = sessions.card_session_line(self.ada, SESSION)
             self.assertEqual(
                 sessions.suggested_status(line.average), PromotionStatus.PROMOTED
             )
@@ -814,6 +874,7 @@ class ThePromotionDecisionTests(SessionSetUp):
 
     def test_a_decision_records_the_suggestion_it_was_taken_against(self):
         with connected_to(self.stmarys):
+            self.release_terms()
             decision = sessions.decide(
                 self.ada, SESSION, PromotionStatus.PROMOTED, by=self.principal
             )
@@ -828,6 +889,7 @@ class ThePromotionDecisionTests(SessionSetUp):
     def test_an_override_is_visible_as_one(self):
         """The gap between the two columns is the record that a person differed."""
         with connected_to(self.stmarys):
+            self.release_terms()
             decision = sessions.decide(
                 self.ada, SESSION, PromotionStatus.REPEATED, by=self.principal,
                 note="Missed most of third term through illness.",
@@ -855,9 +917,10 @@ class ThePromotionDecisionTests(SessionSetUp):
 
         with connected_to(self.stmarys):
             sessions.use_a_weighting(20, 20, 60)
+            self.release_terms()
             # 60*.2 + 55*.2 + 40*.6 = 12 + 11 + 24 = 47.00
             self.assertEqual(
-                sessions.session_line(weak, SESSION).average, Decimal("47.00")
+                sessions.card_session_line(weak, SESSION).average, Decimal("47.00")
             )
             decision = sessions.decide(
                 weak, SESSION, PromotionStatus.ON_TRIAL, by=self.principal
@@ -1028,9 +1091,11 @@ class TwoSchoolsTests(SessionSetUp):
 
         with connected_to(self.stmarys):
             sessions.use_a_weighting(20, 20, 60)
-            ours = sessions.session_line(self.ada, SESSION).average
+            self.release_terms()
+            ours = sessions.card_session_line(self.ada, SESSION).average
         with connected_to(self.grace):
-            theirs_average = sessions.session_line(theirs, SESSION).average
+            self.release_terms(school=self.grace)
+            theirs_average = sessions.card_session_line(theirs, SESSION).average
 
         self.assertEqual(ours, Decimal("74.00"))
         self.assertEqual(theirs_average, Decimal("70.00"))
@@ -1188,3 +1253,216 @@ class TheChildWhoMovedAfterReleaseTests(SessionSetUp):
         ordering = highest.split("ORDER BY", 1)[1]
         self.assertIn("VERSION", ordering)
         self.assertIn("DESC", ordering)
+
+
+class TheYearIsTheCardsThatWentHomeTests(SessionSetUp):
+    """Audit finding G-02: the year's summary is built from released cards only.
+
+    Each term's figure is the average on the card that went home for that term,
+    never the marks as they stand today. A subject with a paper unmarked never
+    enters it, a term that was never released does not count, and the promotion
+    suggestion is taken from the same figures.
+
+    Every test here that changes a live mark was run against the old reading
+    (`positions.overall_percentages()` for the earlier terms, `averages` for the
+    term being released) and failed there.
+    """
+
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            self.english_id = Subject.objects.create(name="English", code="ENG").pk
+
+    def change_the_live_mark(self, term_name, membership, value):
+        """Move the child to another arm for that term, then rewrite her Exam mark.
+
+        The database refuses to change a mark of a class whose term is released
+        (`gradebook`'s guard), so a mark cannot simply be edited under a card.
+        The way a live mark does move after a card went home is this one: the
+        office moves the child to another arm, whose sheet is still open, and
+        the mark is changed there. Her card for the term is untouched by it.
+        """
+        with connected_to(self.stmarys):
+            term = self.term(self.stmarys, term_name)
+            other, _ = ClassGroup.objects.get_or_create(name="JSS 1B", defaults={"level": 1})
+            move_student(other, term, membership)
+            changed = Score.objects.filter(
+                assessment__term=term,
+                assessment__subject_id=self.maths_id[self.stmarys.pk],
+                student_membership_id=membership.pk,
+            ).update(value=value)
+        self.assertEqual(changed, 1, "the live mark was not there to change")
+        return other
+
+    def paper(self, term_name, name, membership=None, value=None, max_score=10):
+        """An English paper for the term, marked for `membership` if a value is given."""
+        with connected_to(self.stmarys):
+            assessment, _ = Assessment.objects.get_or_create(
+                term=self.term(self.stmarys, term_name),
+                subject_id=self.english_id,
+                name=name,
+                defaults={"max_score": max_score},
+            )
+            if membership is not None and value is not None:
+                Score.objects.create(
+                    assessment=assessment, student_membership_id=membership.pk, value=value
+                )
+
+    def card(self, term_name, membership=None):
+        return cards.card_for(membership or self.ada, self.term(self.stmarys, term_name))
+
+    def test_a_live_mark_changed_after_its_card_went_home_does_not_move_the_year(self):
+        """First and second term are read off their cards, not marked again."""
+        self.mark(self.stmarys, "first", self.ada, 60)
+        self.mark(self.stmarys, "second", self.ada, 70)
+        self.mark(self.stmarys, "third", self.ada, 80)
+        with connected_to(self.stmarys):
+            self.release_terms("first", "second")
+            before = sessions.session_line(self.ada, SESSION)
+
+        self.change_the_live_mark("first", self.ada, 10)
+        self.change_the_live_mark("second", self.ada, 20)
+
+        with connected_to(self.stmarys):
+            # The marks really did move: the staff's live figure says so.
+            live = positions.overall_percentages(
+                ClassGroup.objects.get(name="JSS 1B"), self.term(self.stmarys, "first")
+            )
+            self.assertEqual(live[self.ada.pk], Decimal("10.00"))
+
+            still = sessions.session_line(self.ada, SESSION)
+            self.release_the_third_term()
+            frozen = sessions.released_session_line(self.ada, SESSION)
+            first_card, second_card = self.card("first"), self.card("second")
+
+        self.assertEqual(before.average, Decimal("65.00"))
+        self.assertEqual(still.average, before.average)
+        self.assertEqual(frozen.first_average, Decimal("60.00"))
+        self.assertEqual(frozen.second_average, Decimal("70.00"))
+        self.assertEqual(frozen.first_average, first_card.own_average)
+        self.assertEqual(frozen.second_average, second_card.own_average)
+        self.assertEqual(frozen.session_average, Decimal("70.00"))  # (60 + 70 + 80) / 3
+
+    def test_a_live_mark_changed_after_the_year_is_released_does_not_move_it(self):
+        self.mark(self.stmarys, "first", self.ada, 60)
+        self.mark(self.stmarys, "second", self.ada, 70)
+        self.mark(self.stmarys, "third", self.ada, 80)
+        with connected_to(self.stmarys):
+            self.release_the_third_term()
+            before = sessions.card_session_line(self.ada, SESSION)
+
+        self.change_the_live_mark("first", self.ada, 5)
+
+        with connected_to(self.stmarys):
+            after = sessions.card_session_line(self.ada, SESSION)
+            # Nor does the unfrozen read, which is built from the same cards.
+            unfrozen = sessions.session_line(self.ada, SESSION)
+
+        self.assertEqual(before.average, Decimal("70.00"))
+        self.assertEqual(after, before)
+        self.assertEqual(unfrozen.average, Decimal("70.00"))
+
+    def test_the_session_average_is_the_frozen_term_cards_under_the_schools_weighting(self):
+        self.mark(self.stmarys, "first", self.ada, 61)
+        self.mark(self.stmarys, "second", self.ada, 73)
+        self.mark(self.stmarys, "third", self.ada, 88)
+        with connected_to(self.stmarys):
+            sessions.use_a_weighting(20, 30, 50)
+            sheet = self.release_the_third_term()
+            first, second, third = self.card("first"), self.card("second"), self.card("third")
+            frozen = ReleasedSessionResult.objects.get(card=third)
+
+        self.assertEqual(third.sheet_id, sheet.pk)
+        # Each term's figure is the one at the top of that term's card.
+        self.assertEqual(frozen.first_average, first.own_average)
+        self.assertEqual(frozen.second_average, second.own_average)
+        self.assertEqual(frozen.third_average, third.own_average)
+        # And the year is those three, combined as the school weights them.
+        combined = (
+            first.own_average * 20 + second.own_average * 30 + third.own_average * 50
+        ) / 100
+        self.assertEqual(frozen.session_average, positions.round_percentage(combined))
+        self.assertEqual(frozen.session_average, Decimal("78.10"))
+        self.assertEqual(
+            (frozen.first_weight_used, frozen.second_weight_used, frozen.third_weight_used),
+            (Decimal("20.00"), Decimal("30.00"), Decimal("50.00")),
+        )
+
+    def test_a_part_marked_subject_never_enters_the_year(self):
+        """English has two papers and one of them unmarked, in the first term and
+        in the third. The card leaves it out of its average; so does the year."""
+        for term_name, maths in (("first", 60), ("second", 70), ("third", 80)):
+            self.mark(self.stmarys, term_name, self.ada, maths)
+        for term_name in ("first", "third"):
+            self.paper(term_name, "CA", self.ada, 10)  # 10/10, and...
+            self.paper(term_name, "Exam")  # ...this one never marked
+        with connected_to(self.stmarys):
+            self.release_the_third_term()
+            frozen = sessions.released_session_line(self.ada, SESSION)
+            first_card, third_card = self.card("first"), self.card("third")
+            # What the staff's figure, partial subjects included, says instead.
+            with_partials = positions.overall_percentages(
+                self.group(self.stmarys), self.term(self.stmarys, "third")
+            )[self.ada.pk]
+
+        self.assertEqual(with_partials, Decimal("90.00"))  # (80 + 100) / 2
+        self.assertEqual(third_card.own_average, Decimal("80.00"))
+        self.assertEqual(frozen.third_average, third_card.own_average)
+        self.assertEqual(frozen.first_average, first_card.own_average)
+        self.assertEqual(frozen.first_average, Decimal("60.00"))
+        self.assertEqual(frozen.session_average, Decimal("70.00"))
+
+    def test_a_term_that_was_never_released_does_not_count(self):
+        """The first term was left in draft with marks in it."""
+        self.mark(self.stmarys, "first", self.ada, 20)
+        self.mark(self.stmarys, "second", self.ada, 70)
+        self.mark(self.stmarys, "third", self.ada, 80)
+        with connected_to(self.stmarys):
+            self.release_terms("second", "third")
+            frozen = sessions.released_session_line(self.ada, SESSION)
+
+        self.assertIsNone(frozen.first_average)
+        self.assertEqual(frozen.first_absence, TermAbsence.NOT_RELEASED)
+        self.assertIsNone(frozen.first_weight_used)
+        self.assertEqual(frozen.session_average, Decimal("75.00"))  # (70 + 80) / 2
+
+    def test_a_term_in_progress_is_not_released_rather_than_marked_live(self):
+        self.mark(self.stmarys, "first", self.ada, 60)
+        self.mark(self.stmarys, "second", self.ada, 70)
+        self.mark(self.stmarys, "third", self.ada, 100)
+        with connected_to(self.stmarys):
+            self.release_terms("first", "second")
+            line = sessions.session_line(self.ada, SESSION)
+
+        self.assertEqual(line.terms[2].absence, TermAbsence.NOT_RELEASED)
+        self.assertIsNone(line.terms[2].average)
+        self.assertEqual(line.average, Decimal("65.00"))
+
+    def test_the_promotion_suggestion_is_made_on_the_figures_the_cards_showed(self):
+        """48.33 on the cards: repeated. The live marks, moved since, say 65."""
+        self.mark(self.stmarys, "first", self.ada, 60)
+        self.mark(self.stmarys, "second", self.ada, 40)
+        self.mark(self.stmarys, "third", self.ada, 45)
+        with connected_to(self.stmarys):
+            self.release_terms("first", "second")
+        self.change_the_live_mark("first", self.ada, 100)
+        self.change_the_live_mark("second", self.ada, 50)
+
+        with connected_to(self.stmarys):
+            early = sessions.decide(
+                self.ada, SESSION, PromotionStatus.ON_TRIAL, by=self.principal
+            )
+            self.release_the_third_term()
+            frozen = sessions.released_session_line(self.ada, SESSION)
+            decision = sessions.decide(
+                self.ada, SESSION, PromotionStatus.REPEATED, by=self.principal
+            )
+
+        # Before the third term went home: the two cards so far, (60 + 40) / 2.
+        self.assertEqual(early.session_average, Decimal("50.00"))
+        self.assertEqual(early.suggested, PromotionStatus.PROMOTED)
+        # After: the three cards, (60 + 40 + 45) / 3, and not (100 + 50 + 45) / 3.
+        self.assertEqual(frozen.session_average, Decimal("48.33"))
+        self.assertEqual(decision.session_average, frozen.session_average)
+        self.assertEqual(decision.suggested, PromotionStatus.REPEATED)
+        self.assertFalse(decision.overrode_the_suggestion)

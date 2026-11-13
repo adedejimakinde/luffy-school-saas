@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applyWrite, fromSetup, htmlFor, mount } from "../../static/setup/app.js";
+import { applyWrite, changedSentence, fromSetup, htmlFor, mount } from "../../static/setup/app.js";
 import { REFUSAL, SAVE, refusalFor } from "../../static/setup/api.js";
 import * as states from "../../static/setup/states.js";
 import { forgetToken } from "../../static/web/http.js";
@@ -26,6 +26,28 @@ const SHAPE = {
     { class_group_id: 12, name: "JSS 1B", level: 1, is_active: false },
   ],
   may_set_up: true,
+};
+
+/** What `GET terms/2/current/review/` answers: audit G-01's review before the switch. */
+const REVIEW = {
+  term: SHAPE.terms[1],
+  from_term: SHAPE.terms[0],
+  carries: true,
+  why_not: "",
+  classes: [
+    {
+      class_group_id: 11, name: "JSS 1A", carried: 44, already_placed: 1,
+      not_carried: [
+        { name: "Tunde Cole", reference: "SM/004", why: "No longer at the school (left or graduated)" },
+        { name: "<b>Zed</b>", reference: "", why: "No longer at the school (left or graduated)" },
+      ],
+    },
+    { class_group_id: 12, name: "JSS 1B", carried: 42, already_placed: 0, not_carried: [] },
+  ],
+  carried: 86,
+  already_placed: 1,
+  not_carried: 2,
+  in_new_term: 1,
 };
 
 const state = () => fromSetup({ ok: true, body: SHAPE });
@@ -121,7 +143,8 @@ test("a successful write asks for the shape again rather than patching a row", a
   const root = fakeRoot({ portal: "portal.example.test" });
   await mount(root, {
     fetchImpl: serve([
-      ["/api/academics/terms/2/current/", { status: 200, body: { ...SHAPE.terms[1], is_current: true } }],
+      ["/api/academics/terms/2/current/review/", { status: 200, body: REVIEW }],
+      ["/api/academics/terms/2/current/", { status: 200, body: { ...SHAPE.terms[1], is_current: true, carried: 86 } }],
       ["/api/academics/setup/", () => {
         shapeReads += 1;
         return {
@@ -137,8 +160,77 @@ test("a successful write asks for the shape again rather than patching a row", a
 
   await root.click({ "data-action": "make-current", "data-term": "2" });
 
+  // The first press only asks: the review is on the screen and nothing is switched.
+  assert.equal(shapeReads, 1, "the term was switched before the review was confirmed");
+  assert.match(root.innerHTML, /data-action="confirm-current"[^>]*data-term="2"/);
+
+  await root.click({ "data-action": "confirm-current", "data-term": "2" });
+
   assert.equal(shapeReads, 2, "the shape was not re-read after a write");
   assert.equal((root.innerHTML.match(/>Current</g) || []).length, 1, "two terms read as current");
+  assert.match(root.innerHTML, /Second term is now the current term\. 86 children were carried into it/);
+  assert.doesNotMatch(root.innerHTML, /data-action="confirm-current"/, "the review stayed open after the switch");
+});
+
+test("the review before a term change lists each class, its count and who is not carried", () => {
+  const html = states.termChange({ review: REVIEW });
+
+  assert.match(html, /Make 2025\/2026 &middot; Second term the current term\?/);
+  assert.match(html, /<th scope="row">JSS 1A<\/th><td data-label="Carried">44<\/td><td data-label="Already placed">1<\/td><td data-label="Not carried">2<\/td>/);
+  assert.match(html, /<th scope="row">JSS 1B<\/th><td data-label="Carried">42<\/td>/);
+  assert.match(html, /<strong>86 children<\/strong> will be carried/);
+  assert.match(html, /1 child already placed in Second term stays where they are/);
+  assert.match(html, /Not carried \(2\)/);
+  assert.match(html, /Tunde Cole<\/span> <span class="level">SM\/004<\/span>, JSS 1A: No longer at the school \(left or graduated\)/);
+  assert.match(html, /Promotion at the end of the session is a separate step/);
+  // A name is the school's data: it is escaped, never trusted.
+  assert.match(html, /&lt;b&gt;Zed&lt;\/b&gt;/);
+  assert.doesNotMatch(html, /<b>Zed/);
+});
+
+test("a term of another session carries nothing, and the review says promotion is the step", () => {
+  const html = states.termChange({
+    review: {
+      term: { term_id: 4, session: "2026/2027", name_label: "First term" },
+      from_term: REVIEW.from_term,
+      carries: false,
+      why_not: "First term is in another session. Class lists are not carried from one session into the next: children move up through Promotion, which is a separate step.",
+      classes: [], carried: 0, already_placed: 0, not_carried: 0, in_new_term: 3,
+    },
+  });
+
+  assert.match(html, /children move up through Promotion/);
+  assert.match(html, /3 children already have a class in this term/);
+  assert.doesNotMatch(html, /will be carried/);
+  assert.match(html, /data-action="confirm-current"[^>]*data-term="4"/);
+});
+
+test("'Not now' closes the review and switches nothing", async () => {
+  forgetToken();
+  let puts = 0;
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/terms/2/current/review/", { status: 200, body: REVIEW }],
+      ["/api/academics/terms/2/current/", () => { puts += 1; return { status: 200, body: {} }; }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.click({ "data-action": "make-current", "data-term": "2" });
+  await root.click({ "data-action": "keep-term" });
+
+  assert.equal(puts, 0);
+  assert.doesNotMatch(root.innerHTML, /data-action="confirm-current"/);
+  assert.match(root.innerHTML, /data-action="make-current"[^>]*data-term="2"/);
+});
+
+test("the sentence after a switch counts the children, and says so plainly when there are none", () => {
+  assert.equal(
+    changedSentence({ name_label: "Second term", carried: 1 }),
+    "Second term is now the current term. 1 child was carried into it, each in the same class.",
+  );
+  assert.equal(changedSentence({ name_label: "First term", carried: 0 }), "First term is now the current term.");
 });
 
 test("submitting the term form sends what was typed", async () => {

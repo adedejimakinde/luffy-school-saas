@@ -630,19 +630,20 @@ class TheThirdTermCard(ReportCardApiSetUp):
     def test_the_frozen_session_row_really_does_record_an_absence_reason(self):
         """The control for the exclusion below.
 
-        Ada is marked in first and third term and never in second, so the
-        second-term column carries an `UNMARKED` reason and the other two carry
-        none. If no column carried one, asserting the payload lacks one would
-        prove nothing.
+        Only the third term has been released here. Ada was in the class for the
+        first and second terms and neither went home, so both columns carry a
+        `NOT_RELEASED` reason (audit G-02: a term counts only through its
+        released card) and the third carries none. If no column carried one,
+        asserting the payload lacks one would prove nothing.
         """
         with connected_to(self.stmarys):
             card = cards.card_for(self.ada, self.term_of(self.stmarys, TermName.THIRD))
             row = ReleasedSessionResult.objects.get(card=card)
 
-        self.assertEqual(row.second_absence, "unmarked")
-        # And the terms she *was* marked in carry no reason, which is what makes
-        # the one above a real value rather than a default sitting in every row.
-        self.assertEqual(row.first_absence, "")
+        self.assertEqual(row.first_absence, "not_released")
+        self.assertEqual(row.second_absence, "not_released")
+        # And the term that did go home carries no reason, which is what makes
+        # the ones above real values rather than a default sitting in every row.
         self.assertEqual(row.third_absence, "")
 
     def test_the_payload_never_says_why_a_term_averaged_nothing(self):
@@ -653,6 +654,7 @@ class TheThirdTermCard(ReportCardApiSetUp):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn(b"absence", response.content)
         self.assertNotIn(b"unmarked", response.content)
+        self.assertNotIn(b"not_released", response.content)
 
     def test_a_first_term_card_carries_no_session_line_at_all(self):
         self.release(term_name=TermName.FIRST.value)

@@ -355,9 +355,89 @@ def create_term(request, payload: NewTermIn):
     return 201, _term_row(term)
 
 
+class NotCarriedOut(Schema):
+    name: str
+    reference: str = ""
+    why: str
+
+
+class TermChangeClassOut(Schema):
+    class_group_id: int
+    name: str
+    carried: int
+    already_placed: int
+    not_carried: List[NotCarriedOut]
+
+
+class TermChangeReviewOut(Schema):
+    """What making a term current would do to the class lists. Nothing is changed."""
+
+    term: TermRowOut
+    from_term: Optional[TermRowOut] = None
+    #: Whether the class lists are copied into the term. False for a term of another
+    #: session (promotion's work), a step back, and a school with no term yet.
+    carries: bool
+    why_not: str = ""
+    classes: List[TermChangeClassOut]
+    carried: int
+    already_placed: int
+    not_carried: int
+    in_new_term: int
+
+
+class CurrentTermOut(TermRowOut):
+    #: How many children's classes were copied into the term by this call. 0 on a
+    #: second call, and whenever nothing is carried.
+    carried: int = 0
+
+
+@router.get(
+    "/terms/{int:term_id}/current/review/",
+    response={200: TermChangeReviewOut, 403: MessageOut},
+)
+def review_current_term(request, term_id: int):
+    """Before the switch: each class, how many children go with it, who does not.
+
+    Read-only (`term_change.review()`). The setup page shows this and asks before
+    it sends the `PUT` below.
+    """
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+
+    from . import term_change
+
+    term = get_object_or_404(Term, pk=term_id)
+    found = term_change.review(term)
+    return 200, TermChangeReviewOut(
+        term=_term_row(found.term),
+        from_term=_term_row(found.from_term) if found.from_term else None,
+        carries=found.carries,
+        why_not=found.why_not,
+        classes=[
+            TermChangeClassOut(
+                class_group_id=line.class_group_id,
+                name=line.name,
+                carried=line.carried,
+                already_placed=line.already_placed,
+                not_carried=[
+                    NotCarriedOut(name=child.name, reference=child.reference, why=child.why)
+                    for child in line.not_carried
+                ],
+            )
+            for line in found.classes
+        ],
+        carried=found.carried,
+        already_placed=found.already_placed,
+        not_carried=found.not_carried,
+        in_new_term=found.in_new_term,
+    )
+
+
 @router.put(
     "/terms/{int:term_id}/current/",
-    response={200: TermRowOut, 403: MessageOut, 422: MessageOut},
+    response={200: CurrentTermOut, 403: MessageOut, 422: MessageOut},
 )
 def set_current_term(request, term_id: int):
     """Say which term the school is teaching now.
@@ -368,7 +448,12 @@ def set_current_term(request, term_id: int):
     school never has to know that and never gets half of it.
 
     Moving on to a later term also carries the subject teachers forward
-    (`gradebook.assignments.carry_forward()`), in the same transaction.
+    (`gradebook.assignments.carry_forward()`) and, within a session, **every
+    class list** (`term_change.carry()`, audit finding G-01), all in the same
+    transaction: the term is current with its classes in it, or nothing changed.
+    Sent twice, the second call finds the term current already and carries
+    nothing. A new session's first term gets no class list here; that is
+    promotion's, a separate step.
     """
     school = _school_of(request)
     refused = _refuse_outsiders(request, school)
@@ -378,17 +463,26 @@ def set_current_term(request, term_id: int):
     term = get_object_or_404(Term, pk=term_id)
     from gradebook import assignments
 
+    from . import term_change
+
     try:
         with transaction.atomic():
-            was = Term.objects.filter(is_current=True).first()
+            # Locked, so two people making a term current at once go one after
+            # the other and the second sees what the first did.
+            was = Term.objects.select_for_update().filter(is_current=True).first()
             term = services.set_current_term_as(request.user, term, school=school)
             # A new term starts with the last one's subject teachers, copied in the
             # same transaction (`docs/subject-teachers.md`). Nothing, if it had none.
             assignments.carry_forward(school, was, term)
+            # And with its class lists, so that registers, marking, bills and
+            # reminders have children in them on the first day.
+            carried = term_change.carry(was, term, by=request.user)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except services.ResultsInTheChain as exc:
+        return 422, MessageOut(detail=f"{exc} The current term was not changed.")
 
-    return 200, _term_row(term)
+    return 200, CurrentTermOut(**_term_row(term).dict(), carried=carried)
 
 
 @router.post("/classes/", response={201: ClassRowOut, 403: MessageOut, 422: MessageOut})

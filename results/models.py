@@ -1247,8 +1247,14 @@ class TermAbsence(models.TextChoices):
     | cause | what it means | what staff do |
     | --- | --- | --- |
     | `NOT_ENROLLED` | the child was not here that term | nothing; a transfer |
-    | `UNMARKED` | the child was here and nobody entered marks | enter the marks |
+    | `UNMARKED` | a card went home with no average on it: no subject was marked whole | nothing now; the card stands |
+    | `NOT_RELEASED` | the child was in a class and the term's results never reached release | release the term |
     | `NO_TERM` | the school has no such term this session | create the term |
+
+    `NOT_RELEASED` is audit finding G-02. A term counts towards the year only
+    through the card that went home for it (`sessions._lines_for()`), so a term
+    left in draft, or sent back and never finished, contributes nothing and
+    says so here, whatever marks it holds.
 
     Collapsing them into a bare `None` would make a marking backlog look
     exactly like a mid-session transfer, which is the one thing a head of year
@@ -1261,6 +1267,7 @@ class TermAbsence(models.TextChoices):
 
     NOT_ENROLLED = "not_enrolled", "Not enrolled this term"
     UNMARKED = "unmarked", "Enrolled, but no marks were entered"
+    NOT_RELEASED = "not_released", "Enrolled, but the term's results were not released"
     NO_TERM = "no_term", "The school has no such term this session"
 
 

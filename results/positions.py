@@ -68,9 +68,10 @@ Everyone ranked is ranked as before: dense, on the average as printed. "Out of
 N" is the number ranked, not the roster, and **the class average is the mean of
 those children's averages** (labelled "Class average (ranked students)"): it
 counts the children the ranking beside it counts. A child who is not ranked has no
-position, and is not last. `ClassResults.averages` is untouched, and so is
-everything built on it (the year's last line): the new fields below are
-additions.
+position, and is not last. `ClassResults.averages` is untouched: the new fields
+below are additions. The year's last line was built on it and is no longer
+(audit G-02): it is built on the released cards' own averages, which are
+`card_averages`.
 
 ## The overall average is the child's own, across their subjects
 
@@ -345,9 +346,9 @@ class ClassResults:
     #: Only where the child is whole in the subject (`whole`).
     subject_positions: dict[tuple[int, int], int]
     #: The child's average over **every subject they have a mark in**, partial
-    #: ones included. Unchanged, and what the year's last line and the class
-    #: average are built on. It is not the figure a family reads: that is
-    #: `card_averages`.
+    #: ones included. The staff's figure on the broadsheet. It is not the
+    #: figure a family reads, nor what the year's last line is built on: both
+    #: are `card_averages` (audit G-02, `sessions._lines_for()`).
     averages: dict[int, Decimal]
     #: Only the children whole in every subject, dense on `averages`. Everyone
     #: else is absent, which is "not ranked", not last.

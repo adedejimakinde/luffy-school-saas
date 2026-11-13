@@ -25,6 +25,7 @@ export function shape({
   terms = [], classes = [], card: card_ = null, contact_email = "", about = "", address = "", phone = "",
   short_name = "", short_name_default = "",
   lga = "", lga_choices = [], school_code = "", subjects = [], departments = [], conduct = null, notes = {},
+  changing = null,
 } = {}) {
   return [
     '<section class="state state-setup" data-state="setup">',
@@ -35,6 +36,8 @@ export function shape({
       terms.length
         ? `<ul class="terms">${terms.map((t) => termRow(t)).join("")}</ul>`
         : '<p class="blank">No terms yet. The first one opens the school\'s calendar.</p>',
+      notes.term_changed ? `<p class="done" role="status">${esc(notes.term_changed.detail)}</p>` : "",
+      changing ? termChange(changing) : "",
       newTermForm(notes.term),
     ]),
 
@@ -183,6 +186,79 @@ function termRow(t) {
       : `<button type="button" data-action="make-current" ` +
         `data-term="${esc(t.term_id)}">Make current</button>`,
     "</li>",
+  ].join("");
+}
+
+function children(n) {
+  return `${n} ${n === 1 ? "child" : "children"}`;
+}
+
+/**
+ * The review before a term is made current (audit G-01): each class, how many
+ * children are carried into the new term with it, and by name everyone who is
+ * not. Nothing has been changed when this is on the screen; the two buttons
+ * under it are the only way on.
+ *
+ * A term of another session carries nothing (that is Promotion, a separate
+ * step) and the panel says so in the server's words before it offers the switch.
+ */
+export function termChange({ review }) {
+  const to = `${esc(review.term.session)} &middot; ${esc(review.term.name_label)}`;
+  const buttons = [
+    `<button type="button" class="submit" data-action="confirm-current" data-term="${esc(review.term.term_id)}">`,
+    `Make ${esc(review.term.name_label)} current</button>`,
+    '<button type="button" class="again" data-action="keep-term">Not now</button>',
+  ].join("");
+  if (!review.carries) {
+    return [
+      '<div class="confirm term-change" role="region" aria-label="Before you change the term">',
+      `<h3>Make ${to} the current term?</h3>`,
+      `<p class="note">${esc(review.why_not)}</p>`,
+      review.in_new_term ? `<p>${children(review.in_new_term)} already ${review.in_new_term === 1 ? "has" : "have"} a class in this term.</p>` : "",
+      buttons,
+      "</div>",
+    ].join("");
+  }
+  const left = review.classes.flatMap((c) => c.not_carried.map((child) => ({ ...child, class_name: c.name })));
+  return [
+    '<div class="confirm term-change" role="region" aria-label="Before you change the term">',
+    `<h3>Make ${to} the current term?</h3>`,
+    `<p>Every class list is carried from ${esc(review.from_term.name_label)} into ${esc(review.term.name_label)}, each child into the same class. `,
+    "Nobody is promoted here: Promotion at the end of the session is a separate step.</p>",
+    review.classes.length
+      ? [
+          '<div class="scroll"><table class="carry stack">',
+          '<thead><tr><th scope="col">Class</th><th scope="col">Carried</th><th scope="col">Already placed</th><th scope="col">Not carried</th></tr></thead><tbody>',
+          review.classes
+            .map((c) =>
+              [
+                "<tr>",
+                `<th scope="row">${esc(c.name)}</th>`,
+                `<td data-label="Carried">${esc(c.carried)}</td>`,
+                `<td data-label="Already placed">${esc(c.already_placed)}</td>`,
+                `<td data-label="Not carried">${esc(c.not_carried.length)}</td>`,
+                "</tr>",
+              ].join(""),
+            )
+            .join(""),
+          "</tbody></table></div>",
+        ].join("")
+      : `<p class="blank">No child is in a class in ${esc(review.from_term.name_label)}, so there is nothing to carry.</p>`,
+    `<p><strong>${children(review.carried)}</strong> will be carried.`,
+    review.already_placed ? ` ${children(review.already_placed)} already placed in ${esc(review.term.name_label)} ${review.already_placed === 1 ? "stays" : "stay"} where they are.` : "",
+    "</p>",
+    left.length
+      ? [
+          `<h4>Not carried (${left.length})</h4>`,
+          '<ul class="not-carried">',
+          left
+            .map((child) => `<li><span class="name">${esc(child.name)}</span>${child.reference ? ` <span class="level">${esc(child.reference)}</span>` : ""}, ${esc(child.class_name)}: ${esc(child.why)}</li>`)
+            .join(""),
+          "</ul>",
+        ].join("")
+      : '<p class="hint">Nobody is left behind: every child on these lists is still at the school.</p>',
+    buttons,
+    "</div>",
   ].join("");
 }
 

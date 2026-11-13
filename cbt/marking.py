@@ -204,6 +204,9 @@ class Results:
     may_restore: bool = False
     sends_to_ca: bool = True
     open_attempts: int = 0
+    #: The classes that have still to finish the paper. While any is named, a release
+    #: shows a class its scores and no answers (`release.classes_still_to_finish()`).
+    answers_held_for: List[str] = field(default_factory=list)
 
 
 def _iso(at):
@@ -371,7 +374,14 @@ def results_as(actor, school, test_id) -> Results:
         may_restore=access.restores(actor, school),
         sends_to_ca=test.may_send_to_ca,
         open_attempts=open_attempts,
+        answers_held_for=_held_for(test),
     )
+
+
+def _held_for(test) -> List[str]:
+    from .release import classes_still_to_finish
+
+    return classes_still_to_finish(test)
 
 
 def _class_out(test, class_id, name, released, may_mark, actor, school) -> dict:
@@ -456,7 +466,7 @@ def _released_only(test, subject, audience, released, out_of) -> Results:
     return Results(
         test=test, subject=subject, released_only=True, out_of=out_of, classes=classes, rows=rows,
         stats=_stats(marks, out_of, len(rows)), distribution=[], items=[], corrections=[], transfers=[],
-        sends_to_ca=test.may_send_to_ca,
+        sends_to_ca=test.may_send_to_ca, answers_held_for=_held_for(test),
     )
 
 

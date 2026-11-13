@@ -205,3 +205,15 @@ test("the routes read the hash, and a test id is a number", async () => {
   assert.match(htmlFor({ step: "not-yours", detail: "Not <yours>" }), /Not &lt;yours&gt;/);
   assert.match(htmlFor({ step: "results", results: RESULTS }), /data-state="results"/);
 });
+
+test("screen 7: while another class has still to sit, a release is said to show scores and no answers (audit G-03)", () => {
+  const held = { ...RESULTS, answers_held_for: ["JSS 1C", "JSS <1D>"] };
+  const asking = states.resultsView(held, { confirming: "release-3" });
+  assert.match(asking, /Release JSS 1A&#39;s scores\? Each student then sees their own score, and each parent their own child&#39;s\. The answers stay hidden from every student until JSS 1C and JSS &lt;1D&gt; have finished this test\./);
+  assert.doesNotMatch(asking, /own score and corrections/);
+  const released = states.resultsView(held);
+  assert.match(released, /Released by Kemi Bello[^<]*The answers stay hidden until JSS 1C and JSS &lt;1D&gt; have finished this test\./);
+  // And once every class has finished, or for a paper one class sits, it is as before.
+  assert.match(states.resultsView({ ...RESULTS, answers_held_for: [] }, { confirming: "release-3" }), /own score and corrections/);
+  assert.match(states.resultsView(RESULTS), /Each student sees their own score and corrections/);
+});

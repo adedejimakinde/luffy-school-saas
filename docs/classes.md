@@ -97,6 +97,25 @@ sit, and they already sit there.
 
 ## Carrying a term forward
 
+**It runs when a term is made current** (audit finding G-01, `academics/term_change.py`).
+`PUT /api/academics/terms/{id}/current/` copies every class list of the term that
+was current into the new one, in the transaction that makes it current, when the
+new term is a later term **of the same session**. Before this nothing called
+`carry_forward_placements()`, and every term opened with empty classes.
+
+- `GET /api/academics/terms/{id}/current/review/` says first what the switch will
+  do and writes nothing: each class, how many children are carried into it, how
+  many are already placed in the new term, and by name every child who is not
+  carried. The setup page shows this when "Make current" is pressed, and switches
+  only on the second press.
+- Sent twice, the second call finds the term current already and carries nothing.
+  Stepping back to an earlier term carries nothing either.
+- **A new session's first term gets nothing here.** That is promotion, below, a
+  separate step: `promote()` refuses children already placed in that term, so
+  carrying them would break it. The review says so in a sentence.
+- If the carry is refused (a class of the new term already has results with a
+  signatory), the term is not changed: one transaction.
+
 Without `carry_forward_placements()`, the first day of every term is a school
 with no rosters, and every position and average has no denominator until
 somebody re-types forty-five children per group. That is not a convenience; it
