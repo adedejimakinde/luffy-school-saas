@@ -121,6 +121,6 @@
 <section id="contact">
   <h2>Contact us</h2>
   <p>Email: <a href="mailto:hello@classnode.co">hello@classnode.co</a></p>
-  <p><span class="todo">TODO: registered address, for post.</span></p>
+  <p>{% if registered_address %}By post: {{ registered_address }}.{% else %}<span class="todo">TODO: registered address, for post.</span>{% endif %}</p>
 </section>
 {% endblock %}

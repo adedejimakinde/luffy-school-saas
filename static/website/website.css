@@ -787,28 +787,36 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   line-height: 1.4;
   text-transform: uppercase;
 }
-.foot-col ul, .foot-small { display: flex; flex-wrap: wrap; align-items: center; margin: 0; padding: 0; list-style: none; }
-.foot-col li, .foot-small li { display: flex; align-items: center; }
-.foot-col li + li::before, .foot-small li + li::before { content: "\00b7"; color: var(--on-deep-muted); }
+/* A row of links wraps, and a separator must never begin or end a line. Each
+   dot belongs to the item after it and sits in the 16px gap before it, outside
+   the item's own box; the row clips everything left of its own edge, so the
+   dot of an item that starts a line (the first, or the first after a wrap) is
+   cut off and never drawn. No item has a dot after it, so none ends a line.
+   The clip is open 8px above and below and 4px on the right, so a focus ring
+   is not cut there; a link's ring is drawn inside its box (`outline-offset`).
+   Links have no side padding, so every line starts at the same left edge. */
+.foot-col ul, .foot-small {
+  display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px;
+  margin: 0; padding: 0; list-style: none;
+  clip-path: inset(-8px -4px -8px 0);
+}
+.foot-col li, .foot-small li { position: relative; display: flex; align-items: center; }
+.foot-col li + li::before, .foot-small li + li::before {
+  content: "\00b7"; position: absolute; left: -10px; width: 4px; text-align: center; color: var(--on-deep-muted);
+}
 .foot-col a, .foot-small a {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 0 8px;
+  padding: 0;
   color: var(--on-deep);
   font-size: 0.875rem;
   text-decoration: none;
   border-radius: 4px;
 }
-.foot-col li:first-child a, .foot-small li:first-child a { padding-left: 0; }
+.foot-col a:focus-visible, .foot-small a:focus-visible { outline-offset: -2px; }
 .foot-col a:hover, .foot-col a:focus-visible, .foot-small a:hover, .foot-small a:focus-visible { color: var(--card); text-decoration: underline; text-underline-offset: 3px; }
 .foot-col [aria-current], .foot-small [aria-current] { color: var(--card); }
-/* Below 400px the bottom line (FAQ, Privacy, Terms and the email) is tightened
-   to its links' own width so all four stay on one 44px row at 320px. */
-@media (max-width: 399.98px) {
-  .foot-small a { padding: 0 4px; }
-  .foot-small li:first-child a { padding-left: 0; }
-}
 .foot-bottom { margin-top: 8px; border-top: 1px solid color-mix(in srgb, var(--card) 10%, transparent); }
 .foot-legal { margin: 8px 0 0; color: var(--on-deep-legal); }
 .foot-small a { color: var(--on-deep-legal); }

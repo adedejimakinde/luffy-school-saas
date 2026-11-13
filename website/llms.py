@@ -16,15 +16,15 @@ pricing page does.
 
 import re
 
-from django.conf import settings
 from django.http import HttpResponse
 from django.urls import reverse
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_http_methods
 
+from .contact import contact
 from .crawlers import site_url
 from . import price
-from .features import GROUPS
+from .features import GROUPS, feature
 from .views import LEGAL_IN_DRAFT, LEGAL_PAGES, pages
 
 #: How many of the newest blog posts the file lists. The blog has the rest.
@@ -52,19 +52,20 @@ def llms_text():
     from blog.models import Post
 
     site = site_url()
+    details = contact()
     lines = [
         "# Classnode",
         "",
-        "> Classnode is school management software for Nigerian secondary schools, made by "
-        "Classnode Edtech Limited (RC 9926572) in Abeokuta, Ogun State. Teachers enter scores and "
+        "> Classnode is school management software for secondary schools across Nigeria, made by "
+        "Classnode Edtech Limited (RC 9926572), based in " + (details["location"] or "Nigeria") + ". Teachers enter scores and "
         "take registers on their phones. The school approves results, prints report cards, tracks "
         "fees and lets parents check results online. " + price.sentence(),
         "",
         "## Who it is for",
         "",
-        "Private secondary schools in Nigeria: their principals, bursars, exam officers and "
-        "teachers, and the parents of their students. Schools in Ogun State can print the Ogun "
-        "State report card.",
+        "Private secondary schools across Nigeria: their principals, bursars, exam officers and "
+        "teachers, and the parents of their students. Report cards are the standard report card, "
+        "or your state's format such as the Ogun State report sheet.",
         "",
         "## What it includes",
         "",
@@ -74,10 +75,16 @@ def llms_text():
         lines += [_feature(feature) for feature in features]
         lines.append("")
     lines += [
-        "## Data",
+        "## About and security",
         "",
-        "Each school's records are kept apart from every other school's. Staff see only their own "
-        "part, by role, and parents see only their own children.",
+        f"Classnode is run by Classnode Edtech Limited, RC 9926572, based in {details['location'] or 'Nigeria'}. "
+        "It was founded by Adedeji Makinde.",
+        "",
+        f"- Backups: {_line(feature('backups').line)}",
+        "- Each school's records are kept apart from every other school's.",
+        "- Staff see only their own part, by role.",
+        "- Parents see only their own children.",
+        f"- More: {site}/about/",
         "",
         "## Price",
         "",
@@ -111,12 +118,17 @@ def llms_text():
         "",
         "## Contact",
         "",
-        f"- Email: {price.CONTACT_EMAIL}",
+        f"- Email: {details['email']}",
         f"- Book a demo: {site}/#demo",
-        "- Location: Abeokuta, Ogun State, Nigeria",
     ]
-    if settings.SITE_PHONE:
-        lines.append(f"- Phone: {settings.SITE_PHONE}")
+    if details["location"]:
+        lines.append(f"- Location: {details['location']}")
+    if details["phone"]:
+        lines.append(f"- Support phone: {details['phone']}")
+    if details["linkedin"]:
+        lines.append(f"- LinkedIn: {details['linkedin']}")
+    if details["google"]:
+        lines.append(f"- Google Business Profile: {details['google']}")
     lines.append("")
     return "\n".join(lines)
 
