@@ -556,11 +556,12 @@ function measureSite({ width }) {
       if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
-    // The footer on a phone: short (about 330px, a little more where the line
-    // under the logo wraps), all of it on the left, small type, and every link
-    // a thumb tall by its padding.
+    // The footer on a phone: short, all of it on the left, small type, and every
+    // link a thumb tall by its padding. It was about 330px (cap 350 and 340); the
+    // About link and the contacts (support phone, LinkedIn, Google) each add a
+    // wrapped 44px row at phone widths, so the cap is 440 (owner to confirm).
     const foot = document.querySelector(".site-foot");
-    const limit = width < 375 ? 350 : 340;
+    const limit = 440;
     if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
       if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
