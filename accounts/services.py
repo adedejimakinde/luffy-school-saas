@@ -68,6 +68,16 @@ class NotPermitted(MembershipError):
     """The actor has no authority to grant memberships at that school."""
 
 
+class AdmissionNumberTaken(MembershipError):
+    """Another child at this school holds that admission number. Audit finding G-14.
+
+    Raised by every writer of a student's number before it writes, and by
+    `grant_membership()` and `set_admission_number()` when the database's index
+    (`admission_numbers.CONSTRAINT`) refuses a clash the check could not see.
+    The sentence is `admission_numbers.refusal()`'s.
+    """
+
+
 #: Maps the codes `Guardianship.clean()` raises onto this module's hierarchy.
 #: Keyed on the code and not the message: the message is prose that may be
 #: reworded, while the code is the rule's name.
@@ -165,9 +175,34 @@ def grant_membership(user, school, role, *, status=MembershipStatus.ACTIVE, **fi
     try:
         return _grant_or_revive(user, school, role, status=status, **fields)
     except IntegrityError as exc:
+        _raise_if_the_number_clashed(exc, school, fields.get("reference", ""))
         if not _is_the_membership_colliding(exc):
             raise
-    return _grant_or_revive(user, school, role, status=status, **fields)
+    try:
+        return _grant_or_revive(user, school, role, status=status, **fields)
+    except IntegrityError as exc:
+        _raise_if_the_number_clashed(exc, school, fields.get("reference", ""))
+        raise
+
+
+def _raise_if_the_number_clashed(exc, school, reference):
+    """The admission-number index refused this write: say so, in the check's words.
+
+    The check before the write (`admission_numbers.require_free()`) answers the
+    ordinary case. This is the pair of writes that both passed it at once; the
+    loser's savepoint is already rolled back by `atomic()`, so the refusal is
+    raised on a connection the caller can still use.
+    """
+    from . import admission_numbers
+
+    if not admission_numbers.is_the_clash(exc):
+        return
+    held_by = admission_numbers.holder(school, reference)
+    if held_by is None:
+        raise AdmissionNumberTaken(
+            f"{admission_numbers.clean(reference)!r} is already an admission number at this school."
+        ) from None
+    raise AdmissionNumberTaken(admission_numbers.refusal(reference, held_by)) from None
 
 
 @transaction.atomic
@@ -223,7 +258,40 @@ def enroll_student(user, school, *, reference="", **fields):
         raise AlreadyEnrolled(
             f"{user} is already enrolled at {existing.school}. Transfer them instead."
         )
+    from . import admission_numbers
+
+    reference = admission_numbers.clean(reference)
+    # Their own row may hold it already: a re-admission revives that row.
+    own = Membership.objects.filter(user=user, school=school, role=Role.STUDENT).first()
+    admission_numbers.require_free(school, reference, excluding=own)
     return grant_membership(user, school, Role.STUDENT, reference=reference, **fields)
+
+
+@transaction.atomic
+def set_admission_number(student, reference):
+    """Give a child a new admission number, or none. Returns the row.
+
+    Refused with `AdmissionNumberTaken` if another child at the school holds it,
+    in any case and whatever their status (`accounts.admission_numbers`). The
+    edit is the office's correction of a number typed wrong, so it is the
+    administrator's act, as admitting is (`set_admission_number_as()`).
+    """
+    from . import admission_numbers
+
+    if student.role != Role.STUDENT:
+        raise NotAStudent("Only a child has an admission number.")
+    reference = admission_numbers.clean(reference)
+    if reference == student.reference:
+        return student
+    admission_numbers.require_free(student.school, reference, excluding=student)
+    student.reference = reference
+    try:
+        with transaction.atomic():
+            student.save(update_fields=["reference", "updated_at"])
+    except IntegrityError as exc:
+        _raise_if_the_number_clashed(exc, student.school, reference)
+        raise
+    return student
 
 
 @transaction.atomic
@@ -396,7 +464,7 @@ def unlink_guardian(guardian, student):
 
 
 @transaction.atomic
-def release_student(student, *, on=None):
+def release_student(student, *, on=None, keep_family_access=False):
     """End an enrolment at the school the child is leaving. Returns the ended row.
 
     Half of a transfer, and the half the *releasing* school owns. The other half
@@ -443,6 +511,15 @@ def release_student(student, *, on=None):
     ]
 
     student.end(on)
+
+    # **`keep_family_access`**: a child taken off the roll mid-session
+    # (`academics.leaving`, G-16) leaves a family who still has to read the
+    # cards that went home and what they paid, and the card routes serve an
+    # ended child's released cards to their guardian (`card_api._children_of()`)
+    # only while that guardian can still sign in here. So their PARENT
+    # membership is left as it is. A transfer and promotion do not pass it.
+    if keep_family_access:
+        return student
 
     # After the end, never before: the query behind this asks whether a *live*
     # child still keeps the parent here, and the child just stopped being one.
@@ -491,6 +568,17 @@ def transfer_student(student, to_school, *, reference=""):
         ).values_list("user_id", flat=True)
     )
 
+    # The number the child arrives with is the receiving school's, or the one
+    # they carry; either way it must be free there (G-14). Asked before anything
+    # is ended, so a clash leaves the child exactly where they were.
+    from . import admission_numbers
+
+    arriving_with = admission_numbers.clean(reference or student.reference)
+    own_there = Membership.objects.filter(
+        user=student.user, school=to_school, role=Role.STUDENT
+    ).first()
+    admission_numbers.require_free(to_school, arriving_with, excluding=own_there)
+
     # End first: the partial unique index allows only one live STUDENT row.
     student.end()
 
@@ -498,7 +586,7 @@ def transfer_student(student, to_school, *, reference=""):
         student.user,
         to_school,
         Role.STUDENT,
-        reference=reference or student.reference,
+        reference=arriving_with,
         display_name=student.display_name,
     )
 
@@ -576,6 +664,13 @@ def admit_student_as(actor, school, full_name, username, *, reference="", **fiel
 def enroll_student_as(actor, user, school, **kwargs):
     _require_grant_authority(actor, school)
     return enroll_student(user, school, **kwargs)
+
+
+@transaction.atomic
+def set_admission_number_as(actor, student, reference):
+    """The edit, for an administrator of the child's school (as admitting is)."""
+    _require_grant_authority(actor, student.school)
+    return set_admission_number(student, reference)
 
 
 @transaction.atomic

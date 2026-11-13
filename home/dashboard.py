@@ -509,6 +509,10 @@ def fee_card(facts, term, today) -> dict:
     week's takings as a pill (green when money came in, amber when refunds
     outweighed it, grey for a quiet week), then what is outstanding and what is
     expected this term, each a link to the fee book.
+
+    "Outstanding" is `fees.outstanding`'s one meaning (G-12): the whole account
+    of every child placed this term who owes, labelled "(all terms)", with "of
+    which this term" beneath it. Collected and expected are this term's.
     """
     money = facts["money"]
     collected, billed = _collected(money), _billed(money)
@@ -528,8 +532,11 @@ def fee_card(facts, term, today) -> dict:
             "tone": "ok" if this_week > 0 else ("warn" if this_week < 0 else ""),
             "icon": "i-up" if this_week > 0 else ("i-down" if this_week < 0 else ""),
         },
+        # G-12: the whole account of each child placed this term who owes
+        # (`fees.outstanding`), with this term's part as the smaller line.
         "outstanding": short_naira(money["owing"]["kobo"]),
         "outstanding_exact": naira(money["owing"]["kobo"]),
+        "outstanding_this_term": naira(money["owing"].get("this_term", 0)),
         "owing": owing,
         "owing_text": f"{plural(owing, 'student')} {'owes' if owing == 1 else 'owe'}" if owing else "Nobody owes",
         "spark": None,
@@ -592,8 +599,11 @@ def attention(facts, scope: Scope, school, user, today, term, week) -> list:
             "key": "fees",
             "icon": "i-fees",
             "href": "/fees/",
-            "title": f"{plural(n, 'student')} {'owes' if n == 1 else 'owe'} fees for this term",
-            "detail": f"{short_naira(money['owing']['kobo'])} outstanding{when_}",
+            "title": f"{plural(n, 'student')} {'owes' if n == 1 else 'owe'} fees",
+            "detail": (
+                f"{short_naira(money['owing']['kobo'])} outstanding (all terms), of which this "
+                f"term: {short_naira(money['owing'].get('this_term', 0))}{when_}"
+            ),
             "chip": _chip("stop", "i-alert", "Unpaid"),
         })
 
