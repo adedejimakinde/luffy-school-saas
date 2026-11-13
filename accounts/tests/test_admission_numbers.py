@@ -111,8 +111,12 @@ class TheDoorsRefuseInASentenceTests(AdmissionNumberSetUp):
 
         CONTROL G14-2: `bulk.check()` comparing `reference` as typed makes this
         red: the row is admitted."""
-        body = self.upload(self.admin, csv_of("Ngozi Abah,JSS 1B,,jss/014,,")).json()
+        response = self.upload(self.admin, csv_of("Ngozi Abah,JSS 1B,,jss/014,,"))
 
+        # Status first: without the row check the service still refuses the
+        # number, but as a whole-file 422 with no line on it.
+        self.assertEqual(response.status_code, 200, "a per-row report became a whole-file refusal")
+        body = response.json()
         self.assertEqual(body["admitted"], 0)
         self.assertEqual([p["column"] for p in body["problems"]], ["reference"])
 
@@ -124,10 +128,9 @@ class TheDoorsRefuseInASentenceTests(AdmissionNumberSetUp):
 
     def test_a_transfer_carrying_a_number_the_receiving_school_uses_is_refused(self):
         """`transfer_student()` carried the sending school's number across unchecked.
-        Refused before anything is ended, so the child stays where they were.
-
-        CONTROL G14-3: `transfer_student()` without its `require_free()` makes
-        this red at the index instead: an IntegrityError, not the sentence."""
+        Refused, and the child stays where they were. Held twice: by the check
+        before anything is ended (`test_a_transfer_is_checked_without_the_index`)
+        and by the index, whose refusal arrives as the same sentence."""
         chidi = self.grace_child
         set_admission_number(chidi, "JSS/014")
 
@@ -136,6 +139,19 @@ class TheDoorsRefuseInASentenceTests(AdmissionNumberSetUp):
 
         chidi.refresh_from_db()
         self.assertTrue(chidi.is_live, "a refused transfer ended the enrolment it was moving")
+
+    def test_a_transfer_is_checked_without_the_index(self):
+        """The check in `transfer_student()` on its own, the index dropped.
+
+        CONTROL G14-3: `transfer_student()` without its `require_free()` makes
+        this red: Chidi arrives at St Mary's holding Ada's number."""
+        chidi = self.grace_child
+        set_admission_number(chidi, "jss/014")
+        with connection.cursor() as cursor:
+            cursor.execute(f'DROP INDEX IF EXISTS "{admission_numbers.CONSTRAINT}"')
+
+        with self.assertRaises(AdmissionNumberTaken):
+            transfer_student(chidi, self.stmarys)
 
     def test_only_an_administrator_edits_a_number(self):
         response = self.edit(self.head, self.children["emeka"].pk, "JSS/099")

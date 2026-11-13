@@ -171,6 +171,13 @@ class OnlyThePrincipalTests(LeavingSetUp):
         self.assertTrue(self.ada.is_live)
         self.assertEqual(self.departures(), [])
 
+    def test_the_roll_offers_has_left_to_the_principal_only(self):
+        for user, offered in ((self.principal, True), (self.staff[Role.ADMIN], False)):
+            with self.subTest(user=user.username):
+                self.client.force_login(user)
+                body = self.client.get("/api/enrolment/roll/", HTTP_HOST=HOST).json()
+                self.assertIs(body["may_take_off"], offered)
+
     def test_a_principal_cannot_reach_the_other_schools_child(self):
         response = self.leave(self.principal, self.ngozi)
         self.assertEqual(response.status_code, 404)
