@@ -36,11 +36,11 @@ not read, so silence is not taken for a clean bill.
 | G-09 | Choosing the Ogun template while a class is waiting for approval or release changes the conduct section and the position on its cards | Medium | Ogun card, approval chain | `results/ogun.py`, `results/ratings.py` | Open |
 | G-10 | A register can be taken, changed or discarded for any term at any time, including after the cards are released | Medium | Attendance | `attendance/api.py`, `attendance/services.py` | Open |
 | G-11 | Attendance counts marks, not days: a child who changed class can be counted twice for one day, and a back-filled register uses today's class list | Medium | Attendance | `attendance/summary.py`, `attendance/services.py` | Open |
-| G-12 | The dashboard's "outstanding" is this term only; the fee book, reminders and withholding use the whole account | Medium | Fees | `home/facts.py`, `fees/api.py` | Fixed in PR #@@PR@@ |
-| G-13 | A child moved to another class mid-term stays on the old class's bill and is never charged a line added later | Medium | Fees | `fees/schedules.py` | Fixed in PR #@@PR@@ |
-| G-14 | Admission numbers are not unique: one-at-a-time admission does not check, nothing in the database does, and the doors match without case | Medium | Roll, IDs | `accounts/enrolment_api.py`, `accounts/models.py` | Fixed in PR #@@PR@@ |
-| G-15 | A roll file without admission numbers, sent twice, admits every child twice | Medium | Roll import | `accounts/bulk.py` | Fixed in PR #@@PR@@ |
-| G-16 | There is no way to take a child off the roll mid-session, and the transfer handshake has no route | Medium | Transfers | `accounts/transfers.py`, `accounts/enrolment_api.py` | Leaving fixed in PR #@@PR@@; transfer route deferred, #346 |
+| G-12 | The dashboard's "outstanding" is this term only; the fee book, reminders and withholding use the whole account | Medium | Fees | `home/facts.py`, `fees/api.py` | Fixed in PR #349 |
+| G-13 | A child moved to another class mid-term stays on the old class's bill and is never charged a line added later | Medium | Fees | `fees/schedules.py` | Fixed in PR #349 |
+| G-14 | Admission numbers are not unique: one-at-a-time admission does not check, nothing in the database does, and the doors match without case | Medium | Roll, IDs | `accounts/enrolment_api.py`, `accounts/models.py` | Fixed in PR #349 |
+| G-15 | A roll file without admission numbers, sent twice, admits every child twice | Medium | Roll import | `accounts/bulk.py` | Fixed in PR #349 |
+| G-16 | There is no way to take a child off the roll mid-session, and the transfer handshake has no route | Medium | Transfers | `accounts/transfers.py`, `accounts/enrolment_api.py` | Leaving fixed in PR #349; transfer route deferred, #346 |
 | G-17 | Question banks are per subject and class "level", and level defaults to 0, so one bank can span every year group | Low | CBT banks | `cbt/access.py`, `academics/api.py` | Open |
 | G-18 | The Ogun card prints attendance with no "not marked" figure, and nothing stops present exceeding the days the school opened | Low | Attendance, Ogun card | `results/ogun_card.py`, `attendance/services.py` | Open |
 | G-19 | An absence alert goes out on a mis-tap and for a register entered days late | Low | Attendance, messaging | `notices/absence_alerts.py` | Open |
@@ -588,7 +588,7 @@ of children placed this term (the rule reminders already use) and label it
 "outstanding, all terms". Keep "collected" and "billed" as this term's, and
 add an "unplaced" row to the fee book so its classes add up to the dashboard.
 
-**Status.** Fixed in PR #@@PR@@, as decided: outstanding is the whole-account
+**Status.** Fixed in PR #349, as decided: outstanding is the whole-account
 balance of the children placed this term, summed over those who owe, labelled
 "Outstanding (all terms)" with "of which this term" beneath it (each owing
 child's this-term sum, never below nothing nor above their balance).
@@ -644,7 +644,7 @@ who holds an un-reversed charge from **this** bill, on the roster or not. And
 have the roll's move answer say "this child has been billed in SS 1 Arts this
 term" when that is so.
 
-**Status.** Fixed in PR #@@PR@@. A child moved into a class is charged, by
+**Status.** Fixed in PR #349. A child moved into a class is charged, by
 that class's bill, each line added after they joined it:
 `ClassPlacement.class_since`, new, set when a child is placed and when they are
 moved and by nothing else (existing rows take `updated_at`, migration
@@ -700,7 +700,7 @@ already held at that school by another student, compared without case; and add
 a partial unique index on `(school, lower(reference))` for student rows with a
 non-blank reference, after checking no existing rows collide.
 
-**Status.** Fixed in PR #@@PR@@. One rule, `accounts/admission_numbers.py`: at
+**Status.** Fixed in PR #349. One rule, `accounts/admission_numbers.py`: at
 one school no two STUDENT memberships hold the same non-blank number, compared
 without case and surrounding spaces, ended children included. The database
 holds it: `an_admission_number_names_one_child_per_school`, a partial unique
@@ -744,7 +744,7 @@ the same class this term as a problem ("already on the roll in JSS 1A; give an
 admission number if this is a different child"). Give the import route the
 same once-only key the payment form has.
 
-**Status.** Fixed in PR #@@PR@@. `accounts.bulk.check()` matches each row to a
+**Status.** Fixed in PR #349. `accounts.bulk.check()` matches each row to a
 child already on the roll before admitting anybody: by admission number, else
 username, else name (enrolled, same name without case or extra spaces, in the
 row's class this term or in none, not carrying a different number). A matched
@@ -808,7 +808,7 @@ family's read access for a period (G-05). Wire the transfer handshake
 separately; before it is, make `transfer_student()` require the receiving
 school's own admission number.
 
-**Status.** Taking a child off the roll is fixed in PR #@@PR@@; the transfer
+**Status.** Taking a child off the roll is fixed in PR #349; the transfer
 handshake still has no route, for reasons now written down (issue #346).
 `POST /api/enrolment/roll/{id}/leave/` (`academics.leaving`) is the
 **principal's** decision, with a required reason and a day (not after today,
