@@ -604,9 +604,22 @@ jobs:
   # `910e007…` around the candidate's `544fc75…`. That still pulls the same
   # image, but it is a different digest and a different shape from every tag
   # before it, and "the tag is the candidate" should be literally true.
+  #
+  # **Why the `if` names its needs.** An `if` with no status function gets an
+  # implicit `success()`, and GitHub evaluates that over every ancestor job, not
+  # just the direct `needs`. On `main` the shards and `screens` are skipped by
+  # design, so `test` (which has `always()`) is green but `publish` was skipped
+  # with it, and 4a74985 could not be deployed (#338). `!cancelled()` replaces
+  # the implicit check, and the three jobs that matter are required explicitly:
+  # `pins`, `image` and the `test` gate, which has already judged the skips.
   publish:
-    needs: [test, image]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [pins, test, image]
+    if: >-
+      ${{ !cancelled()
+      && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.pins.result == 'success'
+      && needs.test.result == 'success'
+      && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: read
