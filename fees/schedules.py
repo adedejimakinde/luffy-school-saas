@@ -49,6 +49,21 @@ reversed one. Now the second bill skips them and counts them
 another class's bill this term is that bill's, until those charges are undone.
 Undone — every one reversed — they are billable here again.
 
+**A child who moved in is charged what their new class adds after they
+arrive** (audit finding G-13). Under the rule above, a child charged in SS 1
+Arts and moved to SS 1 Science was Arts's for the whole term, and neither bill
+reached a line added later — a second instalment, an exam fee — so the child
+was silently under-billed. Now Science's bill charges such a child **each of its
+lines added after they joined the class** (`ClassPlacement.class_since`, set
+when they are placed or moved) — and only those: the lines Science already had
+when they arrived are taken to be the ones Arts already charged them, which is
+the B2 decision unchanged. **No line is billed twice**: a line is charged once
+per child (`a_schedule_line_charges_a_child_once`), and a later line is
+skipped, and counted in `same_item_elsewhere`, when the child already holds a
+standing charge from another bill this term with the same description — Arts's
+"Second instalment" and Science's "Second instalment" are one fee. Arts's own
+later lines do not reach them, because they are not on its roster.
+
 That check reads other bills' charges, which the schedule lock does not cover:
 two bursars billing JSS 1A and JSS 3A at once could each read the child as
 unbilled. So an application also takes the term's row, `FOR NO KEY UPDATE`,
@@ -130,6 +145,10 @@ class AppliedSummary:
     #: charged this term, and so were not charged by this one. Ids rather than
     #: a count so the screen can say who; sorted, like the roster.
     billed_elsewhere: tuple = ()
+    #: Charges this bill did not post to a child who moved in, because another
+    #: bill this term already charged them a line of the same description
+    #: (G-13): `(membership id, line description)`, sorted.
+    same_item_elsewhere: tuple = ()
 
     def __str__(self):
         left = (
@@ -142,6 +161,11 @@ class AppliedSummary:
             if self.billed_elsewhere
             else ""
         )
+        if self.same_item_elsewhere:
+            elsewhere += (
+                f"; {len(self.same_item_elsewhere)} not charged again for an item "
+                "another class's bill already charged"
+            )
         return (
             f"{self.charges_posted} charged, {self.charges_skipped} skipped; "
             f"{self.discounts_posted} discounts, {self.discounts_skipped} skipped"
@@ -278,6 +302,43 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     )
     charged_here = [sid for sid in student_ids if sid not in billed_elsewhere]
 
+    # **G-13: a child billed elsewhere is charged this bill's later lines.** For
+    # each, the lines added after they joined this class (`class_since`, read
+    # with the roster's term), less any whose description matches a standing
+    # charge another bill already posted them this term: one item, one charge.
+    joined = dict(
+        ClassPlacement.objects.filter(
+            class_group=class_group, term=term, student_membership_id__in=list(billed_elsewhere)
+        ).values_list("student_membership_id", "class_since")
+    )
+    charged_items = {}
+    for sid, narration in (
+        FeeLedgerEntry.objects.filter(
+            kind=FeeEntryKind.CHARGE,
+            term=term,
+            source_line__isnull=False,
+            student_membership_id__in=list(billed_elsewhere),
+            reversed_by__isnull=True,
+        )
+        .exclude(source_line__schedule_id=locked.pk)
+        .order_by()
+        .values_list("student_membership_id", "narration")
+    ):
+        charged_items.setdefault(sid, set()).add(_item_key(narration))
+    later_lines = {}
+    same_item_elsewhere = []
+    for sid in sorted(billed_elsewhere):
+        since = joined.get(sid)
+        if since is None:
+            continue
+        for line in lines:
+            if line.created_at <= since:
+                continue
+            if _item_key(line.description) in charged_items.get(sid, ()):
+                same_item_elsewhere.append((sid, line.description))
+                continue
+            later_lines.setdefault(sid, []).append(line)
+
     # Both skip-sets in one query each, and both are read *after* the lock, so a
     # concurrent application of this bill has either not started or has finished.
     # `order_by()` with no arguments on both: these collapse into a `set()`, and
@@ -287,7 +348,7 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         FeeLedgerEntry.objects.filter(
             kind=FeeEntryKind.CHARGE,
             source_line__in=lines,
-            student_membership_id__in=charged_here,
+            student_membership_id__in=charged_here + list(later_lines),
         )
         .order_by()
         .values_list("student_membership_id", "source_line_id")
@@ -384,9 +445,12 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
     # on the child. So this loop is counted in concessions granted, and forty-
     # five children holding two apiece is ninety savepoints, past 64 with no
     # unusual school involved. Issue #85, deliberately not fixed here.
-    for student_id in charged_here:
+    # Every child this bill charges, with the lines it charges them: the whole
+    # bill for its own children, the later lines for a child who moved in.
+    to_charge = [(sid, lines) for sid in charged_here] + sorted(later_lines.items())
+    for student_id, their_lines in to_charge:
         membership = memberships[student_id]
-        for line in lines:
+        for line in their_lines:
             if (student_id, line.pk) in already_charged:
                 charges_skipped += 1
                 continue
@@ -491,7 +555,13 @@ def apply_to_class(schedule, *, by, effective_on=None) -> AppliedSummary:
         discounts_skipped=discounts_skipped,
         discounted_kobo=discounted_kobo,
         billed_elsewhere=tuple(sorted(billed_elsewhere)),
+        same_item_elsewhere=tuple(sorted(same_item_elsewhere)),
     )
+
+
+def _item_key(description) -> str:
+    """A bill line's description as two bills are compared: no case, one space."""
+    return " ".join(str(description or "").split()).casefold()
 
 
 __all__ = ["AppliedSummary", "EmptySchedule", "UnknownStudent", "apply_to_class"]

@@ -29,6 +29,7 @@ only holds for the view.
 """
 
 from django.db import IntegrityError, connection, transaction
+from django.utils import timezone
 
 from accounts.models import LIVE_STATUSES, Membership, Role
 from accounts.staff import why_not_a_teacher_here
@@ -353,11 +354,14 @@ def move_student(class_group, term, membership, *, by=None):
 
         current.class_group = class_group
         current.placed_by_id = _stamp(by)
+        # When they joined *this* class: what a bill reads to charge a child who
+        # moved the lines the new class adds after they arrive (G-13).
+        current.class_since = timezone.now()
         # `updated_at` is listed so that `auto_now` fires for it. Unlike a
         # queryset `update()`, `save(update_fields=...)` does run each named
         # field's `pre_save`, so it does not need setting by hand here — see
         # `gradebook.services._update_the_mark_shown()`, which does need to.
-        current.save(update_fields=["class_group", "placed_by_id", "updated_at"])
+        current.save(update_fields=["class_group", "placed_by_id", "class_since", "updated_at"])
         return current
 
 

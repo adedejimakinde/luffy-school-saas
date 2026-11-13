@@ -31,7 +31,10 @@ export function collectedShare(collected, billed) {
  */
 function classRow(c) {
   const share = collectedShare(c.collected_kobo, c.billed_kobo);
-  const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}`;
+  const owes = c.owing
+    ? ` · ${esc(naira(c.outstanding_kobo || 0))} outstanding`
+    : "";
+  const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}${owes}`;
   return (
     `<li><button type="button" class="list-row class-row" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
     `<span class="list-row-text"><span class="list-row-title">${esc(c.class_group)}</span>` +
@@ -46,6 +49,21 @@ function classRow(c) {
     "</span>" +
     '<svg class="icon" aria-hidden="true" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>' +
     "</span></button></li>"
+  );
+}
+
+/**
+ * "Outstanding (all terms)" and "of which this term", the figures the dashboard
+ * shows (`fees.outstanding`, audit G-12): the whole account of each child placed
+ * this term who owes. Nothing when nobody owes.
+ */
+export function outstandingLine(body = {}) {
+  const { owing = 0, outstanding_kobo: kobo = 0, outstanding_this_term_kobo: thisTerm = 0 } = body;
+  if (!owing) return "";
+  return (
+    '<p class="outstanding"><span class="eyebrow">Outstanding (all terms)</span> ' +
+    `<strong class="fig">${esc(naira(kobo))}</strong>, ${esc(owing)} ${owing === 1 ? "child owes" : "children owe"}` +
+    `<br><small class="fig">of which this term: ${esc(naira(thisTerm))}</small></p>`
   );
 }
 
@@ -64,6 +82,7 @@ export function books({
     `<form class="chooser"><label for="term">Term</label>`,
     `<select id="term" data-term>${termOptions(terms, termId)}</select></form>`,
     `<h2>${esc(term)}</h2>`,
+    outstandingLine(body),
     hasFeeItems
       ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>'
       : emptyState({
@@ -101,6 +120,7 @@ export function classBalances({ classBalances: body = {}, reminding = null, note
     '<p class="back"><button type="button" data-action="back-to-books">All classes</button></p>',
     `<h1>${esc(class_group)}</h1>`,
     `<p class="quiet">${esc(term)}. Each balance is the whole account, every term.</p>`,
+    outstandingLine(body),
     children.length
       ? [
           '<div class="scroll"><table class="balances stack"><thead><tr>',

@@ -24,6 +24,7 @@ from datetime import date
 
 from django.db import models
 from django.db.models import F, Func, IntegerField, Q
+from django.utils import timezone
 from django.db.models.functions import Upper
 
 class DaysBetween(Func):
@@ -278,6 +279,12 @@ class ClassPlacement(models.Model):
     student_membership_id = models.PositiveBigIntegerField(db_index=True)
 
     placed_by_id = models.PositiveBigIntegerField(null=True, blank=True)
+    #: When the child joined **this** class this term: set when they are placed
+    #: and again when they are moved (`services.move_student()`), and by nothing
+    #: else. `updated_at` is not that, because any save moves it. A bill reads
+    #: it to charge a child who moved in the lines the new class added after
+    #: they arrived (audit finding G-13, `fees.schedules`).
+    class_since = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -310,6 +317,53 @@ class ClassPlacement(models.Model):
 
     def __str__(self):
         return f"membership {self.student_membership_id} in {self.class_group} ({self.term})"
+
+
+class Departure(models.Model):
+    """A child taken off the roll mid-session: who decided, when, and why. G-16.
+
+    **The record of an absence**, which is why it exists (`docs/operating-rules.md`
+    rule 8). Taking a child off the roll ends their enrolment and takes them out
+    of the classes of every term they had not finished; afterwards they are on no
+    list at all, and nothing but this row says that they left, on which day, on
+    whose decision, for what reason, and which classes they were taken out of.
+    The membership's `ended_on` says only that the enrolment ended, and not how
+    (G-01's note).
+
+    **Append-only**, in the database (`academics_departures_are_append_only`):
+    a decision written down is not edited afterwards. A child who comes back is
+    admitted again, and keeps this row as their history.
+
+    Tenant-local, beside the placements it accounts for, with the child as a
+    bare id into the shared `Membership` table, as `ClassPlacement` has it.
+    """
+
+    student_membership_id = models.PositiveBigIntegerField(db_index=True)
+    #: The day they left, as the principal gave it; on or before the day it was recorded.
+    left_on = models.DateField()
+    #: In the principal's words. Required: a decision with no reason is the
+    #: thing a family disputes six months on.
+    reason = models.TextField()
+    #: The principal who decided. A bare id into the shared `User` table.
+    decided_by_id = models.PositiveBigIntegerField()
+    #: Copied at the time, never joined to (rule 2): the child's name, and each
+    #: class and term they were taken out of, so the record reads the same after
+    #: a class is renamed.
+    student_name = models.CharField(max_length=255)
+    classes_left = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(reason=""),
+                name="a_departure_gives_a_reason",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.student_name} left on {self.left_on}"
 
 
 class ClassTeacherQuerySet(models.QuerySet):
