@@ -21,7 +21,7 @@ what is shown and what is given cannot differ. Dressed as the legal pages are
     {% endfor %}
     <section id="more">
       <h2>Something else?</h2>
-      <p>Email <a href="mailto:hello@classnode.co">hello@classnode.co</a> or <a href="/#demo">book a demo</a> and we will call you.</p>
+      <p>Email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% if contact.phone %}, call <a href="{{ contact.tel }}">{{ contact.phone }}</a>{% endif %} or <a href="/#demo">book a demo</a> and we will call you.{% if contact.linkedin or contact.google %} You can also find us on{% if contact.linkedin %} <a href="{{ contact.linkedin }}" rel="noopener">LinkedIn</a>{% endif %}{% if contact.linkedin and contact.google %} and{% endif %}{% if contact.google %} <a href="{{ contact.google }}" rel="noopener">Google</a>{% endif %}.{% endif %}</p>
     </section>
   </div>
 </article>

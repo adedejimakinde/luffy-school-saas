@@ -41,7 +41,7 @@ COPY = [
     "Report cards that add up by themselves",
     "Teachers enter CA and exam scores once. Totals and grades are worked out for you, and every "
     "report card carries your crest.",
-    "Schools in Ogun State can switch on the report sheet the Ministry asks for.",
+    "Standard report card, or your state's format such as the Ogun State report sheet.",
     "Sunrise Demo Academy is a demo school. Every name and figure is made up.",
     "See who has paid, and who still owes",
     "Each child has their own account number, so a transfer lands on the right record. You see "
@@ -74,7 +74,7 @@ COPY = [
     "Who can see our school's records?",
     "See it with your own classes.",
     "Book a demo and we will call you within two working days.",
-    "School management for Nigerian secondary schools.",
+    "School management for secondary schools across Nigeria.",
     "Product", "Features", "Pricing", "Blog", "Sign in", "Staff sign in", "Parent sign in",
     "Privacy", "Terms", "hello@classnode.co",
     "© 2026 Classnode Edtech Limited · RC 9926572",
@@ -411,18 +411,36 @@ class TheFooterTests(SiteSetUp):
         ]
         self.assertEqual(found, [
             ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
-                         ("/#demo", "Book a demo")]),
+                         ("/about/", "About and security"), ("/#demo", "Book a demo")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
         ])
 
-    def test_privacy_terms_and_the_email_sit_in_the_bottom_line_by_the_copyright(self):
+    def test_privacy_terms_and_the_contacts_sit_in_the_bottom_line_by_the_copyright(self):
         bottom = re.search(r'<div class="foot-bottom">(.*?)</div>\s*</div>\s*$', self.footer(), flags=re.S).group(1)
         self.assertLess(bottom.index("foot-legal"), bottom.index("foot-small"))
         self.assertEqual(
             [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', bottom, flags=re.S)],
-            [("/faq/", "FAQ"), ("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co")],
+            [("/faq/", "FAQ"), ("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co"),
+             ("tel:+2349030269294", "+234 903 026 9294"),
+             ("https://www.linkedin.com/company/classnode/", "LinkedIn"),
+             ("https://share.google/1MOPiuTETX2wehGWA", "Google")],
         )
+
+    def test_every_page_shows_the_rc_number_in_the_footer(self):
+        for path in ("/", "/pricing/", "/faq/", "/about/", "/privacy/", "/terms/", "/blog/"):
+            with self.subTest(path=path):
+                self.assertIn("RC 9926572", words(self.footer(path)))
+
+    def test_the_contacts_in_the_footer_come_from_the_settings(self):
+        with override_settings(SITE_PHONE="+2348000000000", SITE_LINKEDIN_URL="https://example.com/li",
+                               SITE_GOOGLE_BUSINESS_URL=""):
+            footer = self.footer()
+        self.assertIn('href="tel:+2348000000000"', footer)
+        self.assertIn("+234 800 000 0000", words(footer))
+        self.assertIn('href="https://example.com/li"', footer)
+        self.assertNotIn("Google", words(footer))
+        self.assertNotIn("9030269294", footer)
 
     def test_it_has_one_logo_and_no_second_call_to_action(self):
         footer = self.footer()
@@ -602,7 +620,9 @@ class TheBudgetsTests(SiteSetUp):
         for srcset in re.findall(r'srcset="([^"]+)"', page):
             for url, _ in _CANDIDATE.findall(srcset):
                 self.assertTrue(url.startswith(settings.STATIC_URL), url)
-        self.assertNotRegex(page, r'(src|href|srcset)="https?://')
+        # Only the footer's two profile links (`website.contact`) leave the host, and each is a link, not an asset.
+        outside = re.sub(r'<a href="https://[^"]+" rel="noopener">', "", page)
+        self.assertNotRegex(outside, r'(src|href|srcset)="https?://')
 
     def test_images_are_webp_sized_described_and_only_the_hero_eager(self):
         top, below = self.page.split('<section class="proof"', 1)

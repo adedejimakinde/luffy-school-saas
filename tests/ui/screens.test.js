@@ -26,7 +26,7 @@
  * artifact: `<width>/<screen>.png`.
  *
  * Classnode's own public site (`website/`, on the bare platform domain: the
- * homepage, the privacy notice and the terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
+ * homepage, pricing, about, privacy notice and terms) is photographed at nine widths, `SITE_WIDTHS`, under reduced motion so every
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
@@ -132,6 +132,8 @@ export const SCREENS = [
   // Classnode's own public site, on the bare domain.
   { name: "homepage", as: null, url: `${SITE}/`, widths: SITE_WIDTHS, site: true },
   { name: "pricing", as: null, url: `${SITE}/pricing/`, widths: SITE_WIDTHS, site: true },
+  // About and security: 320, 390 and 1280 are among `SITE_WIDTHS` and the default widths.
+  { name: "about", as: null, url: `${SITE}/about/`, widths: SITE_WIDTHS, site: true },
   { name: "privacy", as: null, url: `${SITE}/privacy/`, widths: SITE_WIDTHS, site: true },
   { name: "terms", as: null, url: `${SITE}/terms/`, widths: SITE_WIDTHS, site: true },
 
@@ -554,11 +556,12 @@ function measureSite({ width }) {
       if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
-    // The footer on a phone: short (about 330px, a little more where the line
-    // under the logo wraps), all of it on the left, small type, and every link
-    // a thumb tall by its padding.
+    // The footer on a phone: short, all of it on the left, small type, and every
+    // link a thumb tall by its padding. It was about 330px (cap 350 and 340); the
+    // About link and the contacts (support phone, LinkedIn, Google) each add a
+    // wrapped 44px row at phone widths, so the cap is 440 (owner to confirm).
     const foot = document.querySelector(".site-foot");
-    const limit = width < 375 ? 350 : 340;
+    const limit = 440;
     if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
       if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {

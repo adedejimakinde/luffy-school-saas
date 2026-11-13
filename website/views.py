@@ -29,6 +29,7 @@ from django.views.decorators.http import require_http_methods
 from accounts.throttling import client_address
 from schools.hosts import portal_host
 
+from .contact import contact
 from .crawlers import NOINDEX, site_url
 from . import price
 from .features import FEATURES, feature, groups
@@ -54,8 +55,13 @@ _PAGES = {
     ),
     "site-faq": (
         "Classnode FAQ: Nigerian school software questions",
-        "Plain answers on what Classnode does, the Ogun State report card, the price, weak "
+        "Plain answers on what Classnode does, report cards, the price, weak "
         "networks, parents' results, your data and CBT.",
+    ),
+    "site-about": (
+        "About Classnode and how we protect your data",
+        "Classnode Edtech Limited, RC 9926572: nightly off-site backups, separate school data, "
+        "access by role, and how to reach us.",
     ),
     "site-privacy": (
         "Privacy notice: Classnode",
@@ -69,7 +75,7 @@ _PAGES = {
     ),
     "site-blog": (
         "Classnode blog: results, fees and registers",
-        "Notes for principals, bursars and teachers on running a Nigerian secondary school: "
+        "Notes for principals, bursars and teachers on running a secondary school in Nigeria: "
         "results, fees, registers and the term in between.",
     ),
 }
@@ -139,7 +145,7 @@ def faq_page():
          "and report cards, fees, registers, CBT and parent result checks. "
          'Book a <a href="/#demo">demo</a> and try it with your own classes.'),
         ("What does Classnode do?",
-         "Classnode is school management software for Nigerian secondary schools, made by Classnode "
+         "Classnode is school management software for secondary schools across Nigeria, made by Classnode "
          f"Edtech Limited. It includes: {names}. See everything in the price on the "
          '<a href="/pricing/">pricing page</a>.'),
         ("Does it support the Ogun State report card?",
@@ -196,6 +202,8 @@ def site_page(request, template, context=None, status=200):
             "portal_host": portal_host(),
             "price": price.context(),
             "contact_email": price.CONTACT_EMAIL,
+            "contact": contact(),
+            "registered_address": settings.SITE_REGISTERED_ADDRESS,
             **(context or {}),
         },
         status=status,
@@ -242,6 +250,7 @@ def _organization(site):
     pages are named only when a deployment sets them (`settings.SITE_PHONE`,
     `SITE_LINKEDIN_URL`, `SITE_GOOGLE_BUSINESS_URL`); nothing is made up.
     """
+    details = contact()
     organization = {
         "@type": "Organization",
         "@id": f"{site}/#organization",
@@ -250,20 +259,17 @@ def _organization(site):
         "url": f"{site}/",
         "logo": logo(site),
         "email": "hello@classnode.co",
-        "address": {
-            "@type": "PostalAddress",
-            "addressLocality": "Abeokuta",
-            "addressRegion": "Ogun State",
-            "addressCountry": "NG",
-        },
+        "areaServed": {"@type": "Country", "name": "Nigeria"},
     }
+    if details["location"]:
+        organization["address"] = {
+            "@type": "PostalAddress",
+            "addressLocality": details["location"].split(",")[0].strip(),
+            "addressCountry": "NG",
+        }
     if settings.SITE_PHONE:
         organization["telephone"] = settings.SITE_PHONE
-    profiles = [
-        url
-        for url in (settings.SITE_LINKEDIN_URL, settings.SITE_GOOGLE_BUSINESS_URL)
-        if url.startswith("https://")
-    ]
+    profiles = [url for url in (details["linkedin"], details["google"]) if url]
     if profiles:
         organization["sameAs"] = profiles
     return organization
@@ -287,7 +293,7 @@ def structured_data():
                 "url": f"{site}/",
                 "applicationCategory": "EducationalApplication",
                 "operatingSystem": "Web browser",
-                "description": "School management software for Nigerian secondary schools: "
+                "description": "School management software for secondary schools across Nigeria: "
                                "results and report cards, fees and registers in one place. "
                                + price.sentence(),
                 "publisher": {"@id": organization},
@@ -442,6 +448,12 @@ def faq(request):
             "nav_faq": True,
         },
     )
+
+
+@require_http_methods(["GET", "HEAD"])
+def about(request):
+    """Who runs Classnode, how a school's data is kept, and how to reach us."""
+    return site_page(request, "website/about.html", {"nav_about": True, "backups": feature("backups")})
 
 
 @require_http_methods(["GET", "HEAD"])
