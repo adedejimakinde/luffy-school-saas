@@ -423,8 +423,7 @@ class TheFooterTests(SiteSetUp):
             [(href, words(label)) for href, label in re.findall(r'<a href="([^"]+)"[^>]*>(.*?)</a>', bottom, flags=re.S)],
             [("/faq/", "FAQ"), ("/privacy/", "Privacy"), ("/terms/", "Terms"), ("mailto:hello@classnode.co", "hello@classnode.co"),
              ("tel:+2349030269294", "+234 903 026 9294"),
-             ("https://www.linkedin.com/company/classnode/", "LinkedIn"),
-             ("https://share.google/1MOPiuTETX2wehGWA", "Google")],
+             ("https://www.linkedin.com/company/classnode/", "LinkedIn")],
         )
 
     def test_every_page_shows_the_rc_number_in_the_footer(self):
@@ -434,12 +433,14 @@ class TheFooterTests(SiteSetUp):
 
     def test_the_contacts_in_the_footer_come_from_the_settings(self):
         with override_settings(SITE_PHONE="+2348000000000", SITE_LINKEDIN_URL="https://example.com/li",
-                               SITE_GOOGLE_BUSINESS_URL=""):
+                               SITE_GOOGLE_BUSINESS_URL="https://example.com/g"):
             footer = self.footer()
         self.assertIn('href="tel:+2348000000000"', footer)
         self.assertIn("+234 800 000 0000", words(footer))
         self.assertIn('href="https://example.com/li"', footer)
+        # The Google Business Profile is on the About page, not in the footer.
         self.assertNotIn("Google", words(footer))
+        self.assertNotIn("example.com/g", footer)
         self.assertNotIn("9030269294", footer)
 
     def test_it_has_one_logo_and_no_second_call_to_action(self):
