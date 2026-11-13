@@ -22,7 +22,7 @@ class TheAboutPageTests(SiteSetUp):
 
     def test_it_says_who_runs_classnode(self):
         text = visible_text(self.page())
-        for fact in ("Classnode Edtech Limited, RC 9926572", "Abeokuta, Ogun State",
+        for fact in ("Classnode Edtech Limited, RC 9926572", "based in Lagos, Nigeria",
                      "founded by Adedeji Makinde"):
             with self.subTest(fact=fact):
                 self.assertIn(fact, text)

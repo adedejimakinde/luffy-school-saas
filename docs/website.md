@@ -284,8 +284,7 @@ final call to action, and the footer.
 
 - **`/about/`** (`website/templates/website/about.html`) is in the header, the
   phone menu, the footer's Product group, the sitemap and `/llms.txt`. It says
-  who runs Classnode (Classnode Edtech Limited, RC 9926572, Abeokuta, Ogun
-  State; the founder, Adedeji Makinde, named **in text only, no photo**), the
+  who runs Classnode (Classnode Edtech Limited, RC 9926572, based in Lagos, Nigeria; the founder, Adedeji Makinde, named **in text only, no photo**), the
   four security facts (nightly off-site backups, each school's data kept
   separate, staff see only their part by role, parents only their own
   children) and how to reach us. The backups sentence is the feature list's
@@ -299,6 +298,17 @@ final call to action, and the footer.
   `SITE_LINKEDIN_URL` and `SITE_GOOGLE_BUSINESS_URL`. A value set to empty is
   left out everywhere; a profile that is not `https://` is never linked. The
   phone is shown grouped (`+234 903 026 9294`) and linked as `tel:`.
+- **Where Classnode is based, and who it is for.** `SITE_LOCATION` (default
+  `Lagos, Nigeria`) is the one setting the About page, `/llms.txt` and the
+  structured data read for the business location. The market is "school
+  management software for secondary schools across Nigeria": no page or
+  `/llms.txt` names Abeokuta or Ogun State as the market or the base
+  (`website/tests/test_location.py` holds it). The Ogun State report sheet is
+  one listed report card option, never a headline.
+- **The registered office is a separate setting**, `SITE_REGISTERED_ADDRESS`
+  (empty until the owner gives it). It appears in three places only, each a
+  `TODO` note until it is set: the privacy notice's "who we are" paragraph,
+  the privacy notice's contact section and the terms' contact section.
 - There is no separate contact page: the "Talk to us" section of `/about/`
   and the FAQ's "Something else?" are where the contacts sit.
 
@@ -378,8 +388,8 @@ The site is the only thing on the platform a search engine is asked to index.
 - **Structured data, on the homepage, `/faq/` and each blog post only.** On a
   post it is an Article (`docs/blog.md`). On the homepage: Organization
   (Classnode Edtech Limited, its logo `https://classnode.co/icon-512.png`,
-  `hello@classnode.co`, and an address that is Abeokuta, Ogun State, Nigeria
-  with no street, since there is no public office), SoftwareApplication
+  `hello@classnode.co`, and an address that is the town of `SITE_LOCATION` and Nigeria
+  with no street, since there is no public office; `areaServed` is Nigeria), SoftwareApplication
   (EducationalApplication, a free first term then ₦1,500 per student per term)
   and FAQPage. The Organization also carries `telephone` and `sameAs` (the
   LinkedIn page and the Google Business Profile) from the contact settings
@@ -397,7 +407,7 @@ The site is the only thing on the platform a search engine is asked to index.
 - **`/llms.txt`** (`website/llms.py`) is a Markdown summary for ChatGPT,
   Gemini, Perplexity, Claude and the like: what Classnode is, who it is for,
   every feature the pricing page lists (`website.features`), an "About and
-  security" section (the company, RC number, Abeokuta, the founder, nightly
+  security" section (the company, RC number, the base, the founder, nightly
   backups, separate school data, access by role), the price
   (`website.price`), the public pages (`/faq/` and `/about/` among them) with the descriptions
   they give search engines, the newest 25 published blog posts (never a draft),

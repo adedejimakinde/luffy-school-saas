@@ -88,6 +88,15 @@ PORTAL_HOST = os.environ.get("PORTAL_HOST", "").strip().lower() or (
 SITE_HOST = os.environ.get("SITE_HOST", "").strip().lower() or PLATFORM_DOMAIN
 SITE_URLCONF = "urls_site"
 
+#: **Where Classnode is based** (the business location), said wherever the site,
+#: `/llms.txt`, the FAQ and the footer say so. Not the market: Classnode serves
+#: secondary schools across Nigeria. `website/contact.py` reads it.
+SITE_LOCATION = os.environ.get("SITE_LOCATION", "Lagos, Nigeria").strip()
+#: The registered office address, for the privacy notice and the terms only. A
+#: separate setting from `SITE_LOCATION`, empty until the owner gives it; while
+#: it is empty those pages keep their open TODO note instead.
+SITE_REGISTERED_ADDRESS = os.environ.get("SITE_REGISTERED_ADDRESS", "").strip()
+
 #: **Classnode's contact details: the one place they are written.** The support
 #: phone line, the LinkedIn page and the Google Business Profile. The footer, the
 #: About page, the FAQ, `/llms.txt` and the structured data all read them through

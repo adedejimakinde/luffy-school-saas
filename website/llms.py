@@ -56,16 +56,16 @@ def llms_text():
     lines = [
         "# Classnode",
         "",
-        "> Classnode is school management software for Nigerian secondary schools, made by "
-        "Classnode Edtech Limited (RC 9926572) in Abeokuta, Ogun State. Teachers enter scores and "
+        "> Classnode is school management software for secondary schools across Nigeria, made by "
+        "Classnode Edtech Limited (RC 9926572), based in " + (details["location"] or "Nigeria") + ". Teachers enter scores and "
         "take registers on their phones. The school approves results, prints report cards, tracks "
         "fees and lets parents check results online. " + price.sentence(),
         "",
         "## Who it is for",
         "",
-        "Private secondary schools in Nigeria: their principals, bursars, exam officers and "
-        "teachers, and the parents of their students. Schools in Ogun State can print the Ogun "
-        "State report card.",
+        "Private secondary schools across Nigeria: their principals, bursars, exam officers and "
+        "teachers, and the parents of their students. Report cards are the standard report card, "
+        "or your state's format such as the Ogun State report sheet.",
         "",
         "## What it includes",
         "",
@@ -77,7 +77,7 @@ def llms_text():
     lines += [
         "## About and security",
         "",
-        "Classnode is run by Classnode Edtech Limited, RC 9926572, in Abeokuta, Ogun State, Nigeria. "
+        f"Classnode is run by Classnode Edtech Limited, RC 9926572, based in {details['location'] or 'Nigeria'}. "
         "It was founded by Adedeji Makinde.",
         "",
         f"- Backups: {_line(feature('backups').line)}",
@@ -120,8 +120,9 @@ def llms_text():
         "",
         f"- Email: {details['email']}",
         f"- Book a demo: {site}/#demo",
-        "- Location: Abeokuta, Ogun State, Nigeria",
     ]
+    if details["location"]:
+        lines.append(f"- Location: {details['location']}")
     if details["phone"]:
         lines.append(f"- Support phone: {details['phone']}")
     if details["linkedin"]:

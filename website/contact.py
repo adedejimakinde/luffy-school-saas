@@ -1,6 +1,6 @@
 """Classnode's contact details, read from one place: `settings`.
 
-The support phone (`SITE_PHONE`), the LinkedIn page (`SITE_LINKEDIN_URL`), the
+Where Classnode is based (`SITE_LOCATION`), the support phone (`SITE_PHONE`), the LinkedIn page (`SITE_LINKEDIN_URL`), the
 Google Business Profile (`SITE_GOOGLE_BUSINESS_URL`) and the `hello@` address.
 The footer, the About page, the FAQ, `/llms.txt` and the structured data all
 read them through `contact()`, so none of them types a number or an address.
@@ -29,6 +29,7 @@ def contact():
     https = lambda url: url if url.startswith("https://") else ""  # noqa: E731
     return {
         "email": price.CONTACT_EMAIL,
+        "location": settings.SITE_LOCATION,
         "phone": phone_display(phone) if phone else "",
         "tel": "tel:" + re.sub(r"[^\d+]", "", phone) if phone else "",
         "linkedin": https(settings.SITE_LINKEDIN_URL),

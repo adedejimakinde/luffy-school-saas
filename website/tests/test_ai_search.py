@@ -128,7 +128,7 @@ class LlmsTxtTests(BlogSetUp):
         self.assertIn("/blog/a-live-post/", text)
         self.assertNotIn("a-draft-post", text)
         for needed in ("+234 903 026 9294", "hello@classnode.co", f"https://{SITE}/faq/",
-                       "private secondary schools in Nigeria"):
+                       "private secondary schools across Nigeria"):
             self.assertIn(needed.lower(), text.lower())
 
     def test_it_is_markdown_in_the_llms_txt_shape(self):
@@ -142,9 +142,9 @@ class LlmsTxtTests(BlogSetUp):
     def test_it_says_what_classnode_is_and_who_it_is_for(self):
         text = self.text()
         for needed in (
-            "school management software for Nigerian secondary schools",
+            "school management software for secondary schools across Nigeria",
             "Classnode Edtech Limited (RC 9926572)",
-            "Abeokuta, Ogun State",
+            "based in Lagos, Nigeria",
             "## Who it is for",
             "Ogun State",
             "weak networks",
@@ -248,7 +248,7 @@ class LlmsTxtTests(BlogSetUp):
     def test_it_says_who_runs_classnode_and_how_data_is_kept(self):
         text = self.text()
         self.assertIn("## About and security", text)
-        for fact in ("Classnode Edtech Limited, RC 9926572", "Abeokuta, Ogun State", "Adedeji Makinde",
+        for fact in ("Classnode Edtech Limited, RC 9926572", "based in Lagos, Nigeria", "Adedeji Makinde",
                      "backed up every night", "kept apart from every other school's",
                      "Staff see only their own part, by role", "Parents see only their own children",
                      f"https://{SITE}/about/"):
@@ -302,9 +302,9 @@ class StructuredDataTests(SiteSetUp):
         self.assertEqual(org["logo"]["url"], f"https://{SITE}/icon-512.png")
         self.assertEqual(
             org["address"],
-            {"@type": "PostalAddress", "addressLocality": "Abeokuta",
-             "addressRegion": "Ogun State", "addressCountry": "NG"},
+            {"@type": "PostalAddress", "addressLocality": "Lagos", "addressCountry": "NG"},
         )
+        self.assertEqual(org["areaServed"], {"@type": "Country", "name": "Nigeria"})
         self.assertNotIn("streetAddress", org)
         self.assertNotIn("postalCode", org)
 
