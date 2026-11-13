@@ -43,6 +43,7 @@ from blog.write_views import EDITOR_MODULES as BLOG_EDITOR_MODULES
 from cbt.views import EXAM_SLIPS_MODULES, TESTS_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
 from fees.views import BANK_MODULES, FEES_MODULES
+from idcards.views import ID_CARDS_MODULES
 from gradebook.views import MARKING_MODULES, SUBJECT_TEACHERS_MODULES, TEACHING_MODULES
 from results.views import (
     BROADSHEET_MODULES,
@@ -97,6 +98,7 @@ PAGES = {
     "teaching": TEACHING_MODULES,
     "subject-teachers": SUBJECT_TEACHERS_MODULES,
     "exam-slips": EXAM_SLIPS_MODULES,
+    "id-cards": ID_CARDS_MODULES,
     "tests": TESTS_MODULES,
     # The exam door and screen (CBT step 4), kept by its own worker at `/sit/sw.js`.
     "sit": SIT_MODULES,

@@ -93,6 +93,9 @@ NOT_ON_THE_DESIGN = {
     "results/templates/results/checker_slips.html",
     # The exam slips are the checker slips' twin (`cbt/pdf.py`), printed the same way.
     "cbt/templates/cbt/exam_slips.html",
+    # The student ID cards (`idcards.render`): CR80 cards on an A4 sheet in the school's own
+    # colour, a WeasyPrint document like the report card's.
+    "idcards/templates/idcards/sheet.html",
 }
 
 #: Documents WeasyPrint draws, which are not pages a browser opens: they have no
@@ -102,6 +105,7 @@ WEASYPRINT_DOCUMENTS = {
     "results/templates/results/report_card_ogun.html",
     "results/templates/results/checker_slips.html",
     "cbt/templates/cbt/exam_slips.html",
+    "idcards/templates/idcards/sheet.html",
 }
 
 #: The stylesheets that set a figure at 800, each shipping Hanken's 800 face itself

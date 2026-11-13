@@ -1,0 +1,26 @@
+/*
+ * Student ID cards: the layout `setup/setup.css` does not already give.
+ *
+ * One row per class, its name and how many children, then its button. The
+ * choosing panel and the log are the same wrapping rows, so a 320px phone and
+ * text at 200% keep every name, number and button readable on its own line.
+ */
+.id-classes { display: grid; gap: 6px; }
+.id-class { min-width: 0; }
+.id-class .name { overflow-wrap: anywhere; }
+.id-class .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.id-class button, .id-panel button, .id-panel .btn { margin: 0; min-height: var(--control); }
+.term-pick { max-width: 26rem; margin: 12px 0; display: grid; gap: 4px; }
+.id-panel { flex-basis: 100%; min-width: 0; margin: 4px 0 8px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
+.id-panel p { margin: 0 0 8px; overflow-wrap: anywhere; }
+.id-panel progress { width: 100%; max-width: 26rem; margin: 0 0 8px; }
+.id-form { max-width: none; margin: 0; }
+.id-form fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 2px; max-height: 22rem; overflow-y: auto; }
+.id-form legend { padding: 0; margin: 0 0 8px; font-weight: 700; }
+.id-form .pick { display: flex; gap: 10px; align-items: center; min-height: var(--control); margin: 0; font-weight: 400; overflow-wrap: anywhere; }
+.id-form .pick input { width: auto; flex: none; }
+.id-form .who { display: block; color: var(--muted); font-size: var(--small); }
+.id-form .actions, .id-panel > .actions { display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 12px; }
+.change-log ul { padding-left: 1.2rem; }
+.change-log li { margin: 4px 0; overflow-wrap: anywhere; }
+.change-log .when { color: var(--muted); font-size: var(--small); }

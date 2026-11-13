@@ -101,3 +101,8 @@ cryptography>=42
 # page.
 markdown>=3.6
 nh3>=0.2.17
+
+# Student ID cards (`idcards/`): the verification QR code on the back of each
+# card. Pure Python with no dependencies of its own, and it draws the code as
+# vector paths that WeasyPrint prints crisply at any size.
+segno>=1.6

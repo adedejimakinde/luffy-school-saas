@@ -35,6 +35,7 @@ from cbt.views import exam_slips_page, results_page, tests_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
+from idcards.views import id_cards_page, verify_page
 from onboarding.views import help_page, start_again_page, start_here, step_page
 from notices.views import settings_page
 from schools.paths import RESERVED
@@ -135,6 +136,11 @@ urlpatterns = [
     # Exam slips and exam officers (`docs/cbt.md`): the principal, the administrator and
     # an exam officer print; the principal names officers.
     path("exam-slips/", exam_slips_page, name="exam-slips"),
+    # Student ID cards (`docs/id-cards.md`): the principal, the vice principal
+    # (academic) and the administrator print; the card's QR code opens `verify/`,
+    # a public page on this school's own host that says valid or expired.
+    path("id-cards/", id_cards_page, name="id-cards"),
+    path("verify/<str:token>/", verify_page, name="id-card-verify"),
     # Question banks and tests (`docs/cbt.md`, step 3): teachers write and set, the
     # principal or the vice principal approves; the administrator sees the list with no question in it.
     path("tests/", tests_page, name="tests"),

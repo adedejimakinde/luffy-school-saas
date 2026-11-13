@@ -50,6 +50,10 @@ class Kind(models.TextChoices):
     #: A class's master broadsheet, as a PDF or an Excel file, made by
     #: `results.broadsheet_files` the same way and kept the same day.
     CLASS_BROADSHEET = "class_broadsheet", "Broadsheet for a class"
+    #: A class's student ID cards as one A4 PDF, made by `idcards.printing` the
+    #: same way and kept the same day: private to the person who asked, never
+    #: sent on `/files/`, removed a day after it was made.
+    ID_CARDS = "id_cards", "ID cards for a class"
     #: A picture in a CBT question (`cbt.images`). Private, and never sent on the
     #: generic `/files/` route: `cbt`'s own route asks who may read the bank or the
     #: test that names it.
@@ -203,6 +207,13 @@ PROFILES = {
         Profile(
             Kind.CLASS_BROADSHEET, Family.MADE, "A class's broadsheet", 50 * MB,
             formats=frozenset(), readers=frozenset(), typical_bytes=1 * MB,
+        ),
+        # A class's ID cards (`idcards.printing`). `readers` is empty for the
+        # report cards' reason: only the ID cards route sends it, to the person
+        # who asked, after asking again who they are.
+        Profile(
+            Kind.ID_CARDS, Family.MADE, "A class's ID cards", 100 * MB,
+            formats=frozenset(), readers=frozenset(), typical_bytes=2 * MB,
         ),
         # A question's picture. `readers` is empty for the class print's reason: only
         # `cbt.api`'s image route sends it, after asking whether this login may read

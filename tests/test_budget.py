@@ -84,6 +84,7 @@ SCHOOL_PAGES = (
     "/teaching/",
     "/subject-teachers/",
     "/exam-slips/",
+    "/id-cards/",
     "/tests/",
     "/tests/results/",
     # The exam door and screen (CBT step 4): a frame, opened here by a member of staff.
