@@ -83,3 +83,55 @@ class EveryWorkflowParsesTests(SimpleTestCase):
                 for needed in [needs] if isinstance(needs, str) else needs:
                     with self.subTest(file=path.name, job=job_id, needs=needed):
                         self.assertIn(needed, document["jobs"])
+
+
+class PublishRunsOnMainWhenTheShardsAreSkippedTests(SimpleTestCase):
+    """4a74985 could not be deployed: on a push to `main` the shards and
+    `screens` are skipped by design, and `publish`, whose `if` had only the
+    implicit `success()` (evaluated over every ancestor job), was skipped with
+    them, so the deploy guard never saw it succeed."""
+
+    def setUp(self):
+        self.jobs = load(Path(settings.BASE_DIR) / ".github/workflows/tests.yml")["jobs"]
+
+    def test_publish_needs_pins_the_gate_and_the_image(self):
+        self.assertEqual(set(self.jobs["publish"]["needs"]), {"pins", "test", "image"})
+
+    def test_publish_condition_overrides_the_implicit_success_check(self):
+        condition = str(self.jobs["publish"]["if"])
+        self.assertIn("!cancelled()", condition)
+        for job in ("pins", "test", "image"):
+            self.assertIn(f"needs.{job}.result == 'success'", condition)
+        # Never asks about the shards or screens: they are skipped on main.
+        self.assertNotIn("shard", condition)
+        self.assertNotIn("screens", condition)
+        self.assertIn("refs/heads/main", condition)
+
+    def test_the_shards_stay_off_main(self):
+        self.assertIn("pull_request", self.jobs["shard"]["if"])
+
+    def gate(self, event, **results):
+        import os
+        import subprocess
+
+        step = self.jobs["test"]["steps"][0]
+        env = {
+            "PATH": os.environ["PATH"],
+            "EVENT": event,
+            "CHANGES": "success", "SHARDS": "skipped",
+            "SCREENS": "skipped", "PINS": "success",
+        }
+        env.update({k.upper(): v for k, v in results.items()})
+        return subprocess.run(["bash", "-e", "-c", step["run"]], env=env,
+                              capture_output=True, text=True).returncode
+
+    def test_the_gate_passes_on_main_with_the_shards_and_screens_skipped(self):
+        self.assertEqual(self.gate("push"), 0)
+
+    def test_the_gate_refuses_skipped_shards_on_a_pull_request(self):
+        self.assertEqual(self.gate("pull_request"), 1)
+
+    def test_the_gate_refuses_failed_pins_or_shards_on_main(self):
+        self.assertEqual(self.gate("push", pins="failure"), 1)
+        self.assertEqual(self.gate("push", shards="failure"), 1)
+        self.assertEqual(self.gate("push", pins="skipped"), 1)

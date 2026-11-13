@@ -425,7 +425,11 @@ month. `.github/workflows/tests.yml` spends them like this:
   shards and `screens` are skipped, and the `test` check still reports green
   (a skipped suite counts only on a push; on a pull request it is a failure),
   so the deploy guard, which reads the check names `test`, `image` and
-  `publish`, is unchanged.
+  `publish`, is unchanged. `publish` runs on `main` once `pins`, `image` and
+  `test` have succeeded, whatever was skipped: its `if` uses `!cancelled()`
+  and names those three results, because the implicit `success()` looks at
+  every ancestor job and skipped it with the shards (4a74985 was refused for
+  that, "CI has not passed").
 - **`screens` runs only when a pull request touches** `templates/`, `static/`,
   `web/` (and `website/`, `webroot/`), `tests/ui/`, any `.css`/`.js` file, or
   `run-screens.sh`/`package.json`. A skipped `screens` counts as passed in `test`.
@@ -451,3 +455,17 @@ passes only on the retry, the log and the job's summary say
 `FLAKY: <test name>` and the job passes; a test that fails twice, or a failure
 outside any single test, fails the job. A `FLAKY:` line is a bug to fix, not
 noise to ignore.
+
+### Dry run: the guard's decision
+
+The deploy guard asks for the latest check-run named `test`, `image` and
+`publish` of a `tests.yml` run on the SHA; all three must be `completed` and
+`success`. Anything else, including a skipped `publish`, refuses. Other
+check-runs (`tests 1/4`…, `screens`) are never read. Pinned by
+`TheCiGuardReadsTheRightCheckRunsTests` in `tests/test_deploy_workflow.py`.
+
+| Run on the SHA | `test` | `image` | `publish` | Shards, `screens` | Guard |
+| --- | --- | --- | --- | --- | --- |
+| All green (pull-request style) | success | success | success | success | **allowed** |
+| Push to `main` | success | success | success | skipped by design | **allowed** |
+| `publish` failed | success | success | failure | skipped by design | **refused**: "CI has not passed" |
