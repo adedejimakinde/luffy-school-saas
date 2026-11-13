@@ -2,8 +2,9 @@
 The hero: fees collected this term, full width, above the tiles. Drawn only
 for `fees.authority.READING_ROLES` (`home.dashboard.build()` hands nobody else
 `dash.fees`). The amount in full, its share of what was billed on a green bar,
-this week's takings as a pill, then what is outstanding and what is expected,
-each a link to the fee book. On a desk the term's weeks are a sparkline beside it.
+this week's takings as a pill, then what is outstanding (every term's account of
+the children placed this term, `fees.outstanding`, with this term's part beneath)
+and what is expected, each a link to the fee book. On a desk the term's weeks are a sparkline beside it.
 {% endcomment %}<section class="hero" aria-labelledby="fees-title" data-tile="{{ dash.fees.key }}">
   <div class="hero-main">
     <div class="hero-top">
@@ -27,9 +28,10 @@ each a link to the fee book. On a desk the term's weeks are a sparkline beside i
   {% endif %}
   <div class="hero-subs">
     <a class="hero-sub" href="/fees/" title="{{ dash.fees.outstanding_exact }}">
-      <span class="eyebrow">Outstanding</span>
+      <span class="eyebrow">Outstanding (all terms)</span>
       <span class="hero-sub-value fig">{{ dash.fees.outstanding }}</span>
       <span class="hero-sub-meta">{{ dash.fees.owing_text }}</span>
+      <span class="hero-sub-meta hero-sub-small fig">of which this term: {{ dash.fees.outstanding_this_term }}</span>
     </a>
     <a class="hero-sub" href="/fees/" title="{{ dash.fees.expected }}">
       <span class="eyebrow">Expected this term</span>

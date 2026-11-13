@@ -42,8 +42,39 @@ narrower than `User.save()`'s lets a row through that the save then refuses,
 which arrives as a whole-file refusal with no line number on it.
 
 `reference` is the school's admission number. Optional; unique within the
-school and within the file when present, because two children sharing one is a
-records problem the office wants told about now rather than found in March.
+school and within the file when present, compared **without case** as the
+doors compare it (G-14, `accounts.admission_numbers`), because two children
+sharing one is a records problem the office wants told about now rather than
+found in March.
+
+## Sending a file twice admits nobody twice (G-15)
+
+Every row is first matched against the children already on the roll, by the
+first thing it carries that names a child (`_match()` has the rules in full):
+
+1. its **admission number**, held by a child here;
+2. else its **username**, the login of a child here;
+3. else, or when the number and handle are nobody's yet, its **name**: one
+   enrolled child of that name, in the row's class this term or in none, who
+   does not carry a different admission number.
+
+A matched row is that child. **The import adds; it never changes or removes
+what the roll already says**: it fills only what the roll has nothing for (a
+number, a class this term, a learner's ID, sex, date of birth, a guardian not
+yet linked) and the row is `UPDATED`; with nothing to fill it is `SKIPPED`.
+What the row says differently is left as the roll has it and listed in the
+row's notes. An unmatched row is `NEW`. A row that could be two children (the
+same name in another class, a name two children share, a number that is a
+different child's) is refused with a sentence saying what to add, so a file is
+never guessed at.
+
+So the same file sent twice, with admission numbers or without, admits the
+second time nobody: every row is `SKIPPED`. A double press or a retry is the
+same file twice at once, and `admit()` holds one import per school at a time
+(`_lock_the_roll()`) and checks the file inside that hold, so the second is
+checked against what the first wrote. The preview (`/roll/import/check/`)
+shows each row's outcome before anything is written. `docs/roll-import.md`
+says the same for an office.
 
 ## Siblings share a guardian
 
@@ -98,9 +129,9 @@ from django.db import transaction
 from academics import details
 from academics import services as academics
 from academics.models import ClassGroup
-from accounts import guardian_contacts
+from accounts import admission_numbers, guardian_contacts
 from accounts.identifiers import canonical_username
-from accounts.models import ContactChannel, GuardianAccount, Membership, Role, User
+from accounts.models import ContactChannel, GuardianAccount, Guardianship, Membership, Role, User
 from accounts.services import admit_student_as
 
 #: The header a file must carry. Two are required of every row; the rest may be
@@ -172,6 +203,21 @@ class PlannedChild:
     learner_id: str = ""
     sex: str = ""
     date_of_birth: object = None
+    #: `NEW`, `UPDATED` or `SKIPPED`: what the import does with this row (G-15).
+    outcome: str = "new"
+    #: The child already on the roll this row is, for `UPDATED` and `SKIPPED`.
+    existing: object = None
+    #: How the row was matched to `existing`: "admission number", "username" or "name".
+    matched_by: str = ""
+    #: What an `UPDATED` row fills in, in words, in the order it is written.
+    fills: list = field(default_factory=list)
+    #: What the file says that the roll says otherwise, and is left as the roll has it.
+    notes: list = field(default_factory=list)
+    #: For an `UPDATED` row, which of the fills to write.
+    set_reference: bool = False
+    place: bool = False
+    link_guardian: bool = False
+    details_to_fill: dict = field(default_factory=dict)
 
     @property
     def has_details(self) -> bool:
@@ -234,6 +280,9 @@ class Report:
     @property
     def ok(self) -> bool:
         return not self.problems
+
+    def count(self, outcome) -> int:
+        return sum(1 for p in self.planned if p.outcome == outcome)
 
 
 class BulkError(Exception):
@@ -554,22 +603,83 @@ def _generated_username(school, reference, taken):
         n += 1
 
 
-def check(school, source) -> Report:
-    """Read a file and say what is wrong with it. **Writes nothing.**
+NEW = "new"
+UPDATED = "updated"
+SKIPPED = "skipped"
+
+
+def _name_key(name):
+    """A name as the import compares it: no case, one space between words."""
+    return " ".join(str(name or "").split()).casefold()
+
+
+def _name_of(membership):
+    return membership.display_name or membership.user.full_name or membership.user.username
+
+
+class _Roll:
+    """Who is on this school's roll, read once per check: the matching rules' input.
+
+    Every STUDENT membership at the school, ended ones included, because an
+    admission number or a handle held by a child who has left still names that
+    child. A name only ever matches a child still enrolled.
+    """
+
+    def __init__(self, school, term):
+        from academics.models import ClassPlacement
+        from accounts.models import LIVE_STATUSES
+
+        students = list(
+            Membership.objects.filter(school=school, role=Role.STUDENT)
+            .select_related("user")
+            .order_by("pk")
+        )
+        self.by_number = {}
+        self.by_user = {}
+        self.by_name = {}
+        for m in students:
+            self.by_user[m.user_id] = m
+            number = admission_numbers.clean(m.reference).lower()
+            if number:
+                self.by_number.setdefault(number, m)
+            if m.status in LIVE_STATUSES:
+                self.by_name.setdefault(_name_key(_name_of(m)), []).append(m)
+        self.placed = {}
+        if term is not None:
+            self.placed = dict(
+                ClassPlacement.objects.filter(term=term).values_list(
+                    "student_membership_id", "class_group_id"
+                )
+            )
+
+
+def check(school, source, term=None) -> Report:
+    """Read a file and say what it would do, row by row. **Writes nothing.**
 
     Every row is checked and every problem reported. Checks run in a fixed
-    order per row — required fields, then the handle, then the reference, then
-    the class, then the guardian pair — so a row with two faults reports the
-    one the office fixes first.
+    order per row — required fields, then who the row is (`_match()`), then the
+    handle and the admission number of a new child, then the class, then the
+    guardian pair, then the details — so a row with two faults reports the one
+    the office fixes first.
+
+    `term` is the term children are placed in; with it, a row matched to a child
+    already on the roll is compared with their class this term. Every row that
+    passes is in `planned`, with its `outcome`: `NEW`, `UPDATED` or `SKIPPED`
+    (G-15, and `docs/roll-import.md` for the rules).
     """
     report = Report()
     groups = {
         g.name.strip().lower(): g
         for g in ClassGroup.objects.filter(is_active=True)
     }
+    roll = _Roll(school, term)
     taken_usernames = set()
     taken_references = set()
     taken_learner_ids = set()
+    #: Children already claimed by a row of this file, so two rows are never one child.
+    claimed = {}
+    #: New children named with neither a number nor a handle, by (name, class).
+    unnamed_new = {}
 
     for line, row in _read(source):
         problems_before = len(report.problems)
@@ -581,8 +691,34 @@ def check(school, source) -> Report:
         if not full_name:
             report.problems.append(RowProblem(line, "full_name", "A name is required."))
 
+        class_name = row.get("class_group", "")
+        group = groups.get(class_name.lower()) if class_name else None
         username = row.get("username", "")
-        if username:
+        reference = admission_numbers.clean(row.get("reference", ""))
+
+        existing, matched_by = (None, "")
+        before_match = len(report.problems)
+        if full_name:
+            existing, matched_by = _match(
+                report, line, roll, full_name, username, reference, group
+            )
+        # Refused as somebody else's: the handle and number are not asked again.
+        identity_refused = len(report.problems) > before_match
+        if existing is not None:
+            earlier = claimed.get(existing.pk)
+            if earlier is not None:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "full_name",
+                        f"Line {earlier} is already {_name_of(existing)}, who is on the roll. "
+                        "One child, one row.",
+                    )
+                )
+            else:
+                claimed[existing.pk] = line
+
+        if username and existing is None and not identity_refused:
             if _handle_key(username) in taken_usernames:
                 report.problems.append(
                     RowProblem(line, "username", f"{username!r} appears twice in this file.")
@@ -597,27 +733,19 @@ def check(school, source) -> Report:
             else:
                 taken_usernames.add(_handle_key(username))
 
-        reference = row.get("reference", "")
-        if reference:
-            if reference in taken_references:
+        # Compared as the doors and the index compare it: without case (G-14).
+        if reference and not identity_refused and (existing is None or not existing.reference):
+            if reference.lower() in taken_references:
                 report.problems.append(
                     RowProblem(line, "reference", f"{reference!r} appears twice in this file.")
                 )
-            elif Membership.objects.filter(
-                school=school, role=Role.STUDENT, reference=reference
-            ).exists():
+            elif (held := roll.by_number.get(reference.lower())) is not None and held is not existing:
                 report.problems.append(
-                    RowProblem(
-                        line,
-                        "reference",
-                        f"{reference!r} is already an admission number at this school.",
-                    )
+                    RowProblem(line, "reference", admission_numbers.refusal(reference, held))
                 )
             else:
-                taken_references.add(reference)
+                taken_references.add(reference.lower())
 
-        class_name = row.get("class_group", "")
-        group = groups.get(class_name.lower()) if class_name else None
         if not class_name:
             report.problems.append(RowProblem(line, "class_group", "A class is required."))
         elif group is None:
@@ -630,6 +758,21 @@ def check(school, source) -> Report:
                     f"{class_name!r} is not a class this school teaches.",
                 )
             )
+
+        if existing is None and full_name and group is not None and not username and not reference:
+            key = (_name_key(full_name), group.pk)
+            if key in unnamed_new:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "full_name",
+                        f"{full_name} in {group.name} appears twice in this file (line "
+                        f"{unnamed_new[key]}). Give each child an admission number if these "
+                        "are two children.",
+                    )
+                )
+            else:
+                unnamed_new[key] = line
 
         guardian_name = row.get("guardian_name", "")
         guardian_raw = row.get("guardian_contact", "")
@@ -661,11 +804,12 @@ def check(school, source) -> Report:
         except details.DetailsRefused as exc:
             report.problems.append(RowProblem(line, "learner_id", str(exc)))
         if learner_id:
+            holder_id = details.learner_id_holder(learner_id)
             if learner_id.lower() in taken_learner_ids:
                 report.problems.append(
                     RowProblem(line, "learner_id", f"{learner_id!r} appears twice in this file.")
                 )
-            elif details.learner_id_holder(learner_id) is not None:
+            elif holder_id is not None and (existing is None or holder_id != existing.pk):
                 report.problems.append(
                     RowProblem(
                         line,
@@ -689,8 +833,8 @@ def check(school, source) -> Report:
                 PlannedChild(
                     line=line,
                     full_name=full_name,
-                    username=username,
-                    username_was_generated=not username,
+                    username=username if existing is None else existing.user.username,
+                    username_was_generated=existing is None and not username,
                     reference=reference,
                     class_group=group,
                     guardian_name=guardian_name,
@@ -699,23 +843,230 @@ def check(school, source) -> Report:
                     learner_id=learner_id,
                     sex=sex,
                     date_of_birth=date_of_birth,
+                    existing=existing,
+                    matched_by=matched_by,
                 )
             )
 
+    _decide_what_matched_rows_do(report, roll, school, username_by_line={
+        r.line: r.values.get("username", "") for r in report.rows
+    })
     return report
 
 
+def _match(report, line, roll, full_name, username, reference, group):
+    """Which child already on the roll this row is, if any: `(membership, how)`.
+
+    **The matching rules** (G-15), first key the row carries wins:
+
+    1. **An admission number** names the child at this school holding it, without
+       case. Held by a child who has left, or by a child of another name, the row
+       is refused: the number is theirs.
+    2. **A username** (no number) names the child here whose login it is. Held by a
+       child of another name, or who has left, the row is refused. A handle
+       somebody else on the platform holds is refused by the caller, as before.
+    3. **The name**, for a row whose number and handle nobody holds (or that has
+       neither): an enrolled child here of the same name, compared without case or
+       extra spaces, who is in the row's class this term or in no class, and does
+       not carry a different admission number from the row's. In another class it
+       is refused ("give an admission number if this is a different child"), and
+       so is a name two enrolled children share.
+
+    Refusals are added to `report.problems`; the answer is then `(None, "")`.
+    """
+    from accounts.models import LIVE_STATUSES
+
+    wanted = _name_key(full_name)
+
+    if reference:
+        held = roll.by_number.get(reference.lower())
+        if held is not None:
+            if held.status not in LIVE_STATUSES:
+                report.problems.append(
+                    RowProblem(line, "reference", admission_numbers.refusal(reference, held))
+                )
+                return None, ""
+            if _name_key(_name_of(held)) != wanted:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "reference",
+                        f"{reference!r} is already an admission number at this school, "
+                        f"{_name_of(held)}'s, and this row names {full_name}.",
+                    )
+                )
+                return None, ""
+            if username:
+                handles = list(User.objects.matching_identifier(username)[:2])
+                if handles and all(u.pk != held.user_id for u in handles):
+                    report.problems.append(
+                        RowProblem(line, "username", f"{username!r} is already in use.")
+                    )
+                    return None, ""
+            return held, "admission number"
+
+    if username:
+        handles = list(User.objects.matching_identifier(username)[:2])
+        mine = [roll.by_user[u.pk] for u in handles if u.pk in roll.by_user]
+        if len(handles) == 1 and mine:
+            held = mine[0]
+            if held.status not in LIVE_STATUSES:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "username",
+                        f"{username!r} is the username of {_name_of(held)}, who has left "
+                        "this school.",
+                    )
+                )
+                return None, ""
+            if _name_key(_name_of(held)) != wanted:
+                report.problems.append(
+                    RowProblem(
+                        line,
+                        "username",
+                        f"{username!r} is the username of {_name_of(held)}, and this row "
+                        f"names {full_name}.",
+                    )
+                )
+                return None, ""
+            return held, "username"
+        if handles:
+            # Somebody else's handle: refused by the caller, without naming them.
+            return None, ""
+
+    same_name = [
+        m
+        for m in roll.by_name.get(wanted, [])
+        if not (reference and m.reference and admission_numbers.clean(m.reference).lower() != reference.lower())
+    ]
+    if not same_name:
+        return None, ""
+    if len(same_name) > 1:
+        report.problems.append(
+            RowProblem(
+                line,
+                "full_name",
+                f"{len(same_name)} children called {full_name} are on the roll. Give this "
+                "row the admission number of the one it is, or a new one if it is a "
+                "different child.",
+            )
+        )
+        return None, ""
+    held = same_name[0]
+    placed_in = roll.placed.get(held.pk)
+    if placed_in is not None and group is not None and placed_in != group.pk:
+        from academics.models import ClassGroup as Group
+
+        where = Group.objects.filter(pk=placed_in).values_list("name", flat=True).first()
+        report.problems.append(
+            RowProblem(
+                line,
+                "full_name",
+                f"A child called {full_name} is already on the roll, in {where}. Give this "
+                "row an admission number if it is a different child; to move them, use "
+                "the roll.",
+            )
+        )
+        return None, ""
+    return held, "name"
+
+
+def _decide_what_matched_rows_do(report, roll, school, *, username_by_line):
+    """Mark each matched row `UPDATED` or `SKIPPED`, and say what and why.
+
+    **The import adds; it never changes or removes what the roll already says.**
+    A matched row fills only what the roll has nothing for: an admission number,
+    a class this term, a learner's ID, sex or date of birth, a guardian not yet
+    linked. Anything the row says differently from the roll is left as the roll
+    has it and listed in `notes`, so the preview shows it. A row with nothing to
+    fill is `SKIPPED`: sending the same file twice changes nothing.
+    """
+    matched = [p for p in report.planned if p.existing is not None]
+    if not matched:
+        return
+    recorded = details.details_for(p.existing.pk for p in matched)
+    from academics.models import ClassGroup as Group
+
+    names = dict(Group.objects.values_list("pk", "name"))
+    for planned in matched:
+        child = planned.existing
+        planned.notes.append(f"Already on the roll as {_name_of(child)} (matched by {planned.matched_by}).")
+        if planned.reference and not child.reference:
+            planned.set_reference = True
+            planned.fills.append(f"admission number {planned.reference}")
+        elif planned.reference and admission_numbers.clean(child.reference).lower() != planned.reference.lower():
+            planned.notes.append(f"Admission number kept as {child.reference}.")
+        given = username_by_line.get(planned.line, "")
+        if given and _handle_key(given) != _handle_key(child.user.username):
+            planned.notes.append(f"Username kept as {child.user.username}.")
+
+        placed_in = roll.placed.get(child.pk)
+        if placed_in is None:
+            planned.place = True
+            planned.fills.append(f"class {planned.class_group.name} this term")
+        elif placed_in != planned.class_group.pk:
+            planned.notes.append(f"Kept in {names.get(placed_in, 'their class')}; move them on the roll.")
+
+        row = recorded.get(child.pk)
+        for field_name, label, value in (
+            ("learner_id", "learner's ID", planned.learner_id),
+            ("sex", "sex", planned.sex),
+            ("date_of_birth", "date of birth", planned.date_of_birth),
+        ):
+            if not value:
+                continue
+            have = getattr(row, field_name, None) if row else None
+            if not have:
+                planned.details_to_fill[field_name] = value
+                planned.fills.append(label)
+            elif str(have).lower() != str(value).lower():
+                planned.notes.append(f"{label.capitalize()} kept as recorded.")
+
+        if planned.guardian_contact:
+            linked = Guardianship.objects.filter(
+                student=child,
+                guardian__in=User.objects.matching_identifier(planned.guardian_contact),
+            ).exists()
+            if not linked:
+                planned.link_guardian = True
+                planned.fills.append(f"guardian {planned.guardian_name}")
+
+        planned.outcome = UPDATED if planned.fills else SKIPPED
+
+
+def _lock_the_roll(school):
+    """One import at a time per school, until the transaction ends.
+
+    The second press of a double press, or a retry after a slow answer, waits
+    here and then checks the file against the roll the first one wrote, so every
+    row comes back `SKIPPED` rather than admitted twice. Keyed on the school, so
+    two schools never wait on each other.
+    """
+    from django.db import connection
+
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT pg_advisory_xact_lock(hashtext(%s))", [f"roll-import:{school.pk}"])
+
+
 def admit(actor, school, term, source) -> Report:
-    """Admit a whole file, or none of it.
+    """Admit a whole file, or none of it; and never the same child twice (G-15).
 
     `check()` runs first and the write only starts if it found nothing. That
     ordering *is* the all-or-nothing rule — interleaving the two, writing each
     row as it passes, is exactly the half-applied file this module exists to
     prevent, and it would pass every test that only counts errors.
 
-    One transaction over all of it, so a refusal the check could not foresee —
-    a handle claimed by another school between the two passes — takes the whole
-    file back out rather than leaving a prefix of it behind.
+    **The check runs inside the transaction, after `_lock_the_roll()`**, so two
+    imports of one file at one school are one after the other, and the second
+    is checked against what the first wrote. One transaction over all of it, so
+    a refusal the check could not foresee — a handle claimed by another school
+    between the two passes — takes the whole file back out rather than leaving a
+    prefix of it behind.
+
+    Each row does what `check()` said: a `NEW` row admits, places and links; an
+    `UPDATED` row fills what the roll had nothing for; a `SKIPPED` row writes
+    nothing.
 
     **Siblings share a guardian.** Each row goes through
     `link_by_contact_as()`, which finds the `User` the first sibling's row made
@@ -728,13 +1079,20 @@ def admit(actor, school, term, source) -> Report:
             "current term before importing a roll."
         )
 
-    report = check(school, source)
-    if not report.ok:
-        return report
-
     with transaction.atomic():
-        taken = _handles_in_use(school, report.planned)
+        _lock_the_roll(school)
+        report = check(school, source, term)
+        if not report.ok:
+            return report
+
+        taken = _handles_in_use(school, [p for p in report.planned if p.outcome == NEW])
         for planned in report.planned:
+            if planned.outcome == SKIPPED:
+                continue
+            if planned.outcome == UPDATED:
+                _fill(actor, school, term, planned, report)
+                continue
+
             username = planned.username or _generated_username(
                 school, planned.reference, taken
             )
@@ -764,40 +1122,70 @@ def admit(actor, school, term, source) -> Report:
                     date_of_birth=planned.date_of_birth,
                     by=actor,
                 )
-
-            link = None
-            if planned.guardian_contact:
-                link = guardian_contacts.link_by_contact_as(
-                    actor,
-                    membership,
-                    planned.guardian_name,
-                    planned.guardian_contact,
-                )
-                # Read back rather than assumed. New links are INVITED; one to
-                # a guardian this school has already confirmed is live, because
-                # `grant_membership()` never downgrades a live membership.
-                report.guardian_links.append(
-                    GuardianLink(
-                        line=planned.line,
-                        guardian_contact=planned.guardian_contact,
-                        status=guardian_contacts.link_status_at(link.guardian, school),
-                    )
-                )
-            why = _why_no_email(planned, link, school)
-            if why:
-                report.no_email.append(
-                    NoEmail(
-                        line=planned.line,
-                        full_name=planned.full_name,
-                        class_group=planned.class_group.name,
-                        reference=planned.reference,
-                        guardian_name=planned.guardian_name,
-                        guardian_contact=planned.guardian_contact,
-                        why=why,
-                    )
-                )
+            _link_and_report(actor, school, membership, planned, report)
 
     return report
+
+
+def _fill(actor, school, term, planned, report):
+    """Write what an `UPDATED` row fills in, and nothing else."""
+    from accounts.services import set_admission_number_as
+
+    child = planned.existing
+    if planned.set_reference:
+        set_admission_number_as(actor, child, planned.reference)
+    if planned.place:
+        academics.place_student_as(actor, planned.class_group, term, child, by=actor)
+    if planned.details_to_fill:
+        row = details.details_for([child.pk]).get(child.pk)
+        details.record(
+            child.pk,
+            learner_id=planned.details_to_fill.get("learner_id", getattr(row, "learner_id", "") or ""),
+            sex=planned.details_to_fill.get("sex", getattr(row, "sex", "") or ""),
+            date_of_birth=planned.details_to_fill.get(
+                "date_of_birth", getattr(row, "date_of_birth", None) if row else None
+            ),
+            by=actor,
+        )
+    if planned.link_guardian:
+        _link_and_report(actor, school, child, planned, report)
+
+
+def _link_and_report(actor, school, membership, planned, report):
+    link = None
+    if planned.guardian_contact:
+        link = guardian_contacts.link_by_contact_as(
+            actor,
+            membership,
+            planned.guardian_name,
+            planned.guardian_contact,
+        )
+        # Read back rather than assumed. New links are INVITED; one to
+        # a guardian this school has already confirmed is live, because
+        # `grant_membership()` never downgrades a live membership.
+        report.guardian_links.append(
+            GuardianLink(
+                line=planned.line,
+                guardian_contact=planned.guardian_contact,
+                status=guardian_contacts.link_status_at(link.guardian, school),
+            )
+        )
+    if planned.outcome != NEW:
+        return
+    why = _why_no_email(planned, link, school)
+    if why:
+        report.no_email.append(
+            NoEmail(
+                line=planned.line,
+                full_name=planned.full_name,
+                class_group=planned.class_group.name,
+                reference=planned.reference,
+                guardian_name=planned.guardian_name,
+                guardian_contact=planned.guardian_contact,
+                why=why,
+            )
+        )
+
 
 
 def _why_no_email(planned, link, school):
@@ -821,6 +1209,9 @@ def _why_no_email(planned, link, school):
 
 
 __all__ = [
+    "NEW",
+    "SKIPPED",
+    "UPDATED",
     "BulkError",
     "MAX_FILE_BYTES",
     "MAX_ROWS",

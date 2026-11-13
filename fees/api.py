@@ -38,7 +38,7 @@ from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role, User
 from accounts.session import session_auth
 
-from . import billing, schedules, services
+from . import billing, outstanding, schedules, services
 from .authority import may_read, may_write, receipt_number
 from .models import (
     FeeConcession,
@@ -75,6 +75,11 @@ class ClassSummaryOut(Schema):
     #: reckons the whole school's. The list draws "% collected" from the two.
     collected_kobo: int = 0
     billed_kobo: int = 0
+    #: `fees.outstanding` for the class (G-12): the whole account of each child
+    #: in it this term who owes, the number of them, and of which this term.
+    outstanding_kobo: int = 0
+    outstanding_this_term_kobo: int = 0
+    owing: int = 0
 
 
 class BooksOut(Schema):
@@ -88,6 +93,12 @@ class BooksOut(Schema):
     #: The bursar or an administrator, at a school that sends fee reminders
     #: (docs/messaging.md D10). The page offers "Remind families" only then.
     may_remind: bool = False
+    #: The whole school's "Outstanding (all terms)", "of which this term" and
+    #: how many owe: `fees.outstanding`, the dashboard's figure (G-12). The sum
+    #: of the classes' figures, since every child counted is in a class.
+    outstanding_kobo: int = 0
+    outstanding_this_term_kobo: int = 0
+    owing: int = 0
     #: Has any class a bill with a line on it for this term? Without one the
     #: page shows its empty state, "No fees yet".
     has_fee_items: bool = False
@@ -101,6 +112,9 @@ class ChildBalanceOut(Schema):
     #: today, which is the number withholding reads too. Positive is owed;
     #: negative is in credit; the page says which in words.
     balance_kobo: int
+    #: Of an owing balance, the part this term's entries make (`fees.outstanding`);
+    #: nought for an account that is not owing.
+    this_term_kobo: int = 0
 
 
 class ClassBalancesOut(Schema):
@@ -115,6 +129,11 @@ class ClassBalancesOut(Schema):
     may_make_accounts: bool = False
     #: Children in this class this term with no virtual account yet.
     accounts_missing: int = 0
+    #: `fees.outstanding` for the class (G-12): the figures the fees list and the
+    #: dashboard show, from the same rows as `children`.
+    outstanding_kobo: int = 0
+    outstanding_this_term_kobo: int = 0
+    owing: int = 0
 
 
 class EntryOut(Schema):
@@ -362,6 +381,7 @@ def books(request, term_id: Optional[int] = None):
         term = next((t for t in terms if t.is_current), terms[0] if terms else None)
 
     classes = []
+    school_owes = outstanding.total([])
     if term is not None:
         groups = list(
             ClassGroup.objects.annotate(children=Count("placements", filter=Q(placements__term=term)))
@@ -369,6 +389,10 @@ def books(request, term_id: Optional[int] = None):
             .order_by("level", "name")
         )
         money = _class_money(term)
+        owing_rows = outstanding.owing(term)
+        school_owes = outstanding.total(owing_rows)
+        owes = outstanding.by_class(owing_rows)
+        nothing = outstanding.total([])
         classes = [
             ClassSummaryOut(
                 class_group_id=g.pk,
@@ -376,10 +400,16 @@ def books(request, term_id: Optional[int] = None):
                 children=g.children,
                 collected_kobo=money.get(g.pk, (0, 0))[0],
                 billed_kobo=money.get(g.pk, (0, 0))[1],
+                outstanding_kobo=owes.get(g.pk, nothing).kobo,
+                outstanding_this_term_kobo=owes.get(g.pk, nothing).this_term_kobo,
+                owing=owes.get(g.pk, nothing).children,
             )
             for g in groups
         ]
     return BooksOut(
+        outstanding_kobo=school_owes.kobo,
+        outstanding_this_term_kobo=school_owes.this_term_kobo,
+        owing=school_owes.children,
         terms=_term_choices(terms),
         term_id=term.pk if term else None,
         term=str(term) if term else None,
@@ -413,12 +443,15 @@ def class_balances(request, class_group_id: int, term_id: int):
         .annotate(total=Sum("amount_kobo"))
         .values_list("student_membership_id", "total")
     )
+    owes = outstanding.owing(term, group)
+    class_owes = outstanding.total(owes)
     children = [
         ChildBalanceOut(
             student_membership_id=row["pk"],
             student=row["display_name"] or row["user__full_name"] or "",
             reference=row["reference"],
             balance_kobo=balances.get(row["pk"], 0),
+            this_term_kobo=owes[row["pk"]].this_term_kobo if row["pk"] in owes else 0,
         )
         for row in Membership.objects.filter(
             pk__in=ids, school=school, role=Role.STUDENT.value
@@ -437,6 +470,9 @@ def class_balances(request, class_group_id: int, term_id: int):
         may_remind=_may_remind(request.user, school),
         may_make_accounts=bool(writer and bank.current() is not None),
         accounts_missing=virtual.missing_in_class(school, group, term) if writer else 0,
+        outstanding_kobo=class_owes.kobo,
+        outstanding_this_term_kobo=class_owes.this_term_kobo,
+        owing=class_owes.children,
     )
 
 

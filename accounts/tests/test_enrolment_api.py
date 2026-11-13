@@ -108,7 +108,8 @@ class TheRollTests(EnrolmentSetUp):
             self.client.get(ROLL, HTTP_HOST=HOST)
 
         for n in range(5):
-            self.admit(self.admin, username=f"STM/2026/10{n}", full_name=f"Extra {n}")
+            # Each its own admission number: one number is one child (G-14).
+            self.admit(self.admin, username=f"STM/2026/10{n}", full_name=f"Extra {n}", reference=f"10{n}")
 
         self.as_user(self.admin)
         with CaptureQueriesContext(connection) as larger:
