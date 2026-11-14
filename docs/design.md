@@ -149,7 +149,7 @@ Mobile first, checked at 360, 768 and 1280.
   are the point: the broadsheet, the timetable and the marking sheet. They sit
   in a `.wide` scroller with the first column fixed (the broadsheet fixes the
   name too) and a "Swipe for more" cue above. `tests/ui/screens.test.js`
-  fails any other table wider than a 360px screen. The page itself never
+  fails any other table wider than a 360px screen. The broadsheet pins Pos. (40px) and Name (124px) and its subjects are 76px, so two show at 390px (`tests/ui/broadsheet.test.js`). The page itself never
   scrolls sideways, and no scroller has a minimum height.
 - Forms and side panels (`.split`) stack into one column on a phone.
 - Touch targets are at least 44px. Body text on a phone is never under 15px.

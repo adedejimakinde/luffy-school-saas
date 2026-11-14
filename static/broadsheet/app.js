@@ -81,6 +81,18 @@ export async function mount(root, { fetchImpl = fetch, search = "" } = {}) {
   if (params.get("class")) await showSheet(Number(params.get("class")), termId);
   else await showOverview(termId);
 
+  // A soft edge on the pinned columns once the subjects have moved under them.
+  root.addEventListener(
+    "scroll",
+    (event) => {
+      const box = event.target;
+      if (box && box.classList && box.classList.contains("scroll")) {
+        box.toggleAttribute("data-scrolled", box.scrollLeft > 0);
+      }
+    },
+    true,
+  );
+
   root.addEventListener("change", async (event) => {
     const field = event.target;
     if (!field || !field.dataset || field.dataset.term === undefined) return;

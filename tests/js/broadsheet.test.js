@@ -71,37 +71,37 @@ function serve(routes) {
 test("no marks is a dash, never a zero", () => {
   // CONTROL 3: printing a null average as 0 makes this red.
   const html = states.sheet({ broadsheet: SHEET });
-  const dayo = html.slice(html.indexOf("Dayo D"));
+  const dayo = html.slice(html.indexOf("Dayo<br>D"));
   const row = dayo.slice(0, dayo.indexOf("</tr>"));
 
-  assert.match(row, /<td class="num">-<\/td>$/, "the average cell is not a dash");
-  assert.doesNotMatch(html, /<td class="num">0<\/td>/);
-  assert.doesNotMatch(html, /<td class="num">0\.00/);
+  assert.match(row, /<span class="sc">-<\/span><\/td>$/, "the average cell is not a dash");
+  assert.doesNotMatch(html, /<span class="sc">0(\.00)?<\/span>/);
 });
 
 test("rows follow the server's rank and a shared rank is marked, not split", () => {
   // CONTROL 4: numbering rows by their place on the page makes this red —
   // two children on 88.00 would print as 1st and 2nd.
   const html = states.sheet({ broadsheet: SHEET });
-  const order = ["Ada A", "Bisi B", "Chike C", "Dayo D"].map((n) => html.indexOf(n));
+  const order = ["Ada<br>A", "Bisi<br>B", "Chike<br>C", "Dayo<br>D"].map((n) => html.indexOf(n));
 
   assert.deepEqual([...order].sort((a, b) => a - b), order, "rows are not in rank order");
-  const ranks = [...html.matchAll(/<td class="num rank">([^<]*)<\/td>/g)].map((m) => m[1]);
+  const ranks = [...html.matchAll(/<td class="rank pos">(?:<span[^>]*>)?([^<]*)(?:<\/span>)?<\/td>/g)].map((m) => m[1]);
   assert.deepEqual(ranks, ["1=", "1=", "2", "-"]);
 });
 
 test("a subject rank is the server's too, with its tie marked", () => {
   const html = states.sheet({ broadsheet: SHEET });
 
-  assert.match(html, /88\.00 <small>\(1=\)<\/small>/);
-  assert.match(html, /61\.00 <small>\(2\)<\/small>/);
+  assert.match(html, /<span class="sc">88<\/span><small>1=<\/small>/);
+  assert.match(html, /<span class="sc">88<\/span><small>1st<\/small>/);
+  assert.match(html, /<span class="sc">61<\/span><small>2nd<\/small>/);
 });
 
 test("the class average is at the foot, and a dash when nobody has one", () => {
-  assert.match(states.sheet({ broadsheet: SHEET }), /Class average \(ranked students\)<\/th><td class="num">74\.50<\/td>/);
+  assert.match(states.sheet({ broadsheet: SHEET }), /Class average \(ranked students\)<\/th><td colspan="2"><\/td><td class="num subj"><span class="sc">74\.5<\/span><\/td>/);
   assert.match(
     states.sheet({ broadsheet: { ...SHEET, class_average: null } }),
-    /Class average \(ranked students\)<\/th><td class="num">-<\/td>/,
+    /Class average \(ranked students\)<\/th><td colspan="2"><\/td><td class="num subj"><span class="sc">-<\/span><\/td>/,
   );
 });
 
@@ -246,23 +246,23 @@ const PARTIAL_SHEET = {
 
 test("a child with a paper unmarked has no position, only 'not ranked', and is not last of the ranked", () => {
   const html = states.sheet({ broadsheet: PARTIAL_SHEET });
-  const names = [...html.matchAll(/<td>([A-Z][a-z]+ [A-Z])<\/td>/g)].map((m) => m[1]);
-  const chike = html.slice(html.indexOf("Chike C") - 80);
+  const names = [...html.matchAll(/<td class="name">([A-Z][a-z]+)<br>([A-Z])<\/td>/g)].map((m) => `${m[1]} ${m[2]}`);
+  const chike = html.slice(html.indexOf("Chike<br>C") - 160);
 
   assert.deepEqual(names, ["Ada A", "Bisi B", "Chike C"], "the unranked after the ranked");
-  assert.match(chike, /<td class="num rank"><span class="not-ranked">not ranked<\/span><\/td>/);
-  assert.match(html, /<td class="num rank">1<\/td>/);
-  assert.match(html, /<td class="num rank">2<\/td>/);
+  assert.match(chike, /<td class="rank pos"><span class="not-ranked" title="Not ranked" aria-label="Not ranked">-<\/span><\/td>/);
+  assert.match(html, /<td class="rank pos">1<\/td>/);
+  assert.match(html, /<td class="rank pos">2<\/td>/);
 });
 
 test("the partial figures print beside 'incomplete', and a whole figure does not", () => {
   const html = states.sheet({ broadsheet: PARTIAL_SHEET });
-  const chike = html.slice(html.indexOf("Chike C"), html.indexOf("</tr>", html.indexOf("Chike C")));
-  const ada = html.slice(html.indexOf("Ada A"), html.indexOf("</tr>", html.indexOf("Ada A")));
+  const chike = html.slice(html.indexOf("Chike<br>C"), html.indexOf("</tr>", html.indexOf("Chike<br>C")));
+  const ada = html.slice(html.indexOf("Ada<br>A"), html.indexOf("</tr>", html.indexOf("Ada<br>A")));
 
-  assert.match(chike, /94\.55 <small>incomplete<\/small>/, "the unfinished subject");
-  assert.match(chike, /92\.28 <small>incomplete<\/small>/, "and the average built on it");
-  assert.doesNotMatch(chike.replace(/90\.00 <small>\(1\)<\/small>/, ""), /90\.00 <small>incomplete/, "a whole subject is not marked");
+  assert.match(chike, /<span class="sc">94\.55<\/span><small>incomplete<\/small>/, "the unfinished subject");
+  assert.match(chike, /<span class="sc">92\.28<\/span><small>incomplete<\/small>/, "and the average built on it");
+  assert.doesNotMatch(chike.replace(/<span class="sc">90<\/span><small>1st<\/small>/, ""), /<span class="sc">90<\/span><small>incomplete/, "a whole subject is not marked");
   assert.doesNotMatch(ada, /incomplete/);
 });
 
@@ -271,10 +271,10 @@ test("a child with no marks at all is a dash, not 'incomplete' with nothing to s
     ...PARTIAL_SHEET,
     rows: [{ student_membership_id: 4, student: "Dayo D", average: null, current_rank: null, is_complete: false, subjects: subjects(null, null, null, null).map((s) => ({ ...s, is_complete: false })) }],
   };
-  const row = states.sheet({ broadsheet: sheet }).match(/Dayo D.*?<\/tr>/)[0];
+  const row = states.sheet({ broadsheet: sheet }).match(/Dayo<br>D.*?<\/tr>/)[0];
 
   assert.doesNotMatch(row, /incomplete/);
-  assert.match(row, /<td class="num">-<\/td><\/tr>$/);
+  assert.match(row, /<span class="sc">-<\/span><\/td><\/tr>$/);
 });
 
 test("the page says how many are ranked, and why the others are not", () => {
@@ -288,4 +288,18 @@ test("a sheet from before the rule says nothing of incomplete, and keeps every r
 
   assert.doesNotMatch(html, /incomplete|not ranked<|A child with a paper/);
   assert.match(html, /3 of 4 ranked\.<\/p>/);
+});
+
+test("scores drop a trailing .00, subject places are ordinals, headers are short", () => {
+  assert.equal(states.score("70.00"), "70");
+  assert.equal(states.score("72.50"), "72.5");
+  assert.equal(states.score("94.55"), "94.55");
+  assert.equal(states.score(null), "-");
+  const none = new Map();
+  assert.deepEqual([1, 2, 3, 5, 11, 12, 13, 21, 22].map((n) => states.subjectPlace(n, none)), ["1st", "2nd", "3rd", "5th", "11th", "12th", "13th", "21st", "22nd"]);
+  assert.equal(states.subjectPlace(3, new Map([[3, 2]])), "3=");
+  assert.equal(states.shortSubject("Mathematics"), "Maths");
+  assert.equal(states.shortSubject("English Language"), "Eng.");
+  assert.equal(states.shortSubject("Basic Science"), "Basic Sci.");
+  assert.equal(states.nameCell("Ada Okafor"), "Ada<br>Okafor");
 });

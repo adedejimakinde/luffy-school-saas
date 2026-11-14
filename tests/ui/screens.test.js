@@ -113,6 +113,8 @@ const WIDE_TABLES = "table.broadsheet, table.week, table.marking-sheet, table.og
 const SMALL_ON_PURPOSE =
   ".label, .tag, .pill, .revised, .nav-heading, .tab-label, .marks-summary, " +
   ".eyebrow, .chip, .spark-axis, .week-labels, .fee-split dt, " +
+  // The broadsheet cell's second line: the subject position, small and muted.
+  ".broadsheet td.subj small, " +
   // The administrator's setup chip in the top bar: a status chip like `.chip`,
   // 13px so the bar still fits a 360px phone beside the logo and the avatar.
   ".setup-chip, " +

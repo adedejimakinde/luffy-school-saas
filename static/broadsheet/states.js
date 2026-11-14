@@ -29,6 +29,44 @@ export function figure(value) {
   return value === null || value === undefined || value === "" ? DASH : esc(value);
 }
 
+/** A score without a trailing ".00": "70.00" is "70", "72.50" is "72.5", "-" for none. */
+export function score(value) {
+  if (value === null || value === undefined || value === "") return DASH;
+  const n = Number(value);
+  return Number.isFinite(n) ? esc(String(Math.round(n * 100) / 100)) : esc(value);
+}
+
+/** 1 is "1st", 2 "2nd", 3 "3rd", 11 "11th"; a shared rank is "3=", as in the Pos. column. */
+export function subjectPlace(rank, counts) {
+  if (rank === null || rank === undefined) return "";
+  if (counts.get(rank) > 1) return `${esc(rank)}=`;
+  const n = Number(rank);
+  const tail = n % 100 >= 11 && n % 100 <= 13 ? "th" : { 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th";
+  return `${esc(rank)}${tail}`;
+}
+
+const SHORT = { mathematics: "Maths", "english language": "Eng.", english: "Eng." };
+
+/** A header short enough for a 76px column; the full name rides in the title. */
+export function shortSubject(name) {
+  const full = String(name).trim();
+  const known = SHORT[full.toLowerCase()];
+  if (known) return known;
+  const words = full.split(/\s+/);
+  if (words.length === 1) return full.length <= 7 ? full : `${full.slice(0, 4)}.`;
+  const [first, ...rest] = words;
+  const head = first.length <= 6 ? first : `${first.slice(0, 4)}.`;
+  const tail = rest.map((w) => (w.length <= 3 ? w : `${w.slice(0, 3)}.`)).join(" ");
+  return `${head} ${tail}`;
+}
+
+/** First name on one line, the rest (surname) on the next, never cut off. */
+export function nameCell(name) {
+  const full = String(name).trim();
+  const i = full.indexOf(" ");
+  return i < 0 ? esc(full) : `${esc(full.slice(0, i))}<br>${esc(full.slice(i + 1))}`;
+}
+
 /** "1", or "1=" when another row on the page holds the same rank. */
 export function rankLabel(rank, counts) {
   if (rank === null || rank === undefined) return DASH;
@@ -120,7 +158,7 @@ function partial(value, isComplete) {
 
 /** The position cell: the rank, "not ranked" for a child with a subject unfinished, else a dash. */
 function placing(row, counts) {
-  if (row.is_complete === false) return '<span class="not-ranked">not ranked</span>';
+  if (row.is_complete === false) return '<span class="not-ranked" title="Not ranked" aria-label="Not ranked">-</span>';
   return rankLabel(row.current_rank, counts);
 }
 
@@ -164,34 +202,35 @@ export function sheet({ broadsheet: body = {} } = {}) {
           // columns are the point. Position and name stay put.
           '<p class="swipe-cue">Swipe for more subjects</p>',
           '<div class="scroll wide"><table class="broadsheet">',
-          "<thead><tr><th>Pos.</th><th>Name</th>",
-          subjects.map(([, name]) => `<th>${esc(name)}</th>`).join(""),
-          "<th>Average</th></tr></thead><tbody>",
+          '<thead><tr><th class="pos">Pos.</th><th class="name">Name</th>',
+          subjects
+            .map(([, name]) => `<th class="subj" tabindex="0" title="${esc(name)}" data-full="${esc(name)}">${esc(shortSubject(name))}</th>`)
+            .join(""),
+          '<th class="subj" tabindex="0" title="Average" data-full="Average">Avg.</th></tr></thead><tbody>',
           ordered(rows)
             .map((r) => {
               const cells = subjects.map(([id]) => {
                 const s = r.subjects.find((x) => x.subject_id === id) || {};
-                return (
-                  `<td class="num">${partial(s.percentage, s.is_complete)}` +
-                  (s.current_subject_rank == null
-                    ? ""
-                    : ` <small>(${rankLabel(s.current_subject_rank, subjectCounts.get(id))})</small>`) +
-                  "</td>"
-                );
+                const second =
+                  s.is_complete === false && s.percentage != null
+                    ? "incomplete"
+                    : subjectPlace(s.current_subject_rank, subjectCounts.get(id));
+                return `<td class="num subj"><span class="sc">${score(s.percentage)}</span>${second ? `<small>${second}</small>` : ""}</td>`;
               });
+              const avg = r.is_complete === false && r.average != null ? "incomplete" : "";
               return (
                 "<tr>" +
-                `<td class="num rank">${placing(r, counts)}</td>` +
-                `<td>${esc(r.student)}</td>` +
+                `<td class="rank pos">${placing(r, counts)}</td>` +
+                `<td class="name">${nameCell(r.student)}</td>` +
                 cells.join("") +
-                `<td class="num">${partial(r.average, r.is_complete)}</td>` +
+                `<td class="num subj"><span class="sc">${score(r.average)}</span>${avg ? `<small>${avg}</small>` : ""}</td>` +
                 "</tr>"
               );
             })
             .join(""),
           "</tbody>",
-          `<tfoot><tr><th colspan="${subjects.length + 2}">Class average (ranked students)</th>` +
-            `<td class="num">${figure(class_average)}</td></tr></tfoot>`,
+          `<tfoot><tr><th class="name" colspan="2">Class average (ranked students)</th>` +
+            `<td colspan="${subjects.length}"></td><td class="num subj"><span class="sc">${score(class_average)}</span></td></tr></tfoot>`,
           "</table></div>",
         ].join("")
       : '<p class="blank">Nobody in this class has a result this term.</p>',

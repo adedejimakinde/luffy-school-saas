@@ -17,15 +17,54 @@ tfoot th, tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
   th, td { padding: 3px 6px; }
 }
 
-/* The position and the name both stay put while the subjects scroll under
-   them: a position alone does not say whose row it is. */
-.broadsheet :is(th, td):first-child { width: 6.5rem; min-width: 6.5rem; box-shadow: none; }
-.broadsheet tbody td:nth-child(2), .broadsheet thead th:nth-child(2) {
+/* On a phone the position and the name stay put (40px + 124px) and the
+   subjects, 76px each, scroll under them: two whole subjects show at 390px
+   and one and a half at 320px, so the swipe is plain. */
+.broadsheet { font-variant-numeric: tabular-nums; }
+.broadsheet :is(th, td) { padding: 0 8px; height: 52px; vertical-align: middle; }
+.broadsheet thead th { height: 44px; }
+.broadsheet :is(th, td).pos { width: 40px; min-width: 40px; max-width: 40px; padding: 0 2px; text-align: center; box-shadow: none; }
+.broadsheet :is(th, td).name {
   position: sticky;
-  left: 6.5rem;
+  left: 40px;
   z-index: 1;
+  width: 124px;
+  min-width: 124px;
+  max-width: 124px;
   background: var(--card);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.25;
   box-shadow: inset -1px 0 0 var(--border);
+  transition: box-shadow 120ms;
+}
+.broadsheet tfoot th.name { left: 0; width: 164px; min-width: 164px; max-width: 164px; }
+.scroll[data-scrolled] .broadsheet :is(th, td).name { box-shadow: inset -1px 0 0 var(--border), 6px 0 8px -4px color-mix(in srgb, var(--text) 22%, transparent); }
+.broadsheet :is(th, td).subj { width: 76px; min-width: 76px; max-width: 76px; padding: 0 4px; text-align: center; position: relative; }
+.broadsheet td.subj .sc { display: block; font-weight: 700; line-height: 1.2; }
+.broadsheet td.subj small { display: block; color: var(--muted); font-size: 0.75rem; line-height: 1.2; }
+.broadsheet th.subj[title]:focus { outline-offset: -2px; }
+.broadsheet th.subj[title]:focus::after {
+  content: attr(data-full);
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 3;
+  padding: 4px 8px;
+  background: var(--text);
+  color: var(--card);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  border-radius: 6px;
+}
+@media (min-width: 640px) {
+  .broadsheet :is(th, td).name { width: 180px; min-width: 180px; max-width: 180px; left: 56px; }
+  .broadsheet tfoot th.name { width: 236px; min-width: 236px; max-width: 236px; }
+  .broadsheet :is(th, td).pos { width: 56px; min-width: 56px; max-width: 56px; }
+  .broadsheet :is(th, td).subj { width: 110px; min-width: 110px; max-width: 110px; }
 }
 .ranked-count { margin: 8px 0; }
 .not-ranked { color: var(--muted); }
