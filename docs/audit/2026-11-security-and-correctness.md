@@ -35,9 +35,9 @@ takes silence here for a clean bill.
 | F-04 | Children's data has no retention period, no erasure route and several open legal items | High | Data protection (NDPA) | `website/templates/website/privacy.html`, `accounts/deletion.py` | Open |
 | F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` | Fixed in PR #340 |
 | F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` | Fixed in PR #340 |
-| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Fixed in PR #NNN |
-| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Fixed in PR #NNN |
-| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Fixed for the exam door and the test-scores door in PR #NNN; the result checker and the password door still open |
+| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Fixed in PR #351 |
+| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Fixed in PR #351 |
+| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Fixed for the exam door and the test-scores door in PR #351; the result checker and the password door still open |
 | F-10 | Signed-in pages have no Content-Security-Policy and escaping is by hand; one value is not escaped | Medium | XSS | `static/web/html.js`, `static/signin/app.js` | Open |
 | F-11 | Report card and fee answers carry no `Cache-Control: no-store` | Low | Privacy, shared computers | `results/card_api.py` | Open |
 | F-12 | Result-checker PINs are stored as a plain SHA-256 | Low | Secrets at rest | `results/checker.py` | Open |
@@ -303,7 +303,7 @@ existing tests for the conduct-on case should pass unchanged.
 
 ### F-07. The time an offline CBT answer was chosen is taken from the device (Medium)
 
-**Status.** Fixed in PR #NNN, in `cbt/sitting.py`. Whether an answer is in time is
+**Status.** Fixed in PR #351, in `cbt/sitting.py`. Whether an answer is in time is
 now asked of the server's own record of each computer's contacts
 (`AttemptSession.last_seen_at`, moved on every sync, a replaced computer's too),
 never of `chosen_at`. After the deadline an answer counts only if it arrives by
@@ -360,7 +360,7 @@ the score on the results page so the teacher can judge.
 
 ### F-08. A test set without the exam PIN is opened by an admission number alone (Medium)
 
-**Status.** Fixed in PR #NNN. A test with the PIN off is a practice test and
+**Status.** Fixed in PR #351. A test with the PIN off is a practice test and
 nothing else: `cbt.sitting.needs_pin()` asks for the PIN of every test that can
 send to CA or be released (with the existing constraint, a test without the PIN
 never sends to CA); `release_as()` refuses a practice test
@@ -405,7 +405,7 @@ sit as anybody.
 ### F-09. Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out (Medium)
 
 **Status.** Fixed for the exam door (`/sit/`) and the test-scores door
-(`/test-scores/`) in PR #NNN. Wrong tries are counted against the browser that made
+(`/test-scores/`) in PR #351. Wrong tries are counted against the browser that made
 them and its address, never against the admission number typed. Each browser is
 given a random id by the page (`sit_views.DEVICE_COOKIE`, `HttpOnly`,
 `SameSite=Strict`, scoped to `/sit/` or `/test-scores/`), which names nobody and
