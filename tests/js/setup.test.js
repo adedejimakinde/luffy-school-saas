@@ -38,8 +38,8 @@ const REVIEW = {
     {
       class_group_id: 11, name: "JSS 1A", carried: 44, already_placed: 1,
       not_carried: [
-        { name: "Tunde Cole", reference: "SM/004", why: "No longer at the school (left or graduated)" },
-        { name: "<b>Zed</b>", reference: "", why: "No longer at the school (left or graduated)" },
+        { name: "Tunde Cole", reference: "SM/004", why: "Left the school on 3 October 2025" },
+        { name: "<b>Zed</b>", reference: "", why: "Graduated" },
       ],
     },
     { class_group_id: 12, name: "JSS 1B", carried: 42, already_placed: 0, not_carried: [] },
@@ -48,6 +48,8 @@ const REVIEW = {
   already_placed: 1,
   not_carried: 2,
   in_new_term: 1,
+  not_promoted: 0,
+  token: "seen-1",
 };
 
 const state = () => fromSetup({ ok: true, body: SHAPE });
@@ -181,7 +183,7 @@ test("the review before a term change lists each class, its count and who is not
   assert.match(html, /<strong>86 children<\/strong> will be carried/);
   assert.match(html, /1 child already placed in Second term stays where they are/);
   assert.match(html, /Not carried \(2\)/);
-  assert.match(html, /Tunde Cole<\/span> <span class="level">SM\/004<\/span>, JSS 1A: No longer at the school \(left or graduated\)/);
+  assert.match(html, /Tunde Cole<\/span> <span class="level">SM\/004<\/span>, JSS 1A: Left the school on 3 October 2025/);
   assert.match(html, /Promotion at the end of the session is a separate step/);
   // A name is the school's data: it is escaped, never trusted.
   assert.match(html, /&lt;b&gt;Zed&lt;\/b&gt;/);
@@ -616,4 +618,59 @@ test("choosing a department saves it", async () => {
   await root.change({ "data-subject": "4" }, "business");
 
   assert.deepEqual(sent, [{ department: "business" }]);
+});
+
+test("the switch sends the token of the review that was shown", async () => {
+  forgetToken();
+  let sent = null;
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/terms/2/current/review/", { status: 200, body: REVIEW }],
+      ["/api/academics/terms/2/current/", (options) => {
+        sent = JSON.parse(options.body);
+        return { status: 200, body: { ...SHAPE.terms[1], is_current: true, carried: 86 } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.click({ "data-action": "make-current", "data-term": "2" });
+  await root.click({ "data-action": "confirm-current", "data-term": "2" });
+
+  assert.deepEqual(sent, { seen: "seen-1" });
+});
+
+test("a review that changed is shown again with the school's sentence, and nothing is switched", async () => {
+  forgetToken();
+  const tokens = [];
+  let reviews = 0;
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/terms/2/current/review/", () => {
+        reviews += 1;
+        return { status: 200, body: reviews === 1 ? REVIEW : { ...REVIEW, carried: 85, token: "seen-2" } };
+      }],
+      ["/api/academics/terms/2/current/", (options) => {
+        const seen = JSON.parse(options.body).seen;
+        tokens.push(seen);
+        return seen === "seen-2"
+          ? { status: 200, body: { ...SHAPE.terms[1], is_current: true, carried: 85 } }
+          : { status: 409, body: { detail: "The class lists changed since you looked. Look again at what making this term current will do. The current term was not changed." } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.click({ "data-action": "make-current", "data-term": "2" });
+  await root.click({ "data-action": "confirm-current", "data-term": "2" });
+
+  assert.equal(reviews, 2);
+  assert.match(root.innerHTML, /The class lists changed since you looked/);
+  assert.match(root.innerHTML, /<strong>85 children<\/strong> will be carried/);
+  assert.match(root.innerHTML, /data-action="confirm-current"[^>]*data-term="2"/);
+
+  await root.click({ "data-action": "confirm-current", "data-term": "2" });
+  assert.deepEqual(tokens, ["seen-1", "seen-2"]);
 });

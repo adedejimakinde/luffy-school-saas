@@ -194,7 +194,7 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     }
     if (hit.dataset.action === "decide" && review) {
       // The principal records one class's decisions, with one reason.
-      const form = hit.form || hit.closest("form");
+      const form = hit.form;
       const classId = Number(hit.dataset.class);
       const row = review.classes.find((c) => c.class_group_id === classId);
       if (!form || !row) return;

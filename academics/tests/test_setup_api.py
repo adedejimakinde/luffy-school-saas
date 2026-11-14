@@ -179,6 +179,12 @@ class TheSetUpScreenTests(ChainSetUp):
 
     # -- setting the current term ---------------------------------------------
 
+    def make_current(self, term_id):
+        """As the page does: read the review, then send its token back (G-01)."""
+        url = f"{TERMS}{term_id}/current/"
+        seen = self.client.get(f"{url}review/", HTTP_HOST=HOST).json()["token"]
+        return self.client.put(url, data={"seen": seen}, content_type="application/json", HTTP_HOST=HOST)
+
     def test_making_one_current_clears_the_old_one(self):
         """`one_current_term` is a unique constraint on `is_current` where
         true, so setting a second without clearing the first is refused by the
@@ -186,9 +192,7 @@ class TheSetUpScreenTests(ChainSetUp):
         created = self.new_term(self.head).json()
 
         self.as_user(self.head)
-        response = self.client.put(
-            f"{TERMS}{created['term_id']}/current/", HTTP_HOST=HOST
-        )
+        response = self.make_current(created["term_id"])
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["is_current"])
@@ -200,7 +204,7 @@ class TheSetUpScreenTests(ChainSetUp):
         """A screen doing it on a double click is not a mistake worth a refusal."""
         self.as_user(self.head)
 
-        response = self.client.put(f"{TERMS}{self.term_id}/current/", HTTP_HOST=HOST)
+        response = self.make_current(self.term_id)
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["is_current"])

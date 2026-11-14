@@ -892,16 +892,27 @@ const PAGES = [
     },
   },
   {
-    name: "promotion: where each class goes, and a child who repeats",
+    name: "promotion: where each class goes, and the principal's decision for a child",
     as: "principal",
     path: "/promotion/",
     async before(page) {
       await answer(page, "**/api/academics/promotion/", {
         term: "2025/2026 Third term",
         to_term: "2026/2027 First term",
+        // Each child's choice is the principal's recorded decision (audit G-04).
+        may_decide: true,
+        pass_mark: "50.00",
+        undecided: 0,
+        outcomes: [
+          { value: "promoted", label: "Promote" },
+          { value: "on_trial", label: "Promote on trial" },
+          { value: "repeated", label: "Repeat" },
+          { value: "graduated", label: "Graduated" },
+          { value: "withdrawn", label: "Leaving" },
+        ],
         classes: [
-          { class_group_id: 801, name: "Picker One", destination_id: null, graduate: false, children: [{ membership_id: 9001, name: "Ada Picker", action: "promote" }] },
-          { class_group_id: 802, name: "Picker Two", destination_id: null, graduate: false, children: [{ membership_id: 9002, name: "Bayo Picker", action: "promote" }] },
+          { class_group_id: 801, name: "Picker One", destination_id: null, graduate: false, children: [{ membership_id: 9001, name: "Ada Picker", action: "repeat", average: "40.00", suggested: "repeated", decision: { status: "repeated", label: "Repeating the class", reason: "Below the pass mark", by: "The principal", at: "2026-07-24T10:00:00+01:00" } }] },
+          { class_group_id: 802, name: "Picker Two", destination_id: null, graduate: false, children: [{ membership_id: 9002, name: "Bayo Picker", action: "promote", average: "70.00", suggested: "promoted", decision: { status: "graduated", label: "Graduated", reason: "Completed", by: "The principal", at: "2026-07-24T10:00:00+01:00" } }] },
         ],
         targets: [
           { class_group_id: 801, name: "Picker One" },
@@ -912,7 +923,8 @@ const PAGES = [
     async run(page, sent) {
       assert.equal(await choose(page, page.locator('select[name="dest_801"]'), { label: "Picker Two" }), "802");
       assert.equal(await choose(page, page.locator('select[name="dest_802"]'), { label: "Graduated" }), "graduate");
-      assert.equal(await choose(page, page.locator('select[name="child_9001"]'), { label: "Repeat" }), "repeat");
+      // The decision is a select of its own; choosing in it posts nothing.
+      assert.equal(await choose(page, page.locator('select[name="decide_9001"]'), { label: "Promote on trial" }), "on_trial");
       await page.locator('form[data-form="review"]').evaluate((f) => f.requestSubmit());
       await settle(page);
       await page.locator('form[data-form="confirm"]').evaluate((f) => f.requestSubmit());

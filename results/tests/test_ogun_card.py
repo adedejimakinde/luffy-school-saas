@@ -137,20 +137,9 @@ class TheThirdTermTests(OgunCardSetUp):
             [by_name["English"][k] for k in ("first", "second", "third", "annual")], ["74", None, "80", "77"]
         )
 
-    def test_promoted_to_the_class_the_child_was_placed_in(self):
-        with connected_to(self.stmarys):
-            next_first = Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11))
-            jss2 = ClassGroup.objects.create(name="JSS 2A", level=2)
-            ClassPlacement.objects.create(class_group=jss2, term=next_first, student_membership_id=self.ada.pk)
-        self.release(term_name=THIRD)
-        self.assertEqual(self.payload(THIRD)["ogun"]["promotion"], "Promoted to JSS 2A")
-
-    def test_placed_in_the_same_class_is_to_repeat(self):
-        with connected_to(self.stmarys):
-            next_first = Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11))
-            ClassPlacement.objects.create(class_group_id=self.group_id, term=next_first, student_membership_id=self.ada.pk)
-        self.release(term_name=THIRD)
-        self.assertEqual(self.payload(THIRD)["ogun"]["promotion"], "Not promoted, to repeat JSS 1A")
+    # The promotion line is the principal's decision and never a guess from
+    # next session's class (audit finding G-06):
+    # `test_audit_ogun_and_the_year.ThePromotionLineIsTheDecisionTests`.
 
     def test_no_line_before_a_decision_and_none_on_another_term(self):
         self.release(term_name=THIRD)

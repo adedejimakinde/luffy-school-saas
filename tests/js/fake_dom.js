@@ -101,8 +101,10 @@ export function fakeRoot(dataset = {}) {
       target.value = value;
       for (const handler of listeners.input || []) await handler({ target });
     },
-    async click(attributes = { "data-action": "sign-out" }) {
+    async click(attributes = { "data-action": "sign-out" }, extra = {}) {
       const target = fakeTarget(attributes);
+      // What a real element carries beyond its attributes: a button's `form`.
+      Object.assign(target, extra);
       for (const handler of listeners.click || []) await handler({ target });
     },
     /**

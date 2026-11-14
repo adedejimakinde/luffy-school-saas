@@ -33,19 +33,21 @@ the office moved while they were marking.
 ## One mark per child per day (audit finding G-11)
 
 A register is taken against the class list as it is now, for whatever date is
-asked. So two more children are left unmarked and named, for the same reason
-as the child who appeared: nobody in this room observed them that day.
-
-- a child **already marked that day by another class** (`marked_elsewhere`).
-  She was in JSS 1A on Monday and is on JSS 1B's list now; JSS 1B's register
-  for Monday, taken that afternoon or filled in a week later, does not mark her
-  a second time, and does not write "present" over what JSS 1A saw.
-- a child **who had not joined the school by that day** (`joined_later`,
-  `Membership.started_on`). Filling in last week's register must not mark
-  present a child admitted this morning.
+asked. So one more child is left unmarked and named, for the same reason as the
+child who appeared: nobody in this room observed her that day. She is the child
+**already marked that day by another class** (`marked_elsewhere`): in JSS 1A on
+Monday and on JSS 1B's list now. JSS 1B's register for Monday, taken that
+afternoon or filled in a week later, does not mark her a second time, and does
+not write "present" over what JSS 1A saw.
 
 `attendance.summary` counts days and not marks, which is what holds for any
 double mark written before this.
+
+What this does **not** do is leave unmarked a child who joined the school after
+the day being filled in. Nothing records the day a child first attended:
+`Membership.started_on` is the day the office made the record, so a school that
+imports its roll in week three and fills in weeks one and two would have every
+child left out. The audit's note on G-11 keeps that open.
 
 ## A register is part of what is approved (audit finding G-10)
 
@@ -67,7 +69,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from academics.models import ClassPlacement
-from accounts.models import Membership, Role
+from accounts.models import Role
 
 from .models import AttendanceMark, AttendanceStatus, Register
 
@@ -157,8 +159,6 @@ class RegisterTaken:
     #: On the roster, and another class's register already marked them that
     #: day. **Not marked** here: a day is one mark (G-11).
     marked_elsewhere: list[int] = field(default_factory=list)
-    #: On the roster, and not yet at the school on the register's day. Not marked.
-    joined_later: list[int] = field(default_factory=list)
 
     #: With a base (`docs/offline.md` D4): children the teacher did not change
     #: from what they were shown. Nothing was written for them.
@@ -247,22 +247,19 @@ def _require_the_register_is_open(class_group, term):
     )
 
 
-def _not_to_be_marked(class_group, on, roster):
-    """`(marked_elsewhere, joined_later)`: who on `roster` this register must
-    leave unmarked for `on`. See the module docstring, "One mark per child per day"."""
-    elsewhere = set(
+def _marked_elsewhere(class_group, on, roster) -> set:
+    """Who on `roster` another class's register has already marked for `on`.
+
+    This register leaves them unmarked. See the module docstring, "One mark per
+    child per day".
+    """
+    return set(
         AttendanceMark.objects.filter(
             register__taken_on=on, student_membership_id__in=roster
         )
         .exclude(register__class_group=class_group)
         .values_list("student_membership_id", flat=True)
     )
-    later = set(
-        Membership.objects.filter(pk__in=roster, started_on__gt=on).values_list(
-            "pk", flat=True
-        )
-    )
-    return elsewhere, later - elsewhere
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -355,15 +352,14 @@ def take_register(
     roster_set = set(roster)
     absent_set = set(absent_ids)
     shown = roster_set if shown_ids is None else set(shown_ids)
-    elsewhere, later = _not_to_be_marked(class_group, on, roster)
-    held_back = elsewhere | later
+    held_back = _marked_elsewhere(class_group, on, roster)
 
     looked_at = (roster_set & shown) - held_back
     absent = sorted(absent_set & looked_at)
     present = sorted(looked_at - absent_set)
     appeared = sorted(roster_set - shown - held_back)
     not_on_the_roster = sorted(absent_set - roster_set)
-    left_out = {"marked_elsewhere": sorted(elsewhere), "joined_later": sorted(later)}
+    left_out = {"marked_elsewhere": sorted(held_back)}
 
     if base is not None:
         taken = _merge_register(

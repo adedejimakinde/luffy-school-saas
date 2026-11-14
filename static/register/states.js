@@ -179,7 +179,6 @@ export function done({
   appeared = [],
   not_on_the_roster = [],
   marked_elsewhere = [],
-  joined_later = [],
   names = {},
 } = {}) {
   const nameOf = (id) => esc(names[id] || `child ${id}`);
@@ -200,10 +199,6 @@ export function done({
     marked_elsewhere.length
       ? '<p class="warn">Not marked here, because another class already marked them ' +
         `for this day: ${marked_elsewhere.map(nameOf).join(", ")}.</p>`
-      : "",
-    joined_later.length
-      ? '<p class="warn">Not marked, because they had not joined the school on this ' +
-        `day: ${joined_later.map(nameOf).join(", ")}.</p>`
       : "",
     '<button type="button" class="again" data-action="back">Another class</button>',
     "</section>",

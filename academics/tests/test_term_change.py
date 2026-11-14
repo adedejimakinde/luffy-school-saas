@@ -57,9 +57,19 @@ class TermChangeSetUp(ChainSetUp):
         self.client.force_login((who or self.head).user)
         return self.client.get(f"{TERMS}{term_id or self.second_id}/current/review/", HTTP_HOST=host)
 
-    def make_current(self, who=None, term_id=None, host=HOST):
+    def make_current(self, who=None, term_id=None, host=HOST, seen=None):
+        """Make a term current as the page does: with the token of the review
+        just read. `seen` sends that token instead (`""` for none at all)."""
         self.client.force_login((who or self.head).user)
-        return self.client.put(f"{TERMS}{term_id or self.second_id}/current/", HTTP_HOST=host)
+        url = f"{TERMS}{term_id or self.second_id}/current/"
+        if seen is None:
+            review = self.client.get(f"{url}review/", HTTP_HOST=host)
+            # A caller refused the review (not the office, or no standing on
+            # this host at all) has no token to send.
+            seen = review.json().get("token", "") if review.status_code == 200 else ""
+        return self.client.put(
+            url, data={"seen": seen}, content_type="application/json", HTTP_HOST=host
+        )
 
     def lists(self, term_id=None, school=None):
         """`{class name: sorted child names}` for a term's placements."""
@@ -350,6 +360,16 @@ class ANewSessionIsPromotionsTests(TermChangeSetUp):
                 }
                 for line in found.classes
             ]
+            # Promotion carries out the principal's decisions (G-04): decide first.
+            from accounts.models import Membership as _Membership
+            from results import sessions
+
+            for line in found.classes:
+                for child in line.children:
+                    sessions.decide(
+                        _Membership.objects.select_related("school", "user").get(pk=child.membership_id),
+                        found.term.session, "repeated", note="To repeat", by=self.head.user,
+                    )
             outcome = promotion.promote(plan, by=self.head.user)
 
         self.assertIsNone(found.problem)
@@ -357,6 +377,158 @@ class ANewSessionIsPromotionsTests(TermChangeSetUp):
         self.assertEqual(
             self.lists(self.next_first_id), {"JSS 1A": self.everyone(), "JSS 1B": [self.bimpe.pk]}
         )
+
+
+class TheRouteRequiresTheReviewTests(TermChangeSetUp):
+    """The route enforces what its page shows (G-01's "left"). The switch is
+    refused without the token of the review, and with the token of a review
+    that no longer holds; the term stays where it was and nothing is carried.
+
+    CONTROL: with `term_change.require_seen()` not called from the route, the
+    three refusals here are red (the term is switched)."""
+
+    def current(self):
+        with connected_to(self.stmarys):
+            return Term.objects.get(is_current=True).pk
+
+    def test_without_the_review_the_term_is_not_changed(self):
+        for seen in ("", "not-a-token"):
+            with self.subTest(seen=seen):
+                response = self.make_current(seen=seen)
+                self.assertEqual(response.status_code, 409, response.content)
+                self.assertIn("The current term was not changed", response.json()["detail"])
+        # A caller that sends no body at all, as every caller did before.
+        self.client.force_login(self.head.user)
+        bare = self.client.put(f"{TERMS}{self.second_id}/current/", HTTP_HOST=HOST)
+        self.assertEqual(bare.status_code, 409)
+        self.assertEqual(self.current(), self.term_id)
+        self.assertEqual(self.lists(), {})
+
+    def test_a_review_that_no_longer_holds_is_refused_and_the_new_one_goes_through(self):
+        seen = self.review().json()["token"]
+        # The office takes a child off the lists after the page was drawn.
+        release_student(self.children["tunde"])
+
+        stale = self.make_current(seen=seen)
+
+        self.assertEqual(stale.status_code, 409)
+        self.assertIn("changed since you looked", stale.json()["detail"])
+        self.assertEqual(self.current(), self.term_id)
+        self.assertEqual(self.lists(), {})
+        again = self.review().json()
+        self.assertNotEqual(again["token"], seen)
+        self.assertEqual(again["not_carried"], 1)
+        done = self.make_current(seen=again["token"])
+        self.assertEqual(done.status_code, 200)
+        self.assertEqual(done.json()["carried"], 4)
+
+    def test_the_token_is_for_one_term_and_one_school(self):
+        with connected_to(self.grace):
+            theirs = Term.objects.create(
+                session="2025/2026", name=TermName.SECOND, starts_on=date(2026, 1, 12), ends_on=date(2026, 4, 2)
+            )
+        ours = self.review().json()["token"]
+
+        response = self.make_current(self.their_head, term_id=theirs.pk, host=THEIR_HOST, seen=ours)
+
+        self.assertEqual(response.status_code, 409)
+        with connected_to(self.grace):
+            self.assertEqual(Term.objects.get(is_current=True).pk, self.grace_term_id)
+
+    def test_authority_is_asked_before_the_token(self):
+        seen = self.review().json()["token"]
+
+        self.assertEqual(self.make_current(self.teacher, seen=seen).status_code, 403)
+        self.assertEqual(self.current(), self.term_id)
+
+
+class TheReviewSaysHowAChildLeftTests(TermChangeSetUp):
+    """G-01's other "left": the review said "left or graduated" for both."""
+
+    def why(self, handle):
+        body = self.review().json()
+        return {
+            child["name"]: child["why"] for line in body["classes"] for child in line["not_carried"]
+        }[self.children[handle].user.full_name]
+
+    def test_a_child_the_principal_took_off_the_roll_says_left_and_the_day(self):
+        from academics import leaving
+
+        with connected_to(self.stmarys):
+            # Their place in a term already over stays: it is where they sat.
+            left = leaving.take_off_the_roll_as(self.head.user, self.children["tunde"], reason="Relocated")
+
+        day = left.left_on
+        self.assertEqual(self.why("tunde"), f"Left the school on {day.day} {day:%B %Y}")
+
+    def test_a_graduate_and_a_leaver_at_promotion_each_say_which(self):
+        from results import sessions
+
+        with connected_to(self.stmarys):
+            sessions.decide(self.children["ada"], "2024/2025", "graduated", note="Completed", by=self.head.user)
+            sessions.decide(self.children["emeka"], "2024/2025", "withdrawn", note="Moved", by=self.head.user)
+        for handle in ("ada", "emeka", "bisi"):
+            release_student(self.children[handle])
+
+        self.assertEqual(self.why("ada"), term_change.GRADUATED)
+        self.assertEqual(self.why("emeka"), term_change.LEFT_AT_PROMOTION)
+        # No record of how: it says only what is known.
+        self.assertEqual(self.why("bisi"), term_change.LEFT)
+
+    def test_a_decision_to_promote_is_not_a_reason_for_leaving(self):
+        from results import sessions
+
+        with connected_to(self.stmarys):
+            sessions.decide(self.children["ada"], "2024/2025", "promoted", note="Passed", by=self.head.user)
+        release_student(self.children["ada"])
+
+        self.assertEqual(self.why("ada"), term_change.LEFT)
+
+
+class LeavingAThirdTermUnpromotedTests(TermChangeSetUp):
+    def setUp(self):
+        super().setUp()
+        with connected_to(self.stmarys):
+            Term.objects.filter(pk=self.term_id).update(name=TermName.THIRD)
+            self.next_first_id = Term.objects.create(
+                session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11)
+            ).pk
+
+    def test_the_review_counts_the_children_not_promoted(self):
+        release_student(self.children["tunde"])
+        with connected_to(self.stmarys):
+            services.place_student(
+                self.jss1b, Term.objects.get(pk=self.next_first_id), self.children["ada"]
+            )
+
+        body = self.review(term_id=self.next_first_id).json()
+
+        self.assertFalse(body["carries"])
+        # Emeka, Bisi and Bimpe: not Tunde, who left, nor Ada, who has a class.
+        self.assertEqual(body["not_promoted"], 3)
+        self.assertIn("3 children of", body["why_not"])
+        self.assertIn("have not been promoted", body["why_not"])
+
+    def test_with_everybody_placed_it_says_nothing_of_the_kind(self):
+        with connected_to(self.stmarys):
+            new = Term.objects.get(pk=self.next_first_id)
+            for child in (*self.children.values(), self.bimpe):
+                services.place_student(self.jss1b, new, child)
+
+        body = self.review(term_id=self.next_first_id).json()
+
+        self.assertEqual(body["not_promoted"], 0)
+        self.assertNotIn("not been promoted", body["why_not"])
+
+    def test_a_child_promoted_since_the_review_makes_it_stale(self):
+        seen = self.review(term_id=self.next_first_id).json()["token"]
+        with connected_to(self.stmarys):
+            services.place_student(
+                self.jss1b, Term.objects.get(pk=self.next_first_id), self.children["ada"]
+            )
+
+        self.assertEqual(self.make_current(term_id=self.next_first_id, seen=seen).status_code, 409)
+        self.assertEqual(self.make_current(term_id=self.next_first_id).status_code, 200)
 
 
 class OneTransactionTests(TermChangeSetUp):
