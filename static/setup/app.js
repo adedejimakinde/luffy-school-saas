@@ -194,7 +194,21 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       return;
     }
     if (hit.dataset.action === "confirm-current") {
-      const result = await makeCurrent({ termId: Number(hit.dataset.term), fetchImpl });
+      const termId = Number(hit.dataset.term);
+      const seen = state.changing && state.changing.review ? state.changing.review.token : "";
+      const result = await makeCurrent({ termId, seen, fetchImpl });
+      if (result.changed) {
+        // The lists moved since the review was drawn. Nothing was switched:
+        // show the review as it is now, with the server's sentence, and ask again.
+        const again = await fetchTermChange({ termId, fetchImpl });
+        if (again.ok) {
+          state = { ...state, changing: { review: again.body, note: result.body.detail || "" } };
+          draw();
+          return;
+        }
+        await after("term", again);
+        return;
+      }
       if (result.ok) {
         // Said once, under the terms, until the page is next opened.
         await load({ ...state.notes, term: undefined, term_changed: { kind: "done", detail: changedSentence(result.row) } });

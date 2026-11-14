@@ -110,8 +110,19 @@ def note_success(identifier: str) -> None:
 
 
 def belongs_at(user, school) -> bool:
-    """Has `user` an active membership at `school`? What a school's own door asks."""
-    return user.memberships.with_access().filter(school=school).exists()
+    """May `user` come in at `school`'s own door?
+
+    An active membership there, or a STUDENT membership there that has ended:
+    a child who graduated or left still signs in, and then reaches the report
+    cards that went home to them and nothing else (`accounts.former`, audit
+    finding G-05). The door grants no role; `SchoolAccessMiddleware` is what
+    keeps that login to its cards.
+    """
+    from .former import was_a_student_here
+
+    return user.memberships.with_access().filter(school=school).exists() or (
+        was_a_student_here(user, school)
+    )
 
 
 def sign_in(request, identifier: str, password: str, *, school=None):

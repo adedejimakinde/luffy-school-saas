@@ -3,6 +3,7 @@ from django_tenants.utils import get_public_schema_name
 
 from schools.paths import is_door, is_public_site_request
 
+from . import former
 from .guardian_signin import OPENED_BY_CODE
 from .refusals import CodeSessionCannotEscalate, NoMembershipHere
 
@@ -16,6 +17,12 @@ class SchoolAccessMiddleware:
     one step away in `User.roles_at()`, which is scoped to ACCESS_STATUSES.
     Deliberately not `.live()`, which is the wider set including invited and
     suspended.
+
+    **One exception, for one kind of page.** A login whose STUDENT membership
+    here has ended holds no role and is still let through to its own report
+    cards (`accounts.former.CARD_PATHS`), which the card routes then answer for
+    themselves. Graduating must not be what locks a child out of their final
+    card (audit finding G-05).
 
     On the public portal host none of this applies: that is where a parent sees
     children from several schools at once, and where a login with no membership
@@ -139,7 +146,12 @@ class SchoolAccessMiddleware:
                         "This session was opened with a sign-in code, which "
                         "reaches a guardian's own children and nothing else."
                     )
-                if not user.is_platform_staff:
+                # A child who has left reads the cards that went home to them,
+                # and nothing else (`accounts.former`, audit finding G-05).
+                # No role is granted: `request.school_roles` stays empty.
+                if not user.is_platform_staff and not former.may_open(
+                    user, tenant, request.path
+                ):
                     raise NoMembershipHere(
                         "You do not have access to this school."
                     )

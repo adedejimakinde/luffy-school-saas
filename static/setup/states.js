@@ -202,9 +202,11 @@ function children(n) {
  * A term of another session carries nothing (that is Promotion, a separate
  * step) and the panel says so in the server's words before it offers the switch.
  */
-export function termChange({ review }) {
+export function termChange({ review, note = "" }) {
   const to = `${esc(review.term.session)} &middot; ${esc(review.term.name_label)}`;
   const buttons = [
+    // Said when the server refused the switch because this review had changed.
+    note ? `<p class="note" role="alert">${esc(note)}</p>` : "",
     `<button type="button" class="submit" data-action="confirm-current" data-term="${esc(review.term.term_id)}">`,
     `Make ${esc(review.term.name_label)} current</button>`,
     '<button type="button" class="again" data-action="keep-term">Not now</button>',

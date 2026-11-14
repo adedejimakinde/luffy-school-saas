@@ -15,3 +15,14 @@ main { max-width: 44rem; }
 .summary { padding-left: 20px; }
 .note { font-size: var(--small); color: var(--stop); }
 form.rejected { background: var(--stop-bg); border-radius: var(--radius); padding: 8px 12px; }
+.child .who { display: grid; gap: 2px; }
+.child .figures, .child .decision { color: var(--muted); font-size: var(--small); }
+.child .decided { color: var(--text); font-weight: 600; }
+.child .undecided { color: var(--stop); }
+.decide { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; padding-top: 12px; }
+.decide label { display: grid; gap: 4px; flex: 1 1 16rem; }
+.year-settings form { display: grid; gap: 12px; }
+.year-settings fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+.year-settings .weights { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.year-settings .weights label, .year-settings .pass-mark { display: grid; gap: 4px; max-width: 9rem; }
+.saved { font-size: var(--small); color: var(--muted); }

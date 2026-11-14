@@ -164,11 +164,17 @@ export async function fetchTermChange({ termId, fetchImpl = fetch }) {
 /**
  * Say which term the school is teaching now. The old one is cleared server-side,
  * and within a session every class list is carried into the new term in the same
- * act; the answer's `carried` says how many children.
+ * act; the answer's `carried` says how many children. `{changed: true}` when
+ * the school's lists moved since the review was drawn: nothing was switched.
  */
-export async function makeCurrent({ termId, fetchImpl = fetch }) {
+export async function makeCurrent({ termId, seen = "", fetchImpl = fetch }) {
   try {
-    return classify(await putJson(currentTermUrl(termId), {}, { fetchImpl }), 200);
+    // `seen` is the token of the review the person was shown. The server works
+    // the review out again and refuses (409) if it is missing or no longer
+    // holds: the switch that happens is the one that was shown.
+    const answer = await putJson(currentTermUrl(termId), { seen }, { fetchImpl });
+    if (answer.status === 409) return { ok: false, changed: true, body: answer.body || {} };
+    return classify(answer, 200);
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
