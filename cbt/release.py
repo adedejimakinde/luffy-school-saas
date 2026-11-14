@@ -11,6 +11,14 @@ row with scores frozen afresh (after a key correction, if one was needed).
 A class is released when nobody in it is still sitting the test and its sitting is not
 open, by a teacher of the test for a class they teach it to, or by the principal.
 
+## A practice test is never released (audit F-08)
+
+A test with the exam PIN off opened on an admission number alone, which is on every class
+list, so whoever sat it may not be who the score names. Its scores are the teacher's to
+read on the results screen and nobody else's: `release_as()` refuses it, and
+`live_scores()`, which every student's and parent's page reads, never carries a score of
+one, whatever rows exist.
+
 ## The two pages
 
 ## Answers wait for every class (audit G-03)
@@ -24,7 +32,8 @@ a retake still running, holds the answers again for everybody.
 
 - **A student** has no account to sign in with (`docs/cbt.md`, "Student sign-in"), so
   their page is a door, like `/sit/`: the test code, their admission number and their
-  exam PIN, behind the same throttle and with the same one refusal for every failure of
+  exam PIN, **always the PIN**, behind the same throttle (this browser and its address,
+  never the number typed: audit F-09) and with the same one refusal for every failure of
   the three. Proved, it shows their own released score for that test with their
   corrections (their numbering and letters), and their other released scores; before
   release it says so and shows nothing.
@@ -38,8 +47,7 @@ from typing import List, Optional
 from django.db import transaction
 from django.utils import timezone
 
-from accounts import throttling
-from accounts.models import Membership, Role, SignInScope
+from accounts.models import Membership, Role
 
 from . import access, paper, pins, sitting
 from .banks import NotYours, Refused, name_of, plain
@@ -58,6 +66,11 @@ from .models import (
 from .sittings import NotAllowed, _role_word
 
 NOT_RELEASED = "Your score for this test has not been released yet. Your teacher releases it."
+#: Why a practice test (the exam PIN off) is never released (audit F-08).
+PRACTICE_NOT_RELEASED = (
+    "This is a practice test, sat without the exam PIN, so its scores are never released to "
+    "students or parents: anybody with the class list could have sat as anybody."
+)
 #: Said on a student's page in place of the corrections while another class still sits.
 ANSWERS_HELD = (
     "Your answers and the right ones will show here once every class has finished this test."
@@ -128,6 +141,8 @@ def answers_held(test, now=None) -> bool:
 
 def why_not_releasable(test, class_group_id) -> str:
     """Why this class's scores cannot be released now, or "" if they can."""
+    if sitting.is_practice(test):
+        return PRACTICE_NOT_RELEASED
     open_now = Attempt.objects.filter(test=test, class_group_id=class_group_id, submitted_at__isnull=True).count()
     if open_now:
         return f"{open_now} student{' is' if open_now == 1 else 's are'} still sitting it."
@@ -188,6 +203,8 @@ def release_as(actor, school, test_id, class_group_id) -> TestRelease:
             raise NotAllowed("You release scores only for the classes you teach this subject to.")
         if test.state == Test.State.PUBLISHED:
             sitting.settle_all(test, timezone.now())
+        if sitting.is_practice(test):
+            raise Refused(PRACTICE_NOT_RELEASED)
         if TestRelease.objects.filter(test=test, class_group_id=class_group_id, restore__isnull=True).exists():
             raise Refused("This class's scores are released already.")
         why = why_not_releasable(test, class_group_id)
@@ -246,8 +263,11 @@ def restore_as(actor, school, release_id, reason) -> TestReleaseRestore:
 
 
 def live_scores():
-    """Released scores whose release has not been restored."""
-    return ReleasedTestScore.objects.filter(release__restore__isnull=True)
+    """Released scores whose release has not been restored, of tests that asked for the exam
+    PIN. A practice test's never show (audit F-08), even if a row was written for one."""
+    return ReleasedTestScore.objects.filter(release__restore__isnull=True).exclude(
+        test__require_pin=False, test__may_send_to_ca=False
+    )
 
 
 def _summary(r) -> dict:
@@ -281,7 +301,8 @@ def _proved_for_scores(school, code, number, pin):
     ).select_related("term").first()
     if test is None:
         return None
-    student = pins.check(school, test.term, number, pin) if test.require_pin else sitting._student_without_pin(school, number)
+    # Always the PIN: a practice test has nothing released to open (audit F-08).
+    student = pins.check(school, test.term, number, pin)
     if student is None:
         return None
     if not Attempt.objects.filter(test=test, student_membership_id=student.pk).exists():
@@ -289,7 +310,7 @@ def _proved_for_scores(school, code, number, pin):
     return test, student
 
 
-def student_scores(school, *, code, admission_number, pin, address, now=None) -> StudentScores:
+def student_scores(school, *, code, admission_number, pin, address, device="", now=None) -> StudentScores:
     """A student's own released scores, behind the door's three and its throttle.
 
     The corrections are left out, and `answers_held` says so, while any class has still
@@ -297,16 +318,11 @@ def student_scores(school, *, code, admission_number, pin, address, now=None) ->
     if not sitting._here(school):
         raise sitting.NotOpened()
     number = sitting._number(admission_number)
-    number_key, address_key = sitting._keys(school, number, address)
-    wait = sitting._wait(number_key, address_key)
-    if wait is not None:
-        raise sitting.TooManyAttempts(wait)
+    keys = sitting.guarded(school, device, address)
     proved = _proved_for_scores(school, code, number, pin)
     if proved is None:
-        throttling.record_failure(SignInScope.SIT_NUMBER, number_key)
-        throttling.record_failure(SignInScope.SIT_ADDRESS, address_key)
+        sitting.count_a_wrong_try(*keys)
         raise sitting.NotOpened()
-    throttling.clear(SignInScope.SIT_NUMBER, number_key)
     test, student = proved
     mine = list(live_scores().filter(student_membership_id=student.pk).order_by("-released_at", "-id"))
     this = next((r for r in mine if r.test_id == test.pk), None)
@@ -354,9 +370,10 @@ def family_scores_as(actor, school) -> List[dict]:
                 seen.add(r.test_id)
                 scores.append(_summary(r))
         sat = set(
-            Attempt.objects.filter(student_membership_id=child.pk, submitted_at__isnull=False).values_list(
-                "test_id", flat=True
-            )
+            Attempt.objects.filter(student_membership_id=child.pk, submitted_at__isnull=False)
+            # A practice test's scores never come, so it is not "waiting".
+            .exclude(test__require_pin=False, test__may_send_to_ca=False)
+            .values_list("test_id", flat=True)
         )
         out.append(
             {
@@ -373,6 +390,7 @@ def family_scores_as(actor, school) -> List[dict]:
 __all__ = [
     "ANSWERS_HELD",
     "NOT_RELEASED",
+    "PRACTICE_NOT_RELEASED",
     "StudentScores",
     "answers_held",
     "classes_still_to_finish",
