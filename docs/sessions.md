@@ -250,6 +250,34 @@ recorded in one request can share it to the microsecond, and a promotion status
 that resolves arbitrarily between two rows is one that changes when nothing
 changed.
 
+### Where the suggestion comes from, and the routes (audit finding G-04)
+
+`decide()` takes the average from **the frozen year and nowhere else**: the
+`ReleasedSessionResult` written when the child's third-term card was released
+(or reissued). A child with no released third-term card gets **no suggestion**
+(`suggested` blank), whatever marks are entered: nothing is proposed on figures
+no card showed.
+
+Until November 2026 nothing called any of this. The routes are:
+
+| route | who | what |
+| --- | --- | --- |
+| `GET /api/academics/promotion/` | principal, administrator | each child's frozen average, the suggestion and the decision |
+| `POST /api/academics/promotion/decisions/` | **principal only** | records decisions, with one required reason; all or none |
+| `GET`/`PUT /api/results/year-settings/` | principal, administrator | the weighting and the pass mark |
+
+A decision made through the route **requires a reason**
+(`sessions.decide_as()` and `decide_many_as()`; `decide()` itself still allows a
+blank note, for an import with nobody behind it). `PromotionStatus` gained
+`GRADUATED`; "leaving" is `WITHDRAWN`. `academics.promotion.promote()` moves a
+child only as their latest decision says (`docs/classes.md`).
+
+**What the two settings reach.** The weighting is read when a third term is
+released and is frozen on each card's year summary; the pass mark is read when
+a decision is recorded and is kept beside it. Neither reaches a card that has
+gone home or a decision already made. A weight and the pass mark have at most
+two decimal places, which is what their columns keep.
+
 ## Who may do what
 
 | act | roles | why |

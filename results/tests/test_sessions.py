@@ -1026,9 +1026,11 @@ class WhoMayDecideTests(SessionSetUp):
     def test_the_principal_decides(self):
         with connected_to(self.stmarys):
             decision = sessions.decide_as(
-                self.principal, self.ada, SESSION, PromotionStatus.PROMOTED
+                self.principal, self.ada, SESSION, PromotionStatus.PROMOTED,
+                note="Met the pass mark",
             )
         self.assertEqual(decision.decided_by_id, self.principal.pk)
+        self.assertEqual(decision.note, "Met the pass mark")
 
     def test_an_administrator_may_configure_but_may_not_decide(self):
         """The one place these two sets are meant to disagree."""
@@ -1458,9 +1460,11 @@ class TheYearIsTheCardsThatWentHomeTests(SessionSetUp):
                 self.ada, SESSION, PromotionStatus.REPEATED, by=self.principal
             )
 
-        # Before the third term went home: the two cards so far, (60 + 40) / 2.
-        self.assertEqual(early.session_average, Decimal("50.00"))
-        self.assertEqual(early.suggested, PromotionStatus.PROMOTED)
+        # Before the third term went home the year is not frozen, and nothing
+        # is suggested on a reckoning no card shows (audit finding G-04). It
+        # used to suggest "promoted" here on the two cards so far.
+        self.assertIsNone(early.session_average)
+        self.assertEqual(early.suggested, "")
         # After: the three cards, (60 + 40 + 45) / 3, and not (100 + 50 + 45) / 3.
         self.assertEqual(frozen.session_average, Decimal("48.33"))
         self.assertEqual(decision.session_average, frozen.session_average)

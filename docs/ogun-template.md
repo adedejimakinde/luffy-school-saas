@@ -342,10 +342,10 @@ the One Blue card, unchanged.
 | "St Mary's (Abeokuta South LGA) [B13003]" | `School.name`, `School.lga`, `School.school_code` (new, set beside the LGA in setup) |
 | learner's ID, sex, date of birth, passport photo | `academics.StudentDetails` (part 1) |
 | crest and colour | `results.look`, as on the Standard card |
-| subject grid | the card's frozen subject lines: Cont. Assess = every paper but the one named Exam, Exam, Weighted Average = the subject's percentage, **only when every paper of the subject has a mark, the exam included**; otherwise a dash, and the annual score built on it is a dash too. The summary's Marks obtainable, Marks obtained and Percentage count the whole subjects only, and say how many were not counted. The Standard card is unchanged: it prints the percentage over the papers marked, beside the marks. Row labels say (30) and (70) when every subject agrees. |
+| subject grid | the card's frozen subject lines: Cont. Assess = every paper but the one named Exam, Exam, Weighted Average = the subject's percentage, **only when every paper of the subject has a mark**; otherwise a dash, and the annual score built on it is a dash too. **What the papers are called decides the split and nothing else** (audit finding G-07): a subject with no paper named exactly "Exam" prints a dash in the two rows the sheet cannot fill and its marks in the Weighted Average, and is counted in the summary. The summary's Marks obtainable and Marks obtained are sums over the whole subjects, and say how many were not counted; **Percentage is the card's own frozen average** (`ReleasedCard.own_average`), the figure the class position beside it is ranked on (G-08). The Standard card is unchanged: it prints the percentage over the papers marked, beside the marks. Row labels say (30) and (70) when every subject that has the split agrees. |
 | senior grouping | a class whose name starts SS or SSS groups subject columns under `gradebook.Department` headings (General, Business, Humanities, Science & Mathematics, Technology, Trade), then "Other" for subjects with none. Departments are set per subject in setup (Ogun schools only). A junior class has one run of columns. |
-| third term | 1st, 2nd and 3rd term scores per subject (each out of 100) from this child's card for each term of the session, and the Weighted Annual Score, their average over the terms taken; "-" for a term with none |
-| promotion box (third term) | the child's placement in next session's first term (`academics.promotion`): another class is "Promoted to JSS 3A", the same class "Not promoted, to repeat JSS 2A"; failing that, a recorded `PromotionDecision`; else no box |
+| third term | 1st, 2nd and 3rd term scores per subject (each out of 100) from this child's card for each term of the session **as it stood when this card was issued** (`cards.card_as_of()`), and the Weighted Annual Score: those scores under the weighting frozen on this card's year summary, over the terms the subject has a score for, rounded half up like every other percentage (G-08); "-" for a term with none |
+| promotion box (third term) | **the principal's recorded decision and nothing else** (`PromotionDecision`, audit finding G-06): "Promoted", "Promoted on trial", "Not promoted, to repeat JSS 2A" (the class on the card), "Graduated", "Withdrawn"; no decision, no box. Never worked out from the child's placement next session |
 | attendance | the card's frozen days open, present and absent |
 | traits | the card's frozen ratings, ticked on a 5 to 1 grid, with a total per section ("18 of 30") and the rating key |
 | summary | part 4: marks obtainable, obtained, percentage, class position |
@@ -367,9 +367,19 @@ The learner's ID, sex, date of birth, photo, the school line and the
 departments are read when the payload is built, like `admission_number`. The
 PDF is rendered at release and stored, so the file keeps what was on record
 then; the page shows what is on record now. The other terms' scores come from
-those terms' own frozen cards. The promotion box is read live, like the
-Standard card's promotion line; a card released before the promotion is
-decided shows no box in its PDF.
+those terms' own frozen cards, as they stood when this card was issued. The
+promotion box is the principal's decision, read live exactly as the Standard
+card's promotion line is; a card released before the promotion is decided shows
+no box in its PDF.
+
+### Choosing the template while a class is waiting for release
+
+Refused (audit finding G-09). Choosing the Ogun card switches both conduct
+sections on, hides, adds and renames traits, rewords the scale and turns the
+class position on; choosing either card changes the layout cards are released
+in. While any class's results are submitted, checked or approved,
+`set_template_as()` changes nothing and names the class: release it or send it
+back first. The same holds for every conduct setting (`docs/ratings.md`).
 
 ### Tests and controls
 

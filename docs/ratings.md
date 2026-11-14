@@ -446,6 +446,22 @@ Two things reached a released card through live settings, and both are closed:
 release and asserts the card payload, the stored rows, the Ogun key and a reissued
 version are identical.
 
+### Nothing changes while a class is waiting for release
+
+Audit finding G-09. Ratings lock when a class is submitted, and release freezes
+each section from the trait list, the switches and the scale's words as they
+stand at that moment. So a change made in between changed the cards about to go
+home: rated lines removed, new lines nobody could rate any more printed blank.
+
+While any class's results are **submitted, checked or approved**, in any term,
+every change here is refused (422) with a sentence naming the class: switching a
+section, adding, renaming, hiding or showing a trait, reordering, rewording the
+scale, and choosing the report card template (`docs/ogun-template.md`).
+`ratings.require_no_class_awaiting_release()` is the one check, called by each
+actor-checked entry point and by `ogun.set_template_as()`. The settings are the
+school's, so one class in the chain holds them for everybody until it is
+released or sent back. Draft, sent back and released leave them free.
+
 ### Every change is logged: who, what, when
 
 `ConductSettingChange` is one append-only row per change (trigger in migration

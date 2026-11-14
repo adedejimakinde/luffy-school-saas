@@ -42,9 +42,24 @@ class OgunCardSetUp(ReportCardApiSetUp):
             )
 
     def ogun_papers(self, term, child, subject, test1, test2, assignment, exam):
+        """The sheet's four papers for a subject, marked for `child` where a
+        value is given. **All four exist either way**, as they do at a school
+        on the Ogun card: a paper with no mark is an unmarked paper, and a
+        subject is whole when every paper it has is marked, whatever they are
+        called (audit finding G-07)."""
+        from gradebook.models import Assessment
+
         for name, value, out_of in (("1st Test", test1, 10), ("2nd Test", test2, 10), ("Assignment", assignment, 10), ("Exam", exam, 70)):
             if value is not None:
                 self._mark(self.stmarys, term, child, subject, name, value, out_of=out_of)
+            else:
+                with connected_to(self.stmarys):
+                    Assessment.objects.get_or_create(
+                        term=self.term_of(self.stmarys, term),
+                        subject_id=self.subjects[subject],
+                        name=name,
+                        defaults={"max_score": out_of},
+                    )
 
     def payload(self, term=TermName.FIRST.value, who=None):
         response = self.fetch(who or self.mama, self.stmarys, self.ada, term)

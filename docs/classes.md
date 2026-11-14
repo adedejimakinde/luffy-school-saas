@@ -163,13 +163,33 @@ screen; the confirm step says so.
 - **A third choice, "Leaving"**, beside promote and repeat, for a child of any class
   who is not coming back. It ends the enrolment exactly as graduating does
   (`release_student()`), in the same all-at-once confirmation, but is counted as
-  *left*, not *graduated* (the API's `left`), and the child gets no placement. The
-  membership row is the same either way (ended, kept as history): the difference is
-  what the office is told, not a stored reason.
-- **Every child is shown, defaulting to promote.** Each class's destination is
-  suggested (the next `level` up; among several arms, the one with the same arm
-  letter; nothing when that is ambiguous, and the plan is then refused until the
-  office chooses; graduation when there is no class above) and can be changed.
+  *left*, not *graduated* (the API's `left`), and the child gets no placement.
+- **The principal decides; promotion carries it out** (audit finding G-04).
+  Whether a child is promoted, promoted on trial, repeats, graduates or leaves
+  is a `results.PromotionDecision`, recorded by the principal with a reason
+  through `POST /api/academics/promotion/decisions/` (one reason for one child
+  or a whole class; every decision in a request is recorded or none is). The
+  page shows, for each child, the year's average off the released third-term
+  card, what Classnode suggests from it and the school's pass mark, and the
+  decision. **Nothing is assumed**: a child nobody has decided about has no
+  choice on the page, and `promote()` refuses the whole plan, by name, for a
+  child with no decision and for a choice that is not what was decided
+  ("promote" for a child decided repeating, "leave" for a child nobody said is
+  leaving, graduation for a class decided promoted). So an administrator may
+  press Confirm, and what it does is what the principal wrote down. Leaving and
+  graduating are decisions like the others, kept with their reason, so the
+  record says which it was and why (the term-change review reads it).
+- **The pass mark and the term weighting** are the school's own
+  (`GET`/`PUT /api/results/year-settings/`, the principal and the
+  administrator; the section "How the year is reckoned" at the top of the
+  promotion page). `docs/sessions.md` has what each reaches.
+- **A graduate's or a leaver's family keeps its way in** (audit finding G-05):
+  the guardians' PARENT memberships are left as they were, and the child can
+  still sign in and read their own cards and nothing else (`accounts.former`).
+- Each class's destination is suggested (the next `level` up; among several
+  arms, the one with the same arm letter; nothing when that is ambiguous, and
+  the plan is then refused until the office chooses; graduation when there is
+  no class above) and can be changed.
 - **Nothing moves until confirmed**: looking writes nothing, and the page's first
   button only shows what confirming would do.
 - **All at once or not at all.** One transaction, with the current term row
@@ -184,12 +204,17 @@ screen; the confirm step says so.
 - Authority is `PLACEMENT_ROLES`, asked before any table is read. The
   vice principal, a teacher and a bursar are refused.
 
-Tested with two schools (`academics/tests/test_promotion.py`): both have a
-"JSS 1A" and a third term, and promoting one leaves the other's placements and
-memberships exactly as they were.
+Tested with two schools (`academics/tests/test_promotion.py` for the mechanics,
+`test_promotion_decisions.py` for the decisions, the suggestion and the
+settings, `test_promotion_family_access.py` for G-05): both have a "JSS 1A" and
+a third term, and promoting or deciding at one leaves the other's placements,
+memberships, decisions and settings exactly as they were.
 
-**Not built:** undoing a promotion; a stored reason on an ended enrolment (left versus
-graduated is reported once, on the confirmation, and not recorded); promotion across a class the school has not created yet.
+**Not built:** undoing a promotion; promotion across a class the school has not
+created yet; promotion once the new session's first term has been made current
+(the page then says the school is in first term, and children are placed by
+hand; the term-change review counts the children not promoted before the
+switch is made).
 
 ## Who may place
 

@@ -218,9 +218,34 @@ A revision copies the three fields from the card it supersedes. If attendance it
 what needs correcting, that is an **explicit input to the revision** — the caller says
 so and the audit row records it — not a side effect of fixing something else.
 
-This gets its own control: amend a register after release, revise the card for an
-unrelated reason, and assert the revised card's three numbers equal the original's. The
-control makes the revision recompute, and exactly that test reddens.
+This gets its own control: change the marks behind a released card, revise the card for
+an unrelated reason, and assert the revised card's three numbers equal the original's. The
+control makes the revision recompute, and exactly that test reddens. (Since audit finding
+G-10 a register cannot be amended through the service after release, so the test changes
+the marks directly.)
+
+### D7a. A register is locked with the results it feeds (audit finding G-10)
+
+A register is taken, amended or discarded only while the class's results for that term
+are open for writing: nobody has opened the sheet, or it is in draft
+(`results.services.is_open_for_writing()`, the rule marks, ratings and remarks keep).
+Once the sheet is submitted, checked or approved the register is refused (409) and the
+sentence says to **send the results back first**; once it is released it is refused for
+good. `services.RegisterLocked`, checked under the sheet's row lock.
+
+What this costs, on purpose: a class whose results are submitted before the last day of
+term cannot take a register for the days that remain until the sheet is sent back or
+released. What went on the card is then what was approved.
+
+### D7b. A day is one mark (audit finding G-11)
+
+`summary.for_term()` counts **school days**: where two classes' registers marked one
+child on one day, the day counts once and the mark written last is its answer. And
+`take_register()` no longer writes the second mark: a child another class has already
+marked for that day is left unmarked and named (`marked_elsewhere`). Not done: a child
+who joined the school after the day being filled in is still marked, because nothing
+records the day a child first attended (`Membership.started_on` is the day the record was
+made).
 
 ### D8. Marks are mutable; the card is the artefact
 

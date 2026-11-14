@@ -452,11 +452,11 @@ class SettingsHoldStillInTheChainTests(ConductSetUp):
 class TheYearFollowsARevisedCardTests(ReportCardApiSetUp):
     """Grace Academy, three terms released: Ngozi's Mathematics 90, 60 and 75.
 
-    The earlier card's figure is moved the only way it can move today: a live
-    mark changed underneath a released term. The marks lock refuses that in the
-    service; the database's own refusal keys off frozen ratings, and Grace
-    prints no conduct section, so a direct write gets through. It stands in for
-    any correction that reaches an earlier card: what is under test is what a
+    The earlier card's figure is moved the only way a mark under a released
+    card can move today (`test_sessions.change_the_live_mark()` has the
+    argument): the office moves the child to another arm, whose sheet is open,
+    the mark is changed there, and she is moved back. It stands in for any
+    correction that reaches an earlier card: what is under test is what a
     reissue of that card then does to the year.
     """
 
@@ -473,12 +473,19 @@ class TheYearFollowsARevisedCardTests(ReportCardApiSetUp):
             self.release(self.stmarys, term)
 
     def move_the_mark(self, term_name, value, school=None, child=None):
-        school = school or self.grace
+        from academics.services import move_student
+
+        school, child = school or self.grace, child or self.ngozi
         with connected_to(school):
-            Score.objects.filter(
-                assessment__term=self.term_of(school, term_name),
-                student_membership_id=(child or self.ngozi).pk,
+            term = self.term_of(school, term_name)
+            home = self.group_of(school)
+            other, _ = ClassGroup.objects.get_or_create(name="JSS 1B", defaults={"level": 1})
+            move_student(other, term, child)
+            changed = Score.objects.filter(
+                assessment__term=term, student_membership_id=child.pk
             ).update(value=value)
+            move_student(home, term, child)
+        self.assertEqual(changed, 1, "the live mark was not there to change")
 
     def revise(self, term_name, reason="The first term's mark was entered wrongly"):
         with connected_to(self.grace):
@@ -520,7 +527,7 @@ class TheYearFollowsARevisedCardTests(ReportCardApiSetUp):
         # And it is what the family is served on the third-term card.
         body = self.fetch(self.their_principal, self.grace, self.ngozi, THIRD).json()
         self.assertEqual(
-            (body["session_line"]["first_average"], body["session_line"]["session_average"]),
+            (body["session"]["first_average"], body["session"]["session_average"]),
             ("60.00", "65.00"),
         )
         self.assertEqual(body["version"], 2)
@@ -542,7 +549,7 @@ class TheYearFollowsARevisedCardTests(ReportCardApiSetUp):
         with connected_to(self.grace):
             third = cards.card_for(self.ngozi, self.term_of(self.grace, THIRD))
             first = cards.card_for(self.ngozi, self.term_of(self.grace, FIRST))
-            log = CardRevision.objects.get(card=third)
+            log = CardRevision.objects.select_related("previous_card").get(card=third)
             own = CardRevision.objects.get(card=first)
         self.assertEqual(log.previous_card.version, 1)
         self.assertEqual(log.revised_by_id, self.their_principal.pk)
