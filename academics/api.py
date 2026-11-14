@@ -383,6 +383,16 @@ class TermChangeReviewOut(Schema):
     already_placed: int
     not_carried: int
     in_new_term: int
+    #: Leaving a third term for a new session: children not yet promoted.
+    not_promoted: int = 0
+    #: Sent back as `seen` on the `PUT` that makes the term current, which is
+    #: refused without it or once the review no longer holds.
+    token: str
+
+
+class SeenIn(Schema):
+    #: The `token` of the review the person was shown.
+    seen: str = ""
 
 
 class CurrentTermOut(TermRowOut):
@@ -432,15 +442,22 @@ def review_current_term(request, term_id: int):
         already_placed=found.already_placed,
         not_carried=found.not_carried,
         in_new_term=found.in_new_term,
+        not_promoted=found.not_promoted,
+        token=found.token,
     )
 
 
 @router.put(
     "/terms/{int:term_id}/current/",
-    response={200: CurrentTermOut, 403: MessageOut, 422: MessageOut},
+    response={200: CurrentTermOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
 )
-def set_current_term(request, term_id: int):
+def set_current_term(request, term_id: int, payload: SeenIn = None):
     """Say which term the school is teaching now.
+
+    **Only after the review, and only as reviewed.** `seen` is the `token` of
+    `GET .../current/review/`. Without it, or when the review has changed since
+    (a child placed, moved or taken off the roll), the answer is 409 and the
+    current term stays where it was: look again, then send the new token.
 
     The previous one is cleared in the same transaction — `one_current_term` is
     a unique constraint on `is_current` where true, so setting a second without
@@ -470,6 +487,9 @@ def set_current_term(request, term_id: int):
             # Locked, so two people making a term current at once go one after
             # the other and the second sees what the first did.
             was = Term.objects.select_for_update().filter(is_current=True).first()
+            # What this switch will do, worked out under that lock, has to be
+            # what the caller was shown.
+            term_change.require_seen(term, payload.seen if payload else "")
             term = services.set_current_term_as(request.user, term, school=school)
             # A new term starts with the last one's subject teachers, copied in the
             # same transaction (`docs/subject-teachers.md`). Nothing, if it had none.
@@ -479,6 +499,8 @@ def set_current_term(request, term_id: int):
             carried = term_change.carry(was, term, by=request.user)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except term_change.ReviewNotSeen as exc:
+        return 409, MessageOut(detail=str(exc))
     except services.ResultsInTheChain as exc:
         return 422, MessageOut(detail=f"{exc} The current term was not changed.")
 

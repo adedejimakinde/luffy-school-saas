@@ -23,8 +23,6 @@ and shows up as the remainder, which is the whole of A4.
 
 from dataclasses import dataclass
 
-from django.db.models import Count, Q
-
 from .models import AttendanceMark, AttendanceStatus
 
 
@@ -73,28 +71,47 @@ def for_term(term, student_ids) -> dict[int, TermAttendance]:
     both, and both halves are her attendance for the term; `Register.class_group`
     records who did the marking, which is a different question and the one D2 is
     about.
+
+    **School days are counted, not marks** (audit finding G-11). The database
+    holds one mark per child per *register* and one register per class per day,
+    and nothing says one mark per child per day: a child marked in JSS 1A in the
+    morning and moved to JSS 1B that day, or on JSS 1B's list when its teacher
+    fills in last week, has two marks for one day. Counting rows gave that child
+    two days, and a term's total could pass the days the school opened. So each
+    child's marks are read a day at a time and **a day counts once**: where two
+    registers marked the same child on the same day, the mark written last is
+    the day's answer (`updated_at`, then the row's id), which is how a
+    correction works everywhere else. `take_register()` no longer writes the
+    second mark; this is what holds for the ones already written.
     """
     ids = list(student_ids)
     if not ids:
         return {}
 
-    counted = (
+    # `DISTINCT ON (child, day)`, keeping the row that sorts first: the mark
+    # written last. One query for the class, as before.
+    days = (
         AttendanceMark.objects.filter(
             register__term=term, student_membership_id__in=ids
         )
-        .values("student_membership_id")
-        .annotate(
-            present=Count("pk", filter=Q(status=AttendanceStatus.PRESENT)),
-            absent=Count("pk", filter=Q(status=AttendanceStatus.ABSENT)),
+        .order_by(
+            "student_membership_id", "register__taken_on", "-updated_at", "-pk"
         )
+        .distinct("student_membership_id", "register__taken_on")
+        .values_list("student_membership_id", "status")
     )
-    found = {
-        row["student_membership_id"]: TermAttendance(
-            present=row["present"], absent=row["absent"]
-        )
-        for row in counted
+    present, absent = {}, {}
+    for student_id, status in days:
+        if status == AttendanceStatus.PRESENT:
+            present[student_id] = present.get(student_id, 0) + 1
+        elif status == AttendanceStatus.ABSENT:
+            absent[student_id] = absent.get(student_id, 0) + 1
+    return {
+        sid: TermAttendance(present=present.get(sid, 0), absent=absent.get(sid, 0))
+        if sid in present or sid in absent
+        else NOTHING_MARKED
+        for sid in ids
     }
-    return {sid: found.get(sid, NOTHING_MARKED) for sid in ids}
 
 
 __all__ = ["NOTHING_MARKED", "TermAttendance", "for_term"]

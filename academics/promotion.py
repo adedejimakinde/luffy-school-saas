@@ -36,6 +36,28 @@ placements go. Neither is created here: opening a term is the office's own act
 skipped either: the whole promotion is refused, naming how many. Somebody has
 already started placing children by hand or carried a roster forward, and mixing
 the two silently is how a class ends up with two rosters.
+
+**The principal decides; this carries it out** (audit finding G-04). Whether a
+child is promoted, repeats, graduates or leaves is a `results.PromotionDecision`,
+recorded by the principal with a reason (`results.sessions.decide_many_as()`),
+beside what Classnode suggested from the year's released results and the
+school's pass mark. `promote()` moves nobody on its own say:
+
+- a child with **no decision** refuses the whole plan, by name. Undecided is
+  the absence of a row, and a child nobody decided about has not been promoted;
+- a choice that **disagrees** with the decision refuses the whole plan, by
+  name: "promote" for a child the principal said repeats, "leave" for a child
+  nobody said is leaving, "graduated" for a class whose children were decided
+  "promoted".
+
+So an administrator may still press the button, and what it does is what the
+principal wrote down. `_plan_words()` is the table of which decision allows
+which choice.
+
+**A graduate's or a leaver's family keeps its way in** (audit finding G-05):
+the enrolment ends with the guardians' access left as it was
+(`release_student(keep_family_access=True)`), so the cards that went home stay
+readable.
 """
 
 import re
@@ -87,11 +109,32 @@ class AlreadyPlacedNext(PromotionError):
     """Some children already have a place in next session's first term."""
 
 
+class NotDecided(PromotionError):
+    """A child in the plan has no decision from the principal."""
+
+
+class AgainstTheDecision(PromotionError):
+    """The plan's choice for a child is not what the principal decided."""
+
+
 @dataclass
 class Child:
     membership_id: int
     name: str
     reference: str
+    #: The year's average on the released third-term card, or `None` when the
+    #: year has not been frozen for this child.
+    average: object = None
+    #: What Classnode suggests from that average and the pass mark:
+    #: "promoted", "repeated" or "" (nothing to go on).
+    suggested: str = ""
+    #: The principal's latest `PromotionDecision`, or `None` when undecided.
+    decision: object = None
+
+    @property
+    def action(self):
+        """The plan's choice this decision allows, or `None` when undecided."""
+        return _ACTION_FOR.get(self.decision.status) if self.decision else None
 
 
 @dataclass
@@ -114,6 +157,12 @@ class Review:
     targets: list = field(default_factory=list)
     #: Why nothing can be promoted yet, in a sentence for the person; `None` when it can.
     problem: str = None
+    #: The pass mark suggestions are made against today.
+    pass_mark: object = None
+
+    @property
+    def undecided(self) -> int:
+        return sum(1 for row in self.classes for child in row.children if child.decision is None)
 
 
 def next_session(session: str):
@@ -204,19 +253,135 @@ def _name(member):
     return member.display_name or member.user.full_name or member.user.username
 
 
+#: The plan's choice each decision allows. "Graduated" is "promote" in a class
+#: whose destination is graduation; `_class_graduates()` holds that half.
+_ACTION_FOR = {
+    "promoted": PROMOTE,
+    "on_trial": PROMOTE,
+    "graduated": PROMOTE,
+    "repeated": REPEAT,
+    "withdrawn": LEAVE,
+}
+
+
+def _class_graduates(status):
+    """Whether this decision needs the child's class to graduate: True, False, or
+    `None` when where the class goes makes no difference to this child."""
+    if status == "graduated":
+        return True
+    if status in ("promoted", "on_trial"):
+        return False
+    return None
+
+
+def _plan_words(choice, graduate, destination):
+    """What the plan says about one child, for a refusal."""
+    if choice == LEAVE:
+        return "is leaving"
+    if choice == REPEAT:
+        return "repeats"
+    if graduate:
+        return "graduates"
+    return f"is promoted to {destination.name}" if destination else "is promoted"
+
+
+def _named(names, limit=5):
+    names = sorted(names, key=str.casefold)
+    shown = ", ".join(names[:limit])
+    return f"{shown} and {len(names) - limit} more" if len(names) > limit else shown
+
+
+def _require_the_principals_decisions(term, eligible, chosen, groups):
+    """Refuse a plan that moves a child the principal has not decided about, or
+    not as the principal decided. Audit finding G-04. Nothing has been written.
+
+    Read inside `promote()`'s transaction, under its lock on the term. A decision
+    is an insert that takes no lock, so one recorded a moment later is not seen;
+    it would have had to say the same as the plan for the plan to pass.
+    """
+    from results import sessions
+
+    decisions = sessions.decisions_for(
+        [m.pk for members in eligible.values() for m in members], term.session
+    )
+    undecided, against = [], []
+    for group_id, members in eligible.items():
+        entry = chosen[group_id]
+        choices = {int(k): v for k, v in entry["children"].items()}
+        graduate = bool(entry.get("graduate"))
+        destination = groups.get(entry.get("destination_id"))
+        for member in members:
+            decision = decisions.get(member.pk)
+            if decision is None:
+                undecided.append(_name(member))
+                continue
+            needs = _class_graduates(decision.status)
+            if choices[member.pk] != _ACTION_FOR[decision.status] or (
+                needs is not None and needs != graduate
+            ):
+                against.append(
+                    f"{_name(member)} (decided: {decision.get_status_display().lower()}; "
+                    f"this plan: {_plan_words(choices[member.pk], graduate, destination)})"
+                )
+    if undecided:
+        raise NotDecided(
+            f"The principal has not decided about {len(undecided)} "
+            f"{'child' if len(undecided) == 1 else 'children'}: {_named(undecided)}. "
+            f"Whether a child moves up, repeats, graduates or leaves is the "
+            f"principal's decision. Nothing was moved."
+        )
+    if against:
+        raise AgainstTheDecision(
+            f"This plan is not what the principal decided for {_named(against, limit=3)}. "
+            f"Nothing was moved. Change the plan, or ask the principal to record a "
+            f"new decision."
+        )
+
+
 def review() -> Review:
-    """What promotion would look at, for the current term. **Writes nothing.**"""
+    """What promotion would look at, for the current term. **Writes nothing.**
+
+    Each child comes with the year's average off their released third-term card,
+    what Classnode suggests from it and the pass mark as it is today, and the
+    principal's decision if one has been recorded. The suggestion shown for a
+    child already decided is the one kept with that decision.
+    """
+    from results import sessions
+
     term = _current_term()
     problem, to_term = _problem_with(term)
     result = Review(term=term, to_term=to_term, problem=problem)
     if problem:
         return result
+    config = sessions.settings()
+    result.pass_mark = config.pass_mark
 
     active = list(ClassGroup.objects.filter(is_active=True))
     result.targets = active
     groups = {g.pk: g for g in ClassGroup.objects.all()}
+    live = _live_children(term)
+    everybody = [m.pk for members in live.values() for m in members]
+    years = sessions.frozen_years(everybody, term.session)
+    decisions = sessions.decisions_for(everybody, term.session)
+
+    def child(m):
+        year, decision = years.get(m.pk), decisions.get(m.pk)
+        average = year.session_average if year is not None else None
+        return Child(
+            m.pk,
+            _name(m),
+            m.reference,
+            average=average,
+            suggested=(
+                decision.suggested
+                if decision is not None
+                else sessions.suggested_status(average, config=config) or ""
+            ),
+            decision=decision,
+        )
+
     for group_id, members in sorted(
-        _live_children(term).items(), key=lambda item: (groups[item[0]].level, groups[item[0]].name)
+        live.items(), key=lambda item: (groups[item[0]].level, groups[item[0]].name)
     ):
         group = groups[group_id]
         suggested, graduate = _suggest(group, active)
@@ -224,7 +389,7 @@ def review() -> Review:
             ClassReview(
                 class_group=group,
                 children=sorted(
-                    (Child(m.pk, _name(m), m.reference) for m in members),
+                    (child(m) for m in members),
                     key=lambda c: c.name.lower(),
                 ),
                 suggested_class=suggested,
@@ -248,6 +413,10 @@ def promote(plan, *, by=None) -> Outcome:
     `plan` is a list of `{"class_group_id", "graduate", "destination_id",
     "children": {membership_id: "promote" | "repeat" | "leave"}}`, one entry for every
     class that has children and, in each, one choice for every child.
+
+    Every choice has to be what the principal decided for that child
+    (`_require_the_principals_decisions()`), whoever calls: there is no way
+    round it, in a route or out of one.
     """
     with transaction.atomic():
         # The term row is locked so two confirmations cannot interleave: the
@@ -313,6 +482,10 @@ def promote(plan, *, by=None) -> Outcome:
                     writes.append((destination_id, member))
                     counts["promoted"] += 1
 
+        # The plan is well formed: every class, every child, a real destination.
+        # Now, and before anything is written, is it what the principal decided?
+        _require_the_principals_decisions(term, eligible, chosen, groups)
+
         placed = ClassPlacement.objects.filter(
             term=to_term, student_membership_id__in=[m.pk for _, m in writes]
         ).count()
@@ -336,7 +509,8 @@ def promote(plan, *, by=None) -> Outcome:
             for class_id, member in writes
         )
         for member in leaving:
-            release_student(member)
+            # The family keeps its way in to the cards that went home (G-05).
+            release_student(member, keep_family_access=True)
     return Outcome(**counts)
 
 
@@ -352,10 +526,12 @@ def promote_as(actor, school, plan):
 
 __all__ = [
     "ACTIONS",
+    "AgainstTheDecision",
     "AlreadyPlacedNext",
     "BadDestination",
     "LEAVE",
     "NoFirstTermNext",
+    "NotDecided",
     "NotEndOfSession",
     "PROMOTE",
     "PromotionError",

@@ -25,14 +25,38 @@ the subject's percentage. "The exam" is the paper named Exam (the Ogun preset's
 name, `ogun.ASSESSMENTS`), so a school whose papers differ still gets its CA
 and exam split, each out of what its papers add up to.
 
+**The name decides the split and nothing else** (audit finding G-07). A subject
+is whole when every one of its papers is marked, whatever they are called, and
+a whole subject prints its Weighted Average, its term scores and its annual
+score and is counted in the summary. A subject with no paper named exactly
+"Exam" (a school that kept "Examination", "CA" and "Test") prints a dash in the
+two rows the sheet cannot fill and its marks in the third.
+
 A **senior** class (its name starts SS or SSS: "SSS 2A", "SS1 Gold") groups the
 columns under department headings, in `gradebook.Department` order, with
 subjects nobody placed under "Other". A junior class has one run of columns.
 
 On a **third-term** card three more rows: the 1st, 2nd and 3rd term scores
 (each out of 100, from this child's card for each term of the session) and the
-**Weighted Annual Score**, their average over the terms taken. A term with no
-score shows "-".
+**Weighted Annual Score**. A term with no score shows "-".
+
+## One set of frozen figures (audit finding G-08)
+
+- **Percentage** in the summary is the card's own frozen average
+  (`ReleasedCard.own_average`): the figure the class position beside it is
+  ranked on and the Standard card prints. It is not marks obtained over marks
+  obtainable, which is a different number whenever subjects are out of
+  different totals. Those two sums still print, as sums.
+- **Rounding** is `positions.round_percentage()`, half up, as everywhere else.
+- **The annual score** of a subject is its term scores combined under the
+  weighting frozen on this card's year summary (`ReleasedSessionResult`'s
+  `*_weight_used`), over the terms the subject has a score for: the same terms,
+  the same weights and the same rounding as the year's average on the card.
+- **The 1st and 2nd term scores** are read off the child's cards for those
+  terms *as they stood when this card was issued* (`cards.card_as_of()`), which
+  is what the year summary was frozen from. A later revision of an earlier
+  term's card reissues this one in the same transaction when it moves the
+  year's figures (`results.revision`), and the new version reads the new card.
 
 ## The head
 
@@ -44,19 +68,21 @@ one line.
 
 ## The promotion line
 
-Third term only, from the end-of-session promotion (`academics.promotion`),
-which places each child in next session's first term: placed in the same class
-is "Not promoted, to repeat JSS 2A"; in another, "Promoted to JSS 3A". Where no
-placement exists yet, the school's recorded decision (`PromotionDecision`) is
-used if there is one, without a class. Otherwise no line.
+Third term only, and **the principal's recorded decision and nothing else**
+(`PromotionDecision`, audit finding G-06): "Promoted", "Promoted on trial",
+"Not promoted, to repeat JSS 2A" (the class on this card), "Graduated",
+"Withdrawn". No decision, no line. It is not worked out from where the child is
+placed next session: a placement made by hand, a child who repeats in another
+arm and a move in October each used to reword a card that had gone home.
+The Standard card prints the same decision (`card_api._promotion()`).
 """
 
 import base64
 import re
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from typing import Optional
 
-from academics.models import ClassPlacement, Sex, StudentDetails, Term, TermName
+from academics.models import Sex, StudentDetails, Term, TermName
 from gradebook.models import Department, Subject
 
 from .models import (
@@ -64,9 +90,11 @@ from .models import (
     PromotionDecision,
     PromotionStatus,
     ReleasedCard,
+    ReleasedSessionResult,
     ReleasedSubjectResult,
     ReportCardSettings,
 )
+from .positions import CONTEXT, round_percentage
 
 MINISTRY = ("OGUN STATE GOVERNMENT", "MINISTRY OF EDUCATION, SCIENCE AND TECHNOLOGY")
 
@@ -102,17 +130,29 @@ def _text(value) -> Optional[str]:
     return text.rstrip("0").rstrip(".") if "." in text else text
 
 
+def _is_exam(cell) -> bool:
+    return cell.assessment_name.strip().lower() == "exam"
+
+
 def _split(line, whole_only=False) -> dict:
     """CA and exam for one subject line, each with what it is out of.
 
     On a card frozen under the whole-subjects rule (`whole_only`), a half with a
     paper unmarked is a dash: a continuous assessment total over two of its three
     tests is not the child's CA score. An earlier card keeps its partial sum.
+
+    **A subject with no paper named Exam has no split**: both halves are `None`
+    with nothing they are out of, and the sheet prints a dash in each. Its marks
+    are in the Weighted Average row (audit finding G-07).
     """
-    exam = [c for c in line.assessments if c.assessment_name.strip().lower() == "exam"]
+    exam = [c for c in line.assessments if _is_exam(c)]
+    if not exam:
+        return {"ca": None, "ca_max": None, "exam": None, "exam_max": None}
     rest = [c for c in line.assessments if c not in exam]
 
     def total(cells):
+        if not cells:
+            return None, None
         scores = [c.score for c in cells if c.score is not None]
         if whole_only and len(scores) < len(cells):
             return None, sum(c.max_score for c in cells)
@@ -124,45 +164,45 @@ def _split(line, whole_only=False) -> dict:
 
 
 def _is_complete(line) -> bool:
-    """Every paper of this subject has a mark for this child, exam included.
+    """Every paper of this subject has a mark for this child.
 
     A paper with no mark is not nought (`gradebook.Score`: no row is "not
-    marked"), and a subject still waiting on a paper has no total yet. The sheet
-    needs both halves, so a subject with no paper named Exam, or none but the
-    exam, is not whole either. The Standard card prints the percentage over what
-    was marked, with the marks beside it; the Ogun sheet's Weighted Average (100)
-    and its summary have no room for that denominator, so they wait until the
-    subject is whole.
+    marked"), and a subject still waiting on a paper has no total yet. The
+    Standard card prints the percentage over what was marked, with the marks
+    beside it; the Ogun sheet's Weighted Average (100) and its summary have no
+    room for that denominator, so they wait until the subject is whole.
+
+    **What the papers are called has nothing to do with it** (audit finding
+    G-07). This used to ask for a paper named exactly "Exam" and at least one
+    other, so a school that kept its own papers got a column of dashes for a
+    subject every child had been marked in.
     """
     cells = line.assessments
-    exam = [c for c in cells if c.assessment_name.strip().lower() == "exam"]
-    return (
-        bool(exam)
-        and len(exam) < len(cells)
-        and all(c.score is not None for c in cells)
-        and line.is_complete
-    )
+    return bool(cells) and all(c.score is not None for c in cells) and line.is_complete
 
 
-def _summary(subjects, whole) -> dict:
-    """Marks obtainable, obtained and percentage over the complete subjects only."""
+def _summary(card, subjects, whole) -> dict:
+    """Marks obtainable and obtained over the whole subjects, and the percentage.
+
+    The percentage is the card's own frozen average, the figure its position is
+    ranked on (audit finding G-08), not the two sums divided.
+    """
     done = [s for s in subjects if id(s) in whole]
-    obtainable = sum(s["ca_max"] + s["exam_max"] for s in done)
-    obtained = sum((s["ca"] or 0) + (s["exam"] or 0) for s in done)
-    percentage = None
-    if obtainable:
-        share = Decimal(obtained) * 100 / Decimal(obtainable)
-        percentage = _text(share.quantize(Decimal("0.01")))
+    obtainable = sum(s["out_of"] for s in done)
+    obtained = sum(s["total"] for s in done)
     return {
         "obtainable": obtainable or None,
         "obtained": obtained if obtainable else None,
-        "percentage": percentage,
+        "percentage": _text(round_percentage(card.own_average))
+        if card.own_average is not None
+        else None,
         "left_out": len(subjects) - len(done),
     }
 
 
 def _other_terms(card) -> dict:
-    """`{"first": {subject_id: percentage}, "second": {...}}` from this child's cards."""
+    """`{"first": {subject_id: percentage}, "second": {...}}` from this child's
+    cards for those terms, as they stood when this card was issued."""
     from . import cards
 
     found = {}
@@ -170,7 +210,7 @@ def _other_terms(card) -> dict:
         term = Term.objects.filter(session=card.session, name=name).first()
         if term is None:
             continue
-        other = cards.card_for(card.student_membership_id, term)
+        other = cards.card_as_of(card.student_membership_id, term, card.created_at)
         if other is None:
             continue
         # A subject with a paper unmarked that term has no score for it.
@@ -182,39 +222,59 @@ def _other_terms(card) -> dict:
     return found
 
 
-def _annual(scores) -> Optional[Decimal]:
-    taken = [s for s in scores if s is not None]
-    if not taken:
+def _weights_of(card) -> dict:
+    """`{term name: weight}` as frozen on this card's year summary.
+
+    Only the terms the year counted. A card with no frozen year (not a third
+    term, or issued before the year was frozen at all) weighs its terms equally.
+    """
+    frozen = ReleasedSessionResult.objects.filter(card=card).order_by("-id").first()
+    names = [name.value for name in (TermName.FIRST, TermName.SECOND, TermName.THIRD)]
+    if frozen is None:
+        return {name: Decimal(1) for name in names}
+    return {
+        name: weight
+        for name in names
+        if (weight := getattr(frozen, f"{name}_weight_used")) is not None
+    }
+
+
+def _annual(scores, weights) -> Optional[Decimal]:
+    """One subject's year: its term scores under the card's frozen weighting.
+
+    `scores` is `{term name: percentage or None}`. Over the terms that have a
+    score and that the year counted, renormalised, exactly as the year's average
+    is (`sessions._weigh()`), and rounded once, half up.
+    """
+    taken = {
+        name: score
+        for name, score in scores.items()
+        if score is not None and name in weights
+    }
+    total = sum(weights[name] for name in taken)
+    if not taken or total <= 0:
         return None
-    return (sum(taken) / len(taken)).quantize(Decimal("0.01"))
+    with localcontext(CONTEXT):
+        return round_percentage(
+            sum(score * weights[name] for name, score in taken.items()) / total
+        )
 
 
 def _promotion_line(card) -> Optional[str]:
+    """The principal's decision for this child's year, in the sheet's words."""
     if card.term_name != TermName.THIRD:
         return None
-    from academics.promotion import next_session
-
-    following = Term.objects.filter(session=next_session(card.session), name=TermName.FIRST).first()
-    placement = (
-        ClassPlacement.objects.select_related("class_group")
-        .filter(term=following, student_membership_id=card.student_membership_id)
+    decision = (
+        PromotionDecision.objects.filter(
+            student_membership_id=card.student_membership_id, session=card.session
+        )
+        .order_by("-decided_at", "-id")
         .first()
-        if following
-        else None
     )
-    if placement is not None:
-        if placement.class_group_id == card.class_group_id:
-            return f"Not promoted, to repeat {card.class_group_name}"
-        return f"Promoted to {placement.class_group.name}"
-    decision = PromotionDecision.objects.filter(
-        student_membership_id=card.student_membership_id, session=card.session
-    ).first()
     if decision is None:
         return None
     if decision.status == PromotionStatus.REPEATED:
         return f"Not promoted, to repeat {card.class_group_name}"
-    if decision.status in (PromotionStatus.PROMOTED, PromotionStatus.ON_TRIAL):
-        return decision.get_status_display()
     return decision.get_status_display()
 
 
@@ -260,6 +320,7 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
     )
     third = card.term_name == TermName.THIRD
     others = _other_terms(card) if third else {}
+    weights = _weights_of(card) if third else {}
 
     subjects = []
     whole = set()
@@ -278,17 +339,22 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
             "ca_max": split["ca_max"],
             "exam": split["exam"],
             "exam_max": split["exam_max"],
-            "weighted": _text(percentage.quantize(Decimal("0.01"))) if percentage is not None else None,
+            "weighted": _text(round_percentage(percentage)) if percentage is not None else None,
+            #: The subject's marks and what they are out of, for the summary's
+            #: two sums. Nought for a subject that is not whole; never printed.
+            "total": sum(c.score for c in line.assessments) if complete else 0,
+            "out_of": sum(c.max_score for c in line.assessments) if complete else 0,
         }
         if third:
             first = others.get("first", {}).get(sid)
             second = others.get("second", {}).get(sid)
-            terms = [first, second, percentage]
             row.update(
                 first=_text(first),
                 second=_text(second),
                 third=_text(percentage),
-                annual=_text(_annual(terms)),
+                annual=_text(
+                    _annual({"first": first, "second": second, "third": percentage}, weights)
+                ),
             )
         subjects.append(row)
         if complete:
@@ -320,8 +386,10 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         )
 
     present, absent = card.days_present, card.days_absent
-    ca_outs = {s["ca_max"] for s in subjects}
-    exam_outs = {s["exam_max"] for s in subjects}
+    # Over the subjects that have the split; one with no paper named Exam has
+    # neither half and says nothing about what the halves are out of.
+    ca_outs = {s["ca_max"] for s in subjects if s["exam_max"] is not None}
+    exam_outs = {s["exam_max"] for s in subjects if s["exam_max"] is not None}
     return {
         #: "(30)" and "(70)" on the row labels when every subject agrees.
         "ca_out_of": ca_outs.pop() if len(ca_outs) == 1 else None,
@@ -356,7 +424,7 @@ def sheet_for(card: ReleasedCard, payload, school) -> Optional[dict]:
         #: The card's own key, as it was printed: relabelling a point of
         #: the scale later does not reword a card that has gone home.
         "key": ratings.scale_of_card(card),
-        "summary": _summary(subjects, whole),
+        "summary": _summary(card, subjects, whole),
     }
 
 

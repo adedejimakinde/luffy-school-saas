@@ -29,8 +29,28 @@ the school steps **back** to an earlier term either: that term has its own lists
 current would do: each class, how many children would be carried into it, how many
 are already placed, and by name every child who would not be carried and why. It
 writes nothing. The setup page shows it and asks before it switches.
+
+**The route requires it.** The review carries a `token`, a digest of everything it
+says, and `PUT .../current/` takes that token back as `seen`. Inside the
+transaction that would make the term current, the review is worked out again and
+its token compared: with no token, or one for a review that no longer holds (a
+child placed, moved or taken off the roll since), the term is not changed and the
+caller is told to look again. So the switch that happens is the switch that was
+shown, and a caller that never read the review cannot make it.
+
+**It says how a child left.** A child not carried was taken off the roll by the
+principal (`Departure`, with the day), or graduated or left at the end of a
+session on the principal's decision (`results.PromotionDecision`). Where neither
+record exists (an enrolment ended before either was kept, or by a transfer), it
+says only that they are no longer at the school.
+
+**Leaving a third term with children not promoted** is said, with the number:
+they will be in no class in the new session until Promotion is run or they are
+placed by hand.
 """
 
+import hashlib
+import json
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -39,11 +59,13 @@ from django.db import connection
 from accounts.models import LIVE_STATUSES, Membership, Role
 
 from . import services
-from .models import ClassGroup, ClassPlacement, Term
+from .models import ClassGroup, ClassPlacement, Departure, Term, TermName
 
-#: Why a child on last term's list is not carried. The membership records that an
-#: enrolment ended and not how, so one sentence covers a leaver and a graduate.
-LEFT = "No longer at the school (left or graduated)"
+#: Why a child on last term's list is not carried, where no record says how the
+#: enrolment ended: neither a `Departure` nor a decision at promotion.
+LEFT = "No longer at the school"
+GRADUATED = "Graduated"
+LEFT_AT_PROMOTION = "Left the school at the end of the session"
 
 
 @dataclass
@@ -77,6 +99,39 @@ class Review:
     classes: List[ClassLine] = field(default_factory=list)
     #: How many children the new term's lists hold already, however they got there.
     in_new_term: int = 0
+    #: Leaving a third term for another session: how many children on its class
+    #: lists are still at the school and have no class in the new term. They are
+    #: who Promotion has not moved.
+    not_promoted: int = 0
+
+    @property
+    def token(self) -> str:
+        """A digest of everything this review says, for `require_seen()`.
+
+        Whatever a person was shown and agreed to is in it: which term replaces
+        which, whether the lists are carried and why not, each class's counts,
+        each child not carried and the reason given, and the two totals. Not
+        a secret and not a signature: it proves what was *seen*, and authority
+        is asked separately.
+        """
+        said = {
+            "term": self.term.pk,
+            "from": self.from_term.pk if self.from_term else None,
+            "carries": self.carries,
+            "why_not": self.why_not,
+            "in_new_term": self.in_new_term,
+            "not_promoted": self.not_promoted,
+            "classes": [
+                [
+                    line.class_group_id,
+                    line.carried,
+                    line.already_placed,
+                    [[child.membership_id, child.why] for child in line.not_carried],
+                ]
+                for line in self.classes
+            ],
+        }
+        return hashlib.sha256(json.dumps(said, sort_keys=True).encode()).hexdigest()
 
     @property
     def carried(self) -> int:
@@ -123,6 +178,78 @@ def _name(member) -> str:
     return member.display_name or member.user.full_name or member.user.username
 
 
+class ReviewNotSeen(services.AcademicsError):
+    """The caller has not seen the review as it stands. Nothing was changed."""
+
+
+def require_seen(term, seen) -> Review:
+    """The review of making `term` current, if `seen` is its token. Else refuse.
+
+    Called inside the transaction that makes the term current, after the current
+    term's row is locked, so the review compared is the one the switch will act
+    on. See the module docstring, "The route requires it".
+    """
+    found = review(term)
+    if not seen:
+        raise ReviewNotSeen(
+            "Look at what making this term current will do before it is made "
+            "current. The current term was not changed."
+        )
+    if seen != found.token:
+        raise ReviewNotSeen(
+            "The class lists changed since you looked. Look again at what making "
+            "this term current will do. The current term was not changed."
+        )
+    return found
+
+
+def _how_they_left(membership_ids) -> dict:
+    """`{membership id: sentence}` for children whose enrolment ended on a record.
+
+    The latest `Departure` (the principal took them off the roll, G-16), else the
+    principal's latest decision at a promotion, if it was "graduated" or
+    "withdrawn" (G-04). A child with neither is absent, and gets `LEFT`.
+    """
+    ids = list(membership_ids)
+    if not ids:
+        return {}
+    from results.models import PromotionDecision, PromotionStatus
+
+    how = {}
+    for decision in PromotionDecision.objects.filter(
+        student_membership_id__in=ids,
+        status__in=[PromotionStatus.GRADUATED, PromotionStatus.WITHDRAWN],
+    ).order_by("student_membership_id", "-decided_at", "-id"):
+        how.setdefault(
+            decision.student_membership_id,
+            GRADUATED if decision.status == PromotionStatus.GRADUATED else LEFT_AT_PROMOTION,
+        )
+    # A departure is the later and the more particular record, so it wins.
+    for departure in Departure.objects.filter(student_membership_id__in=ids).order_by(
+        "created_at", "id"
+    ):
+        how[departure.student_membership_id] = (
+            f"Left the school on {departure.left_on.day} {departure.left_on:%B %Y}"
+        )
+    return how
+
+
+def _not_promoted(was, term) -> int:
+    """Children on `was`'s lists, still at the school, with no class in `term`."""
+    placed = set(
+        ClassPlacement.objects.filter(term=term).values_list("student_membership_id", flat=True)
+    )
+    waiting = set(
+        ClassPlacement.objects.filter(term=was).values_list("student_membership_id", flat=True)
+    ) - placed
+    return Membership.objects.filter(
+        pk__in=waiting,
+        role=Role.STUDENT,
+        status__in=LIVE_STATUSES,
+        school__schema_name=connection.schema_name,
+    ).count()
+
+
 def review(term) -> Review:
     """What making `term` current would do to the class lists. **Writes nothing.**"""
     was = current_term()
@@ -135,6 +262,15 @@ def review(term) -> Review:
         in_new_term=ClassPlacement.objects.filter(term=term).count(),
     )
     if why_not:
+        if was is not None and was.name == TermName.THIRD and was.session != term.session:
+            result.not_promoted = _not_promoted(was, term)
+            if result.not_promoted:
+                result.why_not = (
+                    f"{why_not} {result.not_promoted} "
+                    f"{'child' if result.not_promoted == 1 else 'children'} of {was} "
+                    f"{'has' if result.not_promoted == 1 else 'have'} not been promoted "
+                    f"and will be in no class in {term}."
+                )
         return result
 
     source = list(ClassPlacement.objects.filter(term=was))
@@ -150,6 +286,12 @@ def review(term) -> Review:
         ).select_related("user", "school")
     }
     groups = {g.pk: g for g in ClassGroup.objects.filter(pk__in={p.class_group_id for p in source})}
+    how = _how_they_left(
+        p.student_membership_id
+        for p in source
+        if (m := members.get(p.student_membership_id)) is None
+        or m.status not in LIVE_STATUSES
+    )
     lines = {}
     for placement in source:
         group = groups[placement.class_group_id]
@@ -166,6 +308,7 @@ def review(term) -> Review:
                     membership_id=placement.student_membership_id,
                     name=_name(member) if member is not None else "A student who has left",
                     reference=(member.reference or "") if member is not None else "",
+                    why=how.get(placement.student_membership_id, LEFT),
                 )
             )
         elif placement.student_membership_id in already:
@@ -196,11 +339,15 @@ def carry(was, term, *, by=None) -> int:
 
 __all__ = [
     "ClassLine",
+    "GRADUATED",
     "LEFT",
+    "LEFT_AT_PROMOTION",
     "NotCarried",
     "Review",
+    "ReviewNotSeen",
     "carry",
     "current_term",
+    "require_seen",
     "review",
     "why_not_carried",
 ]

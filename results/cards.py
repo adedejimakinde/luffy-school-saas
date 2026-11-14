@@ -639,6 +639,40 @@ def card_for(membership, term) -> ReleasedCard | None:
     )
 
 
+def card_as_of(membership, term, moment) -> ReleasedCard | None:
+    """`card_for()` as it would have answered at `moment`: the card a later card
+    was issued beside.
+
+    The earliest release for the term, if it had happened by then, and the
+    highest version of it that existed by then. A third-term card that prints a
+    first-term figure reads it through this with its own `created_at`, so the
+    figure is the one that stood when the third-term card was issued and a
+    later revision of the first-term card does not reword it. The revision that
+    should reach it reissues the third-term card in the same transaction
+    (`revision._update_the_years_summary()`), and the new version then reads
+    the new figure.
+    """
+    student_id = getattr(membership, "pk", membership)
+    first = (
+        ReleasedCard.objects.filter(
+            term=term, student_membership_id=student_id, version=1
+        )
+        .order_by("created_at", "id")
+        .first()
+    )
+    if first is None or first.created_at > moment:
+        return None
+    return (
+        ReleasedCard.objects.filter(
+            sheet_id=first.sheet_id,
+            student_membership_id=student_id,
+            created_at__lte=moment,
+        )
+        .order_by("-version", "-id")
+        .first()
+    )
+
+
 def cards_for(student_ids, term) -> dict[int, ReleasedCard]:
     """`card_for()` for many children at once: `{student_id: card}`.
 
@@ -769,6 +803,7 @@ __all__ = [
     "the_card_for",
     "a_card_went_home",
     "cards_by_student",
+    "card_as_of",
     "card_for",
     "cards_for",
     "card_lines",

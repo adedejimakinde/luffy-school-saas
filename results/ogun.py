@@ -260,10 +260,23 @@ def set_template_as(actor, school, template: str):
     Returns `(settings row, Applied or None)`. Choosing Ogun again applies the
     presets again, which is how a school that added a subject or opened a term
     since gets them, and changes nothing that is already right.
+
+    **Refused while any class's results are submitted, checked or approved**
+    (`ratings.require_no_class_awaiting_release()`, audit finding G-09), naming
+    the class: nothing is changed, and the choice is made after they are
+    released or sent back.
     """
     _require_authority(actor, school)
     if template not in CardTemplate.values:
         raise TemplateRefused("Choose the Standard card or the Ogun State card.")
+    # Audit finding G-09. Choosing the Ogun card switches both conduct
+    # sections on, hides, adds and renames traits, rewords the scale and turns
+    # the class position on; choosing either changes the layout the cards are
+    # released in. All of that is what a class in the chain was approved with.
+    try:
+        ratings.require_no_class_awaiting_release("The report card template")
+    except ratings.ClassesAwaitingRelease as exc:
+        raise TemplateRefused(str(exc)) from None
     row = _row()
     row.template = template
     fields = ["template", "updated_at"]

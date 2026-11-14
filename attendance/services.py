@@ -29,16 +29,45 @@ a real event, and there are three ways it bites:
 None of the three is an error. They are all reports, because a teacher standing
 in front of a class should not have a register refused wholesale over one child
 the office moved while they were marking.
+
+## One mark per child per day (audit finding G-11)
+
+A register is taken against the class list as it is now, for whatever date is
+asked. So two more children are left unmarked and named, for the same reason
+as the child who appeared: nobody in this room observed them that day.
+
+- a child **already marked that day by another class** (`marked_elsewhere`).
+  She was in JSS 1A on Monday and is on JSS 1B's list now; JSS 1B's register
+  for Monday, taken that afternoon or filled in a week later, does not mark her
+  a second time, and does not write "present" over what JSS 1A saw.
+- a child **who had not joined the school by that day** (`joined_later`,
+  `Membership.started_on`). Filling in last week's register must not mark
+  present a child admitted this morning.
+
+`attendance.summary` counts days and not marks, which is what holds for any
+double mark written before this.
+
+## A register is part of what is approved (audit finding G-10)
+
+A card's attendance is read from the registers when the class is released. So a
+register can be taken, amended or discarded only while the class's results for
+that term are open for writing (`results.services.is_open_for_writing()`, the
+rule marks, ratings and remarks already keep): nobody has opened the sheet, or
+it is in draft. Once it is submitted, checked or approved the register is
+refused and the sentence says to send the results back first; once it is
+released it is refused for good, because the card that went home carries the
+figures and a register that could still move would stop supporting it.
+`RegisterLocked` is the refusal.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date as date_type
 
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from academics.models import ClassPlacement
-from accounts.models import Role
+from accounts.models import Membership, Role
 
 from .models import AttendanceMark, AttendanceStatus, Register
 
@@ -69,6 +98,15 @@ class DayOutsideTheTerm(AttendanceError):
     does not give — this repository has made the opposite mistake before, and a
     bound stated in prose with nothing behind it is the mistake.
     """
+
+
+class RegisterLocked(AttendanceError):
+    """The class's results for the term are with a signatory or released, so its
+    registers cannot be taken, amended or discarded. `state` is the sheet's."""
+
+    def __init__(self, message, *, state=None):
+        super().__init__(message)
+        self.state = state
 
 
 class NoRoster(AttendanceError):
@@ -116,6 +154,11 @@ class RegisterTaken:
     appeared: list[int] = field(default_factory=list)
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: list[int] = field(default_factory=list)
+    #: On the roster, and another class's register already marked them that
+    #: day. **Not marked** here: a day is one mark (G-11).
+    marked_elsewhere: list[int] = field(default_factory=list)
+    #: On the roster, and not yet at the school on the register's day. Not marked.
+    joined_later: list[int] = field(default_factory=list)
 
     #: With a base (`docs/offline.md` D4): children the teacher did not change
     #: from what they were shown. Nothing was written for them.
@@ -166,6 +209,60 @@ def _require_the_day_is_in_the_term(term, on):
             f"{on} is not inside {term}, which runs {term.starts_on} to "
             f"{term.ends_on}. A register belongs to the term it was taken in."
         )
+
+
+def _require_the_register_is_open(class_group, term):
+    """Refuse while this class's results for the term are past draft. G-10.
+
+    Takes the sheet's row lock (`results.services.locked_sheet_for()`), the one
+    a submit, an approval and a release take, and the caller writes the register
+    in the same transaction: a submit either landed first and is seen here, or
+    waits until the register has committed. A class nobody has opened a sheet
+    for has no row to lock and is open, the residue
+    `results.ratings._require_the_sheet_is_open()` describes (issue #30).
+
+    Keyed on the **register's** class and term, the pair the release reads, not
+    on where any child sits today.
+
+    A late import: `results` imports this app's summary.
+    """
+    from results.models import SheetState
+    from results.services import is_open_for_writing, locked_sheet_for
+
+    sheet = locked_sheet_for(class_group, term)
+    if is_open_for_writing(sheet):
+        return
+    if sheet.state == SheetState.RELEASED:
+        raise RegisterLocked(
+            f"{class_group}'s results for {term} have been released to parents, "
+            f"and the attendance on those cards came from its registers. The "
+            f"registers for that term can no longer be changed.",
+            state=sheet.state,
+        )
+    raise RegisterLocked(
+        f"{class_group}'s results for {term} are {sheet.get_state_display().lower()}, "
+        f"and its attendance is part of what is being approved. Send the results "
+        f"back first to change a register.",
+        state=sheet.state,
+    )
+
+
+def _not_to_be_marked(class_group, on, roster):
+    """`(marked_elsewhere, joined_later)`: who on `roster` this register must
+    leave unmarked for `on`. See the module docstring, "One mark per child per day"."""
+    elsewhere = set(
+        AttendanceMark.objects.filter(
+            register__taken_on=on, student_membership_id__in=roster
+        )
+        .exclude(register__class_group=class_group)
+        .values_list("student_membership_id", flat=True)
+    )
+    later = set(
+        Membership.objects.filter(pk__in=roster, started_on__gt=on).values_list(
+            "pk", flat=True
+        )
+    )
+    return elsewhere, later - elsewhere
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -246,6 +343,7 @@ def take_register(
     Without a base (an import, a shell, an old page) it amends as it always has.
     """
     _require_the_day_is_in_the_term(term, on)
+    _require_the_register_is_open(class_group, term)
 
     roster = roster_ids(class_group, term)
     if not roster:
@@ -257,17 +355,21 @@ def take_register(
     roster_set = set(roster)
     absent_set = set(absent_ids)
     shown = roster_set if shown_ids is None else set(shown_ids)
+    elsewhere, later = _not_to_be_marked(class_group, on, roster)
+    held_back = elsewhere | later
 
-    looked_at = roster_set & shown
+    looked_at = (roster_set & shown) - held_back
     absent = sorted(absent_set & looked_at)
     present = sorted(looked_at - absent_set)
-    appeared = sorted(roster_set - shown)
+    appeared = sorted(roster_set - shown - held_back)
     not_on_the_roster = sorted(absent_set - roster_set)
+    left_out = {"marked_elsewhere": sorted(elsewhere), "joined_later": sorted(later)}
 
     if base is not None:
-        return _merge_register(
+        taken = _merge_register(
             class_group, term, on, by, base, looked_at, absent_set, appeared, not_on_the_roster
         )
+        return replace(taken, **left_out)
 
     register = _locked_register(class_group, term, on, by)
     _write_marks(register, present, absent, by)
@@ -286,6 +388,7 @@ def take_register(
         absent=absent,
         appeared=appeared,
         not_on_the_roster=not_on_the_roster,
+        **left_out,
     )
 
 
@@ -481,14 +584,20 @@ def discard_register(class_group, on) -> bool:
     This is not how a wrong *mark* is fixed — that is `take_register()` again,
     which amends. This is for a register filed against the wrong day, where
     every mark in it is about a day that did not happen.
+
+    Raises `RegisterLocked`, with nothing removed, once the class's results for
+    the register's term are past draft (`_require_the_register_is_open()`).
     """
     register = (
-        Register.objects.select_for_update()
+        Register.objects.select_for_update(of=("self",))
+        .select_related("term")
         .filter(class_group=class_group, taken_on=on)
         .first()
     )
     if register is None:
         return False
+    # The term the register was filed under, which is the one whose cards read it.
+    _require_the_register_is_open(class_group, register.term)
     AttendanceMark.objects.filter(register=register).delete()
     register.delete()
     return True
@@ -546,6 +655,7 @@ __all__ = [
     "NoRoster",
     "NotAllowedToMarkAttendance",
     "RegisterConflict",
+    "RegisterLocked",
     "RegisterTaken",
     "can_mark_attendance",
     "group_that_marked",

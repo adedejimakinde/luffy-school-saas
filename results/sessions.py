@@ -90,6 +90,8 @@ point: a default value would promote a whole school without anybody acting.
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 
+from django.db import transaction
+
 from academics.models import ClassPlacement, Term, TermName
 from accounts.models import Role
 from accounts.students import why_not_a_student_here
@@ -133,6 +135,10 @@ class InvalidWeighting(SessionsError):
 
 class InvalidPassMark(SessionsError):
     """The pass mark offered is not a percentage."""
+
+
+class ReasonRequired(SessionsError):
+    """A decision made through the route came with no reason, or too long a one."""
 
 
 class NotThisSchoolsStudent(SessionsError):
@@ -225,9 +231,16 @@ def _require_a_weighting(first, second, third):
             f"A weighting is three numbers. Got {first!r}, {second!r}, {third!r}."
         ) from None
 
-    if any(weight < 0 for weight in weights):
+    if any(not weight.is_finite() or weight < 0 for weight in weights):
         raise InvalidWeighting(
             f"A weight cannot be negative. Got {weights[0]}/{weights[1]}/{weights[2]}."
+        )
+    if any(weight != weight.quantize(Decimal("0.01")) for weight in weights):
+        # The columns keep two places. A third would be rounded on the way in,
+        # and three rounded weights need not add up to the hundred just checked.
+        raise InvalidWeighting(
+            f"A weight has at most two decimal places. Got "
+            f"{weights[0]}/{weights[1]}/{weights[2]}."
         )
 
     total = sum(weights)
@@ -292,8 +305,10 @@ def set_pass_mark(mark) -> SessionSettings:
         mark = Decimal(str(mark))
     except (TypeError, ValueError, ArithmeticError):
         raise InvalidPassMark(f"A pass mark is a percentage. Got {mark!r}.") from None
-    if not (0 <= mark <= FULL_WEIGHT):
+    if not mark.is_finite() or not (0 <= mark <= FULL_WEIGHT):
         raise InvalidPassMark(f"A pass mark is between 0 and 100. Got {mark}.")
+    if mark != mark.quantize(Decimal("0.01")):
+        raise InvalidPassMark(f"A pass mark has at most two decimal places. Got {mark}.")
 
     row = _the_settings_row()
     row.pass_mark = mark
@@ -888,17 +903,21 @@ def decide(membership, session, status, *, note="", by=None) -> PromotionDecisio
     on when it was asked — inventing overrides no principal ever performed, on
     precisely the rows kept to prove who decided what.
 
-    **The average comes from the freeze when there is one.** A released card's
-    session line is what the parent is holding, so a decision recorded after
-    release has to be a decision about that number rather than about a live
-    recomputation of it that may already have moved.
+    **The average comes from the freeze, and from nowhere else** (audit finding
+    G-04). A released third-term card's session line is what the parent is
+    holding, so the suggestion is made on that number and never on a
+    reckoning of the cards released so far. A child whose year has not been
+    frozen (the third term is not released, or they have no third-term card)
+    gets **no suggestion**: the row's `suggested` is blank, and a person
+    decides with nothing proposed to them.
     """
     _require_student_of_this_school(membership)
     status = _require_a_status(status)
     config = settings()
 
-    line = card_session_line(membership, session)
-    suggested = suggested_status(line.average, config=config)
+    frozen = released_session_line(membership, session)
+    average = frozen.session_average if frozen is not None else None
+    suggested = suggested_status(average, config=config)
 
     # No `atomic()` here, and deliberately: this is a single INSERT, which is
     # already atomic, and there is no read-then-write to hold together. The
@@ -912,11 +931,60 @@ def decide(membership, session, status, *, note="", by=None) -> PromotionDecisio
         # Blank, not null: the column is a `CharField` with choices, and
         # `a_suggestion_carries_what_produced_it` ties the three together.
         suggested=suggested or "",
-        session_average=line.average if suggested else None,
+        session_average=average if suggested else None,
         pass_mark_used=config.pass_mark if suggested else None,
         note=note,
         decided_by_id=getattr(by, "pk", by),
     )
+
+
+def frozen_years(student_ids, session) -> dict[int, ReleasedSessionResult]:
+    """`released_session_line()` for many children: `{student_id: frozen row}`.
+
+    The same rule, read in one query: each child's earliest sheet, then that
+    sheet's highest card version. A child whose year has not been frozen is
+    absent from the mapping.
+    """
+    ids = [getattr(student, "pk", student) for student in student_ids]
+    if not ids:
+        return {}
+    rows = list(
+        ReleasedSessionResult.objects.filter(
+            session=session, student_membership_id__in=ids
+        )
+        .select_related("card")
+        .order_by("created_at", "id")
+    )
+    first_sheet = {}
+    for row in rows:
+        first_sheet.setdefault(row.student_membership_id, row.sheet_id)
+    found = {}
+    for row in rows:
+        if row.sheet_id != first_sheet[row.student_membership_id]:
+            continue
+        held = found.get(row.student_membership_id)
+        if held is None or (row.card.version, row.pk) > (held.card.version, held.pk):
+            found[row.student_membership_id] = row
+    return found
+
+
+def decisions_for(student_ids, session) -> dict[int, PromotionDecision]:
+    """`promotion_of()` for many children: `{student_id: the latest decision}`.
+
+    A child nobody has decided about is absent from the mapping, which is the
+    answer and not a gap: undecided is the absence of a row.
+    """
+    ids = [getattr(student, "pk", student) for student in student_ids]
+    if not ids:
+        return {}
+    found = {}
+    # `Meta.ordering` is newest first within a child, tie broken on `-id`;
+    # spelled out here so the rule does not depend on it.
+    for row in PromotionDecision.objects.filter(
+        session=session, student_membership_id__in=ids
+    ).order_by("student_membership_id", "-decided_at", "-id"):
+        found.setdefault(row.student_membership_id, row)
+    return found
 
 
 # ---------------------------------------------------------------------------
@@ -968,10 +1036,86 @@ def _require_deciding_authority(actor):
     return school
 
 
+#: The longest reason kept with a decision; a paragraph, not an essay.
+MAX_REASON = 1000
+
+
+def _require_a_reason(note) -> str:
+    """A decision made by a person says why (audit finding G-04).
+
+    `decide()` itself allows a blank note, for an import of last year's
+    records with nobody behind it. A principal deciding through the route is
+    somebody, and "why" is what a family asks six months on.
+    """
+    reason = " ".join((note or "").split())
+    if not reason:
+        raise ReasonRequired(
+            "Say why. The reason is kept with the decision."
+        )
+    if len(reason) > MAX_REASON:
+        raise ReasonRequired(f"Keep the reason under {MAX_REASON} characters.")
+    return reason
+
+
 def decide_as(actor, membership, session, status, *, note="") -> PromotionDecision:
-    """`decide()` for a caller with a request behind it."""
+    """`decide()` for a caller with a request behind it. The reason is required."""
     _require_deciding_authority(actor)
-    return decide(membership, session, status, note=note, by=actor)
+    return decide(membership, session, status, note=_require_a_reason(note), by=actor)
+
+
+def decide_many_as(actor, session, choices, *, reason) -> list[PromotionDecision]:
+    """One reason, several children: every decision is recorded, or none is.
+
+    `choices` is `{Membership: status}`. A principal confirming a class does
+    it in one act with one sentence, and that sentence is written on every row,
+    because each row has to be readable on its own.
+
+    Authority, the reason and every status are checked before the first row is
+    written, and the rows are written in one transaction, so a refusal at the
+    fortieth child leaves the first thirty-nine undecided.
+    """
+    _require_deciding_authority(actor)
+    reason = _require_a_reason(reason)
+    if not choices:
+        raise SessionsError("Choose at least one child to decide about.")
+    checked = [
+        (_require_student_of_this_school(membership), _require_a_status(status))
+        for membership, status in choices.items()
+    ]
+    with transaction.atomic():
+        return [
+            decide(membership, session, status, note=reason, by=actor)
+            for membership, status in checked
+        ]
+
+
+def configure_as(actor, *, averaging=None, weights=None, pass_mark=None) -> SessionSettings:
+    """Set how the year is reckoned and the pass mark, together or not at all.
+
+    `averaging` is `"equal"` or `"weighted"` (with `weights`, three numbers
+    adding up to 100); `pass_mark` is a percentage. Anything left `None` is left
+    as it is. One transaction, so a refused pass mark does not leave a new
+    weighting behind.
+
+    **What it reaches.** The weighting is read when a third term is released
+    and frozen on each card's year summary; the pass mark is read when a
+    decision is recorded and kept beside it. Neither reaches a card that has
+    gone home or a decision already made.
+    """
+    _require_configuring_authority(actor)
+    with transaction.atomic():
+        if averaging is not None:
+            if averaging == SessionAveraging.EQUAL:
+                use_a_straight_mean()
+            elif averaging == SessionAveraging.WEIGHTED:
+                use_a_weighting(*(weights or (None, None, None)))
+            else:
+                raise InvalidWeighting(
+                    "The terms are averaged equally, or weighted."
+                )
+        if pass_mark is not None:
+            set_pass_mark(pass_mark)
+    return settings()
 
 
 def use_a_straight_mean_as(actor) -> SessionSettings:
@@ -995,18 +1139,24 @@ __all__ = [
     "TERM_ORDER",
     "InvalidPassMark",
     "InvalidWeighting",
+    "MAX_REASON",
     "NotAllowedToConfigureSessions",
     "NotAllowedToDecidePromotion",
     "NotThisSchoolsStudent",
+    "ReasonRequired",
     "SessionLine",
     "SessionsError",
     "TermLine",
     "can_configure_sessions",
     "can_decide_promotions",
     "card_session_line",
+    "configure_as",
     "decide",
     "decide_as",
+    "decide_many_as",
+    "decisions_for",
     "freeze_for_release",
+    "frozen_years",
     "promotion_of",
     "released_session_line",
     "session_line",

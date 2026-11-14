@@ -120,6 +120,12 @@ class NotPlacedThisTerm(RatingsError):
     """
 
 
+class ClassesAwaitingRelease(RatingsError):
+    """A class's results are with a signatory, so what its cards print for
+    conduct and skills cannot be changed now. See
+    `require_no_class_awaiting_release()`."""
+
+
 class RatingsLocked(RatingsError):
     """The sheet has left `draft`, so its ratings are part of what is being checked.
 
@@ -1160,6 +1166,64 @@ def freeze_for_release(sheet, card_by_student) -> int:
 
 
 # ---------------------------------------------------------------------------
+# The settings hold still while a class is waiting for release (G-09)
+# ---------------------------------------------------------------------------
+
+#: The states in which a sheet is with a signatory. What they say to a person.
+_AWAITING = {
+    SheetState.SUBMITTED: "are waiting for approval",
+    SheetState.CHECKED: "are waiting for approval",
+    SheetState.APPROVED: "have been approved and are waiting to be released",
+}
+
+
+def classes_awaiting_release():
+    """Every result sheet that is submitted, checked or approved, of any term."""
+    from .models import ResultSheet
+
+    return list(
+        ResultSheet.objects.filter(state__in=list(_AWAITING))
+        .select_related("class_group", "term")
+        .order_by("term__starts_on", "class_group__level", "class_group__name", "pk")
+    )
+
+
+def require_no_class_awaiting_release(what="What a card prints for conduct and skills"):
+    """Refuse a change to the conduct settings while any class is in the chain.
+
+    Audit finding G-09. Ratings lock when a class is submitted
+    (`_require_the_sheet_is_open()`), and release freezes each section from the
+    trait list, the switches and the scale's words **as they stand at that
+    moment** (`freeze_for_release()`). So a trait hidden, added or renamed, a
+    section switched, the order changed, a scale label reworded, or the Ogun
+    template chosen (which does all of those at once) between a class being
+    submitted and its release changed the cards about to go home: rated lines
+    removed, new lines nobody could rate any more printed blank. What was
+    released was not what was approved.
+
+    The settings are the school's, not a class's, so one class in the chain
+    holds them for everybody: until it is released or sent back.
+
+    Read without a lock. A class submitted in the instant after this read is
+    submitted with the changed settings in front of whoever checks it, which is
+    the settings changing *before* the review and not during it.
+    """
+    waiting = classes_awaiting_release()
+    if not waiting:
+        return
+    first = waiting[0]
+    more = len(waiting) - 1
+    also = ""
+    if more:
+        also = f", and so are those of {more} more {'class' if more == 1 else 'classes'}"
+    raise ClassesAwaitingRelease(
+        f"{first.class_group}'s results for {first.term} {_AWAITING[first.state]}{also}. "
+        f"{what} is part of what is being approved, so it cannot be changed now. "
+        f"Release them or send them back first."
+    )
+
+
+# ---------------------------------------------------------------------------
 # Actor-checked entry points.
 # ---------------------------------------------------------------------------
 
@@ -1283,8 +1347,12 @@ def set_group_enabled_as(actor, group, on: bool) -> ReportCardSettings:
     **Nothing is deleted:** the ratings already entered stay, and are back on the
     grid if the section is switched on again. A card already released froze its
     own section and is not touched either way.
+
+    Refused, like every other change to these settings, while any class's
+    results are with a signatory (`require_no_class_awaiting_release()`).
     """
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     group = _group(group)
     with transaction.atomic():
         before = is_enabled(group)
@@ -1303,6 +1371,7 @@ def set_group_enabled_as(actor, group, on: bool) -> ReportCardSettings:
 
 def add_trait_as(actor, group, name, *, position=None) -> Trait:
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     with transaction.atomic():
         trait = add_trait(group, name, position=position)
         record_change(
@@ -1316,6 +1385,7 @@ def add_trait_as(actor, group, name, *, position=None) -> Trait:
 
 def rename_trait_as(actor, trait, name) -> Trait:
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     with transaction.atomic():
         before = _the_trait_row(trait).name
         trait = rename_trait(trait, name)
@@ -1331,6 +1401,7 @@ def rename_trait_as(actor, trait, name) -> Trait:
 
 def set_trait_hidden_as(actor, trait, hidden: bool = True) -> Trait:
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     with transaction.atomic():
         before = _the_trait_row(trait).is_hidden
         trait = set_trait_hidden(trait, hidden)
@@ -1349,6 +1420,7 @@ def set_trait_hidden_as(actor, trait, hidden: bool = True) -> Trait:
 
 def reorder_as(actor, group, trait_ids) -> int:
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     group = _group(group)
     with transaction.atomic():
         moved = reorder(group, trait_ids)
@@ -1364,6 +1436,7 @@ def reorder_as(actor, group, trait_ids) -> int:
 
 def set_scale_label_as(actor, value, label) -> RatingScalePoint:
     _require_configuring_authority(actor)
+    require_no_class_awaiting_release()
     with transaction.atomic():
         before = scale_labels().get(value)
         point = set_scale_label(value, label)
@@ -1378,6 +1451,9 @@ def set_scale_label_as(actor, value, label) -> RatingScalePoint:
 
 
 __all__ = [
+    "ClassesAwaitingRelease",
+    "classes_awaiting_release",
+    "require_no_class_awaiting_release",
     "CONFIGURING_ROLES",
     "CardSection",
     "NotAllowedToConfigureRatings",

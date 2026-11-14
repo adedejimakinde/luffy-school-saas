@@ -69,7 +69,7 @@ not do.
 
 from django.db import transaction
 
-from academics.models import ClassPlacement
+from academics.models import ClassPlacement, Term, TermName
 
 from . import cards, comments, positions, ratings, renders, sessions
 from .models import CardRevision, ResultSheet, SheetState
@@ -134,6 +134,13 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
     `IntegrityError` naming a column rather than as a refusal naming the act.
     The card is re-read **inside** the lock for the same reason `_move()` re-reads
     the sheet: the caller's copy is a fact about an earlier moment.
+
+    ## The year's summary follows
+
+    Reissuing a first- or second-term card whose average (or whose being there
+    at all) differs from what the child's third-term card froze for that term
+    reissues the third-term card as well, in the same transaction, with its own
+    logged revision. `_update_the_years_summary()` has the rule.
     """
     if not (reason or "").strip():
         raise RevisionError(
@@ -146,72 +153,150 @@ def revise(membership, term, actor, reason, *, by_platform_staff=False):
     student_id = getattr(membership, "pk", membership)
 
     with transaction.atomic():
-        sheet = _the_released_sheet(student_id, term)
-        locked = _locked(sheet)
-        if locked.state != SheetState.RELEASED:
-            raise NothingToRevise(
-                f"{locked.class_group} for {locked.term} is "
-                f"{locked.get_state_display().lower()}, not released. A revision "
-                f"reissues a card that has gone home; there is nothing here that "
-                f"has."
-            )
+        card = _reissue(student_id, term, actor, reason.strip(), by_platform_staff)
+        _update_the_years_summary(card, actor, reason.strip(), by_platform_staff)
+    return card
 
-        previous = cards.card_for(student_id, term)
-        version = 1 if previous is None else previous.version + 1
 
-        # One read of the class inside this lock, and everything below is
-        # decided against it — the guard, the freeze and the session line.
-        # Issue #60; `_require_still_on_this_roster()` says what two reads cost.
-        results = positions.class_results(locked.class_group, locked.term)
-        _require_still_on_this_roster(locked, results, student_id)
-
-        # D7. `previous` is the card this revision supersedes, and its three
-        # attendance numbers are copied onto the new version rather than
-        # recomputed. A March revision fixing a comment typo must not silently
-        # restate the attendance a parent read in December — every value
-        # individually legal, nothing objecting, and a correction to one field
-        # quietly rewriting another. That is issue #59's shape, about a
-        # different column.
-        #
-        # `None` for a first version, which is the task 8 case of a child placed
-        # into a term after it was released: she has no earlier card to carry
-        # anything forward from.
-        frozen = cards.freeze_a_revision(
-            locked,
-            results,
-            student_id,
-            version=version,
-            supersedes=previous,
-            by=actor,
+def _reissue(student_id, term, actor, reason, by_platform_staff):
+    """One card, reissued at the next version. Inside the caller's transaction."""
+    sheet = _the_released_sheet(student_id, term)
+    locked = _locked(sheet)
+    if locked.state != SheetState.RELEASED:
+        raise NothingToRevise(
+            f"{locked.class_group} for {locked.term} is "
+            f"{locked.get_state_display().lower()}, not released. A revision "
+            f"reissues a card that has gone home; there is nothing here that "
+            f"has."
         )
-        # The conduct section is **carried** from the card this one supersedes,
-        # not re-read from the school's settings: a trait renamed or a section
-        # switched off since the first release must not reach a reissued card.
-        # A child with no earlier card is frozen from the settings as they are.
-        if previous is None:
-            ratings.freeze_for_release(locked, frozen)
-        else:
-            ratings.carry_forward(frozen, previous)
-        comments.freeze_for_release(locked, frozen)
-        sessions.freeze_for_release(locked, frozen, results)
 
-        card = frozen[student_id]
-        CardRevision.objects.create(
-            card=card,
-            previous_card=previous,
-            reason=reason.strip(),
-            revised_by_id=actor.pk,
-            by_platform_staff=by_platform_staff,
-        )
-        # A revision is a card, so it owes a file exactly as a release does —
-        # and this path is the *only* way a child placed into a term after it
-        # was released (issue #31) gets one at all. Marking only at release
-        # would leave her card the one case with no marker and no render, which
-        # is precisely the case issue #56 is about. `results.renders` holds the
-        # ordering: the row inside this transaction, the queue after it.
-        renders.mark_and_enqueue([card])
+    previous = cards.card_for(student_id, term)
+    version = 1 if previous is None else previous.version + 1
+
+    # One read of the class inside this lock, and everything below is
+    # decided against it — the guard, the freeze and the session line.
+    # Issue #60; `_require_still_on_this_roster()` says what two reads cost.
+    results = positions.class_results(locked.class_group, locked.term)
+    _require_still_on_this_roster(locked, results, student_id)
+
+    # D7. `previous` is the card this revision supersedes, and its three
+    # attendance numbers are copied onto the new version rather than
+    # recomputed. A March revision fixing a comment typo must not silently
+    # restate the attendance a parent read in December — every value
+    # individually legal, nothing objecting, and a correction to one field
+    # quietly rewriting another. That is issue #59's shape, about a
+    # different column.
+    #
+    # `None` for a first version, which is the task 8 case of a child placed
+    # into a term after it was released: she has no earlier card to carry
+    # anything forward from.
+    frozen = cards.freeze_a_revision(
+        locked,
+        results,
+        student_id,
+        version=version,
+        supersedes=previous,
+        by=actor,
+    )
+    # The conduct section is **carried** from the card this one supersedes,
+    # not re-read from the school's settings: a trait renamed or a section
+    # switched off since the first release must not reach a reissued card.
+    # A child with no earlier card is frozen from the settings as they are.
+    if previous is None:
+        ratings.freeze_for_release(locked, frozen)
+    else:
+        ratings.carry_forward(frozen, previous)
+    comments.freeze_for_release(locked, frozen)
+    sessions.freeze_for_release(locked, frozen, results)
+
+    card = frozen[student_id]
+    CardRevision.objects.create(
+        card=card,
+        previous_card=previous,
+        reason=reason,
+        revised_by_id=actor.pk,
+        by_platform_staff=by_platform_staff,
+    )
+    # A revision is a card, so it owes a file exactly as a release does —
+    # and this path is the *only* way a child placed into a term after it
+    # was released (issue #31) gets one at all. Marking only at release
+    # would leave her card the one case with no marker and no render, which
+    # is precisely the case issue #56 is about. `results.renders` holds the
+    # ordering: the row inside this transaction, the queue after it.
+    renders.mark_and_enqueue([card])
 
     return card
+
+
+class TheYearsSummaryCannotFollow(RevisionError):
+    """An earlier term's card cannot be reissued because the third-term card,
+    whose year summary it would change, cannot be reissued with it."""
+
+
+def _update_the_years_summary(card, actor, reason, by_platform_staff):
+    """After a first- or second-term card is reissued: reissue the third-term
+    card too, in this transaction, if its year summary no longer says what the
+    cards say. Returns the new third-term card, or `None` when nothing changed.
+
+    A third-term card freezes the year: each term's average and the session
+    average (`ReleasedSessionResult`), read from the cards as they stood at its
+    release (audit finding G-02). Reissuing an earlier term's card afterwards
+    used to leave that summary quoting a card that had been superseded: the
+    "first term" on the third-term card and the average on the first-term card
+    in the same parent's hands disagreed, and so did the promotion suggestion.
+
+    **Only when a figure moves.** The year's line is worked out again from the
+    cards as they now stand and compared with the frozen one, term by term:
+    the average, or the reason there is none. A reissue that corrects a name
+    leaves them equal, and then the third-term card is not touched and does not
+    grow a "Revised" mark over somebody's spelling.
+
+    **How it is logged.** The third-term card's new version is an ordinary
+    revision: its own `CardRevision` row, by the same person, at the same
+    moment, with a reason that names the cause and quotes theirs.
+
+    **Everything or nothing.** If the third-term card cannot be reissued (the
+    child is no longer on that class's list for the term,
+    `TheChildHasLeftThisClass`), neither is this one: the caller's transaction
+    is rolled back and the refusal says both halves. A first-term card and a
+    year summary that disagree is the state this exists to prevent, so it does
+    not leave one behind on purpose.
+    """
+    if card.term_name == TermName.THIRD:
+        # Its own reissue has just frozen the year again (`_reissue()`).
+        return None
+    third = Term.objects.filter(session=card.session, name=TermName.THIRD).first()
+    if third is None:
+        return None
+    frozen = sessions.released_session_line(card.student_membership_id, card.session)
+    if frozen is None:
+        # No third-term card has frozen this child's year: nothing to update.
+        return None
+
+    now = sessions.session_line(card.student_membership_id, card.session)
+    moved = [
+        line.term_name
+        for line in now.terms
+        if line.term_name != TermName.THIRD
+        and (
+            getattr(frozen, f"{line.term_name}_average") != line.average
+            or getattr(frozen, f"{line.term_name}_absence") != line.absence
+        )
+    ]
+    if not moved:
+        return None
+
+    cause = (
+        f"The year's summary was updated because the {TermName(card.term_name).label.lower()} "
+        f"card was revised. That revision's reason: {reason}"
+    )
+    try:
+        return _reissue(card.student_membership_id, third, actor, cause, by_platform_staff)
+    except TheChildHasLeftThisClass as exc:
+        raise TheYearsSummaryCannotFollow(
+            f"Revising this card changes the year's summary on the child's third-term "
+            f"card, and that card cannot be reissued: {exc} Nothing was changed."
+        ) from exc
 
 
 def _require_the_authority_to_revise(actor, by_platform_staff):
@@ -315,5 +400,6 @@ __all__ = [
     "NothingToRevise",
     "RevisionError",
     "TheChildHasLeftThisClass",
+    "TheYearsSummaryCannotFollow",
     "revise",
 ]

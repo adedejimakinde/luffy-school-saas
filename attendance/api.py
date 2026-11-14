@@ -136,6 +136,10 @@ class RegisterTakenOut(Schema):
     appeared: List[int]
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: List[int]
+    #: On the roster, already marked that day by another class. Not marked here.
+    marked_elsewhere: List[int] = []
+    #: On the roster, not yet at the school on that day. Not marked.
+    joined_later: List[int] = []
     #: With a base: not changed by the teacher, so not written.
     untouched: List[int] = []
     #: With a base: changed by the teacher, and already the school's answer.
@@ -441,7 +445,7 @@ def _take(request, group, term, on, payload):
             by=request.user,
             base=_base_of(payload),
         )
-    except services.NoRoster as exc:
+    except (services.NoRoster, services.RegisterLocked) as exc:
         return 409, MessageOut(detail=str(exc))
     except services.DayOutsideTheTerm as exc:
         return 422, MessageOut(detail=str(exc))
@@ -453,6 +457,8 @@ def _take(request, group, term, on, payload):
         absent=taken.absent,
         appeared=taken.appeared,
         not_on_the_roster=taken.not_on_the_roster,
+        marked_elsewhere=taken.marked_elsewhere,
+        joined_later=taken.joined_later,
         untouched=taken.untouched,
         already=taken.already,
         conflicts=[
@@ -485,7 +491,7 @@ def _base_of(payload):
 
 @router.delete(
     "/classes/{int:class_group_id}/{on}/",
-    response={204: None, 403: MessageOut, 404: MessageOut},
+    response={204: None, 403: MessageOut, 404: MessageOut, 409: MessageOut},
 )
 def discard(request, class_group_id: int, on: date):
     """Take back a register filed against the wrong day.
@@ -500,7 +506,12 @@ def discard(request, class_group_id: int, on: date):
         return refusal
 
     group = get_object_or_404(ClassGroup, pk=class_group_id)
-    if not services.discard_register(group, on):
+    try:
+        gone = services.discard_register(group, on)
+    except services.RegisterLocked as exc:
+        # The class's results for that term are with a signatory or released.
+        return 409, MessageOut(detail=str(exc))
+    if not gone:
         return 404, MessageOut(detail="No register was taken for that slot.")
     return 204, None
 
