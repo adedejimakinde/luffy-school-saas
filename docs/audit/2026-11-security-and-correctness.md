@@ -35,9 +35,9 @@ takes silence here for a clean bill.
 | F-04 | Children's data has no retention period, no erasure route and several open legal items | High | Data protection (NDPA) | `website/templates/website/privacy.html`, `accounts/deletion.py` | Open |
 | F-05 | Results can be submitted, approved and released with papers unmarked and nothing says so | Medium | Correctness, approval chain | `results/services.py`, `results/chain_api.py` | Fixed in PR #340 |
 | F-06 | "This card has gone home" is asked of the conduct rows, so a school with conduct off loses the lock after a class move | Medium | Changing released results | `gradebook/services.py`, `cbt/ca.py` | Fixed in PR #340 |
-| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Open |
-| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Open |
-| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Open |
+| F-07 | The time an offline CBT answer was chosen is taken from the device | Medium | CBT, deadline | `cbt/sitting.py` | Fixed in PR #NNN |
+| F-08 | A test set without the exam PIN is opened by an admission number alone | Medium | CBT, students seeing others' work | `cbt/sitting.py`, `cbt/release.py` | Fixed in PR #NNN |
+| F-09 | Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out of the exam door | Medium | Authentication, throttling | `cbt/sitting.py`, `results/checker.py`, `accounts/signin.py` | Fixed for the exam door and the test-scores door in PR #NNN; the result checker and the password door still open |
 | F-10 | Signed-in pages have no Content-Security-Policy and escaping is by hand; one value is not escaped | Medium | XSS | `static/web/html.js`, `static/signin/app.js` | Open |
 | F-11 | Report card and fee answers carry no `Cache-Control: no-store` | Low | Privacy, shared computers | `results/card_api.py` | Open |
 | F-12 | Result-checker PINs are stored as a plain SHA-256 | Low | Secrets at rest | `results/checker.py` | Open |
@@ -303,6 +303,29 @@ existing tests for the conduct-on case should pass unchanged.
 
 ### F-07. The time an offline CBT answer was chosen is taken from the device (Medium)
 
+**Status.** Fixed in PR #NNN, in `cbt/sitting.py`. Whether an answer is in time is
+now asked of the server's own record of each computer's contacts
+(`AttemptSession.last_seen_at`, moved on every sync, a replaced computer's too),
+never of `chosen_at`. After the deadline an answer counts only if it arrives by
+`deadline + late_window` **and** in that computer's first contact since the
+deadline (`in_first_contact_after_time()`, with `TIE_SECONDS` of slack for a
+heartbeat crossing the deadline). A computer the server has already heard from
+after the deadline cannot add an answer, whatever it claims; it is kept, refused
+`after_time` and logged as `late_refused` with each reason counted, the deadline
+and the last contact. The device's own `chosen_at` can still refuse an answer it
+says was late, never accept one. Extra time moves the line, because the deadline
+is read on each contact. Tests: `cbt/tests/test_door_and_deadline.py`
+(`TheServersRecordDecidesTests`: the audit's reproduction, offline through the
+deadline, two computers, two classmates, extra time, and two schools whose
+attempt and session ids are the same). **Still open, by design:** a computer that
+was offline through the deadline and comes back inside the late window delivers
+what it holds, and an answer it took after time cannot be told from one taken
+before; the window (at most five minutes) is the most that buys, as
+`docs/cbt.md` ("Offline", "The honest limit") says. `_wins()` still orders two
+computers' answers by `chosen_at`; that is the same student's attempt and was
+left. `docs/cbt.md`'s "Offline" bullet and step 4's "Answers" paragraph still
+describe the old rule (the PR was limited to the cbt app) and want updating.
+
 **What is wrong.** `cbt/sitting.py:589-601` (`_when`) reads `chosen_at` from the
 request and only caps it at the server's "now". `:634-641` then refuses an
 answer only if that claimed time is after the deadline, or if it arrives after
@@ -337,6 +360,22 @@ the score on the results page so the teacher can judge.
 
 ### F-08. A test set without the exam PIN is opened by an admission number alone (Medium)
 
+**Status.** Fixed in PR #NNN. A test with the PIN off is a practice test and
+nothing else: `cbt.sitting.needs_pin()` asks for the PIN of every test that can
+send to CA or be released (with the existing constraint, a test without the PIN
+never sends to CA); `release_as()` refuses a practice test
+(`PRACTICE_NOT_RELEASED`, also the results screen's reason the Release button
+is off); `live_scores()`, which every student's and parent's page reads, never
+carries a practice test's score even if a released row exists; the
+`/test-scores/` door always checks the PIN; and a parent's page does not count a
+practice test as "waiting". The test settings say, where the PIN is switched off,
+that anybody with the class list can sit as anybody and the scores are never sent
+to CA or released. Tests: `cbt/tests/test_door_and_deadline.py`
+(`PracticeTestsTests`, with a released row written by hand for a practice test,
+and a practice code at the other school). **Still open:** a practice test still
+opens on a number, so one classmate can start (and use up) another's practice
+attempt; the teacher sees it, and nothing it scores is kept anywhere else.
+
 **What is wrong.** When `test.require_pin` is false, `cbt/sitting.py:322-325`
 proves a student with `_student_without_pin` (`:304-311`): the test code, which
 the whole room is told, and an admission number, which is on every class list
@@ -364,6 +403,47 @@ settings, where the PIN is switched off, that anybody with the class list can
 sit as anybody.
 
 ### F-09. Wrong-PIN limits are keyed on the victim's admission number, so a classmate can lock a student out (Medium)
+
+**Status.** Fixed for the exam door (`/sit/`) and the test-scores door
+(`/test-scores/`) in PR #NNN. Wrong tries are counted against the browser that made
+them and its address, never against the admission number typed. Each browser is
+given a random id by the page (`sit_views.DEVICE_COOKIE`, `HttpOnly`,
+`SameSite=Strict`, scoped to `/sit/` or `/test-scores/`), which names nobody and
+opens nothing; a request with none shares one bucket per address. The device's
+bucket reuses `SignInScope.SIT_NUMBER`'s row and its limit
+(`SIT_MAX_FAILURES_PER_ADMISSION_NUMBER`, ten), so no `accounts` migration or
+setting was needed; the address keeps `SIT_ADDRESS` (a hundred). A correct
+sign-in clears neither. Tests: `cbt/tests/test_door_and_deadline.py`
+(`TheDoorWaitsOnTheDeviceTests`, `TheScoresDoorWaitsOnTheDeviceTests`: two
+classmates on two computers, no reset on success, the address against fresh
+devices, the cookie, and two schools), and
+`cbt/tests/test_sitting.py`'s per-device test, which replaces the one that
+asserted the lockout. **Still open:** fresh ids are free, so the address bucket
+is the brake on guessing, and a whole computer room behind one address shares its
+hundred tries a quarter-hour: someone determined to can still make the room wait.
+The renamed setting and scope are left for an `accounts` change. The result
+checker (`results/checker.py`) and the password door (`accounts/signin.py`)
+have the same shape and were outside this PR.
+
+**Controls for F-07, F-08 and F-09** (operating rule 5). Each break was applied to
+the fixed tree, run over `cbt/tests/test_door_and_deadline.py` and
+`cbt/tests/test_sitting.py` (77 tests), and with `cbt/tests/test_marking.py` too
+where the claim is a release's (124), then the file was restored and checked
+unchanged before the next. Every one went red.
+
+| the claim | the break | what failed |
+| --- | --- | --- |
+| F-07: a computer heard after the deadline cannot add an answer | drop the first-contact check | 4: the audit's reproduction, two computers, two classmates, two schools |
+| F-07: a replaced computer's contacts are on the record too | move `last_seen_at` only for the open session | 1: two computers (seat 4's second contact accepted) |
+| F-07: an answer chosen in the last second goes with the submit | no `TIE_SECONDS` slack | 1: the last-second test |
+| F-08: every test that can send to CA or be released asks for the PIN | `needs_pin()` reads `require_pin` alone | 1: the needs-the-PIN test |
+| F-08: a practice test is never released | drop the refusal in `release_as()` and `why_not_releasable()` | 1: the release answered 200 |
+| F-08: a practice score never reaches a student's or a parent's page | `live_scores()` without the exclusion | 1: the scores door served the hand-written row (200) |
+| F-08: the scores door always asks for the PIN | the number alone for a test without one | 1: the number alone opened the door (409, not 404) |
+| F-09: nothing is counted against the number typed | key the device's bucket on the number | 5: the two-classmates test, no reset, the number's key, the address, and `test_sitting`'s per-device test |
+| F-09: a correct sign-in resets nothing | clear the device's bucket on success | 1: the no-reset test |
+| F-09: a device waiting at one school is not waiting at the other | the school out of the device's key | 1: the two-schools test |
+| F-09: the scores door counts per device too | no device passed from `/test-scores/` | 1: the scores door's two-classmates test |
 
 **What is wrong.** The exam door counts failures per admission number and
 refuses **before** checking the proof once the count is reached
