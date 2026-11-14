@@ -422,6 +422,23 @@ class TheRouteRequiresTheReviewTests(TermChangeSetUp):
         self.assertEqual(done.status_code, 200)
         self.assertEqual(done.json()["carried"], 4)
 
+    def test_a_reason_that_changed_makes_the_review_stale_too(self):
+        """The token covers what the review *says*, not only its counts: the
+        same child is still not carried, and the reason shown for it is new."""
+        from results import sessions
+
+        release_student(self.children["tunde"])
+        seen = self.review().json()["token"]
+        with connected_to(self.stmarys):
+            sessions.decide(self.children["tunde"], "2024/2025", "graduated", note="Completed", by=self.head.user)
+
+        again = self.review().json()
+
+        self.assertEqual(again["not_carried"], 1)
+        self.assertNotEqual(again["token"], seen)
+        self.assertEqual(self.make_current(seen=seen).status_code, 409)
+        self.assertEqual(self.current(), self.term_id)
+
     def test_the_token_is_for_one_term_and_one_school(self):
         with connected_to(self.grace):
             theirs = Term.objects.create(
