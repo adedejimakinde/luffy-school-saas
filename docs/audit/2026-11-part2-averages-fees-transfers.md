@@ -28,14 +28,14 @@ not read, so silence is not taken for a clean bill.
 | G-01 | Moving to a new term empties every class: nothing carries the rosters forward | High | Term change, rosters | `academics/api.py`, `academics/services.py` | Fixed in PR #343 |
 | G-02 | The session line is built from live marks and part-marked subjects, so it can disagree with the term cards and with the card it is printed on | High | Session averages | `results/sessions.py`, `results/positions.py` | Fixed in PR #343 |
 | G-03 | Releasing one class's CBT scores gives out the answers while other classes have still to sit the same paper | High | CBT, answers | `cbt/release.py` | Fixed in PR #343 |
-| G-04 | Promotion moves children with no reference to results or to the principal's decision, and the decision, the weighting and the pass mark have no screen or route | Medium | Promotion | `academics/promotion.py`, `results/sessions.py` | Open |
-| G-05 | Graduating or "leaving" a child at promotion locks the family out of the final report card | Medium | Promotion, parent access | `accounts/services.py`, `academics/promotion.py` | Open |
-| G-06 | The Ogun card's promotion line is worked out from next term's class, read live | Medium | Ogun card | `results/ogun_card.py` | Open |
-| G-07 | On the Ogun card a subject with no paper named "Exam" has no weighted average, no annual score and is left out of the summary | Medium | Ogun card | `results/ogun_card.py` | Open |
-| G-08 | The Ogun card's percentage and annual score are not the figures the position and the Standard card use | Medium | Ogun card, rounding | `results/ogun_card.py` | Open |
-| G-09 | Choosing the Ogun template while a class is waiting for approval or release changes the conduct section and the position on its cards | Medium | Ogun card, approval chain | `results/ogun.py`, `results/ratings.py` | Open |
-| G-10 | A register can be taken, changed or discarded for any term at any time, including after the cards are released | Medium | Attendance | `attendance/api.py`, `attendance/services.py` | Open |
-| G-11 | Attendance counts marks, not days: a child who changed class can be counted twice for one day, and a back-filled register uses today's class list | Medium | Attendance | `attendance/summary.py`, `attendance/services.py` | Open |
+| G-04 | Promotion moves children with no reference to results or to the principal's decision, and the decision, the weighting and the pass mark have no screen or route | Medium | Promotion | `academics/promotion.py`, `results/sessions.py` | Fixed in PR #NEXT |
+| G-05 | Graduating or "leaving" a child at promotion locks the family out of the final report card | Medium | Promotion, parent access | `accounts/services.py`, `academics/promotion.py` | Fixed in PR #NEXT |
+| G-06 | The Ogun card's promotion line is worked out from next term's class, read live | Medium | Ogun card | `results/ogun_card.py` | Fixed in PR #NEXT |
+| G-07 | On the Ogun card a subject with no paper named "Exam" has no weighted average, no annual score and is left out of the summary | Medium | Ogun card | `results/ogun_card.py` | Fixed in PR #NEXT |
+| G-08 | The Ogun card's percentage and annual score are not the figures the position and the Standard card use | Medium | Ogun card, rounding | `results/ogun_card.py` | Fixed in PR #NEXT |
+| G-09 | Choosing the Ogun template while a class is waiting for approval or release changes the conduct section and the position on its cards | Medium | Ogun card, approval chain | `results/ogun.py`, `results/ratings.py` | Fixed in PR #NEXT |
+| G-10 | A register can be taken, changed or discarded for any term at any time, including after the cards are released | Medium | Attendance | `attendance/api.py`, `attendance/services.py` | Fixed in PR #NEXT |
+| G-11 | Attendance counts marks, not days: a child who changed class can be counted twice for one day, and a back-filled register uses today's class list | Medium | Attendance | `attendance/summary.py`, `attendance/services.py` | Fixed in PR #NEXT |
 | G-12 | The dashboard's "outstanding" is this term only; the fee book, reminders and withholding use the whole account | Medium | Fees | `home/facts.py`, `fees/api.py` | Fixed in PR #349 |
 | G-13 | A child moved to another class mid-term stays on the old class's bill and is never charged a line added later | Medium | Fees | `fees/schedules.py` | Fixed in PR #349 |
 | G-14 | Admission numbers are not unique: one-at-a-time admission does not check, nothing in the database does, and the doors match without case | Medium | Roll, IDs | `accounts/enrolment_api.py`, `accounts/models.py` | Fixed in PR #349 |
@@ -118,6 +118,12 @@ Left: the membership records that an enrolment ended and not how, so the review
 says "left or graduated" for both. The review is shown by the page and is not
 required by the route: a caller that sends the `PUT` without reading it still
 switches. G-04 (promotion ignores results) is untouched.
+Both closed in PR #NEXT: the review says "Left the school on 3 October 2025"
+(`Departure`), "Graduated" or "Left the school at the end of the session" (the
+principal's decision at promotion), and only where neither record exists "No
+longer at the school". And the review carries a `token` that the `PUT` takes
+back as `seen`; without it, or once the review no longer holds, the answer is
+409 and the term is not changed (`term_change.require_seen()`).
 
 ### G-02. The session line is built from live marks and part-marked subjects (High)
 
@@ -185,6 +191,12 @@ Left: a first- or second-term card revised **after** the third term was
 released does not rewrite the year's summary already frozen on the third-term
 card; revising the third-term card re-reads them. The Ogun card's own annual
 score (G-08) is untouched.
+Closed in PR #NEXT: reissuing a first- or second-term card whose average (or whose
+being there at all) differs from what the third-term card froze reissues the
+third-term card in the same transaction, with its own `CardRevision` row
+naming the cause; a reissue that moves no figure leaves it alone
+(`revision._update_the_years_summary()`, `docs/revision.md`). Still open: an
+earlier term *released* after the third term (issue #352).
 
 ### G-03. Releasing one class's CBT scores gives out the answers while others still sit (High)
 
@@ -283,6 +295,32 @@ decision: have `promote()` write a `PromotionDecision` per child with who
 confirmed it, and make "leave" and "graduate" the principal's. Either way,
 have `set_current_term` warn when leaving a third term with nobody promoted.
 
+**Status.** Fixed in PR #NEXT, by the first option, as decided: promotion follows
+the principal's decision.
+`GET /api/academics/promotion/` shows each child's average for the year off the
+released third-term card (`ReleasedSessionResult`), what Classnode suggests from
+it and the school's pass mark, and the decision; a child with no released
+third-term card gets no suggestion, and `sessions.decide()` no longer reads
+anything but the frozen year. `POST /api/academics/promotion/decisions/` is the
+route for `decide_as`: the principal alone, a reason required, one reason for
+one child or many, every decision recorded or none. `promote()` refuses the
+whole plan, by name and with nothing moved, for a child with no decision and
+for a choice that is not what was decided (the table is
+`academics.promotion._ACTION_FOR` and `_class_graduates()`); the administrator
+may still confirm, and what is carried out is what the principal wrote down.
+"Graduated" is a new outcome and "leaving" is `withdrawn`, each kept with its
+reason, and the term-change review now says which it was. `GET`/`PUT
+/api/results/year-settings/` and the section "How the year is reckoned" on the
+promotion page set the term weighting and the pass mark (the principal and the
+administrator). The term-change review counts the children a third term leaves
+unpromoted, and the route that makes a term current now requires the review's
+token, so the switch that happens is the one that was shown (G-01's "left").
+Tests: `academics/tests/test_promotion_decisions.py`, `test_term_change.py`,
+`tests/js/promotion.test.js`; two schools throughout.
+Left: promotion still cannot be run once the new session's first term is
+current (issue #354). `sessions.decide()` itself accepts a blank note, for an
+import with nobody behind it; the route and `decide_as()` do not.
+
 ### G-05. Graduating or "leaving" a child locks the family out of the final card (Medium)
 
 **What is wrong.** Promotion ends the enrolment of every child who graduates
@@ -314,6 +352,23 @@ access to released cards and the fee account for a set period (a term), by
 checking for a recently ended membership at the card and fee read routes. Until
 then, say on the promotion confirm step that graduates' families lose access at
 once, and offer result-checker slips for the leaving class.
+
+**Status.** Checked, then fixed in PR #NEXT. The check
+(`test_before_the_fix_a_graduates_only_guardian_was_refused_at_the_host`): the
+release promotion used to make ended the guardian's PARENT membership and the
+host answered 403 on the card routes, as the audit expected. Now promotion ends
+a graduate's or a leaver's enrolment with
+`release_student(keep_family_access=True)`, as taking a child off the roll
+already did (G-16), so the guardians keep their way in. And the child's own
+login still opens the school's door and reaches **their own report cards and
+nothing else** (`accounts/former.py`: `/cards/` and `/api/results/cards/`); no
+role is granted, so every other page and route still refuses them, and a
+suspended student is not a former one.
+Tests: `academics/tests/test_promotion_family_access.py`, two schools.
+Left: access has no end date, for the family or the child. The fee account and
+receipts are not opened to a former student's own login (a guardian reaches
+whatever a parent reaches). A transfer still ends the guardians' access at the
+school the child leaves.
 
 ### G-06. The Ogun card's promotion line is worked out from next term's class, read live (Medium)
 
@@ -353,6 +408,17 @@ was, when no such decision was made.
 when promotion is confirmed (G-04's `PromotionDecision` per child), and print
 only that.
 
+**Status.** Fixed in PR #NEXT, by the second option: the line is the principal's
+recorded decision (`PromotionDecision`, G-04) and nothing else. "Promoted",
+"Promoted on trial", "Not promoted, to repeat JSS 2A" (the class on the card),
+"Graduated", "Withdrawn"; no decision, no line. Next session's placement is no
+longer read, so a placement by hand, a child repeating in another arm and a
+move in October do not reword a card. The released broadsheet uses the same
+function. Tests: `results/tests/test_audit_ogun_and_the_year.py`,
+`ThePromotionLineIsTheDecisionTests`.
+Left: the stored PDF is rendered at release, before the decision, so it has no
+line while the page shows one; the same is true of the Standard card.
+
 ### G-07. On the Ogun card a subject with no paper named "Exam" is left out (Medium)
 
 **What is wrong.** `results/ogun_card.py:126-144` `_is_complete()` treats a
@@ -382,6 +448,18 @@ true (every paper marked), whatever the papers are called; use the "Exam" name
 only to split the two rows, and when no paper is so named show the total in the
 Weighted Average row and leave the split blank. Until then, have
 `set_template_as` list the kept subjects whose papers have no "Exam".
+
+**Status.** Fixed in PR #NEXT. A subject is whole when every one of its papers is
+marked, whatever they are called. The name "Exam" decides only the split: a
+subject with no paper so named prints a dash in the CA and Exam rows and its
+marks in the Weighted Average, its term and annual scores print, and it is
+counted in the summary. A subject with a paper unmarked still waits, and the
+note under the summary is now true of every subject it counts. Tests:
+`ASubjectWithNoPaperNamedExamTests`; the Ogun test fixture now gives every
+subject the sheet's four papers, marked or not, as a school on the Ogun card
+has them.
+Left: `set_template_as` does not list the kept subjects whose papers have no
+"Exam"; they print, so nothing is lost by it.
 
 ### G-08. The Ogun card's percentage and annual score are not the figures the position uses (Medium)
 
@@ -420,6 +498,20 @@ calls. Print the card's own frozen average (`ReleasedCard.own_average`) as the
 percentage, or label the present figure "Marks %" so it is not read as the
 ranked average. Show "-" for the annual score unless every term the child was
 enrolled for has a score, or say how many terms it covers.
+
+**Status.** Fixed in PR #NEXT. The summary's percentage is the card's own frozen
+average (`ReleasedCard.own_average`), the figure the position beside it is
+ranked on; marks obtainable and obtained still print, as sums. Both `quantize`
+calls are `positions.round_percentage()` (half up). A subject's annual score
+is its term scores under the weighting frozen on that card's year summary
+(`ReleasedSessionResult.*_weight_used`), over the terms the subject has a
+score for, so the grid and the year's average use the same terms, weights and
+rounding; the 1st and 2nd term scores are read from the earlier cards as they
+stood when the third-term card was issued (`cards.card_as_of()`). Tests:
+`OneSetOfFrozenFiguresTests`.
+Left: the annual score does not say how many terms it covers; it follows the
+year's summary, which leaves out a term with no released card and
+renormalises.
 
 ### G-09. Choosing the Ogun template mid-chain changes cards waiting for release (Medium)
 
@@ -461,6 +553,21 @@ way to correct a released card short of revising each one.
 the current term is submitted, checked or approved, naming the classes, with
 the sentence F-01 and F-02 already use.
 
+**Status.** Fixed in PR #NEXT, and the wider door the "needs checking" asked about
+was open and is closed with it: none of the ordinary conduct settings was
+refused mid-chain. While any class's results are submitted, checked or
+approved, in any term, every change is refused (422) with a sentence naming
+the class: switching a section, adding, renaming, hiding or showing a trait,
+reordering, rewording the scale, and choosing either report card template.
+`ratings.require_no_class_awaiting_release()` is the one check. Draft, sent
+back and released leave the settings free; one school's chain holds nothing at
+another. Tests: `SettingsHoldStillInTheChainTests`, including the audit's
+reproduction (what is released is what was approved).
+Left: the check is a read with no lock; a class submitted in the instant after
+it is submitted with the changed settings in front of whoever checks it.
+`show_position` and the other card switches that are read live, not frozen at
+release, are not held.
+
 ### G-10. A register can be written for any term at any time (Medium)
 
 **What is wrong.** `PUT /api/attendance/classes/{class}/terms/{term}/{date}/`
@@ -498,6 +605,19 @@ register no longer supports the card it issued.
 the class's sheet for that term is not open for writing
 (`results.services.is_open_for_writing`), as marks and ratings already do.
 A correction after release then goes through a revision, with a reason.
+
+**Status.** Fixed in PR #NEXT. `take_register()` and `discard_register()` refuse
+(409, `RegisterLocked`) unless the class's results for the register's term are
+open for writing, under the sheet's row lock: refused once submitted, checked
+or approved, with "Send the results back first"; refused for good once
+released. So what is approved is what is released, and the register behind a
+released card cannot be changed through the service. Tests:
+`attendance/tests/test_register_and_the_chain.py`, two schools.
+Left (issue #353): the lock is in the service and not the database; a class
+submitted before the last day of term takes no register for the days that
+remain until it is sent back or released, which is the price of the rule; any
+teacher may still write any class's register while it is open (issue #125); a
+late register sent without a `base` still overwrites.
 
 ### G-11. Attendance counts marks, not days (Medium)
 
@@ -539,6 +659,19 @@ correction works). And when a register is taken for a past date, leave
 unmarked any child whose placement was made after that date
 (`ClassPlacement.updated_at`), naming them in the answer as `appeared` already
 does.
+
+**Status.** Fixed in PR #NEXT. `summary.for_term()` counts school days: where two
+registers marked one child on one day, the day counts once and the mark
+written last is its answer, so a double mark already in the tables is not
+counted twice either. And `take_register()` no longer writes the second mark:
+a child another class has already marked for that day is left unmarked and
+named (`marked_elsewhere`), on the page as well. Tests:
+`attendance/tests/test_school_days_not_marks.py`, two schools.
+Left (issue #353): a child who joined the school after the day being filled
+in is still marked. The audit suggested `ClassPlacement.updated_at`; nothing
+records the day a child first attended (`Membership.started_on` is the day the
+record was made, and a carry-forward stamps every placement "now"), so the
+rule would have left whole classes out of a back-filled week.
 
 ### G-12. The dashboard's "outstanding" is this term only; the fee book uses the whole account (Medium)
 
