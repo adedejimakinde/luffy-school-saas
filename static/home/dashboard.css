@@ -233,7 +233,6 @@
 .hero-sub:active { transform: scale(0.98); }
 .hero-sub-value { font-size: var(--t-5); font-weight: var(--heavy); line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }
 .hero-sub-meta { color: var(--muted); font-size: var(--t-3); line-height: 1.35; }
-.hero-sub-small { font-size: var(--t-2, 0.75rem); }
 
 @media (min-width: 640px) {
   .hero { padding: var(--s-3); gap: var(--s-3); }

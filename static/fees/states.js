@@ -63,7 +63,7 @@ export function outstandingLine(body = {}) {
   return (
     '<p class="outstanding"><span class="eyebrow">Outstanding (all terms)</span> ' +
     `<strong class="fig">${esc(naira(kobo))}</strong>, ${esc(owing)} ${owing === 1 ? "child owes" : "children owe"}` +
-    `<br><small class="fig">of which this term: ${esc(naira(thisTerm))}</small></p>`
+    `<br><span class="fig">of which this term: ${esc(naira(thisTerm))}</span></p>`
   );
 }
 
