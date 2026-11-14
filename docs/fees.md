@@ -381,6 +381,36 @@ for the one before it, and nothing else does, because no foreign key's
 `FOR KEY SHARE` conflicts with it. `TwoBillsOneTermTests` stages that
 interleaving and fails without the lock.
 
+### A child who moves in mid-term (audit G-13)
+
+Under the rule above, a child charged by JSS 1A's bill and moved to JSS 3A was
+JSS 1A's for the term, and a line either bill added later reached neither.
+Now **JSS 3A's bill charges them each of its lines added after they joined
+JSS 3A** (`ClassPlacement.class_since`, set when a child is placed or moved,
+and by nothing else). The lines JSS 3A already had when they arrived are taken
+to be what JSS 1A already charged them, which is the rule above unchanged.
+
+**No line is billed twice**: a line charges a child once (the index), and a
+later line is not charged to a child who already holds a standing charge this
+term, from another bill, with the same description, compared without case or
+extra spaces: JSS 1A's "Second instalment" and JSS 3A's are one fee. Those are
+counted in `AppliedSummary.same_item_elsewhere`. JSS 1A's own later lines do not
+reach the child, who is no longer on its roster.
+
+### What "outstanding" means (audit G-12, decided)
+
+**The whole-account balance of the children placed this term**, summed over
+those who owe, shown as "Outstanding (all terms)" with "of which this term"
+beneath it: for each child, the part of their balance this term's entries
+make, never below nothing and never more than the balance. A family in credit
+is not netted against one that owes; a child placed in no class this term
+(not yet placed, or taken off the roll) is not counted, and their account is
+still read on its own page. `fees/outstanding.py` is the rule, one statement;
+the dashboard embeds it, and the fees list (per class and for the school), the
+fee book's class page and fee reminders read the same rows, so the four agree
+by construction (`fees/tests/test_outstanding.py`). "Collected" and "expected"
+stay this term's.
+
 ### Issue #75: a concession is granted once and revoked once
 
 A concession used to be switched off with `is_active`, which recorded when (as

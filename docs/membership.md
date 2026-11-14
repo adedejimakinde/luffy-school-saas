@@ -262,8 +262,45 @@ actor, so there is no signature to record, and inventing an author would be wors
 gap. It is for imports and fixtures — anything driven by a request goes through an `_as`
 function, which is the same split the rest of `services.py` already documents.
 
-There is no HTTP surface for any of this yet — it is a service-layer flow, like
-`release_student_as()` beside it.
+### Why the handshake has no route yet (audit G-16, issue #346)
+
+There is no HTTP surface for the handshake, and that is a decision, not an
+oversight. Three questions stand before it can have one, each written out in
+issue #346:
+
+1. **How the receiving school names a child at another school.** A
+   receiving-side request needs a pointer to a membership at another school, and
+   an id, a name or an admission number would make the route a directory of
+   another school's roll. A transfer code the releasing school gives the family
+   is one answer.
+2. **The sending school's class lists.** An accept runs on the receiving
+   school's host. It ends the membership, a shared row, but the child's
+   placements live in the *sending* school's schema, which that request cannot
+   and must not write. So the child would stay on the sending school's roster,
+   in its class size and on its bills: exactly the harm G-16 reports.
+   `accounts/tests/test_transfer_has_no_route.py` pins that as a fact.
+3. **What the receiving school reads before it agrees**: the child's name, the
+   sending school's number, and what that school typed about each guardian.
+
+`accounts/tests/test_transfer_has_no_route.py` asserts the gap: nothing outside
+the tests calls the handshake and no route answers for a transfer. It goes red
+the day one is added, and its docstring says what to do then.
+
+Until then a child leaving for another school is **taken off the roll** by the
+principal (`academics.leaving`, `POST /api/enrolment/roll/{id}/leave/`: a reason,
+a day, a `Departure` record, out of every class of a term not finished, the
+family's cards still readable) and admitted at the new school as a new pupil.
+
+### Admission numbers (audit G-14)
+
+A child's admission number (`Membership.reference` on the STUDENT row) names one
+child per school: compared without case and surrounding spaces, every status
+counted, blank no number. `an_admission_number_names_one_child_per_school` holds
+it in the database; `accounts.admission_numbers` is the rule in Python, and
+admitting, the edit (`PUT /api/enrolment/roll/{id}/admission-number/`), the roll
+import and a transfer each refuse a clash in a sentence first. The migration that
+added the index lists every number already shared, and
+`python manage.py admission_number_clashes` lists them without migrating.
 
 ## Deleting things
 
