@@ -46,7 +46,10 @@ On a **third-term** card three more rows: the 1st, 2nd and 3rd term scores
   (`ReleasedCard.own_average`): the figure the class position beside it is
   ranked on and the Standard card prints. It is not marks obtained over marks
   obtainable, which is a different number whenever subjects are out of
-  different totals. Those two sums still print, as sums.
+  different totals. Those two sums still print, as sums. (A card frozen before
+  the whole-subjects rule, `whole_subjects_only` false, keeps the figure it
+  was released with: its average counts part-marked subjects that the summary
+  leaves out.)
 - **Rounding** is `positions.round_percentage()`, half up, as everywhere else.
 - **The annual score** of a subject is its term scores combined under the
   weighting frozen on this card's year summary (`ReleasedSessionResult`'s
@@ -190,12 +193,23 @@ def _summary(card, subjects, whole) -> dict:
     done = [s for s in subjects if id(s) in whole]
     obtainable = sum(s["out_of"] for s in done)
     obtained = sum(s["total"] for s in done)
+    if card.whole_subjects_only:
+        percentage = (
+            _text(round_percentage(card.own_average)) if card.own_average is not None else None
+        )
+    else:
+        # A card frozen before the whole-subjects rule: its own average counts
+        # part-marked subjects, which this summary leaves out, so the two sums
+        # divided are what it has always printed here. A released card is not
+        # reworded; the figure is kept exactly, rounding included.
+        percentage = None
+        if obtainable:
+            share = Decimal(obtained) * 100 / Decimal(obtainable)
+            percentage = _text(share.quantize(Decimal("0.01")))
     return {
         "obtainable": obtainable or None,
         "obtained": obtained if obtainable else None,
-        "percentage": _text(round_percentage(card.own_average))
-        if card.own_average is not None
-        else None,
+        "percentage": percentage,
         "left_out": len(subjects) - len(done),
     }
 

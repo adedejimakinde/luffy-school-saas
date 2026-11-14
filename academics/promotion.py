@@ -51,8 +51,8 @@ school's pass mark. `promote()` moves nobody on its own say:
   "promoted".
 
 So an administrator may still press the button, and what it does is what the
-principal wrote down. `_plan_words()` is the table of which decision allows
-which choice.
+principal wrote down. `_ACTION_FOR` and `_class_graduates()` are the table of
+which decision allows which choice.
 
 **A graduate's or a leaver's family keeps its way in** (audit finding G-05):
 the enrolment ends with the guardians' access left as it was

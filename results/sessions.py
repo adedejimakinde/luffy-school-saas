@@ -746,9 +746,10 @@ def released_session_line(membership, session) -> ReleasedSessionResult | None:
     "The earliest" is the right rule **between sheets** and the wrong one
     **between versions of one sheet**, and task 8 made the second case real. A
     revision writes a second row on the same sheet, later; taking the earliest
-    returned the **superseded** line, so `card_session_line()` — and through it
-    `decide()`, which freezes `session_average` and the promotion *suggestion*
-    off this row — read version 1 while `card_api` served version 2 to the
+    returned the **superseded** line, so `card_session_line()` and `decide()`
+    (which freezes `session_average` and the promotion *suggestion* off this
+    row, and since audit finding G-04 off nothing else) read version 1 while
+    `card_api` served version 2 to the
     family. The two genuinely differ: the revised line carries the revised
     card's third-term average, and is weighted as the school weights the year
     on the day of the revision.

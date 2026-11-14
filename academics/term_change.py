@@ -215,15 +215,18 @@ def _how_they_left(membership_ids) -> dict:
         return {}
     from results.models import PromotionDecision, PromotionStatus
 
-    how = {}
-    for decision in PromotionDecision.objects.filter(
-        student_membership_id__in=ids,
-        status__in=[PromotionStatus.GRADUATED, PromotionStatus.WITHDRAWN],
-    ).order_by("student_membership_id", "-decided_at", "-id"):
-        how.setdefault(
-            decision.student_membership_id,
-            GRADUATED if decision.status == PromotionStatus.GRADUATED else LEFT_AT_PROMOTION,
-        )
+    how, latest = {}, {}
+    # The child's latest decision of all, and only then what it says: a
+    # "withdrawn" the principal later changed to "promoted" is not how they left.
+    for decision in PromotionDecision.objects.filter(student_membership_id__in=ids).order_by(
+        "student_membership_id", "-decided_at", "-id"
+    ):
+        latest.setdefault(decision.student_membership_id, decision)
+    for student_id, decision in latest.items():
+        if decision.status == PromotionStatus.GRADUATED:
+            how[student_id] = GRADUATED
+        elif decision.status == PromotionStatus.WITHDRAWN:
+            how[student_id] = LEFT_AT_PROMOTION
     # A departure is the later and the more particular record, so it wins.
     for departure in Departure.objects.filter(student_membership_id__in=ids).order_by(
         "created_at", "id"

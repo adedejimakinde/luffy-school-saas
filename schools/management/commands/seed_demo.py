@@ -322,18 +322,20 @@ class Command(BaseCommand):
             ogun.set_template_as(staff["principal"].user, school, template)
             self._learners(children, rng, staff["admin"].user)
 
-        self._timetable(term, groups, subjects, staff, teachers)
-        self._release(term, groups[1], placed[groups[1]], staff, rng)
-        self._remarks_begun(term, groups[0], placed[groups[0]], staff)
-
         # Two weeks of registers. Children 3 and 14 are away often enough to be
-        # on the principal's absence list.
+        # on the principal's absence list. Taken before the release below: a
+        # class's registers are locked with its results (audit finding G-10),
+        # and a card freezes its attendance when it is released.
         days = [d for d in _weekdays(starts, today)][:10]
         for group, members in placed.items():
             for day in days:
                 away = [c.pk for c in members if (c in (children[2], children[13]) and rng.random() < 0.5)
                         or rng.random() < 0.05]
                 attendance.take_register(group, term, on=day, absent_ids=away, by=staff["teacher"].user)
+
+        self._timetable(term, groups, subjects, staff, teachers)
+        self._release(term, groups[1], placed[groups[1]], staff, rng)
+        self._remarks_begun(term, groups[0], placed[groups[0]], staff)
 
         # The term's fees. Two concessions first — child 5 a staff child, whose
         # standing concession each bill gives; child 8 a bursary since revoked,

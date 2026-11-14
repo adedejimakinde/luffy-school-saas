@@ -138,6 +138,29 @@ class AttendanceFreezeSetUp(CardSetUp):
             by=self.teacher,
         )
 
+    def change_the_marks_after_release(self, on, absent_ids=()):
+        """The marks behind a released card, changed underneath it.
+
+        A register cannot be taken or amended through the service once its
+        class is released (audit finding G-10,
+        `attendance/tests/test_register_and_the_chain.py`), so this writes the
+        rows directly, as a shell would. What these tests assert is the other
+        half: whatever the tables come to hold, the card does not move.
+        """
+        from attendance.models import AttendanceMark, Register
+
+        with self.assertRaises(attendance.RegisterLocked):
+            self.mark(on, absent_ids=absent_ids)
+        register, _ = Register.objects.get_or_create(
+            class_group=self.group(self.stmarys), taken_on=on,
+            defaults={"term": self.term(self.stmarys, "first")},
+        )
+        for student_id in absent_ids:
+            AttendanceMark.objects.update_or_create(
+                register=register, student_membership_id=student_id,
+                defaults={"status": "absent"},
+            )
+
     def card_of(self, membership):
         return cards.card_for(membership.pk, self.term(self.stmarys, "first"))
 
@@ -201,8 +224,8 @@ class TheFreezeTests(AttendanceFreezeSetUp):
             self.release_the_term()
             before = self.card_of(self.ada)
 
-            self.mark(FIRST_DAY, absent_ids=[self.ada.pk])
-            self.mark(SECOND_DAY, absent_ids=[self.ada.pk])
+            self.change_the_marks_after_release(FIRST_DAY, absent_ids=[self.ada.pk])
+            self.change_the_marks_after_release(SECOND_DAY, absent_ids=[self.ada.pk])
 
             after = self.card_of(self.ada)
             self.assertEqual(after.pk, before.pk)
@@ -225,8 +248,8 @@ class ARevisionCarriesAttendanceForwardTests(AttendanceFreezeSetUp):
             original = self.card_of(self.ada)
 
             # The register changes after release, the way a register does.
-            self.mark(FIRST_DAY, absent_ids=[self.ada.pk])
-            self.mark(SECOND_DAY, absent_ids=[self.ada.pk])
+            self.change_the_marks_after_release(FIRST_DAY, absent_ids=[self.ada.pk])
+            self.change_the_marks_after_release(SECOND_DAY, absent_ids=[self.ada.pk])
 
             revision.revise(self.ada, self.term(self.stmarys, "first"), self.principal, "typo")
 

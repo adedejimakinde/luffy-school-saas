@@ -479,7 +479,9 @@ class TheReviewSaysHowAChildLeftTests(TermChangeSetUp):
         from results import sessions
 
         with connected_to(self.stmarys):
-            sessions.decide(self.children["ada"], "2024/2025", "promoted", note="Passed", by=self.head.user)
+            # Decided leaving, then changed: the later decision is what holds.
+            sessions.decide(self.children["ada"], "2024/2025", "withdrawn", note="Moving", by=self.head.user)
+            sessions.decide(self.children["ada"], "2024/2025", "promoted", note="Staying", by=self.head.user)
         release_student(self.children["ada"])
 
         self.assertEqual(self.why("ada"), term_change.LEFT)
