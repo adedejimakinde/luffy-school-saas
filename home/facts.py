@@ -7,8 +7,8 @@ aggregates over the table that owns them, so the database does the counting
 and hands back one row of JSON:
 
 1. **people**: the current term, the classes and who is placed in them, the
-   previous term's roll, staff and student counts, class teachers, this week's
-   and the two weeks before's registers, staff invitations and the crest.
+   previous term's roll, staff and student counts, class teachers, the term's
+   registers, staff invitations and the crest.
 2. **money**: this term's ledger, by kind, by week, and by family.
 3. **work**: the results sheets and their steps, papers with marks started,
    and remarks written.
@@ -52,7 +52,7 @@ CACHE_SECONDS = 5 * 60
 
 #: Bumped when the shape of the facts changes, so a deploy never reads a
 #: cached copy written by the code before it.
-VERSION = 1
+VERSION = 2
 
 #: The crest is stored as a 256px square (`results.look.CREST_SIDE`). The
 #: header draws it at 56px; this is twice that, for a sharp phone screen, and a
@@ -101,8 +101,9 @@ def read(school, today: date) -> dict:
         people = _one(cursor, _PEOPLE, {
             "school": school.pk,
             "staff": sorted(STAFF_ROLES),
-            # Two weeks back: the day shown can be last Friday, and its
-            # change is against the seven days before that.
+            # Only the fallback, for a school with no current term. With one,
+            # the registers are the term's: "Present" is told against the term's
+            # earlier school days (`home.dashboard.attendance_change()`).
             "from": monday_of(today) - timedelta(days=14),
             "today": today,
         })
@@ -209,7 +210,7 @@ SELECT json_build_object(
             FROM attendance_attendancemark a WHERE a.register_id = r.id
         ) x ON true
         LEFT JOIN accounts_user u ON u.id = r.taken_by_id
-        WHERE r.taken_on BETWEEN %(from)s AND %(today)s
+        WHERE r.taken_on BETWEEN coalesce((SELECT starts_on FROM t), %(from)s) AND %(today)s
     ),
     'invited', (
         SELECT json_build_object('n', count(*), 'oldest', min(i.created_at))

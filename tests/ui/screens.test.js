@@ -1204,6 +1204,62 @@ describe("keyboard focus and large text on a phone", () => {
   }
 });
 
+describe("the dashboard's three stat tiles", () => {
+  // Students, Present and To approve each end in a third line (home/dashboard.py,
+  // `_third()`). On a small phone three tiles in a row leave about 70px of text
+  // each, so the line may wrap onto a second or third line; what it may not do is
+  // fall under 15px, spill out of its tile, cut a figure short, or leave the tiles
+  // at different heights. Photographed at 320 and 390px (`home-stat-tiles.png`).
+  for (const width of [320, 390]) {
+    test(`the principal's stat tiles at ${width}px: 15px text, level tiles, nothing cut off`, async () => {
+      const context = await signedIn("sunrise.principal");
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${SUNRISE}/home/`);
+        await settle(page);
+        mkdirSync(join(OUT, String(width)), { recursive: true });
+        await page.locator(".kpis").screenshot({ path: join(OUT, String(width), "home-stat-tiles.png") });
+        const found = await page.evaluate(() => {
+          const tiles = [...document.querySelectorAll(".kpi-stat")];
+          const problems = [];
+          const tops = new Set(tiles.map((t) => Math.round(t.getBoundingClientRect().top)));
+          const heights = new Set(tiles.map((t) => Math.round(t.getBoundingClientRect().height)));
+          if (tiles.length !== 3) problems.push(`${tiles.length} stat tiles, not 3`);
+          if (tops.size !== 1) problems.push(`the tiles are not in one row (tops ${[...tops]})`);
+          if (heights.size !== 1) problems.push(`the tiles are not one height (${[...heights]})`);
+          for (const tile of tiles) {
+            const name = tile.dataset.tile;
+            const third = tile.querySelector(".kpi-third");
+            const value = tile.querySelector(".kpi-value");
+            if (!third) problems.push(`${name} has no third line`);
+            for (const el of [tile.querySelector(".eyebrow"), third, third && third.querySelector("span")]) {
+              if (el && parseFloat(getComputedStyle(el).fontSize) < 15) problems.push(`${name}: ${el.className || el.tagName} text under 15px`);
+            }
+            const box = tile.getBoundingClientRect();
+            for (const el of [value, third, tile.querySelector(".eyebrow")]) {
+              if (!el) continue;
+              if (el.scrollWidth > el.clientWidth + 1) problems.push(`${name}: ${el.className} is cut off`);
+              if (el.getBoundingClientRect().right > box.right + 0.5) problems.push(`${name}: ${el.className} spills out of its tile`);
+            }
+            if (!value.classList.contains("kpi-word") && value.getBoundingClientRect().height > parseFloat(getComputedStyle(value).lineHeight) * 1.5) {
+              problems.push(`${name}: the figure wraps`);
+            }
+            if (/[\u2013\u2014]/.test(tile.innerText) || /^\s*-\s*$/.test(value.textContent)) problems.push(`${name}: a dash in the copy`);
+            if (!tile.matches("a[href]")) problems.push(`${name} is not a link`);
+          }
+          const root = document.documentElement;
+          if (root.scrollWidth > root.clientWidth) problems.push("the page scrolls sideways");
+          return problems;
+        });
+        assert.deepEqual(found, []);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});
+
 describe("the top bar is one row", () => {
   // The phone's top bar never wraps: the menu button, the logo and the account
   // menu share one row at every width from 320, and at the reader's own text

@@ -319,6 +319,53 @@ a.kpi:active { transform: scale(0.98); }
   }
 }
 
+/*
+ * The three stat tiles' third line: Students ("12 classes"), Present ("2.9 pts
+ * down") and To approve ("3 classes waiting"). Always shown, 15px at every width,
+ * and free to wrap to a second or third line in a narrow tile; the figure never
+ * shrinks or truncates to make room. The arrow beside a change is a drawing and
+ * the words say the same thing, so colour is never alone.
+ */
+.kpi-third {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-half);
+  color: var(--muted);
+  font-size: var(--t-3);
+  line-height: 1.3;
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+
+.kpi-third .icon { flex: none; width: 16px; height: 16px; margin-top: 2px; stroke-width: 2.25; }
+.kpi-third-warn { color: var(--stat-down); }
+.kpi-third-ok { color: var(--stat-up); }
+
+/* "Not taken": a word where a figure would be, so it may wrap and is set smaller. */
+.kpi-word { font-size: var(--t-5); white-space: normal; overflow-wrap: break-word; }
+
+/* Something waits on the reader: the "needs action" tint. */
+.kpi-action { background: var(--stat-action-bg); }
+.kpi-action .eyebrow { color: var(--stat-action-label); }
+.kpi-action .kpi-value { color: var(--stat-action-figure); }
+/* 700: the heaviest cut below the figures' 800 that the page ships (600 is not one). */
+.kpi-action .kpi-third { color: var(--stat-action-label); font-weight: 700; }
+
+/* On a phone the label is 15px too, in small caps so "STUDENTS" still fits a
+   third of a 320px screen; the top is two lines tall so a label that wraps
+   ("Present today") leaves the figures level across the row. */
+@media (max-width: 639.98px) {
+  .kpi-stat .kpi-top { min-height: 2.6em; font-size: var(--t-3); line-height: 1.3; }
+  .kpi-stat .eyebrow {
+    font-size: var(--t-3);
+    line-height: 1.3;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    font-variant-caps: all-small-caps;
+    overflow-wrap: break-word;
+  }
+}
+
 /* The collection meter: a track and the share collected, drawn in the SVG. */
 .meter { display: block; width: 100%; height: 8px; }
 .meter .track { fill: var(--divider); }

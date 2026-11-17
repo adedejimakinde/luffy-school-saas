@@ -70,6 +70,14 @@
   --stop-bg: #FDECEA;
     --action-bg: #FFF7E8;
 
+  /* The dashboard's three stat tiles (`home/dashboard.css`): a change for the worse, a
+     change for the better, and the "needs action" tint with its label, figure and line. */
+  --stat-down: #9A5B0E;
+  --stat-up: #0F6B47;
+  --stat-action-bg: #FFF7EA;
+  --stat-action-label: #8A5410;
+  --stat-action-figure: #6E420B;
+
   /* The public site's icon tiles only, never words. */
   --teal: #0F766E;
   --amber: #B45309;
