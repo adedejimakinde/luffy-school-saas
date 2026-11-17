@@ -1209,8 +1209,8 @@ describe("the dashboard's three stat tiles", () => {
   // `_third()`). On a small phone three tiles in a row leave about 70px of text
   // each, so the line may wrap onto a second or third line; what it may not do is
   // fall under 15px, spill out of its tile, cut a figure short, or leave the tiles
-  // at different heights. Photographed at 320 and 390px (`home-stat-tiles.png`).
-  for (const width of [320, 390]) {
+  // at different heights. Photographed at 320, 360 and 390px (`home-stat-tiles.png`).
+  for (const width of [320, 360, 390]) {
     test(`the principal's stat tiles at ${width}px: 15px text, level tiles, nothing cut off`, async () => {
       const context = await signedIn("sunrise.principal");
       const page = await context.newPage();
@@ -1247,12 +1247,47 @@ describe("the dashboard's three stat tiles", () => {
             }
             if (/[\u2013\u2014]/.test(tile.innerText) || /^\s*-\s*$/.test(value.textContent)) problems.push(`${name}: a dash in the copy`);
             if (!tile.matches("a[href]")) problems.push(`${name} is not a link`);
+            // Two lines from 360px up (three at 320px, where "Last register:" alone is wider
+            // than the 75px a tile has: the date is then the third line), and a date is
+            // never split ("Fri 6 / Nov").
+            const lineHeight = parseFloat(getComputedStyle(third).lineHeight);
+            const most = window.innerWidth >= 360 ? 2 : 3;
+            if (third.getBoundingClientRect().height > lineHeight * most + 1) problems.push(`${name}: the third line runs to more than ${most} lines`);
+            for (const date of third.querySelectorAll(".kpi-date")) {
+              if (date.getBoundingClientRect().height > lineHeight * 1.5) problems.push(`${name}: the date is split across lines`);
+            }
           }
           const root = document.documentElement;
           if (root.scrollWidth > root.clientWidth) problems.push("the page scrolls sideways");
           return problems;
         });
         assert.deepEqual(found, []);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});
+
+describe("the fees card's two figures line up", () => {
+  // Outstanding and Expected this term sit side by side; "Expected this term" wraps
+  // to a second line in a narrow card, and the two figures must still share a row.
+  for (const width of [320, 360, 390]) {
+    test(`the fee sub-cards' figures are level at ${width}px`, async () => {
+      const context = await signedIn("sunrise.principal");
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${SUNRISE}/home/`);
+        await settle(page);
+        const found = await page.evaluate(() => {
+          const tops = (sel) => [...document.querySelectorAll(`.hero-sub ${sel}`)].map((el) => Math.round(el.getBoundingClientRect().top));
+          const subs = [...document.querySelectorAll(".hero-sub")].map((el) => Math.round(el.getBoundingClientRect().height));
+          return { values: tops(".hero-sub-value"), metas: tops(".hero-sub-meta"), subs };
+        });
+        assert.equal(new Set(found.values).size, 1, `figures at ${found.values}`);
+        assert.equal(new Set(found.metas).size, 1, `notes at ${found.metas}`);
+        assert.equal(new Set(found.subs).size, 1, `cards ${found.subs} tall`);
       } finally {
         await page.close();
       }

@@ -16,7 +16,7 @@ keeps its older lines, which on a phone are kept for a screen reader
     <span class="kpi-value fig{% if tile.word %} kpi-word{% endif %}"{% if tile.exact %} title="{{ tile.exact }}"{% endif %}>{{ tile.value }}{% if tile.unit %} <small>{{ tile.unit }}</small>{% endif %}</span>
     {% if tile.third %}
     {% if tile.exact %}<span class="sr">{{ tile.exact }}</span>{% endif %}
-    <span class="kpi-third kpi-third-{{ tile.third.tone }}">{% if tile.third.icon %}<svg class="icon" aria-hidden="true" focusable="false"><use href="#{{ tile.third.icon }}"/></svg>{% endif %}<span>{{ tile.third.text }}</span></span>
+    <span class="kpi-third kpi-third-{{ tile.third.tone }}">{% if tile.third.icon %}<svg class="icon" aria-hidden="true" focusable="false"><use href="#{{ tile.third.icon }}"/></svg>{% endif %}<span>{{ tile.third.text }}{% if tile.third.date %} <span class="kpi-date">{{ tile.third.date }}</span>{% endif %}</span></span>
     {% else %}
     <span class="stat-more">
       <span class="kpi-meta">{{ tile.meta|nobreak }}</span>

@@ -33,7 +33,7 @@ figure never shrinks or truncates, and the tiles stay one height.
 | --- | --- | --- | --- |
 | Students | on the roll this term | "8 classes" / "1 class": classes with a student this term. Grey. | `/roll/` |
 | Present | today's attendance | against the average of this term's earlier school days that have a register, each day counting once: "2.9 pts down" (amber, down arrow), "1.4 pts up" (green, up arrow), "Same as usual" (grey, under half a point), "First register this term" (grey, nothing earlier). Digits are `figure()`'s, so "3 pts", never "3.0". | `/absences/` (a teacher: `/register/`) |
-| Present, no register today | the last school day's figure | "Last school day: Mon 16 Nov". No change line. | same |
+| Present, no register today | the last register's figure | "Last register: Mon 16 Nov". No change line. | same |
 | Present, no register this term | "Not taken", no % | "No registers yet" | same |
 | To approve | classes waiting on this login | "classes waiting" / "class waiting"; with none, "0" and "All caught up" in green | the "results waiting" row's page |
 
@@ -55,7 +55,7 @@ never disagree:
   "Attendance today", the chart has today's bar, and the feed says how many
   classes have taken it.
 - If none was, the tile is "Attendance" and shows the **last day a register
-  was taken**, labelled "Last school day: Fri 9 Oct". It never calls a day
+  was taken**, labelled "Last register: Fri 9 Oct". It never calls a day
   with no register "today". The chart says "No registers on a weekend" only
   when it is one and nobody has taken a register.
 - The change line is told only for today, against the term's earlier school days (above).

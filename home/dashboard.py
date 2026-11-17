@@ -290,14 +290,14 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
 
     - **The day shown** is today if any register was taken today, whatever
       day of the week it is. Otherwise it is the last day a register was
-      taken, and the tile says so ("Last school day: Fri 9 Oct"); it never
+      taken, and the tile says so ("Last register: Fri 9 Oct"); it never
       calls a day with no register "today".
     - **The chart** is Monday to Friday of this week, plus a Saturday or a
       Sunday only if a register was taken on it.
     - **The change** is today's figure against the average of the earlier
       school days of this term that have a register (`attendance_change()`).
       Only when today has a register: a day carried over from before says
-      "Last school day" and nothing else.
+      "Last register" and nothing else.
 
     Out of the children marked, never out of the roll (`summary.present()`'s
     reason): a class nobody has taken a register for has had nobody absent.
@@ -408,8 +408,9 @@ def _signed_naira(kobo: int) -> str:
 # arrow. The meaning is in the words; the tone and the arrow only back them up.
 
 
-def _third(text: str, tone: str = "muted", icon: Optional[str] = None) -> dict:
-    return {"text": text, "tone": tone, "icon": icon}
+def _third(text: str, tone: str = "muted", icon: Optional[str] = None, date: str = "") -> dict:
+    """`date`, when given, is drawn after the text and never split across lines."""
+    return {"text": text, "tone": tone, "icon": icon, "date": date}
 
 
 def students_line(classes: int) -> str:
@@ -458,7 +459,7 @@ def _attendance_tile(week, scope: Scope, today: date) -> dict:
     tile = {
         "key": "attendance",
         # "Present today" only for a day a register was taken today; else the
-        # day shown is named in the line under it ("Last school day: ...").
+        # day shown is named in the line under it ("Last register: ...").
         "label": "Present today" if shown == today else "Present",
         "icon": "i-register",
         "href": "/absences/" if week["school_wide"] else "/register/",
@@ -471,7 +472,7 @@ def _attendance_tile(week, scope: Scope, today: date) -> dict:
     third = (
         present_line(exact, week["earlier"])
         if shown == today
-        else _third(f"Last school day: {short_day(shown).replace(NBSP, ' ')}")  # may wrap in a narrow tile
+        else _third("Last register:", date=short_day(shown).replace(NBSP, " "))
     )
     return {
         **tile,
