@@ -229,6 +229,12 @@
   border-radius: var(--r-card);
   transition: background-color var(--ease), transform var(--ease);
 }
+/* Side by side on a phone, the two cards share their rows: a label that wraps to
+   a second line ("Expected this term") pushes both figures down together, so the
+   amounts stay level. Where subgrid is missing they simply stack as before. */
+@supports (grid-template-rows: subgrid) {
+  .hero-sub { grid-row: span 3; grid-template-rows: subgrid; gap: var(--s-half); }
+}
 .hero-sub:hover { color: var(--text); background: var(--brand-tint); }
 .hero-sub:active { transform: scale(0.98); }
 .hero-sub-value { font-size: var(--t-5); font-weight: var(--heavy); line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }
@@ -337,6 +343,14 @@ a.kpi:active { transform: scale(0.98); }
   min-width: 0;
 }
 
+.kpi-date { white-space: nowrap; }
+
+/* Under 390px the tiles give up 4px a side, so "Last register:" (86px at 15px)
+   fits one line at 360px and the date takes the second. At 320px the text area
+   is 75px: the line is then "Last / register: / Fri 6 Nov", the date still whole. */
+@media (max-width: 389.98px) {
+  .kpi-stat { padding-inline: var(--s-1); }
+}
 .kpi-third .icon { flex: none; width: 16px; height: 16px; margin-top: 2px; stroke-width: 2.25; }
 .kpi-third-warn { color: var(--stat-down); }
 .kpi-third-ok { color: var(--stat-up); }

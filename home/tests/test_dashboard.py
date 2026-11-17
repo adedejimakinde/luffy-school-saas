@@ -287,7 +287,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
         html = self.shown(self.head)[3]
 
         self.assertNotIn("Present today", html)
-        self.assertIn("Last school day: Fri 19 Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Fri 19 Sep</span>', self.tile(html))
         self.assertIn(">75%<", self.tile(html))
         self.assertNotIn("Sun</span>", self.week(html))
         self.assertIn("No registers on a weekend", self.week(html))
@@ -298,7 +298,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         html = self.shown(self.head)[3]
 
-        self.assertIn("Last school day: Tue 16 Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Tue 16 Sep</span>', self.tile(html))
         self.assertNotIn("Present today", html)
         self.assertIn("Not yet</b>Wed", self.week(html))
 
@@ -308,7 +308,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         html = self.shown(self.teacher)[3]
 
-        self.assertIn("Last school day: Fri 19 Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Fri 19 Sep</span>', self.tile(html))
         self.assertNotIn("Present today", html)
 
 
@@ -534,9 +534,9 @@ class TheThirdLineCopyTests(DashboardSetUp):
         self.assertEqual(attendance_change(91.5, earlier)[0], "down")
         self.assertIsNone(attendance_change(92, []))
 
-        self.assertEqual(present_line(89.1, earlier), {"text": "2.9 pts down", "tone": "warn", "icon": "i-down"})
-        self.assertEqual(present_line(93.4, earlier), {"text": "1.4 pts up", "tone": "ok", "icon": "i-up"})
-        self.assertEqual(present_line(92.2, earlier), {"text": "Same as usual", "tone": "muted", "icon": None})
+        self.assertEqual(present_line(89.1, earlier), {"text": "2.9 pts down", "tone": "warn", "icon": "i-down", "date": ""})
+        self.assertEqual(present_line(93.4, earlier), {"text": "1.4 pts up", "tone": "ok", "icon": "i-up", "date": ""})
+        self.assertEqual(present_line(92.2, earlier), {"text": "Same as usual", "tone": "muted", "icon": None, "date": ""})
         self.assertEqual(present_line(92, [])["text"], "First register this term")
 
     def test_every_school_day_counts_once_whatever_its_size(self):
@@ -569,7 +569,7 @@ class TheStatTilesTests(DashboardSetUp):
 
     def third(self, html, key):
         found = re.search(r'<span class="kpi-third[^"]*">(.*?)</span>\s*(?:</span>)?\s*</a>', self.tile(html, key), re.S)
-        return re.sub(r"<[^>]+>|\s+", " ", found.group(1)).strip()
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", found.group(1))).strip()
 
     def test_students_says_how_many_classes_and_opens_the_roll(self):
         html = self.shown(self.head)[3]
@@ -595,7 +595,7 @@ class TheStatTilesTests(DashboardSetUp):
         html = self.shown(self.head)[3]
 
         self.assertIn(">75%<", self.tile(html, "attendance"))
-        self.assertEqual(self.third(html, "attendance"), "Last school day: Tue 16 Sep")
+        self.assertEqual(self.third(html, "attendance"), "Last register: Tue 16 Sep")
         self.assertNotIn("kpi-third-warn", self.tile(html, "attendance"))
 
     def test_today_against_the_terms_earlier_days_goes_down_with_an_arrow_and_words(self):
@@ -663,7 +663,7 @@ class TheStatTilesNeverLeakTests(DashboardSetUp):
                 key: re.search(rf'<a class="kpi[^>]*data-tile="{key}">.*?</a>', html, re.S).group(0)
                 for key in ("students", "attendance", "results")
             }
-            third = lambda t: re.sub(r"<[^>]+>|\s+", " ", t.split('class="kpi-third')[1].split("</span>")[0].split(">", 1)[1]).strip()
+            third = lambda t: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", t.split('class="kpi-third')[1].split("</span>\n")[0].split(">", 1)[1])).strip()
             value = lambda t: re.search(r'class="kpi-value[^"]*"[^>]*>([^<]*)<', t).group(1).strip()
             return {k: (value(t), third(t)) for k, t in tiles.items()}
 
