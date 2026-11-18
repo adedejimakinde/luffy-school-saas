@@ -31,14 +31,16 @@ export function collectedShare(collected, billed) {
  */
 function classRow(c) {
   const share = collectedShare(c.collected_kobo, c.billed_kobo);
+  const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}`;
+  // What the class owes, all terms (audit G-12), on a line of its own: the
+  // sub-line stays the count alone.
   const owes = c.owing
-    ? ` · ${esc(naira(c.outstanding_kobo || 0))} outstanding`
+    ? `<span class="class-owes">${esc(naira(c.outstanding_kobo || 0))} outstanding</span>`
     : "";
-  const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}${owes}`;
   return (
     `<li><button type="button" class="list-row class-row" data-action="open-class" data-class="${esc(c.class_group_id)}">` +
     `<span class="list-row-text"><span class="list-row-title">${esc(c.class_group)}</span>` +
-    `<span class="list-row-sub">${children}</span></span>` +
+    `<span class="list-row-sub">${children}</span>${owes}</span>` +
     '<span class="list-row-end class-money">' +
     '<span class="class-figures">' +
     (share === null && !c.collected_kobo ? "" : `<span class="class-collected">${esc(naira(c.collected_kobo || 0))}</span>`) +
