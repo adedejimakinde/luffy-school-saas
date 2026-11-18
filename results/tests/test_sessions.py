@@ -1026,9 +1026,11 @@ class WhoMayDecideTests(SessionSetUp):
     def test_the_principal_decides(self):
         with connected_to(self.stmarys):
             decision = sessions.decide_as(
-                self.principal, self.ada, SESSION, PromotionStatus.PROMOTED
+                self.principal, self.ada, SESSION, PromotionStatus.PROMOTED,
+                note="Met the pass mark",
             )
         self.assertEqual(decision.decided_by_id, self.principal.pk)
+        self.assertEqual(decision.note, "Met the pass mark")
 
     def test_an_administrator_may_configure_but_may_not_decide(self):
         """The one place these two sets are meant to disagree."""
@@ -1458,11 +1460,82 @@ class TheYearIsTheCardsThatWentHomeTests(SessionSetUp):
                 self.ada, SESSION, PromotionStatus.REPEATED, by=self.principal
             )
 
-        # Before the third term went home: the two cards so far, (60 + 40) / 2.
-        self.assertEqual(early.session_average, Decimal("50.00"))
-        self.assertEqual(early.suggested, PromotionStatus.PROMOTED)
+        # Before the third term went home the year is not frozen, and nothing
+        # is suggested on a reckoning no card shows (audit finding G-04). It
+        # used to suggest "promoted" here on the two cards so far.
+        self.assertIsNone(early.session_average)
+        self.assertEqual(early.suggested, "")
         # After: the three cards, (60 + 40 + 45) / 3, and not (100 + 50 + 45) / 3.
         self.assertEqual(frozen.session_average, Decimal("48.33"))
         self.assertEqual(decision.session_average, frozen.session_average)
         self.assertEqual(decision.suggested, PromotionStatus.REPEATED)
         self.assertFalse(decision.overrode_the_suggestion)
+
+
+class NothingIsSuggestedBeforeTheYearIsFrozenTests(SessionSetUp):
+    """Audit finding G-04: the suggestion is made on the released, frozen year
+    and on nothing else. With the first and second terms' cards gone home and
+    the third not yet released there *is* a figure that could be reckoned (the
+    cards so far), and nothing may be suggested on it: not by `decide()`, and
+    not on the promotion page.
+
+    CONTROLS: `decide()` reading `card_session_line()` again, and
+    `academics.promotion.review()` falling back to `session_line()`, each make
+    this red.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.mark(self.stmarys, "first", self.ada, 80)
+        self.mark(self.stmarys, "second", self.ada, 70)
+        self.mark(self.stmarys, "third", self.ada, 30)
+        with connected_to(self.stmarys):
+            self.release_terms("first", "second")
+            Term.objects.filter(pk=self.terms[self.stmarys.pk]["third"]).update(is_current=True)
+            Term.objects.create(
+                session="2026/2027", name=TermName.FIRST,
+                starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11),
+            )
+
+    def shown(self):
+        from academics import promotion
+
+        review = promotion.review()
+        self.assertIsNone(review.problem)
+        return next(c for row in review.classes for c in row.children if c.membership_id == self.ada.pk)
+
+    def test_the_cards_so_far_are_a_figure_and_nothing_is_suggested_on_it(self):
+        with connected_to(self.stmarys):
+            so_far = sessions.session_line(self.ada, SESSION)
+            child = self.shown()
+            decision = sessions.decide(self.ada, SESSION, PromotionStatus.PROMOTED, by=self.principal)
+
+        # The control on the fixture: there is a number to be tempted by.
+        self.assertEqual(so_far.average, Decimal("75.00"))
+        self.assertIsNone(child.average)
+        self.assertEqual(child.suggested, "")
+        self.assertEqual(
+            (decision.suggested, decision.session_average, decision.pass_mark_used), ("", None, None)
+        )
+
+    def test_once_the_third_term_is_released_the_frozen_year_is_what_is_suggested_on(self):
+        with connected_to(self.stmarys):
+            self.release_the_third_term()
+            child = self.shown()
+            decision = sessions.decide(self.ada, SESSION, PromotionStatus.PROMOTED, by=self.principal)
+
+        # (80 + 70 + 30) / 3, on the three cards.
+        self.assertEqual(child.average, Decimal("60.00"))
+        self.assertEqual(child.suggested, PromotionStatus.PROMOTED)
+        self.assertEqual(decision.session_average, Decimal("60.00"))
+
+    def test_the_other_schools_year_suggests_nothing_here(self):
+        """Grace releases its whole year; St Mary's child is still unsuggested."""
+        chidi = self.child(self.grace, "chidi", "Chidi Eze")
+        for term in ("first", "second", "third"):
+            self.mark(self.grace, term, chidi, 90)
+        with connected_to(self.grace):
+            self.release_terms(school=self.grace)
+        with connected_to(self.stmarys):
+            self.assertEqual(self.shown().suggested, "")
+            self.assertEqual(sessions.frozen_years([self.ada.pk, chidi.pk], SESSION), {})

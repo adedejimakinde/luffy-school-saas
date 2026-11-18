@@ -180,6 +180,13 @@ it (`student.guardianships`) with `link_guardian_as()` under its own authority. 
 not survive is the parents' *access*: a guardian with no other live child at the releasing
 school loses their PARENT membership there.
 
+**Except when the child graduates, leaves at promotion or is taken off the roll**
+(`release_student(keep_family_access=True)`, audit findings G-16 and G-05). Those families
+still have cards to read, so the guardians' PARENT memberships are left as they were, with
+no end date, and `card_api` serves an ended child's released cards to their guardian. One
+mechanism, made for taking a child off the roll (#349) and reused by promotion. A transfer
+does not pass the flag.
+
 `services.transfer_student_as()` is kept for platform staff and for the rare admin holding
 memberships at both schools. It does both halves in one transaction — no window, and
 guardians carried across rather than re-linked — but it is not the ordinary path, because

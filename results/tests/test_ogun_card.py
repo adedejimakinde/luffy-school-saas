@@ -42,9 +42,24 @@ class OgunCardSetUp(ReportCardApiSetUp):
             )
 
     def ogun_papers(self, term, child, subject, test1, test2, assignment, exam):
+        """The sheet's four papers for a subject, marked for `child` where a
+        value is given. **All four exist either way**, as they do at a school
+        on the Ogun card: a paper with no mark is an unmarked paper, and a
+        subject is whole when every paper it has is marked, whatever they are
+        called (audit finding G-07)."""
+        from gradebook.models import Assessment
+
         for name, value, out_of in (("1st Test", test1, 10), ("2nd Test", test2, 10), ("Assignment", assignment, 10), ("Exam", exam, 70)):
             if value is not None:
                 self._mark(self.stmarys, term, child, subject, name, value, out_of=out_of)
+            else:
+                with connected_to(self.stmarys):
+                    Assessment.objects.get_or_create(
+                        term=self.term_of(self.stmarys, term),
+                        subject_id=self.subjects[subject],
+                        name=name,
+                        defaults={"max_score": out_of},
+                    )
 
     def payload(self, term=TermName.FIRST.value, who=None):
         response = self.fetch(who or self.mama, self.stmarys, self.ada, term)
@@ -137,20 +152,9 @@ class TheThirdTermTests(OgunCardSetUp):
             [by_name["English"][k] for k in ("first", "second", "third", "annual")], ["74", None, "80", "77"]
         )
 
-    def test_promoted_to_the_class_the_child_was_placed_in(self):
-        with connected_to(self.stmarys):
-            next_first = Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11))
-            jss2 = ClassGroup.objects.create(name="JSS 2A", level=2)
-            ClassPlacement.objects.create(class_group=jss2, term=next_first, student_membership_id=self.ada.pk)
-        self.release(term_name=THIRD)
-        self.assertEqual(self.payload(THIRD)["ogun"]["promotion"], "Promoted to JSS 2A")
-
-    def test_placed_in_the_same_class_is_to_repeat(self):
-        with connected_to(self.stmarys):
-            next_first = Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 14), ends_on=date(2026, 12, 11))
-            ClassPlacement.objects.create(class_group_id=self.group_id, term=next_first, student_membership_id=self.ada.pk)
-        self.release(term_name=THIRD)
-        self.assertEqual(self.payload(THIRD)["ogun"]["promotion"], "Not promoted, to repeat JSS 1A")
+    # The promotion line is the principal's decision and never a guess from
+    # next session's class (audit finding G-06):
+    # `test_audit_ogun_and_the_year.ThePromotionLineIsTheDecisionTests`.
 
     def test_no_line_before_a_decision_and_none_on_another_term(self):
         self.release(term_name=THIRD)

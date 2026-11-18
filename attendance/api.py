@@ -136,6 +136,8 @@ class RegisterTakenOut(Schema):
     appeared: List[int]
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: List[int]
+    #: On the roster, already marked that day by another class. Not marked here.
+    marked_elsewhere: List[int] = []
     #: With a base: not changed by the teacher, so not written.
     untouched: List[int] = []
     #: With a base: changed by the teacher, and already the school's answer.
@@ -453,6 +455,7 @@ def _take(request, group, term, on, payload):
         absent=taken.absent,
         appeared=taken.appeared,
         not_on_the_roster=taken.not_on_the_roster,
+        marked_elsewhere=taken.marked_elsewhere,
         untouched=taken.untouched,
         already=taken.already,
         conflicts=[

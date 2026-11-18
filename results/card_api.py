@@ -488,10 +488,13 @@ class OgunSubjectOut(Schema):
 
     name: str
     department: str
+    #: Both halves and what each is out of are null for a subject with no
+    #: paper named exactly "Exam": the sheet has no split to print for it, and
+    #: its marks are in `weighted` (audit finding G-07).
     ca: Optional[int] = None
-    ca_max: int
+    ca_max: Optional[int] = None
     exam: Optional[int] = None
-    exam_max: int
+    exam_max: Optional[int] = None
     weighted: Optional[str] = None
     #: Third term only: each term's score out of 100, and their average.
     first: Optional[str] = None

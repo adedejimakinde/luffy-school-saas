@@ -114,6 +114,33 @@ how the wrong card gets believed. The *reason* is not on the payload —
 `CardRevision` is the school's audit, and "why was this corrected" is a
 conversation rather than a field on a page a child carries home.
 
+## An earlier term's card, and the year on the third-term card
+
+A third-term card freezes the year: each term's average and the session average
+(`ReleasedSessionResult`), read from the cards as they stood when it was
+released. Reissuing a first- or second-term card afterwards used to leave that
+summary quoting a superseded card.
+
+Now `revise()` of a first- or second-term card works the year's line out again
+from the cards as they stand and compares it, term by term, with the one frozen
+on the child's third-term card. **If a figure moved** (an average, or the reason
+there is none), the third-term card is reissued too, **in the same
+transaction**: a new version with its own `CardRevision` row, by the same
+person, whose reason names the cause and quotes theirs. If nothing moved (a
+name corrected), the third-term card is left alone and grows no "Revised" mark.
+
+Both cards or neither: if the third-term card cannot be reissued (the child is
+no longer on that class's list for the term), the earlier card is not reissued
+either, and the refusal says both halves (`TheYearsSummaryCannotFollow`).
+
+A third-term Ogun card's 1st and 2nd term scores are read from the earlier
+cards as they stood when it was issued (`cards.card_as_of()`), so they move with
+the year's summary and not before it.
+
+Not covered: an earlier term **released** (not revised) after the third term.
+The year on the third-term card still says "not released" for it until that
+card is itself revised.
+
 ## Who may
 
 **The principal**, which is release's own authority: release is the principal's

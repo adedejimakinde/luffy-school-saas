@@ -13,6 +13,7 @@ screen already has to solve — the same problem, once, rather than twice in two
 shapes. Nobody should read this route's existence as implying a page.
 """
 
+from datetime import date
 from typing import Optional
 
 from django.db import transaction
@@ -47,6 +48,20 @@ class TermOut(Schema):
     ends_on: str
     calendar_days: int
     school_days: Optional[int]
+    #: The school's cut-off, or null when it has set none.
+    attendance_cutoff: Optional[str] = None
+    #: The last day whose registers count on the report card: the cut-off, or
+    #: the term's last day.
+    attendance_through: str = ""
+
+
+class CutoffIn(Schema):
+    """The last day whose registers count on the term's report cards.
+
+    Null clears it, and the term's last day is then the cut-off.
+    """
+
+    attendance_cutoff: Optional[date] = None
 
 
 class MessageOut(Schema):
@@ -100,6 +115,10 @@ def set_term_length(request, term_id: int, payload: TermLengthIn):
             raise
         return 422, MessageOut(detail=_first_message(exc))
 
+    return _term_out(term)
+
+
+def _term_out(term) -> TermOut:
     return TermOut(
         term_id=term.pk,
         term=str(term),
@@ -107,7 +126,50 @@ def set_term_length(request, term_id: int, payload: TermLengthIn):
         ends_on=term.ends_on.isoformat(),
         calendar_days=term.calendar_days,
         school_days=term.school_days,
+        attendance_cutoff=term.attendance_cutoff.isoformat() if term.attendance_cutoff else None,
+        attendance_through=term.attendance_through.isoformat(),
     )
+
+
+@router.put(
+    "/terms/{int:term_id}/attendance-cutoff/",
+    response={200: TermOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
+)
+def set_attendance_cutoff(request, term_id: int, payload: CutoffIn):
+    """Set the last day whose registers count on this term's report cards.
+
+    Audit finding G-10, as decided: registers are never locked; a teacher may
+    correct one at any time. What the card prints is the count of school days
+    to this day, frozen when the card is released. Authority before the lookup,
+    as above. 409 once a card of the term has gone home (every card of a term is
+    counted to one day); 422 for a day outside the term.
+    """
+    school = _school_of(request)
+    if not services.can_set_school_days(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_SET_CUTOFF)
+
+    term = get_object_or_404(Term, pk=term_id)
+    try:
+        term = services.set_attendance_cutoff_as(
+            request.user, term, payload.attendance_cutoff, school=school
+        )
+    except services.NotAllowedToSetTermLength:
+        return 403, MessageOut(detail=_MAY_NOT_SET_CUTOFF)
+    except services.CutoffFixed as exc:
+        return 409, MessageOut(detail=str(exc))
+    except Exception as exc:  # ValidationError from full_clean(), narrowed below
+        from django.core.exceptions import ValidationError
+
+        if not isinstance(exc, ValidationError):
+            raise
+        return 422, MessageOut(detail=_first_message(exc))
+    return _term_out(term)
+
+
+_MAY_NOT_SET_CUTOFF = (
+    "The day a term's attendance is counted to on the report card is set by a "
+    "principal or an administrator of the school."
+)
 
 
 def _first_message(exc) -> str:
@@ -153,6 +215,10 @@ class TermRowOut(Schema):
     starts_on: str
     ends_on: str
     school_days: Optional[int] = None
+    #: The school's attendance cut-off, or null when it has set none.
+    attendance_cutoff: Optional[str] = None
+    #: The last day whose registers count on the report card.
+    attendance_through: str = ""
     is_current: bool
 
 
@@ -246,6 +312,8 @@ def _term_row(term) -> TermRowOut:
         starts_on=term.starts_on.isoformat(),
         ends_on=term.ends_on.isoformat(),
         school_days=term.school_days,
+        attendance_cutoff=term.attendance_cutoff.isoformat() if term.attendance_cutoff else None,
+        attendance_through=term.attendance_through.isoformat(),
         is_current=term.is_current,
     )
 
@@ -383,6 +451,16 @@ class TermChangeReviewOut(Schema):
     already_placed: int
     not_carried: int
     in_new_term: int
+    #: Leaving a third term for a new session: children not yet promoted.
+    not_promoted: int = 0
+    #: Sent back as `seen` on the `PUT` that makes the term current, which is
+    #: refused without it or once the review no longer holds.
+    token: str
+
+
+class SeenIn(Schema):
+    #: The `token` of the review the person was shown.
+    seen: str = ""
 
 
 class CurrentTermOut(TermRowOut):
@@ -432,15 +510,22 @@ def review_current_term(request, term_id: int):
         already_placed=found.already_placed,
         not_carried=found.not_carried,
         in_new_term=found.in_new_term,
+        not_promoted=found.not_promoted,
+        token=found.token,
     )
 
 
 @router.put(
     "/terms/{int:term_id}/current/",
-    response={200: CurrentTermOut, 403: MessageOut, 422: MessageOut},
+    response={200: CurrentTermOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
 )
-def set_current_term(request, term_id: int):
+def set_current_term(request, term_id: int, payload: SeenIn = None):
     """Say which term the school is teaching now.
+
+    **Only after the review, and only as reviewed.** `seen` is the `token` of
+    `GET .../current/review/`. Without it, or when the review has changed since
+    (a child placed, moved or taken off the roll), the answer is 409 and the
+    current term stays where it was: look again, then send the new token.
 
     The previous one is cleared in the same transaction — `one_current_term` is
     a unique constraint on `is_current` where true, so setting a second without
@@ -470,6 +555,9 @@ def set_current_term(request, term_id: int):
             # Locked, so two people making a term current at once go one after
             # the other and the second sees what the first did.
             was = Term.objects.select_for_update().filter(is_current=True).first()
+            # What this switch will do, worked out under that lock, has to be
+            # what the caller was shown.
+            term_change.require_seen(term, payload.seen if payload else "")
             term = services.set_current_term_as(request.user, term, school=school)
             # A new term starts with the last one's subject teachers, copied in the
             # same transaction (`docs/subject-teachers.md`). Nothing, if it had none.
@@ -479,6 +567,8 @@ def set_current_term(request, term_id: int):
             carried = term_change.carry(was, term, by=request.user)
     except services.NotAllowedToSetUp:
         return 403, MessageOut(detail=_MAY_NOT_SET_UP)
+    except term_change.ReviewNotSeen as exc:
+        return 409, MessageOut(detail=str(exc))
     except services.ResultsInTheChain as exc:
         return 422, MessageOut(detail=f"{exc} The current term was not changed.")
 

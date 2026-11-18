@@ -101,3 +101,7 @@ label.switch input:focus-visible + .track { outline: 3px solid var(--brand); out
   .trait { grid-template-columns: minmax(0, 1fr); }
   .trait-actions { justify-content: flex-end; }
 }
+.term .cutoff-form { flex-basis: 100%; max-width: none; grid-template-columns: auto auto auto; align-items: center; gap: 6px 10px; margin: 0; }
+.term .cutoff-form .hint, .term .cutoff-form .note { grid-column: 1 / -1; font-size: var(--small); }
+.term .cutoff-form .hint { color: var(--muted); }
+@media (max-width: 480px) { .term .cutoff-form { grid-template-columns: 1fr; } }

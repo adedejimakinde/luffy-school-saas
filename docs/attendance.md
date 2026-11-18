@@ -222,6 +222,39 @@ This gets its own control: amend a register after release, revise the card for a
 unrelated reason, and assert the revised card's three numbers equal the original's. The
 control makes the revision recompute, and exactly that test reddens.
 
+### D7a. The card counts to a cut-off; the register is never locked (audit finding G-10)
+
+The audit found that a register could be changed for any term at any time, so the register
+behind a released card could part from it. **Decided: teachers can always correct a
+register**, before or after the cards go home (D8 below was always the rule). What holds the
+card still is the card:
+
+- **The term's attendance cut-off** (`Term.attendance_cutoff`, set by the school on the
+  setup page, `PUT /api/academics/terms/{id}/attendance-cutoff/`, principal or
+  administrator). Blank is the term's last day. A school sets it earlier when the last week
+  is exams or a holiday and the card's attendance should stop before it. The database
+  refuses a day outside the term (`the_attendance_cutoff_is_a_day_of_the_term`).
+- **The card prints school days counted to that day** (`summary.for_the_card()`), read
+  once inside the release and frozen on the card (D6). The three places a card's figures
+  are made use it: the release, the class print of cards, and the OGSERA export. The
+  principal's absence list counts the whole term.
+- **The cut-off holds once any class of the term is past draft** (409), so every card of a
+  term is counted to the same day and no release reads it while it changes. Sent back to
+  draft, it can be moved again.
+
+So a register corrected after release changes the register, the absence list and any later
+read, and never a card that has gone home; a revision carries the figures forward (D7).
+
+### D7b. A day is one mark (audit finding G-11)
+
+`summary.for_term()` counts **school days**: where two classes' registers marked one
+child on one day, the day counts once and the mark written last is its answer. And
+`take_register()` no longer writes the second mark: a child another class has already
+marked for that day is left unmarked and named (`marked_elsewhere`). Not done: a child
+who joined the school after the day being filled in is still marked, because nothing
+records the day a child first attended (`Membership.started_on` is the day the record was
+made).
+
 ### D8. Marks are mutable; the card is the artefact
 
 No append-only trigger on either new table. A teacher who marks a child absent and then

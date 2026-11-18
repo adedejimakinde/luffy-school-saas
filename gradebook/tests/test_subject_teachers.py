@@ -98,7 +98,11 @@ class SubjectTeachersSetUp(ChainSetUp):
         )
 
     def make_current(self, who, term_id, host=HOST):
-        response = self.as_(who).put(f"/api/academics/terms/{term_id}/current/", HTTP_HOST=host)
+        client = self.as_(who)
+        url = f"/api/academics/terms/{term_id}/current/"
+        # As the page does: the review's token goes back with the switch (G-01).
+        seen = client.get(f"{url}review/", HTTP_HOST=host).json().get("token", "")
+        response = client.put(url, data={"seen": seen}, content_type="application/json", HTTP_HOST=host)
         connection.set_schema_to_public()
         return response
 

@@ -29,9 +29,37 @@ a real event, and there are three ways it bites:
 None of the three is an error. They are all reports, because a teacher standing
 in front of a class should not have a register refused wholesale over one child
 the office moved while they were marking.
+
+## One mark per child per day (audit finding G-11)
+
+A register is taken against the class list as it is now, for whatever date is
+asked. So one more child is left unmarked and named, for the same reason as the
+child who appeared: nobody in this room observed her that day. She is the child
+**already marked that day by another class** (`marked_elsewhere`): in JSS 1A on
+Monday and on JSS 1B's list now. JSS 1B's register for Monday, taken that
+afternoon or filled in a week later, does not mark her a second time, and does
+not write "present" over what JSS 1A saw.
+
+`attendance.summary` counts days and not marks, which is what holds for any
+double mark written before this.
+
+What this does **not** do is leave unmarked a child who joined the school after
+the day being filled in. Nothing records the day a child first attended:
+`Membership.started_on` is the day the office made the record, so a school that
+imports its roll in week three and fills in weeks one and two would have every
+child left out. The audit's note on G-11 keeps that open.
+
+## A register can always be corrected (audit finding G-10, as decided)
+
+No register is locked: not at submission, not at release. A teacher who finds a
+wrong mark corrects it. What holds a report card still is not the register but
+the card: its attendance is counted to the term's cut-off
+(`Term.attendance_through`) and frozen when the card is released
+(`attendance.summary.for_the_card()`), so a register corrected afterwards does
+not move a card that has gone home.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date as date_type
 
 from django.db import IntegrityError, transaction
@@ -116,6 +144,9 @@ class RegisterTaken:
     appeared: list[int] = field(default_factory=list)
     #: Submitted as absent, not on the roster now. Nothing written for them.
     not_on_the_roster: list[int] = field(default_factory=list)
+    #: On the roster, and another class's register already marked them that
+    #: day. **Not marked** here: a day is one mark (G-11).
+    marked_elsewhere: list[int] = field(default_factory=list)
 
     #: With a base (`docs/offline.md` D4): children the teacher did not change
     #: from what they were shown. Nothing was written for them.
@@ -166,6 +197,21 @@ def _require_the_day_is_in_the_term(term, on):
             f"{on} is not inside {term}, which runs {term.starts_on} to "
             f"{term.ends_on}. A register belongs to the term it was taken in."
         )
+
+
+def _marked_elsewhere(class_group, on, roster) -> set:
+    """Who on `roster` another class's register has already marked for `on`.
+
+    This register leaves them unmarked. See the module docstring, "One mark per
+    child per day".
+    """
+    return set(
+        AttendanceMark.objects.filter(
+            register__taken_on=on, student_membership_id__in=roster
+        )
+        .exclude(register__class_group=class_group)
+        .values_list("student_membership_id", flat=True)
+    )
 
 
 def roster_ids(class_group, term) -> list[int]:
@@ -257,17 +303,20 @@ def take_register(
     roster_set = set(roster)
     absent_set = set(absent_ids)
     shown = roster_set if shown_ids is None else set(shown_ids)
+    held_back = _marked_elsewhere(class_group, on, roster)
 
-    looked_at = roster_set & shown
+    looked_at = (roster_set & shown) - held_back
     absent = sorted(absent_set & looked_at)
     present = sorted(looked_at - absent_set)
-    appeared = sorted(roster_set - shown)
+    appeared = sorted(roster_set - shown - held_back)
     not_on_the_roster = sorted(absent_set - roster_set)
+    left_out = {"marked_elsewhere": sorted(held_back)}
 
     if base is not None:
-        return _merge_register(
+        taken = _merge_register(
             class_group, term, on, by, base, looked_at, absent_set, appeared, not_on_the_roster
         )
+        return replace(taken, **left_out)
 
     register = _locked_register(class_group, term, on, by)
     _write_marks(register, present, absent, by)
@@ -286,6 +335,7 @@ def take_register(
         absent=absent,
         appeared=appeared,
         not_on_the_roster=not_on_the_roster,
+        **left_out,
     )
 
 
@@ -481,6 +531,7 @@ def discard_register(class_group, on) -> bool:
     This is not how a wrong *mark* is fixed — that is `take_register()` again,
     which amends. This is for a register filed against the wrong day, where
     every mark in it is about a day that did not happen.
+
     """
     register = (
         Register.objects.select_for_update()

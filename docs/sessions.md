@@ -250,6 +250,37 @@ recorded in one request can share it to the microsecond, and a promotion status
 that resolves arbitrarily between two rows is one that changes when nothing
 changed.
 
+### Where the suggestion comes from, and the routes (audit finding G-04)
+
+`decide()` takes the average from **the frozen year and nowhere else**: the
+`ReleasedSessionResult` written when the child's third-term card was released
+(or reissued). A child with no released third-term card gets **no suggestion**
+(`suggested` blank), whatever marks are entered: nothing is proposed on figures
+no card showed.
+
+Until November 2026 nothing called any of this. The routes are:
+
+| route | who | what |
+| --- | --- | --- |
+| `GET /api/academics/promotion/` | principal, administrator | each child's frozen average, the suggestion and the decision |
+| `POST /api/academics/promotion/decisions/` | **principal only** | records decisions, with one reason where one is needed; all or none |
+| `GET`/`PUT /api/results/year-settings/` | principal, administrator | the weighting and the pass mark |
+
+A decision **needs a reason only when the principal goes against Classnode's
+suggestion, or decides graduated or leaving** (`sessions.needs_a_reason()`):
+agreeing with the suggestion needs none, and nor does a decision where nothing
+was suggested, since there is nothing to disagree with. One reason covers every
+child in the request; a blank one with any child who needs it refuses the whole
+request, naming them. Every decision is logged whichever it is: the row keeps
+who decided, when, the outcome, the suggestion and the figures behind it.
+`decide()` itself, for an import with nobody behind it, takes no rule.
+
+**What the two settings reach.** The weighting is read when a third term is
+released and is frozen on each card's year summary; the pass mark is read when
+a decision is recorded and is kept beside it. Neither reaches a card that has
+gone home or a decision already made. A weight and the pass mark have at most
+two decimal places, which is what their columns keep.
+
 ## Who may do what
 
 | act | roles | why |

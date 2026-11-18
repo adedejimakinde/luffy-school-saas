@@ -62,19 +62,54 @@ class PromotionSetUp(ChainSetUp):
         self.client.force_login((member or self.head).user)
         return self.client.get(URL, HTTP_HOST=host)
 
-    def post(self, plan, member=None, host=HOST):
+    def post(self, plan, member=None, host=HOST, decided=True):
+        """Confirm `plan`. By default the principal has first decided exactly it.
+
+        These tests are about the mechanics of the move, and since audit finding
+        G-04 nothing moves that the principal has not decided
+        (`test_promotion_decisions.py` holds that rule). So the decisions the
+        plan implies are recorded first, as the school's principal; `decided=
+        False` posts the plan against whatever has been decided so far.
+        """
+        if decided:
+            self.decide_as_the_plan(plan, host)
         self.client.force_login((member or self.head).user)
         return self.client.post(URL, data={"classes": plan}, content_type="application/json", HTTP_HOST=host)
 
+    #: The decision each choice in a plan stands for.
+    _DECISION = {"promote": "promoted", "repeat": "repeated", "leave": "withdrawn"}
+
+    def decide_as_the_plan(self, plan, host=HOST):
+        from results import sessions
+
+        school, principal = (
+            (self.stmarys, self.head) if host == HOST else (self.grace, self.their_head)
+        )
+        with connected_to(school):
+            term = Term.objects.filter(is_current=True).first()
+            if term is None:
+                return
+            for entry in plan:
+                for key, choice in entry["children"].items():
+                    status = self._DECISION.get(choice)
+                    member = Membership.objects.filter(
+                        pk=int(key), school=school, role=Role.STUDENT
+                    ).select_related("school", "user").first()
+                    if status is None or member is None:
+                        continue
+                    if choice == "promote" and entry.get("graduate"):
+                        status = "graduated"
+                    sessions.decide(member, term.session, status, note="As planned", by=principal.user)
+
     def default_plan(self, host=HOST, member=None):
-        """The page's own defaults, as the page would post them back."""
+        """Every class to where the page suggests, every child promoted."""
         body = self.get(member, host=host).json()
         return [
             {
                 "class_group_id": c["class_group_id"],
                 "destination_id": c["destination_id"],
                 "graduate": c["graduate"],
-                "children": {str(k["membership_id"]): k["action"] for k in c["children"]},
+                "children": {str(k["membership_id"]): "promote" for k in c["children"]},
             }
             for c in body["classes"]
         ]
@@ -111,16 +146,20 @@ class PromotionSetUp(ChainSetUp):
 
 
 class TheReviewTests(PromotionSetUp):
-    def test_every_class_and_every_child_is_shown_defaulting_to_promote(self):
+    def test_every_class_and_every_child_is_shown_and_nobody_is_assumed_promoted(self):
         body = self.get().json()
 
         names = {c["name"]: c for c in body["classes"]}
         self.assertEqual(set(names), {"JSS 1A", "JSS 1B", "SS 3"})
         self.assertEqual(len(names["JSS 1A"]["children"]), 4)
         self.assertEqual(len(names["SS 3"]["children"]), 2)
+        # Nothing is decided yet, so nothing is chosen: the page used to start
+        # every child at "promote" (audit finding G-04).
         for row in body["classes"]:
             for child in row["children"]:
-                self.assertEqual(child["action"], "promote")
+                self.assertIsNone(child["action"])
+                self.assertIsNone(child["decision"])
+        self.assertEqual(body["undecided"], 7)
         self.assertIsNone(body["problem"])
         self.assertEqual(body["to_term"], str(self.next_term))
 

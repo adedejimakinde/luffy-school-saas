@@ -681,6 +681,59 @@ def _require_term_length_authority(actor, school):
         )
 
 
+class CutoffFixed(AcademicsError):
+    """A class of the term is past draft, so the term's attendance cut-off holds."""
+
+
+def set_attendance_cutoff(term, day):
+    """Set the last day whose registers count on the term's cards. `None` is the
+    term's last day. Returns the `Term`.
+
+    **Refused once any class of the term is past draft** (submitted, checked,
+    approved or released). Each card's attendance is frozen at its release,
+    counted to the cut-off then in force; moving it after one class has gone
+    home would leave the classes of one term counted to different days, with
+    nothing on either card to say so. Refusing from submission, not only from
+    release, is also what keeps a release from reading the cut-off while it
+    changes: between this check and any release are three more signed steps.
+
+    The database holds the other rule, that the day is one of the term's
+    (`the_attendance_cutoff_is_a_day_of_the_term`); `full_clean()` turns it
+    into a sentence.
+    """
+    from results.models import ResultSheet, SheetState
+
+    with transaction.atomic():
+        locked = Term.objects.select_for_update().get(pk=term.pk)
+        if locked.attendance_cutoff != day:
+            moving = (
+                ResultSheet.objects.filter(term=locked)
+                .exclude(state=SheetState.DRAFT)
+                .select_related("class_group")
+                .order_by("pk")
+                .first()
+            )
+            if moving is not None:
+                raise CutoffFixed(
+                    f"{moving.class_group}'s results for {locked} are "
+                    f"{moving.get_state_display().lower()}, counted to "
+                    f"{locked.attendance_through.day} {locked.attendance_through:%B %Y}. "
+                    f"Every card of a term is counted to the same day, so the cut-off "
+                    f"cannot be changed now."
+                )
+        locked.attendance_cutoff = day
+        locked.full_clean(exclude=["session", "name"])
+        locked.save(update_fields=["attendance_cutoff"])
+        return locked
+
+
+def set_attendance_cutoff_as(actor, term, day, *, school):
+    """`set_attendance_cutoff()` for a caller with a request behind it. The same
+    people who declare the term's length (`TERM_LENGTH_ROLES`)."""
+    _require_term_length_authority(actor, school)
+    return set_attendance_cutoff(term, day)
+
+
 def set_school_days_as(actor, term, count, *, school, by=None):
     """`set_school_days()` for a caller with a request behind it."""
     _require_term_length_authority(actor, school)
@@ -905,6 +958,9 @@ __all__ = [
     "remove_placement_as",
     "set_school_days",
     "set_school_days_as",
+    "CutoffFixed",
+    "set_attendance_cutoff",
+    "set_attendance_cutoff_as",
     "unassign_class_teacher",
     "unassign_class_teacher_as",
 ]

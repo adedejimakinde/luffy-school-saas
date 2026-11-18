@@ -72,6 +72,7 @@ from results.card_api import router as report_card_router
 from results.chain_api import router as chain_router
 from results.comments_api import router as comments_router
 from results.conduct_api import router as conduct_router
+from results.session_api import router as year_settings_router
 from results.ogsera_api import router as ogsera_router
 from results.health_api import router as health_router
 from results.broadsheet_api import router as broadsheet_router
@@ -164,6 +165,8 @@ api.add_router("/results/", health_router, tags=["results"])
 api.add_router("/results/", ogsera_router, tags=["results"])
 # The conduct and skills sections: switches, traits and scale (the setup page).
 api.add_router("/results/", conduct_router, tags=["results"])
+# How the year is reckoned: the term weighting and the pass mark (audit G-04).
+api.add_router("/results/", year_settings_router, tags=["results"])
 # "Print report cards": a class's cards as one PDF, made off the request
 # (`results.class_print`, `docs/class-print.md`).
 api.add_router("/results/", print_router, tags=["results"])

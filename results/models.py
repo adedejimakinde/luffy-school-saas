@@ -1284,6 +1284,11 @@ class PromotionStatus(models.TextChoices):
     PROMOTED = "promoted", "Promoted"
     ON_TRIAL = "on_trial", "Promoted on trial"
     REPEATED = "repeated", "Repeating the class"
+    #: Finished the school's last class. The principal's decision like the
+    #: others (audit finding G-04): end-of-session promotion ends a graduate's
+    #: enrolment only when this is what was decided.
+    GRADUATED = "graduated", "Graduated"
+    #: Leaving the school, from any class. Promotion's "leaving".
     WITHDRAWN = "withdrawn", "Withdrawn"
 
 

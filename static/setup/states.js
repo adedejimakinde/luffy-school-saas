@@ -34,7 +34,7 @@ export function shape({
     card([
       '<h2 id="terms">Terms</h2>',
       terms.length
-        ? `<ul class="terms">${terms.map((t) => termRow(t)).join("")}</ul>`
+        ? `<ul class="terms">${terms.map((t) => termRow(t, notes[`cutoff_${t.term_id}`])).join("")}</ul>`
         : '<p class="blank">No terms yet. The first one opens the school\'s calendar.</p>',
       notes.term_changed ? `<p class="done" role="status">${esc(notes.term_changed.detail)}</p>` : "",
       changing ? termChange(changing) : "",
@@ -175,7 +175,7 @@ function publicPage({ about, address, phone, short_name = "", short_name_default
  * declared yet is a different one. Truthiness cannot tell them apart, which is
  * the same care the card page takes with attendance.
  */
-function termRow(t) {
+function termRow(t, note = null) {
   return [
     `<li class="term${t.is_current ? " current" : ""}">`,
     `<span class="name">${esc(t.session)} &middot; ${esc(t.name_label)}</span>`,
@@ -185,7 +185,28 @@ function termRow(t) {
       ? '<span class="standing">Current</span>'
       : `<button type="button" data-action="make-current" ` +
         `data-term="${esc(t.term_id)}">Make current</button>`,
+    cutoffForm(t, note),
     "</li>",
+  ].join("");
+}
+
+/**
+ * The day the report card's attendance is counted to (audit G-10). Registers
+ * are never locked; what goes on the card is the school days to this day,
+ * frozen when the card is released. Blank is the term's last day.
+ */
+function cutoffForm(t, note) {
+  const id = `cutoff_${esc(t.term_id)}`;
+  return [
+    `<form class="cutoff-form${note ? ` ${esc(note.kind)}` : ""}" data-form="cutoff" data-term="${esc(t.term_id)}">`,
+    `<label for="${id}">Card attendance counted to</label>`,
+    `<input id="${id}" name="cutoff" type="date" min="${esc(t.starts_on)}" max="${esc(t.ends_on)}" ` +
+      `value="${esc(t.attendance_cutoff || "")}">`,
+    `<span class="hint">${t.attendance_cutoff ? "" : `Blank: the term's last day, ${esc(dayFirst(t.ends_on))}. `}` +
+      "Registers can still be corrected after this day; the card counts to it.</span>",
+    '<button type="submit">Save</button>',
+    note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
   ].join("");
 }
 
@@ -202,9 +223,11 @@ function children(n) {
  * A term of another session carries nothing (that is Promotion, a separate
  * step) and the panel says so in the server's words before it offers the switch.
  */
-export function termChange({ review }) {
+export function termChange({ review, note = "" }) {
   const to = `${esc(review.term.session)} &middot; ${esc(review.term.name_label)}`;
   const buttons = [
+    // Said when the server refused the switch because this review had changed.
+    note ? `<p class="note" role="alert">${esc(note)}</p>` : "",
     `<button type="button" class="submit" data-action="confirm-current" data-term="${esc(review.term.term_id)}">`,
     `Make ${esc(review.term.name_label)} current</button>`,
     '<button type="button" class="again" data-action="keep-term">Not now</button>',

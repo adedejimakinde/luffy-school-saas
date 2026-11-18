@@ -419,3 +419,12 @@ test("with no portal domain there is a sentence and no link", () => {
   assert.doesNotMatch(html, /<a /);
   assert.match(html, /go back to the sign-in page/i);
 });
+
+test("a child another class already marked that day is named as not marked here", () => {
+  const html = states.done({
+    present: [2], absent: [], marked_elsewhere: [4], names: { 4: "Tunde Cole" },
+  });
+
+  assert.match(html, /Not marked here, because another class already marked them for this day: Tunde Cole\./);
+  assert.doesNotMatch(states.done({ present: [2], absent: [] }), /another class already marked/);
+});
