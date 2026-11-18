@@ -31,6 +31,12 @@ catches `TransferError`; one that wants "was this a sensible thing to ask?"
 catches the other. Collapsing them would have meant either a circular import or
 a second exception wearing a name that already means something else, which is a
 mistake this codebase has made once already and documented.
+
+**No route calls any of this yet**, deliberately (audit G-16, issue #346): the
+receiving school has no safe way to name another school's child, and an accept
+on the receiving host cannot take the child off the sending school's class
+lists. `docs/membership.md` says why at length, and
+`accounts/tests/test_transfer_has_no_route.py` goes red when that changes.
 """
 
 from django.db import IntegrityError, transaction

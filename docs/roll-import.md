@@ -16,9 +16,47 @@ both).
 - A duplicate admission number (`reference`) is a problem, in the file or
   against this school's roll, and **refuses the file**. It is not skipped.
   Two children sharing a number is a records problem the office wants told
-  about now.
+  about now. Numbers are compared **without case** since G-14 ("jss/014" is
+  "JSS/014", as at every door), and a number a child who has left still holds
+  is not given to another.
 - Classes are matched by name against this school's active classes. Two rows
   with one guardian contact are siblings with one guardian.
+
+## Sending a file again (audit G-15)
+
+**The same file sent twice admits nobody the second time**, with admission
+numbers or without. Before anybody is admitted, each row is matched to a child
+already on this school's roll, by the first of these it carries:
+
+1. **Its admission number**: the child here who holds it (without case). If
+   that child has left, or has another name, the row is refused: the number is
+   theirs.
+2. **Else its username**: the child here whose login it is. Another name, or a
+   child who has left, is refused; a username somebody else on the platform
+   holds is refused without saying whose, as before.
+3. **Else its name**, also for a row whose number or username nobody holds yet:
+   one enrolled child of the same name (no case, extra spaces ignored) who is
+   in the row's class this term or in no class, and does not carry a different
+   admission number from the row's. The same name in **another** class, or a
+   name two children share, is refused with what to add: "give an admission
+   number if this is a different child".
+
+**A matched row never changes what the roll says.** It fills in only what the
+roll has nothing for: an admission number, a class this term, a learner's ID,
+sex, date of birth, a guardian not yet linked. Then it is **updated**; with
+nothing to fill it is **skipped**. Anything the row says differently (another
+class, another learner's ID) is left as the roll has it and shown as a note
+("Kept in JSS 1A; move them on the roll."). An unmatched row is **new**.
+
+To admit a second child with the same name as one already in the class, give
+one of them an admission number first.
+
+The preview shows each row's outcome, with what it fills and what it keeps, and
+counts them: "2 new children, 1 child already on the roll to fill in, 40
+children already on the roll, left as they are". A file that is all already in
+says so and offers no button. A double press or a retry is the same file twice
+at once: one import runs at a time per school, and the second is checked
+against what the first wrote, so it reports every row skipped.
 
 ## What the upload adds
 

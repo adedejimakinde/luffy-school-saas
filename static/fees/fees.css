@@ -13,6 +13,7 @@ ul.classes:not(.list-rows) { list-style: none; padding: 0; display: flex; flex-d
 .class-card { padding: var(--sp-8) var(--sp-16); margin: var(--sp-8) 0 var(--sp-16); }
 .classes.list-rows { margin: 0; }
 .classes.list-rows > li + li::before { left: 0; right: 0; }
+.class-owes { color: var(--muted); font-size: var(--small); line-height: 1.4; }
 button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; width: 100%; padding: var(--sp-12) 0; text-align: left; background: none; border: 0; font-weight: 400; }
 .class-money { display: flex; align-items: center; gap: var(--sp-8); }
 .class-figures { display: grid; gap: 2px; justify-items: end; }

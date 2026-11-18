@@ -22,10 +22,12 @@ export function roll({
   classes = [],
   may_admit = false,
   may_place = false,
+  may_take_off = false,
   notes = {},
   panel = null,
   details = null,
 } = {}) {
+  const child = details ? children.find((c) => String(c.student_membership_id) === String(details.childId)) : null;
   return [
     '<section class="state state-roll" data-state="roll">',
     "<h1>The roll</h1>",
@@ -36,7 +38,8 @@ export function roll({
       ? '<p class="import"><a class="btn" href="/roll/import/">Import from a spreadsheet</a></p>'
       : "",
     panel ? guardiansPanel(panel) : "",
-    details ? detailsPanel(details) : "",
+    details ? detailsPanel({ ...details, child, may_admit, may_take_off }) : "",
+    notes.left ? `<p class="note" role="status">${esc(notes.left.detail)}</p>` : "",
     children.length
       ? `<ul class="children stack-list">${children
           .map((c) => childRow(c, { classes, may_place }))
@@ -349,7 +352,7 @@ function linkForm(relationships, note) {
  * reader may change them, and a reader who may not sees them as text. A
  * refused save keeps what was typed, as the guardian form does.
  */
-export function detailsPanel({ body = {}, note = null } = {}) {
+export function detailsPanel({ body = {}, note = null, child = null, may_admit = false, may_take_off = false } = {}) {
   const {
     student = "",
     student_membership_id: id = "",
@@ -420,8 +423,49 @@ export function detailsPanel({ body = {}, note = null } = {}) {
           "</dl>",
           note ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
         ].join(""),
+    may_admit ? admissionNumberForm(child, note) : "",
+    may_take_off ? leaveForm(note) : "",
     '<button type="button" data-action="close-details">Close</button>',
     "</section>",
+  ].join("");
+}
+
+/** The administrator changes a child's admission number. One number, one child (G-14). */
+function admissionNumberForm(child, note) {
+  const mine = note && note.form === "admission-number";
+  const typed = mine && note.typed ? note.typed.reference : undefined;
+  const value = typed !== undefined ? typed : (child && child.reference) || "";
+  return [
+    `<form class="admission-number${mine ? ` ${esc(note.kind)}` : ""}" data-form="admission-number">`,
+    '<label for="reference">Admission number</label>',
+    `<input id="reference" name="reference" value="${esc(value)}" maxlength="64" autocomplete="off">`,
+    '<span class="hint">Each child has their own. Leave it empty to take the number away.</span>',
+    '<button type="submit">Save admission number</button>',
+    mine ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
+  ].join("");
+}
+
+/**
+ * The principal takes a child off the roll mid-session (G-16): a reason, the day
+ * they left, and what it does said before it is pressed.
+ */
+function leaveForm(note) {
+  const mine = note && note.form === "leave";
+  const typed = (mine && note.typed) || {};
+  return [
+    `<form class="leave${mine ? ` ${esc(note.kind)}` : ""}" data-form="leave">`,
+    "<h3>Has left the school</h3>",
+    '<p class="hint">They come off the roll and out of every class of a term they have not finished. ' +
+      "Their marks, attendance and fees are kept, and their family can still read the report cards " +
+      "that went home. Recorded with your name and the reason.</p>",
+    '<label for="leave-reason">Why are they leaving?</label>',
+    `<textarea id="leave-reason" name="reason" required maxlength="1000">${esc(typed.reason || "")}</textarea>`,
+    '<label for="left_on">The day they left</label>',
+    `<input id="left_on" name="left_on" type="date" value="${esc(typed.left_on || "")}">`,
+    '<button type="submit">Take off the roll</button>',
+    mine ? `<p class="note" role="alert">${esc(note.detail)}</p>` : "",
+    "</form>",
   ].join("");
 }
 

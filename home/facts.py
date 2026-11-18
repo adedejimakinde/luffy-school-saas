@@ -9,7 +9,9 @@ and hands back one row of JSON:
 1. **people**: the current term, the classes and who is placed in them, the
    previous term's roll, staff and student counts, class teachers, the term's
    registers, staff invitations and the crest.
-2. **money**: this term's ledger, by kind, by week, and by family.
+2. **money**: this term's ledger, by kind, by week, and by family, and what is
+   outstanding (`fees.outstanding`: the whole account of each child placed
+   this term).
 3. **work**: the results sheets and their steps, papers with marks started,
    and remarks written.
 
@@ -46,6 +48,7 @@ from django.db import connection
 from django.utils import timezone
 
 from accounts.models import STAFF_ROLES
+from fees.outstanding import OWING_SQL
 
 #: How long one school's facts are served from the cache.
 CACHE_SECONDS = 5 * 60
@@ -119,7 +122,9 @@ def read(school, today: date) -> dict:
         if term is None or facts["setting_up"]:
             return facts
         start = monday_of(date.fromisoformat(term["starts_on"]))
-        facts["money"] = _one(cursor, _MONEY, {"term": term["id"], "start": start})
+        facts["money"] = _one(
+            cursor, _MONEY, {"term": term["id"], "start": start, "class_group": None}
+        )
         facts["work"] = _one(cursor, _WORK, {"term": term["id"], "week_ago": timezone.now() - timedelta(days=7)})
     return facts
 
@@ -243,8 +248,10 @@ SELECT json_build_object(
 """
 
 #: A reversal counts as the kind it undoes (`home.summary.fees()`'s rule, one
-#: hop), so a reversed payment is not money collected. A family's balance is
-#: the plain sum of its rows (`FeeLedgerQuerySet.balance()`).
+#: hop), so a reversed payment is not money collected. **`owing` is
+#: `fees.outstanding`'s rule, its SQL embedded as it is** (G-12): the whole
+#: account of each child placed this term who owes, and of which this term.
+#: "Collected" and "billed" stay this term's.
 _MONEY = """
 WITH e AS (
     SELECT e.student_membership_id AS sid, e.amount_kobo AS amt, e.effective_on AS d,
@@ -264,9 +271,10 @@ SELECT json_build_object(
         ) w
     ),
     'owing', (
-        SELECT json_build_object('n', count(*), 'kobo', coalesce(sum(b), 0)) FROM (
-            SELECT sum(amt) AS b FROM e GROUP BY sid HAVING sum(amt) > 0
-        ) o
+        SELECT json_build_object(
+            'n', count(*), 'kobo', coalesce(sum(o.total), 0),
+            'this_term', coalesce(sum(o.of_this_term), 0)
+        ) FROM (""" + OWING_SQL + """) o
     ),
     'paid', (
         SELECT coalesce(json_agg(p ORDER BY p.at DESC), '[]'::json) FROM (

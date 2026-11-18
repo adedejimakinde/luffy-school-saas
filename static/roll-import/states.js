@@ -129,7 +129,7 @@ export function preview({ term = null, fileName = "", preview: p, busy = false, 
     '<section class="card">',
     `<div class="card-head"><h2>${esc(fileName) || "Your file"}</h2>`,
     `<span class="label">${plural(rows.length, "row", "rows")}</span></div>`,
-    p.admissible ? ready(rows.length, busy) : toFix(fixes),
+    p.admissible ? ready(p, busy) : toFix(fixes),
     note ? `<div class="msg" role="alert"><span class="label label-stop">Not admitted</span><p>${esc(note)}</p></div>` : "",
     '<div class="table-scroll"><table class="rows stack">',
     "<thead><tr>",
@@ -144,17 +144,50 @@ export function preview({ term = null, fileName = "", preview: p, busy = false, 
   ].join("");
 }
 
-function ready(n, busy) {
+/**
+ * Every row passed. What the import will do with them, before anything is
+ * saved: new children, children already on the roll it fills something in for,
+ * and children already on the roll with nothing to fill (G-15). A file already
+ * in is all of the last kind, and says so.
+ */
+function ready(p, busy) {
+  // Counted from the rows, each row's outcome being the server's; a row with
+  // none is a new child, as every row was before matching existed.
+  const rows = (p.rows || []).filter((r) => !(r.problems || []).length);
+  const skipped = rows.filter((r) => r.outcome === "skipped").length;
+  const updated = rows.filter((r) => r.outcome === "updated").length;
+  const fresh = rows.length - skipped - updated;
+  const parts = [
+    fresh ? plural(fresh, "new child", "new children") : "",
+    updated ? `${plural(updated, "child", "children")} already on the roll to fill in` : "",
+    skipped ? `${plural(skipped, "child", "children")} already on the roll, left as they are` : "",
+  ].filter(Boolean);
+  if (!fresh && !updated) {
+    return [
+      '<div class="msg" role="status"><span class="label label-ok">Already in</span>',
+      `<p>Every child in this file is already on the roll, and the file adds nothing. Nothing will be saved.</p></div>`,
+      '<div class="actions"><button type="button" data-action="again">Choose another file</button></div>',
+    ].join("");
+  }
   return [
     '<div class="msg"><span class="label label-ok">Ready</span>',
-    `<p>Every row passed. Nothing is saved until you admit ${n === 1 ? "this child" : `all ${n}`}.</p></div>`,
+    skipped || updated
+      ? `<p>Every row passed: ${esc(parts.join(", "))}. Nothing is saved until you press the button.</p></div>`
+      : `<p>Every row passed. Nothing is saved until you admit ${fresh === 1 ? "this child" : `all ${fresh}`}.</p></div>`,
     '<div class="actions">',
     `<button type="button" class="submit" data-action="admit"${busy ? " disabled" : ""}>`,
-    busy ? "Admitting&hellip;" : `Admit ${plural(n, "child", "children")}`,
+    busy ? "Saving&hellip;" : fresh ? `Admit ${plural(fresh, "child", "children")}` : "Fill them in",
     "</button>",
     '<button type="button" data-action="again">Choose another file</button>',
     "</div>",
   ].join("");
+}
+
+/** A passed row's verdict: what the import does with it (G-15). */
+function outcomeLabel(r) {
+  if (r.outcome === "updated") return '<span class="label label-warn">On the roll: fills in</span>';
+  if (r.outcome === "skipped") return '<span class="label">Already on the roll</span>';
+  return '<span class="label label-ok">Ready</span>';
 }
 
 function toFix(n) {
@@ -179,9 +212,11 @@ function row(r) {
         : "";
     return `<td data-label="${CARD_LABEL[key]}"${bad.has(key) ? ' class="bad"' : ""}>${shown}</td>`;
   };
-  const verdict = problems.length
-    ? '<span class="label label-stop">Fix</span>'
-    : '<span class="label label-ok">Ready</span>';
+  const verdict = problems.length ? '<span class="label label-stop">Fix</span>' : outcomeLabel(r);
+  const said = [
+    ...(r.fills && r.fills.length ? [`Fills in ${r.fills.join(", ")}.`] : []),
+    ...(r.notes || []),
+  ];
   return [
     `<tr${problems.length ? ' class="to-fix"' : ""} data-line="${esc(r.line)}">`,
     // The phone's card opens with "Row 3" and its verdict; the table has
@@ -190,8 +225,11 @@ function row(r) {
     `<td class="num stack-hide">${esc(r.line)}</td>`,
     // Straight after the row number on a desktop. On a phone the verdict is
     // in the card's head, and the problems close the card.
-    `<td class="check${problems.length ? " stack-full" : " stack-hide"}">`,
+    `<td class="check${problems.length || said.length ? " stack-full" : " stack-hide"}">`,
     verdict,
+    !problems.length && said.length
+      ? '<ul class="said">' + said.map((t) => `<li>${esc(t)}</li>`).join("") + "</ul>"
+      : "",
     problems.length
       ? '<ul class="problems">' +
         problems.map((p) => `<li><strong>${HEADING[p.column] || esc(p.column)}:</strong> ${esc(p.detail)}</li>`).join("") +
@@ -272,7 +310,10 @@ export function done({ term = null, report = {}, preview: p = { rows: [] } } = {
     head(term),
     '<section class="card">',
     '<div class="msg" role="status"><span class="label label-ok">Admitted</span>',
-    `<p>${plural(report.admitted || 0, "child was", "children were")} admitted and placed in their classes.</p></div>`,
+    `<p>${plural(report.admitted || 0, "child was", "children were")} admitted and placed in their classes.` +
+      (report.updated ? ` ${plural(report.updated, "child", "children")} already on the roll had details filled in.` : "") +
+      (report.skipped ? ` ${plural(report.skipped, "child was", "children were")} already on the roll and left as they were.` : "") +
+      "</p></div>",
     pending
       ? '<div class="msg"><span class="label label-warn">Guardians to confirm</span>' +
         `<p>${plural(pending, "guardian link is", "guardian links are")} waiting for the guardian to answer ` +

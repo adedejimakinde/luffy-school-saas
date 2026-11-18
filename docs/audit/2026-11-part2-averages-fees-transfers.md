@@ -36,11 +36,11 @@ not read, so silence is not taken for a clean bill.
 | G-09 | Choosing the Ogun template while a class is waiting for approval or release changes the conduct section and the position on its cards | Medium | Ogun card, approval chain | `results/ogun.py`, `results/ratings.py` | Open |
 | G-10 | A register can be taken, changed or discarded for any term at any time, including after the cards are released | Medium | Attendance | `attendance/api.py`, `attendance/services.py` | Open |
 | G-11 | Attendance counts marks, not days: a child who changed class can be counted twice for one day, and a back-filled register uses today's class list | Medium | Attendance | `attendance/summary.py`, `attendance/services.py` | Open |
-| G-12 | The dashboard's "outstanding" is this term only; the fee book, reminders and withholding use the whole account | Medium | Fees | `home/facts.py`, `fees/api.py` | Open |
-| G-13 | A child moved to another class mid-term stays on the old class's bill and is never charged a line added later | Medium | Fees | `fees/schedules.py` | Open |
-| G-14 | Admission numbers are not unique: one-at-a-time admission does not check, nothing in the database does, and the doors match without case | Medium | Roll, IDs | `accounts/enrolment_api.py`, `accounts/models.py` | Open |
-| G-15 | A roll file without admission numbers, sent twice, admits every child twice | Medium | Roll import | `accounts/bulk.py` | Open |
-| G-16 | There is no way to take a child off the roll mid-session, and the transfer handshake has no route | Medium | Transfers | `accounts/transfers.py`, `accounts/enrolment_api.py` | Open |
+| G-12 | The dashboard's "outstanding" is this term only; the fee book, reminders and withholding use the whole account | Medium | Fees | `home/facts.py`, `fees/api.py` | Fixed in PR #349 |
+| G-13 | A child moved to another class mid-term stays on the old class's bill and is never charged a line added later | Medium | Fees | `fees/schedules.py` | Fixed in PR #349 |
+| G-14 | Admission numbers are not unique: one-at-a-time admission does not check, nothing in the database does, and the doors match without case | Medium | Roll, IDs | `accounts/enrolment_api.py`, `accounts/models.py` | Fixed in PR #349 |
+| G-15 | A roll file without admission numbers, sent twice, admits every child twice | Medium | Roll import | `accounts/bulk.py` | Fixed in PR #349 |
+| G-16 | There is no way to take a child off the roll mid-session, and the transfer handshake has no route | Medium | Transfers | `accounts/transfers.py`, `accounts/enrolment_api.py` | Leaving fixed in PR #349; transfer route deferred, #346 |
 | G-17 | Question banks are per subject and class "level", and level defaults to 0, so one bank can span every year group | Low | CBT banks | `cbt/access.py`, `academics/api.py` | Open |
 | G-18 | The Ogun card prints attendance with no "not marked" figure, and nothing stops present exceeding the days the school opened | Low | Attendance, Ogun card | `results/ogun_card.py`, `attendance/services.py` | Open |
 | G-19 | An absence alert goes out on a mis-tap and for a register entered days late | Low | Attendance, messaging | `notices/absence_alerts.py` | Open |
@@ -588,6 +588,26 @@ of children placed this term (the rule reminders already use) and label it
 "outstanding, all terms". Keep "collected" and "billed" as this term's, and
 add an "unplaced" row to the fee book so its classes add up to the dashboard.
 
+**Status.** Fixed in PR #349, as decided: outstanding is the whole-account
+balance of the children placed this term, summed over those who owe, labelled
+"Outstanding (all terms)" with "of which this term" beneath it (each owing
+child's this-term sum, never below nothing nor above their balance).
+`fees/outstanding.py` is the rule, one SQL statement; `home.facts._MONEY`
+embeds it as it is (still three statements), and the fees list (per class and
+for the school, `GET /api/fees/classes/`), the fee book's class page and fee
+reminders (`notices.reminders._batch()`) read the same rows. The dashboard's
+attention item now says "N students owe fees" and "₦X outstanding (all terms),
+of which this term: ₦Y". Because only placed children count, every child
+counted is in a class, so the classes add up to the school's figure.
+Tests: `fees/tests/test_outstanding.py` (arrears, credit, an overpaid child and
+an unplaced debtor; the four screens agree; a second school's debt reaches none
+of it), red under four controls.
+Left: "collected" and "billed" are still this term's entries, so a payment for
+a child with no class this term is in the dashboard's "collected" and in no
+class's, and arrears paid this term can still push "collected" past 100% of
+"billed" (the bar is capped). Withholding still reads the whole account of the
+child, placed or not, which is its own rule.
+
 ### G-13. A child moved to another class mid-term stays on the old class's bill (Medium)
 
 **What is wrong.** A bill belongs to a class and a term. Applying it charges
@@ -623,6 +643,25 @@ the gap is found and billed at once.
 who holds an un-reversed charge from **this** bill, on the roster or not. And
 have the roll's move answer say "this child has been billed in SS 1 Arts this
 term" when that is so.
+
+**Status.** Fixed in PR #349. A child moved into a class is charged, by
+that class's bill, each line added after they joined it:
+`ClassPlacement.class_since`, new, set when a child is placed and when they are
+moved and by nothing else (existing rows take `updated_at`, migration
+`academics/0006`). The lines the new class had when they arrived are still
+taken to be what the old class charged (B2 unchanged). No line is billed twice:
+a line charges a child once (the existing index), and a later line is skipped,
+and counted in `AppliedSummary.same_item_elsewhere`, when another bill already
+charged the child a standing charge with the same description this term.
+Tests: `fees/tests/test_moved_child_billing.py` (the finding's test idea; the
+older lines stay off; one "Second instalment" across two bills; a re-run;
+the old class's later line; a re-save does not move `class_since`; two
+schools), red under three controls; `fees/tests/test_schedules.py`'s B2 tests
+unchanged and green.
+Left: a line the new class added between the old class's charge and the move
+(neither "already there" nor "later") is not charged; a child admitted after a
+bill was applied is still charged only when somebody presses Apply again; the
+roll's move answer does not yet say "already billed in SS 1 Arts".
 
 ### G-14. Admission numbers are not unique (Medium)
 
@@ -661,6 +700,24 @@ already held at that school by another student, compared without case; and add
 a partial unique index on `(school, lower(reference))` for student rows with a
 non-blank reference, after checking no existing rows collide.
 
+**Status.** Fixed in PR #349. One rule, `accounts/admission_numbers.py`: at
+one school no two STUDENT memberships hold the same non-blank number, compared
+without case and surrounding spaces, ended children included. The database
+holds it: `an_admission_number_names_one_child_per_school`, a partial unique
+index on `(school_id, lower(reference))` (migration `accounts/0021`). The
+migration first looks for numbers already shared and, if any, stops with every
+school, number and child listed and how to fix them; it changes no number. It
+also trims surrounding spaces from student numbers. `python manage.py
+admission_number_clashes` prints the same list without migrating. Every writer
+refuses in a sentence naming the holder: admitting one child (`POST
+/api/enrolment/roll/`, 409), a new edit (`PUT
+/api/enrolment/roll/{id}/admission-number/`, administrator, 409), the roll
+import (by row, without case), and `transfer_student()`, which now checks the
+number it carries in before ending anything. Two writes that race meet the
+index and get the same sentence. The roll page's details panel has the edit.
+Tests: `accounts/tests/test_admission_numbers.py`, red under five controls.
+Left: the doors still match without case, which is now the same rule.
+
 ### G-15. A roll file without admission numbers, sent twice, admits every child twice (Medium)
 
 **What is wrong.** `accounts/bulk.py:557-705` checks each row for a name, a
@@ -686,6 +743,26 @@ positions "of N", bills applied to the class (each duplicate is charged).
 the same class this term as a problem ("already on the roll in JSS 1A; give an
 admission number if this is a different child"). Give the import route the
 same once-only key the payment form has.
+
+**Status.** Fixed in PR #349. `accounts.bulk.check()` matches each row to a
+child already on the roll before admitting anybody: by admission number, else
+username, else name (enrolled, same name without case or extra spaces, in the
+row's class this term or in none, not carrying a different number). A matched
+row fills only what the roll lacks (number, class this term, learner's ID, sex,
+date of birth, a guardian not yet linked) and is `updated`, or is `skipped`;
+it never changes what the roll says. A row that could be two children (same
+name in another class, a name two children share, a number that is another
+child's) is refused with what to add. The rules are in `bulk.py`'s docstring
+and `docs/roll-import.md`. The preview (`/roll/import/check/`) gives each row's
+outcome, what it fills and what it keeps, and the counts; the page shows them
+and offers no button for a file already in. `admit()` takes a per-school
+advisory lock and checks inside it, so a double press is checked against what
+the first wrote. A once-only form key was not needed: the lock and the matching
+make a repeat a no-op. Tests: `accounts/tests/test_roll_import_twice.py`
+(twice without numbers, with numbers, with usernames; numbers added later; a
+real two-connection double press; two schools), red under five controls.
+Left: there is still no way to merge two records already doubled before this
+(G-16's leaving can take one off the roll, with a reason).
 
 ### G-16. No way to take a child off the roll mid-session; the transfer handshake has no route (Medium)
 
@@ -730,6 +807,32 @@ the child's class is in the approval chain (as F-01), and that keeps the
 family's read access for a period (G-05). Wire the transfer handshake
 separately; before it is, make `transfer_student()` require the receiving
 school's own admission number.
+
+**Status.** Taking a child off the roll is fixed in PR #349; the transfer
+handshake still has no route, for reasons now written down (issue #346).
+`POST /api/enrolment/roll/{id}/leave/` (`academics.leaving`) is the
+**principal's** decision, with a required reason and a day (not after today,
+not before the enrolment began). In one transaction it takes the child out of
+every class of a term not finished by that day, except a term whose card went
+home (that placement is what the card was reckoned from); refuses, writing
+nothing, while such a class has results with a signatory (F-01's rule); ends
+the enrolment with `release_student(..., keep_family_access=True)`, which keeps
+the guardians' parent memberships so the cards that went home stay readable;
+and writes a `Departure` row (who, when, why, the classes and terms left),
+append-only by trigger, with a check refusing a blank reason. `GET
+/api/enrolment/roll/departures/` lists them. Off the roster, the child is no
+longer counted, billed, reminded or listed at a release. The roll page offers
+"Has left" to the principal. The handshake: `docs/membership.md` and issue #346
+give three reasons it stays disabled (the receiving school cannot safely name
+another school's child; an accept on the receiving host cannot take the child
+off the sending school's class lists, which are in the sending school's schema;
+what the receiving school may read first needs confirming), and
+`accounts/tests/test_transfer_has_no_route.py` asserts the gap, with a companion
+showing the service completes a two-school handshake and pins the second reason.
+Tests: `academics/tests/test_leaving.py`, red under seven controls.
+Left: G-05 (graduates and promotion leavers losing access) is untouched;
+`keep_family_access` is the mechanism it could use. The family keeps access
+with no end date.
 
 ### G-17. Question banks are per subject and level, and level defaults to 0 (Low)
 

@@ -58,6 +58,7 @@ from accounts.models import (
     Membership,
     Relationship,
     Role,
+    User,
 )
 from accounts.session import session_auth
 from messaging import codes as message_codes
@@ -114,6 +115,8 @@ class RollOut(Schema):
     classes: List[ClassChoiceOut]
     may_admit: bool
     may_place: bool
+    #: The principal: the page offers "Has left" only then (G-16).
+    may_take_off: bool = False
 
 
 class AdmitIn(Schema):
@@ -253,7 +256,14 @@ def roll(request):
         ],
         may_admit=accounts_services.can_grant_memberships(request.user, school),
         may_place=academics.can_place_students(request.user, school),
+        may_take_off=_may_take_off(request.user, school),
     )
+
+
+def _may_take_off(user, school) -> bool:
+    from academics import leaving
+
+    return leaving.may_take_off_the_roll(user, school)
 
 
 @router.post("/roll/", response={201: EnrolledChildOut, 403: MessageOut, 409: MessageOut, 422: MessageOut})
@@ -298,6 +308,10 @@ def admit(request, payload: AdmitIn):
                 academics.place_student_as(
                     request.user, group, term, membership, by=request.user
                 )
+    except accounts_services.AdmissionNumberTaken as exc:
+        # Another child here holds the number (G-14). Named: it is this
+        # school's own roll, read by its own administrator.
+        return 409, MessageOut(detail=str(exc))
     except ValidationError as exc:
         # `User.save()` checks the handle and raises this; the unique index
         # below is the backstop for the race two admissions can lose. Both are
@@ -379,6 +393,143 @@ def place(request, student_membership_id: int, payload: PlaceIn):
     )
 
 
+class AdmissionNumberIn(Schema):
+    #: Blank takes the number away.
+    reference: str = ""
+
+
+@router.put(
+    "/roll/{int:student_membership_id}/admission-number/",
+    response={200: EnrolledChildOut, 403: MessageOut, 404: MessageOut, 409: MessageOut},
+)
+def set_admission_number(request, student_membership_id: int, payload: AdmissionNumberIn):
+    """Change a child's admission number, or take it away. Audit finding G-14.
+
+    The administrator's act, as admitting is: the number is part of the
+    membership. **409 when another child at this school holds it**, compared
+    without case and whatever that child's status, in a sentence naming them;
+    the database's index refuses the same pair if two edits race.
+
+    Authority before the child is looked up, and the child is looked up with
+    `school=`: an id from another school is the same 404 as no child at all.
+    """
+    school = _school_of(request)
+    if not accounts_services.can_grant_memberships(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_ADMIT)
+    child = (
+        Membership.objects.select_related("user")
+        .filter(pk=student_membership_id, school=school, role=Role.STUDENT)
+        .first()
+    )
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    try:
+        accounts_services.set_admission_number_as(request.user, child, payload.reference)
+    except accounts_services.AdmissionNumberTaken as exc:
+        return 409, MessageOut(detail=str(exc))
+    except accounts_services.NotPermitted:
+        return 403, MessageOut(detail=_MAY_NOT_ADMIT)
+    term = _current_term()
+    placement = academics.placement_of(child.pk, term) if term else None
+    return 200, EnrolledChildOut(
+        student_membership_id=child.pk,
+        student=child.display_name or child.user.full_name or child.user.username,
+        username=child.user.username,
+        reference=child.reference,
+        class_group_id=placement.class_group_id if placement else None,
+        class_group=placement.class_group.name if placement else None,
+    )
+
+
+class LeaveIn(Schema):
+    reason: str
+    #: ISO date; absent is today.
+    left_on: Optional[str] = None
+
+
+class DepartureOut(Schema):
+    student_membership_id: int
+    student: str
+    left_on: str
+    reason: str
+    decided_by: str
+    #: Each class and term they were taken out of, as it was named then.
+    classes_left: str
+    recorded_at: str
+
+
+def _departure_out(row) -> DepartureOut:
+    decided = User.objects.filter(pk=row.decided_by_id).values_list("full_name", flat=True).first()
+    return DepartureOut(
+        student_membership_id=row.student_membership_id,
+        student=row.student_name,
+        left_on=row.left_on.isoformat(),
+        reason=row.reason,
+        decided_by=decided or "",
+        classes_left=row.classes_left,
+        recorded_at=row.created_at.isoformat(),
+    )
+
+
+_MAY_NOT_TAKE_OFF = "A child is taken off the roll by the principal of the school."
+
+
+@router.post(
+    "/roll/{int:student_membership_id}/leave/",
+    response={200: DepartureOut, 403: MessageOut, 404: MessageOut, 422: MessageOut},
+)
+def leave(request, student_membership_id: int, payload: LeaveIn):
+    """Take a child off the roll mid-session, on the principal's decision. G-16.
+
+    `academics.leaving.take_off_the_roll_as()` is the contract: the reason is
+    required, the child comes out of every class of a term they had not
+    finished (unless its card went home), their enrolment ends, their family
+    keeps reading what went home, and a `Departure` row records it all. Refused,
+    with nothing written, while a class they would leave has results with a
+    signatory.
+
+    Authority before the child is looked up, and the child with `school=`: an
+    id from another school is the same 404 as no child at all.
+    """
+    from academics import leaving
+
+    school = _school_of(request)
+    if not leaving.may_take_off_the_roll(request.user, school):
+        return 403, MessageOut(detail=_MAY_NOT_TAKE_OFF)
+    child = (
+        Membership.objects.select_related("user", "school")
+        .filter(pk=student_membership_id, school=school, role=Role.STUDENT)
+        .first()
+    )
+    if child is None:
+        return 404, MessageOut(detail=_NO_SUCH_CHILD)
+    try:
+        departure = leaving.take_off_the_roll_as(
+            request.user, child, reason=payload.reason, left_on=payload.left_on
+        )
+    except leaving.NotThePrincipal:
+        return 403, MessageOut(detail=_MAY_NOT_TAKE_OFF)
+    except academics.AcademicsError as exc:
+        return 422, MessageOut(detail=str(exc))
+    return 200, _departure_out(departure)
+
+
+@router.get("/roll/departures/", response={200: List[DepartureOut], 403: MessageOut})
+def departures(request):
+    """Every child taken off the roll here, newest first: the record of G-16's act.
+
+    For whoever may see the roll (`_refuse_outsiders()`). One school's schema, so
+    another school's departures are not in the table this reads.
+    """
+    from academics.models import Departure
+
+    school = _school_of(request)
+    refused = _refuse_outsiders(request, school)
+    if refused is not None:
+        return refused
+    return 200, [_departure_out(row) for row in Departure.objects.all()[:200]]
+
+
 # ---------------------------------------------------------------------------
 # Admitting a class from a spreadsheet.
 # ---------------------------------------------------------------------------
@@ -447,7 +598,12 @@ class BulkReportOut(Schema):
     `guardians_pending` counts the ones that are not live.
     """
 
+    #: Children admitted: the file's `new` rows (G-15).
     admitted: int
+    #: Children already on the roll that the file filled something in for.
+    updated: int = 0
+    #: Children already on the roll with nothing to fill: a file sent twice.
+    skipped: int = 0
     problems: List[RowProblemOut]
     generated: dict
     guardian_links: List[GuardianLinkOut]
@@ -472,7 +628,9 @@ def _may_import(request, school):
 
 def _report_out(report) -> BulkReportOut:
     return BulkReportOut(
-        admitted=len(report.planned) if report.ok else 0,
+        admitted=report.count(bulk.NEW) if report.ok else 0,
+        updated=report.count(bulk.UPDATED) if report.ok else 0,
+        skipped=report.count(bulk.SKIPPED) if report.ok else 0,
         problems=[
             RowProblemOut(line=p.line, column=p.column, detail=p.detail)
             for p in report.problems
@@ -502,6 +660,10 @@ def _admit(request, school, source):
     try:
         report = bulk.admit(request.user, school, _current_term(), source)
     except bulk.BulkError as exc:
+        return 422, MessageOut(detail=str(exc))
+    except accounts_services.AdmissionNumberTaken as exc:
+        # A number claimed between the check and the write. Nothing was
+        # written: `admit()` holds the whole file in one transaction.
         return 422, MessageOut(detail=str(exc))
     except ValidationError as exc:
         return 422, MessageOut(detail=_first(exc))
@@ -576,18 +738,31 @@ class PreviewRowOut(Schema):
     sex: str = ""
     date_of_birth: str = ""
     problems: List[RowProblemOut]
+    #: "new", "updated" or "skipped" for a row that passed; "" for one with problems.
+    outcome: str = ""
+    #: The child already on the roll this row is, for "updated" and "skipped".
+    matched: str = ""
+    #: What an "updated" row will fill in, in words.
+    fills: List[str] = []
+    #: What the row says that the roll says otherwise, kept as the roll has it.
+    notes: List[str] = []
 
 
 class PreviewOut(Schema):
     """`check()`'s verdict on every row. **Nothing has been written.**
 
     `admissible` is the whole file's verdict: true only when no row has a
-    problem, because the file is admitted whole or not at all.
+    problem, because the file is admitted whole or not at all. `new`,
+    `updated` and `skipped` count what the import would do with the rows that
+    passed (G-15), so the office sees a file already in before it is sent again.
     """
 
     rows: List[PreviewRowOut]
     problem_rows: int
     admissible: bool
+    new: int = 0
+    updated: int = 0
+    skipped: int = 0
 
 
 def _upload(request):
@@ -642,7 +817,7 @@ def import_check(request):
     if problem:
         return 422, problem
     try:
-        report = bulk.check(school, bulk.read_upload(raw))
+        report = bulk.check(school, bulk.read_upload(raw), _current_term())
     except bulk.BulkError as exc:
         return 422, MessageOut(detail=str(exc))
 
@@ -651,14 +826,28 @@ def import_check(request):
         by_line.setdefault(p.line, []).append(
             RowProblemOut(line=p.line, column=p.column, detail=p.detail)
         )
-    rows = [
-        PreviewRowOut(line=row.line, problems=by_line.get(row.line, []), **row.values)
-        for row in report.rows
-    ]
+    planned = {p.line: p for p in report.planned}
+    rows = []
+    for row in report.rows:
+        plan = planned.get(row.line)
+        rows.append(
+            PreviewRowOut(
+                line=row.line,
+                problems=by_line.get(row.line, []),
+                outcome=plan.outcome if plan else "",
+                matched=bulk._name_of(plan.existing) if plan and plan.existing else "",
+                fills=plan.fills if plan else [],
+                notes=plan.notes if plan else [],
+                **row.values,
+            )
+        )
     return 200, PreviewOut(
         rows=rows,
         problem_rows=len(by_line),
         admissible=report.ok,
+        new=report.count(bulk.NEW),
+        updated=report.count(bulk.UPDATED),
+        skipped=report.count(bulk.SKIPPED),
     )
 
 

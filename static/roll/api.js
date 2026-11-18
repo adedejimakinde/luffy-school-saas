@@ -47,6 +47,14 @@ export function photoUrl(studentMembershipId) {
   return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/photo/`;
 }
 
+export function admissionNumberUrl(studentMembershipId) {
+  return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/admission-number/`;
+}
+
+export function leaveUrl(studentMembershipId) {
+  return `${rollUrl()}${encodeURIComponent(studentMembershipId)}/leave/`;
+}
+
 export function removeUrl(studentMembershipId, linkId) {
   return `${guardiansUrl(studentMembershipId)}${encodeURIComponent(linkId)}/remove/`;
 }
@@ -207,7 +215,8 @@ function panelAnswer(answer, expected) {
   if (answer.status === expected && answer.body) return { ok: true, body: answer.body };
   // A 429 is "too many codes just now": a sentence on the panel with a time in
   // it, not a page that has stopped working.
-  if (answer.status === 422 || answer.status === 429) {
+  // A 409 is another child's admission number (G-14): retypable, as a 422 is.
+  if (answer.status === 422 || answer.status === 429 || answer.status === 409) {
     return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
   }
   if (answer.status === 403) return { ok: false, outcome: SAVE.NOT_ALLOWED, body: answer.body || {} };
@@ -235,6 +244,26 @@ export async function fetchDetails({ studentMembershipId, fetchImpl = fetch }) {
 export async function saveDetails({ studentMembershipId, values, fetchImpl = fetch }) {
   try {
     return panelAnswer(await putJson(detailsUrl(studentMembershipId), values, { fetchImpl }), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** A child's admission number, changed or taken away (G-14). 409: another child's. */
+export async function saveAdmissionNumber({ studentMembershipId, reference, fetchImpl = fetch }) {
+  try {
+    return panelAnswer(await putJson(admissionNumberUrl(studentMembershipId), { reference }, { fetchImpl }), 200);
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+}
+
+/** The principal takes a child off the roll, with a reason and a day (G-16). */
+export async function takeOffTheRoll({ studentMembershipId, reason, leftOn = null, fetchImpl = fetch }) {
+  const body = { reason };
+  if (leftOn) body.left_on = leftOn;
+  try {
+    return panelAnswer(await postJson(leaveUrl(studentMembershipId), body, { fetchImpl }), 200);
   } catch (error) {
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }

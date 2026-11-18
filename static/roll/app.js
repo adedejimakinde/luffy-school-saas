@@ -18,7 +18,9 @@ import {
   fetchGuardians,
   fetchRoll,
   removePhoto,
+  saveAdmissionNumber,
   saveDetails,
+  takeOffTheRoll,
   uploadPhoto,
   addContact,
   linkGuardian,
@@ -247,6 +249,36 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       });
       if (state.step === "roll" && !state.details.note) await load(state.notes);
       else draw();
+      return;
+    }
+    if (which === "admission-number" && state.details) {
+      if (event.preventDefault) event.preventDefault();
+      const typed = { reference: form.reference.value };
+      const childId = state.details.childId;
+      const result = await saveAdmissionNumber({ studentMembershipId: childId, reference: typed.reference, fetchImpl });
+      if (result.ok) {
+        // The row's number changes with this, so the roll is read again.
+        await load(state.notes);
+        return;
+      }
+      state = applyDetails(state, childId, result, { form: "admission-number", typed });
+      draw();
+      return;
+    }
+    if (which === "leave" && state.details) {
+      if (event.preventDefault) event.preventDefault();
+      const typed = { reason: form.reason.value, left_on: form.left_on.value };
+      const childId = state.details.childId;
+      const result = await takeOffTheRoll({
+        studentMembershipId: childId, reason: typed.reason, leftOn: typed.left_on || null, fetchImpl,
+      });
+      if (result.ok) {
+        state = { ...state, details: null };
+        await load({ ...state.notes, left: { detail: `${result.body.student} was taken off the roll.` } });
+        return;
+      }
+      state = applyDetails(state, childId, result, { form: "leave", typed });
+      draw();
       return;
     }
     if (which === "photo" && state.details) {

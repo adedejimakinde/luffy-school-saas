@@ -28,6 +28,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, models, transaction
 from django.db.models import F, Q
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 from .identifiers import canonical_username, normalize_email, normalize_phone, try_normalize_phone
@@ -507,6 +508,16 @@ class Membership(models.Model):
                 fields=["user"],
                 condition=Q(role="student") & ~Q(status="ended"),
                 name="one_live_student_membership_per_user",
+            ),
+            # **An admission number names one child per school**, without case,
+            # ended children included: their cards and receipts still carry it.
+            # Blank is no number. Audit finding G-14; `accounts.admission_numbers`
+            # is the rule in Python and says which writers check it first.
+            models.UniqueConstraint(
+                F("school"),
+                Lower("reference"),
+                condition=Q(role="student") & ~Q(reference=""),
+                name="an_admission_number_names_one_child_per_school",
             ),
         ]
         indexes = [

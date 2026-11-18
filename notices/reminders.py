@@ -1,7 +1,8 @@
 """Fee reminders: the bursar's act, to whoever receives invoices. `docs/messaging.md` D10.
 
 **Who.** Each child placed in the chosen class, or anywhere in the school, in the
-chosen term, whose whole account is owing by the ledger's own fold. Each guardian
+chosen term, whose whole account is owing by the ledger's own fold: the rows of
+`fees.outstanding.owing()`, which the dashboard and the fee book count too (G-12). Each guardian
 of that child whose link says `receives_invoices` and who is live here, on one
 channel (D4). One message per child per guardian: a family with three children
 gets three (OPEN-M9). The term only chooses the children.
@@ -101,19 +102,6 @@ def _named(ids, school):
     return sorted(named, key=lambda c: (c["name"].lower(), c["id"]))
 
 
-def _placed(term, class_group, only):
-    """The children placed in `class_group` (or any class) in `term`, narrowed to `only`."""
-    from academics.models import ClassPlacement
-
-    placements = ClassPlacement.objects.filter(term=term)
-    if class_group is not None:
-        placements = placements.filter(class_group=class_group)
-    ids = set(placements.values_list("student_membership_id", flat=True))
-    if only is not None:
-        ids &= {int(i) for i in only}
-    return ids
-
-
 def _counted_since(ids, since, *, inclusive=False):
     """Children with a reminder that counts, going after `since` (or at it, if `inclusive`).
 
@@ -174,9 +162,18 @@ def _batch(term, school, actor, now, class_group, only):
     preview is counted by the code that writes.
     """
     send_after = hours.send_after(now)
-    children = _named(_placed(term, class_group, only), school)
-    owed = balances(c["id"] for c in children)
-    owing = [c for c in children if owed.get(c["id"], 0) > 0]
+    # **`fees.outstanding`**, the one meaning of "owes" (G-12): the children
+    # placed in the term (and class) whose whole account is owing, and that
+    # account's balance. The dashboard, the fees list and the fee book count the
+    # same rows, so the families reminded are the ones those screens say owe.
+    from fees import outstanding
+
+    owes = outstanding.owing(term, class_group)
+    if only is not None:
+        wanted = {int(i) for i in only}
+        owes = {sid: row for sid, row in owes.items() if sid in wanted}
+    owed = {sid: row.kobo for sid, row in owes.items()}
+    owing = _named(owed, school)
     recent = _counted_since((c["id"] for c in owing), send_after - interval())
 
     rows, unreachable, reminded, skipped = [], 0, [], []
