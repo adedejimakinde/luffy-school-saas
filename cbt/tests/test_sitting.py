@@ -5,14 +5,17 @@ term, subject, test and student share ids, and whose first students share an adm
 number. The claims, each with a control in `docs/cbt.md` ("Built", step 4):
 
 - **The door**: a wrong code, a wrong number, a wrong PIN, somebody else's PIN, a
-  cancelled PIN and another school's code get one refusal, counted per admission number
-  and per address; while a wait lasts the right answer is refused too. Only a proved
+  cancelled PIN and another school's code get one refusal, counted per device and per
+  address, never per admission number (audit F-09); while a wait lasts the right answer
+  is refused too, from that device or address. Only a proved
   door says the sitting is not open, or that they have sat it.
 - **No key reaches a student's device**: no response under `/sit/` carries a correct
   index or an explanation.
 - **Answers**: saved once whatever the resends, the later sequence or the later choice
-  counts, both kept; an answer after `deadline + late_window`, or chosen after the
-  deadline, is refused and logged; the server closes the attempt at that time.
+  counts, both kept; an answer after `deadline + late_window`, or sent by a computer the
+  server had already heard from after the deadline, or that the device says was chosen
+  after it, is refused and logged; the server closes the attempt at that time
+  (`test_door_and_deadline` holds audit F-07's cases).
 - **One computer holds an attempt**; a second ends the first, which is told so.
 - **Extra time, retakes, the code and opening or closing a sitting**, each only by whom
   `docs/cbt.md` names, with a reason where one is owed, and logged.
@@ -214,16 +217,19 @@ class TheDoorTests(SittingSetUp):
         return test_id
 
     @override_settings(SIT_MAX_FAILURES_PER_ADMISSION_NUMBER=3)
-    def test_wrong_tries_are_counted_per_number_and_then_even_the_right_one_waits(self):
+    def test_wrong_tries_are_counted_per_device_and_then_even_the_right_one_waits(self):
+        """The device's limit is the setting once named for the number (audit F-09)."""
         with self.at(self.in_window()):
             for _ in range(3):
                 self.assertEqual(self.door(pin="11111111").status_code, 404)
             waiting = self.door()
             other = self.door("SM/002")
+            elsewhere = self.door(device=Client())
         self.assertEqual(waiting.status_code, 429)
         self.assertEqual(waiting.json()["detail"], WAIT)
         self.assertGreater(waiting.json()["retry_after"], 0)
-        self.assertEqual(other.status_code, 200, "another number is not made to wait")
+        self.assertEqual(other.status_code, 429, "this computer waits, whatever number it types")
+        self.assertEqual(elsewhere.status_code, 200, "the student whose number it was is not made to wait")
 
     @override_settings(SIT_MAX_FAILURES_PER_ADDRESS=3)
     def test_wrong_tries_are_counted_per_address(self):

@@ -55,8 +55,8 @@ _PAGES = {
     ),
     "site-faq": (
         "Classnode FAQ: Nigerian school software questions",
-        "Plain answers on what Classnode does, report cards, the price, weak "
-        "networks, parents' results, your data and CBT.",
+        "Plain answers on what Classnode does, the price, weak networks, parents' "
+        "results, your data, CBT and your school's website.",
     ),
     "site-about": (
         "About Classnode and how we protect your data",
@@ -142,11 +142,12 @@ def faq_page():
          "The best one is the one your teachers will really use every day. For a Nigerian secondary "
          "school, that means software that works on a phone, copes with a poor network, and follows "
          "the report sheet your state asks for. Classnode is built for exactly that. It covers results "
-         "and report cards, fees, registers, CBT and parent result checks. "
+         "and report cards, fees, registers, CBT, your school's own website and parent result checks. "
          'Book a <a href="/#demo">demo</a> and try it with your own classes.'),
         ("What does Classnode do?",
          "Classnode is school management software for secondary schools across Nigeria, made by Classnode "
-         f"Edtech Limited. It includes: {names}. See everything in the price on the "
+         f"Edtech Limited. It includes: {names}. That covers CBT, with tests set by your teachers and "
+         "marked by the computer, and a website for your school. See everything in the price on the "
          '<a href="/pricing/">pricing page</a>.'),
         ("Does it support the Ogun State report card?",
          _text("Yes.", cards.line, cards.detail)),
@@ -173,6 +174,11 @@ def faq_page():
          "lists and fee items, as an Excel or CSV file if you have one. We add your classes, "
          "students and staff, then walk your team through it. There is no setup fee."),
         ("Does it have CBT?", _text("Yes.", cbt.line, cbt.detail)),
+        ("Does Classnode include a website and app for our school?",
+         _text("Yes.", "Your school gets its own website on Classnode, in the Modern Campus theme "
+               "with your colours and a slideshow.", site.detail, "The school's portal installs on a "
+               "phone or a computer from the browser, so staff and parents can add it to the home "
+               "screen. No app store is needed.")),
     ]
 
 
@@ -437,7 +443,7 @@ def pricing(request):
 
 @require_http_methods(["GET", "HEAD"])
 def faq(request):
-    """Ten plain questions and answers, also given to search engines as FAQPage structured data."""
+    """Eleven plain questions and answers, also given to search engines as FAQPage structured data."""
     questions = faq_page()
     return site_page(
         request,

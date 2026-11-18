@@ -405,13 +405,13 @@ The site is the only thing on the platform a search engine is asked to index.
   below (a `sameAs` address that is not `https://` is dropped, and one set to
   empty is left out). The FAQ on the
   homepage and in its data are drawn from one list, `website.views.FAQ`;
-  `/faq/` is a FAQPage of its own ten questions from `website.views.faq_page`.
+  `/faq/` is a FAQPage of its own eleven questions from `website.views.faq_page`.
   No ratings and no reviews: there are none to stand behind.
 - **`/faq/`** answers, in plain words and all open on the page, what a school
   asks first: the best software for a Nigerian secondary school, what Classnode
   does, the Ogun State report card, the price, the free first term, weak
   networks and cheap phones, parents checking results, data, how fast to start,
-  and CBT. It is linked from the footer and listed in the sitemap. Its
+  CBT, and the school's own website and app. It is linked from the footer and listed in the sitemap. Its
   feature answers are the feature list's own words (`website.features`).
 - **`/llms.txt`** (`website/llms.py`) is a Markdown summary for ChatGPT,
   Gemini, Perplexity, Claude and the like: what Classnode is, who it is for,
@@ -489,9 +489,13 @@ under the same rules.
   the site and lets none into the portal or a school, `/llms.txt` (shape, every
   feature, the price, links that answer, the price from the setting, cache headers,
   drafts left out), the structured data against schema.org's shapes (address,
-  optional phone and `sameAs`, offers, both FAQPages), `/faq/` (the ten
+  optional phone and `sameAs`, offers, both FAQPages), `/faq/` (the eleven
   questions in order, answers matching the data, footer link, sitemap, writing
   rules), its budget, and a title and description audit of every sitemap address.
+- `website/tests/test_claims.py`: no public page, description, template or feature line
+  says a live feature is "coming soon" or "not yet" (a sentence naming a live feature
+  with either phrase fails), the FAQPage data is the visible FAQ word for word on `/faq/`
+  and the homepage, and the school website's page count is the model's.
 - `website/tests/test_seo.py`: noindex in the header and the page on a school's
   host and the portal and not on the site, robots.txt on each, the sitemap,
   canonical addresses and the one-hop redirects, titles and descriptions, the

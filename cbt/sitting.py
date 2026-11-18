@@ -9,11 +9,28 @@ opening and closing sittings, extra time, retakes, the sitting log) is `cbt.sitt
 `door()` takes the test code, the admission number and the exam PIN. **Every failure of
 those three is one refusal** (`NotOpened`, one sentence): an unknown code, another
 school's code, a test that is not approved, an unknown number, a wrong PIN, somebody
-else's PIN, a student not in the test's classes. Each is counted per admission number (as
-typed) and per address, in `accounts.throttling`'s buckets (`SignInScope.SIT_*`), and
-while a wait lasts **nothing is checked at all**, the right answer included. Only once
-the three are proved does the door say anything else: that the sitting is not open to
-their class now, or that they have sat it already.
+else's PIN, a student not in the test's classes. Only once the three are proved does the
+door say anything else: that the sitting is not open to their class now, or that they
+have sat it already.
+
+**The PIN is asked of every test whose scores can go anywhere** (audit F-08,
+`needs_pin()`): one that can send to CA or be released. A test with the PIN off is a
+practice test: its scores never reach a CA column (`cbt.ca`) and are never released to a
+student's or a parent's page (`cbt.release`), so knowing a classmate's admission number
+opens nothing that is kept.
+
+**Wrong tries wait on the device and the address, never on the student** (audit F-09).
+Each failure is counted against the computer that made it (`device`: a random id the
+`/sit/` page gives each browser in a cookie, `sit_views.DEVICE_COOKIE`) and against its
+address, in `accounts.throttling`'s buckets, and while either wait lasts nothing is
+checked from **that computer or that address**, the right answer included. Nothing is
+counted against the admission number typed: a classmate who types someone else's number
+ten times makes their own computer wait, and the student whose number it is signs in
+from theirs as if nothing had happened. The device's bucket is
+`SignInScope.SIT_NUMBER`'s row (named for the key it had before, and still holding
+`SIT_MAX_FAILURES_PER_ADMISSION_NUMBER`, ten); the address's is `SIT_ADDRESS` (a hundred,
+because a computer room shares one address). A correct sign-in clears neither, so it is
+no reset button for whoever guesses.
 
 A proved door answers "Is this you?" with the student's name, class and admission
 number, and a **ticket**: signed, for this test and student, good for ten minutes. The
@@ -38,12 +55,35 @@ clock.
 `sync()` takes a batch from the device's outbox. Each answer carries the device's
 sequence number, the item, the original option index (or none, cleared) and when it was
 chosen in the server's time as the device estimates it. `(session, client_seq)` makes a
-resend harmless. An answer is accepted only if it arrives by `deadline + late_window`
-**and** was chosen by the deadline; otherwise it is kept, refused, and logged
-(`late_refused`), and counts for nothing. Of two accepted answers to one item **the one
-chosen later counts**; within one computer the later sequence number decides, and between
-two computers whose choices are within `TIE_SECONDS` of each other, the later arrival.
-Nothing is ever updated: each row names the row it replaced or lost to.
+resend harmless.
+
+**Whether an answer is in time is the server's question, asked of the server's record**
+(audit F-07), never of the device's clock. The server keeps, per computer, the sequence
+of its contacts (`AttemptSession.last_seen_at`, moved on every sync, whether or not
+that computer still holds the attempt). An answer is accepted only if:
+
+- it arrives by `deadline + late_window` (the documented late window: 0 to 5 minutes);
+  later than that the attempt is closed and the answer refused; and
+- if it arrives after the deadline, it comes in **that computer's first contact since
+  the deadline** (`in_first_contact_after_time()`). That is the answer a computer cut off
+  through the deadline was holding when it came back. A computer the server has already
+  heard from since the deadline had the deadline in hand: every answer it sends after
+  that was chosen after time ran out, whatever its `chosen_at` says, and is refused
+  (`after_time`). `TIE_SECONDS` of slack after the deadline let an answer chosen in the
+  last second, while a heartbeat was crossing the deadline, still go with the submit;
+- and the device does not itself say it was chosen after the deadline.
+
+So the device's estimate of the time can only ever count against an answer, never for
+it. A refused answer is kept, counts for nothing, and is logged (`late_refused`, with
+each reason counted). The honest limit, as `docs/cbt.md` says: an answer chosen after the
+deadline on a computer that was offline through it, and delivered by its first contact
+inside the late window, cannot be told from one chosen just before; the window is the
+most that buys.
+
+Of two accepted answers to one item **the one chosen later counts**; within one computer
+the later sequence number decides, and between two computers whose choices are within
+`TIE_SECONDS` of each other, the later arrival. Nothing is ever updated: each row names
+the row it replaced or lost to.
 
 ## The clock
 
@@ -281,20 +321,58 @@ def _number(typed) -> str:
     return " ".join((typed or "").split())
 
 
-def _keys(school, number, address):
-    return f"{school.pk}:{number.casefold()}", f"{school.pk}:{address}"
+#: The device's bucket. It is `SIT_NUMBER`'s row in `accounts.throttling` (and its limit,
+#: `SIT_MAX_FAILURES_PER_ADMISSION_NUMBER`), which used to be keyed on the admission number
+#: typed: audit F-09, a wait keyed on the number is a wait for the student whose number it
+#: is. A device key never looks like a number (`_keys()`), so the two never share a row.
+DEVICE_SCOPE = SignInScope.SIT_NUMBER
+ADDRESS_SCOPE = SignInScope.SIT_ADDRESS
 
 
-def _wait(number_key, address_key) -> Optional[int]:
+def _keys(school, device, address):
+    """The device's and the address's keys, both bound to the school. A request with no
+    device id (no cookie: not the page) shares one bucket per address."""
+    device = device or f"none@{address}"
+    return f"{school.pk}:device:{device}", f"{school.pk}:{address}"
+
+
+def _wait(device_key, address_key) -> Optional[int]:
     waits = [
         w
         for w in (
-            throttling.blocked_for(SignInScope.SIT_NUMBER, number_key),
-            throttling.blocked_for(SignInScope.SIT_ADDRESS, address_key),
+            throttling.blocked_for(DEVICE_SCOPE, device_key),
+            throttling.blocked_for(ADDRESS_SCOPE, address_key),
         )
         if w is not None
     ]
     return max(waits) if waits else None
+
+
+def guarded(school, device, address):
+    """The keys for one try at a door, or `TooManyAttempts` while this device or this
+    address must wait. Never keyed on the number typed (audit F-09)."""
+    device_key, address_key = _keys(school, device, address)
+    wait = _wait(device_key, address_key)
+    if wait is not None:
+        raise TooManyAttempts(wait)
+    return device_key, address_key
+
+
+def count_a_wrong_try(device_key, address_key):
+    throttling.record_failure(DEVICE_SCOPE, device_key)
+    throttling.record_failure(ADDRESS_SCOPE, address_key)
+
+
+def needs_pin(test) -> bool:
+    """Does the door ask this test for the exam PIN? Yes for every test whose scores can
+    go to CA or be released (audit F-08). Only a practice test, with the PIN off, opens on
+    a number, and nothing it scores is kept anywhere a student or a parent reads."""
+    return bool(test.require_pin or test.may_send_to_ca)
+
+
+def is_practice(test) -> bool:
+    """A test with the PIN off: its scores never go to CA or onto a released page."""
+    return not needs_pin(test)
 
 
 def name_of(membership) -> str:
@@ -302,7 +380,8 @@ def name_of(membership) -> str:
 
 
 def _student_without_pin(school, number) -> Optional[Membership]:
-    """Option A (`require_pin` off): the one student here with this number, or None."""
+    """Option A, a practice test only (`needs_pin()` false): the one student here with this
+    number, or None."""
     found = list(
         Membership.objects.with_access()
         .filter(school=school, role=Role.STUDENT, reference__iexact=number)
@@ -319,7 +398,7 @@ def _proved(school, code, number, pin):
     test = Test.objects.filter(code_digest=code_digest(school.pk, code), state=Test.State.PUBLISHED).first()
     if test is None:
         return None
-    if test.require_pin:
+    if needs_pin(test):
         student = pins.check(school, test.term, number, pin)
     else:
         student = _student_without_pin(school, number)
@@ -371,21 +450,17 @@ def _next_number(test, student_id) -> Optional[int]:
     return None
 
 
-def door(school, *, code, admission_number, pin, address, now=None) -> Door:
-    """The three, checked behind the throttle. See the module docstring."""
+def door(school, *, code, admission_number, pin, address, device="", now=None) -> Door:
+    """The three, checked behind this device's and this address's throttle. See the module
+    docstring."""
     if not _here(school):
         raise NotOpened()
     number = _number(admission_number)
-    number_key, address_key = _keys(school, number, address)
-    wait = _wait(number_key, address_key)
-    if wait is not None:
-        raise TooManyAttempts(wait)
+    keys = guarded(school, device, address)
     proved = _proved(school, code, number, pin)
     if proved is None:
-        throttling.record_failure(SignInScope.SIT_NUMBER, number_key)
-        throttling.record_failure(SignInScope.SIT_ADDRESS, address_key)
+        count_a_wrong_try(*keys)
         raise NotOpened()
-    throttling.clear(SignInScope.SIT_NUMBER, number_key)
     test, student, group = proved
     now = now or timezone.now()
     with transaction.atomic():
@@ -610,8 +685,17 @@ def _wins(new_session_id, new_seq, new_at, current) -> tuple:
     return new_at > current.chosen_at, False
 
 
-def _record_answer(session, attempt, test, items, raw, now, deadline):
-    """One answer from the outbox: (seq, refusal or '')."""
+def in_first_contact_after_time(previous_contact, deadline) -> bool:
+    """Is a contact the computer's first since the deadline, by the server's record?
+
+    `previous_contact` is when the server last heard from this computer before this
+    contact. If that was already past the deadline (and its `TIE_SECONDS` of slack), the
+    computer has been told the time is up, and what it sends now was chosen after."""
+    return previous_contact < deadline + timedelta(seconds=TIE_SECONDS)
+
+
+def _record_answer(session, attempt, test, items, raw, now, deadline, previous_contact):
+    """One answer from the outbox: (seq, refusal or '', whether it is new here)."""
     try:
         seq = int(raw.get("seq"))
         item_id = int(raw.get("item"))
@@ -621,7 +705,7 @@ def _record_answer(session, attempt, test, items, raw, now, deadline):
         return None
     existing = AnswerEvent.objects.filter(session=session, client_seq=seq).first()
     if existing is not None:
-        return seq, existing.refusal
+        return seq, existing.refusal, False
     chosen = raw.get("chosen")
     if chosen is not None:
         try:
@@ -635,7 +719,12 @@ def _record_answer(session, attempt, test, items, raw, now, deadline):
         refusal = AnswerEvent.Refusal.AFTER_SUBMIT
     elif now > deadline + timedelta(minutes=test.late_window):
         refusal = AnswerEvent.Refusal.LATE
+    elif now > deadline and not in_first_contact_after_time(previous_contact, deadline):
+        # The server's record: this computer was heard from after time ran out, so this
+        # answer was chosen after it, whatever the device says (audit F-07).
+        refusal = AnswerEvent.Refusal.AFTER_TIME
     elif chosen_at > deadline:
+        # The device's own word can only count against it.
         refusal = AnswerEvent.Refusal.AFTER_TIME
     else:
         refusal = AnswerEvent.Refusal.NONE
@@ -649,7 +738,7 @@ def _record_answer(session, attempt, test, items, raw, now, deadline):
             won, tie = _wins(session.pk, seq, chosen_at, current)
             fields.update(tie=tie, **({"supersedes": current} if won else {"superseded_by": current}))
     AnswerEvent.objects.create(**fields)
-    return seq, refusal
+    return seq, refusal, True
 
 
 _DEVICE_KINDS = {"disconnect": Kind.DISCONNECT, "reconnect": Kind.RECONNECT, "left_page": Kind.LEFT_PAGE}
@@ -679,41 +768,51 @@ def _record_event(session, attempt, raw, now):
 
 
 def _heartbeat(session, attempt, now):
-    if not session.is_open:
-        return
-    gap = (now - session.last_seen_at).total_seconds()
-    if gap > GAP_SECONDS:
-        AttemptEvent.objects.create(
-            test_id=attempt.test_id, student_membership_id=attempt.student_membership_id, attempt=attempt,
-            session=session, kind=Kind.DISCONNECT, said_by=AttemptEvent.SaidBy.SERVER, at=session.last_seen_at,
-            detail={"seconds": int(gap), "until": now.isoformat()},
-        )
-    AttemptSession.objects.filter(pk=session.pk, ended_at__isnull=True).update(last_seen_at=now)
+    """Note this contact. Answers when the server last heard from this computer before it.
+
+    Every computer's contacts are kept in `last_seen_at`, a replaced one's too: the
+    deadline rule asks it of whichever computer sends (audit F-07). A gap is logged only
+    for the computer that holds the attempt."""
+    previous = session.last_seen_at
+    if session.is_open:
+        gap = (now - previous).total_seconds()
+        if gap > GAP_SECONDS:
+            AttemptEvent.objects.create(
+                test_id=attempt.test_id, student_membership_id=attempt.student_membership_id, attempt=attempt,
+                session=session, kind=Kind.DISCONNECT, said_by=AttemptEvent.SaidBy.SERVER, at=previous,
+                detail={"seconds": int(gap), "until": now.isoformat()},
+            )
+    if now > previous:
+        AttemptSession.objects.filter(pk=session.pk).update(last_seen_at=now)
+    return previous
 
 
 def _sync_locked(session, answers, events, now):
     attempt = session.attempt
     test = attempt.test
     settle(attempt, test, now)
-    _heartbeat(session, attempt, now)
+    previous_contact = _heartbeat(session, attempt, now)
     deadline = deadline_of(attempt)
     items = {i: len(o) for i, o in TestItem.objects.filter(test_id=test.pk).values_list("pk", "options")}
-    acks, refused, late = [], [], 0
+    acks, refused, why = [], [], {}
     for raw in sorted((answers or [])[:MAX_BATCH], key=lambda a: a.get("seq", 0) if isinstance(a, dict) else 0):
         if not isinstance(raw, dict):
             continue
-        done = _record_answer(session, attempt, test, items, raw, now, deadline)
+        done = _record_answer(session, attempt, test, items, raw, now, deadline, previous_contact)
         if done is None:
             continue
-        seq, refusal = done
+        seq, refusal, new = done
         acks.append(seq)
         if refusal:
             refused.append({"seq": seq, "why": refusal})
-            late += 1
-    if late:
+            if new:
+                why[refusal] = why.get(refusal, 0) + 1
+    if why:
         AttemptEvent.objects.create(
             test_id=test.pk, student_membership_id=attempt.student_membership_id, attempt=attempt, session=session,
-            kind=Kind.LATE_REFUSED, said_by=AttemptEvent.SaidBy.SERVER, at=now, detail={"count": late},
+            kind=Kind.LATE_REFUSED, said_by=AttemptEvent.SaidBy.SERVER, at=now,
+            detail={"count": sum(why.values()), "why": why, "deadline": deadline.isoformat(),
+                    "last_contact": previous_contact.isoformat()},
         )
     event_acks = [s for s in (_record_event(session, attempt, e, now) for e in (events or [])[:MAX_BATCH] if isinstance(e, dict)) if s is not None]
     session.refresh_from_db(fields=["ended_at", "ended_by"])
@@ -761,6 +860,11 @@ __all__ = [
     "NoSession",
     "NotOpened",
     "Replaced",
+    "count_a_wrong_try",
+    "guarded",
+    "in_first_contact_after_time",
+    "is_practice",
+    "needs_pin",
     "SitError",
     "Started",
     "TooManyAttempts",

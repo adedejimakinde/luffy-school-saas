@@ -29,7 +29,7 @@ GROUPS = [
             "results", "Results",
             "CA and exam scores go in once. Totals, averages, grades and class positions are "
             "worked out for you.",
-            "Class positions follow your school's tie rule. A paper not yet marked shows as \"-\", "
+            "Class positions follow your school's tie rule. A paper that has not been marked shows as \"-\", "
             "never as zero. Results go through the school's approval chain before release, and are "
             "locked after release.",
         ),
@@ -82,8 +82,9 @@ GROUPS = [
             "school-website", "School website",
             "The school's own website, in the Modern Campus theme with the school's colours and "
             "a slideshow.",
-            "Up to 20 custom pages, pictures, albums, a hero video and a map. The editor shows a "
-            "preview, and the principal approves a change before it goes live.",
+            "Up to 20 pages in all, the six standard ones and 14 of your own, with pictures, albums, "
+            "a hero video and a map. The editor shows a preview, and the principal approves a "
+            "change before it goes live.",
         ),
     ]),
     ("Fast and safe", [

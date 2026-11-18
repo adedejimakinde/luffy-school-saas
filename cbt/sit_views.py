@@ -12,6 +12,16 @@ opens one attempt and nothing else. No other route reads it: every staff route
 authenticates the account session (`accounts.session.session_auth`), and none of them is
 under `/sit/`. It is cleared at submit and at "This is not me".
 
+## The device's cookie
+
+The page also gives each browser a second cookie, `sit_device`: a random id, scoped to
+`/sit/`, `HttpOnly`, `SameSite=Strict`, kept a year. It names no student, no test and no
+attempt, and opens nothing. It is what wrong tries at the door are counted against (audit
+F-09): a computer that has guessed too often waits, and so does its address, but the
+student whose admission number was typed does not. It is set by the page, or by the door
+if a request comes without it. Anyone can get a fresh one, which is why the address
+keeps its own, wider limit.
+
 ## Writes without a CSRF token
 
 The routes are exempt from Django's CSRF check because there is no account session to
@@ -26,6 +36,8 @@ account session is a parent's here gets the page's refusal and the API's 403.
 """
 
 import json
+import re
+import secrets
 
 import pages
 from django.db import transaction
@@ -45,6 +57,10 @@ from . import sitting
 
 COOKIE = "sit"
 PATH = "/sit/"
+#: The browser's own id for the door's throttle (audit F-09). Opens nothing.
+DEVICE_COOKIE = "sit_device"
+DEVICE_SECONDS = 365 * 24 * 3600
+_DEVICE_ID = re.compile(r"[0-9a-f]{32}")
 
 #: The exam screen's modules, entry point last.
 SIT_MODULES = (
@@ -64,6 +80,24 @@ def _school(request):
     if school is None:
         raise Http404("The exam door is on each school's own address.")
     return school
+
+
+def device_of(request):
+    """(this browser's device id, whether it was made just now)."""
+    kept = request.COOKIES.get(DEVICE_COOKIE, "")
+    if _DEVICE_ID.fullmatch(kept):
+        return kept, False
+    return secrets.token_hex(16), True
+
+
+def keep_device(response, request, device, made, path=PATH):
+    """Give the browser its device id, if it came without one."""
+    if made:
+        response.set_cookie(
+            DEVICE_COOKIE, device, max_age=DEVICE_SECONDS, path=path, httponly=True, samesite="Strict",
+            secure=request.is_secure(),
+        )
+    return response
 
 
 def _a_guardian(request, school) -> bool:
@@ -94,7 +128,8 @@ def sit_page(request):
         },
     )
     response["Cache-Control"] = "no-cache"
-    return response
+    device, made = device_of(request)
+    return keep_device(response, request, device, made)
 
 
 def worker_config() -> dict:
@@ -152,6 +187,13 @@ def _ok(body, status=200):
     return response
 
 
+def _with_device(response, request, exc):
+    kept = getattr(exc, "device", None)
+    if kept:
+        keep_device(response, request, *kept, path=getattr(exc, "device_path", PATH))
+    return response
+
+
 def _api(view):
     """Every route: a school's host, no guardian, a JSON body for a write."""
 
@@ -170,9 +212,9 @@ def _api(view):
         try:
             return view(request, school, body, *args, **kwargs)
         except sitting.TooManyAttempts as exc:
-            return _said(429, str(exc), retry_after=exc.retry_after)
+            return _with_device(_said(429, str(exc), retry_after=exc.retry_after), request, exc)
         except sitting.NotOpened as exc:
-            return _said(404, str(exc))
+            return _with_device(_said(404, str(exc)), request, exc)
         except sitting.NoSession as exc:
             response = _said(401, str(exc))
             response.delete_cookie(COOKIE, path=PATH)
@@ -180,7 +222,7 @@ def _api(view):
         except sitting.Replaced as exc:
             return _said(409, str(exc), replaced=True)
         except sitting.Closed as exc:
-            return _said(409, str(exc))
+            return _with_device(_said(409, str(exc)), request, exc)
 
     wrapped.__name__ = view.__name__
     wrapped.__doc__ = view.__doc__
@@ -194,16 +236,24 @@ def _token(request):
 @require_POST
 @_api
 def door(request, school, body):
-    """The three: code, admission number, PIN. One refusal for every failure of them."""
-    found = sitting.door(
-        school,
-        code=str(body.get("code") or ""),
-        admission_number=str(body.get("admission_number") or ""),
-        pin=str(body.get("pin") or ""),
-        address=client_address(request),
-    )
+    """The three: code, admission number, PIN. One refusal for every failure of them, counted
+    against this browser and its address, never against the number typed."""
+    device, made = device_of(request)
+    try:
+        found = sitting.door(
+            school,
+            code=str(body.get("code") or ""),
+            admission_number=str(body.get("admission_number") or ""),
+            pin=str(body.get("pin") or ""),
+            address=client_address(request),
+            device=device,
+        )
+    except sitting.SitError as exc:
+        # The refusal still gives the browser the id its wrong try was counted against.
+        exc.device = (device, made)
+        raise
     test = found.test
-    return _ok(
+    return keep_device(_ok(
         {
             "ticket": found.ticket,
             "student": {
@@ -220,7 +270,7 @@ def door(request, school, body):
             "resuming": found.resuming,
             "minutes_left": found.minutes_left,
         }
-    )
+    ), request, device, made)
 
 
 @require_POST
@@ -306,5 +356,5 @@ def picture(request, key, variant):
     return views.send(stored, variant, cache_control=views.PRIVATE)
 
 
-__all__ = ["COOKIE", "PATH", "SIT_MODULES", "SIT_STYLES", "attempt", "door", "not_me", "picture", "sit_page",
+__all__ = ["COOKIE", "DEVICE_COOKIE", "PATH", "device_of", "keep_device", "SIT_MODULES", "SIT_STYLES", "attempt", "door", "not_me", "picture", "sit_page",
            "sit_worker", "start", "submit", "sync", "worker_config"]

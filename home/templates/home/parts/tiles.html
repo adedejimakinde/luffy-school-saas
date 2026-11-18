@@ -1,20 +1,28 @@
 {% load typography %}{% comment %}
 The compact stat cards under the hero: students, present, results waiting (a
 teacher: present and scores entered). Each is the link to the page that holds
-its figure in full. On a phone they run three across with the figure and its
-label; the line under it is kept for a screen reader (`.stat-more`).
+its figure in full. Students, Present and To approve each have a third line
+(`tile.third`: its words, a tone and, for a change, an arrow) that shows at every
+width; the tile that has none (Scores entered, the administrator's To approve)
+keeps its older lines, which on a phone are kept for a screen reader
+(`.stat-more`). The arrow is a drawing; the words carry the meaning.
 {% endcomment %}<section class="kpis" aria-label="This term at a glance" style="--kpi-count: {{ dash.tiles|length }}">
   {% for tile in dash.tiles %}
-  <a class="kpi" href="{{ tile.href }}" data-tile="{{ tile.key }}">
+  <a class="kpi{% if tile.third %} kpi-stat{% endif %}{% if tile.needs_action %} kpi-action{% endif %}" href="{{ tile.href }}" data-tile="{{ tile.key }}">
     <span class="kpi-top">
       <span class="eyebrow">{{ tile.label }}</span>
       <span class="kpi-icon" aria-hidden="true"><svg class="icon"><use href="#{{ tile.icon }}"/></svg></span>
     </span>
-    <span class="kpi-value fig"{% if tile.exact %} title="{{ tile.exact }}"{% endif %}>{{ tile.value }}{% if tile.unit %} <small>{{ tile.unit }}</small>{% endif %}</span>
+    <span class="kpi-value fig{% if tile.word %} kpi-word{% endif %}"{% if tile.exact %} title="{{ tile.exact }}"{% endif %}>{{ tile.value }}{% if tile.unit %} <small>{{ tile.unit }}</small>{% endif %}</span>
+    {% if tile.third %}
+    {% if tile.exact %}<span class="sr">{{ tile.exact }}</span>{% endif %}
+    <span class="kpi-third kpi-third-{{ tile.third.tone }}">{% if tile.third.icon %}<svg class="icon" aria-hidden="true" focusable="false"><use href="#{{ tile.third.icon }}"/></svg>{% endif %}<span>{{ tile.third.text }}{% if tile.third.date %} <span class="kpi-date">{{ tile.third.date }}</span>{% endif %}</span></span>
+    {% else %}
     <span class="stat-more">
       <span class="kpi-meta">{{ tile.meta|nobreak }}</span>
       {% if tile.change %}<span class="change fig">{{ tile.change }}</span>{% endif %}
     </span>
+    {% endif %}
   </a>
   {% endfor %}
 </section>

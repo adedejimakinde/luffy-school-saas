@@ -36,7 +36,7 @@ STATIC = ROOT / "static"
 DESIGN = STATIC / "web" / "design.css"
 
 #: The whole palette: eight for the page, seven for the status labels and the
-#: card that asks the reader to act.
+#: card that asks the reader to act, five for the dashboard's stat tiles.
 PALETTE = {
     "#143D8C",  # brand: buttons, links, active nav, logo
     "#0E1726",  # text
@@ -49,6 +49,9 @@ PALETTE = {
     "#16693F", "#E7F4EC",  # green label
     "#8A5A00", "#FDF1DC",  # amber label
     "#FFF7E8",  # the light amber card: something needs the reader
+    # The dashboard's three stat tiles ("A · Layered Calm"): a worse change, a better
+    # change, and the "needs action" tile's tint, label and figure.
+    "#9A5B0E", "#0F6B47", "#FFF7EA", "#8A5410", "#6E420B",
     "#B42318", "#FDECEA",  # red label
     # The public site's three accents, for its icon tiles and nothing else.
     "#0F766E",  # teal

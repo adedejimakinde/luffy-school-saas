@@ -245,7 +245,7 @@ export function testForm(choices, test = null, { detail = "", choice = null } = 
     box("calculator", "Calculator on screen", test ? test.calculator : false),
     "</fieldset>",
     '<fieldset><legend>Signing in to sit it</legend>',
-    box("require_pin", "Exam PIN from the student&#39;s slip", test ? test.require_pin : true, "Without it, scores from this test can never be sent to a CA column; the server refuses it."),
+    box("require_pin", "Exam PIN from the student&#39;s slip", test ? test.require_pin : true, "Without it, this is a practice test: anybody with the class list can sit as anybody, so its scores are never sent to a CA column or released to students or parents. The server refuses both."),
     "</fieldset>",
     '<p class="hint">This does not lock the browser. Supervise the room.</p>',
     note(detail),
@@ -325,7 +325,7 @@ export function testView(t, { detail = "", confirming = null, done: said = "" } 
     t.can_go_back ? "can go back" : "no going back",
     t.grid ? "number grid" : "no grid",
     t.calculator ? "calculator" : "no calculator",
-    t.require_pin ? "exam PIN" : "no exam PIN, so never to CA",
+    t.require_pin ? "exam PIN" : "practice: no exam PIN, so never to CA and never released",
     t.late_window ? `answers accepted up to ${t.late_window} minutes late if saved in time` : "nothing accepted late",
   ];
   return [
