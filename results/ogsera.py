@@ -255,7 +255,7 @@ def _marks(term, subject, ids):
 def _attendance(term, ids):
     from attendance import summary
 
-    found = summary.for_term(term, list(ids)) or {}
+    found = summary.for_the_card(term, list(ids)) or {}
     return {
         sid: {
             "times_opened": term.school_days,

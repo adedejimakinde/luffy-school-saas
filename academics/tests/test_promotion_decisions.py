@@ -256,20 +256,6 @@ class ThePrincipalDecidesTests(DecisionsSetUp):
                 )
         self.assertEqual(self.decisions(), [])
 
-    def test_a_reason_is_required(self):
-        for reason in ("", "   ", "\n\t"):
-            with self.subTest(reason=reason):
-                response = self.decide({self.children["ada"].pk: "repeated"}, reason=reason)
-                self.assertEqual(response.status_code, 422)
-                self.assertIn("Say why", response.json()["detail"])
-        self.assertEqual(self.decisions(), [])
-
-    def test_the_service_requires_the_reason_without_the_route(self):
-        with connected_to(self.stmarys):
-            with self.assertRaises(sessions.ReasonRequired):
-                sessions.decide_as(self.head.user, self.children["ada"], "2025/2026", "repeated", note=" ")
-        self.assertEqual(self.decisions(), [])
-
     def test_one_bad_outcome_and_nobody_is_decided(self):
         response = self.decide(
             {self.children["ada"].pk: "promoted", self.children["emeka"].pk: "expelled"}
@@ -598,3 +584,105 @@ class TwoSchoolsTests(DecisionsSetUp):
             self.client.put(SETTINGS, data={"pass_mark": "1"}, content_type="application/json", HTTP_HOST=THEIR_HOST).status_code,
             403,
         )
+
+
+class AReasonOnlyWhereOneIsNeededTests(DecisionsSetUp):
+    """Audit finding G-04, as decided: the principal says why only when going
+    against Classnode's suggestion, or for graduated or leaving. Agreeing needs
+    no reason. Every decision is logged whichever it is.
+
+    JSS 1A released: Ada 70% (suggested promoted), Emeka 40% (suggested
+    repeated); Bisi has no mark, so nothing is suggested for her.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.release_jss1a(ada=14, emeka=8)
+        self.ada, self.emeka, self.bisi = (self.children[h] for h in ("ada", "emeka", "bisi"))
+
+    def rows(self):
+        with connected_to(self.stmarys):
+            return list(
+                PromotionDecision.objects.order_by("id").values_list(
+                    "student_membership_id", "status", "suggested", "note", "decided_by_id"
+                )
+            )
+
+    def test_agreeing_with_the_suggestion_needs_no_reason_and_is_logged(self):
+        response = self.decide({self.ada.pk: "promoted", self.emeka.pk: "repeated"}, reason="")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            self.rows(),
+            [
+                (self.ada.pk, "promoted", "promoted", "", self.head.user.pk),
+                (self.emeka.pk, "repeated", "repeated", "", self.head.user.pk),
+            ],
+        )
+
+    def test_with_nothing_suggested_there_is_nothing_to_disagree_with(self):
+        response = self.decide({self.bisi.pk: "repeated"}, reason="")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(self.rows(), [(self.bisi.pk, "repeated", "", "", self.head.user.pk)])
+
+    def test_going_against_the_suggestion_needs_a_reason(self):
+        for status, child in (("repeated", "ada"), ("promoted", "emeka"), ("on_trial", "ada"), ("on_trial", "emeka")):
+            for reason in ("", "   ", "\n\t"):
+                with self.subTest(status=status, child=child, reason=reason):
+                    response = self.decide({self.children[child].pk: status}, reason=reason)
+                    self.assertEqual(response.status_code, 422)
+                    detail = response.json()["detail"]
+                    self.assertIn("Say why for", detail)
+                    self.assertIn("Classnode suggested", detail)
+                    self.assertIn("Nothing was recorded", detail)
+        self.assertEqual(self.rows(), [])
+
+        self.assertEqual(self.decide({self.emeka.pk: "on_trial"}, reason="Improving").status_code, 200)
+        self.assertEqual(self.rows()[-1][1:4], ("on_trial", "repeated", "Improving"))
+
+    def test_graduated_and_leaving_need_a_reason_even_where_they_agree(self):
+        for status in ("graduated", "withdrawn"):
+            for child in (self.ada, self.bisi):
+                with self.subTest(status=status, child=child.pk):
+                    response = self.decide({child.pk: status}, reason="")
+                    self.assertEqual(response.status_code, 422)
+                    self.assertIn("ends the enrolment", response.json()["detail"])
+        self.assertEqual(self.rows(), [])
+
+        self.assertEqual(self.decide({self.ada.pk: "withdrawn"}, reason="Moving to Ibadan").status_code, 200)
+        self.assertEqual(self.rows()[-1][1:4], ("withdrawn", "promoted", "Moving to Ibadan"))
+
+    def test_one_child_who_needs_a_reason_holds_the_class_and_is_named(self):
+        response = self.decide({self.ada.pk: "promoted", self.emeka.pk: "promoted"}, reason="")
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("Emeka Nwosu", response.json()["detail"])
+        self.assertNotIn("Ada Obi", response.json()["detail"])
+        self.assertEqual(self.rows(), [])
+
+    def test_the_service_holds_the_rule_without_the_route(self):
+        with connected_to(self.stmarys):
+            with self.assertRaises(sessions.ReasonRequired):
+                sessions.decide_as(self.head.user, self.ada, "2025/2026", "repeated", note=" ")
+            agreed = sessions.decide_as(self.head.user, self.ada, "2025/2026", "promoted")
+        self.assertEqual((agreed.status, agreed.suggested, agreed.note), ("promoted", "promoted", ""))
+
+    def test_the_page_says_when_a_reason_is_needed(self):
+        from results.sessions import needs_a_reason
+
+        cases = {
+            ("promoted", "promoted"): False,
+            ("repeated", "repeated"): False,
+            ("repeated", ""): False,
+            ("on_trial", ""): False,
+            ("repeated", "promoted"): True,
+            ("on_trial", "promoted"): True,
+            ("promoted", "repeated"): True,
+            ("graduated", "promoted"): True,
+            ("graduated", ""): True,
+            ("withdrawn", "repeated"): True,
+        }
+        for (status, suggested), needed in cases.items():
+            with self.subTest(status=status, suggested=suggested):
+                self.assertEqual(needs_a_reason(status, suggested), needed)

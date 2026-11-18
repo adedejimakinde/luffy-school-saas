@@ -443,7 +443,7 @@ def _take(request, group, term, on, payload):
             by=request.user,
             base=_base_of(payload),
         )
-    except (services.NoRoster, services.RegisterLocked) as exc:
+    except services.NoRoster as exc:
         return 409, MessageOut(detail=str(exc))
     except services.DayOutsideTheTerm as exc:
         return 422, MessageOut(detail=str(exc))
@@ -488,7 +488,7 @@ def _base_of(payload):
 
 @router.delete(
     "/classes/{int:class_group_id}/{on}/",
-    response={204: None, 403: MessageOut, 404: MessageOut, 409: MessageOut},
+    response={204: None, 403: MessageOut, 404: MessageOut},
 )
 def discard(request, class_group_id: int, on: date):
     """Take back a register filed against the wrong day.
@@ -503,12 +503,7 @@ def discard(request, class_group_id: int, on: date):
         return refusal
 
     group = get_object_or_404(ClassGroup, pk=class_group_id)
-    try:
-        gone = services.discard_register(group, on)
-    except services.RegisterLocked as exc:
-        # The class's results for that term are with a signatory or released.
-        return 409, MessageOut(detail=str(exc))
-    if not gone:
+    if not services.discard_register(group, on):
         return 404, MessageOut(detail="No register was taken for that slot.")
     return 204, None
 

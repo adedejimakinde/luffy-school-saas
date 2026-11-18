@@ -138,7 +138,9 @@ class InvalidPassMark(SessionsError):
 
 
 class ReasonRequired(SessionsError):
-    """A decision made through the route came with no reason, or too long a one."""
+    """A decision that needs a reason came without one, or a reason is too long.
+
+    See `needs_a_reason()`."""
 
 
 class NotThisSchoolsStudent(SessionsError):
@@ -915,23 +917,33 @@ def decide(membership, session, status, *, note="", by=None) -> PromotionDecisio
     _require_student_of_this_school(membership)
     status = _require_a_status(status)
     config = settings()
+    suggested, average = _suggestion_for(membership, session, config)
+    return _record(membership, session, status, note, by, suggested, average, config)
 
+
+def _suggestion_for(membership, session, config) -> tuple[str, Decimal | None]:
+    """`(suggested, average)` from the child's frozen year, or `("", None)`.
+
+    The frozen year and nothing else (audit finding G-04): the `ReleasedSessionResult`
+    of the child's released third-term card. With none, nothing is suggested.
+    """
     frozen = released_session_line(membership, session)
     average = frozen.session_average if frozen is not None else None
-    suggested = suggested_status(average, config=config)
+    return suggested_status(average, config=config) or "", average
 
+
+def _record(membership, session, status, note, by, suggested, average, config) -> PromotionDecision:
+    """The INSERT, with the suggestion it was made against frozen beside it."""
     # No `atomic()` here, and deliberately: this is a single INSERT, which is
-    # already atomic, and there is no read-then-write to hold together. The
-    # suggestion was computed above from a frozen row or a live one, and two
-    # principals deciding at once is not a race to be locked out — it is two
-    # rows, both real, the later of which holds.
+    # already atomic. Two principals deciding at once is not a race to be
+    # locked out; it is two rows, both real, the later of which holds.
     return PromotionDecision.objects.create(
         student_membership_id=membership.pk,
         session=session,
         status=status,
         # Blank, not null: the column is a `CharField` with choices, and
         # `a_suggestion_carries_what_produced_it` ties the three together.
-        suggested=suggested or "",
+        suggested=suggested,
         session_average=average if suggested else None,
         pass_mark_used=config.pass_mark if suggested else None,
         note=note,
@@ -1041,53 +1053,101 @@ def _require_deciding_authority(actor):
 MAX_REASON = 1000
 
 
-def _require_a_reason(note) -> str:
-    """A decision made by a person says why (audit finding G-04).
+#: The outcomes that always need a reason, whatever was suggested: a child's
+#: enrolment ends on them, and "which, and why" is what the record is for.
+ALWAYS_SAY_WHY = frozenset({PromotionStatus.GRADUATED.value, PromotionStatus.WITHDRAWN.value})
 
-    `decide()` itself allows a blank note, for an import of last year's
-    records with nobody behind it. A principal deciding through the route is
-    somebody, and "why" is what a family asks six months on.
+
+def needs_a_reason(status, suggested) -> bool:
+    """Whether a decision has to say why (audit finding G-04, as decided).
+
+    Only when the principal goes against Classnode's suggestion, or decides
+    "graduated" or "leaving" (`withdrawn`). Agreeing with the suggestion needs
+    no reason; nor does a decision where nothing was suggested (no released
+    year), since there is nothing to disagree with. Every decision is logged
+    either way: the row keeps who, when, what and what was suggested.
     """
+    return status in ALWAYS_SAY_WHY or bool(suggested and suggested != status)
+
+
+def _clean_reason(note) -> str:
     reason = " ".join((note or "").split())
-    if not reason:
-        raise ReasonRequired(
-            "Say why. The reason is kept with the decision."
-        )
     if len(reason) > MAX_REASON:
         raise ReasonRequired(f"Keep the reason under {MAX_REASON} characters.")
     return reason
 
 
+def _why_needed(status, suggested) -> str:
+    if status in ALWAYS_SAY_WHY:
+        return f"{PromotionStatus(status).label.lower()} ends the enrolment"
+    return f"Classnode suggested {PromotionStatus(suggested).label.lower()}"
+
+
 def decide_as(actor, membership, session, status, *, note="") -> PromotionDecision:
-    """`decide()` for a caller with a request behind it. The reason is required."""
-    _require_deciding_authority(actor)
-    return decide(membership, session, status, note=_require_a_reason(note), by=actor)
+    """`decide()` for a caller with a request behind it.
+
+    A reason only where `needs_a_reason()` says so.
+    """
+    return decide_many_as(actor, session, {membership: status}, reason=note)[0]
 
 
-def decide_many_as(actor, session, choices, *, reason) -> list[PromotionDecision]:
+def decide_many_as(actor, session, choices, *, reason="") -> list[PromotionDecision]:
     """One reason, several children: every decision is recorded, or none is.
 
-    `choices` is `{Membership: status}`. A principal confirming a class does
-    it in one act with one sentence, and that sentence is written on every row,
-    because each row has to be readable on its own.
+    `choices` is `{Membership: status}`. A principal confirming a class does it
+    in one act, with one sentence where one is needed, and that sentence is
+    written on every row, because each row has to be readable on its own.
 
-    Authority, the reason and every status are checked before the first row is
-    written, and the rows are written in one transaction, so a refusal at the
-    fortieth child leaves the first thirty-nine undecided.
+    **The reason is required only for the children who need one**
+    (`needs_a_reason()`): decided against what Classnode suggested, graduated
+    or leaving. A blank reason with any such child refuses the whole act,
+    naming them. Agreeing with the suggestion needs none.
+
+    Authority, every status and the reason are checked, against the suggestion
+    each row will carry, before the first row is written; the rows are written
+    in one transaction, so a refusal leaves everybody undecided. The suggestion
+    is worked out once per child and the same value is the one checked and the
+    one stored.
     """
     _require_deciding_authority(actor)
-    reason = _require_a_reason(reason)
+    reason = _clean_reason(reason)
     if not choices:
         raise SessionsError("Choose at least one child to decide about.")
-    checked = [
-        (_require_student_of_this_school(membership), _require_a_status(status))
-        for membership, status in choices.items()
+    config = settings()
+    checked = []
+    for membership, status in choices.items():
+        _require_student_of_this_school(membership)
+        status = _require_a_status(status)
+        suggested, average = _suggestion_for(membership, session, config)
+        checked.append((membership, status, suggested, average))
+
+    unexplained = [
+        f"{_name_of(membership)} ({_why_needed(status, suggested)})"
+        for membership, status, suggested, _ in checked
+        if needs_a_reason(status, suggested)
     ]
+    if unexplained and not reason:
+        shown = ", ".join(unexplained[:3]) + (
+            f" and {len(unexplained) - 3} more" if len(unexplained) > 3 else ""
+        )
+        raise ReasonRequired(
+            f"Say why for {shown}. A reason is kept with a decision that goes "
+            f"against the suggestion, and with graduated and leaving. Nothing "
+            f"was recorded."
+        )
+
     with transaction.atomic():
         return [
-            decide(membership, session, status, note=reason, by=actor)
-            for membership, status in checked
+            _record(membership, session, status, reason, actor, suggested, average, config)
+            for membership, status, suggested, average in checked
         ]
+
+
+def _name_of(membership) -> str:
+    user = getattr(membership, "user", None)
+    return membership.display_name or (user.full_name if user else "") or (
+        user.username if user else f"child {membership.pk}"
+    )
 
 
 def configure_as(actor, *, averaging=None, weights=None, pass_mark=None) -> SessionSettings:
@@ -1140,6 +1200,7 @@ __all__ = [
     "TERM_ORDER",
     "InvalidPassMark",
     "InvalidWeighting",
+    "ALWAYS_SAY_WHY",
     "MAX_REASON",
     "NotAllowedToConfigureSessions",
     "NotAllowedToDecidePromotion",
@@ -1158,6 +1219,7 @@ __all__ = [
     "decisions_for",
     "freeze_for_release",
     "frozen_years",
+    "needs_a_reason",
     "promotion_of",
     "released_session_line",
     "session_line",

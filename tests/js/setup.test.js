@@ -674,3 +674,40 @@ test("a review that changed is shown again with the school's sentence, and nothi
   await root.click({ "data-action": "confirm-current", "data-term": "2" });
   assert.deepEqual(tokens, ["seen-1", "seen-2"]);
 });
+
+test("each term says the day its card's attendance is counted to, blank being the last day", () => {
+  const html = states.shape({
+    ...SHAPE,
+    terms: [{ ...SHAPE.terms[0], attendance_cutoff: "2025-12-05", attendance_through: "2025-12-05" }, SHAPE.terms[1]],
+  });
+
+  assert.match(html, /data-form="cutoff" data-term="1"/);
+  assert.match(html, /id="cutoff_1" name="cutoff" type="date" min="2025-09-15" max="2025-12-12" value="2025-12-05"/);
+  assert.match(html, /id="cutoff_2" name="cutoff" type="date" min="2026-01-12" max="2026-04-02" value=""/);
+  assert.match(html, /Blank: the term's last day/);
+  assert.match(html, /Registers can still be corrected after this day; the card counts to it\./);
+});
+
+test("saving the cut-off sends the day, and a refusal is said on that term's row", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot({ portal: "portal.example.test" });
+  await mount(root, {
+    fetchImpl: serve([
+      ["/api/academics/terms/1/attendance-cutoff/", (options) => {
+        sent.push(JSON.parse(options.body));
+        return sent.length === 1
+          ? { status: 200, body: {} }
+          : { status: 409, body: { detail: "JSS 1A's results for First term 2025/2026 are submitted by teacher, counted to 5 December 2025." } };
+      }],
+      ["/api/academics/setup/", { status: 200, body: SHAPE }],
+    ]),
+  });
+
+  await root.submit({ cutoff: "2025-12-05" }, { form: "cutoff", term: "1" });
+  await root.submit({ cutoff: "" }, { form: "cutoff", term: "1" });
+
+  assert.deepEqual(sent, [{ attendance_cutoff: "2025-12-05" }, { attendance_cutoff: null }]);
+  assert.match(root.innerHTML, /class="cutoff-form rejected" data-form="cutoff" data-term="1"/);
+  assert.match(root.innerHTML, /counted to 5 December 2025/);
+});

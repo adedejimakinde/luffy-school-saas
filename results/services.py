@@ -854,7 +854,7 @@ def release(sheet, actor):
         # `freeze_for_release()` beside `ratings`, `comments` and `sessions`.
         # `docs/attendance.md` D6, and issue #60 for why it is read here rather
         # than inside.
-        attendance = attendance_summary.for_term(locked.term, results.student_ids)
+        attendance = attendance_summary.for_the_card(locked.term, results.student_ids)
         card_by_student = cards.freeze_for_release(
             locked, results, attendance=attendance, by=actor
         )

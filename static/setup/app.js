@@ -20,6 +20,7 @@ import {
   changeTrait,
   createClass,
   createTerm,
+  saveCutoff,
   fetchSetup,
   fetchTermChange,
   makeCurrent,
@@ -256,6 +257,11 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
     if (which === "add-trait") {
       const group = form.dataset.group;
       await after(`conduct_${group}`, await addTrait({ group, name: form.name.value, fetchImpl }));
+      return;
+    }
+    if (which === "cutoff") {
+      const termId = Number(form.dataset.term);
+      await after(`cutoff_${termId}`, await saveCutoff({ termId, cutoff: form.cutoff.value, fetchImpl }));
       return;
     }
     if (which === "ministry") {

@@ -75,11 +75,15 @@ function childRow(child, { mayDecide, outcomes, graduate }) {
   ].join("");
 }
 
-/** One reason for the class, and the button that records its decisions. */
+/**
+ * One reason for the class, and the button that records its decisions. The
+ * reason is needed only for a decision against the suggestion, or graduated
+ * or leaving; agreeing with Classnode needs none.
+ */
 function decideRow(row) {
   return [
     '<div class="decide">',
-    `<label><span class="dest-label">Reason, kept with each decision</span>`,
+    `<label><span class="dest-label">Reason (needed against the suggestion, and for graduated or leaving)</span>`,
     `<input type="text" name="reason_${esc(row.class_group_id)}" maxlength="1000" autocomplete="off"></label>`,
     `<button type="button" class="btn" data-action="decide" data-class="${esc(row.class_group_id)}">Record decisions for ${esc(row.name)}</button>`,
     row.note ? `<p class="note" role="alert">${esc(row.note)}</p>` : "",
@@ -145,7 +149,7 @@ export function review({
     '<section class="state state-review" data-state="review">',
     `<div class="page-head"><div><h1>End-of-session promotion</h1><p>${esc(term)} &rarr; ${esc(to_term)}</p></div></div>`,
     yearSettings(settings),
-    '<p class="hint">Whether each child is promoted, repeats, graduates or leaves is the principal\'s decision, recorded with a reason. ',
+    '<p class="hint">Whether each child is promoted, repeats, graduates or leaves is the principal\'s decision, recorded with a reason when it goes against the suggestion or a child graduates or leaves. ',
     "Choose where each class goes; the school is then moved as decided. Nothing moves until you confirm on the next step.</p>",
     waiting,
     `<form class="promotion${note ? " rejected" : ""}" data-form="review">`,

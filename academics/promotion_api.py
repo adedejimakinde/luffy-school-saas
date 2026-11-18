@@ -9,7 +9,8 @@ has not decided about, a choice that is not what the principal decided); a 422
 is a plan that is not well formed.
 
 **And one route that decides** (audit finding G-04): `POST decisions/` records
-what the principal decided for one child or many, with one reason. The
+what the principal decided for one child or many, with one reason where one is
+needed (against Classnode's suggestion, graduated, leaving). The
 principal alone (`results.sessions.DECIDING_ROLES`); an administrator who may
 open the page and press Confirm is refused here.
 """
@@ -121,7 +122,9 @@ class OutcomeOut(Schema):
 
 
 class DecisionsIn(Schema):
-    #: Why, in the principal's words. Required, and kept on every row.
+    #: Why, in the principal's words, kept on every row. Needed only when a
+    #: decision goes against the suggestion, or is graduated or leaving
+    #: (`results.sessions.needs_a_reason()`).
     reason: str = ""
     #: `{membership id: outcome}`: "promoted", "on_trial", "repeated",
     #: "graduated" or "withdrawn" (leaving).
@@ -233,7 +236,10 @@ def _decision(decision, deciders) -> Optional[DecisionOut]:
     response={200: DecidedOut, 403: MessageOut, 409: MessageOut, 422: MessageOut},
 )
 def decide(request, payload: DecisionsIn):
-    """Record the principal's decision for each child named, with one reason.
+    """Record the principal's decision for each child named.
+
+    One reason for all of them, required only if one of them goes against
+    Classnode's suggestion, or is graduated or leaving; a 422 names who.
 
     Every one is recorded or none is. The children have to be on this term's
     class lists now, as the page showed them: a child who is not is a 409 and

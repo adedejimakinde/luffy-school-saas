@@ -53,7 +53,7 @@ class TermAttendance:
 NOTHING_MARKED = TermAttendance(present=0, absent=0)
 
 
-def for_term(term, student_ids) -> dict[int, TermAttendance]:
+def for_term(term, student_ids, *, through=None) -> dict[int, TermAttendance]:
     """`student_membership_id -> TermAttendance`, for every id asked about.
 
     One aggregate query over the term's marks, not one per child: a release
@@ -83,17 +83,21 @@ def for_term(term, student_ids) -> dict[int, TermAttendance]:
     the day's answer (`updated_at`, then the row's id), which is how a
     correction works everywhere else. `take_register()` no longer writes the
     second mark; this is what holds for the ones already written.
+
+    `through`, when given, is the last day counted: registers after it are
+    left out. `for_the_card()` passes the term's attendance cut-off.
     """
     ids = list(student_ids)
     if not ids:
         return {}
 
+    marks = AttendanceMark.objects.filter(register__term=term, student_membership_id__in=ids)
+    if through is not None:
+        marks = marks.filter(register__taken_on__lte=through)
     # `DISTINCT ON (child, day)`, keeping the row that sorts first: the mark
     # written last. One query for the class, as before.
     days = (
-        AttendanceMark.objects.filter(
-            register__term=term, student_membership_id__in=ids
-        )
+        marks
         .order_by(
             "student_membership_id", "register__taken_on", "-updated_at", "-pk"
         )
@@ -114,4 +118,26 @@ def for_term(term, student_ids) -> dict[int, TermAttendance]:
     }
 
 
-__all__ = ["NOTHING_MARKED", "TermAttendance", "for_term"]
+def for_the_card(term, student_ids) -> dict[int, TermAttendance]:
+    """What a report card prints: school days counted to the term's attendance
+    cut-off (`Term.attendance_through`, the school's cut-off or the term's last
+    day). Audit finding G-10, as decided.
+
+    **Registers are never locked.** A teacher corrects a register whenever it is
+    wrong, before or after the cards go home. What holds the card still is that
+    this is read once, inside the release, and frozen on the card
+    (`ReleasedCard.days_present`, `days_absent`, append-only at two layers); a
+    revision carries the figures forward rather than reading again (D7). So a
+    register corrected after release changes the register, the absence list
+    and the next read, and never a card that has gone home. A register after
+    the cut-off (the exam week the school chose to leave off) counts nowhere on
+    the card.
+
+    The three callers are the three places a card's figures are made: the
+    release, the class print of cards before release, and the OGSERA export.
+    The principal's absence list (`attendance.absences`) counts the whole term.
+    """
+    return for_term(term, student_ids, through=term.attendance_through)
+
+
+__all__ = ["NOTHING_MARKED", "TermAttendance", "for_term", "for_the_card"]

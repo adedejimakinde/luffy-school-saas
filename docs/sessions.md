@@ -263,14 +263,17 @@ Until November 2026 nothing called any of this. The routes are:
 | route | who | what |
 | --- | --- | --- |
 | `GET /api/academics/promotion/` | principal, administrator | each child's frozen average, the suggestion and the decision |
-| `POST /api/academics/promotion/decisions/` | **principal only** | records decisions, with one required reason; all or none |
+| `POST /api/academics/promotion/decisions/` | **principal only** | records decisions, with one reason where one is needed; all or none |
 | `GET`/`PUT /api/results/year-settings/` | principal, administrator | the weighting and the pass mark |
 
-A decision made through the route **requires a reason**
-(`sessions.decide_as()` and `decide_many_as()`; `decide()` itself still allows a
-blank note, for an import with nobody behind it). `PromotionStatus` gained
-`GRADUATED`; "leaving" is `WITHDRAWN`. `academics.promotion.promote()` moves a
-child only as their latest decision says (`docs/classes.md`).
+A decision **needs a reason only when the principal goes against Classnode's
+suggestion, or decides graduated or leaving** (`sessions.needs_a_reason()`):
+agreeing with the suggestion needs none, and nor does a decision where nothing
+was suggested, since there is nothing to disagree with. One reason covers every
+child in the request; a blank one with any child who needs it refuses the whole
+request, naming them. Every decision is logged whichever it is: the row keeps
+who decided, when, the outcome, the suggestion and the figures behind it.
+`decide()` itself, for an import with nobody behind it, takes no rule.
 
 **What the two settings reach.** The weighting is read when a third term is
 released and is frozen on each card's year summary; the pass mark is read when

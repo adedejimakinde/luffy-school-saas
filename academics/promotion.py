@@ -55,9 +55,9 @@ principal wrote down. `_ACTION_FOR` and `_class_graduates()` are the table of
 which decision allows which choice.
 
 **A graduate's or a leaver's family keeps its way in** (audit finding G-05):
-the enrolment ends with the guardians' access left as it was
-(`release_student(keep_family_access=True)`), so the cards that went home stay
-readable.
+the enrolment ends with the guardians' access left as it was, by the mechanism
+taking a child off the roll uses (`release_student(keep_family_access=True)`,
+`academics.leaving`), so the cards that went home stay readable.
 """
 
 import re

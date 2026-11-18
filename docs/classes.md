@@ -166,9 +166,11 @@ screen; the confirm step says so.
   *left*, not *graduated* (the API's `left`), and the child gets no placement.
 - **The principal decides; promotion carries it out** (audit finding G-04).
   Whether a child is promoted, promoted on trial, repeats, graduates or leaves
-  is a `results.PromotionDecision`, recorded by the principal with a reason
-  through `POST /api/academics/promotion/decisions/` (one reason for one child
-  or a whole class; every decision in a request is recorded or none is). The
+  is a `results.PromotionDecision`, recorded by the principal
+  through `POST /api/academics/promotion/decisions/`, with a reason only when
+  the decision goes against Classnode's suggestion or is graduated or leaving
+  (one reason for one child or a whole class; every decision in a request is
+  recorded or none is). The
   page shows, for each child, the year's average off the released third-term
   card, what Classnode suggests from it and the school's pass mark, and the
   decision. **Nothing is assumed**: a child nobody has decided about has no
@@ -184,8 +186,10 @@ screen; the confirm step says so.
   administrator; the section "How the year is reckoned" at the top of the
   promotion page). `docs/sessions.md` has what each reaches.
 - **A graduate's or a leaver's family keeps its way in** (audit finding G-05):
-  the guardians' PARENT memberships are left as they were, and the child can
-  still sign in and read their own cards and nothing else (`accounts.former`).
+  promotion ends their enrolment with `release_student(keep_family_access=True)`,
+  the mechanism taking a child off the roll uses (G-16), so the guardians'
+  PARENT memberships are left as they were and the released cards stay
+  readable.
 - Each class's destination is suggested (the next `level` up; among several
   arms, the one with the same arm letter; nothing when that is ambiguous, and
   the plan is then refused until the office chooses; graduation when there is

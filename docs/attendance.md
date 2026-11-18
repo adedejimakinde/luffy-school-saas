@@ -218,24 +218,32 @@ A revision copies the three fields from the card it supersedes. If attendance it
 what needs correcting, that is an **explicit input to the revision** — the caller says
 so and the audit row records it — not a side effect of fixing something else.
 
-This gets its own control: change the marks behind a released card, revise the card for
-an unrelated reason, and assert the revised card's three numbers equal the original's. The
-control makes the revision recompute, and exactly that test reddens. (Since audit finding
-G-10 a register cannot be amended through the service after release, so the test changes
-the marks directly.)
+This gets its own control: amend a register after release, revise the card for an
+unrelated reason, and assert the revised card's three numbers equal the original's. The
+control makes the revision recompute, and exactly that test reddens.
 
-### D7a. A register is locked with the results it feeds (audit finding G-10)
+### D7a. The card counts to a cut-off; the register is never locked (audit finding G-10)
 
-A register is taken, amended or discarded only while the class's results for that term
-are open for writing: nobody has opened the sheet, or it is in draft
-(`results.services.is_open_for_writing()`, the rule marks, ratings and remarks keep).
-Once the sheet is submitted, checked or approved the register is refused (409) and the
-sentence says to **send the results back first**; once it is released it is refused for
-good. `services.RegisterLocked`, checked under the sheet's row lock.
+The audit found that a register could be changed for any term at any time, so the register
+behind a released card could part from it. **Decided: teachers can always correct a
+register**, before or after the cards go home (D8 below was always the rule). What holds the
+card still is the card:
 
-What this costs, on purpose: a class whose results are submitted before the last day of
-term cannot take a register for the days that remain until the sheet is sent back or
-released. What went on the card is then what was approved.
+- **The term's attendance cut-off** (`Term.attendance_cutoff`, set by the school on the
+  setup page, `PUT /api/academics/terms/{id}/attendance-cutoff/`, principal or
+  administrator). Blank is the term's last day. A school sets it earlier when the last week
+  is exams or a holiday and the card's attendance should stop before it. The database
+  refuses a day outside the term (`the_attendance_cutoff_is_a_day_of_the_term`).
+- **The card prints school days counted to that day** (`summary.for_the_card()`), read
+  once inside the release and frozen on the card (D6). The three places a card's figures
+  are made use it: the release, the class print of cards, and the OGSERA export. The
+  principal's absence list counts the whole term.
+- **The cut-off holds once any class of the term is past draft** (409), so every card of a
+  term is counted to the same day and no release reads it while it changes. Sent back to
+  draft, it can be moved again.
+
+So a register corrected after release changes the register, the absence list and any later
+read, and never a card that has gone home; a revision carries the figures forward (D7).
 
 ### D7b. A day is one mark (audit finding G-11)
 

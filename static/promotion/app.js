@@ -10,7 +10,8 @@
  * **Each child's choice is the principal's decision, not a field on this page**
  * (audit finding G-04). The plan sends what the review said was decided, and
  * the server refuses anything else. The principal records decisions a class at
- * a time, with a reason, which is a write of its own; the page is then drawn
+ * a time, with a reason where one is needed (against the suggestion, graduated,
+ * leaving), which is a write of its own; the page is then drawn
  * again from the school.
  */
 
@@ -93,6 +94,20 @@ export function decisionsFrom(form, row) {
     }
   }
   return wanted;
+}
+
+/**
+ * Whether these decisions need a reason: one goes against what Classnode
+ * suggested for that child, or is graduated or leaving. The rule is the
+ * server's (`results.sessions.needs_a_reason()`); this asks it first.
+ */
+export function needsAReason(row, decisions) {
+  return row.children.some((child) => {
+    const status = decisions[String(child.membership_id)];
+    if (!status) return false;
+    if (status === "graduated" || status === "withdrawn") return true;
+    return Boolean(child.suggested) && child.suggested !== status;
+  });
 }
 
 /** The settings form's fields, as the route takes them. */
@@ -193,7 +208,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       return;
     }
     if (hit.dataset.action === "decide" && review) {
-      // The principal records one class's decisions, with one reason.
+      // The principal records one class's decisions, with one reason where one
+      // is needed. The server holds the rule; the page asks first so nothing is
+      // sent that would be refused.
       const form = hit.form;
       const classId = Number(hit.dataset.class);
       const row = review.classes.find((c) => c.class_group_id === classId);
@@ -204,7 +221,9 @@ export async function mount(root, { fetchImpl = fetch } = {}) {
       const reason = reasonField ? reasonField.value.trim() : "";
       let note = "";
       if (!Object.keys(children).length) note = "Nothing to record: every child here already has that decision.";
-      else if (!reason) note = "Say why. The reason is kept with each decision.";
+      else if (!reason && needsAReason(row, children)) {
+        note = "Say why: a reason is kept with a decision that goes against the suggestion, and with graduated and leaving.";
+      }
       if (!note) {
         const result = await recordDecisions({ children, reason }, { fetchImpl });
         if (result.refusal) {

@@ -23,6 +23,7 @@ import {
   fromReview,
   htmlFor,
   mount,
+  needsAReason,
   planFrom,
   settingsFrom,
   summarise,
@@ -373,7 +374,7 @@ test("recording a class's decisions is one request with the reason, and the page
   assert.match(root.innerHTML, /name="dest_1"[^>]*>.*?<option value="3" selected>SS 3/s);
 });
 
-test("no reason, or nothing to record, is said on the class and posts nothing", async () => {
+test("going against the suggestion with no reason, or nothing to record, is said on the class and posts nothing", async () => {
   forgetToken();
   const root = fakeRoot({ onSchool: "yes" });
   let posted = 0;
@@ -383,7 +384,7 @@ test("no reason, or nothing to record, is said on the class and posts nothing", 
 
   await mount(root, { fetchImpl });
   await root.click({ "data-action": "decide", "data-class": "1" }, { form: fields({ decide_11: "repeated", decide_12: "repeated", reason_1: " " }) });
-  assert.match(root.innerHTML, /Say why\. The reason is kept with each decision\./);
+  assert.match(root.innerHTML, /Say why: a reason is kept with a decision that goes against the suggestion, and with graduated and leaving\./);
   await root.click({ "data-action": "decide", "data-class": "1" }, { form: fields({ decide_11: "promoted", decide_12: "repeated", reason_1: "Same as before" }) });
   assert.match(root.innerHTML, /Nothing to record/);
 
@@ -497,4 +498,36 @@ test("a child decided leaving is planned as leave and counted apart from graduat
 
   assert.deepEqual(posted.classes[0].children, { 11: "leave", 12: "repeat" });
   assert.match(root.innerHTML, /1 graduated, 1 left/);
+});
+
+test("agreeing with the suggestion posts with no reason; graduated and leaving ask for one", async () => {
+  forgetToken();
+  const root = fakeRoot({ onSchool: "yes" });
+  const posts = [];
+  const fetchImpl = serve(school({ ...UNDECIDED, may_decide: true }, [
+    ["/api/academics/promotion/decisions/", (options) => {
+      posts.push(JSON.parse(options.body));
+      return { status: 200, body: { decided: 2 } };
+    }],
+  ]));
+
+  await mount(root, { fetchImpl });
+  // Ada suggested promoted, Emeka suggested repeated: both agree.
+  await root.click({ "data-action": "decide", "data-class": "1" }, { form: fields({ decide_11: "promoted", decide_12: "repeated", reason_1: "" }) });
+  assert.deepEqual(posts, [{ children: { 11: "promoted", 12: "repeated" }, reason: "" }]);
+
+  // Chi has no suggestion; graduated still needs a reason.
+  await root.click({ "data-action": "decide", "data-class": "3" }, { form: fields({ decide_31: "graduated", reason_3: "" }) });
+  assert.equal(posts.length, 1);
+  assert.match(root.innerHTML, /Say why: a reason is kept/);
+});
+
+test("needsAReason follows the server's rule", () => {
+  const row = UNDECIDED.classes[0];
+  assert.equal(needsAReason(row, { 11: "promoted", 12: "repeated" }), false);
+  assert.equal(needsAReason(row, { 11: "on_trial" }), true);
+  assert.equal(needsAReason(row, { 12: "promoted" }), true);
+  assert.equal(needsAReason(row, { 11: "withdrawn" }), true);
+  assert.equal(needsAReason(UNDECIDED.classes[1], { 31: "repeated" }), false);
+  assert.equal(needsAReason(UNDECIDED.classes[1], { 31: "graduated" }), true);
 });

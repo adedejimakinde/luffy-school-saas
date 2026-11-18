@@ -215,6 +215,26 @@ export async function saveContactEmail({ contact_email, fetchImpl = fetch }) {
   return classify(answer, 200);
 }
 
+export function cutoffUrl(termId) {
+  return `/api/academics/terms/${encodeURIComponent(termId)}/attendance-cutoff/`;
+}
+
+/**
+ * The last day whose registers count on a term's report cards (audit G-10).
+ * Blank clears it: the term's last day is then the cut-off. A 409 (a class of
+ * the term is past draft) is a sentence for the term's row, like a 422.
+ */
+export async function saveCutoff({ termId, cutoff, fetchImpl = fetch }) {
+  let answer;
+  try {
+    answer = await putJson(cutoffUrl(termId), { attendance_cutoff: cutoff || null }, { fetchImpl });
+  } catch (error) {
+    return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
+  }
+  if (answer.status === 409) return { ok: false, outcome: SAVE.REJECTED, body: answer.body || {} };
+  return classify(answer, 200);
+}
+
 /** The local government area the school sits in. Blank clears it. */
 export async function saveLga({ lga, school_code = "", fetchImpl = fetch }) {
   let answer;

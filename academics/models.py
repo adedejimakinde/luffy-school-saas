@@ -114,6 +114,20 @@ class Term(models.Model):
         ),
     )
 
+    # The last day whose registers count on the report card (audit finding
+    # G-10, as decided). Blank means the term's last day. A school sets it
+    # earlier when the last week is exams or holiday and the card's attendance
+    # should stop before it. Registers after it are still taken and still
+    # corrected; they are not on the card. See `attendance_through`.
+    attendance_cutoff = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The last day whose registers count on the report card. Blank "
+            "means the term's last day."
+        ),
+    )
+
     # Which term the school is currently teaching. At most one, enforced below.
     is_current = models.BooleanField(default=False)
 
@@ -159,6 +173,20 @@ class Term(models.Model):
                 condition=Q(school_days__isnull=True) | Q(school_days__gte=1),
                 name="a_term_has_at_least_one_school_day",
             ),
+            # The card's attendance stops on a day of the term, not before it
+            # starts nor after it ends.
+            models.CheckConstraint(
+                condition=Q(attendance_cutoff__isnull=True)
+                | (
+                    Q(attendance_cutoff__gte=F("starts_on"))
+                    & Q(attendance_cutoff__lte=F("ends_on"))
+                ),
+                name="the_attendance_cutoff_is_a_day_of_the_term",
+                violation_error_message=(
+                    "The day the card's attendance is counted to has to be a day "
+                    "of the term, from its first day to its last."
+                ),
+            ),
         ]
 
     def __str__(self):
@@ -173,6 +201,12 @@ class Term(models.Model):
         is a different thing from what the school actually taught.
         """
         return (self.ends_on - self.starts_on).days + 1
+
+    @property
+    def attendance_through(self):
+        """The last day whose registers count on the report card: the school's
+        cut-off, or the term's last day when it has set none."""
+        return self.attendance_cutoff or self.ends_on
 
 
 class ClassGroup(models.Model):

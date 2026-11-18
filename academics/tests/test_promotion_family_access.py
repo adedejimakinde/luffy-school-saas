@@ -9,26 +9,19 @@ on the day promotion was confirmed, an SS 3 family could no longer open the
 third-term card. `test_before_the_fix_...` is that state, reproduced on the
 service that used to be called.
 
-Now:
-
-- **the guardian** keeps their PARENT membership (`keep_family_access`), as a
-  leaver's family already did (G-16);
-- **the child** signs in on the school's host with an ended membership and
-  reaches their own cards and nothing else (`accounts.former`). No role is
-  granted: every other route still refuses them.
+Now promotion ends a graduate's or a leaver's enrolment with
+`release_student(keep_family_access=True)`: **the mechanism #349 built for
+taking a child off the roll (G-16), reused, not a second one.** The guardian
+keeps their PARENT membership, with no end date, and `card_api` serves the
+ended child's released cards to them.
 
 St Mary's JSS 1A is released for its third term and then, in different tests,
 graduates or loses one child. Grace Academy is the second school.
 """
 
-from django.db import connection
-from django.test import Client
-
-from academics import services as academics
-from accounts import former, services as memberships
+from accounts import services as memberships
 from accounts.models import Membership, MembershipStatus, Role, User
-from accounts.services import enroll_student, release_student
-from results.models import ReleasedCard
+from accounts.services import release_student
 from results.tests.fixtures import HOST, PASSWORD, THEIR_HOST
 from schools.tests.tenants import connected_to
 from tests.guardians import give_verified_channel
@@ -65,19 +58,6 @@ class FamilySetUp(DecisionsSetUp):
         response = self.post(self.plan(ada="leave"), decided=False)
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(Membership.objects.get(pk=self.ada.pk).status, MembershipStatus.ENDED)
-
-    def sign_in(self, identifier, host=HOST):
-        client = Client(enforce_csrf_checks=True)
-        token = client.get("/api/csrf/", HTTP_HOST=host).json()["csrf_token"]
-        response = client.post(
-            "/api/login/",
-            data={"identifier": identifier, "password": PASSWORD},
-            content_type="application/json",
-            HTTP_HOST=host,
-            HTTP_X_CSRFTOKEN=token,
-        )
-        connection.set_schema_to_public()
-        return client, response
 
     def parent_is_active(self):
         return Membership.objects.filter(
@@ -124,102 +104,38 @@ class TheGuardianKeepsTheCardsTests(FamilySetUp):
         )
 
 
-class TheChildKeepsTheirOwnCardsTests(FamilySetUp):
-    def test_a_graduate_signs_in_and_reads_their_final_card(self):
-        self.graduate_jss1a()
-
-        client, response = self.sign_in("ada")
-
-        self.assertEqual(response.status_code, 200, response.content)
-        listed = client.get(CARDS, HTTP_HOST=HOST)
-        self.assertEqual(listed.status_code, 200, listed.content)
-        self.assertIn("Ada Obi", listed.content.decode())
-        card = client.get(self.card_url(), HTTP_HOST=HOST)
-        self.assertEqual(card.status_code, 200, card.content)
-        self.assertEqual(card.json()["student_name"], "Ada Obi")
-        self.assertEqual(client.get("/cards/", HTTP_HOST=HOST).status_code, 200)
-
-    def test_a_child_who_left_at_promotion_does_too(self):
-        self.ada_leaves()
-
-        client, response = self.sign_in("ada")
-
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(client.get(self.card_url(), HTTP_HOST=HOST).status_code, 200)
-
-    def test_before_the_fix_the_door_and_the_host_refused_them(self):
-        """The companion: with the former-student rule switched off, both gates
-        are real. Sign-in is refused and a session is refused at the host."""
+class OneMechanismForLeaversAndGraduatesTests(FamilySetUp):
+    def test_promotion_and_taking_a_child_off_the_roll_end_an_enrolment_the_same_way(self):
+        """Both reach `release_student()` with `keep_family_access=True`."""
         from unittest import mock
 
+        with mock.patch(
+            "academics.promotion.release_student", wraps=release_student
+        ) as released:
+            self.graduate_jss1a()
+
+        # JSS 1A's four and SS 3's two.
+        self.assertEqual(len(released.call_args_list), 6)
+        self.assertTrue(
+            all(call.kwargs.get("keep_family_access") is True for call in released.call_args_list)
+        )
+        # The leaving path's own use of the flag is #349's to assert
+        # (`academics/tests/test_leaving.py`, control G16-3).
+
+    def test_the_other_schools_family_is_untouched(self):
+        """Grace's guardian, whose child is not promoted anywhere, keeps exactly
+        what they had, and reads nothing of St Mary's."""
+        papa = User.objects.create_user("papa", PASSWORD, full_name="Papa Chidi")
+        memberships.link_guardian(papa, self.grace_child)
+        give_verified_channel(papa, "08030000009")
+        before = list(Membership.objects.filter(user=papa).values_list("school_id", "role", "status"))
+
         self.graduate_jss1a()
-        with mock.patch.object(former, "was_a_student_here", return_value=False):
-            _client, response = self.sign_in("ada")
-            self.assertEqual(response.status_code, 401)
-            self.client.force_login(self.ada.user)
-            self.assertEqual(self.client.get(self.card_url(), HTTP_HOST=HOST).status_code, 403)
 
-    def test_they_reach_their_cards_and_nothing_else(self):
-        """No role is granted. Every other page and route answers as it does to
-        a login with no membership: refused by the host, 403."""
-        self.graduate_jss1a()
-        client, _ = self.sign_in("ada")
-
-        self.assertEqual(set(self.ada.user.roles_at(self.stmarys)), set())
-        for path in (
-            "/home/",
-            "/roll/",
-            "/fees/",
-            "/promotion/",
-            "/register/",
-            "/api/home/",
-            "/api/academics/promotion/",
-            "/api/academics/setup/",
-            "/api/enrolment/roll/",
-            "/api/results/year-settings/",
-            f"/api/results/health/{self.ada.pk}/?term_id={self.term_id}",
-            "/api/fees/",
-            "/cards-of-everybody/",
-        ):
-            with self.subTest(path=path):
-                self.assertEqual(client.get(path, HTTP_HOST=HOST).status_code, 403)
-
-    def test_another_childs_card_is_not_theirs(self):
-        self.graduate_jss1a()
-        client, _ = self.sign_in("ada")
-
-        self.assertEqual(client.get(self.card_url(self.children["emeka"]), HTTP_HOST=HOST).status_code, 404)
-        self.assertEqual(client.get(self.card_url(self.bimpe), HTTP_HOST=HOST).status_code, 404)
-
-    def test_a_suspended_student_is_not_a_former_one(self):
-        Membership.objects.filter(pk=self.ada.pk).update(status=MembershipStatus.SUSPENDED)
-
-        _client, response = self.sign_in("ada")
-
-        self.assertEqual(response.status_code, 401)
-        self.client.force_login(self.ada.user)
+        self.assertEqual(
+            list(Membership.objects.filter(user=papa).values_list("school_id", "role", "status")), before
+        )
+        self.client.force_login(papa)
         self.assertEqual(self.client.get(self.card_url(), HTTP_HOST=HOST).status_code, 403)
-
-    def test_a_former_teacher_is_not_let_in(self):
-        """Only an ended STUDENT membership opens the door."""
-        Membership.objects.filter(pk=self.teacher.pk).update(status=MembershipStatus.ENDED)
-
-        _client, response = self.sign_in("kemi")
-
-        self.assertEqual(response.status_code, 401)
-        self.client.force_login(self.teacher.user)
-        self.assertEqual(self.client.get(CARDS, HTTP_HOST=HOST).status_code, 403)
-
-    def test_having_left_one_school_opens_nothing_at_another(self):
-        self.graduate_jss1a()
-
-        _client, response = self.sign_in("ada", host=THEIR_HOST)
-        self.assertEqual(response.status_code, 401)
-        self.client.force_login(self.ada.user)
+        self.client.force_login(self.mama)
         self.assertEqual(self.client.get(CARDS, HTTP_HOST=THEIR_HOST).status_code, 403)
-        # And Grace's own former student reads nothing at St Mary's.
-        release_student(Membership.objects.get(pk=self.grace_child.pk))
-        self.client.force_login(self.grace_child.user)
-        self.assertEqual(self.client.get(CARDS, HTTP_HOST=HOST).status_code, 403)
-        self.assertEqual(self.client.get(self.card_url(), HTTP_HOST=HOST).status_code, 403)
-        self.assertEqual(self.client.get(CARDS, HTTP_HOST=THEIR_HOST).status_code, 200)

@@ -400,7 +400,7 @@ def _preview_html(class_group, term, wanted, *, sheet=None, by_id=None, write=No
         if sheet is None:
             sheet = ResultSheet.objects.create(class_group=class_group, term=term)
         results = positions.class_results(class_group, term)
-        attendance = attendance_summary.for_term(term, results.student_ids)
+        attendance = attendance_summary.for_the_card(term, results.student_ids)
         card_by_student = cards.freeze_for_release(sheet, results, attendance=attendance, by=by_id)
         ratings.freeze_for_release(sheet, card_by_student)
         comments.freeze_for_release(sheet, card_by_student)
