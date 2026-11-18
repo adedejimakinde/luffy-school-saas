@@ -162,15 +162,16 @@ class EachRoleSeesItsOwnTests(DashboardSetUp):
         self.assertEqual(events, {"results", "register"})
 
     def test_the_results_tile_is_one_short_word_and_says_whose_step_it_is(self):
-        for member, label, meta in (
-            (self.head, "To approve", "Results checked and waiting on you"),
-            (self.vp, "To check", "Results submitted and waiting on you"),
+        for member, label, third in (
+            (self.head, "To approve", "class waiting"),
+            (self.vp, "To check", None),
             (self.admin, "To approve", "Results checked, with the principal"),
         ):
             with self.subTest(role=member.role):
                 html = self.shown(member)[3]
                 self.assertRegex(html, rf'data-tile="results">\s*<span class="kpi-top">\s*<span class="eyebrow">{label}</span>')
-                self.assertIn(meta, html)
+                if third:
+                    self.assertIn(third, html)
 
     def test_a_parent_is_refused_in_one_sentence(self):
         parent = grant_membership(
@@ -226,7 +227,7 @@ class ATeacherSeesTheirOwnClassTests(DashboardSetUp):
         teacher = self.shown(self.teacher)[3]
         principal = self.shown(self.head)[3]
 
-        self.assertIn(f"3 of 4 present in JSS{NBSP}1A", teacher)
+        self.assertIn("3 of 4 present in JSS 1A", teacher.replace(NBSP, " "))
         self.assertIn("75%", teacher)
         # The school: JSS 1A's three, and one of JSS 1B's two.
         self.assertIn("4 of 6 present", principal)
@@ -273,7 +274,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
         tiles, items, events, html = self.shown(self.head)
 
         self.assertIn("Present today", self.tile(html))
-        self.assertIn("3 of 4 present", self.tile(html))
+        self.assertIn('title="3 of 4 present"', self.tile(html))
         self.assertIn("<b class=\"fig\">75%</b>Sun", self.week(html))
         self.assertNotIn("No registers on a weekend", html)
         self.assertIn("Registers taken for 1 of", html)
@@ -286,7 +287,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
         html = self.shown(self.head)[3]
 
         self.assertNotIn("Present today", html)
-        self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Fri 19 Sep</span>', self.tile(html))
         self.assertIn(">75%<", self.tile(html))
         self.assertNotIn("Sun</span>", self.week(html))
         self.assertIn("No registers on a weekend", self.week(html))
@@ -297,7 +298,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         html = self.shown(self.head)[3]
 
-        self.assertIn(f"Last school day: Tue{NBSP}16{NBSP}Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Tue 16 Sep</span>', self.tile(html))
         self.assertNotIn("Present today", html)
         self.assertIn("Not yet</b>Wed", self.week(html))
 
@@ -307,7 +308,7 @@ class AttendanceTellsOneStoryTests(DashboardSetUp):
 
         html = self.shown(self.teacher)[3]
 
-        self.assertIn(f"Last school day: Fri{NBSP}19{NBSP}Sep", self.tile(html))
+        self.assertIn('Last register: <span class="kpi-date">Fri 19 Sep</span>', self.tile(html))
         self.assertNotIn("Present today", html)
 
 
@@ -321,21 +322,6 @@ class NumbersAndNamesTests(DashboardSetUp):
             [short_naira(4_860_000_000), short_naira(150_000_000), short_naira(100_000_000_000), short_naira(50_000)],
             ["\u20a648.6m", "\u20a61.5m", "\u20a61bn", "\u20a6500"],
         )
-
-    def test_attendance_that_has_not_moved_has_no_change_line(self):
-        from datetime import date
-
-        from home.dashboard import _attendance_tile
-
-        today = date(2026, 10, 15)
-
-        def tile(present, before):
-            week = {"school_wide": True, "shown": today, "present": present, "marked": 1000, "before": before}
-            return _attendance_tile(week, None, today)
-
-        self.assertIsNone(tile(938, (9380, 10000))["change"], "0 pts is never printed")
-        self.assertIsNone(tile(938, (9384, 10000))["change"], "nor a change that rounds to 0.0")
-        self.assertEqual(tile(938, (9300, 10000))["change"], "+0.8 pts")
 
     def test_no_figure_on_the_page_ends_in_point_zero(self):
         with connected_to(self.stmarys):
@@ -527,6 +513,170 @@ class TheDoorsTests(DashboardSetUp):
 
         self.assertEqual(response.status_code, 404)
         self.assertIn('data-state="elsewhere"', response.content.decode())
+
+
+# -- the three stat tiles ------------------------------------------------------------
+
+
+class TheThirdLineCopyTests(DashboardSetUp):
+    """The pure parts: no database, no page."""
+
+    def test_present_against_the_terms_earlier_school_days(self):
+        from home.dashboard import attendance_change, present_line
+
+        earlier = [90.0, 94.0, 92.0]  # averages 92
+        self.assertEqual(attendance_change(89.1, earlier)[0], "down")
+        self.assertAlmostEqual(attendance_change(89.1, earlier)[1], -2.9)
+        self.assertEqual(attendance_change(93.4, earlier)[0], "up")
+        self.assertEqual(attendance_change(92.4, earlier)[0], "same")
+        self.assertEqual(attendance_change(91.6, earlier)[0], "same")
+        self.assertEqual(attendance_change(92.5, earlier)[0], "up", "half a point is a change")
+        self.assertEqual(attendance_change(91.5, earlier)[0], "down")
+        self.assertIsNone(attendance_change(92, []))
+
+        self.assertEqual(present_line(89.1, earlier), {"text": "2.9 pts down", "tone": "warn", "icon": "i-down", "date": ""})
+        self.assertEqual(present_line(93.4, earlier), {"text": "1.4 pts up", "tone": "ok", "icon": "i-up", "date": ""})
+        self.assertEqual(present_line(92.2, earlier), {"text": "Same as usual", "tone": "muted", "icon": None, "date": ""})
+        self.assertEqual(present_line(92, [])["text"], "First register this term")
+
+    def test_every_school_day_counts_once_whatever_its_size(self):
+        from home.dashboard import attendance_change
+
+        # Two days, 100% and 80%: the usual is 90, not the pooled figure.
+        self.assertEqual(attendance_change(90, [100.0, 80.0])[0], "same")
+
+    def test_singular_and_plural(self):
+        from home.dashboard import results_line, students_line
+
+        self.assertEqual([students_line(n) for n in (0, 1, 2, 12)], ["0 classes", "1 class", "2 classes", "12 classes"])
+        self.assertEqual([results_line(n) for n in (1, 2, 5)], ["class waiting", "classes waiting", "classes waiting"])
+
+
+class TheStatTilesTests(DashboardSetUp):
+    """Students, Present and To approve, on the page."""
+
+    FRIDAY = A_SCHOOL_DAY + timedelta(days=2)
+
+    def register(self, on, absent=()):
+        with connected_to(self.stmarys), mock.patch("django.utils.timezone.now", return_value=lagos(on, 8)):
+            registers.take_register(
+                ClassGroup.objects.get(pk=self.jss1a_id), self.this_term(), on=on,
+                absent_ids=[self.children[h].pk for h in absent], by=self.teacher.user,
+            )
+
+    def tile(self, html, key):
+        return re.search(rf'<a class="kpi[^>]*data-tile="{key}">.*?</a>', html, re.S).group(0)
+
+    def third(self, html, key):
+        found = re.search(r'<span class="kpi-third[^"]*">(.*?)</span>\s*(?:</span>)?\s*</a>', self.tile(html, key), re.S)
+        return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", found.group(1))).strip()
+
+    def test_students_says_how_many_classes_and_opens_the_roll(self):
+        html = self.shown(self.head)[3]
+        tile = self.tile(html, "students")
+
+        self.assertIn('href="/roll/"', tile)
+        self.assertRegex(self.third(html, "students"), r"^\d+ classes?$")
+        self.assertIn("kpi-third-muted", tile)
+
+    def test_no_register_this_term_is_not_taken_and_never_a_dash_or_zero(self):
+        html = self.shown(self.head)[3]
+        tile = self.tile(html, "attendance")
+
+        self.assertIn("Not taken", tile)
+        self.assertEqual(self.third(html, "attendance"), "No registers yet")
+        self.assertNotIn("0%", tile)
+        self.assertNotRegex(tile, r">\s*[-\u2013\u2014]\s*<")
+        self.assertIn('href="/absences/"', tile)
+
+    def test_no_register_today_shows_the_last_school_day_with_no_change(self):
+        self.register(A_SCHOOL_DAY - timedelta(days=1), absent=["emeka"])
+
+        html = self.shown(self.head)[3]
+
+        self.assertIn(">75%<", self.tile(html, "attendance"))
+        self.assertEqual(self.third(html, "attendance"), "Last register: Tue 16 Sep")
+        self.assertNotIn("kpi-third-warn", self.tile(html, "attendance"))
+
+    def test_today_against_the_terms_earlier_days_goes_down_with_an_arrow_and_words(self):
+        self.register(A_SCHOOL_DAY - timedelta(days=2))
+        self.register(A_SCHOOL_DAY - timedelta(days=1))
+        self.register(self.day, absent=["emeka"])
+
+        html = self.shown(self.head)[3]
+        tile = self.tile(html, "attendance")
+
+        self.assertEqual(self.third(html, "attendance"), "25 pts down")
+        self.assertIn("kpi-third-warn", tile)
+        self.assertRegex(tile, r'<svg class="icon" aria-hidden="true"[^>]*><use href="#i-down"/>')
+
+    def test_today_the_same_as_usual(self):
+        self.register(A_SCHOOL_DAY - timedelta(days=1))
+        self.register(self.day)
+
+        html = self.shown(self.head)[3]
+
+        self.assertEqual(self.third(html, "attendance"), "Same as usual")
+        self.assertNotIn("<svg", self.tile(html, "attendance").split("kpi-third")[1])
+
+    def test_the_first_register_of_the_term_has_nothing_to_be_compared_with(self):
+        self.register(self.day)
+
+        self.assertEqual(self.third(self.shown(self.head)[3], "attendance"), "First register this term")
+
+    def test_to_approve_waiting_is_tinted_and_opens_the_queue_the_attention_row_opens(self):
+        self.a_busy_week_at_st_marys()
+
+        html = self.shown(self.head)[3]
+        tile = self.tile(html, "results")
+
+        self.assertIn("kpi-action", tile)
+        self.assertEqual(self.third(html, "results"), "class waiting")
+        self.assertRegex(tile, r'class="kpi-value fig"[^>]*>1<')
+        row = re.search(r'data-item="results-checked">\s*<a class="list-row" href="([^"]+)"', html)
+        self.assertIsNotNone(row)
+        self.assertIn(f'href="{row.group(1)}"', tile)
+
+    def test_to_approve_with_nothing_waiting_is_plain_and_all_caught_up(self):
+        html = self.shown(self.head)[3]
+        tile = self.tile(html, "results")
+
+        self.assertNotIn("kpi-action", tile)
+        self.assertEqual(self.third(html, "results"), "All caught up")
+        self.assertIn("kpi-third-ok", tile)
+        self.assertRegex(tile, r'class="kpi-value fig"[^>]*>0<')
+        self.assertIn('href="/results/"', tile)
+
+
+class TheStatTilesNeverLeakTests(DashboardSetUp):
+    """Two schools: each tile counts its own school's students, classes,
+    registers and sheets, and neither's reach the other, cold or cached."""
+
+    def test_counts_never_cross_between_two_schools(self):
+        self.a_busy_week_at_st_marys()
+        with connected_to(self.grace):
+            ClassGroup.objects.create(name="Grace Only", level=9)
+
+        def read(member, host):
+            html = self.shown(member, host=host)[3]
+            tiles = {
+                key: re.search(rf'<a class="kpi[^>]*data-tile="{key}">.*?</a>', html, re.S).group(0)
+                for key in ("students", "attendance", "results")
+            }
+            third = lambda t: re.sub(r"\s+", " ", re.sub(r"<[^>]+>", "", t.split('class="kpi-third')[1].split("</span>\n")[0].split(">", 1)[1])).strip()
+            value = lambda t: re.search(r'class="kpi-value[^"]*"[^>]*>([^<]*)<', t).group(1).strip()
+            return {k: (value(t), third(t)) for k, t in tiles.items()}
+
+        st_marys_first = read(self.head, HOST)
+        grace = read(self.their_head, THEIR_HOST)
+        st_marys_again = read(self.head, HOST)
+
+        self.assertEqual(st_marys_first, st_marys_again)
+        self.assertEqual(st_marys_first["attendance"], ("75%", "First register this term"))
+        self.assertEqual(st_marys_first["results"], ("1", "class waiting"))
+        self.assertEqual(grace["attendance"], ("Not taken", "No registers yet"), "St Mary's register is not Grace's")
+        self.assertEqual(grace["results"], ("0", "All caught up"), "St Mary's waiting sheet is not Grace's")
+        self.assertNotEqual(grace["students"], st_marys_first["students"])
 
 
 # -- the parts -----------------------------------------------------------------------

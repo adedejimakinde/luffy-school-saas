@@ -44,7 +44,7 @@ test("a class row says what its children owe", () => {
   const html = fees.books({
     books: { terms: [], classes: [{ class_group_id: 3, class_group: "JSS 1A", children: 4, owing: 2, outstanding_kobo: 3_000_000 }] },
   });
-  assert.match(html, /4 children · ₦30,000\.00 outstanding/);
+  assert.match(html, /<span class="list-row-sub">4 children<\/span><span class="class-owes">₦30,000\.00 outstanding<\/span>/);
 });
 
 // -- G-14 and G-16, on the roll ------------------------------------------------

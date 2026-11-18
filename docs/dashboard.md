@@ -15,12 +15,36 @@ nothing to fetch after it and no script to run.
 | --- | --- |
 | Header | Greeting, date, session, term and week. The school's crest and name are the shell's header (`docs/design.md`, "School branding"). On a phone, one chip: term, week and date. |
 | Fees collected (the hero) | Full width, first, and only for `fees.authority.READING_ROLES`: the amount collected this term in full, "X% of N total" with a green bar, this week's takings as a pill (green when money came in, amber when refunds outweighed it, grey for a quiet week), then Outstanding (and how many owe) and Expected this term side by side, each a link to the fee book. On a desk the term's weeks are a sparkline beside it. Carries `data-tile="fees"`. |
-| Stat cards | Three compact cards: Students, Present today (or Present, with the last school day named under it), To approve (To check for the vice principal). A teacher gets Present and Scores entered for their own class instead. Each carries one change note against last week or last term where that exists. |
+| Stat cards | Three compact cards: Students, Present today (or Present), To approve (To check for the vice principal). A teacher gets Present and Scores entered for their own class instead. Each is a link and ends in a third line, below. Scores entered, and the administrator's To approve, keep their older lines. |
 | Needs your attention | One card of list rows, light amber while anything waits on the reader. Up to five items, each a link to the page that fixes it: a register not taken, fees owed, results waiting on this login, papers half marked, remarks missing, staff invitations not accepted, no contact email. |
 | Attendance this week | Monday to Friday as bars, plus a Saturday or Sunday only if a register was taken on it. A day with no register yet is a dashed empty slot labelled "Not yet" (or "None" once it has passed), never a low bar. |
 | Recent activity | The latest five lines from the logs the school already keeps (below). |
 | Your next step | The administrator, until setup is first finished: one card at the top with the next of the eight setup steps and one button (`docs/onboarding.md`). While the school has no students it stands instead of the figures; the principal then sees how far the administrator has got. |
 | First days | A teacher (register, marks) or a bursar (fees, a payment), until they have done both or for fourteen days after their first sign-in. |
+
+## The three stat tiles' third line
+
+Each of Students, Present and To approve is label, figure, then a third line
+(`tile.third`: words, a tone, and for a change an arrow). The line is 15px at
+every width and may wrap to two or three lines in a phone-narrow tile; the
+figure never shrinks or truncates, and the tiles stay one height.
+
+| Tile | Figure | Third line | Opens |
+| --- | --- | --- | --- |
+| Students | on the roll this term | "8 classes" / "1 class": classes with a student this term. Grey. | `/roll/` |
+| Present | today's attendance | against the average of this term's earlier school days that have a register, each day counting once: "2.9 pts down" (amber, down arrow), "1.4 pts up" (green, up arrow), "Same as usual" (grey, under half a point), "First register this term" (grey, nothing earlier). Digits are `figure()`'s, so "3 pts", never "3.0". | `/absences/` (a teacher: `/register/`) |
+| Present, no register today | the last register's figure | "Last register: Mon 16 Nov". No change line. | same |
+| Present, no register this term | "Not taken", no % | "No registers yet" | same |
+| To approve | classes waiting on this login | "classes waiting" / "class waiting"; with none, "0" and "All caught up" in green | the "results waiting" row's page |
+
+Above zero, To approve takes the "needs action" tint. The meaning is always in
+the words; the arrow and the colour only back them up. The vice principal's
+To check is the same tile. The administrator's To approve (nothing waits on
+the administrator) is unchanged. The colours are `--stat-*` in `design.css`.
+
+The terms' registers come from the same `people` statement as before, with its
+window widened from three weeks to the term (`facts.VERSION` is 2), so the
+tiles add no query.
 
 ## Attendance: one day, told three ways
 
@@ -31,10 +55,10 @@ never disagree:
   "Attendance today", the chart has today's bar, and the feed says how many
   classes have taken it.
 - If none was, the tile is "Attendance" and shows the **last day a register
-  was taken**, labelled "Last school day: Fri 9 Oct". It never calls a day
+  was taken**, labelled "Last register: Fri 9 Oct". It never calls a day
   with no register "today". The chart says "No registers on a weekend" only
   when it is one and nobody has taken a register.
-- The change note compares the day shown with the seven days before it.
+- The change line is told only for today, against the term's earlier school days (above).
 
 `AttendanceTellsOneStoryTests` holds this for a Sunday with a register, a
 Sunday without one, a school day before its register, and a teacher's class.

@@ -290,11 +290,14 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
 
     - **The day shown** is today if any register was taken today, whatever
       day of the week it is. Otherwise it is the last day a register was
-      taken, and the tile says so ("Last school day: Fri 9 Oct"); it never
+      taken, and the tile says so ("Last register: Fri 9 Oct"); it never
       calls a day with no register "today".
     - **The chart** is Monday to Friday of this week, plus a Saturday or a
       Sunday only if a register was taken on it.
-    - **The change** is the day shown against the seven days before it.
+    - **The change** is today's figure against the average of the earlier
+      school days of this term that have a register (`attendance_change()`).
+      Only when today has a register: a day carried over from before says
+      "Last register" and nothing else.
 
     Out of the children marked, never out of the roll (`summary.present()`'s
     reason): a class nobody has taken a register for has had nobody absent.
@@ -316,12 +319,11 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
     placed = {cid for cid, _, n in facts["people"]["classes"] if n and cid in scope.classes}
 
     shown = today if today in by_day else max((d for d in by_day if d < today), default=None)
-    before = [0, 0]
-    if shown is not None:
-        for day, (present, marked) in by_day.items():
-            if shown - timedelta(days=7) <= day < shown:
-                before[0] += present
-                before[1] += marked
+    # The term's earlier school days that have a register, as daily rates. The
+    # facts read the term's registers and no others, so "earlier" is this term's.
+    earlier = [
+        day[0] * 100 / day[1] for on, day in by_day.items() if shown is not None and on < shown and day[1]
+    ]
 
     days = [monday + timedelta(days=i) for i in range(5)]
     days += [d for d in (monday + timedelta(days=5), monday + timedelta(days=6)) if d in by_day and d <= today]
@@ -357,7 +359,7 @@ def attendance(facts: dict, scope: Scope, today: date, term) -> Optional[dict]:
         "shown": shown,
         "present": by_day[shown][0] if shown else 0,
         "marked": by_day[shown][1] if shown else 0,
-        "before": before,
+        "earlier": earlier,
         "weekend": weekend,
         "placed": placed,
         "taken_today": taken_today,
@@ -374,15 +376,13 @@ def tiles(facts, scope: Scope, today, term, week) -> list:
     if scope.may(ROLL_ROLES):
         placed = sum(n for _, _, n in people["classes"])
         classes = sum(1 for _, _, n in people["classes"] if n)
-        before = people["placed_before"]
         out.append({
             "key": "students",
             "label": "Students",
             "icon": "i-people",
             "href": "/roll/",
             "value": f"{placed:,}",
-            "meta": f"In {plural(classes, 'class', 'classes')}",
-            "change": f"{signed(placed - before)} this term" if before is not None else None,
+            "third": _third(students_line(classes)),
         })
     # Fees collected is not a tile: it is the hero card above them (`fee_card()`),
     # shown on the same terms, to `FEE_READING_ROLES` alone.
@@ -401,64 +401,128 @@ def _signed_naira(kobo: int) -> str:
     return f"{'+' if kobo > 0 else MINUS}{short_naira(kobo)}"
 
 
+# -- the three stat tiles' third line --------------------------------------------------
+#
+# Each of Students, Present and To approve ends in a line of its own, drawn from
+# `_third()`: the words, a tone (`muted`, `warn`, `ok`) and, for a change, an
+# arrow. The meaning is in the words; the tone and the arrow only back them up.
+
+
+def _third(text: str, tone: str = "muted", icon: Optional[str] = None, date: str = "") -> dict:
+    """`date`, when given, is drawn after the text and never split across lines."""
+    return {"text": text, "tone": tone, "icon": icon, "date": date}
+
+
+def students_line(classes: int) -> str:
+    """"12 classes", "1 class": classes with at least one student this term."""
+    return plural(classes, "class", "classes")
+
+
+#: A change smaller than this many points is "Same as usual".
+SAME_BELOW = 0.5
+
+
+def attendance_change(rate: float, earlier: list) -> Optional[tuple]:
+    """How a day's attendance compares with the average of the earlier school
+    days that have a register, as `("up" | "down" | "same", points)`; `None`
+    when there is no earlier day to compare with.
+
+    `rate` and each of `earlier` are percentages, one per school day, so each
+    day counts once however many children were marked. Points are unrounded;
+    `present_line()` rounds them for the page, and a change under half a point
+    is "same" whatever its sign."""
+    if not earlier:
+        return None
+    points = rate - sum(earlier) / len(earlier)
+    if abs(points) < SAME_BELOW:
+        return "same", points
+    return ("up" if points > 0 else "down"), points
+
+
+def present_line(rate: float, earlier: list) -> dict:
+    """The third line under a day's attendance: "2.9 pts down" in amber with a
+    down arrow, "1.4 pts up" in green with an up arrow, "Same as usual" in
+    grey, and "First register this term" while there is nothing to compare."""
+    change = attendance_change(rate, earlier)
+    if change is None:
+        return _third("First register this term")
+    kind, points = change
+    if kind == "same":
+        return _third("Same as usual")
+    words = f"{figure(abs(points))} pts {kind}"
+    return _third(words, "warn", "i-down") if kind == "down" else _third(words, "ok", "i-up")
+
+
 def _attendance_tile(week, scope: Scope, today: date) -> dict:
     where = "" if week["school_wide"] else f" in {scope.label()}"
     shown = week["shown"]
     tile = {
         "key": "attendance",
         # "Present today" only for a day a register was taken today; else the
-        # day shown is named in the line under it ("Last school day: ...").
+        # day shown is named in the line under it ("Last register: ...").
         "label": "Present today" if shown == today else "Present",
         "icon": "i-register",
         "href": "/absences/" if week["school_wide"] else "/register/",
     }
     if shown is None:
-        meta = "No registers on a weekend" if week["weekend"] else f"No register taken yet{where}"
-        return {**tile, "value": "-", "meta": meta, "change": None}
+        # "0%" would say nobody came; no register says nothing happened yet.
+        return {**tile, "value": "Not taken", "word": True, "third": _third("No registers yet")}
     present, marked = week["present"], week["marked"]
     exact = present * 100 / marked
-    change = None
-    if week["before"][1]:
-        # The day shown against the seven days before it. No change is no line:
-        # "0 pts" reads as a figure, and "same as yesterday" would not be true of
-        # a week's average.
-        points = exact - week["before"][0] * 100 / week["before"][1]
-        if round(points, 1):
-            change = f"{signed(points)} pts"
-    meta = (
-        f"{present:,} of {marked:,} present{where}"
+    third = (
+        present_line(exact, week["earlier"])
         if shown == today
-        else f"Last school day: {short_day(shown)}"
+        else _third("Last register:", date=short_day(shown).replace(NBSP, " "))
     )
     return {
         **tile,
         "value": f"{figure(exact)}%",
         "exact": f"{present:,} of {marked:,} present{where}",
-        "meta": meta,
-        "change": change,
+        "third": third,
     }
 
 
-#: Which sheets wait on whom, and how the tile names them.
+def results_line(waiting: int) -> str:
+    """"3 classes waiting", "1 class waiting"; the figure is the tile's number,
+    so the line carries only the words."""
+    return "class waiting" if waiting == 1 else "classes waiting"
+
+
 def _results_tile(facts, scope: Scope) -> dict:
-    if scope.may(chain.APPROVING_ROLES):
-        state, label, meta = "checked", "To approve", "Results checked and waiting on you"
-    elif scope.may(chain.CHECKING_ROLES):
-        state, label, meta = "submitted", "To check", "Results submitted and waiting on you"
-    else:
-        state, label, meta = "checked", "To approve", "Results checked, with the principal"
+    """"To approve" (the principal), "To check" (the vice principal): the
+    classes whose results wait on this login, and the page that clears them,
+    the same as the "results waiting" row in Needs your attention. The
+    administrator's is the principal's count told as "with the principal", and
+    keeps its older lines: nothing waits on the administrator."""
     sheets = [s for s in facts["work"]["sheets"] if s[0] in scope.classes]
-    now = sum(1 for s in sheets if s[1] == state)
-    before = sum(1 for s in sheets if s[5] == state)
+    if scope.may(chain.APPROVING_ROLES):
+        state, label = "checked", "To approve"
+    elif scope.may(chain.CHECKING_ROLES):
+        state, label = "submitted", "To check"
+    else:
+        now = sum(1 for s in sheets if s[1] == "checked")
+        before = sum(1 for s in sheets if s[5] == "checked")
+        return {
+            "key": "results",
+            "label": "To approve",
+            "icon": "i-results",
+            "href": "/results/",
+            "value": str(now),
+            "unit": "class" if now == 1 else "classes",
+            "meta": "Results checked, with the principal",
+            "change": f"{signed(now - before)} this week",
+        }
+    waiting = sorted((s for s in sheets if s[1] == state), key=lambda s: s[2])
+    n = len(waiting)
     return {
         "key": "results",
         "label": label,
         "icon": "i-results",
-        "href": "/results/",
-        "value": str(now),
-        "unit": "class" if now == 1 else "classes",
-        "meta": meta,
-        "change": f"{signed(now - before)} this week",
+        # The row's own target: the one class when it is one, else the queue.
+        "href": f"/results/?class={waiting[0][0]}" if n == 1 else "/results/",
+        "value": str(n),
+        "needs_action": n > 0,
+        "third": _third(results_line(n)) if n else _third("All caught up", "ok"),
     }
 
 
