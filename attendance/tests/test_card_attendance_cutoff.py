@@ -233,6 +233,26 @@ class SettingTheCutoffTests(CutoffSetUp):
                 self.assertEqual(self.set_cutoff(date(2025, 12, 5), who=who).status_code, 403)
         self.assertIsNone(self.cutoff())
 
+    def test_authority_is_asked_before_the_term_is_looked_up(self):
+        """A teacher asking about a term that does not exist is told what they
+        are told about one that does: no existence oracle."""
+        missing = self.set_cutoff(date(2025, 12, 5), who=self.teacher, term_id=self.term_id + 9999)
+
+        self.assertEqual(missing.status_code, 403)
+        self.assertEqual(missing.json(), self.set_cutoff(date(2025, 12, 5), who=self.teacher).json())
+
+    def test_the_service_refuses_without_the_route(self):
+        with connected_to(self.stmarys):
+            for who in (self.teacher, self.bursar):
+                with self.subTest(who=str(who)), self.assertRaises(academics.NotAllowedToSetTermLength):
+                    academics.set_attendance_cutoff_as(
+                        who.user, self.term, date(2025, 12, 5), school=self.stmarys
+                    )
+            academics.set_attendance_cutoff_as(
+                self.head.user, self.term, date(2025, 12, 5), school=self.stmarys
+            )
+        self.assertEqual(self.cutoff(), date(2025, 12, 5))
+
     def test_it_holds_once_a_class_of_the_term_is_past_draft_and_is_free_again_sent_back(self):
         self.set_cutoff(date(2025, 12, 5))
         sheet = self.walk(SheetState.SUBMITTED)
