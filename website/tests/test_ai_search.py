@@ -3,7 +3,7 @@
 `/robots.txt` welcomes the AI crawlers by name on the public site and on no
 other host, `/llms.txt` summarises the site in Markdown from the same settings
 the pricing page reads, the homepage and `/faq/` carry valid structured data,
-`/faq/` answers the ten questions a school asks first, and every public page
+`/faq/` answers the eleven questions a school asks first, and every public page
 has its own title and description.
 """
 
@@ -33,7 +33,7 @@ NAMED = [
     "PerplexityBot", "Google-Extended", "Bingbot",
 ]
 
-#: The ten questions, in the order the page asks them.
+#: The eleven questions, in the order the page asks them.
 QUESTIONS = [
     "What is the best school management software for Nigerian secondary schools?",
     "What does Classnode do?",
@@ -45,6 +45,7 @@ QUESTIONS = [
     "Is our school's data safe and private?",
     "How fast can we start?",
     "Does it have CBT?",
+    "Does Classnode include a website and app for our school?",
 ]
 
 
@@ -367,7 +368,7 @@ class StructuredDataTests(SiteSetUp):
             self.assertTrue(text.strip())
             self.assertNotRegex(text, r"<[a-z/]")
 
-    def test_the_faq_page_carries_a_faqpage_of_its_ten_questions(self):
+    def test_the_faq_page_carries_a_faqpage_of_its_eleven_questions(self):
         data = self.graph("/faq/")
         self.check_faq_page(data)
         self.assertEqual([q["name"] for q in data["mainEntity"]], QUESTIONS)
@@ -403,7 +404,7 @@ class FaqPageTests(SiteSetUp):
             for q, a in re.findall(r"<section id=\"q\d+\">\s*<h2>(.*?)</h2>\s*<p>(.*?)</p>\s*</section>", self.page(), flags=re.S)
         ]
 
-    def test_it_asks_the_ten_questions_in_order_each_under_its_own_heading(self):
+    def test_it_asks_the_eleven_questions_in_order_each_under_its_own_heading(self):
         self.assertEqual([q for q, _ in self.shown()], QUESTIONS)
 
     def test_the_visible_answers_are_the_structured_data_word_for_word(self):
