@@ -1283,7 +1283,7 @@ describe("the fees card's two figures line up", () => {
         const found = await page.evaluate(() => {
           const tops = (sel) => [...document.querySelectorAll(`.hero-sub ${sel}`)].map((el) => Math.round(el.getBoundingClientRect().top));
           const subs = [...document.querySelectorAll(".hero-sub")].map((el) => Math.round(el.getBoundingClientRect().height));
-          return { values: tops(".hero-sub-value"), metas: tops(".hero-sub-meta"), subs };
+          return { values: tops(".hero-sub-value"), metas: tops(":is(.hero-sub-metas, .hero-sub > .hero-sub-meta)"), subs };
         });
         assert.equal(new Set(found.values).size, 1, `figures at ${found.values}`);
         assert.equal(new Set(found.metas).size, 1, `notes at ${found.metas}`);
