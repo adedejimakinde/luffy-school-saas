@@ -83,24 +83,25 @@ class WhatTheCardSaysTests(CardSetUp):
         self.assertEqual({f.expires_on for f in faces}, {last})
 
     def test_a_session_spanning_two_calendar_years_expires_in_the_second(self):
-        """2026/2027: first term Sep-Nov 2026, third term ends Jul 2027. Not 20 November 2026."""
+        """A session over two calendar years: first term Sep-Nov, third term ends Jul the next year, not the first term's November end.
+
+        (The dates are fixed and the session label is its own, so no other term in the school is touched.)
+        """
         with connected_to(self.stmarys):
-            Term.objects.all().delete()
             for name, a, b in (
-                (TermName.FIRST, date(2026, 9, 7), date(2026, 11, 20)),
-                (TermName.SECOND, date(2027, 1, 11), date(2027, 4, 2)),
-                (TermName.THIRD, date(2027, 4, 26), date(2027, 7, 23)),
+                (TermName.FIRST, date(2031, 9, 8), date(2031, 11, 21)),
+                (TermName.SECOND, date(2032, 1, 12), date(2032, 4, 2)),
+                (TermName.THIRD, date(2032, 4, 26), date(2032, 7, 23)),
             ):
-                Term.objects.create(session="2026/2027", name=name, starts_on=a, ends_on=b)
-            self.assertEqual(cards.session_ends_on("2026/2027"), date(2027, 7, 23))
-            self.assertEqual(f"{cards.session_ends_on('2026/2027'):%-d %B %Y}", "23 July 2027")
+                Term.objects.create(session="2031/2032", name=name, starts_on=a, ends_on=b)
+            self.assertEqual(cards.session_ends_on("2031/2032"), date(2032, 7, 23))
+            self.assertEqual(f"{cards.session_ends_on('2031/2032'):%-d %B %Y}", "23 July 2032")
 
     def test_a_session_with_only_its_first_term_has_no_known_end(self):
-        """The first term's end (20 November 2026) is not the session's; say nothing rather than that."""
+        """The first term's end (18 November 2033) is not the session's; say nothing rather than that."""
         with connected_to(self.stmarys):
-            Term.objects.all().delete()
-            Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 7), ends_on=date(2026, 11, 20))
-            self.assertIsNone(cards.session_ends_on("2026/2027"))
+            Term.objects.create(session="2033/2034", name=TermName.FIRST, starts_on=date(2033, 9, 5), ends_on=date(2033, 11, 18))
+            self.assertIsNone(cards.session_ends_on("2033/2034"))
 
     def test_the_emergency_line_is_the_schools_phone(self):
         html, _ = self.html()
