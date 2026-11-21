@@ -9,6 +9,7 @@ that the address opens the card's page.
 """
 
 import io
+from datetime import date
 import re
 
 import pikepdf
@@ -80,6 +81,26 @@ class WhatTheCardSaysTests(CardSetUp):
         with connected_to(self.stmarys):
             last = Term.objects.get(pk=self.terms[TermName.THIRD.value]).ends_on
         self.assertEqual({f.expires_on for f in faces}, {last})
+
+    def test_a_session_spanning_two_calendar_years_expires_in_the_second(self):
+        """2026/2027: first term Sep-Nov 2026, third term ends Jul 2027. Not 20 November 2026."""
+        with connected_to(self.stmarys):
+            Term.objects.all().delete()
+            for name, a, b in (
+                (TermName.FIRST, date(2026, 9, 7), date(2026, 11, 20)),
+                (TermName.SECOND, date(2027, 1, 11), date(2027, 4, 2)),
+                (TermName.THIRD, date(2027, 4, 26), date(2027, 7, 23)),
+            ):
+                Term.objects.create(session="2026/2027", name=name, starts_on=a, ends_on=b)
+            self.assertEqual(cards.session_ends_on("2026/2027"), date(2027, 7, 23))
+            self.assertEqual(f"{cards.session_ends_on('2026/2027'):%-d %B %Y}", "23 July 2027")
+
+    def test_a_session_with_only_its_first_term_has_no_known_end(self):
+        """The first term's end (20 November 2026) is not the session's; say nothing rather than that."""
+        with connected_to(self.stmarys):
+            Term.objects.all().delete()
+            Term.objects.create(session="2026/2027", name=TermName.FIRST, starts_on=date(2026, 9, 7), ends_on=date(2026, 11, 20))
+            self.assertIsNone(cards.session_ends_on("2026/2027"))
 
     def test_the_emergency_line_is_the_schools_phone(self):
         html, _ = self.html()

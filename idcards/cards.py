@@ -34,7 +34,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
-from academics.models import ClassPlacement, Term
+from academics.models import ClassPlacement, Term, TermName
 from accounts.models import LIVE_STATUSES, Membership, Role
 from schools.hosts import current_school_host
 
@@ -82,8 +82,13 @@ def students_of(school, class_group, term, only=None):
 
 
 def session_ends_on(session: str) -> Optional[date]:
-    """The last day of the session's last term, or None if it has no terms."""
-    return Term.objects.filter(session=session).aggregate(last=Max("ends_on"))["last"]
+    """The last day of the session's final (third) term, or None until that term is set up.
+
+    A session runs across three terms. While only the first or second exists, the
+    latest `ends_on` is the end of *that term*, not of the session, so it is not
+    used: a card must not expire months before the year it was printed for does.
+    """
+    return Term.objects.filter(session=session, name=TermName.THIRD).aggregate(last=Max("ends_on"))["last"]
 
 
 # -- the school ---------------------------------------------------------------------

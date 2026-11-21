@@ -85,6 +85,11 @@ def start(actor, school, class_group, term, student_ids=None) -> IdCardPrint:
     children = cards.students_of(school, class_group, term)
     if not children:
         raise NothingToPrint(f"{class_group} has no children placed for {term}, so there are no cards to print.")
+    if cards.session_ends_on(term.session) is None:
+        raise NothingToPrint(
+            f"The {term.session} session has no third term yet, so the date its cards expire is not known. "
+            "Add the third term on the Setup page, then print."
+        )
     on_roll = {c["id"] for c in children}
     wanted = sorted({int(i) for i in (student_ids or [])})
     stray = [i for i in wanted if i not in on_roll]

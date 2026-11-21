@@ -39,7 +39,9 @@ CR80, 85.6 x 54 mm. Nothing it prints is nearer than 3 mm to the edge.
 - **The colour** is one thin rule, the school's name and the initials, as on the
   report card: a solid band of ink streaks on a cheap printer.
 - **The expiry date** is the last day of the card's session: the end of the
-  session's last term (`cards.session_ends_on`). Printing for any term of a
+  session's third term (`cards.session_ends_on`). A session with no third term
+  yet has no known end, so nothing is printed until it is added (a first term's
+  end is not the session's). Printing for any term of a
   session gives the same date, and the date is brought up to the session's end
   as it stands whenever a card is printed again.
 

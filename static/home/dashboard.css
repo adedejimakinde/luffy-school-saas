@@ -235,6 +235,10 @@
 @supports (grid-template-rows: subgrid) {
   .hero-sub { grid-row: span 3; grid-template-rows: subgrid; gap: var(--s-half); }
 }
+/* The owing line and the "of which this term" line are one grid row holding two
+   block lines: as two children of the three-row subgrid the second fell into a
+   row that did not exist and was drawn over the first. */
+.hero-sub-metas { display: grid; gap: 2px; min-width: 0; }
 .hero-sub:hover { color: var(--text); background: var(--brand-tint); }
 .hero-sub:active { transform: scale(0.98); }
 .hero-sub-value { font-size: var(--t-5); font-weight: var(--heavy); line-height: 1.2; letter-spacing: -0.02em; white-space: nowrap; }

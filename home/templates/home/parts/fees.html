@@ -30,8 +30,10 @@ and what is expected, each a link to the fee book. On a desk the term's weeks ar
     <a class="hero-sub" href="/fees/" title="{{ dash.fees.outstanding_exact }}">
       <span class="eyebrow">Outstanding (all terms)</span>
       <span class="hero-sub-value fig">{{ dash.fees.outstanding }}</span>
-      <span class="hero-sub-meta">{{ dash.fees.owing_text }}</span>
-      <span class="hero-sub-meta fig">of which this term: {{ dash.fees.outstanding_this_term }}</span>
+      <span class="hero-sub-metas">
+        <span class="hero-sub-meta" data-line="owing">{{ dash.fees.owing_text }}</span>
+        <span class="hero-sub-meta fig" data-line="this-term">of which this term: {{ dash.fees.outstanding_this_term }}</span>
+      </span>
     </a>
     <a class="hero-sub" href="/fees/" title="{{ dash.fees.expected }}">
       <span class="eyebrow">Expected this term</span>
