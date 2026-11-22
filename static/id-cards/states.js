@@ -38,7 +38,7 @@ export function overview({
     term
       ? (term.expires_on
         ? `<p class="hint">Cards printed for ${esc(term.label)} are valid until ${esc(dayFirst(term.expires_on))}, the last day of the ${esc(term.session)} session&#39;s third term.</p>`
-        : `<p class="note" role="status">The ${esc(term.session)} session has no third term yet, so the date its cards expire is not known. Add the third term on the Setup page before printing.</p>`)
+        : '<p class="hint">Cards show the session only until the third term is set up.</p>')
       : '<p class="note" role="alert">No term has been set up yet. Terms are set on the Setup page.</p>',
     term && classes.length
       ? `<ul class="classes id-classes">${classes.map((c) => classRow(c, printing, notes)).join("")}</ul>`

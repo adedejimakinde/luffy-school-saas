@@ -51,8 +51,10 @@ class IdCard(models.Model):
     student_membership_id = models.PositiveBigIntegerField(db_index=True)
     #: The academic session it was printed for ("2025/2026").
     session = models.CharField(max_length=9)
-    #: The last day it is valid: the end of that session's last term.
-    expires_on = models.DateField()
+    #: The last day it is valid: the end of that session's third term. Empty while
+    #: the session has no third term yet: the card then says only its session, and is
+    #: brought up to the date when a print follows the term being set up.
+    expires_on = models.DateField(null=True, blank=True)
     issued_at = models.DateTimeField(auto_now_add=True)
     issued_by_id = models.PositiveBigIntegerField(null=True, blank=True)
     #: Set when a card is withdrawn (lost, or replaced). A withdrawn card reads

@@ -139,7 +139,9 @@ class Face:
     admission_number: str
     class_name: str
     session: str
-    expires_on: date
+    #: The last day of the session's third term, or None while there is none: the card then
+    #: says "Valid for the <session> session" and no date.
+    expires_on: Optional[date]
     #: The passport photo as a data URL, or None for the initials placeholder.
     photo: Optional[str]
     verify_url: str
@@ -190,7 +192,7 @@ def _photo_uri(membership_id: int) -> Optional[str]:
     return f"data:image/jpeg;base64,{base64.b64encode(jpeg).decode()}" if jpeg else None
 
 
-def issue(membership_id: int, session: str, expires_on: date, by_id: Optional[int]) -> IdCard:
+def issue(membership_id: int, session: str, expires_on: Optional[date], by_id: Optional[int]) -> IdCard:
     """This child's card for `session`: the one that exists, or a new one.
 
     Reused on every reprint, so the QR code on a reprinted card is the one on
@@ -222,7 +224,7 @@ def issue(membership_id: int, session: str, expires_on: date, by_id: Optional[in
     return card
 
 
-def face_for(child: dict, *, class_name: str, session: str, expires_on: date, by_id: Optional[int]) -> Face:
+def face_for(child: dict, *, class_name: str, session: str, expires_on: Optional[date], by_id: Optional[int]) -> Face:
     card = issue(child["id"], session, expires_on, by_id)
     url = verify_url_for(card.token)
     return Face(
@@ -272,7 +274,12 @@ def verification(token: str, school, today: Optional[date] = None) -> Optional[V
     if row is None:
         return None
     name = row["display_name"] or row["user__full_name"] or ""
-    valid = card.revoked_at is None and today <= card.expires_on and row["status"] in LIVE_STATUSES
+    # The card's own date, else the session's end as it stands now: a card printed in first
+    # term has no date, and is valid for the session until the third term says when it ends.
+    # With no third term there is no end to have passed, so only withdrawal or leaving the roll ends it.
+    ends_on = card.expires_on or session_ends_on(card.session)
+    in_date = ends_on is None or today <= ends_on
+    valid = card.revoked_at is None and in_date and row["status"] in LIVE_STATUSES
     if not valid:
         return Verification(valid=False, name=name)
     return Verification(

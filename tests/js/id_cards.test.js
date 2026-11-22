@@ -86,8 +86,9 @@ test("the page says the expiry is the last day of the third term, and says so wh
   assert.match(known, /last day of the 2026\/2027 session&#39;s third term/);
   assert.doesNotMatch(known, /the end of the 2026\/2027 session/);
   const none = states.overview({ ...OVERVIEW, term: { ...TERM, expires_on: null }, printing: null, notes: {} });
-  assert.match(none, /no third term yet/);
+  assert.match(none, /Cards show the session only until the third term is set up\./);
   assert.doesNotMatch(none, /valid until/);
+  assert.doesNotMatch(none, /role="status"/);
 });
 
 test("the page names the expiry, lists each class, and offers Print only where there are children", () => {

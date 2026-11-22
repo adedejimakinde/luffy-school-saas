@@ -93,7 +93,7 @@ Hausa letters and DejaVu Sans for anything else, as the report card has.
       <div class="row"><span class="k">Class</span><span class="v">{{ face.class_name }}</span></div>
       <div class="row"><span class="k">Session</span><span class="v">{{ face.session }}</span></div>
     </div>
-    <div class="abs valid">Valid until <b>{{ face.expires_on|date:"j F Y" }}</b></div>
+    <div class="abs valid">{% if face.expires_on %}Valid until <b>{{ face.expires_on|date:"j F Y" }}</b>{% else %}Valid for the <b>{{ face.session }}</b> session{% endif %}</div>
     {% else %}
     <div class="bar" style="top:0"></div>
     <div class="abs name-line">{{ school.name }}</div>
@@ -105,7 +105,7 @@ Hausa letters and DejaVu Sans for anything else, as the report card has.
       <div class="phone">{{ school.phone }}</div>
       {% else %}<div class="emergency">In an emergency, contact the school office.</div>
       <div class="phone"></div>{% endif %}
-      <div class="own">This card belongs to {{ school.name }} and must be returned on request. Valid until {{ face.expires_on|date:"j F Y" }}.</div>
+      <div class="own">This card belongs to {{ school.name }} and must be returned on request. {% if face.expires_on %}Valid until {{ face.expires_on|date:"j F Y" }}.{% else %}Valid for the {{ face.session }} session.{% endif %}</div>
     </div>
     {% endif %}
   </div>{% endwith %}
