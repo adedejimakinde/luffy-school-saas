@@ -136,6 +136,24 @@ class TheParentDomainIsNamedOnceTests(SimpleTestCase):
                 self.assertNotIn(domain, (BASE_DIR / name).read_text())
 
 
+class DeployPullTests(SimpleTestCase):
+    """deploy.sh pulls every image, with retries, before it changes anything;
+    deploy.yml's token can list tests.yml's runs."""
+
+    def test_pull_retries_and_comes_before_anything_is_started(self):
+        deploy = (BASE_DIR / "deploy/deploy.sh").read_text()
+        self.assertIn("for delay in 10 30 0; do", deploy)
+        self.assertIn("\n  if docker compose pull; then", deploy)
+        pull = deploy.index("docker compose pull")
+        for later in ("up -d", "migrate_schemas", "run --rm"):
+            self.assertLess(pull, deploy.index(later), later)
+
+    def test_the_deploy_workflow_can_read_actions_runs(self):
+        workflow = (BASE_DIR / ".github/workflows/deploy.yml").read_text()
+        self.assertIn("permissions:\n  contents: read\n  checks: read\n", workflow)
+        self.assertRegex(workflow, r"\n  actions: read\n")
+
+
 class UploadedFilesTests(SimpleTestCase):
     """The upload service on the server (`files`, docs/school-sites.md §9.1)."""
 

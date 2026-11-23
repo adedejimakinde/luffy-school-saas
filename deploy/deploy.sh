@@ -59,7 +59,24 @@ else
   echo "No GHCR login (/root/ghcr-login is missing or unreadable): pulling anonymously, which only works for public images. docs/first-day.md, step 12." >&2
 fi
 
-docker compose pull web worker media caddy db
+# Everything is pulled (plain `pull`: every image the stack uses, redis
+# included) before anything is started, migrated or restarted. Each attempt
+# retries: 3 in all, waiting 10s, then 30s. If all fail, nothing has changed.
+pull_ok=0
+for delay in 10 30 0; do
+  if docker compose pull; then
+    pull_ok=1
+    break
+  fi
+  if [ "$delay" != 0 ]; then
+    echo "docker compose pull failed; trying again in ${delay}s" >&2
+    sleep "$delay"
+  fi
+done
+if [ "$pull_ok" != 1 ]; then
+  echo "Could not pull the images for $SHA after 3 attempts; nothing was changed." >&2
+  exit 1
+fi
 docker compose up -d db redis
 docker compose run --rm --no-deps web python manage.py migrate_schemas --noinput
 # The uploaded files' directory (FILES_ROOT), given to the app's user. Docker
