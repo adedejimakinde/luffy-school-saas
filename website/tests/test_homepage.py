@@ -396,12 +396,12 @@ class TheHeaderTests(SiteSetUp):
 
 
 class TheFooterTests(SiteSetUp):
-    """The footer: short and calm. The logo and one line, two groups of links, one bottom line."""
+    """The footer: short and calm. The logo and one line, three groups of links, one bottom line."""
 
     def footer(self, path="/"):
         return self.get(path).content.decode().split('<footer class="site-foot', 1)[1].split("</footer>", 1)[0]
 
-    def test_two_groups_hold_the_given_links_in_order(self):
+    def test_three_groups_hold_the_given_links_in_order(self):
         columns = re.findall(r'<div class="foot-col[^"]*">(.*?)</div>', self.footer(), flags=re.S)
         found = [
             (words(re.search(r"<h2[^>]*>(.*?)</h2>", column, flags=re.S).group(1)),
@@ -412,6 +412,14 @@ class TheFooterTests(SiteSetUp):
         self.assertEqual(found, [
             ("Product", [("/#features", "Features"), ("/pricing/", "Pricing"), ("/blog/", "Blog"),
                          ("/about/", "About and security"), ("/#demo", "Book a demo")]),
+            # Every solution page (`website.landing`), so every page links to all eight.
+            ("Solutions", [("/result-computation-software/", "Result computation"),
+                           ("/cbt-software-for-schools/", "CBT software"),
+                           ("/school-result-checker/", "Result checker"),
+                           ("/school-fees-management-software/", "School fees"),
+                           ("/school-website-design/", "School website"), ("/pricing/", "Pricing"),
+                           ("/school-management-software-lagos/", "Schools in Lagos"),
+                           ("/excel-vs-school-software/", "Excel vs software")]),
             ("Sign in", [(f"//{PORTAL}/staff-sign-in/", "Staff sign in"),
                          (f"//{PORTAL}/sign-in/", "Parent sign in")]),
         ])
