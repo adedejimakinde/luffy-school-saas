@@ -141,8 +141,8 @@ class TheWordsTests(SchoolSetUp):
     def test_no_coming_soon_and_nothing_that_is_not_built(self):
         for path in PATHS.values():
             with self.subTest(path=path):
-                text = self.text(path).lower()
-                for phrase in ("coming soon", "not yet", "custom domain", "own domain", "news post",
+                text = self.text(path).replace(landing.ADD_ONS, "").lower()
+                for phrase in ("coming soon", "not yet", "custom domain", "own domain", "school email", "news post",
                                "admissions form", "id card", "forgot password", "premium", "testimonial"):
                     self.assertNotIn(phrase, text)
 
@@ -166,11 +166,27 @@ class TheWordsTests(SchoolSetUp):
 
     def test_the_lagos_page_is_about_lagos(self):
         text = self.text("/school-management-software-lagos/")
-        for phrase in ("Lagos, Nigeria", "In-person setup", "Training in your staff room", "Local support",
-                       "a visit"):
+        for phrase in ("Lagos, Nigeria", "set up within 48 hours of receiving your student list",
+                       "Staff trained in person at your school", "WhatsApp and email, Monday to Friday",
+                       "+234 903 026 9294", "hello@classnode.co"):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, text)
         self.assertGreaterEqual(text.count("Lagos"), 12)
+
+    def test_the_lagos_page_promises_no_visit_and_no_local_support(self):
+        text = self.text("/school-management-software-lagos/").lower()
+        for phrase in ("visit", "local support", "face to face", "call us"):
+            with self.subTest(phrase=phrase):
+                self.assertNotIn(phrase, text)
+
+    def test_the_add_ons_line_is_on_the_pricing_page_alone(self):
+        for path in PATHS.values():
+            with self.subTest(path=path):
+                self.assertEqual(self.text(path).count(landing.ADD_ONS), 1 if path == "/pricing/" else 0)
+        pricing = self.text("/pricing/")
+        self.assertIn("Staff and parent logins are not charged.", pricing)
+        self.assertIn("CBT, the result checker and your school website, on your school's classnode.co "
+                      "address, are included at no extra cost.", pricing)
 
     def test_the_excel_page_says_what_excel_does_well_and_where_it_breaks(self):
         page = self.get("/excel-vs-school-software/").content.decode()

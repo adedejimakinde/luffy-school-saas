@@ -179,10 +179,18 @@ class Landing:
 
 
 def fill(text):
-    """`{figure}`, `{price}`, `{email}` and `{location}` in `text`, from today's settings."""
+    """`{figure}`, `{price}`, `{email}`, `{location}` and `{phone}` (the support phone,
+    `SITE_PHONE`) in `text`, from today's settings."""
     details = contact()
     return text.format(figure=price.figure(), price=price.sentence(), email=details["email"],
-                       location=details["location"])
+                       location=details["location"], phone=details["phone"])
+
+
+#: The one line on the public site that names custom domains and school email:
+#: optional paid add-ons, outside the price, on the pricing page alone (the
+#: owner's words, 23 November 2026). Neither is a feature (`website.features`),
+#: and no other page offers either; `website/tests/test_landing.py` holds it.
+ADD_ONS = "Custom domains and school email are offered as optional paid add-ons."
 
 
 LANDINGS = (
@@ -485,17 +493,17 @@ LANDINGS = (
         title="School management software price in Nigeria | Classnode",
         description="School management software price in Nigeria, from Classnode. {price}",
         h1="School management software price in Nigeria, in one line",
-        lead="The first term is free, then {figure} per student, per term. No setup fee, and everything "
-             "below is in the price.",
+        lead="The first term is free, then {figure} per student, per term. No setup fee, and every "
+             "feature below is in the price.",
         pricing=True,
         nav="pricing",
         sections=(
             Section(
                 "How the price works",
                 body=(
-                    "Your school pays for the students on its roll each term, and nothing else. There is no "
-                    "setup fee, no charge per teacher or per login, and no separate price for CBT, the "
-                    "result checker or your school website.",
+                    "Your school pays for the students on its roll each term. There is no setup fee, and "
+                    "staff and parent logins are not charged. CBT, the result checker and your school "
+                    "website, on your school's classnode.co address, are included at no extra cost.",
                 ),
                 points=(
                     "<b>First term free.</b> Your school's first term on Classnode costs nothing, with every "
@@ -504,6 +512,7 @@ LANDINGS = (
                     "<b>No setup fee.</b> We add your classes, students and staff from your lists and walk "
                     "your team through it, at no charge.",
                 ),
+                after=(ADD_ONS,),
             ),
             Section(
                 "What a proprietor is paying for",
@@ -525,8 +534,9 @@ LANDINGS = (
                     "registers, bill the fees and release results. If it does not work for your school, "
                     "you have paid nothing, and your records are not trapped: the broadsheet downloads in "
                     "Excel and every report card as a PDF.",
-                    'Schools in Lagos can ask for <a href="/school-management-software-lagos/">setup and '
-                    "training in person</a>. Elsewhere, we set up with you by phone, WhatsApp and email.",
+                    'Schools in Lagos can have their <a href="/school-management-software-lagos/">staff '
+                    "trained in person at the school</a>. Support for every school is by WhatsApp and email, "
+                    "Monday to Friday.",
                 ),
             ),
         ),
@@ -538,8 +548,8 @@ LANDINGS = (
             ("Do we pay for teachers and parents too?",
              "No. The price is per student on your roll. Staff and parent logins are not charged."),
             ("Are CBT and the school website extra?",
-             "No. CBT, the result checker, fees, registers, report cards and your school website are all "
-             "in the same price."),
+             "No. CBT, the result checker, fees, registers, report cards and your school website on your "
+             "school's classnode.co address are all in the same price, at no extra cost."),
             ("What happens after the free first term?",
              "From your second term, your school pays {figure} per student, per term. Your broadsheets "
              "download in Excel and your report cards as PDFs at any time."),
@@ -742,42 +752,41 @@ LANDINGS = (
         path="/school-management-software-lagos/",
         keyword="school management software in Lagos",
         title="School management software in Lagos | Classnode",
-        description="School management software in Lagos from a Lagos team: setup and staff training at "
-                    "your school, and support by phone and WhatsApp. Classnode.",
+        description="School management software in Lagos: set up within 48 hours of your student list, "
+                    "and staff trained in person at your school. Classnode.",
         h1="School management software in Lagos, from a team in Lagos",
-        lead="Classnode is based in {location}. For a Lagos school, that means we can come to you: to set "
-             "up, to train your staff in the staff room, and to sort things out face to face.",
+        lead="Classnode is based in {location}. For a Lagos school, we set up within 48 hours of "
+             "receiving your student list, then train your staff in person, at your school.",
         sections=(
             Section(
                 "Based in Lagos, Nigeria",
                 body=(
-                    "Classnode Edtech Limited is based in {location}. For a school in Lagos, that means "
-                    "Classnode is set up by people who can visit, in the same city and the same traffic as "
-                    "you, and who can be at your gate when something needs looking at in person.",
-                    "We work with secondary schools across Nigeria, and Lagos schools get one thing the "
-                    "others cannot: a visit.",
+                    "Classnode Edtech Limited is based in {location}. We work with secondary schools across "
+                    "Nigeria, and for a school in Lagos that means one thing the others cannot have: staff "
+                    "trained in person at your school, by people from the same city.",
+                    "A Lagos proprietor does not have to wait for a term to be over to move. Send the student "
+                    "list in the holiday, and the school is ready before resumption.",
                 ),
             ),
             Section(
-                "In-person setup at your school",
+                "Set up within 48 hours of your student list",
                 body=(
-                    "Setup starts with your lists. Send us your class lists and fee items, as an Excel or "
-                    "CSV file if you have one, and we add your classes, students and staff. For a "
-                    "Lagos school we can then come to the school to finish it with you: the session and "
-                    "term, your papers and grading scale, your report card, and your fee items for the "
-                    "bursar.",
-                    "We arrange the visit around your school day, so setup does not take teachers out of "
-                    "lessons. Many schools choose the days before resumption, when staff are already in for "
-                    "meetings and the timetable is being drawn up.",
+                    "Setup starts with your lists. Send us your student list, with your class lists and fee "
+                    "items, as an Excel or CSV file if you have one. Your school is set up within 48 hours "
+                    "of receiving your student list: your classes, students and staff added, and ready for "
+                    "the session and term.",
+                    "In those 48 hours we also set the things a school needs on its first day: your papers "
+                    "for the term and what each is out of, your grading scale, your report card, and your fee "
+                    "items for the bursar. You check it before anyone is trained on it.",
                     "There is no setup fee, in Lagos or anywhere else.",
                 ),
             ),
             Section(
-                "Training in your staff room",
+                "Staff trained in person at your school",
                 body=(
                     "Software only helps if the staff use it, and staff learn fastest from a person standing "
-                    "beside them. In a Lagos school we train in person, in small groups, on the phones your "
-                    "teachers already carry:",
+                    "beside them. In a Lagos school we train in person, at your school, in small groups, on "
+                    "the phones your teachers already carry:",
                 ),
                 points=(
                     "class teachers on taking the register, and subject teachers on entering CA and exam "
@@ -787,7 +796,8 @@ LANDINGS = (
                     "the office on admitting students and printing result PIN slips.",
                 ),
                 after=(
-                    "Teachers who miss the session can follow the same steps on their phones afterwards, "
+                    "Training is planned around your school day, so it does not take teachers out of their "
+                    "lessons. Teachers who miss it can follow the same steps on their phones afterwards, "
                     "because every screen they use is the one they were shown.",
                 ),
                 shot="register",
@@ -805,10 +815,11 @@ LANDINGS = (
                 ),
             ),
             Section(
-                "Local support by phone, WhatsApp and email",
+                "Support by WhatsApp and email, Monday to Friday",
                 body=(
-                    "When something does not look right, call or message us on WhatsApp and speak to the "
-                    "team in Lagos, or write to {email}. If it needs a visit, we can come.",
+                    "When something does not look right, message us on WhatsApp at {phone} or write to "
+                    "{email}. Support is by WhatsApp and email, Monday to Friday, and it is the same for "
+                    "every school, in Lagos and outside it.",
                     'Everything is in one <a href="/pricing/">price</a>: the first term free, then {figure} '
                     "per student, per term, with no setup fee. Lagos schools often start with "
                     '<a href="/result-computation-software/">results</a> and '
@@ -820,18 +831,18 @@ LANDINGS = (
         faq=(
             ("Where is Classnode based?",
              "In Lagos, Nigeria. Classnode Edtech Limited works with secondary schools across Nigeria."),
-            ("Do you set up in person in Lagos?",
-             "Yes. For a school in Lagos we can come to the school to finish setup with you and train your "
-             "staff. There is no setup fee."),
+            ("How fast can a Lagos school be set up?",
+             "Within 48 hours of receiving your student list. Send it with your class lists and fee items, "
+             "as an Excel or CSV file if you have one. There is no setup fee."),
             ("Can you train our teachers at the school?",
-             "Yes. In Lagos we train staff in person, in small groups, on the phones they already use: "
-             "registers, scores, approvals, fees and PIN slips."),
+             "Yes. In Lagos, staff are trained in person at your school, in small groups, on the phones they "
+             "already use: registers, scores, approvals, fees and PIN slips."),
             ("How do we get support?",
-             "Call or message us on WhatsApp, or email hello@classnode.co. For a Lagos school, we can visit "
-             "if it needs one."),
+             "By WhatsApp and email, Monday to Friday. Message us on WhatsApp at {phone} or email "
+             "hello@classnode.co."),
             ("Does it work outside Lagos?",
-             "Yes. Classnode works for secondary schools across Nigeria. Outside Lagos we set up and train "
-             "by phone, WhatsApp and email."),
+             "Yes. Classnode works for secondary schools across Nigeria, with the same support by WhatsApp "
+             "and email, Monday to Friday."),
         ),
         related=("site-pricing", "site-result-computation", "site-fees"),
     ),
