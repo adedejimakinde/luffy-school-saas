@@ -18,6 +18,7 @@ from pathlib import Path
 
 from schoolsite.models import CUSTOM_PAGE_SLOTS
 from website import features
+from website.landing import ADD_ONS
 from website.tests.test_homepage import SiteSetUp, visible_text
 from website.views import FAQ, faq_page, pages
 
@@ -123,9 +124,11 @@ class NothingLiveIsCalledComingSoonTests(SiteSetUp):
             self.assertIn("website", answers[question])
 
     def test_the_school_website_is_not_sold_as_a_domain_name(self):
+        """The website is the school's classnode.co address. A custom domain is
+        named once, on the pricing page, as an optional paid add-on (`website.landing.ADD_ONS`)."""
         for path in ("/", "/pricing/", "/faq/", "/llms.txt"):
             with self.subTest(path=path):
-                text = self.get(path).content.decode().lower()
+                text = self.get(path).content.decode().replace(ADD_ONS, "").lower()
                 self.assertNotRegex(text, r"your own domain|custom domain|own domain name|\.com\.ng|\.sch\.ng")
 
 

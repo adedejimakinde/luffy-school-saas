@@ -706,6 +706,30 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 .demo-form button { width: 100%; min-height: 48px; margin-top: 8px; border-radius: 8px; }
 .bait { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 
+/* ---------------------------------------------------------------- solutions */
+
+/* The homepage's eight links to the solution pages, as small cards. */
+.solution-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+@media (min-width: 640px) { .solution-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; } }
+@media (min-width: 1024px) { .solution-list { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.solution-list a {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  height: 100%;
+  min-height: 44px;
+  padding: 16px 20px;
+  color: var(--text);
+  text-decoration: none;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+}
+.solution-list a:hover { border-color: var(--brand); }
+.solution-list b { color: var(--brand); font-size: var(--copy-lg); }
+.solution-list span { color: var(--muted); font-size: var(--copy-note); line-height: 1.5; }
+
 /* ---------------------------------------------------------------- faq */
 
 /* The headline at the left of the questions on a desk, and over them on a phone. */
@@ -828,6 +852,12 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   .foot-col a, .foot-small a { min-height: 32px; }
   .foot-bottom { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 16px; }
   .foot-legal { margin: 0; }
+}
+/* Three groups on a desk share the room beside the logo in even columns, and
+   each group's links wrap inside its own column. */
+@media (min-width: 900px) {
+  .foot-top { grid-template-columns: minmax(200px, 1fr) minmax(0, 3fr); }
+  .foot-links { grid-auto-columns: minmax(0, 1fr); }
 }
 
 /* The title sits in the top band, under the header. */
@@ -971,3 +1001,63 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 /* The figure a total counts with (the report sheet). */
 @property --n { syntax: "<integer>"; inherits: false; initial-value: 0; }
 .mini-phone.float-card { display: block; }
+
+/* ---------------------------------------------------------------- solution pages */
+
+/*
+ * A solution page (`website/landing.html`): the homepage's top band and hero
+ * type with words and buttons only, then rows of words beside a screen on
+ * alternating grounds (the benefit rows' rhythm), the questions, a short list
+ * of pages to read next, and the final band. Every screen is below the first
+ * screen and lazy.
+ */
+.land-hero { padding-bottom: 48px; }
+.land-hero h1 { max-width: 22ch; font-size: clamp(1.875rem, 1.3rem + 2.6vw, 3rem); }
+.land-hero .hero-lead { max-width: 40em; }
+.land-hero .hero-note a { color: var(--brand); }
+.land-price { padding-bottom: 24px; }
+.land-row { padding: 56px 0; }
+@media (min-width: 900px) { .land-row { padding: 80px 0; } }
+.land { display: grid; gap: 32px; align-items: center; }
+.land-text { min-width: 0; }
+.land:not(.land-pair) .land-text { max-width: 760px; }
+@media (min-width: 900px) {
+  .land-pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 64px; }
+  .land-flip .land-text { order: 2; }
+}
+.land-text h2 { margin-bottom: 20px; font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.125rem); }
+.land-text p, .land-points li { margin: 0 0 16px; color: var(--muted); font-size: var(--copy-lg); line-height: 1.6; max-width: 38em; }
+.land-text p:last-child { margin-bottom: 0; }
+.land-text a { color: var(--brand); }
+.land-points { display: grid; gap: 4px; margin: 0 0 16px; padding: 0; list-style: none; }
+.land-points li { display: flex; gap: 12px; align-items: flex-start; margin: 0; }
+.land-points .icon { flex: none; margin-top: 4px; color: var(--brand); }
+.land-points b { color: var(--text); }
+.land-shot { position: relative; min-width: 0; margin: 0; }
+/* The homepage's phone rules turn every browser frame into a phone; a solution
+   page's desk screens stay desk screens at every width. */
+.land-shot .browser { width: 100%; height: auto; padding: 0; border-radius: 12px; overflow: hidden; background: var(--card); box-shadow: var(--shadow-frame); }
+.land-shot .browser img { display: block; width: 100%; height: auto; aspect-ratio: auto; border-radius: 0; }
+.land-shot-phone { justify-self: center; width: min(240px, 72%); }
+@media (min-width: 900px) { .land-shot-phone { width: 260px; } }
+.land-shot-phone .phone-frame { width: 100%; height: auto; }
+.land-shot-phone .phone-frame img { display: block; width: 100%; height: auto; }
+/* The comparison fits the column at every width, down to a 320px phone: its
+   cells wrap rather than scroll. */
+.land-table { margin-top: 24px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.land-table table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; table-layout: fixed; overflow-wrap: anywhere; }
+.land-table th, .land-table td { padding: 10px 8px; text-align: left; vertical-align: top; border-top: 1px solid var(--divider); }
+@media (min-width: 640px) { .land-table th, .land-table td { padding: 12px 16px; } }
+.land-table thead th { border-top: 0; color: var(--text); background: var(--brand-wash); }
+.land-table tbody th { color: var(--text); font-weight: 700; }
+.land-table td { color: var(--muted); }
+.land-related { padding: 48px 0; }
+.land-related h2 { margin-bottom: 16px; font-size: clamp(1.375rem, 1.1rem + 1vw, 1.75rem); }
+.land-related ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.land-related a { display: inline-flex; align-items: center; min-height: 44px; color: var(--brand); font-size: var(--copy-lg); font-weight: 700; }
+.cta-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 0 0 24px; }
+.cta .cta-actions { margin-bottom: 24px; }
+.cta .cta-mail { margin: 0; font-size: var(--copy-note); }
+.cta .cta-mail a { color: var(--card); }
+.btn-on-blue { color: var(--card); background: transparent; border: 1.5px solid var(--card); }
+.btn-on-blue:hover { color: var(--brand); background: var(--card); }

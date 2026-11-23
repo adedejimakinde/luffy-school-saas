@@ -140,6 +140,14 @@ export const SCREENS = [
   { name: "about", as: null, url: `${SITE}/about/`, widths: SITE_WIDTHS, site: true },
   { name: "privacy", as: null, url: `${SITE}/privacy/`, widths: SITE_WIDTHS, site: true },
   { name: "terms", as: null, url: `${SITE}/terms/`, widths: SITE_WIDTHS, site: true },
+  // The solution pages (`website.landing`), one template: each at a small
+  // Android, a common iPhone and a desk (320, 390 and 1280, with the defaults).
+  // The pricing page above is one of them.
+  ...[
+    "result-computation-software", "cbt-software-for-schools", "school-result-checker",
+    "school-fees-management-software", "school-website-design", "school-management-software-lagos",
+    "excel-vs-school-software",
+  ].map((slug) => ({ name: `solution-${slug}`, as: null, url: `${SITE}/${slug}/`, widths: [320, 390], site: true })),
 
   // The doors, and what a family with no account uses.
   { name: "sign-in", as: null, url: `${PORTAL}/sign-in/` },
@@ -580,10 +588,12 @@ function measureSite({ width }) {
     // The footer on a phone: short, all of it on the left, small type, and every
     // link a thumb tall by its height. It was about 330px; the About link and
     // the contacts (support phone, LinkedIn) each add a wrapped 44px row on a
-    // phone. The caps are the smallest that pass: 436.1px measured from 320 to
-    // 390 wide, 415.1px at 414 (rounded up); lower them if a row is removed.
+    // phone, and the Solutions group (the eight solution pages, `website.landing`)
+    // adds its label and four or five rows. The caps are the smallest that pass:
+    // about 641px at 320, 597px from 360 to 390 and 576px at 414 wide, with a
+    // pixel spare; lower them if a row is removed.
     const foot = document.querySelector(".site-foot");
-    const limit = width < 400 ? 437 : 416;
+    const limit = width < 360 ? 642 : width < 400 ? 598 : 577;
     if (box(foot).height > limit) problems.push(`the footer is ${Math.round(box(foot).height)}px tall, over ${limit}`);
     for (const el of foot.querySelectorAll("*")) {
       if (["right", "end", "center"].includes(getComputedStyle(el).textAlign)) {
@@ -1936,7 +1946,7 @@ describe("the footer's separators", () => {
   // every dot lands, which items start a line, and that nothing is drawn after
   // an item.
   for (const width of [320, 390, 1280]) {
-    for (const path of ["/", "/about/"]) {
+    for (const path of ["/", "/about/", "/school-management-software-lagos/"]) {
       test(`no line of the footer begins or ends with a separator at ${width}px (${path})`, async () => {
         const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
         const page = await context.newPage();
@@ -1993,7 +2003,7 @@ describe("the footer's separators", () => {
           }
           mkdirSync(join(OUT, String(width)), { recursive: true });
           await page.locator(".site-foot").screenshot({
-            path: join(OUT, String(width), `footer-separators${path === "/" ? "" : "-about"}.png`),
+            path: join(OUT, String(width), `footer-separators${path === "/" ? "" : path.replaceAll("/", "-").replace(/-$/, "")}.png`),
           });
         } finally {
           await context.close();

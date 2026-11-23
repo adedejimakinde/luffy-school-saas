@@ -414,7 +414,23 @@ marks, which are what the section is for.
 </section>
 
 {% comment %}
-5. FAQ
+5. Solutions: one card for each solution page (`website.landing.SOLUTIONS`),
+the same eight the footer's Solutions group links.
+{% endcomment %}
+<section id="solutions" class="section solutions" aria-labelledby="solutions-title">
+  <div class="wrap">
+    <div class="section-head section-head-start reveal">
+      <h2 id="solutions-title">A closer look at each part of the school.</h2>
+    </div>
+    <ul class="solution-list stagger">
+      {% for href, label, line in solution_cards %}<li class="reveal"><a href="{{ href }}"><b>{{ label }}</b><span>{{ line }}</span></a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</section>
+
+{% comment %}
+6. FAQ
 {% endcomment %}
 <section id="faq" class="section faq tint" aria-labelledby="faq-title">
   <div class="wrap faq-inner">
@@ -434,7 +450,7 @@ marks, which are what the section is for.
 </section>
 
 {% comment %}
-6. Final call to action
+7. Final call to action
 {% endcomment %}
 <section class="cta" aria-labelledby="cta-title">
   <svg class="nodes nodes-cta nodes-left" viewBox="0 0 640 560" aria-hidden="true" focusable="false"><use href="#cta-net"/></svg>

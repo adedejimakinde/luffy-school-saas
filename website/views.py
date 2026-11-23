@@ -1,6 +1,7 @@
 """Classnode's public site, on `settings.SITE_HOST` only: the homepage, the
-pricing page, the questions and answers, the privacy notice, the terms and the
-sitemap (`website.llms` answers `/llms.txt`).
+solution pages (the pricing page among them, `website.landing`), the questions
+and answers, the privacy notice, the terms and the sitemap (`website.llms`
+answers `/llms.txt`).
 
 All server-drawn, like a school's own page (`schools.views.school_site`): the
 one inline script moves the homepage's slider, counts its figures up and closes
@@ -31,6 +32,7 @@ from schools.hosts import portal_host
 
 from .contact import contact
 from .crawlers import NOINDEX, site_url
+from . import landing as solutions
 from . import price
 from .features import FEATURES, feature, groups
 from .forms import DemoRequestForm
@@ -43,15 +45,13 @@ from .notify import demo_requested
 #: `pages()` so the price is the setting's and nowhere else. Every title is the
 #: page's own, starts or ends with the name, and is 60 characters or fewer, so a
 #: search result shows all of it; every description is under 155. A page added
-#: to `urls_site.py` is added here too, or its tests say so.
+#: to `urls_site.py` is added here too, or its tests say so. The solution pages'
+#: (`website.landing`, the pricing page among them) are written there, each with
+#: its main search phrase first, and listed after these.
 _PAGES = {
     "site-home": (
         "Classnode: School software for Nigerian schools",
         "Results, report cards, fees and registers for Nigerian secondary schools. {price}",
-    ),
-    "site-pricing": (
-        "Classnode pricing: first term free, then {figure}",
-        "Everything Classnode includes for every school. {price}",
     ),
     "site-faq": (
         "Classnode FAQ: Nigerian school software questions",
@@ -78,6 +78,7 @@ _PAGES = {
         "Notes for principals, bursars and teachers on running a secondary school in Nigeria: "
         "results, fees, registers and the term in between.",
     ),
+    **solutions.pages(),
 }
 
 
@@ -196,6 +197,7 @@ def site_page(request, template, context=None, status=200):
     is read last.
     """
     title, description = pages().get(request.resolver_match.url_name, ("", ""))
+    links = [(reverse(name, urlconf=settings.SITE_URLCONF), label) for name, label, _ in solutions.SOLUTIONS]
     return render(
         request,
         template,
@@ -210,6 +212,7 @@ def site_page(request, template, context=None, status=200):
             "contact_email": price.CONTACT_EMAIL,
             "contact": contact(),
             "registered_address": settings.SITE_REGISTERED_ADDRESS,
+            "solutions": links,
             **(context or {}),
         },
         status=status,
@@ -429,6 +432,10 @@ def homepage(request):
             "sent": request.method == "GET" and request.GET.get("sent") == "1",
             "faq": [(question, mark_safe(answer)) for question, answer in FAQ],
             "features": FEATURES,
+            "solution_cards": [
+                (reverse(name, urlconf=settings.SITE_URLCONF), label, solutions.fill(line))
+                for name, label, line in solutions.SOLUTIONS
+            ],
             "structured_data": structured_data(),
         },
         status=status,
@@ -436,9 +443,33 @@ def homepage(request):
 
 
 @require_http_methods(["GET", "HEAD"])
-def pricing(request):
-    """The price and everything it includes, from `website.features`."""
-    return site_page(request, "website/pricing.html", {"groups": groups(), "nav_pricing": True})
+def landing(request):
+    """A solution page (`website.landing`), the pricing page among them: its words,
+    its screenshots, its questions with their FAQPage structured data, and the
+    pages it links to. One view and one template for all of them."""
+    page = solutions.BY_NAME[request.resolver_match.url_name]
+    fill = solutions.fill
+    faq = solutions.faq(page)
+    titles = pages()
+    return site_page(
+        request,
+        "website/landing.html",
+        {
+            "page": page,
+            "h1": fill(page.h1),
+            "lead": fill(page.lead),
+            "sections": [solutions.drawn(section, index) for index, section in enumerate(page.sections)],
+            "faq": [(question, mark_safe(answer)) for question, answer in faq],
+            "structured_data": faq_structured_data(faq),
+            "related": [
+                (reverse(name, urlconf=settings.SITE_URLCONF), titles[name][0].split(" | ")[0])
+                for name in page.related
+            ],
+            "groups": groups() if page.pricing else None,
+            "whatsapp": solutions.whatsapp(),
+            f"nav_{page.nav}": bool(page.nav),
+        },
+    )
 
 
 @require_http_methods(["GET", "HEAD"])

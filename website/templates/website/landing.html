@@ -1,0 +1,132 @@
+{% extends "website/base.html" %}
+{% block head %}<script type="application/ld+json">{{ structured_data }}</script>
+{% endblock %}
+{% block main %}
+{% comment %}
+A solution page (`website.landing`): one template for all eight, the pricing
+page among them. The homepage's parts, reused: the light top band and its
+hero type, the benefit rows on alternating grounds with a screen beside the
+words, the price card and the groups of everything in it (the pricing page
+only), the questions as native `<details>`, and the final band.
+
+The top band is words and buttons only, so the first screen draws with no
+picture to wait for; every screenshot is below it and `loading="lazy"`. The
+questions are the page's FAQPage structured data, from the same list
+(`website.landing.faq`), so what is shown and what is given cannot differ.
+{% endcomment %}
+<div class="top-band">
+<section class="hero land-hero" aria-labelledby="land-title">
+  <div class="wrap">
+    <p class="eyebrow">For Nigerian secondary schools</p>
+    <h1 id="land-title">{{ h1 }}</h1>
+    <p class="hero-lead">{{ lead }}</p>
+    <p class="hero-actions">
+      <a class="btn btn-lg btn-primary" href="/#demo">Start your free first term</a>
+      {% if whatsapp %}<a class="btn btn-lg btn-outline" href="{{ whatsapp }}" rel="noopener">WhatsApp us</a>{% endif %}
+    </p>
+    <p class="hero-note">{{ price.sentence }} Or email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>.</p>
+  </div>
+</section>
+</div>
+
+{% if groups %}
+<div class="wrap pricing-page land-price">
+  <div class="price-card price-card-wide">
+    <div class="price-band">
+      <p class="price-label">The first term is free, then</p>
+      <p class="price"><span class="price-figure num">{{ price.figure }}</span></p>
+      <p class="price-sub">per student, per term. No setup fee.</p>
+    </div>
+    <p class="price-action"><a class="btn btn-lg btn-primary" href="/#demo">Start your free first term</a></p>
+  </div>
+  <section class="included-section" aria-labelledby="included-title">
+    <h2 id="included-title">Everything in the price</h2>
+    <div class="included-groups">
+      {% for group in groups %}
+      <section class="included-group" aria-labelledby="group-{{ forloop.counter }}">
+        <h3 id="group-{{ forloop.counter }}">{{ group.heading }}</h3>
+        <ul class="included">
+          {% for item in group.items %}
+          <li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span><b>{{ item.name }}</b><br><span class="quiet">{{ item.line }}{% if item.detail %} {{ item.detail }}{% endif %}</span></span></li>
+          {% endfor %}
+        </ul>
+      </section>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endif %}
+
+{% for section in sections %}
+<section class="land-row{% if section.tint %} tint{% endif %}" aria-labelledby="part-{{ forloop.counter }}">
+  <div class="wrap land{% if section.picture %} land-pair{% if section.flip %} land-flip{% endif %}{% endif %}">
+    <div class="land-text">
+      <h2 id="part-{{ forloop.counter }}">{{ section.heading }}</h2>
+      {% for paragraph in section.body %}<p>{{ paragraph }}</p>
+      {% endfor %}{% if section.points %}<ul class="land-points">
+        {% for point in section.points %}<li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>{{ point }}</span></li>
+        {% endfor %}
+      </ul>{% endif %}
+      {% for paragraph in section.after %}<p>{{ paragraph }}</p>
+      {% endfor %}{% if section.rows %}<div class="land-table">
+        <table>
+          <thead><tr>{% for cell in section.header %}<th scope="col">{{ cell }}</th>{% endfor %}</tr></thead>
+          <tbody>
+            {% for row in section.rows %}<tr>{% for cell in row %}{% if forloop.first %}<th scope="row">{{ cell }}</th>{% else %}<td>{{ cell }}</td>{% endif %}{% endfor %}</tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>{% endif %}
+    </div>
+    {% if section.picture %}{% with shot=section.picture %}
+    <figure class="land-shot{% if shot.phone %} land-shot-phone{% endif %}">
+      {% if shot.phone %}<div class="phone-frame">
+        <img src="{{ shot.src }}" srcset="{{ shot.srcset }}" sizes="(min-width: 900px) 260px, 240px" width="{{ shot.width }}" height="{{ shot.height }}" loading="lazy" decoding="async" alt="{{ shot.alt }}">
+      </div>{% else %}<div class="browser">
+        <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span></div>
+        <img src="{{ shot.src }}" srcset="{{ shot.srcset }}" sizes="(min-width: 1180px) 540px, (min-width: 900px) calc(50vw - 64px), calc(100vw - 32px)" width="{{ shot.width }}" height="{{ shot.height }}" loading="lazy" decoding="async" alt="{{ shot.alt }}">
+      </div>{% endif %}
+    </figure>
+    {% endwith %}{% endif %}
+  </div>
+</section>
+{% endfor %}
+
+<section class="section faq tint land-faq" aria-labelledby="faq-title">
+  <div class="wrap faq-inner">
+    <div class="section-head section-head-start">
+      <h2 id="faq-title">Questions schools ask.</h2>
+    </div>
+    <div class="faq-list">
+      {% for question, answer in faq %}
+      <details>
+        <summary>{{ question }}</summary>
+        <p>{{ answer }}</p>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+
+<nav class="land-related" aria-labelledby="related-title">
+  <div class="wrap">
+    <h2 id="related-title">Read next</h2>
+    <ul>
+      {% for href, label in related %}<li><a href="{{ href }}">{{ label }}</a></li>
+      {% endfor %}<li><a href="/">Classnode home: school software for Nigerian schools</a></li>
+    </ul>
+  </div>
+</nav>
+
+<section class="cta" aria-labelledby="cta-title">
+  <div class="wrap cta-inner">
+    <h2 id="cta-title">{{ page.closing }}</h2>
+    <p>{{ page.closing_line }}</p>
+    <p class="cta-actions">
+      <a class="btn btn-lg btn-light" href="/#demo">Start your free first term</a>
+      {% if whatsapp %}<a class="btn btn-lg btn-on-blue" href="{{ whatsapp }}" rel="noopener">WhatsApp us</a>{% endif %}
+    </p>
+    <p class="cta-mail">Or email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>. Support is by WhatsApp and email, Monday to Friday. We are in {{ contact.location }}.</p>
+  </div>
+</section>
+{% endblock %}

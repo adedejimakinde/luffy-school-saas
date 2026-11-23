@@ -11,9 +11,19 @@ import re
 
 from django.test import override_settings
 
+from website.landing import BY_NAME, LANDINGS
 from website.tests.test_homepage import SiteSetUp
 
-PATHS = ("/", "/pricing/", "/faq/", "/about/", "/privacy/", "/terms/", "/blog/", "/llms.txt")
+PATHS = ("/", "/pricing/", "/faq/", "/about/", "/privacy/", "/terms/", "/blog/", "/llms.txt",
+         *(landing.path for landing in LANDINGS))
+
+
+def without_the_lagos_page(text):
+    """`text` without the links to the Lagos solution page: its footer link, and its
+    line in `/llms.txt`, which name Lagos because the page is for Lagos schools."""
+    lagos = BY_NAME["site-lagos"]
+    text = re.sub(rf"^- \[{re.escape(lagos.title)}\].*$", "", text, flags=re.M)
+    return text.replace("Schools in Lagos", "")
 
 
 class TheBaseAndTheMarketTests(SiteSetUp):
@@ -46,7 +56,14 @@ class TheBaseAndTheMarketTests(SiteSetUp):
                 with self.subTest(path=path):
                     text = self.body(path)
                     self.assertIn("Ibadan, Nigeria", text)
-                    self.assertNotIn("Lagos", text)
+                    self.assertNotIn("Lagos", without_the_lagos_page(text))
+
+    def test_the_lagos_page_is_the_one_exception_and_takes_its_base_from_the_setting(self):
+        """The solution page for Lagos schools is about Lagos, whatever the base;
+        the line that says where Classnode is based is still the setting's."""
+        self.assertIn("Classnode is based in Lagos, Nigeria.", self.body("/school-management-software-lagos/"))
+        with override_settings(SITE_LOCATION="Ibadan, Nigeria"):
+            self.assertIn("Classnode is based in Ibadan, Nigeria.", self.body("/school-management-software-lagos/"))
 
     def test_the_positioning_is_nigeria_wide(self):
         self.assertIn("secondary schools across Nigeria", self.body("/llms.txt"))

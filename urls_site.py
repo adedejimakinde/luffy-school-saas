@@ -1,7 +1,7 @@
 """What the **public site host** serves (`settings.SITE_HOST`, the bare domain).
 
-Classnode's own pages for a school that is not a customer yet, its
-about and security page, its questions and answers, privacy notice and terms, its blog, the sitemap that lists them and
+Classnode's own pages for a school that is not a customer yet, its solution
+pages (`website.landing`), its about and security page, its questions and answers, privacy notice and terms, its blog, the sitemap that lists them and
 `/llms.txt` for AI search tools, and nothing else: no API, no admin, no sign-in. The doors are linked from here and stay on
 the portal, for the reason `urls_public.py` gives. Chosen by
 `schools.middleware.PlatformTenantMiddleware`, which is the only thing that
@@ -16,16 +16,25 @@ from django.urls import path, re_path
 from blog import views as blog
 from schools.pwa import site_manifest
 from website.llms import llms
-from website.views import about, faq, homepage, pricing, privacy, sitemap, terms
+from website.views import about, faq, homepage, landing, privacy, sitemap, terms
 
 urlpatterns = [
     path("", homepage, name="site-home"),
-    path("pricing/", pricing, name="site-pricing"),
+    path("pricing/", landing, name="site-pricing"),
     path("faq/", faq, name="site-faq"),
     path("about/", about, name="site-about"),
     path("privacy/", privacy, name="site-privacy"),
     path("terms/", terms, name="site-terms"),
     path("blog/", blog.index, name="site-blog"),
+    # The solution pages (`website.landing`): one view and one template, a
+    # page for each thing a school searches for. The pricing page above is one.
+    path("result-computation-software/", landing, name="site-result-computation"),
+    path("cbt-software-for-schools/", landing, name="site-cbt"),
+    path("school-result-checker/", landing, name="site-school-result-checker"),
+    path("school-fees-management-software/", landing, name="site-fees"),
+    path("school-website-design/", landing, name="site-school-website"),
+    path("school-management-software-lagos/", landing, name="site-lagos"),
+    path("excel-vs-school-software/", landing, name="site-excel-vs-software"),
     path("blog/page/<int:page>/", blog.index, name="blog-page"),
     re_path(r"^blog/images/(?P<key>[0-9a-f]{32})\.webp$", blog.image, name="blog-image"),
     re_path(r"^blog/images/(?P<key>[0-9a-f]{32})-small\.webp$", blog.image_small, name="blog-image-small"),
