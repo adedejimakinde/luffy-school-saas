@@ -1293,7 +1293,7 @@ describe("the fees card's two figures line up", () => {
         const found = await page.evaluate(() => {
           const tops = (sel) => [...document.querySelectorAll(`.hero-sub ${sel}`)].map((el) => Math.round(el.getBoundingClientRect().top));
           const subs = [...document.querySelectorAll(".hero-sub")].map((el) => Math.round(el.getBoundingClientRect().height));
-          return { values: tops(".hero-sub-value"), metas: tops(".hero-sub-meta"), subs };
+          return { values: tops(".hero-sub-value"), metas: tops(":is(.hero-sub-metas, .hero-sub > .hero-sub-meta)"), subs };
         });
         assert.equal(new Set(found.values).size, 1, `figures at ${found.values}`);
         assert.equal(new Set(found.metas).size, 1, `notes at ${found.metas}`);
@@ -1303,6 +1303,49 @@ describe("the fees card's two figures line up", () => {
       }
     });
   }
+});
+
+describe("the outstanding card's two lines never overlap", () => {
+  for (const width of [320, 360, 390, 1440]) {
+    test(`"students owe" and "of which this term" are separate lines at ${width}px`, async () => {
+      const context = await signedIn("sunrise.principal");
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height: 900 });
+        await page.goto(`${SUNRISE}/home/`);
+        await settle(page);
+        const found = await page.evaluate(() => {
+          const box = (sel) => document.querySelector(`.hero-sub ${sel}`)?.getBoundingClientRect();
+          const a = box('[data-line="owing"]');
+          const b = box('[data-line="this-term"]');
+          return a && b ? { aBottom: a.bottom, bTop: b.top, aTop: a.top, bBottom: b.bottom } : null;
+        });
+        assert.ok(found, "the outstanding card shows both lines");
+        assert.ok(found.bTop >= found.aBottom - 0.5, `the second line starts at ${found.bTop}, the first ends at ${found.aBottom}`);
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});
+
+describe("the school website's Admissions open label shows one dot", () => {
+  test("the hero pill draws a single dot", async () => {
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    try {
+      await page.goto(`${HARBOUR}/`);
+      const dots = await page.evaluate(() => {
+        const pill = document.querySelector(".hero .pill");
+        if (!pill) return null;
+        const before = getComputedStyle(pill, "::before").content;
+        return pill.querySelectorAll(".pill-dot").length + (before && before !== "none" && before !== "normal" ? 1 : 0);
+      });
+      assert.ok(dots === null || dots === 1, `${dots} dots`);
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 describe("the top bar is one row", () => {

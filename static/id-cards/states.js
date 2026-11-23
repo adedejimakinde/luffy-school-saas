@@ -36,7 +36,9 @@ export function overview({
       : '<p class="note" role="status">The school has no phone number on record, so the back of each card will say &ldquo;contact the school office&rdquo; with no number. Add it where the school&#39;s contact details are kept.</p>',
     termPicker(terms, term),
     term
-      ? `<p class="hint">Cards printed for ${esc(term.label)} are valid until ${esc(dayFirst(term.expires_on))}, the end of the ${esc(term.session)} session.</p>`
+      ? (term.expires_on
+        ? `<p class="hint">Cards printed for ${esc(term.label)} are valid until ${esc(dayFirst(term.expires_on))}, the last day of the ${esc(term.session)} session&#39;s third term.</p>`
+        : '<p class="hint">Cards show the session only until the third term is set up.</p>')
       : '<p class="note" role="alert">No term has been set up yet. Terms are set on the Setup page.</p>',
     term && classes.length
       ? `<ul class="classes id-classes">${classes.map((c) => classRow(c, printing, notes)).join("")}</ul>`

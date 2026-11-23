@@ -54,6 +54,82 @@ class VerifySetUp(IdCardSetUp):
             IdCard.objects.filter(token=self.token).update(expires_on=self.today - timedelta(days=days_ago))
 
 
+class WhenTheCardsEndIsKnownTests(VerifySetUp):
+    """A card's end is its third term's last day; with no third term yet there is no end to have passed."""
+
+    def card_with(self, **fields):
+        with connected_to(self.stmarys):
+            IdCard.objects.filter(token=self.token).update(**fields)
+
+    def third_term_ended(self, days_ago):
+        from academics.models import Term, TermName
+
+        with connected_to(self.stmarys):
+            Term.objects.filter(session=self.session, name=TermName.THIRD).update(
+                starts_on=self.today - timedelta(days=days_ago + 90), ends_on=self.today - timedelta(days=days_ago)
+            )
+
+    def test_a_card_with_no_date_and_no_third_term_is_valid_for_the_session(self):
+        self.card_with(expires_on=None, session="2040/2041")  # a session with no terms at all
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+
+    def test_a_card_with_no_date_follows_the_third_term_once_it_exists(self):
+        self.card_with(expires_on=None)  # this session's third term ends in the future
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+        self.third_term_ended(days_ago=1)
+        self.assertContains(self.verify(self.token), 'data-verdict="expired"')
+
+    def test_a_dateless_card_stops_verifying_once_a_later_session_is_current(self):
+        """A 2026/2027 card never verifies in 2027/2028, though its session never had a third term."""
+        from academics.models import Term, TermName
+
+        self.card_with(expires_on=None, session="2040/2041")
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')  # an earlier session is current
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2041/2042", name=TermName.FIRST, is_current=True,
+                starts_on=self.today + timedelta(days=400), ends_on=self.today + timedelta(days=490),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="expired"')
+
+    def test_a_dateless_card_of_the_current_session_stays_valid(self):
+        self.card_with(expires_on=None, session="2040/2041")
+        from academics.models import Term, TermName
+
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2040/2041", name=TermName.FIRST, is_current=True,
+                starts_on=self.today - timedelta(days=5), ends_on=self.today + timedelta(days=80),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+
+    def test_a_card_with_its_date_keeps_it_whatever_session_is_current(self):
+        from academics.models import Term, TermName
+
+        self.card_with(expires_on=self.today + timedelta(days=30))
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2041/2042", name=TermName.FIRST, is_current=True,
+                starts_on=self.today + timedelta(days=400), ends_on=self.today + timedelta(days=490),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+
+    def test_a_dateless_card_is_still_ended_by_withdrawal(self):
+        from django.utils import timezone
+
+        self.card_with(expires_on=None, session="2040/2041", revoked_at=timezone.now())
+        self.assertContains(self.verify(self.token), 'data-verdict="expired"')
+
+    def test_a_dated_card_ends_on_its_last_day_not_before(self):
+        self.card_with(expires_on=self.today)
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+        self.card_with(expires_on=self.today - timedelta(days=1))
+        self.assertContains(self.verify(self.token), 'data-verdict="expired"')
+
+
 class AValidCardTests(VerifySetUp):
     def test_it_says_valid_with_the_name_the_class_and_the_photo(self):
         response = self.verify(self.token)

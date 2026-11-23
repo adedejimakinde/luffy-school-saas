@@ -39,7 +39,16 @@ CR80, 85.6 x 54 mm. Nothing it prints is nearer than 3 mm to the edge.
 - **The colour** is one thin rule, the school's name and the initials, as on the
   report card: a solid band of ink streaks on a cheap printer.
 - **The expiry date** is the last day of the card's session: the end of the
-  session's last term (`cards.session_ends_on`). Printing for any term of a
+  session's third term (`cards.session_ends_on`) and the card says "Valid until
+  <date>". While the session has no third term (schools print in first term) there
+  is no date to give, and the card says "Valid for the 2026/2027 session" on the
+  front and back instead; the ID cards page says so. Printing is never refused for
+  it. The first term's end is not the session's, so it is never used. The page a
+  card's QR code opens follows the same rule without printing either: valid until
+  the third term's last day, or, with no third term yet, until a later session is
+  made current (a 2026/2027 card never verifies in 2027/2028), and for as long as
+  the card is not withdrawn and the child is on the roll. A reprint after the third term is
+  added brings the card's date up. Printing for any term of a
   session gives the same date, and the date is brought up to the session's end
   as it stands whenever a card is printed again.
 

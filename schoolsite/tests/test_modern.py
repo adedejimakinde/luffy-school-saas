@@ -24,9 +24,11 @@
 """
 
 import importlib
+from pathlib import Path
 import re
 
 from django.apps import apps
+from django.conf import settings
 
 from schools.tests.tenants import connected_to
 from schoolsite import pictures, render, sections, services, themes
@@ -324,6 +326,13 @@ class WhatTheThemeDrawsTests(PicturesSetUp):
     def test_the_admissions_pill_comes_from_the_pages_own_panel_and_only_while_open(self):
         open_ = {"heading": "Admissions", "session": "2027/2028", "open": True}
         self.assertIn("Admissions open for 2027/2028</p>", self.home(("admissions_cta", open_)))
+
+    def test_the_hero_pill_has_one_dot_not_two(self):
+        """`.pill-dot` is the hero's dot; the design's own `.pill::before` dot must be switched off beside it."""
+        html = self.home(("admissions_cta", {"heading": "Admissions", "session": "2027/2028", "open": True}))
+        self.assertEqual(html.count('class="pill-dot"'), 1)
+        css = (Path(settings.BASE_DIR) / "static/schoolsite/modern.css").read_text()
+        self.assertIn(".pill:has(> .pill-dot):not(:has(.icon))::before { content: none; }", css)
 
     def test_no_pill_while_admissions_are_closed_or_there_is_no_panel(self):
         self.assertIn('class="pill"', self.home(("admissions_cta", {"heading": "A", "open": True})))

@@ -9,6 +9,7 @@ that the address opens the card's page.
 """
 
 import io
+from datetime import date
 import re
 
 import pikepdf
@@ -80,6 +81,77 @@ class WhatTheCardSaysTests(CardSetUp):
         with connected_to(self.stmarys):
             last = Term.objects.get(pk=self.terms[TermName.THIRD.value]).ends_on
         self.assertEqual({f.expires_on for f in faces}, {last})
+
+    def test_a_session_spanning_two_calendar_years_expires_in_the_second(self):
+        """A session over two calendar years: first term Sep-Nov, third term ends Jul the next year, not the first term's November end.
+
+        (The dates are fixed and the session label is its own, so no other term in the school is touched.)
+        """
+        with connected_to(self.stmarys):
+            for name, a, b in (
+                (TermName.FIRST, date(2031, 9, 8), date(2031, 11, 21)),
+                (TermName.SECOND, date(2032, 1, 12), date(2032, 4, 2)),
+                (TermName.THIRD, date(2032, 4, 26), date(2032, 7, 23)),
+            ):
+                Term.objects.create(session="2031/2032", name=name, starts_on=a, ends_on=b)
+            self.assertEqual(cards.session_ends_on("2031/2032"), date(2032, 7, 23))
+            self.assertEqual(f"{cards.session_ends_on('2031/2032'):%-d %B %Y}", "23 July 2032")
+
+    def test_a_session_with_only_its_first_term_has_no_known_end(self):
+        """The first term's end (18 November 2033) is not the session's; say nothing rather than that."""
+        with connected_to(self.stmarys):
+            Term.objects.create(session="2033/2034", name=TermName.FIRST, starts_on=date(2033, 9, 5), ends_on=date(2033, 11, 18))
+            self.assertIsNone(cards.session_ends_on("2033/2034"))
+
+    def faces_for_session(self, session, expires_on):
+        """The first sheet of JSS 1A for `session`, with `expires_on` as `session_ends_on` gave it."""
+        with connected_to(self.stmarys):
+            group = ClassGroup.objects.get(pk=self.group_id)
+            term = Term.objects.get(pk=self.terms[TermName.FIRST.value])
+            faces = [
+                cards.face_for(k, class_name=group.name, session=session, expires_on=expires_on, by_id=None)
+                for k in cards.students_of(self.stmarys, group, term)
+            ]
+            return render.html_for(cards.school_face(self.stmarys), group.name, faces), faces
+
+    def test_with_a_final_term_the_card_says_valid_until_its_last_day_on_both_sides(self):
+        with connected_to(self.stmarys):
+            for name, a, b in (
+                (TermName.FIRST, date(2031, 9, 8), date(2031, 11, 21)),
+                (TermName.SECOND, date(2032, 1, 12), date(2032, 4, 2)),
+                (TermName.THIRD, date(2032, 4, 26), date(2032, 7, 23)),
+            ):
+                Term.objects.create(session="2031/2032", name=name, starts_on=a, ends_on=b)
+            ends = cards.session_ends_on("2031/2032")
+        html, _ = self.faces_for_session("2031/2032", ends)
+        self.assertEqual(ends, date(2032, 7, 23))  # the second calendar year, not November 2031
+        self.assertGreaterEqual(html.count("Valid until <b>23 July 2032</b>") + html.count("Valid until 23 July 2032."), 2)
+        self.assertNotIn("21 November 2031", html)
+        self.assertNotIn("Valid for the", html)
+
+    def test_without_a_final_term_the_card_names_the_session_and_no_date_on_both_sides(self):
+        with connected_to(self.stmarys):
+            Term.objects.create(session="2033/2034", name=TermName.FIRST, starts_on=date(2033, 9, 5), ends_on=date(2033, 11, 18))
+            ends = cards.session_ends_on("2033/2034")
+        self.assertIsNone(ends)  # the first term's 18 November is not the session's end
+        html, faces = self.faces_for_session("2033/2034", ends)
+        self.assertTrue(faces)
+        self.assertGreaterEqual(html.count("Valid for the <b>2033/2034</b> session") + html.count("Valid for the 2033/2034 session."), 2)
+        self.assertNotIn("Valid until", html)
+        self.assertNotIn("18 November 2033", html)
+
+    def test_printing_in_first_term_is_not_refused_and_a_later_print_gives_the_card_its_date(self):
+        _, faces = self.faces_for_session("2035/2036", None)
+        self.assertTrue(faces)
+        with connected_to(self.stmarys):
+            card = IdCard.objects.filter(session="2035/2036").first()
+            self.assertIsNone(card.expires_on)
+            token = card.token
+        _, again = self.faces_for_session("2035/2036", date(2036, 7, 24))
+        with connected_to(self.stmarys):
+            card.refresh_from_db()
+            self.assertEqual(card.expires_on, date(2036, 7, 24))
+            self.assertEqual(card.token, token)  # the card in the bag still verifies
 
     def test_the_emergency_line_is_the_schools_phone(self):
         html, _ = self.html()
