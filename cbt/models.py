@@ -591,6 +591,59 @@ class SittingControl(models.Model):
         ]
 
 
+class SignInRefusal(models.Model):
+    """A sign-in at the exam door that did not get through, and the real reason. **Staff
+    only. Append-only.** `docs/cbt.md`, "The staff attempt log".
+
+    The student is told one sentence for the three that did not prove (`cbt.sitting.NOT_OPENED`)
+    and never which of them was wrong. Staff are told which, here, on the sitting page, per
+    student. **Never kept: the PIN typed, the test code typed, an address.** Only a typed
+    admission number that names exactly one student here is kept, so a stranger's typing
+    writes nothing, and the wait's own refusals are kept once per student, test and
+    computer while a wait lasts, so hammering the door cannot fill the table.
+
+    `device_tag` is six characters of a keyed hash of the browser's own id (`sit_device`),
+    enough for staff to see "the same computer again" and no way back to the id.
+    """
+
+    class Reason(models.TextChoices):
+        WRONG_CODE = "wrong_code", "Wrong test code"
+        WRONG_PIN = "wrong_pin", "Wrong exam PIN"
+        OTHER_TERM_SLIP = "other_term_slip", "PIN is from another term's slip"
+        NOT_IN_CLASS = "not_in_class", "Not in a class sitting this test"
+        NOT_OPEN = "not_open", "Test not open to their class"
+        ALREADY_SAT = "already_sat", "Has sat it already"
+        LOCKED = "locked", "Locked out for too many wrong tries"
+
+    test = models.ForeignKey(Test, related_name="sign_in_refusals", on_delete=models.PROTECT)
+    student_membership_id = models.PositiveBigIntegerField()
+    student_name = models.CharField(max_length=255)
+    admission_number = models.CharField(max_length=64)
+    reason = models.CharField(max_length=16, choices=Reason)
+    #: For `locked`: when the wait ends.
+    until = models.DateTimeField(null=True, blank=True)
+    device_tag = models.CharField(max_length=8, blank=True, default="")
+    at = models.DateTimeField()
+
+    class Meta:
+        ordering = ["at", "id"]
+        indexes = [models.Index(fields=["test", "student_membership_id", "at"])]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(
+                    reason__in=[
+                        "wrong_code", "wrong_pin", "other_term_slip", "not_in_class", "not_open", "already_sat", "locked",
+                    ]
+                ),
+                name="a_refused_sign_in_has_a_known_reason",
+            ),
+            models.CheckConstraint(
+                condition=(Q(reason="locked", until__isnull=False) | (~Q(reason="locked") & Q(until__isnull=True))),
+                name="only_a_lockout_has_an_end",
+            ),
+        ]
+
+
 class Attempt(models.Model):
     """One student's sitting of one test. `docs/cbt.md`, "Sitting".
 

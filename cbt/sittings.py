@@ -23,7 +23,7 @@ from django.utils import timezone
 from academics.models import ClassGroup, ClassPlacement
 from accounts.models import Membership, Role
 
-from . import access, sitting
+from . import access, signin_log, sitting
 from .banks import NotYours, Refused, name_of, plain
 from .models import (
     MAX_EXTRA_MINUTES,
@@ -32,6 +32,7 @@ from .models import (
     AttemptEvent,
     AttemptSession,
     RetakeGrant,
+    SignInRefusal,
     SittingControl,
     Test,
     TestAudience,
@@ -277,6 +278,10 @@ class Row:
     answers_received: int = 0
     may_retake: bool = False
     events: List[dict] = field(default_factory=list)
+    #: Sign-ins at the exam door that did not get through, with the real reason: staff only
+    #: (`cbt.signin_log`), and never sent to the student's side.
+    failed_sign_ins: int = 0
+    sign_ins: List[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -334,7 +339,16 @@ def sitting_log_as(actor, school, test_id) -> Log:
     latest_attempt = {}
     for a in attempts:
         latest_attempt[a.student_membership_id] = a
-    ids = set(placements) | set(latest_attempt)
+    refused = defaultdict(list)
+    for r in SignInRefusal.objects.filter(test=test).order_by("at", "id"):
+        refused[r.student_membership_id].append(r)
+    ids = set(placements) | set(latest_attempt) | set(refused)
+    # A student who typed this test's code and is in none of its classes has no line above
+    # without this: they are the "not in a class sitting this test" the log is asked for.
+    elsewhere = dict(
+        ClassPlacement.objects.filter(term_id=test.term_id, student_membership_id__in=list(set(refused) - set(placements)))
+        .values_list("student_membership_id", "class_group__name")
+    )
     students = {
         m.pk: m
         for m in Membership.objects.filter(school=school, role=Role.STUDENT, pk__in=ids).select_related("user")
@@ -359,10 +373,22 @@ def sitting_log_as(actor, school, test_id) -> Log:
     for sid in ids:
         member = students.get(sid)
         attempt = latest_attempt.get(sid)
-        name = attempt.student_name if attempt else sitting.name_of(member) if member else "A student who has left"
+        name = (
+            attempt.student_name
+            if attempt
+            else sitting.name_of(member)
+            if member
+            else refused[sid][0].student_name
+            if refused[sid]
+            else "A student who has left"
+        )
         number_typed = attempt.admission_number if attempt else " ".join((member.reference or "").split()) if member else ""
-        class_name = attempt.class_group_name if attempt else group_names.get(placements.get(sid), "")
-        if attempt is None:
+        class_name = (
+            attempt.class_group_name if attempt else group_names.get(placements.get(sid), elsewhere.get(sid, ""))
+        )
+        if attempt is None and sid not in placements:
+            state = "Not in this test's classes"
+        elif attempt is None:
             state = "Not started"
         elif attempt.is_open:
             state = "Sitting"
@@ -371,6 +397,7 @@ def sitting_log_as(actor, school, test_id) -> Log:
         mine = [e for e in events[sid] if attempt is None or e.attempt_id in (None, attempt.pk) or e.kind in ("extra_time", "retake")]
         row = Row(
             student_id=sid, name=name, admission_number=number_typed, class_name=class_name, state=state,
+            failed_sign_ins=len(refused[sid]), sign_ins=[signin_log.out(r) for r in refused[sid]],
         )
         if attempt is not None:
             extra = extras[(sid, attempt.number)]

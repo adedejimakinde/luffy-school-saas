@@ -514,6 +514,49 @@ or under "Built" below.
 Everything else (layout, wording, the calculator, timers on screen) gets ordinary
 tests.
 
+## The staff attempt log
+
+Built after a report from the demo school: a test approved for 24 Nov 08:00 and opened by
+hand for one class the evening before, and a student of that class, with the test code,
+their admission number and the PIN from their latest slip, was told "That test code,
+admission number and PIN do not open a test here."
+
+**What the door does.** That sentence is the door's one refusal for the code, the number
+and the PIN (`cbt.sitting`, "The door"). The window is not one of its checks: a class
+opened by hand signs in, starts, answers and submits before the plan, and
+`cbt/tests/test_signin_log.py` (`HandOpenedBeforeItsPlannedStartTests`) holds that, with
+the latest slip of a class added after approval. A proved door that finds the sitting
+closed says so in its own words (409), and a wait in its own (429). What the sentence can
+stand for is the test's code, the test being approved, the number, the PIN (live, this
+test's term, this student's) and the student being placed, in the test's term, in a class
+that sits it. The student is never told which, by design, so until now nobody could say
+which refused a given student.
+
+**What staff read now.** On the sitting page, per student, **Failed sign-ins**, each with
+the time, the real reason and a six-character tag that says "the same computer again":
+
+| reason | the door's check that failed |
+|---|---|
+| Wrong test code | no test has the code typed (written against the tests open to the student's class now) |
+| Wrong exam PIN | not this student's live PIN, or cancelled, or somebody else's |
+| PIN is from another term's slip | a live PIN of theirs, printed for a term other than this test's |
+| Not in a class sitting this test | code and PIN right, and they are in none of its classes this term: they get a line of their own, with their class |
+| Test not open to their class | proved, and neither the plan nor a hand control has it open |
+| Has sat it already | proved, and an attempt is closed with no retake |
+| Locked out for too many wrong tries, until HH:MM | the device or its address is waiting; nothing was checked |
+
+It is read by exactly who reads the sitting log (`access.reads_sitting_log`), and it is in
+no `/sit/` answer. **Never kept: the PIN typed, the code typed, an address.** A number
+nobody here has writes nothing, so guessing numbers leaves no trace to fill the table.
+Wrong tries are bounded by the throttle that already counts them; a lockout is one line
+for its whole wait, and a proved door pressed again and again before the test opens is one
+line in two minutes. `cbt.SignInRefusal` is append-only (migration 0005).
+
+**What is not here.** A student who types the right code for the wrong class is told
+nothing new; a wrong code is written only when a test is open to the student's class,
+because no sitting was waiting on them otherwise; and the throttle's own counts are
+unchanged.
+
 ## Left for later
 
 - Student passwords, and practice at home (option C).

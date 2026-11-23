@@ -312,6 +312,55 @@ describe("the exam screen", () => {
     }
   });
 
+  test("a wrong PIN tells the student one sentence, and staff read the real reason", async () => {
+    const { context, page } = await device(390);
+    const NOT_OPENED = /That test code, admission number and PIN do not open a test here\./;
+    try {
+      // The student: a wrong PIN, then a wrong code. The same sentence for both, and nothing
+      // on the screen that says which of the three was wrong.
+      for (const [code, pin] of [[CODE, "99999999"], ["ZZZZZZ", child(4).pin]]) {
+        await page.goto(`${SUNRISE}/sit/`);
+        await page.waitForSelector('[data-state="door"]');
+        await page.fill("#code", code);
+        await page.fill("#number", child(4).number);
+        await page.fill("#pin", pin);
+        await page.click('button[type="submit"]');
+        await page.waitForSelector(".sit-note-stop");
+        const said = (await page.textContent("body")).replace(/\s+/g, " ");
+        assert.match(said, NOT_OPENED);
+        assert.doesNotMatch(said, /wrong (?:PIN|code)|not in a class|another term|locked until|Failed sign-ins/i);
+      }
+
+      // Staff: the principal's sitting page names each.
+      const staff = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const desk = await staff.newPage();
+      await desk.goto(`${PORTAL}/staff-sign-in/`);
+      const status = await desk.evaluate(async (password) => {
+        const { csrf_token: token } = await (await fetch("/api/csrf/")).json();
+        const response = await fetch("/api/login/", { method: "POST", headers: { "content-type": "application/json", "X-CSRFToken": token }, body: JSON.stringify({ identifier: "sunrise.principal", password }) });
+        return response.status;
+      }, PASSWORD);
+      assert.equal(status, 200);
+      await desk.goto(`${SUNRISE}/tests/`);
+      await desk.locator('a[href^="#sitting/"]').first().waitFor();
+      const tests = await desk.evaluate(async () => (await (await fetch("/api/cbt/tests/")).json()).tests);
+      const own = tests.find((t) => t.classes.some((c) => c.name === OWN_CLASS));
+      await desk.goto("about:blank");
+      await desk.goto(`${SUNRISE}/tests/#sitting/${own.id}`);
+      await desk.waitForSelector('[data-state="sitting"]');
+      const row = desk.locator(".sit-student-row", { hasText: "Dayo Sit" });
+      await row.locator("summary", { hasText: "Failed sign-ins" }).click();
+      const reasons = await row.locator("[data-reason]").evaluateAll((els) => els.map((el) => el.dataset.reason));
+      assert.ok(reasons.includes("wrong_pin") && reasons.includes("wrong_code"), `the log says ${reasons}`);
+      assert.match(await row.textContent(), /Wrong exam PIN/);
+      assert.match(await row.textContent(), /Wrong test code/);
+      await desk.screenshot({ path: join(OUT, "1280", "sit-log-failed-sign-ins.png"), fullPage: true });
+      await staff.close();
+    } finally {
+      await context.close();
+    }
+  });
+
   test("a second computer takes the attempt over, and the first says so", async () => {
     const first = await device(1280);
     const second = await device(1280);

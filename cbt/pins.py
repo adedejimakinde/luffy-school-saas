@@ -315,6 +315,28 @@ def check(school, term, admission_number, pin) -> Optional[Membership]:
     return students[opened[0]]
 
 
+def is_a_live_slip_of_another_term(school, term, student_membership_id, pin) -> bool:
+    """Is this the PIN of a live slip of this student's from a term other than `term`?
+
+    For the staff attempt log only (`cbt.signin_log`): it is how a correct PIN, typed from
+    last term's slip, is told from a wrong one. It writes nothing and the student is never
+    told. The answer to the person typing is `check()`'s, which is `None` for both.
+    """
+    digits = _typed_pin(pin)
+    if digits is None or term is None or school is None:
+        return False
+    if connection.schema_name != school.schema_name:
+        return False
+    rows = (
+        ExamPin.objects.filter(student_membership_id=student_membership_id, cancelled_at__isnull=True)
+        .exclude(term=term)
+        .values_list("term_id", "digest")
+    )
+    return any(
+        hmac.compare_digest(kept, digest(school.pk, student_membership_id, term_id, digits)) for term_id, kept in rows
+    )
+
+
 __all__ = [
     "NotAllowedToPrint",
     "PIN_DIGITS",
@@ -325,6 +347,7 @@ __all__ = [
     "check",
     "current_term",
     "digest",
+    "is_a_live_slip_of_another_term",
     "live_pin_holders",
     "new_pin",
     "print_class_as",

@@ -378,6 +378,29 @@ export function shortTime(iso) {
   return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/** "14:05" in the browser's time, or "". */
+export function clockTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+/** Sign-ins at the exam door that did not get through, with the real reason. Staff only:
+ * the student is told one sentence whatever was wrong, and this is never sent to them. */
+function signIns(r) {
+  const tries = r.sign_ins || [];
+  if (!tries.length) return "";
+  const lines = tries
+    .map((s) => {
+      const until = s.until ? `, until ${esc(clockTime(s.until))}` : "";
+      const computer = s.device ? ` <span class="hint">(computer ${esc(s.device)})</span>` : "";
+      return `<li data-reason="${esc(s.reason)}">${esc(shortTime(s.at))}: ${esc(s.what)}${until}${computer}</li>`;
+    })
+    .join("");
+  return `<details class="sign-ins"><summary>Failed sign-ins (${tries.length})</summary><p class="hint">Only staff see this. The student is told the same sentence whatever was wrong.</p><ul class="history">${lines}</ul></details>`;
+}
+
 function sittingClass(log, c, confirming) {
   const state = c.open ? '<span class="label label-ok">Open</span>' : '<span class="label">Closed</span>';
   const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span>`;
@@ -456,13 +479,15 @@ function studentRow(log, r, confirming) {
         .join("")}</ul></details>`
     : "";
   const tone = r.state === "Sitting" ? " label-brand" : r.state === "Not started" ? "" : " label-ok";
+  const failed = (r.sign_ins || []).length;
   return [
     `<li class="sit-student-row" data-student="${esc(r.student_id)}">`,
-    `<p class="name"><strong>${esc(r.name)}</strong> <span class="label${tone}">${esc(r.number > 1 ? `${r.state}, attempt ${r.number}` : r.state)}</span></p>`,
+    `<p class="name"><strong>${esc(r.name)}</strong> <span class="label${tone}">${esc(r.number > 1 ? `${r.state}, attempt ${r.number}` : r.state)}</span>${failed ? ` <span class="label label-warn" data-failed-sign-ins>${esc(failed)} failed sign-in${failed === 1 ? "" : "s"}</span>` : ""}</p>`,
     `<p class="level">${esc(r.class_name)}${r.admission_number ? `, ${esc(r.admission_number)}` : ""}.${when.length ? ` ${esc(when.join(", "))}.` : ""}</p>`,
     counts.length ? `<dl class="sit-counts">${counts.map(([k, v]) => `<div data-count="${esc(k)}"><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : "",
     acts.length ? `<div class="row-actions">${acts.join("")}</div>` : "",
     form,
+    signIns(r),
     events,
     "</li>",
   ].join("");
@@ -481,7 +506,7 @@ export function sittingView(log, { detail = "", confirming = null, done: said = 
     "<h2>Classes</h2>",
     `<ul class="classes">${log.classes.map((c) => sittingClass(log, c, confirming)).join("")}</ul>`,
     "<h2>Students</h2>",
-    '<p class="hint">Who started, dropped off and submitted, and when. No answer or score is shown here.</p>',
+    '<p class="hint">Who started, dropped off and submitted, and when, and each sign-in that did not get through, with the real reason. No answer or score is shown here.</p>',
     log.rows.length
       ? `<ul class="sitting-log">${log.rows.map((r) => studentRow(log, r, confirming)).join("")}</ul>`
       : '<p class="blank">Nobody is placed in its classes this term.</p>',

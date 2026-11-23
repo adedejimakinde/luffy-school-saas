@@ -312,6 +312,69 @@ test("the sitting: classes, the log's counts, and no answer in it", () => {
   assert.doesNotMatch(html, /correct|chosen|score:/i);
 });
 
+// -- the staff attempt log: a sign-in that did not get through, and why --
+
+const REFUSALS = [
+  ["wrong_code", "Wrong test code"],
+  ["wrong_pin", "Wrong exam PIN"],
+  ["other_term_slip", "PIN is from another term's slip"],
+  ["not_in_class", "Not in a class sitting this test"],
+  ["not_open", "Test not open to their class"],
+  ["already_sat", "Has sat it already"],
+  ["locked", "Locked out for too many wrong tries"],
+];
+
+function tried(reason, what, extra = {}) {
+  return { at: "2026-11-09T07:58:00Z", reason, what, until: null, device: "a1b2c3", ...extra };
+}
+
+test("a student's failed sign-ins are listed with the real reason, each of the seven", () => {
+  const row = { ...LOG.rows[1], sign_ins: REFUSALS.map(([reason, what]) => tried(reason, what, reason === "locked" ? { until: "2026-11-09T08:05:00Z" } : {})) };
+  const html = states.sittingView({ ...LOG, rows: [row] });
+  assert.match(html, /<summary>Failed sign-ins \(7\)<\/summary>/);
+  assert.match(html, /data-failed-sign-ins>7 failed sign-ins</);
+  for (const [reason, what] of REFUSALS) {
+    assert.match(html, new RegExp(`<li data-reason="${reason}">[^<]*: ${what.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("'", "(?:'|&#39;)")}`), reason);
+  }
+  assert.match(html, /Only staff see this/);
+});
+
+test("a lockout says until when, in HH:MM", () => {
+  const row = { ...LOG.rows[1], sign_ins: [tried("locked", "Locked out for too many wrong tries", { until: "2026-11-09T08:05:00Z" })] };
+  const html = states.sittingView({ ...LOG, rows: [row] });
+  const hhmm = states.clockTime("2026-11-09T08:05:00Z");
+  assert.match(hhmm, /^\d\d:\d\d$/);
+  assert.ok(html.includes(`Locked out for too many wrong tries, until ${hhmm}`), html);
+  assert.equal(states.clockTime(null), "");
+  assert.equal(states.clockTime("not a time"), "");
+});
+
+test("a student with none shows no list, and one is spoken of in the singular", () => {
+  assert.doesNotMatch(states.sittingView(LOG), /Failed sign-ins|failed sign-in/);
+  const one = states.sittingView({ ...LOG, rows: [{ ...LOG.rows[1], sign_ins: [tried("wrong_pin", "Wrong exam PIN")] }] });
+  assert.match(one, /1 failed sign-in</);
+  assert.match(one, /Failed sign-ins \(1\)/);
+});
+
+test("a name, a reason and a computer tag are text, never markup", () => {
+  const row = { ...LOG.rows[1], name: "<img src=x onerror=alert(1)>", sign_ins: [tried("wrong_pin", "<b>Wrong</b>", { device: '"><i>' })] };
+  const html = states.sittingView({ ...LOG, rows: [row] });
+  assert.doesNotMatch(html, /<img|<b>Wrong|<i>/);
+});
+
+test("a student outside the test's classes has a line of their own", () => {
+  const outsider = {
+    ...LOG.rows[1], student_id: 77, name: "Bimpe Ojo", admission_number: "SM/005", class_name: "JSS 1B",
+    state: "Not in this test's classes", number: 0, started_at: null, deadline: null, submitted_at: null, computers: 0,
+    sign_ins: [tried("not_in_class", "Not in a class sitting this test")],
+  };
+  const html = states.sittingView({ ...LOG, rows: [outsider] });
+  assert.match(html, /Bimpe Ojo/);
+  assert.match(html, /Not in this test(?:'|&#39;)s classes/);
+  assert.match(html, /data-reason="not_in_class"/);
+  assert.doesNotMatch(html, /data-count=/, "no attempt, no counts");
+});
+
 test("the code is shown once, in the answer that set it", () => {
   assert.match(states.sittingView({ ...LOG, code_set: true }, { code: "KMTRWX" }), /<strong class="code">KMTRWX<\/strong>/);
   assert.doesNotMatch(states.sittingView(LOG), /KMTRWX/);
