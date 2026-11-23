@@ -126,7 +126,7 @@ questions are the page's FAQPage structured data, from the same list
       <a class="btn btn-lg btn-light" href="/#demo">Start your free first term</a>
       {% if whatsapp %}<a class="btn btn-lg btn-on-blue" href="{{ whatsapp }}" rel="noopener">WhatsApp us</a>{% endif %}
     </p>
-    <p class="cta-mail">Or email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>{% if contact.phone %}, or call <a href="{{ contact.tel }}">{{ contact.phone }}</a>{% endif %}. We are in {{ contact.location }}.</p>
+    <p class="cta-mail">Or email <a href="mailto:{{ contact.email }}">{{ contact.email }}</a>. Support is by WhatsApp and email, Monday to Friday. We are in {{ contact.location }}.</p>
   </div>
 </section>
 {% endblock %}

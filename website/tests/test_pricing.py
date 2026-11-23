@@ -13,6 +13,7 @@ import re
 from django.test import override_settings
 
 from website import features, price
+from website.landing import ADD_ONS
 from website.tests.test_homepage import BANNED, SiteSetUp, visible_text
 
 PRICE = "The first term is free, then ₦1,500 per student, per term. No setup fee."
@@ -130,7 +131,10 @@ class ThePricingPageTests(SiteSetUp):
                 self.assertIn(feature.detail, text)
 
     def test_nothing_that_is_not_built_is_listed(self):
-        text = visible_text(self.page).lower()
+        # Bar the one line naming custom domains and school email as optional
+        # paid add-ons, outside the price (`website.landing.ADD_ONS`).
+        self.assertEqual(visible_text(self.page).count(ADD_ONS), 1)
+        text = visible_text(self.page).replace(ADD_ONS, "").lower()
         for word in ("custom domain", "news post", "admissions form", "email domain", "id card",
                      "forgot password", "premium", "mailbox"):
             self.assertNotIn(word, text)

@@ -311,9 +311,9 @@ first lines:
 - **Calls to action**: "Start your free first term" (to the demo form,
   `/#demo`: a school starts by being set up, and there is no sign-up of its
   own) and "WhatsApp us" (`https://wa.me/` and `SITE_PHONE`, left out when it
-  is empty), in the top band and the final band, with `hello@classnode.co` and
-  the support phone. The final band says where Classnode is based
-  (`SITE_LOCATION`).
+  is empty), in the top band and the final band, with `hello@classnode.co`.
+  The final band says support is by WhatsApp and email, Monday to Friday, and
+  where Classnode is based (`SITE_LOCATION`).
 - **Questions**: four to six a page, drawn and given as that page's FAQPage
   structured data from one list, word for word. No ratings and no reviews.
 - **Links**: each page links two or three related pages and the homepage
@@ -331,8 +331,13 @@ first lines:
   (`docs/fees.md`, `docs/messaging.md`), withholding for fees
   (`docs/withholding.md`), the website editor and who publishes
   (`schoolsite/access.py`), and the roll import (`docs/roll-import.md`).
-  The Lagos page's in-person setup, training and visits are the owner's
-  service, not code.
+  The owner's service terms, not code (confirmed 23 November 2026): a Lagos
+  school is set up within 48 hours of receiving its student list and its
+  staff are trained in person at the school; support for every school is by
+  WhatsApp (`SITE_PHONE`) and email, Monday to Friday. No page promises a
+  visit or "local support". Staff and parent logins are not charged, and CBT,
+  the result checker and the school website (on the school's classnode.co
+  address) are in the price.
 - **The screens** are the two Crestfield demo schools': the showcase
   (Crestfield Demo College) for the broadsheet, the results page, the fee book,
   the roll import and the result checker; the sales demo for CBT and the
@@ -405,9 +410,12 @@ report cards, CBT, fees, attendance and registers, parents, the school's own
 portal, the installable app, the school website, speed on slow networks and
 nightly off-site backups. There is no "coming soon" label and no setting for
 one (the `COMING_SOON_*` settings and the premium add-on are gone). Not built,
-so never mentioned on a public page: news posts, admissions forms, custom
+so never mentioned on a public page as a feature: news posts, admissions forms, custom
 domains, school email, ID cards and forgot-password. A feature is added to the
-list the day it ships.
+list the day it ships. The one exception is a line on the pricing page, the
+owner's (23 November 2026): "Custom domains and school email are offered as
+optional paid add-ons." (`website.landing.ADD_ONS`), outside the price and on
+no other page.
 
 **The price** is one setting, `PRICE_PER_STUDENT_NAIRA` in `settings.py`
 (1500), read through `website/price.py` on every request by the homepage, the
