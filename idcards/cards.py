@@ -276,9 +276,14 @@ def verification(token: str, school, today: Optional[date] = None) -> Optional[V
     name = row["display_name"] or row["user__full_name"] or ""
     # The card's own date, else the session's end as it stands now: a card printed in first
     # term has no date, and is valid for the session until the third term says when it ends.
-    # With no third term there is no end to have passed, so only withdrawal or leaving the roll ends it.
+    # With no third term there is no end date to have passed, so the session ends it instead: the
+    # card stops verifying once a later session is the current one (a 2026/2027 card never
+    # verifies in 2027/2028). Withdrawal or leaving the roll end it too.
     ends_on = card.expires_on or session_ends_on(card.session)
-    in_date = ends_on is None or today <= ends_on
+    if ends_on is not None:
+        in_date = today <= ends_on
+    else:
+        in_date = not _a_later_session_is_current(card.session)
     valid = card.revoked_at is None and in_date and row["status"] in LIVE_STATUSES
     if not valid:
         return Verification(valid=False, name=name)
@@ -288,6 +293,12 @@ def verification(token: str, school, today: Optional[date] = None) -> Optional[V
         class_name=_class_name(card, today),
         photo=_photo_uri(card.student_membership_id),
     )
+
+
+def _a_later_session_is_current(session: str) -> bool:
+    """Whether the school's current term belongs to a session after `session` ("2026/2027" < "2027/2028")."""
+    current = Term.objects.filter(is_current=True).values_list("session", flat=True).first()
+    return current is not None and current > session
 
 
 def _class_name(card: IdCard, today: date) -> str:

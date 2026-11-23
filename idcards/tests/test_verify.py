@@ -79,6 +79,44 @@ class WhenTheCardsEndIsKnownTests(VerifySetUp):
         self.third_term_ended(days_ago=1)
         self.assertContains(self.verify(self.token), 'data-verdict="expired"')
 
+    def test_a_dateless_card_stops_verifying_once_a_later_session_is_current(self):
+        """A 2026/2027 card never verifies in 2027/2028, though its session never had a third term."""
+        from academics.models import Term, TermName
+
+        self.card_with(expires_on=None, session="2040/2041")
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')  # an earlier session is current
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2041/2042", name=TermName.FIRST, is_current=True,
+                starts_on=self.today + timedelta(days=400), ends_on=self.today + timedelta(days=490),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="expired"')
+
+    def test_a_dateless_card_of_the_current_session_stays_valid(self):
+        self.card_with(expires_on=None, session="2040/2041")
+        from academics.models import Term, TermName
+
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2040/2041", name=TermName.FIRST, is_current=True,
+                starts_on=self.today - timedelta(days=5), ends_on=self.today + timedelta(days=80),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+
+    def test_a_card_with_its_date_keeps_it_whatever_session_is_current(self):
+        from academics.models import Term, TermName
+
+        self.card_with(expires_on=self.today + timedelta(days=30))
+        with connected_to(self.stmarys):
+            Term.objects.filter(is_current=True).update(is_current=False)
+            Term.objects.create(
+                session="2041/2042", name=TermName.FIRST, is_current=True,
+                starts_on=self.today + timedelta(days=400), ends_on=self.today + timedelta(days=490),
+            )
+        self.assertContains(self.verify(self.token), 'data-verdict="valid"')
+
     def test_a_dateless_card_is_still_ended_by_withdrawal(self):
         from django.utils import timezone
 

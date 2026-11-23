@@ -45,8 +45,9 @@ CR80, 85.6 x 54 mm. Nothing it prints is nearer than 3 mm to the edge.
   front and back instead; the ID cards page says so. Printing is never refused for
   it. The first term's end is not the session's, so it is never used. The page a
   card's QR code opens follows the same rule without printing either: valid until
-  the third term's last day, or, with no third term yet, for as long as the card is
-  not withdrawn and the child is on the roll. A reprint after the third term is
+  the third term's last day, or, with no third term yet, until a later session is
+  made current (a 2026/2027 card never verifies in 2027/2028), and for as long as
+  the card is not withdrawn and the child is on the roll. A reprint after the third term is
   added brings the card's date up. Printing for any term of a
   session gives the same date, and the date is brought up to the session's end
   as it stands whenever a card is printed again.
