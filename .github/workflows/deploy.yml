@@ -44,6 +44,9 @@ concurrency:
 permissions:
   contents: read
   checks: read
+  # `CI passed on exactly this SHA` lists tests.yml's runs
+  # (repos/.../actions/workflows/tests.yml/runs), which needs actions: read.
+  actions: read
 
 jobs:
   deploy:
