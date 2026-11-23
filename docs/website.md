@@ -66,9 +66,10 @@ A plain form post, CSRF-checked, that works with no script.
 
 ## The page
 
-Seven sections in order: the hero, four benefits (the first of them the
-report sheet), how it works, the price beside the demo form, six questions, a
-final call to action, and the footer.
+Eight sections in order: the hero, four benefits (the first of them the
+report sheet), how it works, the price beside the demo form, the solutions
+(eight cards, one for each solution page below), six questions, a final call
+to action, and the footer.
 
 - **Only the hero has an eyebrow** (its small blue line over the headline); no
   other section has one. **Headlines are not all centred**: the benefits'
@@ -138,9 +139,9 @@ final call to action, and the footer.
   address (hello@classnode.co). The footer, the same on every page of the site
   (homepage, privacy notice, terms, the blog), is short and calm: the logo
   with one line under it (School management for Nigerian secondary schools.),
-  two groups of links with small grey uppercase labels that run inline and
-  wrap (Product: Features, Pricing, Blog, Book a demo; Sign in: Staff sign in,
-  Parent sign in), a thin rule, and one bottom line: the legal line, the only
+  three groups of links with small grey uppercase labels that run inline and
+  wrap (Product: Features, Pricing, Blog, Book a demo; Solutions: the eight
+  solution pages below; Sign in: Staff sign in, Parent sign in), a thin rule, and one bottom line: the legal line, the only
   place the company is named (© 2026 Classnode Edtech Limited · RC 9926572),
   and beside it Privacy, Terms and hello@classnode.co in small text. No
   address; the registered address waits for the lawyer. Every link is 44px
@@ -279,6 +280,78 @@ final call to action, and the footer.
 - **Weight**: a phone fetches about 360 KB uncompressed with every image
   counted at 2x, the deferred screens and the lazy photos too (under the
   400 KB budget a test holds), and less over the wire.
+
+## The solution pages
+
+Eight pages, one for each thing a school searches for, each with its main
+search phrase in its title (first, 60 characters or fewer), its one h1 and its
+first lines:
+
+| address | main search phrase |
+| --- | --- |
+| `/result-computation-software/` | result computation software for schools |
+| `/cbt-software-for-schools/` | CBT software for schools in Nigeria |
+| `/school-result-checker/` | online result checker for schools |
+| `/pricing/` | school management software price in Nigeria |
+| `/school-fees-management-software/` | school fees management software |
+| `/school-website-design/` | school website design in Nigeria |
+| `/school-management-software-lagos/` | school management software in Lagos |
+| `/excel-vs-school-software/` | Excel result template vs school software |
+
+- **One template, one list.** `website/landing.py` holds every page's words
+  (`LANDINGS`): title, description, h1, lead, sections, questions and related
+  pages. `website/templates/website/landing.html` draws them all, and
+  `website.views.landing` is the one view. `/pricing/` is one of them, with the
+  price card and the feature groups (`website.features`) drawn before its
+  sections. A page added to the list is added to `urls_site.py` too.
+- **The homepage's look.** The light top band with the hero's type (words and
+  buttons only, so the first screen has no picture to wait for), rows of words
+  beside a screen on alternating grounds, the questions as native `<details>`,
+  a short "Read next" list and the final band.
+- **Calls to action**: "Start your free first term" (to the demo form,
+  `/#demo`: a school starts by being set up, and there is no sign-up of its
+  own) and "WhatsApp us" (`https://wa.me/` and `SITE_PHONE`, left out when it
+  is empty), in the top band and the final band, with `hello@classnode.co` and
+  the support phone. The final band says where Classnode is based
+  (`SITE_LOCATION`).
+- **Questions**: four to six a page, drawn and given as that page's FAQPage
+  structured data from one list, word for word. No ratings and no reviews.
+- **Links**: each page links two or three related pages and the homepage
+  ("Read next"); every page's footer has a Solutions group with all eight, and
+  the homepage has a Solutions section of eight cards (between the price and
+  the questions), so every public page links to every other, as
+  `test_seo.py` asks.
+- **Only what is built.** Each feature a page describes is in the feature list
+  or is a detail of the code today: the approval chain (class teacher, vice
+  principal, principal; send back with a reason; locked at release), dense
+  positions and "-" for an unmarked paper (`docs/positions.md`), the master
+  broadsheet on screen, as PDF and Excel (`docs/broadsheet.md`), CBT steps 0 to
+  5 (`docs/cbt.md`), the result checker and its slips (`docs/messaging.md`
+  D11), the fee ledger, receipts, reminders and the daily summary
+  (`docs/fees.md`, `docs/messaging.md`), withholding for fees
+  (`docs/withholding.md`), the website editor and who publishes
+  (`schoolsite/access.py`), and the roll import (`docs/roll-import.md`).
+  The Lagos page's in-person setup, training and visits are the owner's
+  service, not code.
+- **The screens** are the two Crestfield demo schools': the showcase
+  (Crestfield Demo College) for the broadsheet, the results page, the fee book,
+  the roll import and the result checker; the sales demo for CBT and the
+  website, renamed "Crestfield College (Demo)" in the local copy the pictures
+  were taken from, and the website cut to sections with no address, since the
+  public site names no town but Lagos. `scripts/landing_shots.mjs` takes them,
+  `scripts/landing_shots.py` cuts them into `static/website/shots/landing-*`
+  (WebP, each under 60 KB, 1x and 2x), and three of the homepage slider's are
+  reused. All are `loading="lazy"` and described as a demo school's.
+- **Held by** `website/tests/test_landing.py`: the addresses, 200 on the site
+  and nothing on a school's host or the portal, one h1 with the phrase, titles
+  and descriptions, canonical, share card, sitemap, 700 to 1,200 words, the
+  writing rules (no en or em dash anywhere in the page), no paragraph shared by
+  two pages, the questions and their structured data, the actions, the links,
+  the screens, and the homepage's SoftwareApplication price (₦1,500, `1500`
+  NGN, per student per term). `tests/ui/screens.test.js` photographs each at
+  320, 360, 390, 768 and 1280.
+- **Measured** with Lighthouse mobile against a local server with `DEBUG` off
+  (the pull request that added them has the figures).
 
 ## About and security, and the contact settings
 

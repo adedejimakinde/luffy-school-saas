@@ -139,7 +139,8 @@ class ThePricingPageTests(SiteSetUp):
         text = visible_text(self.page)
         self.assertNotRegex(text, "[–—]", "an en or em dash")
         self.assertNotIn("!", text)
-        self.assertNotIn("?", text)
+        # Its questions (`website.landing`) are the one place a question mark belongs.
+        self.assertNotIn("?", visible_text(self.page, questions=False))
         for word in BANNED:
             self.assertNotRegex(text.lower(), rf"(?<![a-z]){re.escape(word)}(?![a-z])", word)
 

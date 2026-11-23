@@ -387,7 +387,9 @@ class StructuredDataTests(SiteSetUp):
         json.loads(raw)
 
     def test_the_other_pages_carry_none(self):
-        for path in ("/pricing/", "/privacy/", "/terms/", "/blog/"):
+        # The pricing page is a solution page and carries its own questions'
+        # FAQPage (`website/tests/test_landing.py`).
+        for path in ("/privacy/", "/terms/", "/blog/", "/about/"):
             with self.subTest(path=path):
                 self.assertNotIn("application/ld+json", self.get(path).content.decode())
 

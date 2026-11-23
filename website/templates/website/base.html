@@ -48,8 +48,8 @@ covers a line of the page. Its background is solid; once the page scrolls it
 turns white and gains a hairline and a shadow (`is-scrolled`, set by the
 script below). The phone menu is the small card it always was, hung from the
 header at its right. The footer is one short, calm
-block: the logo and one line, two groups of links that run inline and wrap
-(Product, Sign in), and a bottom line with the copyright, Privacy, Terms and
+block: the logo and one line, three groups of links that run inline and wrap
+(Product, Solutions: the eight solution pages of `website.landing`, Sign in), and a bottom line with the copyright, Privacy, Terms and
 the contacts (email, support phone, LinkedIn, Google).
 
 The one script is inline and a module, so it waits for the page: it marks the
@@ -118,6 +118,13 @@ figures to it (`{% block script %}`). Nothing else on the site runs.
             <li><a href="/#demo">Book a demo</a></li>
           </ul>
         </div>
+        {% if solutions %}<div class="foot-col foot-solutions">
+          <h2 class="foot-heading">Solutions</h2>
+          <ul>
+            {% for href, label in solutions %}<li><a href="{{ href }}">{{ label }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>{% endif %}
         {% if portal_host %}<div class="foot-col">
           <h2 class="foot-heading">Sign in</h2>
           <ul>
