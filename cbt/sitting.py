@@ -13,6 +13,12 @@ else's PIN, a student not in the test's classes. Only once the three are proved 
 door say anything else: that the sitting is not open to their class now, or that they
 have sat it already.
 
+**Staff are told which** (`cbt.signin_log`, `docs/cbt.md`, "The staff attempt log"): beside
+each refusal the door writes the real reason, against the student the number names, for
+the sitting page. It changes nothing the student is told, and keeps neither the PIN nor
+the code typed. The window is not one of the three checks: a class opened by hand signs
+in before the plan.
+
 **The PIN is asked of every test whose scores can go anywhere** (audit F-08,
 `needs_pin()`): one that can send to CA or be released. A test with the PIN off is a
 practice test: its scores never reach a CA column (`cbt.ca`) and are never released to a
@@ -456,13 +462,23 @@ def door(school, *, code, admission_number, pin, address, device="", now=None) -
     if not _here(school):
         raise NotOpened()
     number = _number(admission_number)
-    keys = guarded(school, device, address)
+    now = now or timezone.now()
+    # The staff attempt log (`cbt.signin_log`): written beside each refusal, read by staff
+    # only, and it changes nothing the student is told. Imported here because it reads this
+    # module's own checks.
+    from . import signin_log
+
+    try:
+        keys = guarded(school, device, address)
+    except TooManyAttempts as exc:
+        signin_log.note_locked(school, number=number, retry_after=exc.retry_after, device=device, now=now)
+        raise
     proved = _proved(school, code, number, pin)
     if proved is None:
         count_a_wrong_try(*keys)
+        signin_log.note_failed_try(school, code=code, number=number, pin=pin, device=device, now=now)
         raise NotOpened()
     test, student, group = proved
-    now = now or timezone.now()
     with transaction.atomic():
         attempt = _open_attempt(test, student.pk)
         if attempt is not None:
@@ -473,8 +489,10 @@ def door(school, *, code, admission_number, pin, address, device="", now=None) -
         left = max(0, int((deadline_of(attempt) - now).total_seconds() // 60))
         return Door(_ticket(school, test, student), test, student, group, True, left)
     if _next_number(test, student.pk) is None:
+        signin_log.note_closed(school, test, student, signin_log.Reason.ALREADY_SAT, device=device, now=now)
         raise Closed(ALREADY_SAT)
     if not sitting_open(test, group.pk, now):
+        signin_log.note_closed(school, test, student, signin_log.Reason.NOT_OPEN, device=device, now=now)
         raise Closed(NOT_OPEN_NOW)
     return Door(_ticket(school, test, student), test, student, group, False, None)
 

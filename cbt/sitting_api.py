@@ -37,6 +37,16 @@ class EventOut(Schema):
     detail: dict
 
 
+class SignInOut(Schema):
+    """A sign-in that did not get through. Staff only: never the PIN or the code typed."""
+
+    at: str
+    reason: str
+    what: str
+    until: Optional[str] = None
+    device: str = ""
+
+
 class RowOut(Schema):
     student_id: int
     name: str
@@ -57,6 +67,8 @@ class RowOut(Schema):
     answers_received: int
     may_retake: bool
     events: List[EventOut]
+    failed_sign_ins: int = 0
+    sign_ins: List[SignInOut] = []
 
 
 class ClassOut(Schema):

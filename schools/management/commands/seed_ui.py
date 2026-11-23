@@ -263,4 +263,26 @@ def sit_test(school, group, children, *, title=SIT_TITLE, code=SIT_CODE):
     minted = iter(sit_pin(order[s.pk]) for s in pins.roster(school, group, pins.current_term()))
     with mock.patch("cbt.pins.new_pin", side_effect=lambda: next(minted)):
         pins.print_class_as(principal, school, group.pk)
+    refused_at_the_door(school, children, code, order)
     return test
+
+
+def refused_at_the_door(school, children, code, order):
+    """A few sign-ins that did not get through, for the sitting page's attempt log (CBT
+    leftovers: `docs/cbt.md`, "The staff attempt log"). Through the real door, from an
+    address and a computer of their own, so no browser test's wait is touched."""
+    from cbt import sitting
+
+    tries = (
+        (children[0], code, "00000000"),
+        (children[0], "ZZZZZZ", sit_pin(order[children[0].pk])),
+        (children[1], code, "00000000"),
+    )
+    for child, typed_code, pin in tries:
+        try:
+            sitting.door(
+                school, code=typed_code, admission_number=child.reference, pin=pin,
+                address="203.0.113.7", device="0" * 32,
+            )
+        except sitting.NotOpened:
+            pass  # the point: the student is told one sentence, and the log is written
