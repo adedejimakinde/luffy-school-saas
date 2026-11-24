@@ -39,6 +39,7 @@ cannot tell them apart and neither can the person typing. It writes nothing.
 
 import hashlib
 import hmac
+import logging
 import re
 import secrets
 from dataclasses import dataclass, field
@@ -61,6 +62,9 @@ PIN_DIGITS = 8
 _PIN_SEPARATORS = re.compile(r"[\s-]+")
 
 
+log = logging.getLogger(__name__)
+
+
 class PinError(Exception):
     """A refusal from this module, carrying the sentence to show."""
 
@@ -71,6 +75,14 @@ class NotAllowedToPrint(PinError):
 
 class PrintRefused(PinError):
     """Well formed, and the school's own state says no. The message is the reason."""
+
+
+class ReplaceNotConfirmed(PrintRefused):
+    """The class already holds live PINs and the caller did not say to replace them.
+
+    Printing a whole class again stops every slip already handed out, so it is never done
+    by accident: the screen asks, and the route says `replace` only once it has been told yes.
+    """
 
 
 # -- the PIN -------------------------------------------------------------------------
@@ -182,7 +194,7 @@ def _name_of_user(user) -> str:
     return user.full_name or user.get_username()
 
 
-def _issue(actor, school, group, term, students, *, kind, one=None) -> Slips:
+def _issue(actor, school, group, term, students, *, kind, one=None, only_missing=False) -> Slips:
     """Cancel these students' live PINs this term, mint one each, and write the print.
 
     Called with the class row locked, so two presses for one class cannot interleave.
@@ -213,6 +225,7 @@ def _issue(actor, school, group, term, students, *, kind, one=None) -> Slips:
         count=len(printing),
         cancelled_count=len(live),
         without_a_number=len(answer.without_a_number),
+        only_missing=only_missing,
         printed_by_id=actor.pk,
         printed_by_name=_name_of_user(actor),
     )
@@ -234,6 +247,10 @@ def _issue(actor, school, group, term, students, *, kind, one=None) -> Slips:
         answer.slips.append(Slip(student_name=_name_of(student), admission_number=number, pin=pin))
     ExamPin.objects.bulk_create(pins)
     answer.print_row = row
+    log.info(
+        "exam PINs issued: print=%s kind=%s class=%s term=%s by=%s slips=%d cancelled=%d only_missing=%s",
+        row.pk, kind, group.pk, term.pk, actor.pk, len(printing), len(live), only_missing,
+    )
     return answer
 
 
@@ -252,15 +269,35 @@ def _term_or_refuse():
 
 
 @transaction.atomic
-def print_class_as(actor, school, group_id) -> Slips:
-    """A new slip for every student now in the class this term; every old PIN of theirs stops."""
+def print_class_as(actor, school, group_id, *, only_missing=False, replace=False) -> Slips:
+    """Slips for a class this term.
+
+    `only_missing`: a slip only for the students who hold no live PIN; nobody's PIN is
+    cancelled, so every slip already handed out keeps working.
+
+    Otherwise a new slip for every student now in the class, and every old PIN of theirs
+    stops. If any student holds a live PIN that is refused (`ReplaceNotConfirmed`) unless
+    `replace` says the caller has been told so and agreed.
+    """
     _require_printing_authority(actor, school)
     term = _term_or_refuse()
     group = _locked_group(group_id)
     students = roster(school, group, term)
     if not students:
         raise PrintRefused(f"Nobody is placed in {group.name} this term, so there is no slip to print.")
-    return _issue(actor, school, group, term, students, kind=PinSlipPrint.Kind.CLASS)
+    holding = live_pin_holders(term, [s.pk for s in students])
+    # A student with no admission number can never hold a PIN: they are named on the PDF
+    # either way, and are not "missing" a slip that could not be printed.
+    numbered = [s for s in students if _typed_number(s.reference)]
+    if only_missing:
+        if all(s.pk in holding for s in numbered):
+            raise PrintRefused(f"Everyone in {group.name} already has a slip, so there is none to print.")
+        students = [s for s in students if s.pk not in holding]
+    elif holding and not replace:
+        raise ReplaceNotConfirmed(
+            f"This gives all {len(numbered)} students new PINs. Slips already handed out will stop working."
+        )
+    return _issue(actor, school, group, term, students, kind=PinSlipPrint.Kind.CLASS, only_missing=only_missing)
 
 
 @transaction.atomic
@@ -342,6 +379,7 @@ __all__ = [
     "PIN_DIGITS",
     "PinError",
     "PrintRefused",
+    "ReplaceNotConfirmed",
     "Slip",
     "Slips",
     "check",

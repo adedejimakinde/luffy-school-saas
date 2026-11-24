@@ -64,13 +64,14 @@ export function printUrl(classGroupId, studentId = null) {
 }
 
 /**
- * Print a class's slips, or one student's. Resolves to `{ok: true, blob, filename}` or
+ * Print a class's slips (`replace` says the caller has agreed to cancel PINs already out;
+ * `onlyMissing` prints just for students with none), or one student's. Resolves to `{ok: true, blob, filename}` or
  * `{ok: false, detail}` for a sentence the row can say, or with `refusal` for the page.
  *
  * Not `postJson()`, because a 200 here is a file, not JSON. The CSRF rule is
  * `web/http.js`'s all the same: the token from the API, and one retry on a stale one.
  */
-export async function printSlips({ classGroupId, studentId = null, fetchImpl = fetch }) {
+export async function printSlips({ classGroupId, studentId = null, replace = false, onlyMissing = false, fetchImpl = fetch }) {
   const send = async (csrf) =>
     fetchImpl(printUrl(classGroupId, studentId), {
       method: "POST",
@@ -81,7 +82,7 @@ export async function printSlips({ classGroupId, studentId = null, fetchImpl = f
       },
       credentials: "same-origin",
       cache: "no-store",
-      body: "{}",
+      body: JSON.stringify(studentId == null ? { replace, only_missing: onlyMissing } : {}),
     });
 
   let response;
@@ -102,7 +103,7 @@ export async function printSlips({ classGroupId, studentId = null, fetchImpl = f
     return { ok: false, refusal: REFUSAL.BROKEN, body: { detail: String(error) } };
   }
   body = body || {};
-  if (response.status === 422) return { ok: false, detail: body.detail || "" };
+  if (response.status === 422 || response.status === 409) return { ok: false, detail: body.detail || "" };
   return { ok: false, refusal: refusalFor(response.status, body), body };
 }
 

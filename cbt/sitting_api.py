@@ -71,7 +71,14 @@ class RowOut(Schema):
     sign_ins: List[SignInOut] = []
 
 
+class PinsIssuedOut(Schema):
+    at: str
+    by: str
+
+
 class ClassOut(Schema):
+    #: When this class's exam PINs were last issued this term, and by whom; none if never.
+    pins_issued: Optional[PinsIssuedOut] = None
     id: int
     name: str
     open: bool

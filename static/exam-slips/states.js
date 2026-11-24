@@ -39,7 +39,7 @@ export function overview({
       : '<p class="note" role="alert">No term is open. The current term is set on the Setup page.</p>',
     '<div class="msg"><span class="label label-brand">How slips work</span>',
     "<p>Each student signs in to a test with the code their teacher reads out, their admission number and the exam PIN on their slip. ",
-    "A slip works for this term only. Printing a class again gives everyone in it a new PIN, and the slips already given out stop working.</p></div>",
+    "A slip works for this term only. Printing a whole class again gives everyone in it a new PIN, and the slips already given out stop working. To keep them, print only for the students who do not have a slip yet.</p></div>",
     '<h2 id="by-class">By class</h2>',
     term && classes.length
       ? `<ul class="classes slips">${classes.map((c) => classRow(c, { open, roster, confirming, notes, printed })).join("")}</ul>`
@@ -59,25 +59,32 @@ function classRow(c, { open, roster, confirming, notes, printed }) {
   const counts = c.students
     ? `${plural(c.students, "student", "students")}, ${c.with_a_pin} with a slip`
     : "Nobody placed this term";
-  const last = c.last_print ? `Last printed ${esc(c.last_print.at)} by ${esc(c.last_print.by)}` : "Not printed yet this term";
+  const last = c.last_print ? `PINs last issued: ${esc(c.last_print.at)} by ${esc(c.last_print.by)}` : "PINs not issued yet this term";
+  const missing = c.missing || 0;
+  // Nothing is cancelled by this one, so it asks nothing.
+  const onlyNew =
+    c.with_a_pin && missing > 0
+      ? `<button type="button" data-action="print-missing" data-class="${esc(c.id)}">Print slips only for students who don&#39;t have one yet (${missing})</button>`
+      : "";
   const print = !c.students
     ? ""
     : asking
-      ? `<div class="confirm" data-confirm="${esc(key)}"><p>${
-          c.with_a_pin
-            ? `${esc(c.name)} gets ${plural(c.students, "new slip", "new slips")}. The ${plural(c.with_a_pin, "slip", "slips")} already given out will stop working.`
-            : `${esc(c.name)} gets ${plural(c.students, "slip", "slips")}.`
-        }</p>` +
-        `<button type="button" class="submit" data-action="print-class" data-class="${esc(c.id)}">Print ${esc(c.name)}</button>` +
-        '<button type="button" class="again" data-action="keep">Not now</button></div>'
-      : `<button type="button" data-action="ask-print-class" data-class="${esc(c.id)}">${c.with_a_pin ? "Print again" : "Print slips"}</button>`;
+      ? c.with_a_pin
+        ? `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(c.name)} new PINs"><p><strong>This gives all ${c.printable ?? c.students} students new PINs. Slips already handed out will stop working.</strong></p>` +
+          // Cancel first, and the one the page focuses: Enter or a stray tap changes nothing.
+          '<button type="button" class="submit" data-action="keep" data-default>Cancel</button>' +
+          `<button type="button" class="again" data-action="print-class" data-class="${esc(c.id)}">Give ${esc(c.name)} new PINs and print</button></div>`
+        : `<div class="confirm" data-confirm="${esc(key)}"><p>${esc(c.name)} gets ${plural(c.students, "slip", "slips")}.</p>` +
+          `<button type="button" class="submit" data-action="print-class" data-class="${esc(c.id)}">Print ${esc(c.name)}</button>` +
+          '<button type="button" class="again" data-action="keep">Not now</button></div>'
+      : `<button type="button" data-action="ask-print-class" data-class="${esc(c.id)}">${c.with_a_pin ? "Print for the whole class again" : "Print slips"}</button>${onlyNew}`;
   const lost = c.students && c.with_a_pin
     ? `<button type="button" class="again" data-action="${open === c.id ? "close-class" : "open-class"}" data-class="${esc(c.id)}" aria-expanded="${open === c.id}">${open === c.id ? "Close" : "A lost slip"}</button>`
     : "";
   return [
     `<li class="group class-slips" data-class="${esc(c.id)}">`,
     `<span class="name">${esc(c.name)}</span>`,
-    `<span class="level">${counts}. ${last}.</span>`,
+    `<span class="level">${counts}. ${last}</span>`,
     `<div class="actions">${print}${lost}</div>`,
     note(notes[key]),
     done(printed[key]),
@@ -165,7 +172,8 @@ function officerForm(candidates, n) {
 }
 
 function printLine(p) {
-  const what = p.kind === "student" ? `a new slip for ${esc(p.student)} in ${esc(p.class_group)}` : `${plural(p.count, "slip", "slips")} for ${esc(p.class_group)}`;
+  const only = p.only_missing ? " (only students without one)" : "";
+  const what = p.kind === "student" ? `a new slip for ${esc(p.student)} in ${esc(p.class_group)}` : `${plural(p.count, "slip", "slips")} for ${esc(p.class_group)}${only}`;
   const cancelled = p.cancelled ? `, ${plural(p.cancelled, "old PIN", "old PINs")} stopped` : "";
   const missing = p.without_a_number ? `, ${plural(p.without_a_number, "student", "students")} with no admission number` : "";
   return `${esc(p.by)} printed ${what}${cancelled}${missing}`;

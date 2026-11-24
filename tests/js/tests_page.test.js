@@ -415,3 +415,18 @@ test("extra time is sent with its minutes and its reason, and the log is drawn a
   assert.match(root.innerHTML, /25 extra minutes/);
   assert.match(root.innerHTML, /Extra time given/);
 });
+
+test("the sitting says, for each class, when its PINs were last issued and by whom", () => {
+  const issued = { at: "24 Oct 2026, 10:04", by: "Ngozi <b>Eze</b>" };
+  const html = states.sittingView({
+    ...LOG,
+    classes: [
+      { ...LOG.classes[0], pins_issued: issued },
+      { id: 4, name: "JSS 1B", open: false, by_hand: false, said: "As planned", pins_issued: null },
+    ],
+  });
+
+  assert.match(html, /data-class="3">.*PINs last issued: 24 Oct 2026, 10:04 by Ngozi &lt;b&gt;Eze&lt;\/b&gt;/s);
+  assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
+  assert.doesNotMatch(html, /<b>Eze/);
+});

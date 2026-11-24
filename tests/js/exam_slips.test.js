@@ -25,8 +25,8 @@ const OVERVIEW = {
   term: "First term, 2026/2027",
   may_name: true,
   classes: [
-    { id: 3, name: "JSS 1A", students: 4, with_a_pin: 3, last_print: { at: "24 Oct 2026, 10:04", by: "Ngozi Eze" } },
-    { id: 4, name: "JSS 1B <b>Gold</b>", students: 1, with_a_pin: 0, last_print: null },
+    { id: 3, name: "JSS 1A", students: 4, printable: 4, missing: 1, with_a_pin: 3, last_print: { at: "24 Oct 2026, 10:04", by: "Ngozi Eze" } },
+    { id: 4, name: "JSS 1B <b>Gold</b>", students: 1, printable: 1, missing: 1, with_a_pin: 0, last_print: null },
     { id: 5, name: "JSS 2A", students: 0, with_a_pin: 0, last_print: null },
   ],
   officers: [
@@ -91,8 +91,8 @@ async function opened(extra = [], { overview = OVERVIEW, sent = [], saved = [] }
 test("each class says how many students and slips it has, and when it was last printed", () => {
   const html = states.overview({ ...OVERVIEW });
 
-  assert.match(html, /data-class="3">.*4 students, 3 with a slip\. Last printed 24 Oct 2026, 10:04 by Ngozi Eze\./s);
-  assert.match(html, /data-class="4">.*1 student, 0 with a slip\. Not printed yet this term\./s);
+  assert.match(html, /data-class="3">.*4 students, 3 with a slip\. PINs last issued: 24 Oct 2026, 10:04 by Ngozi Eze/s);
+  assert.match(html, /data-class="4">.*1 student, 0 with a slip\. PINs not issued yet this term/s);
   assert.match(html, /data-class="5">.*Nobody placed this term/s);
   assert.match(html, /First term, 2026\/2027/);
 });
@@ -100,7 +100,7 @@ test("each class says how many students and slips it has, and when it was last p
 test("a class with nobody has no Print button; one with slips offers a lost slip", () => {
   const html = states.overview({ ...OVERVIEW });
 
-  assert.match(html, /data-action="ask-print-class" data-class="3">Print again</);
+  assert.match(html, /data-action="ask-print-class" data-class="3">Print for the whole class again</);
   assert.match(html, /data-action="ask-print-class" data-class="4">Print slips</);
   assert.doesNotMatch(html, /data-class="5">Print/);
   assert.match(html, /data-action="open-class" data-class="3"/);
@@ -121,7 +121,7 @@ test("printing a class asks first, says what stops working, and only the second 
 
   await root.click({ "data-action": "ask-print-class", "data-class": "3" });
   assert.deepEqual(sent.filter((s) => s.startsWith("POST")), [], "asking sends nothing");
-  assert.match(root.innerHTML, /JSS 1A gets 4 new slips\. The 3 slips already given out will stop working\./);
+  assert.match(root.innerHTML, /This gives all 4 students new PINs\. Slips already handed out will stop working\./);
   await root.click({ "data-action": "keep" });
   assert.doesNotMatch(root.innerHTML, /data-confirm=/);
 
@@ -287,4 +287,69 @@ test("the print routes and the file's name", () => {
   assert.equal(printUrl(3, 101), "/api/cbt/slips/classes/3/students/101/print/");
   assert.equal(filenameOf('attachment; filename="a.pdf"'), "a.pdf");
   assert.equal(filenameOf(null), "exam-slips.pdf");
+});
+
+test("a class that holds PINs: Cancel comes first, is the one focused, and prints nothing", async () => {
+  const html = states.overview({ ...OVERVIEW, confirming: "class3" });
+
+  assert.match(html, /<strong>This gives all 4 students new PINs\. Slips already handed out will stop working\.<\/strong>/);
+  const cancel = html.indexOf('data-action="keep" data-default>Cancel<');
+  const go = html.indexOf('data-action="print-class" data-class="3"');
+  assert.ok(cancel > 0 && go > cancel, "Cancel is the first button and the default");
+  assert.doesNotMatch(html, /Printing now|data-default>Give/);
+
+  const sent = [];
+  const root = await opened([], { sent });
+  await root.click({ "data-action": "ask-print-class", "data-class": "3" });
+  await root.click({ "data-action": "keep" });
+  assert.deepEqual(sent.filter((s) => s.startsWith("POST")), []);
+  assert.doesNotMatch(root.innerHTML, /data-confirm=/);
+});
+
+test("replacing PINs says so to the server; only-missing never does", async () => {
+  const bodies = [];
+  const post = (options) => {
+    bodies.push(JSON.parse(options.body));
+    return PDF;
+  };
+  const root = await opened([["/api/cbt/slips/classes/3/print/", { method: "POST", reply: post }]]);
+
+  await root.click({ "data-action": "print-class", "data-class": "3" });
+  await root.click({ "data-action": "print-missing", "data-class": "3" });
+
+  assert.deepEqual(bodies, [
+    { replace: true, only_missing: false },
+    { replace: false, only_missing: true },
+  ]);
+  assert.match(root.innerHTML, /Slips already handed out still work\./);
+});
+
+test("the only-missing button is offered when some student has none, with how many, and asks nothing", () => {
+  const html = states.overview({ ...OVERVIEW });
+
+  assert.match(html, /data-action="print-missing" data-class="3">Print slips only for students who don&#39;t have one yet \(1\)</);
+  assert.doesNotMatch(html, /data-action="print-missing" data-class="4"/, "a class with no PIN prints them all");
+  const everyone = states.overview({ ...OVERVIEW, classes: [{ ...OVERVIEW.classes[0], with_a_pin: 4, missing: 0 }] });
+  assert.doesNotMatch(everyone, /print-missing/, "nobody is missing one");
+});
+
+test("a class never issued says so; the log names an only-missing print", () => {
+  const html = states.overview({ ...OVERVIEW, prints: [{ ...OVERVIEW.prints[0], only_missing: true, cancelled: 0 }] });
+
+  assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
+  assert.match(html, /3 slips for JSS 1A \(only students without one\)/);
+});
+
+test("a 409 from the server is a sentence in the row, not a broken page", async () => {
+  const saved = [];
+  const sentence = "This gives all 4 students new PINs. Slips already handed out will stop working.";
+  const root = await opened(
+    [["/api/cbt/slips/classes/3/print/", { method: "POST", reply: { status: 409, body: { detail: sentence } } }]],
+    { saved },
+  );
+
+  await root.click({ "data-action": "print-class", "data-class": "3" });
+
+  assert.deepEqual(saved, []);
+  assert.match(root.innerHTML, /This gives all 4 students new PINs/);
 });

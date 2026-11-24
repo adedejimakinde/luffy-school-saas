@@ -69,7 +69,7 @@ class LogSetUp(test_sitting.SittingSetUp):
         response = self.post(self.head, f"tests/{self.test_id}/classes/", {"class_group_ids": [self.jss1a_id, self.jss1b_id]})
         self.assertEqual(response.status_code, 200, response.content)
         with connected_to(self.stmarys):
-            pins.print_class_as(self.head.user, self.stmarys, self.jss1b_id)  # a first slip, since lost
+            pins.print_class_as(self.head.user, self.stmarys, self.jss1b_id, replace=True)  # a first slip, since lost
             return pins.print_student_as(self.head.user, self.stmarys, self.jss1b_id, self.bimpe.pk).slips[0].pin
 
     def open_1b_by_hand(self):
@@ -182,7 +182,7 @@ class EveryRefusalIsWrittenForStaffTests(LogSetUp):
             second = Term.objects.get(pk=self.second_term.pk)
             academics.set_current_term(second)
             academics.place_student(ClassGroup.objects.get(pk=self.jss1a_id), second, self.children["ada"])
-            newer = {s.admission_number: s.pin for s in pins.print_class_as(self.head.user, self.stmarys, self.jss1a_id).slips}
+            newer = {s.admission_number: s.pin for s in pins.print_class_as(self.head.user, self.stmarys, self.jss1a_id, replace=True).slips}
             self.assertEqual(ExamPin.objects.filter(student_membership_id=self.children["ada"].pk, cancelled_at__isnull=True).count(), 2)
         self.assertEqual(self.refused("Ada Obi", number="SM/001", pin=newer["SM/001"]), ["other_term_slip"])
         self.assertEqual(self.refused("Ada Obi", number="SM/001", pin="12345678"), ["other_term_slip", "wrong_pin"])

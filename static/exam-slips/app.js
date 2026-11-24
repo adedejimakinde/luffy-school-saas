@@ -39,6 +39,10 @@ export function printedNote(filename) {
   return `Printed. Saved as ${filename}. Hand the slips out; any earlier slips for these students no longer work.`;
 }
 
+export function printedMissingNote(filename) {
+  return `Printed. Saved as ${filename}. Slips already handed out still work.`;
+}
+
 /** Saves the PDF, then lets go of it: the page keeps no copy of a PIN. */
 export function saveFile(blob, filename) {
   const url = URL.createObjectURL(blob);
@@ -71,14 +75,14 @@ export async function mount(root, { fetchImpl = fetch, save = saveFile } = {}) {
     else refused(`class${classGroupId}`, answer);
   };
 
-  const print = async (key, classGroupId, studentId = null) => {
-    const result = await printSlips({ classGroupId, studentId, fetchImpl });
+  const print = async (key, classGroupId, studentId = null, mode = {}) => {
+    const result = await printSlips({ classGroupId, studentId, ...mode, fetchImpl });
     if (!result.ok) return refused(key, result);
     save(result.blob, result.filename);
     const keep = { open: state.open, roster: state.roster };
     state = fromOverview(await fetchOverview({ fetchImpl }), keep);
     if (state.step !== "exam-slips") return;
-    state = { ...state, printed: { [key]: printedNote(result.filename) } };
+    state = { ...state, printed: { [key]: mode.onlyMissing ? printedMissingNote(result.filename) : printedNote(result.filename) } };
     if (state.open != null) await loadRoster(state.open);
   };
 
@@ -96,7 +100,8 @@ export async function mount(root, { fetchImpl = fetch, save = saveFile } = {}) {
       state = { ...state, open: classId, roster: null, confirming: null, notes: {}, printed: {} };
       draw();
       await loadRoster(classId);
-    } else if (action === "print-class") await print(`class${classId}`, classId);
+    } else if (action === "print-class") await print(`class${classId}`, classId, null, { replace: true });
+    else if (action === "print-missing") await print(`class${classId}`, classId, null, { onlyMissing: true });
     else if (action === "print-student") await print(`student${hit.dataset.student}`, classId, Number(hit.dataset.student));
     else if (action === "end") {
       const result = await endOfficer({ membershipId: Number(hit.dataset.member), fetchImpl });
@@ -104,6 +109,9 @@ export async function mount(root, { fetchImpl = fetch, save = saveFile } = {}) {
       else refused(`end${hit.dataset.member}`, result);
     } else return;
     draw();
+    // A confirmation that cancels something opens on Cancel.
+    const safe = root.querySelector && root.querySelector("[data-default]");
+    if (safe && safe.focus) safe.focus();
   });
 
   root.addEventListener("submit", async (event) => {

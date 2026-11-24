@@ -18,6 +18,7 @@ a shared computer's browser and any proxy from keeping it either. The offline wo
 never touches `/api/` (`sync/worker.js`).
 """
 
+import json
 from typing import List, Optional
 
 from django.db import transaction
@@ -51,6 +52,13 @@ class LastPrintOut(Schema):
     by: str
 
 
+class PrintIn(Schema):
+    #: Yes, give everyone new PINs even though some already hold one.
+    replace: bool = False
+    #: Only students who hold no live PIN; cancels nothing.
+    only_missing: bool = False
+
+
 class ClassOut(Schema):
     id: int
     name: str
@@ -58,6 +66,10 @@ class ClassOut(Schema):
     students: int
     #: How many of them hold a live exam PIN this term.
     with_a_pin: int
+    #: How many of them can be given a slip (they have an admission number).
+    printable: int = 0
+    #: Of those, how many hold no live PIN.
+    missing: int = 0
     last_print: Optional[LastPrintOut] = None
 
 
@@ -84,6 +96,7 @@ class PrintOut(Schema):
     count: int
     cancelled: int
     without_a_number: int
+    only_missing: bool = False
     by: str
     at: str
 
@@ -171,9 +184,12 @@ def _overview(request, school) -> OverviewOut:
         ):
             placed.setdefault(group_id, set()).add(sid)
         everyone = set().union(*placed.values()) if placed else set()
-        acting = set(
-            Membership.objects.with_access().filter(school=school, pk__in=everyone).values_list("pk", flat=True)
-        )
+        numbered = {}
+        for pk, reference in Membership.objects.with_access().filter(school=school, pk__in=everyone).values_list(
+            "pk", "reference"
+        ):
+            numbered[pk] = bool(pins._typed_number(reference))
+        acting = set(numbered)
         holding = pins.live_pin_holders(term, acting)
         last = {}
         for row in PinSlipPrint.objects.filter(term=term).order_by("-id"):
@@ -187,6 +203,8 @@ def _overview(request, school) -> OverviewOut:
                     name=group.name,
                     students=len(here),
                     with_a_pin=len(here & holding),
+                    printable=sum(1 for sid in here if numbered[sid]),
+                    missing=sum(1 for sid in here if numbered[sid] and sid not in holding),
                     last_print=LastPrintOut(at=_worded(row.at), by=row.printed_by_name) if row else None,
                 )
             )
@@ -243,6 +261,7 @@ def _overview(request, school) -> OverviewOut:
                 count=p.count,
                 cancelled=p.cancelled_count,
                 without_a_number=p.without_a_number,
+                only_missing=p.only_missing,
                 by=p.printed_by_name,
                 at=_worded(p.at),
             )
@@ -303,21 +322,36 @@ def _pdf_response(request, slips, filename) -> HttpResponse:
     return response
 
 
-_PRINT = {200: None, 403: MessageOut, 404: MessageOut, 422: MessageOut}
+def _print_options(request) -> PrintIn:
+    """The body, if there is one. No body, or one that is not an object, says no to both."""
+    try:
+        data = json.loads(request.body or b"{}")
+        return PrintIn(replace=data.get("replace") is True, only_missing=data.get("only_missing") is True)
+    except (ValueError, AttributeError):
+        return PrintIn()
+
+
+_PRINT = {200: None, 403: MessageOut, 404: MessageOut, 409: MessageOut, 422: MessageOut}
 
 
 @router.post("/slips/classes/{int:class_group_id}/print/", response=_PRINT)
 def print_class(request, class_group_id: int):
-    """A new slip for every student in the class this term. Their old PINs stop working."""
+    """A new slip for every student in the class this term. Their old PINs stop working,
+    so that needs `replace`; `only_missing` prints just for those without one."""
+    payload = _print_options(request)
     school = _school_of(request)
     if not access.can_print(request.user, school):
         return 403, MessageOut(detail=_MAY_NOT_PRINT)
     try:
         with transaction.atomic():
-            slips = pins.print_class_as(request.user, school, class_group_id)
+            slips = pins.print_class_as(
+                request.user, school, class_group_id, only_missing=payload.only_missing, replace=payload.replace
+            )
             response = _pdf_response(request, slips, f"exam slips {slips.class_group_name} {slips.term_label} {slips.session}")
     except pins.NotAllowedToPrint:
         return 403, MessageOut(detail=_MAY_NOT_PRINT)
+    except pins.ReplaceNotConfirmed as exc:
+        return 409, MessageOut(detail=str(exc))
     except pins.PrintRefused as exc:
         return 422, MessageOut(detail=str(exc))
     return response

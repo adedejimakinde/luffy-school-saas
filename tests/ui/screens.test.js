@@ -1126,6 +1126,57 @@ describe("a phone's 390px", () => {
   });
 });
 
+describe("exam slips: replacing PINs that are already out", () => {
+  // A class whose PINs are issued asks before giving everyone new ones, with Cancel first and
+  // focused, and says when and by whom they were last issued. At a small Android, a common
+  // iPhone and a desk. Runs after the plain screens, because it issues a class's PINs.
+  for (const width of [320, 390, 1280]) {
+    test(`the confirmation at ${width}px`, async () => {
+      const context = await signedIn("sunrise.principal");
+      const page = await context.newPage();
+      try {
+        await page.setViewportSize({ width, height: 800 });
+        await page.goto(`${SUNRISE}/exam-slips/`);
+        await settle(page);
+        const printed = await page.evaluate(async () => {
+          const { csrf_token: token } = await (await fetch("/api/csrf/")).json();
+          const overview = await (await fetch("/api/cbt/slips/")).json();
+          const group = overview.classes.find((c) => c.students > 0);
+          const first = await fetch(`/api/cbt/slips/classes/${group.id}/print/`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "X-CSRFToken": token },
+            body: JSON.stringify({ replace: true }),
+          });
+          // Without a yes, the server refuses and says why.
+          const again = await fetch(`/api/cbt/slips/classes/${group.id}/print/`, {
+            method: "POST",
+            headers: { "content-type": "application/json", "X-CSRFToken": token },
+            body: "{}",
+          });
+          return { id: group.id, first: first.status, again: again.status };
+        });
+        assert.ok([200, 409].includes(printed.first), `issuing PINs: ${printed.first}`);
+        assert.equal(printed.again, 409, "a second print without a yes is refused");
+
+        await page.goto(`${SUNRISE}/exam-slips/`);
+        await settle(page);
+        const row = page.locator(`.class-slips[data-class="${printed.id}"]`);
+        assert.match(await row.innerText(), /PINs last issued: \d{1,2} \w{3} \d{4}, \d\d:\d\d by /);
+        await row.locator('[data-action="ask-print-class"]').click();
+        await settle(page);
+        const text = await row.innerText();
+        assert.match(text, /This gives all \d+ students new PINs\. Slips already handed out will stop working\./);
+        assert.equal(await page.evaluate(() => document.activeElement.textContent), "Cancel", "Cancel has focus");
+        assert.deepEqual(await check(page, width, "exam-slips-replace-confirm"), []);
+        await page.locator('[data-action="keep"]').first().click();
+        assert.equal(await page.locator("[data-confirm]").count(), 0, "Cancel closes it and prints nothing");
+      } finally {
+        await page.close();
+      }
+    });
+  }
+});
+
 describe("keyboard focus and large text on a phone", () => {
   // WCAG 2.4.11: tabbing scrolls a control into view, and the fixed tab bar and
   // the sticky top bar must not be what is in front of it. `html`'s
