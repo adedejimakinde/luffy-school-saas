@@ -182,7 +182,7 @@ class EveryRefusalIsWrittenForStaffTests(LogSetUp):
             second = Term.objects.get(pk=self.second_term.pk)
             academics.set_current_term(second)
             academics.place_student(ClassGroup.objects.get(pk=self.jss1a_id), second, self.children["ada"])
-            newer = {s.admission_number: s.pin for s in pins.print_class_as(self.head.user, self.stmarys, self.jss1a_id).slips}
+            newer = {s.admission_number: s.pin for s in pins.print_class_as(self.head.user, self.stmarys, self.jss1a_id, replace=True).slips}
             self.assertEqual(ExamPin.objects.filter(student_membership_id=self.children["ada"].pk, cancelled_at__isnull=True).count(), 2)
         self.assertEqual(self.refused("Ada Obi", number="SM/001", pin=newer["SM/001"]), ["other_term_slip"])
         self.assertEqual(self.refused("Ada Obi", number="SM/001", pin="12345678"), ["other_term_slip", "wrong_pin"])

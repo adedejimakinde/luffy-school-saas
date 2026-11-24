@@ -51,6 +51,13 @@ class LastPrintOut(Schema):
     by: str
 
 
+class PrintIn(Schema):
+    #: Yes, give everyone new PINs even though some already hold one.
+    replace: bool = False
+    #: Only students who hold no live PIN; cancels nothing.
+    only_missing: bool = False
+
+
 class ClassOut(Schema):
     id: int
     name: str
@@ -84,6 +91,7 @@ class PrintOut(Schema):
     count: int
     cancelled: int
     without_a_number: int
+    only_missing: bool = False
     by: str
     at: str
 
@@ -243,6 +251,7 @@ def _overview(request, school) -> OverviewOut:
                 count=p.count,
                 cancelled=p.cancelled_count,
                 without_a_number=p.without_a_number,
+                only_missing=p.only_missing,
                 by=p.printed_by_name,
                 at=_worded(p.at),
             )
@@ -303,21 +312,27 @@ def _pdf_response(request, slips, filename) -> HttpResponse:
     return response
 
 
-_PRINT = {200: None, 403: MessageOut, 404: MessageOut, 422: MessageOut}
+_PRINT = {200: None, 403: MessageOut, 404: MessageOut, 409: MessageOut, 422: MessageOut}
 
 
 @router.post("/slips/classes/{int:class_group_id}/print/", response=_PRINT)
-def print_class(request, class_group_id: int):
-    """A new slip for every student in the class this term. Their old PINs stop working."""
+def print_class(request, class_group_id: int, payload: PrintIn = None):
+    """A new slip for every student in the class this term. Their old PINs stop working,
+    so that needs `replace`; `only_missing` prints just for those without one."""
+    payload = payload or PrintIn()
     school = _school_of(request)
     if not access.can_print(request.user, school):
         return 403, MessageOut(detail=_MAY_NOT_PRINT)
     try:
         with transaction.atomic():
-            slips = pins.print_class_as(request.user, school, class_group_id)
+            slips = pins.print_class_as(
+                request.user, school, class_group_id, only_missing=payload.only_missing, replace=payload.replace
+            )
             response = _pdf_response(request, slips, f"exam slips {slips.class_group_name} {slips.term_label} {slips.session}")
     except pins.NotAllowedToPrint:
         return 403, MessageOut(detail=_MAY_NOT_PRINT)
+    except pins.ReplaceNotConfirmed as exc:
+        return 409, MessageOut(detail=str(exc))
     except pins.PrintRefused as exc:
         return 422, MessageOut(detail=str(exc))
     return response

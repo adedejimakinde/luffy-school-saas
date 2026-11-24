@@ -642,6 +642,18 @@ class WhoRunsASittingTests(SittingSetUp):
 
 
 class TheSittingLogTests(SittingSetUp):
+    def test_each_class_says_when_its_pins_were_last_issued_and_by_whom(self):
+        classes = {c["name"]: c for c in self.get(self.admin, f"tests/{self.test_id}/sitting/").json()["classes"]}
+
+        issued = classes["JSS 1A"]["pins_issued"]
+        self.assertEqual(issued["by"], self.head.user.full_name or self.head.user.get_username())
+        self.assertRegex(issued["at"], r"^\d{1,2} \w{3} \d{4}, \d\d:\d\d$")
+
+        with connected_to(self.stmarys):
+            pins.print_class_as(self.admin.user, self.stmarys, self.jss1a_id, replace=True)
+        again = {c["name"]: c for c in self.get(self.admin, f"tests/{self.test_id}/sitting/").json()["classes"]}
+        self.assertEqual(again["JSS 1A"]["pins_issued"]["by"], self.admin.user.full_name or self.admin.user.get_username())
+
     def test_the_administrator_reads_it_and_it_carries_no_answer(self):
         body = self.started()
         item = body["paper"]["items"][0]

@@ -31,6 +31,7 @@ from .models import (
     Attempt,
     AttemptEvent,
     AttemptSession,
+    PinSlipPrint,
     RetakeGrant,
     SignInRefusal,
     SittingControl,
@@ -315,7 +316,11 @@ def sitting_log_as(actor, school, test_id) -> Log:
     audience = list(TestAudience.objects.filter(test=test).select_related("class_group"))
     group_names = {a.class_group_id: a.class_group.name for a in audience}
     classes = []
+    last_pins = {}
+    for row in PinSlipPrint.objects.filter(term_id=test.term_id, class_group_id__in=list(group_names)).order_by("-id"):
+        last_pins.setdefault(row.class_group_id, row)
     for a in audience:
+        pins_row = last_pins.get(a.class_group_id)
         latest = SittingControl.objects.filter(test=test, class_group_id=a.class_group_id).order_by("-id").first()
         classes.append(
             {
@@ -323,6 +328,11 @@ def sitting_log_as(actor, school, test_id) -> Log:
                 "name": a.class_group.name,
                 "open": sitting.sitting_open(test, a.class_group_id, now),
                 "by_hand": latest is not None,
+                "pins_issued": (
+                    {"at": timezone.localtime(pins_row.at).strftime("%-d %b %Y, %H:%M"), "by": pins_row.printed_by_name}
+                    if pins_row
+                    else None
+                ),
                 "said": (
                     f"{latest.get_kind_display()} by hand by {latest.by_name}, {timezone.localtime(latest.at):%-d %b %H:%M}: {latest.reason}"
                     if latest

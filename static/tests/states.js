@@ -403,7 +403,9 @@ function signIns(r) {
 
 function sittingClass(log, c, confirming) {
   const state = c.open ? '<span class="label label-ok">Open</span>' : '<span class="label">Closed</span>';
-  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span>`;
+  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span><span class="level pins-issued">${
+    c.pins_issued ? `PINs last issued: ${esc(c.pins_issued.at)} by ${esc(c.pins_issued.by)}` : "PINs not issued yet this term"
+  }</span>`;
   if (!log.may_run) return `${head}</li>`;
   const kind = c.open ? "close" : "open";
   if (confirming !== `${kind}-${c.id}`) {

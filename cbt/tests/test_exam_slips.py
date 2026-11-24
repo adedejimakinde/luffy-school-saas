@@ -26,6 +26,7 @@ from unittest import mock
 from django.db import connection, transaction
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from academics import services as academics
 from academics.models import Term
@@ -83,8 +84,10 @@ class ExamSlipsSetUp(RefusalAssertions, ChainSetUp):
     def class_slips(self, who, group_id, host=HOST):
         return self.as_(who).get(f"{BASE}slips/classes/{group_id}/", HTTP_HOST=host)
 
-    def print_class(self, who, group_id, host=HOST):
-        """The response, and the slips the PDF was rendered from (the raw PINs)."""
+    def print_class(self, who, group_id, host=HOST, replace=True, only_missing=False):
+        """The response, and the slips the PDF was rendered from (the raw PINs).
+
+        `replace` defaults to yes, as the screen sends it once the person has agreed."""
         captured = {}
         real = cbt_pdf.render_slips
 
@@ -93,7 +96,12 @@ class ExamSlipsSetUp(RefusalAssertions, ChainSetUp):
             return real(slips, address)
 
         with mock.patch("cbt.api.pdf.render_slips", side_effect=keep):
-            response = self.as_(who).post(f"{BASE}slips/classes/{group_id}/print/", HTTP_HOST=host)
+            response = self.as_(who).post(
+                f"{BASE}slips/classes/{group_id}/print/",
+                data={"replace": replace, "only_missing": only_missing},
+                content_type="application/json",
+                HTTP_HOST=host,
+            )
         connection.set_schema_to_public()
         return response, captured.get("slips"), captured.get("address")
 
@@ -427,6 +435,118 @@ class PrintingAgainCancelsTheOldPinsTests(ExamSlipsSetUp):
         self.assertEqual(response.status_code, 500)
         self.assertEqual(len(self.prints()), 1)
         self.assertEqual(self.check("SM/001", self.pin_for(first, "Ada Obi")), self.children["ada"].pk)
+
+
+class ReissuingNeedsAYesTests(ExamSlipsSetUp):
+    """A class that already holds PINs is never given new ones by accident."""
+
+    def test_a_first_print_needs_no_yes(self):
+        response, slips, _ = self.print_class(self.head, self.jss1a_id, replace=False)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(slips.slips), 3)
+
+    def test_printing_a_class_that_holds_pins_without_a_yes_is_a_409_and_changes_nothing(self):
+        _, first, _ = self.print_class(self.head, self.jss1a_id)
+
+        response, slips, _ = self.print_class(self.head, self.jss1a_id, replace=False)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["detail"],
+            "This gives all 3 students new PINs. Slips already handed out will stop working.",
+        )
+        self.assertIsNone(slips)
+        self.assertEqual(len(self.prints()), 1, "a refusal writes no row")
+        self.assertEqual(len(self.pins_of(cancelled_at__isnull=True)), 3)
+        self.assertEqual(self.check("SM/001", self.pin_for(first, "Ada Obi")), self.children["ada"].pk)
+
+    def test_a_body_less_post_is_the_same_as_no(self):
+        self.print_class(self.head, self.jss1a_id)
+
+        response = self.as_(self.head).post(f"{BASE}slips/classes/{self.jss1a_id}/print/", HTTP_HOST=HOST)
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_with_a_yes_everyone_gets_new_pins_and_the_row_says_so(self):
+        _, first, _ = self.print_class(self.head, self.jss1a_id)
+
+        response, second, _ = self.print_class(self.head, self.jss1a_id, replace=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(self.check("SM/001", self.pin_for(first, "Ada Obi")))
+        self.assertEqual(self.check("SM/001", self.pin_for(second, "Ada Obi")), self.children["ada"].pk)
+        row = self.prints()[-1]
+        self.assertEqual((row.count, row.cancelled_count, row.only_missing), (3, 3, False))
+
+    def test_a_single_students_reprint_is_unchanged_and_needs_no_yes(self):
+        self.print_class(self.head, self.jss1a_id)
+
+        response, one = self.print_student(self.head, self.jss1a_id, self.children["ada"])
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.prints()[-1].cancelled_count, 1)
+
+
+class OnlyStudentsWithoutAPinTests(ExamSlipsSetUp):
+    def test_it_prints_only_for_students_with_none_and_cancels_nothing(self):
+        _, first, _ = self.print_class(self.head, self.jss1a_id)
+        # One student has no live PIN (a PIN cancelled by hand), as a newcomer would not.
+        newcomer = self.children["bisi"]
+        with connected_to(self.stmarys):
+            ExamPin.objects.filter(student_membership_id=newcomer.pk).update(
+                cancelled_at=timezone.now(), cancelled_by_print=PinSlipPrint.objects.first()
+            )
+
+        response, slips, _ = self.print_class(self.head, self.jss1a_id, replace=False, only_missing=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([s.student_name for s in slips.slips], ["Bisi Ade"])
+        self.assertEqual(slips.without_a_number, ["Tunde Cole"])
+        self.assertEqual(self.check("SM/001", self.pin_for(first, "Ada Obi")), self.children["ada"].pk)
+        self.assertEqual(self.check("SM/002", self.pin_for(first, "Emeka Nwosu")), self.children["emeka"].pk)
+        self.assertEqual(self.check("SM/003", slips.slips[0].pin), newcomer.pk)
+        row = self.prints()[-1]
+        self.assertEqual((row.kind, row.count, row.cancelled_count, row.only_missing), ("class", 1, 0, True))
+
+    def test_when_everyone_has_one_it_says_so_and_writes_nothing(self):
+        self.print_class(self.head, self.jss1a_id)
+
+        response, slips, _ = self.print_class(self.head, self.jss1a_id, replace=False, only_missing=True)
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["detail"], "Everyone in JSS 1A already has a slip, so there is none to print.")
+        self.assertEqual(len(self.prints()), 1)
+
+    def test_on_a_class_with_no_pins_it_prints_everyone(self):
+        response, slips, _ = self.print_class(self.head, self.jss1a_id, replace=False, only_missing=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(slips.slips), 3)
+
+    def test_it_is_for_the_same_people_as_a_full_print(self):
+        self.print_class(self.head, self.jss1a_id)
+        self.assertEqual(self.print_class(self.teacher, self.jss1a_id, replace=False, only_missing=True)[0].status_code, 403)
+        self.assertEqual(len(self.prints()), 1)
+
+
+class PinsLastIssuedTests(ExamSlipsSetUp):
+    def test_the_overview_says_when_and_by_whom_for_each_class(self):
+        self.print_class(self.head, self.jss1a_id)
+        self.print_student(self.admin, self.jss1a_id, self.children["ada"])
+
+        classes = {c["name"]: c for c in self.overview(self.head).json()["classes"]}
+
+        last = classes["JSS 1A"]["last_print"]
+        self.assertEqual(last["by"], self.admin.user.full_name or self.admin.user.get_username())
+        self.assertRegex(last["at"], r"^\d{1,2} \w{3} \d{4}, \d\d:\d\d$")
+        self.assertIsNone(classes["JSS 1B"]["last_print"])
+
+    def test_the_print_log_marks_an_only_missing_print(self):
+        self.print_class(self.head, self.jss1a_id, only_missing=True)
+
+        [p] = self.overview(self.head).json()["prints"]
+        self.assertTrue(p["only_missing"])
 
 
 class OneAnswerForEveryFailureTests(ExamSlipsSetUp):

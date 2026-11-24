@@ -85,6 +85,8 @@ class PinSlipPrint(models.Model):
     cancelled_count = models.PositiveIntegerField()
     #: Students on the roster with no admission number, who got no slip.
     without_a_number = models.PositiveIntegerField(default=0)
+    #: Printed only for students who held no live PIN: nothing was cancelled.
+    only_missing = models.BooleanField(default=False)
     printed_by_id = models.PositiveBigIntegerField()
     printed_by_name = models.CharField(max_length=255)
     at = models.DateTimeField(auto_now_add=True)
