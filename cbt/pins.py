@@ -286,13 +286,16 @@ def print_class_as(actor, school, group_id, *, only_missing=False, replace=False
     if not students:
         raise PrintRefused(f"Nobody is placed in {group.name} this term, so there is no slip to print.")
     holding = live_pin_holders(term, [s.pk for s in students])
+    # A student with no admission number can never hold a PIN: they are named on the PDF
+    # either way, and are not "missing" a slip that could not be printed.
+    numbered = [s for s in students if _typed_number(s.reference)]
     if only_missing:
-        students = [s for s in students if s.pk not in holding]
-        if not students:
+        if all(s.pk in holding for s in numbered):
             raise PrintRefused(f"Everyone in {group.name} already has a slip, so there is none to print.")
+        students = [s for s in students if s.pk not in holding]
     elif holding and not replace:
         raise ReplaceNotConfirmed(
-            f"This gives all {len(students)} students new PINs. Slips already handed out will stop working."
+            f"This gives all {len(numbered)} students new PINs. Slips already handed out will stop working."
         )
     return _issue(actor, school, group, term, students, kind=PinSlipPrint.Kind.CLASS, only_missing=only_missing)
 

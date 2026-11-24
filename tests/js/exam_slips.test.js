@@ -25,8 +25,8 @@ const OVERVIEW = {
   term: "First term, 2026/2027",
   may_name: true,
   classes: [
-    { id: 3, name: "JSS 1A", students: 4, with_a_pin: 3, last_print: { at: "24 Oct 2026, 10:04", by: "Ngozi Eze" } },
-    { id: 4, name: "JSS 1B <b>Gold</b>", students: 1, with_a_pin: 0, last_print: null },
+    { id: 3, name: "JSS 1A", students: 4, printable: 4, missing: 1, with_a_pin: 3, last_print: { at: "24 Oct 2026, 10:04", by: "Ngozi Eze" } },
+    { id: 4, name: "JSS 1B <b>Gold</b>", students: 1, printable: 1, missing: 1, with_a_pin: 0, last_print: null },
     { id: 5, name: "JSS 2A", students: 0, with_a_pin: 0, last_print: null },
   ],
   officers: [
@@ -329,7 +329,7 @@ test("the only-missing button is offered when some student has none, with how ma
 
   assert.match(html, /data-action="print-missing" data-class="3">Print slips only for students who don&#39;t have one yet \(1\)</);
   assert.doesNotMatch(html, /data-action="print-missing" data-class="4"/, "a class with no PIN prints them all");
-  const everyone = states.overview({ ...OVERVIEW, classes: [{ ...OVERVIEW.classes[0], with_a_pin: 4 }] });
+  const everyone = states.overview({ ...OVERVIEW, classes: [{ ...OVERVIEW.classes[0], with_a_pin: 4, missing: 0 }] });
   assert.doesNotMatch(everyone, /print-missing/, "nobody is missing one");
 });
 

@@ -69,7 +69,7 @@ class LogSetUp(test_sitting.SittingSetUp):
         response = self.post(self.head, f"tests/{self.test_id}/classes/", {"class_group_ids": [self.jss1a_id, self.jss1b_id]})
         self.assertEqual(response.status_code, 200, response.content)
         with connected_to(self.stmarys):
-            pins.print_class_as(self.head.user, self.stmarys, self.jss1b_id)  # a first slip, since lost
+            pins.print_class_as(self.head.user, self.stmarys, self.jss1b_id, replace=True)  # a first slip, since lost
             return pins.print_student_as(self.head.user, self.stmarys, self.jss1b_id, self.bimpe.pk).slips[0].pin
 
     def open_1b_by_hand(self):

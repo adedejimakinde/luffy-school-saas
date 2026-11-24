@@ -60,17 +60,17 @@ function classRow(c, { open, roster, confirming, notes, printed }) {
     ? `${plural(c.students, "student", "students")}, ${c.with_a_pin} with a slip`
     : "Nobody placed this term";
   const last = c.last_print ? `PINs last issued: ${esc(c.last_print.at)} by ${esc(c.last_print.by)}` : "PINs not issued yet this term";
-  const missing = c.students - c.with_a_pin;
+  const missing = c.missing || 0;
   // Nothing is cancelled by this one, so it asks nothing.
   const onlyNew =
-    c.students && c.with_a_pin && missing > 0
+    c.with_a_pin && missing > 0
       ? `<button type="button" data-action="print-missing" data-class="${esc(c.id)}">Print slips only for students who don&#39;t have one yet (${missing})</button>`
       : "";
   const print = !c.students
     ? ""
     : asking
       ? c.with_a_pin
-        ? `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(c.name)} new PINs"><p><strong>This gives all ${plural(c.students, "student", "students")} new PINs. Slips already handed out will stop working.</strong></p>` +
+        ? `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(c.name)} new PINs"><p><strong>This gives all ${c.printable ?? c.students} students new PINs. Slips already handed out will stop working.</strong></p>` +
           // Cancel first, and the one the page focuses: Enter or a stray tap changes nothing.
           '<button type="button" class="submit" data-action="keep" data-default>Cancel</button>' +
           `<button type="button" class="again" data-action="print-class" data-class="${esc(c.id)}">Give ${esc(c.name)} new PINs and print</button></div>`
