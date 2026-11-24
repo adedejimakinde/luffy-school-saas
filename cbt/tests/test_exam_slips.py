@@ -429,7 +429,12 @@ class PrintingAgainCancelsTheOldPinsTests(ExamSlipsSetUp):
         _, first, _ = self.print_class(self.head, self.jss1a_id)
         self.client.raise_request_exception = False
         with mock.patch("cbt.api.pdf.render_slips", side_effect=RuntimeError("no fonts")):
-            response = self.as_(self.head).post(f"{BASE}slips/classes/{self.jss1a_id}/print/", HTTP_HOST=HOST)
+            response = self.as_(self.head).post(
+                f"{BASE}slips/classes/{self.jss1a_id}/print/",
+                data={"replace": True},
+                content_type="application/json",
+                HTTP_HOST=HOST,
+            )
         connection.set_schema_to_public()
 
         self.assertEqual(response.status_code, 500)
