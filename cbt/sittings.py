@@ -23,7 +23,7 @@ from django.utils import timezone
 from academics.models import ClassGroup, ClassPlacement
 from accounts.models import Membership, Role
 
-from . import access, signin_log, sitting
+from . import access, pins, signin_log, sitting
 from .banks import NotYours, Refused, name_of, plain
 from .models import (
     MAX_EXTRA_MINUTES,
@@ -296,6 +296,9 @@ class Log:
     code_set: bool
     code_changes: List[dict]
     controls: List[dict]
+    #: May this login print and reprint exam slips here? The sitting page's slips card is
+    #: for them alone (`access.can_print`), and each class then carries its `slips` counts.
+    may_print: bool = False
 
 
 def _iso(at):
@@ -340,6 +343,13 @@ def sitting_log_as(actor, school, test_id) -> Log:
                 ),
             }
         )
+    may_print = access.can_print(actor, school)
+    term = pins.current_term() if may_print else None
+    if term is not None:
+        # Counts only, for the slips card: no PIN and no digest leaves this function.
+        for c, a in zip(classes, audience):
+            numbered = [s.pk for s in pins.roster(school, a.class_group, term) if pins._typed_number(s.reference)]
+            c["slips"] = {"printable": len(numbered), "with_a_pin": len(pins.live_pin_holders(term, numbered))}
     placements = dict(
         ClassPlacement.objects.filter(term_id=test.term_id, class_group_id__in=list(group_names)).values_list(
             "student_membership_id", "class_group_id"
@@ -439,6 +449,7 @@ def sitting_log_as(actor, school, test_id) -> Log:
         may_run=access.runs_sitting(actor, school, test),
         may_extend=access.gives_extra_time(actor, school, test),
         may_retake=may_retake,
+        may_print=may_print,
         code_set=bool(test.code_digest),
         code_changes=[
             {"what": f"Code {c.kind}", "by": c.by_name, "role": c.role, "at": _iso(c.at)}

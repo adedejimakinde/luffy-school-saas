@@ -76,7 +76,15 @@ class PinsIssuedOut(Schema):
     by: str
 
 
+class SlipCountsOut(Schema):
+    #: Students who can be given a slip (they have an admission number), and how many of
+    #: them hold a live PIN. Only for a login that may print.
+    printable: int
+    with_a_pin: int
+
+
 class ClassOut(Schema):
+    slips: Optional[SlipCountsOut] = None
     #: When this class's exam PINs were last issued this term, and by whom; none if never.
     pins_issued: Optional[PinsIssuedOut] = None
     id: int
@@ -100,6 +108,7 @@ class LogOut(Schema):
     may_run: bool
     may_extend: bool
     may_retake: bool
+    may_print: bool = False
     classes: List[ClassOut]
     rows: List[RowOut]
     code_changes: List[dict]
@@ -145,6 +154,7 @@ def _log_out(log, code=None) -> LogOut:
         may_run=log.may_run,
         may_extend=log.may_extend,
         may_retake=log.may_retake,
+        may_print=log.may_print,
         classes=[ClassOut(**c) for c in log.classes],
         rows=[RowOut(**r.__dict__) for r in log.rows],
         code_changes=log.code_changes,

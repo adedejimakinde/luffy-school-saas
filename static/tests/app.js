@@ -2,6 +2,8 @@
 
 import * as api from "./api.js";
 import * as states from "./states.js";
+import { fetchClass, printSlips } from "../exam-slips/api.js";
+import { saveFile } from "../web/download.js";
 
 const { REFUSAL } = api;
 
@@ -145,7 +147,10 @@ export function testFrom(form) {
   };
 }
 
-export async function mount(root, { fetchImpl = fetch, location = window.location } = {}) {
+/** An admission number as one would type it twice: trimmed, one space, any case. */
+export const admissionKey = (typed) => String(typed || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+export async function mount(root, { fetchImpl = fetch, location = window.location, save = saveFile } = {}) {
   const portal = root.dataset.portal || "";
   let state = await load(routeOf(location.hash), { fetchImpl });
   const draw = () => {
@@ -173,13 +178,47 @@ export async function mount(root, { fetchImpl = fetch, location = window.locatio
     return null;
   };
 
+  /** The PDF for a class or one student, then the log again so "last issued" is the school's own. */
+  let printing = false;
+  const printSlip = async (classId, mode = {}) => {
+    if (printing) return;
+    printing = true;
+    try {
+      const result = await printSlips({ classGroupId: classId, ...mode, fetchImpl });
+      if (!result.ok) {
+        if (result.refusal) state = refusal(result);
+        else state = { ...state, confirming: null, slips: { [classId]: { kind: "note", text: result.detail || "That slip could not be printed." } } };
+        return draw();
+      }
+      save(result.blob, result.filename);
+      const said = mode.onlyMissing
+        ? `Printed. Saved as ${result.filename}. Slips already handed out still work.`
+        : mode.studentId
+          ? `Printed. Saved as ${result.filename}. Their earlier slip no longer works.`
+          : `Printed. Saved as ${result.filename}. Hand the slips out; every earlier slip for this class no longer works.`;
+      const again = await api.fetchSitting({ testId: state.log.test_id, fetchImpl });
+      state = { step: "sitting", log: again.ok ? again.body : state.log, slips: { [classId]: { kind: "done", text: said } } };
+      draw();
+    } finally {
+      printing = false;
+    }
+  };
+
   root.addEventListener("click", async (event) => {
     const hit = event.target.closest("[data-action]");
     if (!hit || hit.tagName === "INPUT" || hit.tagName === "SELECT") return;
     const { action } = hit.dataset;
+    const slip = /^slip-(missing|reissue)-(\d+)$/.exec(action);
+    if (slip && state.step === "sitting") {
+      return printSlip(Number(slip[2]), slip[1] === "missing" ? { onlyMissing: true } : { replace: true });
+    }
     if (action.startsWith("ask-")) {
-      state = { ...state, confirming: action.slice(4), detail: "", done: "" };
-      return draw();
+      state = { ...state, confirming: action.slice(4), detail: "", done: "", slips: {} };
+      draw();
+      // A confirmation that cancels something opens on Cancel.
+      const safe = root.querySelector && root.querySelector("[data-default]");
+      if (safe && safe.focus) safe.focus();
+      return null;
     }
     if (action === "keep") {
       state = { ...state, confirming: null };
@@ -251,6 +290,26 @@ export async function mount(root, { fetchImpl = fetch, location = window.locatio
     if (!form || !form.dataset) return;
     if (event.preventDefault) event.preventDefault();
     const kind = form.dataset.form;
+    if (kind === "slip-one" && state.step === "sitting") {
+      const classId = Number(form.dataset.class);
+      const say = (text) => {
+        state = { ...state, slips: { [classId]: { kind: "note", text } } };
+        draw();
+      };
+      const wanted = admissionKey(form.admission.value);
+      if (!wanted) return say("Type the student's admission number.");
+      const roster = await fetchClass({ classGroupId: classId, fetchImpl });
+      if (!roster.ok) {
+        if (roster.refusal) {
+          state = refusal(roster);
+          return draw();
+        }
+        return say((roster.body || {}).detail || "That class could not be read.");
+      }
+      const student = roster.body.students.find((s) => admissionKey(s.admission_number) === wanted);
+      if (!student) return say(`No student with admission number ${form.admission.value.trim()} is in ${roster.body.name} this term.`);
+      return printSlip(classId, { studentId: student.id });
+    }
     if (kind === "question") {
       const question = questionFrom(form);
       const { bank } = state;

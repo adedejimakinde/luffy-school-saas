@@ -430,3 +430,195 @@ test("the sitting says, for each class, when its PINs were last issued and by wh
   assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
   assert.doesNotMatch(html, /<b>Eze/);
 });
+
+// -- real buttons, and the sitting page's exam PIN slips ---------------------------------------
+
+const SLIPS_LOG = {
+  ...LOG,
+  may_print: true,
+  classes: [
+    { id: 3, name: "JSS 1A", open: true, by_hand: false, said: "As planned", pins_issued: { at: "24 Oct 2026, 10:04", by: "Ngozi Eze" }, slips: { printable: 4, with_a_pin: 3 } },
+    { id: 4, name: "JSS 1B", open: false, by_hand: false, said: "As planned", pins_issued: null, slips: { printable: 2, with_a_pin: 0 } },
+  ],
+};
+
+/** The tags of every button and link in some markup, with their classes. */
+const controls = (html) => [...html.matchAll(/<(a|button)\b([^>]*)>([^<]*)</g)].map(([, tag, attrs, text]) => ({ tag, attrs, text }));
+const named = (html, text) => controls(html).find((c) => c.text === text);
+
+test("the test page: one primary action, the rest real buttons, and nothing is plain grey text", () => {
+  const html = states.testView({ ...TEST, state: "published", state_label: "Approved", may_approve: false, may_change_classes: true, may_delete: false });
+  const sitting = named(html, "The sitting");
+  assert.equal(sitting.tag, "a");
+  assert.match(sitting.attrs, /class="btn btn-primary"/);
+  assert.match(sitting.attrs, /href="#sitting\/9"/);
+  assert.equal(html.match(/btn-primary/g).length, 1, "one primary action");
+  for (const label of ["Try it as a student", "Results", "Change classes"]) {
+    assert.match(named(html, label).attrs, /class="btn"/, label);
+  }
+  assert.equal(named(html, "Try it as a student").tag, "a");
+  assert.equal(named(html, "Change classes").tag, "button");
+  assert.doesNotMatch(html, /btn-quiet|class="again"/);
+  assert.match(html, /<div class="actions">.*The sitting.*Try it as a student.*Results.*Change classes/s, "in one wrapping row");
+});
+
+test("a draft's delete is the cautious button, and still asks first", () => {
+  const html = states.testView({ ...TEST, state: "draft", may_approve: false, may_delete: true });
+  assert.match(named(html, "Delete draft").attrs, /btn btn-danger/);
+  assert.match(states.testView({ ...TEST, may_delete: true }, { confirming: "delete" }), /btn-danger-solid" data-action="delete-test"/);
+});
+
+test("changing classes opens its form and the button gives way to it", () => {
+  const t = { ...TEST, may_change_classes: true, class_choices: [{ id: 3, name: "JSS 1A" }], class_group_ids: [3] };
+  assert.ok(named(states.testView(t), "Change classes"));
+  const open = states.testView(t, { confirming: "classes" });
+  assert.equal(named(open, "Change classes"), undefined);
+  assert.match(open, /Save classes/);
+});
+
+test("the sitting page: opening is the primary move, closing is cautious and asks first", () => {
+  const html = states.sittingView(SLIPS_LOG);
+  assert.match(named(html, "Close it now").attrs, /btn btn-danger/);
+  assert.match(named(html, "Open it now").attrs, /class="btn-primary"/);
+  assert.match(named(html, "Change the code").attrs, /class="btn"/);
+  assert.match(named(html, "Extra time").attrs, /class="btn"/);
+  const asking = states.sittingView(SLIPS_LOG, { confirming: "close-3" });
+  assert.match(asking, /Close JSS 1A now\?/);
+  assert.match(asking, /btn-danger-solid">Close the sitting/);
+});
+
+test("under the test code, the student is told they need their slip", () => {
+  assert.match(states.sittingView(SLIPS_LOG, { code: "KMTRWX" }), /KMTRWX.*Students also need their exam PIN slip\./s);
+  assert.match(states.sittingView({ ...LOG, may_print: false, code_set: false }), /Students also need their exam PIN slip\./);
+});
+
+test("the slips card: three ways to print per class, and when PINs were last issued", () => {
+  const html = states.sittingView(SLIPS_LOG);
+  assert.match(html, /<h2 id="slips-title">Exam PIN slips<\/h2>/);
+  assert.match(html, /data-class="3"[^>]*>.*3 students have an exam PIN, of 4 students who can be given one/s);
+  assert.match(html, /PINs last issued: 24 Oct 2026, 10:04 by Ngozi Eze/);
+  assert.match(html, /PINs not issued yet this term/);
+  assert.match(named(html, "Print slips for students who don&#39;t have one yet (1)").attrs, /data-action="slip-missing-3"/);
+  assert.match(named(html, "Reissue slips for the whole class").attrs, /btn btn-danger" data-action="ask-reissue-3"/);
+  assert.match(named(html, "Reprint one student&#39;s slip").attrs, /data-action="ask-one-3"/);
+  // A class with no PIN has nothing to reissue; the default prints everyone.
+  assert.equal(html.match(/Reissue slips for the whole class/g).length, 1);
+  assert.match(named(html, "Print slips for students who don&#39;t have one yet (2)").attrs, /slip-missing-4/);
+  // Those lines are drawn once: in the card, not again in the class list.
+  assert.equal(html.match(/PINs last issued/g).length, 1);
+});
+
+test("a login that may not print has no card and no print button, but still reads when PINs were issued", () => {
+  const html = states.sittingView({ ...SLIPS_LOG, may_print: false, classes: SLIPS_LOG.classes.map((c) => ({ ...c, slips: null })) });
+  assert.doesNotMatch(html, /Exam PIN slips|slip-missing|ask-reissue|ask-one/);
+  assert.match(html, /PINs last issued: 24 Oct 2026, 10:04 by Ngozi Eze/);
+});
+
+test("when everyone has a slip the default is off and says so; with none, a whole class is only a print", () => {
+  const html = states.sittingView({ ...SLIPS_LOG, classes: [{ ...SLIPS_LOG.classes[0], slips: { printable: 4, with_a_pin: 4 } }] });
+  assert.match(named(html, "Print slips for students who don&#39;t have one yet").attrs, /disabled/);
+  assert.match(html, /Every student already has a slip\./);
+});
+
+test("reissuing the class asks first, opens on Cancel, and says old slips stop", () => {
+  const html = states.sittingView(SLIPS_LOG, { confirming: "reissue-3" });
+  assert.match(html, /role="alertdialog"/);
+  assert.match(html, /This gives all 4 students new PINs\. Slips already handed out will stop working\./);
+  assert.match(html, /data-action="keep" data-default>Cancel/);
+  assert.match(html, /btn-danger-solid" data-action="slip-reissue-3"/);
+});
+
+function slipsFetch({ sent, roster, printStatus = 200, printBody = {} }) {
+  return async (url, options = {}) => {
+    const method = options.method || "GET";
+    if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
+    sent.push(`${method} ${url}${options.body && method === "POST" ? ` ${options.body}` : ""}`);
+    if (url.endsWith("/sitting/")) return { status: 200, json: async () => SLIPS_LOG };
+    if (/\/slips\/classes\/\d+\/$/.test(url)) return { status: 200, json: async () => roster };
+    if (url.endsWith("/print/")) {
+      if (printStatus !== 200) return { status: printStatus, json: async () => printBody };
+      return { status: 200, headers: { get: () => 'attachment; filename="exam slips JSS 1A.pdf"' }, blob: async () => "PDF" };
+    }
+    throw new Error(`no stub for ${method} ${url}`);
+  };
+}
+
+const ROSTER = { id: 3, name: "JSS 1A", term: "First term", students: [{ id: 101, name: "Ada Obi", admission_number: "SM/001", has_pin: true }] };
+
+test("the default prints for students without a PIN, asks for no yes, and sends no replace", async () => {
+  forgetToken();
+  const sent = [];
+  const saved = [];
+  const root = fakeRoot();
+  await mount(root, { fetchImpl: slipsFetch({ sent, roster: ROSTER }), location: at("#sitting/9"), save: (blob, name) => saved.push(name) });
+  sent.length = 0;
+  // The page shows the sitting only after the first read; draw it from the answer.
+  await root.click({ "data-action": "slip-missing-3" });
+  const post = sent.find((s) => s.startsWith("POST") && s.includes("/slips/classes/3/print/"));
+  assert.ok(post, sent.join("\n"));
+  assert.deepEqual(JSON.parse(post.split(" ").slice(2).join(" ")), { replace: false, only_missing: true });
+  assert.deepEqual(saved, ["exam slips JSS 1A.pdf"]);
+  assert.match(root.innerHTML, /Slips already handed out still work\./);
+  assert.ok(sent.some((s) => s.startsWith("GET") && s.endsWith("/sitting/")), "the log is read again for the new date");
+});
+
+test("reissuing prints only on the second tap, and with the yes", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot();
+  await mount(root, { fetchImpl: slipsFetch({ sent, roster: ROSTER }), location: at("#sitting/9"), save: () => {} });
+  await root.click({ "data-action": "ask-reissue-3" });
+  assert.deepEqual(sent.filter((s) => s.includes("/print/")), [], "asking prints nothing");
+  assert.match(root.innerHTML, /Slips already handed out will stop working/);
+  await root.click({ "data-action": "slip-reissue-3" });
+  const post = sent.find((s) => s.includes("/slips/classes/3/print/"));
+  assert.deepEqual(JSON.parse(post.split(" ").slice(2).join(" ")), { replace: true, only_missing: false });
+  assert.match(root.innerHTML, /every earlier slip for this class no longer works/);
+});
+
+test("one student's slip is found by admission number, however it is typed, and prints for that student only", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot();
+  await mount(root, { fetchImpl: slipsFetch({ sent, roster: ROSTER }), location: at("#sitting/9"), save: () => {} });
+  await root.click({ "data-action": "ask-one-3" });
+  await root.submit({ admission: "  sm/001 " }, { form: "slip-one", class: "3" });
+  assert.ok(sent.some((s) => s.includes("/slips/classes/3/students/101/print/")), sent.join("\n"));
+  assert.match(root.innerHTML, /Their earlier slip no longer works\./);
+});
+
+test("an admission number not in the class says so and prints nothing", async () => {
+  forgetToken();
+  const sent = [];
+  const root = fakeRoot();
+  await mount(root, { fetchImpl: slipsFetch({ sent, roster: ROSTER }), location: at("#sitting/9"), save: () => {} });
+  await root.click({ "data-action": "ask-one-3" });
+  await root.submit({ admission: "SM/999" }, { form: "slip-one", class: "3" });
+  assert.match(root.innerHTML, /No student with admission number SM\/999 is in JSS 1A this term\./);
+  assert.deepEqual(sent.filter((s) => s.includes("/print/")), []);
+  await root.submit({ admission: "   " }, { form: "slip-one", class: "3" });
+  assert.match(root.innerHTML, /Type the student&#39;s admission number\./);
+});
+
+test("a refused print says why beside the class and saves nothing", async () => {
+  forgetToken();
+  const sent = [];
+  const saved = [];
+  const root = fakeRoot();
+  const fetchImpl = slipsFetch({ sent, roster: ROSTER, printStatus: 422, printBody: { detail: "Everyone in JSS 1A already has a slip, so there is none to print." } });
+  await mount(root, { fetchImpl, location: at("#sitting/9"), save: (_, name) => saved.push(name) });
+  await root.click({ "data-action": "slip-missing-3" });
+  assert.match(root.innerHTML, /already has a slip, so there is none to print/);
+  assert.deepEqual(saved, []);
+});
+
+test("no sentence the sitting or the test page says has a dash in it", () => {
+  const pages = [
+    states.sittingView(SLIPS_LOG, { code: "KMTRWX" }),
+    states.sittingView(SLIPS_LOG, { confirming: "reissue-3" }),
+    states.sittingView(SLIPS_LOG, { confirming: "one-3" }),
+    states.sittingView(SLIPS_LOG, { confirming: "close-3" }),
+    states.testView({ ...TEST, state: "published", may_change_classes: true, may_delete: true }),
+  ];
+  for (const html of pages) assert.doesNotMatch(html.replace(/<[^>]*>/g, " "), /[–—]/);
+});

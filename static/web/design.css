@@ -251,6 +251,35 @@ button.signout:hover, button.again:hover, .btn-quiet:hover {
   border-color: transparent;
 }
 
+/* A cautious action: it stops something or replaces something. Outlined until it is the
+   confirming press, which is solid. */
+button.btn-danger, .btn-danger {
+  color: var(--stop);
+  background: var(--card);
+  border-color: var(--stop);
+}
+
+button.btn-danger:hover, .btn-danger:hover {
+  color: var(--stop);
+  background: var(--stop-bg);
+  border-color: var(--stop);
+}
+
+button.btn-danger-solid, .btn-danger-solid {
+  min-height: var(--control-lg);
+  color: var(--card);
+  background: var(--stop);
+  border-color: var(--stop);
+  font-weight: 700;
+}
+
+button.btn-danger-solid:hover, .btn-danger-solid:hover {
+  color: var(--card);
+  background: var(--stop);
+  border-color: var(--stop);
+  filter: brightness(0.92);
+}
+
 button:disabled, .btn[aria-disabled="true"] {
   opacity: 0.55;
   cursor: not-allowed;

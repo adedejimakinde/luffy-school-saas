@@ -344,17 +344,43 @@ export const SCREENS = [
   // The sitting (CBT step 4): its code, its classes opened or closed by hand, and the log
   // with extra time and retakes, as the principal; and as the administrator, who runs it
   // and reads no answer. Read only: `sit.test.js` sits the test.
+  // At a small Android and a common iPhone as well as the defaults (320, 360, 390 and wider): the
+  // buttons wrap, nothing spills out, none is under 44px tall or 15px of text. Reissuing and
+  // reprinting one student's slip are each one more tap, so their screens are held too.
   {
     name: "tests-sitting",
     as: "sunrise.principal",
     url: `${SUNRISE}/tests/`,
-    steps: [["tests-sitting-log", 'a[href^="#sitting/"]']],
+    widths: [320, 390],
+    steps: [
+      ["tests-sitting-log", 'a[href^="#sitting/"]'],
+      ["tests-sitting-reissue", '[data-action^="ask-reissue-"]'],
+    ],
+  },
+  {
+    name: "tests-sitting-one",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/tests/`,
+    widths: [320, 390],
+    steps: [
+      ["tests-sitting-one-log", 'a[href^="#sitting/"]'],
+      ["tests-sitting-one-form", '[data-action^="ask-one-"]'],
+    ],
   },
   {
     name: "tests-sitting-office",
     as: "sunrise.admin",
     url: `${SUNRISE}/tests/`,
+    widths: [320, 390],
     steps: [["tests-sitting-office-log", 'a[href^="#sitting/"]']],
+  },
+  // A published test's own page: "The sitting" is its one primary button; the rest wrap below.
+  {
+    name: "tests-detail",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/tests/`,
+    widths: [320, 390],
+    steps: [["tests-detail-page", '.test-row:has(a[href^="#sitting/"]) a[href^="#test/"]']],
   },
   // A test's results (CBT step 5): `seed_ui`'s UI Results class's test, which its six sat
   // and the principal released (their own class, child, parent and code: nothing sit or

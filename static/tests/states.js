@@ -27,9 +27,9 @@ function testRow(t, { summariesOnly }) {
   const what = `${esc(t.subject)}${t.level_name ? `, ${esc(t.level_name)}` : ""}. ${classNames(t.classes)}.`;
   const when = `Opens ${esc(t.opens)}, closes ${esc(t.closes)}. ${plural(t.duration, "minute", "minutes")} each.`;
   const size = `${plural(t.size, "question", "questions")}. ${t.code_set ? "Test code set." : "No test code yet."}`;
-  const open = summariesOnly ? "" : `<a class="btn btn-quiet" href="#test/${esc(t.id)}">Open</a>`;
-  const sitting = t.state === "published" ? `<a class="btn btn-quiet" href="#sitting/${esc(t.id)}" aria-label="The sitting of ${esc(t.title)}">Sitting</a>` : "";
-  const results = t.state === "published" || t.state === "closed" ? `<a class="btn btn-quiet" href="results/#${esc(t.id)}">Results</a>` : "";
+  const open = summariesOnly ? "" : `<a class="btn" href="#test/${esc(t.id)}">Open</a>`;
+  const sitting = t.state === "published" ? `<a class="btn" href="#sitting/${esc(t.id)}" aria-label="The sitting of ${esc(t.title)}">Sitting</a>` : "";
+  const results = t.state === "published" || t.state === "closed" ? `<a class="btn" href="results/#${esc(t.id)}">Results</a>` : "";
   return [
     `<li class="test-row" data-test="${esc(t.id)}">`,
     `<span class="name">${esc(t.title)}</span> <span class="badge state-${esc(t.state)}">${esc(t.state_label)}</span>`,
@@ -81,7 +81,7 @@ export function banksView({ term = null, banks = [], empty_because = "" } = {}) 
             (b) =>
               `<li class="group" data-bank="${esc(b.subject_id)}-${esc(b.level)}"><span class="name">${esc(b.subject)}, ${esc(b.level_name)}</span>` +
               `<span class="level">${plural(b.in_use, "question", "questions")} in use${b.retired ? `, ${b.retired} retired` : ""}.${b.may_write ? "" : " You read this bank."}</span>` +
-              `<a class="btn btn-quiet" href="#bank/${esc(b.subject_id)}/${esc(b.level)}">Open</a></li>`,
+              `<a class="btn" href="#bank/${esc(b.subject_id)}/${esc(b.level)}">Open</a></li>`,
           )
           .join("")}</ul>`
       : `<p class="blank">${esc(empty_because)}</p>`,
@@ -97,7 +97,7 @@ function questionRow(q, n, bank) {
     `<span class="what"><span class="stem">${lines(q.stem)}</span>`,
     `<span class="who">${q.topic ? `${esc(q.topic)}. ` : ""}${q.options.length === 5 ? "A to E" : "A to D"}. Answer ${LETTERS[q.correct_index]}. ${plural(q.marks, "mark", "marks")}.${picture} `,
     `${q.used_in ? `In ${plural(q.used_in, "test", "tests")}.` : "Not used yet."} ${q.retired ? "Retired." : `Edited ${esc(q.updated_at)} by ${esc(q.updated_by)}.`}</span></span>`,
-    bank.may_write && !q.retired ? `<a class="btn btn-quiet" href="#question/${esc(bank.subject_id)}/${esc(bank.level)}/${esc(q.id)}" aria-label="Edit question ${n}">Edit</a>` : "",
+    bank.may_write && !q.retired ? `<a class="btn" href="#question/${esc(bank.subject_id)}/${esc(bank.level)}/${esc(q.id)}" aria-label="Edit question ${n}">Edit</a>` : "",
     "</li>",
   ].join("");
 }
@@ -149,7 +149,7 @@ export function questionForm(bank, q, { detail = "", values = null, confirming =
     '<p class="hint">PNG, JPG or WebP. It downloads with the test, so keep it small.</p>',
     '<label for="image_alt">Describe the picture for a student who cannot see it</label>',
     `<input id="image_alt" name="image_alt" maxlength="200" value="${esc(v.image_alt || "")}">`,
-    shown ? '<button type="button" class="again" data-action="no-picture">Remove the picture</button>' : "",
+    shown ? '<button type="button" class="btn" data-action="no-picture">Remove the picture</button>' : "",
     '<fieldset><legend>Number of options</legend>',
     `<label class="choice"><input type="radio" name="count" value="4" data-action="count"${n === 4 ? " checked" : ""}> A to D</label>`,
     `<label class="choice"><input type="radio" name="count" value="5" data-action="count"${n === 5 ? " checked" : ""}> A to E</label>`,
@@ -167,7 +167,7 @@ export function questionForm(bank, q, { detail = "", values = null, confirming =
     '<p class="hint">Students see this with their corrections, after scores are released.</p>',
     note(detail),
     '<div class="actions"><button type="submit" class="submit">Save question</button>',
-    `<a class="btn btn-quiet" href="#bank/${esc(bank.subject_id)}/${esc(bank.level)}">Cancel</a></div>`,
+    `<a class="btn" href="#bank/${esc(bank.subject_id)}/${esc(bank.level)}">Cancel</a></div>`,
     "</form>",
     q ? retireOrDelete(q, confirming) : "",
     "</section>",
@@ -176,12 +176,12 @@ export function questionForm(bank, q, { detail = "", values = null, confirming =
 
 function retireOrDelete(q, confirming) {
   if (confirming === "retire") {
-    return '<div class="confirm"><p>Retire this question? It stays for the tests that used it, and no new test draws it.</p><button type="button" class="submit" data-action="retire">Retire it</button><button type="button" class="again" data-action="keep">Not now</button></div>';
+    return '<div class="confirm"><p>Retire this question? It stays for the tests that used it, and no new test draws it.</p><button type="button" class="submit" data-action="retire">Retire it</button><button type="button" class="btn" data-action="keep">Not now</button></div>';
   }
   if (confirming === "delete") {
-    return '<div class="confirm"><p>Delete this question? No test has used it, and it cannot be brought back.</p><button type="button" class="submit" data-action="delete-question">Delete it</button><button type="button" class="again" data-action="keep">Not now</button></div>';
+    return '<div class="confirm"><p>Delete this question? No test has used it, and it cannot be brought back.</p><button type="button" class="submit" data-action="delete-question">Delete it</button><button type="button" class="btn" data-action="keep">Not now</button></div>';
   }
-  return `<div class="actions"><button type="button" class="again" data-action="ask-retire">Retire question</button>${q.used_in ? "" : '<button type="button" class="again" data-action="ask-delete">Delete question</button>'}</div>`;
+  return `<div class="actions"><button type="button" class="btn" data-action="ask-retire">Retire question</button>${q.used_in ? "" : '<button type="button" class="btn btn-danger" data-action="ask-delete">Delete question</button>'}</div>`;
 }
 
 // -- setting a test --
@@ -277,34 +277,37 @@ function actions(t, confirming) {
       '<label for="note">Why it goes back, for its teacher</label>',
       '<input id="note" name="note" maxlength="200" required>',
       '<button type="submit" class="submit">Send it back</button>',
-      '<button type="button" class="again" data-action="keep">Not now</button>',
+      '<button type="button" class="btn" data-action="keep">Not now</button>',
       "</form>",
     ].join("");
   }
   if (confirming === "approve") {
-    return `<div class="confirm"><p>Approve ${esc(t.title)}? It opens to ${classNames(t.classes)} at ${esc(t.opens)}, with these ${plural(t.size, "question", "questions")}.</p><button type="button" class="submit" data-action="approve">Approve</button><button type="button" class="again" data-action="keep">Not now</button></div>`;
+    return `<div class="confirm"><p>Approve ${esc(t.title)}? It opens to ${classNames(t.classes)} at ${esc(t.opens)}, with these ${plural(t.size, "question", "questions")}.</p><button type="button" class="submit" data-action="approve">Approve</button><button type="button" class="btn" data-action="keep">Not now</button></div>`;
   }
   if (confirming === "delete") {
-    return '<div class="confirm"><p>Delete this draft?</p><button type="button" class="submit" data-action="delete-test">Delete it</button><button type="button" class="again" data-action="keep">Not now</button></div>';
+    return '<div class="confirm"><p>Delete this draft?</p><button type="button" class="btn-danger-solid" data-action="delete-test">Delete it</button><button type="button" class="btn" data-action="keep">Not now</button></div>';
   }
+  // One primary move: the sitting once it is published. The rest are plain buttons in a
+  // row that wraps, and the one that cancels something is outlined in red.
   const out = [];
-  if (t.may_edit) out.push(`<a class="btn btn-quiet" href="#edit-test/${esc(t.id)}">Change</a>`);
+  if (t.state === "published") out.push(`<a class="btn btn-primary" href="#sitting/${esc(t.id)}">The sitting</a>`);
+  if (t.may_edit) out.push(`<a class="btn" href="#edit-test/${esc(t.id)}">Change</a>`);
   if (t.may_submit) out.push('<button type="button" class="submit" data-action="submit">Send for approval</button>');
-  if (t.may_withdraw) out.push('<button type="button" class="again" data-action="withdraw">Withdraw from approval</button>');
+  if (t.may_withdraw) out.push('<button type="button" class="btn" data-action="withdraw">Withdraw from approval</button>');
   if (t.may_approve) {
     out.push('<button type="button" class="submit" data-action="ask-approve">Approve</button>');
-    out.push('<button type="button" class="again" data-action="ask-send-back">Send back</button>');
+    out.push('<button type="button" class="btn" data-action="ask-send-back">Send back</button>');
   }
-  if (t.items.length) out.push(`<a class="btn btn-quiet" href="#preview/${esc(t.id)}">Try it as a student</a>`);
-  if (t.state === "published") out.push(`<a class="btn btn-quiet" href="#sitting/${esc(t.id)}">The sitting</a>`);
-  if (t.state === "published" || t.state === "closed") out.push(`<a class="btn btn-quiet" href="results/#${esc(t.id)}">Results</a>`);
-  if (t.may_delete) out.push('<button type="button" class="again" data-action="ask-delete">Delete draft</button>');
+  if (t.items.length) out.push(`<a class="btn" href="#preview/${esc(t.id)}">Try it as a student</a>`);
+  if (t.state === "published" || t.state === "closed") out.push(`<a class="btn" href="results/#${esc(t.id)}">Results</a>`);
+  if (t.may_change_classes && confirming !== "classes") out.push('<button type="button" class="btn" data-action="ask-classes">Change classes</button>');
+  if (t.may_delete) out.push('<button type="button" class="btn btn-danger" data-action="ask-delete">Delete draft</button>');
   return out.length ? `<div class="actions">${out.join("")}</div>` : "";
 }
 
 function classesForm(t, confirming) {
   if (!t.may_change_classes) return "";
-  if (confirming !== "classes") return '<p><button type="button" class="again" data-action="ask-classes">Change classes</button></p>';
+  if (confirming !== "classes") return "";
   const chosen = new Set(t.class_group_ids);
   return [
     '<form data-form="classes" class="confirm">',
@@ -313,7 +316,7 @@ function classesForm(t, confirming) {
     "</fieldset>",
     '<p class="hint">The change is logged with your name.</p>',
     '<button type="submit" class="submit">Save classes</button>',
-    '<button type="button" class="again" data-action="keep">Not now</button>',
+    '<button type="button" class="btn" data-action="keep">Not now</button>',
     "</form>",
   ].join("");
 }
@@ -401,25 +404,92 @@ function signIns(r) {
   return `<details class="sign-ins"><summary>Failed sign-ins (${tries.length})</summary><p class="hint">Only staff see this. The student is told the same sentence whatever was wrong.</p><ul class="history">${lines}</ul></details>`;
 }
 
+/** "PINs last issued: 24 Oct 2026, 10:04 by Ngozi Eze", or that none were. */
+function pinsLine(c) {
+  return c.pins_issued ? `PINs last issued: ${esc(c.pins_issued.at)} by ${esc(c.pins_issued.by)}` : "PINs not issued yet this term";
+}
+
 function sittingClass(log, c, confirming) {
   const state = c.open ? '<span class="label label-ok">Open</span>' : '<span class="label">Closed</span>';
-  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span><span class="level pins-issued">${
-    c.pins_issued ? `PINs last issued: ${esc(c.pins_issued.at)} by ${esc(c.pins_issued.by)}` : "PINs not issued yet this term"
-  }</span>`;
+  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span>${log.may_print ? "" : `<span class="level pins-issued">${pinsLine(c)}</span>`}`;
   if (!log.may_run) return `${head}</li>`;
   const kind = c.open ? "close" : "open";
   if (confirming !== `${kind}-${c.id}`) {
-    return `${head}<button type="button" class="again" data-action="ask-${kind}-${esc(c.id)}">${c.open ? "Close it now" : "Open it now"}</button></li>`;
+    return `${head}<div class="actions"><button type="button" class="${c.open ? "btn btn-danger" : "btn-primary"}" data-action="ask-${kind}-${esc(c.id)}">${c.open ? "Close it now" : "Open it now"}</button></div></li>`;
   }
   return [
     head,
-    `<form data-form="control" data-kind="${kind}" data-class="${esc(c.id)}" class="confirm">`,
+    `<form data-form="control" data-kind="${kind}" data-class="${esc(c.id)}" class="confirm${c.open ? " warn" : ""}">`,
+    c.open ? `<p><strong>Close ${esc(c.name)} now?</strong> Nobody new can start. This is logged with your name.</p>` : "",
     `<label for="reason-${esc(c.id)}">Why, for the record</label>`,
     `<input id="reason-${esc(c.id)}" name="reason" maxlength="200" required>`,
     c.open ? '<label class="choice"><input type="checkbox" name="end_attempts"> <span>Also end every attempt in progress now<span class="hint">Without this, students already sitting carry on to their own time. Nothing they chose is lost either way.</span></span></label>' : "",
-    `<button type="submit" class="submit">${c.open ? "Close the sitting" : "Open the sitting"}</button>`,
-    '<button type="button" class="again" data-action="keep">Not now</button>',
+    `<button type="submit" class="${c.open ? "btn-danger-solid" : "submit"}">${c.open ? "Close the sitting" : "Open the sitting"}</button>`,
+    '<button type="button" class="btn" data-action="keep">Not now</button>',
     "</form></li>",
+  ].join("");
+}
+
+/** One class's line in the slips card: how many hold a PIN, when they were last issued, and the three ways to print. */
+function slipClass(c, confirming, slips) {
+  const name = esc(c.name);
+  const said = slips[c.id];
+  const message = said ? (said.kind === "done" ? done(said.text) : note(said.text)) : "";
+  const counts = c.slips;
+  const head = `<li class="group slip-class" data-class="${esc(c.id)}"><span class="name">${name}</span>`;
+  if (!counts) return `${head}<span class="level">No term is open, so no slip can be printed.</span></li>`;
+  const missing = counts.printable - counts.with_a_pin;
+  const lines =
+    `<span class="level">${plural(counts.with_a_pin, "student has", "students have")} an exam PIN, of ${plural(counts.printable, "student who can be given one", "students who can be given one")}.</span>` +
+    `<span class="level pins-issued">${pinsLine(c)}</span>`;
+  if (!counts.printable) {
+    return `${head}${lines}<span class="level">Nobody here has an admission number yet, so there is no slip to print. Add them on the Roll.</span>${message}</li>`;
+  }
+  if (confirming === `reissue-${c.id}`) {
+    return [
+      head,
+      lines,
+      `<div class="confirm warn" role="alertdialog" aria-label="Give ${name} new PINs"><p><strong>This gives all ${counts.printable} students new PINs. Slips already handed out will stop working.</strong></p>`,
+      // Cancel first, and the one the page focuses: Enter or a stray tap changes nothing.
+      '<button type="button" class="submit" data-action="keep" data-default>Cancel</button>',
+      `<button type="button" class="btn-danger-solid" data-action="slip-reissue-${esc(c.id)}">Give ${name} new PINs and print</button></div>`,
+      "</li>",
+    ].join("");
+  }
+  if (confirming === `one-${c.id}`) {
+    return [
+      head,
+      lines,
+      `<form data-form="slip-one" data-class="${esc(c.id)}" class="confirm">`,
+      `<label for="slip-adm-${esc(c.id)}">Admission number</label>`,
+      `<input id="slip-adm-${esc(c.id)}" name="admission" autocomplete="off" autocapitalize="characters" required>`,
+      '<p class="hint">Only this student&#39;s earlier slip stops working. Everyone else keeps theirs.</p>',
+      '<button type="submit" class="submit">Print this slip</button>',
+      '<button type="button" class="btn" data-action="keep">Not now</button>',
+      "</form>",
+      message,
+      "</li>",
+    ].join("");
+  }
+  const first =
+    `<button type="button" class="btn" data-action="slip-missing-${esc(c.id)}"${missing ? "" : " disabled"}>Print slips for students who don&#39;t have one yet${missing ? ` (${missing})` : ""}</button>`;
+  const reissue = counts.with_a_pin
+    ? `<button type="button" class="btn btn-danger" data-action="ask-reissue-${esc(c.id)}">Reissue slips for the whole class</button>`
+    : "";
+  const one = `<button type="button" class="btn" data-action="ask-one-${esc(c.id)}">Reprint one student&#39;s slip</button>`;
+  const none = missing ? "" : '<span class="level">Every student already has a slip.</span>';
+  return `${head}${lines}${none}<div class="actions">${first}${reissue}${one}</div>${message}</li>`;
+}
+
+/** The "Exam PIN slips" card, for a login that may print them. Counts only: no PIN is ever on this page. */
+function slipsCard(log, { confirming, slips = {} }) {
+  if (!log.may_print) return "";
+  return [
+    '<section class="slips-card" aria-labelledby="slips-title">',
+    '<h2 id="slips-title">Exam PIN slips</h2>',
+    '<p class="hint">Each student signs in with the test code, their admission number and the PIN on their slip. A new slip saves as a PDF.</p>',
+    `<ul class="classes">${log.classes.map((c) => slipClass(c, confirming, slips)).join("")}</ul>`,
+    "</section>",
   ].join("");
 }
 
@@ -430,9 +500,9 @@ function codePart(log, { confirming, code }) {
   const said = log.code_set ? "A test code is set. Students type it with their admission number and exam PIN." : "No test code yet. Students cannot sign in until one is set.";
   if (!log.may_run) return `<p class="hint">${said}</p>`;
   if (log.code_set && confirming === "code") {
-    return `<div class="confirm"><p>Set a new code? The old one stops working. Students already sitting carry on; one who signs in again needs the new code.</p><button type="button" class="submit" data-action="set-code">Set a new code</button><button type="button" class="again" data-action="keep">Not now</button></div>`;
+    return `<div class="confirm"><p>Set a new code? The old one stops working. Students already sitting carry on; one who signs in again needs the new code.</p><button type="button" class="btn-danger-solid" data-action="set-code">Set a new code</button><button type="button" class="btn" data-action="keep">Not now</button></div>`;
   }
-  return `<p class="hint">${said}</p><p><button type="button" class="${log.code_set ? "again" : "submit"}" data-action="${log.code_set ? "ask-code" : "set-code"}">${log.code_set ? "Change the code" : "Set the test code"}</button></p>`;
+  return `<p class="hint">${said}</p><div class="actions"><button type="button" class="${log.code_set ? "btn" : "submit"}" data-action="${log.code_set ? "ask-code" : "set-code"}">${log.code_set ? "Change the code" : "Set the test code"}</button></div>`;
 }
 
 function studentRow(log, r, confirming) {
@@ -453,8 +523,8 @@ function studentRow(log, r, confirming) {
     : [];
   const sitting = r.state === "Sitting" || r.state === "Not started";
   const acts = [];
-  if (log.may_extend && sitting) acts.push(`<button type="button" class="again" data-action="ask-extra-${esc(r.student_id)}">Extra time</button>`);
-  if (r.may_retake) acts.push(`<button type="button" class="again" data-action="ask-retake-${esc(r.student_id)}">Allow a retake</button>`);
+  if (log.may_extend && sitting) acts.push(`<button type="button" class="btn" data-action="ask-extra-${esc(r.student_id)}">Extra time</button>`);
+  if (r.may_retake) acts.push(`<button type="button" class="btn" data-action="ask-retake-${esc(r.student_id)}">Allow a retake</button>`);
   let form = "";
   if (confirming === `extra-${r.student_id}`) {
     form = [
@@ -463,7 +533,7 @@ function studentRow(log, r, confirming) {
       `<input id="minutes-${esc(r.student_id)}" name="minutes" type="number" min="1" max="120" value="10" inputmode="numeric">`,
       `<label for="why-${esc(r.student_id)}">Why, for the record</label>`,
       `<input id="why-${esc(r.student_id)}" name="reason" maxlength="200" required>`,
-      '<button type="submit" class="submit">Give the time</button><button type="button" class="again" data-action="keep">Not now</button>',
+      '<button type="submit" class="submit">Give the time</button><button type="button" class="btn" data-action="keep">Not now</button>',
       "</form>",
     ].join("");
   } else if (confirming === `retake-${r.student_id}`) {
@@ -471,7 +541,7 @@ function studentRow(log, r, confirming) {
       `<form data-form="retake" data-student="${esc(r.student_id)}" class="confirm">`,
       `<label for="retake-${esc(r.student_id)}">Why ${esc(r.name)} sits it again, for the record</label>`,
       `<input id="retake-${esc(r.student_id)}" name="reason" maxlength="200" required>`,
-      '<button type="submit" class="submit">Allow a retake</button><button type="button" class="again" data-action="keep">Not now</button>',
+      '<button type="submit" class="submit">Allow a retake</button><button type="button" class="btn" data-action="keep">Not now</button>',
       "</form>",
     ].join("");
   }
@@ -495,7 +565,7 @@ function studentRow(log, r, confirming) {
   ].join("");
 }
 
-export function sittingView(log, { detail = "", confirming = null, done: said = "", code = null } = {}) {
+export function sittingView(log, { detail = "", confirming = null, done: said = "", code = null, slips = {} } = {}) {
   return [
     '<section class="state state-sitting" data-state="sitting">',
     `<p><a href="#">Tests</a></p>`,
@@ -505,6 +575,8 @@ export function sittingView(log, { detail = "", confirming = null, done: said = 
     note(detail),
     "<h2>Test code</h2>",
     codePart(log, { confirming, code }),
+    '<p class="hint">Students also need their exam PIN slip.</p>',
+    slipsCard(log, { confirming, slips }),
     "<h2>Classes</h2>",
     `<ul class="classes">${log.classes.map((c) => sittingClass(log, c, confirming)).join("")}</ul>`,
     "<h2>Students</h2>",

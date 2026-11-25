@@ -41,6 +41,8 @@ from cbt.models import (
     Attempt,
     AttemptEvent,
     AttemptSession,
+    ExamPin,
+    PinSlipPrint,
     RetakeGrant,
     SittingControl,
     Test,
@@ -744,3 +746,152 @@ def F_later():
     from django.db.models import F
 
     return F("base_deadline") + timedelta(hours=1)
+
+
+class TheSlipsCardTests(SittingSetUp):
+    """The sitting page's "Exam PIN slips" card: who is offered it, what its three buttons
+    do to PINs already handed out, and that it stops at one school. It prints through the
+    same routes and the same functions as the exam slips page, so the same people and the
+    same log."""
+
+    def setUp(self):
+        super().setUp()
+        self.officer = grant_membership(
+            User.objects.create_user("obi", "a-long-password-1", full_name="Obi Officer"), self.stmarys, Role.TEACHER
+        )
+        with connected_to(self.stmarys):
+            officers.name_as(self.head.user, self.stmarys, self.officer.pk)
+
+    def log(self, who, test_id=None, host=HOST):
+        return self.get(who, f"tests/{test_id or self.test_id}/sitting/", host=host)
+
+    def card(self, who):
+        body = self.log(who).json()
+        return body, {c["name"]: c for c in body["classes"]}
+
+    def live(self, group_id, students=False):
+        """The ids of the live PINs of a class, or of the students who hold them."""
+        with connected_to(self.stmarys):
+            return set(
+                ExamPin.objects.filter(class_group_id=group_id, cancelled_at__isnull=True).values_list(
+                    "student_membership_id" if students else "pk", flat=True
+                )
+            )
+
+    def test_only_those_who_may_print_are_offered_the_card_and_it_carries_counts_alone(self):
+        for who in (self.head, self.admin, self.officer):
+            with self.subTest(who=who.user.username):
+                body, classes = self.card(who)
+                self.assertTrue(body["may_print"])
+                counts = classes["JSS 1A"]["slips"]
+                self.assertGreater(counts["printable"], 0)
+                self.assertEqual(counts["with_a_pin"], counts["printable"])
+                self.assertEqual(set(counts), {"printable", "with_a_pin"})
+        for who in (self.teacher, self.vp):
+            with self.subTest(who=who.user.username):
+                response = self.log(who)
+                self.assertEqual(response.status_code, 200, response.content)
+                body = response.json()
+                self.assertFalse(body["may_print"])
+                self.assertTrue(all(c["slips"] is None for c in body["classes"]))
+        # Not a PIN, and not a digest, in anything any of them was sent.
+        for who in (self.head, self.admin, self.officer, self.teacher):
+            text = self.log(who).content.decode()
+            self.assertNotIn("digest", text)
+            for pin in self.pins.values():
+                self.assertNotIn(pin, text)
+
+    def test_the_buttons_print_for_the_same_people_as_the_slips_page_and_nobody_else(self):
+        for who in (self.teacher, self.vp, self.bursar):
+            with self.subTest(who=who.user.username):
+                before = self.live(self.jss1a_id)
+                for path, data in (
+                    (f"slips/classes/{self.jss1a_id}/print/", {"only_missing": True}),
+                    (f"slips/classes/{self.jss1a_id}/print/", {"replace": True}),
+                    (f"slips/classes/{self.jss1a_id}/students/{self.children['ada'].pk}/print/", {}),
+                ):
+                    self.assertIn(self.staff(who, path, data).status_code, (403, 404))
+                self.assertEqual(self.live(self.jss1a_id), before)
+        with connected_to(self.stmarys):
+            self.assertEqual(PinSlipPrint.objects.count(), 2, "only the two prints setUp made")
+
+    def test_reissuing_the_whole_class_still_needs_the_yes_and_cancels_what_it_says(self):
+        before = self.live(self.jss1a_id)
+        refused = self.staff(self.officer, f"slips/classes/{self.jss1a_id}/print/", {"replace": False})
+        self.assertEqual(refused.status_code, 409)
+        self.assertEqual(self.live(self.jss1a_id), before)
+        with connected_to(self.stmarys):
+            slips = pins.print_class_as(self.officer.user, self.stmarys, self.jss1a_id, replace=True)
+            row = PinSlipPrint.objects.latest("id")
+        self.assertEqual(row.printed_by_id, self.officer.user.pk)
+        self.assertEqual(row.cancelled_count, len(before))
+        self.assertFalse(row.only_missing)
+        self.assertEqual(self.live(self.jss1a_id) & before, set(), "every old PIN stopped")
+        self.assertEqual(len(slips.slips), len(self.live(self.jss1a_id)))
+        _, classes = self.card(self.admin)
+        self.assertEqual(classes["JSS 1A"]["pins_issued"]["by"], self.officer.user.full_name)
+
+    def test_the_default_prints_only_for_students_without_a_pin_and_invalidates_nothing(self):
+        ada = self.children["ada"].pk
+        with connected_to(self.stmarys):
+            ExamPin.objects.filter(student_membership_id=ada, cancelled_at__isnull=True).update(
+                cancelled_at=timezone.now(), cancelled_by_print=PinSlipPrint.objects.first()
+            )
+        _, classes = self.card(self.head)
+        counts = classes["JSS 1A"]["slips"]
+        self.assertEqual(counts["printable"] - counts["with_a_pin"], 1)
+        others = {number: pin for number, pin in self.pins.items() if number != "SM/001"}
+
+        with connected_to(self.stmarys):
+            slips = pins.print_class_as(self.officer.user, self.stmarys, self.jss1a_id, only_missing=True)
+            self.assertEqual([s.admission_number for s in slips.slips], ["SM/001"])
+            row = PinSlipPrint.objects.latest("id")
+            self.assertTrue(row.only_missing)
+            self.assertEqual(row.cancelled_count, 0)
+            self.assertEqual(row.printed_by_id, self.officer.user.pk)
+            term = pins.current_term()
+            for number, pin in others.items():
+                if number in ("SM/005",):
+                    continue
+                self.assertIsNotNone(pins.check(self.stmarys, term, number, pin), number)
+            self.assertIsNotNone(pins.check(self.stmarys, term, "SM/001", slips.slips[0].pin))
+        _, classes = self.card(self.head)
+        self.assertEqual(classes["JSS 1A"]["slips"]["with_a_pin"], counts["printable"])
+
+        # And once everyone has one, the default has nothing to print and says so.
+        response = self.staff(self.officer, f"slips/classes/{self.jss1a_id}/print/", {"only_missing": True})
+        self.assertEqual(response.status_code, 422, response.content)
+        self.assertIn("already has a slip", response.json()["detail"])
+
+    def test_one_students_reprint_cancels_that_students_pin_alone_and_is_logged(self):
+        ada, emeka = self.children["ada"], self.children["emeka"]
+        with connected_to(self.stmarys):
+            slips = pins.print_student_as(self.officer.user, self.stmarys, self.jss1a_id, ada.pk)
+            term = pins.current_term()
+            self.assertIsNone(pins.check(self.stmarys, term, "SM/001", self.pins["SM/001"]))
+            self.assertIsNotNone(pins.check(self.stmarys, term, "SM/001", slips.slips[0].pin))
+            self.assertIsNotNone(pins.check(self.stmarys, term, "SM/002", self.pins["SM/002"]))
+            row = PinSlipPrint.objects.latest("id")
+        self.assertEqual((row.kind, row.student_membership_id, row.printed_by_id), ("student", ada.pk, self.officer.user.pk))
+        self.assertIn(emeka.pk, self.live(self.jss1a_id, students=True))
+
+    def test_the_card_stops_at_the_school(self):
+        """The same class and test ids exist at the other school: its principal reads its own
+        log, never this one's counts, and a print from its host touches its own PINs only."""
+        # This school's test id is nobody's at the other: its principal is told no such test.
+        self.assertIn(self.log(self.their_head, host=THEIR_HOST).status_code, (403, 404))
+        # St Mary's principal is nobody at the other school.
+        self.assertIn(self.log(self.head, host=THEIR_HOST).status_code, (401, 403, 404))
+        before = self.live(self.jss1a_id)
+        with connected_to(self.stmarys):
+            prints = PinSlipPrint.objects.count()
+        for path, data in (
+            (f"slips/classes/{self.jss1a_id}/print/", {"replace": True}),
+            (f"slips/classes/{self.jss1a_id}/students/{self.children['ada'].pk}/print/", {}),
+        ):
+            response = self.staff(self.their_head, path, data, host=HOST)
+            self.assertIn(response.status_code, (401, 403, 404))
+            self.staff(self.their_head, path, data, host=THEIR_HOST)
+        self.assertEqual(self.live(self.jss1a_id), before)
+        with connected_to(self.stmarys):
+            self.assertEqual(PinSlipPrint.objects.count(), prints)

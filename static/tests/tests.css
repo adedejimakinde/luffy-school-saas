@@ -11,6 +11,7 @@
 .test-row, .banks-list .group { display: grid; gap: 4px; }
 .test-row .level, .banks-list .level { overflow-wrap: anywhere; }
 .test-row .btn, .banks-list .btn { justify-self: start; }
+.state-test .actions .btn, .state-sitting .actions .btn, .state-sitting .actions button { max-width: 100%; }
 .badge { font-size: var(--small); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 6px; white-space: nowrap; }
 .questions, .items { margin: 0; padding: 0 0 0 1.6em; display: grid; gap: 4px; }
 .questions li, .items > li { padding: 8px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
@@ -32,9 +33,17 @@ label.choice.correct { min-height: var(--control); }
 .confirm { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 12px 0; max-width: none; }
 .confirm p, .confirm fieldset, .confirm label, .confirm input { flex-basis: 100%; margin: 0; overflow-wrap: anywhere; }
 .history { margin: 0; padding-left: 1.2em; font-size: var(--small); color: var(--muted); }
-.row-actions { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .sit-class { display: grid; gap: 4px; }
-.sit-class .again { justify-self: start; }
+.sit-class .actions, .slip-class .actions { margin: 4px 0 0; }
+.slips-card { margin: 16px 0; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; }
+.slips-card h2 { margin-top: 4px; }
+.slips-card ul { list-style: none; margin: 0; padding: 0; }
+.slip-class { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
+.slip-class:first-child { border-top: 0; }
+.slip-class .actions .btn, .slip-class .confirm button { max-width: 100%; }
+.slip-class .confirm.warn { padding: 12px; background: var(--stop-bg); border-radius: var(--radius); }
+.confirm.warn { border-radius: var(--radius); }
 .sit-code .code { font-size: 1.75rem; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; margin-right: 8px; }
 .sitting-log { list-style: none; margin: 0; padding: 0; }
 .sit-student-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
