@@ -57,6 +57,7 @@ PALETTE = {
     "#0F766E",  # teal
     "#B45309",  # amber
     "#C2452D",  # coral
+    "#C9A24A",  # gold: the line that fills under the tour's current tab
 }
 
 #: The only gradients, each of One Blue: the public site's final band, One Blue

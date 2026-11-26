@@ -293,7 +293,8 @@ change that. There are no selects for a date.
 ## What holds it
 
 - `tests/test_design.py`: the palette is the whole palette and lives in one
-  file. It also checks that the three gradients are the only ones, and for emoji and icon packs, the font's two
+  file (the public site's tour adds one gold, `--gold`, for the line that fills
+  under its current tab and nothing else). It also checks that the three gradients are the only ones, and for emoji and icon packs, the font's two
   weights, and that every page includes the head.
 - `tests/test_budget.py`: every page stays under 170 KB with its fonts and
   modules, uses no CDN and no package, and keeps a pinned query count.
