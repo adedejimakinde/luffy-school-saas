@@ -12,7 +12,7 @@
  * - Phones first. Below 1024px the nav is a menu button.
  * - Every animation and transition is inside `prefers-reduced-motion:
  *   no-preference`, at the end of the file. Without it the page is drawn
- *   finished and still, the slider shows its first screen and the report
+ *   finished and still, the tour shows its first screen and the report
  *   sheet is complete.
  * - Only the hero has an eyebrow. Headlines that sit over content start at
  *   the left (`.section-head-start`); the price and the final band are centred.
@@ -223,9 +223,9 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 0 0 16px; }
 .hero-note { margin: 0; color: var(--on-band); font-size: var(--copy-note); }
 
-/* The network sits inside the picture's column, above the slider's bar:
-   behind the photo and the screens, never under the headline, the lead, the
-   buttons, the slider's controls or the caption. */
+/* The network sits inside the picture's column, above its foot:
+   behind the photo and the screen, never under the headline, the lead, the
+   buttons or the caption. */
 .nodes { position: absolute; z-index: 0; pointer-events: none; }
 .hero-visual > .nodes { top: 0; right: -24px; bottom: 64px; left: -24px; width: auto; height: auto; }
 .n-lines path { fill: none; stroke: color-mix(in srgb, var(--brand) 16%, transparent); stroke-width: 1.5; }
@@ -271,7 +271,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   mix-blend-mode: multiply;
 }
 
-.slider { position: relative; z-index: 1; width: 100%; margin-top: 88px; }
+.hero-screen { position: relative; z-index: 1; width: 100%; margin: 88px 0 0; }
 .browser {
   overflow: hidden;
   width: 100%;
@@ -305,13 +305,8 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   border: 1px solid transparent;
   border-radius: 6px;
 }
-.slides { display: grid; }
-.slide { grid-area: 1 / 1; margin: 0; min-width: 0; }
-.slide img { display: block; width: 100%; height: auto; }
-/* The register is a phone, so it sits in a phone, as tall as the screens. It
-   takes its height from them and gives none (`contain: size`): its picture
-   loads after the page, and before it does it stretched the slider. */
-.slide-phone { display: grid; grid-template-rows: minmax(0, 1fr); justify-items: center; contain: size; }
+.hero-screen img { display: block; width: 100%; height: auto; }
+/* A phone's screen in a phone (the hero's on a phone, and the landing pages' phone shots). */
 .phone-frame {
   height: 100%;
   padding: 8px;
@@ -320,41 +315,6 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   box-shadow: var(--shadow-frame);
 }
 .phone-frame img { width: auto; height: 100%; aspect-ratio: 300 / 649; border-radius: 22px; }
-.slide:not(.is-on) { opacity: 0; visibility: hidden; }
-
-.slider-bar { display: flex; align-items: center; gap: 4px; min-height: 44px; margin-top: 12px; }
-.slider-pause {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 44px;
-  padding: 0 12px 0 8px;
-  color: var(--brand);
-  font-size: 0.875rem;
-  background: color-mix(in srgb, var(--brand) 9%, transparent);
-  border: 0;
-  border-radius: 999px;
-}
-.slider-pause:hover { color: var(--brand-strong); background: color-mix(in srgb, var(--brand) 15%, transparent); }
-.slider-pause .icon { width: 18px; height: 18px; stroke-width: 2.25; }
-.slider-pause .i-play, .slider-pause[aria-pressed="true"] .i-pause { display: none; }
-.slider-pause[aria-pressed="true"] .i-play { display: block; }
-.slider-dots { display: flex; }
-.slider-pause[hidden], .slider-dots[hidden] { display: none; }
-.slider-dots button {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  min-height: 44px;
-  padding: 0;
-  background: none;
-  border: 0;
-}
-.slider-dots i { width: 8px; height: 8px; border-radius: 999px; background: color-mix(in srgb, var(--brand) 30%, transparent); }
-.slider-dots [aria-current="true"] i { width: 22px; background: var(--brand); }
-.slider-name { margin: 0 0 0 auto; color: var(--on-band); font-size: 0.875rem; text-align: right; }
-/* Only a desk has room for the screen's name beside the controls. */
-@media (max-width: 1023.98px) { .slider-name { display: none; } }
 
 /* ---------------------------------------------------------------- floating cards */
 
@@ -390,7 +350,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   /* The screens start below the principal's shoulders (the photo is 48% wide
      and 5:4, so 60% of the column tall, her shoulders at about half of it):
      her face is never under the phone. */
-  .slider { margin-top: 38%; }
+  .hero-screen { margin-top: 38%; }
   /* The two buttons side by side from 360px, 44px tall; stacked below it. */
   .hero-actions { gap: 8px; }
   .hero-actions .btn { flex: 1 1 0; min-height: 44px; padding: 0 12px; }
@@ -398,9 +358,8 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   .float-card .tile { width: 32px; height: 32px; }
   .fc-value { font-size: 1.0625rem; }
   .float-b { display: none; }  /* one card on a phone, clear of the screen */
-  /* Every screen is a phone screen here, in the register's frame, one size,
-     at the left, beside the photo rather than over it. */
-  .slide-phone { display: block; place-items: normal; contain: none; }
+  /* The screen is a phone screen here, in a frame, at the left, beside the
+     photo rather than over it. */
   .phone-frame { height: auto; }
   .browser, .phone-frame {
     width: min(250px, 72%);
@@ -417,7 +376,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
    shoulders (the photo is 48% wide and 5:4, her shoulders 34% of the column
    down). */
 @media (min-width: 640px) and (max-width: 767.98px) {
-  .slider { margin-top: calc(34% - 48px); }
+  .hero-screen { margin-top: calc(34% - 48px); }
 }
 /* From 768px the words and the picture sit side by side, in two even columns
    until 1024px, where the picture's grows. The "Fees collected" card stays
@@ -429,14 +388,14 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   .photo-hero { width: 44%; }
   /* The screens start below her shoulders: the photo is 44% wide and 5:4, so
      55% of the column tall, her shoulders at 56% of it (31% of the column). */
-  .slider { width: 92%; margin-top: max(96px, calc(31% - 32px)); }
+  .hero-screen { width: 92%; margin-top: max(96px, calc(31% - 32px)); }
   .float-a { top: 24px; left: 0; }
   .float-b { right: 0; bottom: 96px; }
 }
 @media (min-width: 1024px) {
   .hero { padding: 48px 0 80px; }
   .hero-inner { grid-template-columns: 5fr 7fr; gap: 56px; }
-  .slider { width: 90%; }
+  .hero-screen { width: 90%; }
   .float-a { top: 48px; left: -40px; }
 }
 /* Only where the gutter is wide enough does the picture lean past the column. */
@@ -444,6 +403,83 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
   .hero-visual { margin-right: -24px; }
   .photo-hero { right: -8px; }
   .float-b { right: -12px; }
+}
+
+/* ---------------------------------------------------------------- the tour */
+
+/* Five phone screens, one named tab each; the script and its rules are in docs/website.md. */
+.tour { padding: var(--section) 0; }
+.tour h2 { margin-bottom: 8px; }
+.tour-lead { max-width: 60ch; margin: 0 0 24px; font-size: var(--copy-lg); }
+.tour-tabs {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--border);
+}
+.tour-tabs::-webkit-scrollbar { display: none; }
+.tour-tabs[hidden] { display: none; }
+.tour-tab {
+  position: relative;
+  flex: none;
+  min-height: 48px;
+  padding: 12px 16px 15px;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.2;
+  background: none;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  cursor: pointer;
+}
+.tour-tab:hover { background: var(--brand-tint); }
+.tour-tab:focus-visible { outline-offset: -3px; }
+.tour-tab[aria-selected="true"] { color: var(--brand); font-weight: 700; }
+/* Bold is wider than regular: each tab keeps its bold width so none shifts when it is chosen. */
+.tour-tab span { display: inline-grid; justify-items: center; }
+.tour-tab span::after { content: attr(data-t); height: 0; overflow: hidden; visibility: hidden; font-weight: 700; }
+.tour-line { position: absolute; right: 12px; bottom: -1px; left: 12px; height: 3px; overflow: hidden; border-radius: 2px; }
+.tour-tab[aria-selected="true"] .tour-line { background: var(--border); }
+.tour-line b { display: block; height: 100%; background: var(--gold); transform: scaleX(0); transform-origin: left; }
+
+.tour-stage { overflow: hidden; background: var(--brand-wash); border-radius: var(--radius-card); }
+.tour-slides {
+  display: flex;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.tour-slides::-webkit-scrollbar { display: none; }
+.tour-slide {
+  flex: 0 0 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: clamp(20px, 5vw, 64px);
+  align-items: center;
+  padding: clamp(20px, 4vw, 48px);
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+}
+.tour-copy h3 { margin: 0 0 8px; font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem); line-height: 1.15; }
+.tour-copy p { max-width: 34em; margin: 0; font-size: var(--copy-lg); }
+.tour-phone {
+  justify-self: center;
+  width: min(260px, 100%);
+  height: auto;
+  filter: drop-shadow(0 18px 22px color-mix(in srgb, var(--text) 22%, transparent));
+}
+.tour-lead, .tour-copy p, .tour-hint { text-wrap: balance; }
+.tour-hint { margin: 12px 0 0; font-size: var(--copy-note); }
+@media (max-width: 699.98px) {
+  .tour-slide { grid-template-columns: minmax(0, 1fr); }
+  .tour-copy { order: 2; }
+  .tour-phone { width: min(240px, 72%); }
+  .tour-tab { padding-inline: 14px; }
 }
 
 /* ---------------------------------------------------------------- sections */
@@ -911,16 +947,11 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 
 /*
  * Every moving thing is here, and only here. Under reduced motion none of it
- * applies: the slider stays on its first screen (the script checks too), the
+ * applies: the tour stays on its first screen until a tab is chosen (the script checks too), the
  * network is drawn finished and still, the cards sit still, and the numbers
  * show their final value.
  */
 @media (prefers-reduced-motion: no-preference) {
-  /* The slider's crossfade, and its current dot growing. */
-  .slider-dots i { transition: width 200ms ease, background-color 200ms ease; }
-  .slider.is-live .slide { transition: opacity 600ms ease, visibility 0s linear 600ms; }
-  .slider.is-live .slide.is-on { transition: opacity 600ms ease, visibility 0s; }
-
   /* The network: lines draw in once, then the nodes breathe. */
   .hero .n-lines path { stroke-dasharray: 1; stroke-dashoffset: 1; animation: draw 1.6s ease-out var(--d) forwards; }
   .hero .n-dots circle { opacity: 0; animation: appear 0.6s ease-out calc(var(--d) * 0.6) forwards, breathe 4s ease-in-out calc(var(--d) + 1s) infinite; }

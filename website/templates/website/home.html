@@ -7,18 +7,16 @@ The homepage (`docs/website.md`). Every sentence on it says what the product
 does and promises no outcome we cannot show. The price and the call-back time
 are the owner's own terms.
 
-The screens in the slider and the figures in the floating cards are the
+The screens in the hero and the tour and the figures in the floating cards are the
 showcase school's, `load_demo --showcase` (`schools/showcase.py`), taken by
 `scripts/site_shots.mjs` on a weekday: a demo school, and each screen's
 description says so. A floating card's figure is the figure in the screens, never
 a rounder one. The three photos were supplied by the owner (sources and
 licences in `docs/website.md`); none shows a child's face.
 
-The slider's screens are in the markup in order and the first is showing, so
-the page reads with no script; screens 2 to 4 carry `data-srcset` and are only
-fetched once the page has loaded (the script below). On a phone every screen is
-a whole phone screen in the register's phone frame, with the "Fees collected"
-card beside it on every screen. Real quotes and school logos have a place kept
+The hero shows one still screen, the dashboard, and nothing moves in it. On a
+phone it is a whole phone screen in a frame, with the "Fees collected" card
+beside it. The five-screen tour is below the hero. Real quotes and school logos have a place kept
 for them, hidden, and nothing invented fills it.
 {% endcomment %}
 <div class="top-band">
@@ -69,54 +67,15 @@ Decorative, and inside the picture's column so it never runs under words.
       <span class="dot-grid dot-grid-hero" aria-hidden="true"></span>
       <span class="photo photo-hero"><img src="{% static 'website/photos/principal-300.webp' %}" srcset="{% static 'website/photos/principal-300.webp' %} 300w, {% static 'website/photos/principal-600.webp' %} 600w" sizes="(min-width: 1024px) 280px, (min-width: 768px) 160px, 48vw" width="300" height="375" decoding="async" alt="A school principal smiling at her desk in front of a whiteboard."></span>
 
-      <div class="slider" data-slider data-current="0" aria-roledescription="carousel" aria-label="Classnode screens with Crestfield Demo College demo data">
-        <div class="slides">
-            <figure class="slide is-on" data-name="Home dashboard" aria-roledescription="slide" aria-label="1 of 4">
-              <div class="browser">
-                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
-                <picture>
-                  <source media="(max-width: 639.98px)" srcset="{% static 'website/shots/slide-home-phone-300.webp' %} 300w, {% static 'website/shots/slide-home-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
-                  <img src="{% static 'website/shots/slide-home-desk-640.webp' %}" srcset="{% static 'website/shots/slide-home-desk-640.webp' %} 640w, {% static 'website/shots/slide-home-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, (min-width: 768px) 320px, calc(100vw - 50px)" width="640" height="350" fetchpriority="high" decoding="async" alt="Home dashboard for Crestfield Demo College, a demo school: 612 students, ₦48.6m of ₦71.2m fees collected, 93.8% attendance today, and 7 classes' results waiting for approval.">
-                </picture>
-              </div>
-            </figure>
-            <figure class="slide" aria-hidden="true" inert data-name="Ogun State report sheet" aria-roledescription="slide" aria-label="2 of 4">
-              <div class="browser">
-                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
-                <picture>
-                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-report-phone-300.webp' %} 300w, {% static 'website/shots/slide-report-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
-                  <img data-srcset="{% static 'website/shots/slide-report-desk-640.webp' %} 640w, {% static 'website/shots/slide-report-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, (min-width: 768px) 320px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="A report sheet on the Ogun State template for a demo student at Crestfield Demo College, with continuous assessment, exam and weighted average for six subjects.">
-                </picture>
-              </div>
-            </figure>
-            <figure class="slide slide-phone" aria-hidden="true" inert data-name="Register on a phone" aria-roledescription="slide" aria-label="3 of 4">
-              <div class="phone-frame">
-                <img data-srcset="{% static 'website/shots/slide-register-phone-300.webp' %} 300w, {% static 'website/shots/slide-register-phone-600.webp' %} 600w" sizes="(min-width: 1024px) 170px, (min-width: 768px) 100px, (min-width: 640px) 160px, 234px" width="300" height="649" decoding="async" alt="A teacher's phone taking the SS 1A register at Crestfield Demo College, a demo school, with two children marked absent.">
-              </div>
-            </figure>
-            <figure class="slide" aria-hidden="true" inert data-name="Fee collection" aria-roledescription="slide" aria-label="4 of 4">
-              <div class="browser">
-                <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
-                <picture>
-                  <source media="(max-width: 639.98px)" data-srcset="{% static 'website/shots/slide-fees-phone-300.webp' %} 300w, {% static 'website/shots/slide-fees-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
-                  <img data-srcset="{% static 'website/shots/slide-fees-desk-640.webp' %} 640w, {% static 'website/shots/slide-fees-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, (min-width: 768px) 320px, calc(100vw - 50px)" width="640" height="350" decoding="async" alt="Fee collection for Crestfield Demo College, a demo school: ₦48,600,000 collected of ₦71,206,200 expected this term, 367 students owing, and the latest payments.">
-                </picture>
-              </div>
-            </figure>
+      <figure class="hero-screen">
+        <div class="browser">
+          <div class="browser-bar" aria-hidden="true"><span class="dots"><i></i><i></i><i></i></span><span class="url">crestfield-demo.classnode.co</span></div>
+          <picture>
+            <source media="(max-width: 639.98px)" srcset="{% static 'website/shots/slide-home-phone-300.webp' %} 300w, {% static 'website/shots/slide-home-phone-600.webp' %} 600w" sizes="234px" width="300" height="649">
+            <img src="{% static 'website/shots/slide-home-desk-640.webp' %}" srcset="{% static 'website/shots/slide-home-desk-640.webp' %} 640w, {% static 'website/shots/slide-home-desk-1280.webp' %} 1280w" sizes="(min-width: 1024px) 600px, (min-width: 768px) 320px, calc(100vw - 50px)" width="640" height="350" fetchpriority="high" decoding="async" alt="Home dashboard for Crestfield Demo College, a demo school: 612 students, ₦48.6m of ₦71.2m fees collected, 93.8% attendance today, and 7 classes' results waiting for approval.">
+          </picture>
         </div>
-        <div class="slider-bar">
-          <button class="slider-pause" type="button" data-pause aria-pressed="false" hidden>
-            <svg class="icon i-pause" aria-hidden="true"><use href="#i-pause"/></svg><svg class="icon i-play" aria-hidden="true"><use href="#i-play"/></svg><span>Pause</span>
-          </button>
-          <div class="slider-dots" role="group" aria-label="Choose a screen" hidden>
-            <button type="button" data-go="0" aria-current="true" aria-label="Home dashboard"><i></i></button>
-            <button type="button" data-go="1" aria-current="false" aria-label="Ogun State report sheet"><i></i></button>
-            <button type="button" data-go="2" aria-current="false" aria-label="Register on a phone"><i></i></button>
-            <button type="button" data-go="3" aria-current="false" aria-label="Fee collection"><i></i></button>
-          </div>
-          <p class="slider-name" data-label aria-hidden="true">Home dashboard</p>
-        </div>
-      </div>
+      </figure>
 
       <div class="float-card float-a" aria-hidden="true">
         <span class="tile tile-amber"><svg class="icon"><use href="#i-fees"/></svg></span>
@@ -130,6 +89,68 @@ Decorative, and inside the picture's column so it never runs under words.
   </div>
 </section>
 </div>
+
+{% comment %}
+THE TOUR: five screens of the showcase school, each in an iPhone frame (the
+frame is in the picture), one named tab apiece. The tabs are in the markup
+and hidden, so with no script the five screens are a row to swipe (native
+scroll-snap); the script below shows them and moves on every 3 seconds, a gold
+line filling under the tab it is on, until a visitor chooses one. Only the
+first picture loads with the page. Same demo school as the hero's screen.
+{% endcomment %}
+<section id="tour" class="tour" aria-labelledby="tour-title" data-tour>
+  <div class="wrap">
+    <h2 id="tour-title">See Classnode in action</h2>
+    <p class="tour-lead">Everything a Nigerian secondary school runs each term, on the phones your staff already carry.</p>
+    <div class="tour-tabs" role="tablist" aria-label="Classnode features" hidden>
+      <button class="tour-tab" type="button" role="tab" id="tour-tab-results" aria-controls="tour-results" aria-selected="true" tabindex="0"><span data-t="Results">Results</span><i class="tour-line" aria-hidden="true"><b></b></i></button>
+      <button class="tour-tab" type="button" role="tab" id="tour-tab-fees" aria-controls="tour-fees" aria-selected="false" tabindex="-1"><span data-t="Fees">Fees</span><i class="tour-line" aria-hidden="true"><b></b></i></button>
+      <button class="tour-tab" type="button" role="tab" id="tour-tab-registers" aria-controls="tour-registers" aria-selected="false" tabindex="-1"><span data-t="Registers">Registers</span><i class="tour-line" aria-hidden="true"><b></b></i></button>
+      <button class="tour-tab" type="button" role="tab" id="tour-tab-cbt" aria-controls="tour-cbt" aria-selected="false" tabindex="-1"><span data-t="CBT">CBT</span><i class="tour-line" aria-hidden="true"><b></b></i></button>
+      <button class="tour-tab" type="button" role="tab" id="tour-tab-website" aria-controls="tour-website" aria-selected="false" tabindex="-1"><span data-t="School website">School website</span><i class="tour-line" aria-hidden="true"><b></b></i></button>
+    </div>
+    <div class="tour-stage">
+      <div class="tour-slides" data-slides>
+        <div class="tour-slide" role="tabpanel" id="tour-results" aria-labelledby="tour-tab-results">
+          <div class="tour-copy">
+            <h3>Report cards that add up</h3>
+            <p>Totals, grades and tie-aware positions are worked out for you, then the principal approves before anything goes home.</p>
+          </div>
+          <img class="tour-phone" src="{% static 'website/shots/tour-results.webp' %}" width="400" height="877" decoding="async" alt="A demo student's report sheet on a phone, from Crestfield College, a demo school: the crest, the learner's details and the first subjects.">
+        </div>
+        <div class="tour-slide" role="tabpanel" id="tour-fees" aria-labelledby="tour-tab-fees">
+          <div class="tour-copy">
+            <h3>Every balance in one place</h3>
+            <p>Bills per class, a balance per child and live collections by class, with one outstanding figure everywhere.</p>
+          </div>
+          <img class="tour-phone" src="{% static 'website/shots/tour-fees.webp' %}" width="400" height="877" loading="lazy" decoding="async" alt="The Fees page on a phone for Crestfield College, a demo school: ₦10,749,000.00 outstanding, and each class with its bill, what is owing and the share collected.">
+        </div>
+        <div class="tour-slide" role="tabpanel" id="tour-registers" aria-labelledby="tour-tab-registers">
+          <div class="tour-copy">
+            <h3>Morning register in seconds</h3>
+            <p>Class teachers tap the children who are absent. Days present flow straight onto the report card.</p>
+          </div>
+          <img class="tour-phone" src="{% static 'website/shots/tour-registers.webp' %}" width="400" height="877" loading="lazy" decoding="async" alt="The JSS 2B register on a phone at Crestfield College, a demo school: a list of children, each one tapped only if absent.">
+        </div>
+        <div class="tour-slide" role="tabpanel" id="tour-cbt" aria-labelledby="tour-tab-cbt">
+          <div class="tour-copy">
+            <h3>Tests that survive bad network</h3>
+            <p>JAMB-style tests on phones or computers. Answers stay saved on the device until the network returns.</p>
+          </div>
+          <img class="tour-phone" src="{% static 'website/shots/tour-cbt.webp' %}" width="400" height="877" loading="lazy" decoding="async" alt="A CBT question on a phone at Crestfield College, a demo school, with the offline notice, ten question numbers, four answers and "Answer saved".">
+        </div>
+        <div class="tour-slide" role="tabpanel" id="tour-website" aria-labelledby="tour-tab-website">
+          <div class="tour-copy">
+            <h3>Your school online</h3>
+            <p>A modern website with your crest and colours, updated by your staff and approved by the principal.</p>
+          </div>
+          <img class="tour-phone" src="{% static 'website/shots/tour-website.webp' %}" width="400" height="877" loading="lazy" decoding="async" alt="A school website on a phone for Crestfield College, a demo school, with its crest, an admissions button and a photo of a teacher.">
+        </div>
+      </div>
+    </div>
+    <p class="tour-hint" data-hint hidden>Moves on every 3 seconds. Choose a tab to stop.</p>
+  </div>
+</section>
 
 {% comment %}
 PROOF: real quotes and school logos go here, each with the school's written
@@ -470,23 +491,36 @@ the same eight the footer's Solutions group links.
 {% endblock %}
 
 {% block script %}{{ block.super }}
-/* The hero slider: 5 seconds a screen, held on hover, keyboard focus or a touch,
-   and by its pause button. Still under reduced motion. Screens 2 to 4 load after the page. */
-(()=>{const s=document.querySelector("[data-slider]");if(!s)return;
-const sl=[...s.querySelectorAll(".slide")],ds=[...s.querySelectorAll("[data-go]")],pb=s.querySelector("[data-pause]"),nm=s.querySelector("[data-label]"),
-calm=matchMedia("(prefers-reduced-motion: reduce)").matches,held=new Set;let i=0,t,stop=false;
-const load=e=>e.querySelectorAll("[data-srcset]").forEach(x=>{x.srcset=x.dataset.srcset;x.removeAttribute("data-srcset")});
-const show=n=>{i=(n+sl.length)%sl.length;s.dataset.current=i;load(sl[i]);sl.forEach((e,k)=>{const on=k==i;e.classList.toggle("is-on",on);e.inert=!on;e.toggleAttribute("aria-hidden",!on)});
-ds.forEach((d,k)=>d.setAttribute("aria-current",k==i));nm.textContent=sl[i].dataset.name};
-const run=()=>{clearTimeout(t);if(!calm&&!stop&&!held.size&&!document.hidden)t=setTimeout(()=>{show(i+1);run()},5000)};
-const hold=(k,on)=>{on?held.add(k):held.delete(k);run()};
-s.classList.add("is-live");ds[0].parentNode.hidden=false;pb.hidden=calm;
-ds.forEach(d=>d.onclick=()=>{show(+d.dataset.go);run()});
-pb.onclick=()=>{stop=!stop;pb.setAttribute("aria-pressed",stop);pb.lastChild.textContent=stop?"Play":"Pause";run()};
-s.onmouseenter=()=>hold("m",1);s.onmouseleave=()=>hold("m",0);
-s.addEventListener("focusin",e=>e.target!=pb&&e.target.matches(":focus-visible")&&hold("f",1));s.addEventListener("focusout",()=>hold("f",0));
-s.addEventListener("touchstart",()=>hold("t",1),{passive:true});s.addEventListener("touchend",()=>setTimeout(()=>hold("t",0),2000));
-document.addEventListener("visibilitychange",run);addEventListener("load",()=>setTimeout(()=>sl.forEach(load),1200));run()})();
+/* The product tour: a screen every 3 seconds, a gold line filling under its tab.
+   Held on hover or a touch and while it is off screen; a tab, an arrow key or a
+   swipe stops it for the visit. Still under reduced motion. */
+(()=>{const t=document.querySelector("[data-tour]");if(!t)return;
+const tb=[...t.querySelectorAll("[role=tab]")],sl=[...t.querySelectorAll("[role=tabpanel]")],box=t.querySelector("[data-slides]"),hint=t.querySelector("[data-hint]"),list=t.querySelector("[role=tablist]"),
+calm=matchMedia("(prefers-reduced-motion: reduce)").matches,held=new Set(["v"]),n=sl.length,T=3000;
+let i=0,auto=!calm,t0=0,used=0,raf=0,idle,goal=null;
+const bar=k=>tb[k].querySelector("b"),
+say=()=>hint.textContent=auto?"Moves on every 3 seconds. Choose a tab to stop.":"Choose a tab to see each screen.",
+run=()=>{held.size?(cancelAnimationFrame(raf),raf=t0=0):auto&&!raf&&(raf=requestAnimationFrame(tick))},
+tick=now=>{raf=0;if(!auto||held.size){t0=0;return}
+t0||(t0=now-used);used=now-t0;const f=Math.min(used/T,1);bar(i).style.transform="scaleX("+f+")";f<1?raf=requestAnimationFrame(tick):go(i+1)},
+go=(k,fromScroll)=>{i=(k+n)%n;used=t0=0;
+tb.forEach((b,j)=>{b.setAttribute("aria-selected",j==i);b.tabIndex=j==i?0:-1;bar(j).style.transform=""});
+sl.forEach((e,j)=>e.inert=j!=i);
+list.scrollTo({left:tb[i].offsetLeft-(list.clientWidth-tb[i].offsetWidth)/2,behavior:calm?"auto":"smooth"});
+if(!fromScroll){const x=box.clientWidth*i;goal=Math.abs(box.scrollLeft-x)>2?x:null;box.scrollTo({left:x,behavior:calm?"auto":"smooth"})}run()},
+stop=()=>{if(!auto)return;auto=false;cancelAnimationFrame(raf);raf=0;tb.forEach((b,j)=>bar(j).style.transform="");say()},
+hold=(k,on)=>{on?held.add(k):held.delete(k);run()};
+list.hidden=hint.hidden=false;say();
+tb.forEach((b,j)=>b.onclick=()=>{stop();go(j)});
+list.onkeydown=e=>{const d={ArrowRight:1,ArrowLeft:-1}[e.key];if(!d)return;e.preventDefault();stop();go(i+d);tb[i].focus()};
+const rest=()=>{if(goal!=null&&Math.abs(box.scrollLeft-goal)>2)return;goal=null;const k=Math.round(box.scrollLeft/box.clientWidth);if(k!=i){stop();go(k,1)}};
+box.addEventListener("scroll",()=>{clearTimeout(idle);"onscrollend" in window||(idle=setTimeout(rest,150))},{passive:true});box.addEventListener("scrollend",rest);
+addEventListener("resize",()=>box.scrollTo({left:box.clientWidth*i}));
+const s=t.querySelector(".tour-stage");s.onmouseenter=()=>hold("m",1);s.onmouseleave=()=>hold("m",0);
+s.addEventListener("touchstart",()=>{goal=null;hold("t",1)},{passive:true});s.addEventListener("touchend",()=>setTimeout(()=>hold("t",0),2000));
+document.addEventListener("visibilitychange",()=>hold("h",document.hidden));
+window.IntersectionObserver?new IntersectionObserver(es=>hold("v",!es[es.length-1].isIntersecting),{threshold:.4}).observe(t):hold("v",0);
+go(0)})();
 /* Figures in the floating cards count up once as they come into view. One out of
    view keeps its real figure until any of it shows, so none ever sits at 0. */
 (()=>{if(matchMedia("(prefers-reduced-motion: reduce)").matches||!window.IntersectionObserver)return;

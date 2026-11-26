@@ -190,7 +190,7 @@ to action, and the footer.
   every blue are 4.5:1 or better, worked out from the tokens by a test. Icon
   tiles are One Blue, teal, amber or coral, white icons on each (5:1 or
   better), and those three accents are used for nothing else.
-- **The slider's screens are real screens of a demo school**: the showcase,
+- **The hero's and the tour's screens are real screens of a demo school**: the showcase,
   `manage.py load_demo --showcase` (`schools/showcase.py`), Crestfield Demo
   College, 612 students, ₦48.6m of ₦71.2m collected, seven classes checked and
   waiting on the principal, about 94% in each day, on the Ogun State template.
@@ -242,17 +242,25 @@ to action, and the footer.
   shows a child's face. Their sources and licences are recorded below.
 - **Drawings** are inline SVG: the Classnode mark grown into a network of
   nodes and lines behind the hero's picture (under 5 KB, inside the picture's
-  column above the slider's controls, so never behind a word), a still copy
+  column above its foot, so never behind a word), a still copy
   of it either side of the final band on a desk, and the product parts the
   benefit rows draw in CSS (the report sheet, the register, the roles), each
   read by its description.
 - **Motion**, all of it inside `prefers-reduced-motion: no-preference`:
-  - the slider: a new screen every 5 seconds, a 600ms crossfade, held while the
-    pointer is over it, while keyboard focus is inside it and for two seconds
-    after a touch, and stopped by its own Pause button; dots jump to a screen.
-    Screens 2 to 4 are fetched only after the page has loaded. Under reduced
-    motion it does not move and the Pause button is not drawn; without the
-    script the first screen shows and no controls are drawn;
+  - the hero's screen is one still picture of the dashboard and does not move;
+  - the tour, below the hero (`#tour`): five phone screens (Results, Fees,
+    Registers, CBT, School website), one named tab each, in an iPhone frame
+    (the frame is in the picture, `static/website/shots/tour-*.webp`) with a
+    headline and a line of words beside it, or below it on a phone. A gold line
+    (3px) fills under the current tab over 3 seconds and the tour moves on,
+    looping. A tab, an arrow key (roving tabindex, `tablist`/`tab`/`tabpanel`)
+    or a swipe (native scroll-snap) stops it for the visit, hover or a touch
+    holds it, and it waits while the section is off screen or the tab is
+    hidden. There are no dots and no play button. Only the first picture loads
+    with the page. The line is the script's, not CSS: under reduced motion the
+    script does not run it, the tour stays on the first screen, and tabs still
+    work. Without the script the tabs are hidden and the five screens are a row
+    to swipe;
   - the network: lines draw in once, then the nodes breathe;
   - the floating cards drift 5px up and down, each on its own 4.4 to 5.8
     second loop; the dot grids drift one tile, slowly;
@@ -275,7 +283,7 @@ to action, and the footer.
     column of a made-up 1 to 5 rating, with the sheet's key;
   - the cards' figures count up once as they come into view.
 - **One script, inline**: closing the phone menu on every page, plus the
-  slider (under 2 KB) and the counting figures (under 1 KB) on the homepage.
+  tour (under 3 KB) and the counting figures (under 1 KB) on the homepage.
   No library and nothing from another host.
 - **Weight**: a phone fetches about 360 KB uncompressed with every image
   counted at 2x, the deferred screens and the lazy photos too (under the
@@ -345,7 +353,7 @@ first lines:
   were taken from, and the website cut to sections with no address, since the
   public site names no town but Lagos. `scripts/landing_shots.mjs` takes them,
   `scripts/landing_shots.py` cuts them into `static/website/shots/landing-*`
-  (WebP, each under 60 KB, 1x and 2x), and three of the homepage slider's are
+  (WebP, each under 60 KB, 1x and 2x), and three of the homepage's old slider screens are
   reused. All are `loading="lazy"` and described as a demo school's.
 - **Held by** `website/tests/test_landing.py`: the addresses, 200 on the site
   and nothing on a school's host or the portal, one h1 with the phrase, titles

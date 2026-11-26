@@ -30,9 +30,9 @@
  * section is in its finished state, with its lazy images scrolled in. It is
  * also held to its own layout: content stops at 1160px and sits in the middle,
  * the nav is a menu button below 1024px, and on a phone the page has 16px each
- * side, the hero's buttons are full width, every screen is in the phone
+ * side, the hero's buttons are full width, the hero's screen is in the phone
  * frame, the principal's face is clear of it and of the card, and the one card
- * shows on every screen, clear of the phone. Its motion (the slider, the network, the floating
+ * shows, clear of the phone. Its motion (the tour, the network, the floating
  * cards, the counting figures) is checked in its own `describe` below.
  *
  * ## What it runs against
@@ -562,7 +562,7 @@ function measureSite({ width }) {
   };
   const box = (el) => el.getBoundingClientRect();
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-  const home = Boolean(document.querySelector("[data-slider]"));
+  const home = Boolean(document.querySelector(".hero-screen"));
   const room = document.documentElement.clientWidth;
   for (const wrap of document.querySelectorAll(".wrap")) {
     if (!visible(wrap)) continue;
@@ -582,7 +582,7 @@ function measureSite({ width }) {
     const gutter = box(document.querySelector("main .wrap")).left;
     if (Math.round(gutter) !== 16) problems.push(`the page padding is ${Math.round(gutter)}px, not 16`);
     for (const p of document.querySelectorAll("main p, main li, main summary")) {
-      if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .slider-bar, .eyebrow")) continue;
+      if (!visible(p) || p.closest(".mini, .float-card, .sheet, .todo, .eyebrow")) continue;
       if (size(p) < 14.5) problems.push(`body text is ${size(p)}px, under 15: "${p.textContent.trim().slice(0, 30)}"`);
     }
     // The footer on a phone: short, all of it on the left, small type, and every
@@ -636,11 +636,11 @@ function measureSite({ width }) {
  * screen's; the principal's face, down to her shoulders, is under neither the
  * phone nor a card; and the one card, "Fees collected", shows on every screen,
  * clear of the phone and so of every word on it. Pure, like `measureSite`; []
- * on a page with no slider.
+ * on a page with no hero screen.
  */
 function heroOnAPhone() {
   const problems = [];
-  const slider = document.querySelector("[data-slider]");
+  const slider = document.querySelector(".hero-screen");
   if (!slider) return problems;
   const visible = (el) => {
     const r = el.getBoundingClientRect();
@@ -649,22 +649,16 @@ function heroOnAPhone() {
   };
   const box = (el) => el.getBoundingClientRect();
   const overlaps = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-  const on = slider.querySelector(".slide.is-on");
-  const name = on.dataset.name;
-  const frames = [...slider.querySelectorAll(".slide")].map((s) => s.querySelector(".browser, .phone-frame"));
-  const frame = on.querySelector(".browser, .phone-frame");
+  const name = "the dashboard";
+  const frame = slider.querySelector(".browser");
   const f = box(frame);
   const style = getComputedStyle(frame);
-  if (style.backgroundColor !== getComputedStyle(slider.querySelector(".phone-frame")).backgroundColor || parseFloat(style.borderRadius) < 24) {
+  if (style.backgroundColor !== "rgb(20, 61, 140)" || parseFloat(style.borderRadius) < 24) {
     problems.push(`${name}: not in the phone frame`);
   }
   if ([...frame.querySelectorAll(".browser-bar")].some(visible)) problems.push(`${name}: a browser bar on a phone`);
   const shot = box(frame.querySelector("img"));
   if (Math.abs(shot.width / shot.height - 300 / 649) > 0.01) problems.push(`${name}: the screen is not a phone's shape`);
-  for (const other of frames) {
-    const o = box(other);
-    if (Math.abs(o.width - f.width) > 0.5 || Math.abs(o.left - f.left) > 0.5) problems.push(`${name}: the frames are not one size and place`);
-  }
   if (Math.round(f.left) !== Math.round(box(slider).left)) problems.push(`${name}: the phone is not at the left`);
 
   const photo = box(document.querySelector(".photo-hero"));
@@ -703,10 +697,9 @@ function heroEverywhere() {
   const box = (el) => el.getBoundingClientRect();
   const overlaps = (a, b) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
   const inside = (x, y, r) => x > r.left && x < r.right && y > r.top && y < r.bottom;
-  const on = document.querySelector(".slide.is-on");
-  const name = on.dataset.name;
-  const frame = box(on.querySelector(".browser, .phone-frame"));
-  const words = [...document.querySelectorAll(".hero-text > *, .slider-bar > *")].filter(visible).map((el) => [el.className || el.tagName.toLowerCase(), box(el)]);
+  const name = "the dashboard";
+  const frame = box(document.querySelector(".hero-screen .browser"));
+  const words = [...document.querySelectorAll(".hero-text > *")].filter(visible).map((el) => [el.className || el.tagName.toLowerCase(), box(el)]);
   const photo = box(document.querySelector(".photo-hero"));
   const face = {
     left: photo.left + photo.width * 0.1,
@@ -752,7 +745,7 @@ function loneWords() {
   const main = document.querySelector("main");
   const all = main.querySelectorAll("h1, h2, h3, summary, p, li");
   for (const el of all) {
-    if (el.closest(".mini, .sheet, .float-card, .slider, .bait, .todo, [hidden]")) continue;
+    if (el.closest(".mini, .sheet, .float-card, .hero-screen, .bait, .todo, [hidden]")) continue;
     const r = el.getBoundingClientRect();
     if (!r.width || getComputedStyle(el).visibility === "hidden") continue;
     if (el.querySelector("p, li, ul, ol, div")) continue;
@@ -783,6 +776,15 @@ async function loadEverything(page) {
       await new Promise((done) => setTimeout(done, 30));
     }
     window.scrollTo(0, 0);
+    // The tour's pictures wait out of sight along a row, so they are brought
+    // in by that row, and the row is put back on its first screen.
+    for (const row of document.querySelectorAll(".tour-slides")) {
+      for (let k = 1; k < row.children.length; k++) {
+        row.scrollTo({ left: row.clientWidth * k, behavior: "instant" });
+        await new Promise((done) => setTimeout(done, 30));
+      }
+      row.scrollTo({ left: 0, behavior: "instant" });
+    }
     await Promise.all(
       [...document.images].map((img) => (img.complete ? null : new Promise((done) => img.addEventListener("load", done, { once: true })))),
     );
@@ -1565,7 +1567,7 @@ describe("the homepage's sizes", () => {
             if (visible(h)) within(`"${h.textContent.trim().slice(0, 24)}"`, size(h), 0, phone ? 28 : 40);
           }
           const copy = [...main.querySelectorAll("p, li, summary, label")].filter(
-            (el) => visible(el) && !el.closest(".mini, .float-card, .sheet, .slider-bar, .eyebrow, .bait"),
+            (el) => visible(el) && !el.closest(".mini, .float-card, .sheet, .eyebrow, .bait"),
           );
           for (const el of copy) within(`body copy "${el.textContent.trim().slice(0, 24)}"`, size(el), ...(phone ? [15, 16] : [16, 17]));
           const labels = ".eyebrow, .chip, .mark, .fc-label, .fc-of, .sheet-title, .sheet-label, .sheet-who dt, .sheet-grid thead th, .tile";
@@ -1576,8 +1578,6 @@ describe("the homepage's sizes", () => {
             if (!visible(b)) continue;
             const what = `the button "${b.textContent.trim().slice(0, 18)}"`;
             within(`${what}'s height`, b.getBoundingClientRect().height, 44, 48);
-            // The slider's own controls (its dots and Pause) are the slider's, and kept as they are.
-            if (b.closest(".slider-bar")) continue;
             within(`${what}'s words`, size(b), 15, 16);
             within(`${what}'s corners`, parseFloat(getComputedStyle(b).borderTopLeftRadius), 8, 10);
           }
@@ -1621,7 +1621,7 @@ describe("the homepage's sizes", () => {
             for (const [what, sel] of [["the headline", ".hero h1"], ["the subline", ".hero-lead"], ["the main button", ".hero-actions .btn"]]) {
               if (document.querySelector(sel).getBoundingClientRect().bottom > innerHeight) found.push(`${what} is below the first screen`);
             }
-            const screens = document.querySelector(".slider").getBoundingClientRect().top;
+            const screens = document.querySelector(".hero-screen").getBoundingClientRect().top;
             if (screens > innerHeight - 96) found.push(`the screens start at ${Math.round(screens)}px, under 96px of them on the first screen`);
           }
           return found;
@@ -1637,10 +1637,10 @@ describe("the homepage's sizes", () => {
 });
 
 describe("the hero at every width", () => {
-  // Every screen in turn, by its dot, held to `heroEverywhere`, and the whole
+  // The hero's screen, held to `heroEverywhere`, and the whole
   // page to `loneWords`, from the smallest phone to a wide desk.
   for (const width of [320, 360, 375, 414, 640, 768, 900, 1024, 1280, 1920]) {
-    test(`every screen at ${width}px`, async () => {
+    test(`the hero at ${width}px`, async () => {
       const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: "reduce" });
       const page = await context.newPage();
       try {
@@ -1648,11 +1648,7 @@ describe("the hero at every width", () => {
         await page.waitForLoadState("networkidle");
         await page.waitForTimeout(1500); // the deferred screens in
         const problems = [];
-        for (let n = 0; n < 4; n++) {
-          await page.click(`[data-go="${n}"]`);
-          await page.mouse.move(0, 0);
-          problems.push(...(await page.evaluate(heroEverywhere)));
-        }
+        problems.push(...(await page.evaluate(heroEverywhere)));
         problems.push(...(await page.evaluate(loneWords)));
         if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)) problems.push("the page scrolls sideways");
         assert.deepEqual(problems, []);
@@ -1664,22 +1660,18 @@ describe("the hero at every width", () => {
 });
 
 describe("the hero on a phone", () => {
-  // Every screen in turn, by its dot, held to `heroOnAPhone`: each one in the
-  // register's phone frame, her face clear, the fees card on every screen and
+  // The hero's screen, held to `heroOnAPhone`: in a
+  // phone frame, her face clear, the fees card on every screen and
   // clear of the phone. From 640px the desk keeps its frames.
   for (const width of [320, 375, 414]) {
-    test(`every screen at ${width}px`, async () => {
+    test(`the hero at ${width}px`, async () => {
       const context = await browser.newContext({ viewport: { width, height: 812 }, reducedMotion: "reduce" });
       const page = await context.newPage();
       try {
         await page.goto(`${SITE}/`);
         await page.waitForLoadState("networkidle");
         const problems = [];
-        for (let n = 0; n < 4; n++) {
-          await page.click(`[data-go="${n}"]`);
-          await page.mouse.move(0, 0);
-          problems.push(...(await page.evaluate(heroOnAPhone)));
-        }
+        problems.push(...(await page.evaluate(heroOnAPhone)));
         assert.deepEqual(problems, []);
       } finally {
         await context.close();
@@ -1694,12 +1686,61 @@ describe("the hero on a phone", () => {
       try {
         await page.goto(`${SITE}/`);
         const bars = await page.evaluate(() =>
-          [...document.querySelectorAll(".slide")].map((s) => {
+          [...document.querySelectorAll(".hero-screen")].map((s) => {
             const bar = s.querySelector(".browser-bar");
             return bar ? getComputedStyle(bar).display !== "none" : "phone";
           }),
         );
-        assert.deepEqual(bars, [true, true, "phone", true]);
+        assert.deepEqual(bars, [true]);
+      } finally {
+        await context.close();
+      }
+    });
+  }
+});
+
+describe("the tour at 320, 390 and 1280px", () => {
+  // Laid out, not moving (reduced motion): tabs 44px or more, no text under
+  // 15px, nothing off the side of the page, the tabs a scrolling row on a
+  // phone with the chosen one in view, the words beside the phone on a desk and
+  // below it on a phone.
+  for (const width of [320, 390, 1280]) {
+    test(`at ${width}px`, async () => {
+      const phone = width < 640;
+      const context = await browser.newContext({ viewport: { width, height: phone ? 844 : 800 }, reducedMotion: "reduce" });
+      const page = await context.newPage();
+      try {
+        await page.goto(`${SITE}/`);
+        await page.waitForLoadState("networkidle");
+        await page.evaluate(() => document.querySelector("#tour").scrollIntoView());
+        await page.click("#tour-tab-website");
+        await page.waitForTimeout(400);
+        const found = await page.evaluate((phone) => {
+          const found = [];
+          const box = (el) => el.getBoundingClientRect();
+          const tabs = [...document.querySelectorAll(".tour-tab")];
+          const row = box(document.querySelector(".tour-tabs"));
+          for (const t of tabs) {
+            if (box(t).height < 44 || box(t).width < 44) found.push(`the tab "${t.textContent}" is under 44px`);
+          }
+          const chosen = box(tabs[4]);
+          if (chosen.left < row.left - 1 || chosen.right > row.right + 1) found.push("the chosen tab is not scrolled into view");
+          if (phone && document.querySelector(".tour-tabs").scrollWidth <= row.width) found.push("the tabs do not scroll on a phone");
+          for (const el of document.querySelectorAll("#tour h2, #tour h3, #tour p, #tour button")) {
+            if (el.closest("[inert]") || !box(el).width) continue;
+            if (parseFloat(getComputedStyle(el).fontSize) < 15) found.push(`"${el.textContent.slice(0, 20)}" is under 15px`);
+            if (el.matches("p, h3") && getComputedStyle(el).color !== "rgb(14, 23, 38)") found.push(`"${el.textContent.slice(0, 20)}" is not full ink`);
+          }
+          const slide = document.querySelector("#tour-website");
+          const copy = box(slide.querySelector(".tour-copy"));
+          const img = box(slide.querySelector("img"));
+          if (phone ? copy.top < img.bottom - 1 : copy.right > img.left + 1) found.push(phone ? "the words are not below the phone" : "the words are not beside the phone");
+          if (document.documentElement.scrollWidth > innerWidth) found.push(`scrolls sideways: ${document.documentElement.scrollWidth}px`);
+          return found;
+        }, phone);
+        mkdirSync(join(OUT, String(width)), { recursive: true });
+        await page.locator("#tour").screenshot({ path: join(OUT, String(width), "homepage-tour.png") });
+        assert.deepEqual(found, []);
       } finally {
         await context.close();
       }
@@ -1708,11 +1749,19 @@ describe("the hero on a phone", () => {
 });
 
 describe("the homepage's motion", () => {
-  // The slider runs on `setTimeout`, so the page's clock is Playwright's here
-  // and five seconds pass when the test says so. The network, the floating
-  // cards, the dot grids and the fade and rise are CSS, on the browser's own
-  // clock, and are read from `getAnimations()`.
-  const current = (page) => page.locator("[data-slider]").getAttribute("data-current");
+  // The tour runs on `requestAnimationFrame` and `setTimeout`, so the page's
+  // clock is Playwright's here and three seconds pass when the test says so.
+  // The network, the floating cards, the dot grids and the fade and rise are
+  // CSS, on the browser's own clock, and are read from `getAnimations()`.
+  const current = (page) =>
+    page.evaluate(() => [...document.querySelectorAll(".tour-tab")].findIndex((t) => t.getAttribute("aria-selected") === "true"));
+  const filled = (page, n) =>
+    page.evaluate((k) => {
+      const m = getComputedStyle(document.querySelectorAll(".tour-line b")[k]).transform;
+      return m === "none" ? 0 : Number(m.slice(7, -1).split(",")[0]);
+    }, n);
+  const hint = (page) => page.locator("[data-hint]").textContent();
+  const tab = (page, n) => page.locator(".tour-tab").nth(n);
 
   async function open(options = {}) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, ...options });
@@ -1720,95 +1769,196 @@ describe("the homepage's motion", () => {
     return { context, page };
   }
 
-  async function at(page) {
+  async function at(page, { toTour = true } = {}) {
     // Paused before the page exists, so no timer of the page's runs until the
     // test moves the clock.
     await page.clock.install({ time: new Date("2026-10-05T08:00:00Z") });
     await page.clock.pauseAt(new Date("2026-10-05T08:00:01Z"));
     await page.goto(`${SITE}/`);
     await page.waitForLoadState("networkidle");
+    if (toTour) await toTourOnScreen(page);
   }
 
-  test("the slider moves every 5 seconds, crossfading in 600ms, and holds on hover, keyboard focus, a touch and its pause button", async () => {
-    const { context, page } = await open({ hasTouch: true });
+  // The tour waits while it is off screen, so it starts once it has been scrolled to.
+  async function toTourOnScreen(page) {
+    await page.evaluate(() => document.querySelector("#tour").scrollIntoView());
+    await page.mouse.move(5, 5);
+    await page.waitForTimeout(300);
+  }
+
+  test("the tour is five named tabs and five screens, with no dots and no play button", async () => {
+    const { context, page } = await open();
     try {
       await at(page);
-      await page.mouse.move(5, 795);
-      assert.equal(await current(page), "0");
-      await page.clock.runFor(4900);
-      assert.equal(await current(page), "0", "moved before 5 seconds");
-      await page.clock.runFor(200);
-      assert.equal(await current(page), "1");
-      for (const next of ["2", "3", "0"]) {
-        await page.clock.runFor(5000);
-        assert.equal(await current(page), next);
-      }
-      const fade = await page.locator(".slide").first().evaluate((el) => {
-        const style = getComputedStyle(el);
-        return [style.transitionProperty, style.transitionDuration];
+      assert.deepEqual(await page.locator('[role="tab"]').allTextContents(), ["Results", "Fees", "Registers", "CBT", "School website"]);
+      assert.equal(await page.locator('[role="tablist"]').getAttribute("aria-label"), "Classnode features");
+      assert.equal(await page.locator('[role="tabpanel"]').count(), 5);
+      assert.deepEqual(await page.locator('[role="tab"]').evaluateAll((ts) => ts.map((t) => t.tabIndex)), [0, -1, -1, -1, -1]);
+      assert.equal(await page.locator('[role="tabpanel"]:not([inert])').count(), 1);
+      assert.equal(await page.locator('[data-go], [data-pause], .slider-dots, .slider-pause').count(), 0);
+      assert.equal(await page.locator(".tour-slide img").count(), 5);
+      assert.equal(await page.locator('.tour-slide img[loading="lazy"]').count(), 4);
+      assert.equal(await hint(page), "Moves on every 3 seconds. Choose a tab to stop.");
+      // The line is gold and 3px tall; the current tab is bold One Blue, the others full ink.
+      const look = await page.evaluate(() => {
+        const css = (el, p) => getComputedStyle(el)[p];
+        const tabs = [...document.querySelectorAll(".tour-tab")];
+        const line = document.querySelector(".tour-line b");
+        return {
+          height: css(line.parentElement, "height"),
+          gold: css(line, "backgroundColor"),
+          on: [css(tabs[0], "color"), css(tabs[0], "fontWeight")],
+          off: tabs.slice(1).map((t) => [css(t, "color"), css(t, "opacity")]),
+        };
       });
-      assert.match(fade[0], /^opacity/);
-      assert.match(fade[1], /^0\.6s/);
-      assert.equal(await page.locator(".slide.is-on").count(), 1);
-      assert.equal(await page.locator(".slide[inert]").count(), 3);
-      // Every screen's images have been asked for by now, after the page loaded.
-      assert.equal(await page.locator(".slides [data-srcset]").count(), 0);
-
-      // Hover holds it; leaving lets it go on.
-      await page.hover(".slides");
-      await page.clock.runFor(16000);
-      assert.equal(await current(page), "0", "moved under the pointer");
-      await page.mouse.move(5, 795);
-      await page.clock.runFor(5100);
-      assert.equal(await current(page), "1");
-
-      // A dot jumps, and keyboard focus on it holds the slider there.
-      await page.focus(".hero-actions .btn-outline");
-      await page.keyboard.press("Tab"); // the pause button, which holds nothing
-      await page.keyboard.press("Tab"); // the first dot
-      await page.keyboard.press("Tab"); // the second
-      await page.keyboard.press("Tab"); // the third
-      await page.keyboard.press("Enter");
-      assert.equal(await current(page), "2");
-      assert.equal(await page.locator('[data-go="2"]').getAttribute("aria-current"), "true");
-      await page.clock.runFor(16000);
-      assert.equal(await current(page), "2", "moved with keyboard focus inside");
-      await page.focus(".hero-actions .btn-outline");
-      await page.clock.runFor(5100);
-      assert.equal(await current(page), "3");
-
-      // A touch holds it while the finger is down and for two seconds after.
-      await page.locator(".hero-actions .btn-outline").blur();
-      const slides = await page.locator(".slides").boundingBox();
-      await page.touchscreen.tap(slides.x + 20, slides.y + 20);
-      await page.clock.runFor(6500);
-      assert.equal(await current(page), "3", "moved under a finger");
-      await page.clock.runFor(800);
-      assert.equal(await current(page), "0");
-
-      // The pause button stops it until it is pressed again.
-      await page.click("[data-pause]");
-      await page.mouse.move(5, 795);
-      assert.equal(await page.locator("[data-pause]").getAttribute("aria-pressed"), "true");
-      await page.clock.runFor(30000);
-      assert.equal(await current(page), "0", "moved while paused");
-      await page.click("[data-pause]");
-      await page.mouse.move(5, 795);
-      await page.clock.runFor(5100);
-      assert.equal(await current(page), "1");
+      assert.equal(look.height, "3px");
+      assert.equal(look.gold, "rgb(201, 162, 74)");
+      assert.deepEqual(look.on, ["rgb(20, 61, 140)", "700"]);
+      for (const [colour, opacity] of look.off) assert.deepEqual([colour, opacity], ["rgb(14, 23, 38)", "1"]);
     } finally {
       await context.close();
     }
   });
 
-  test("under reduced motion nothing moves: the first screen, no pause button, no animation, final figures", async () => {
+  test("the tour moves every 3 seconds, a gold line filling under its tab, and loops", async () => {
+    const { context, page } = await open();
+    try {
+      await at(page);
+      assert.equal(await current(page), 0);
+      await page.clock.runFor(1500);
+      const half = await filled(page, 0);
+      assert.ok(half > 0.4 && half < 0.6, `the line is ${half} of the way after 1.5s`);
+      await page.clock.runFor(1400);
+      assert.equal(await current(page), 0, "moved before 3 seconds");
+      await page.clock.runFor(200);
+      assert.equal(await current(page), 1);
+      assert.equal(await filled(page, 0), 0, "the old tab's line is not cleared");
+      for (const next of [2, 3, 4, 0]) {
+        await page.clock.runFor(3050);
+        assert.equal(await current(page), next);
+      }
+      assert.equal(await page.locator('[role="tabpanel"]:not([inert])').count(), 1);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("a tab shows its screen and stops the tour for the visit", async () => {
+    const { context, page } = await open();
+    try {
+      await at(page);
+      await tab(page, 3).click();
+      assert.equal(await current(page), 3);
+      assert.equal(await page.locator("#tour-cbt").evaluate((el) => el.inert), false);
+      assert.equal(await page.locator("#tour-cbt h3").textContent(), "Tests that survive bad network");
+      assert.equal(await hint(page), "Choose a tab to see each screen.");
+      await page.mouse.move(5, 5);
+      await page.clock.runFor(20000);
+      assert.equal(await current(page), 3, "moved on after a tab was chosen");
+      assert.equal(await filled(page, 3), 0, "the line still fills after a tab was chosen");
+      await tab(page, 0).click();
+      assert.equal(await current(page), 0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("hover or a touch on the screen holds the tour, and letting go carries on", async () => {
+    const { context, page } = await open({ hasTouch: true });
+    try {
+      await at(page);
+      await page.clock.runFor(2000);
+      await page.hover(".tour-stage");
+      await page.clock.runFor(15000);
+      assert.equal(await current(page), 0, "moved under the pointer");
+      await page.mouse.move(5, 5);
+      await page.clock.runFor(900);
+      assert.equal(await current(page), 0, "the 2 seconds already spent were lost");
+      await page.clock.runFor(300);
+      assert.equal(await current(page), 1);
+      // A touch holds it while the finger is down and for 2 seconds after.
+      await page.dispatchEvent(".tour-stage", "touchstart");
+      await page.clock.runFor(10000);
+      assert.equal(await current(page), 1, "moved under a finger");
+      await page.dispatchEvent(".tour-stage", "touchend");
+      await page.clock.runFor(2100);
+      assert.equal(await current(page), 1);
+      await page.clock.runFor(3100);
+      assert.equal(await current(page), 2);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the tour waits while it is off screen", async () => {
+    const { context, page } = await open();
+    try {
+      await at(page, { toTour: false });
+      await page.clock.runFor(20000);
+      assert.equal(await current(page), 0, "moved with the tour out of sight");
+      await toTourOnScreen(page);
+      await page.clock.runFor(3100);
+      assert.equal(await current(page), 1);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(300);
+      await page.clock.runFor(20000);
+      assert.equal(await current(page), 1, "moved after the tour left the screen");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("the arrow keys move between tabs, one tab in the tab order, and stop the tour", async () => {
+    const { context, page } = await open();
+    try {
+      await at(page);
+      await tab(page, 0).focus();
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await current(page), 1);
+      assert.equal(await page.evaluate(() => document.activeElement.id), "tour-tab-fees");
+      assert.deepEqual(await page.locator('[role="tab"]').evaluateAll((ts) => ts.map((t) => t.tabIndex)), [-1, 0, -1, -1, -1]);
+      await page.keyboard.press("ArrowLeft");
+      await page.keyboard.press("ArrowLeft");
+      assert.equal(await current(page), 4, "left from the first goes to the last");
+      await page.keyboard.press("ArrowRight");
+      assert.equal(await current(page), 0);
+      await page.clock.runFor(20000);
+      assert.equal(await current(page), 0, "moved after the keys");
+      assert.equal(await hint(page), "Choose a tab to see each screen.");
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("swiping the screen changes the tab and stops the tour", async () => {
+    const { context, page } = await open({ viewport: { width: 390, height: 800 }, hasTouch: true });
+    try {
+      await at(page);
+      await page.evaluate(() => {
+        const row = document.querySelector(".tour-slides");
+        row.scrollTo({ left: row.clientWidth * 2, behavior: "instant" });
+      });
+      await page.waitForTimeout(200);
+      await page.clock.runFor(400);
+      assert.equal(await current(page), 2);
+      assert.equal(await hint(page), "Choose a tab to see each screen.");
+      await page.clock.runFor(20000);
+      assert.equal(await current(page), 2);
+      const snap = await page.locator(".tour-slides").evaluate((el) => getComputedStyle(el).scrollSnapType);
+      assert.match(snap, /x mandatory/);
+    } finally {
+      await context.close();
+    }
+  });
+
+  test("under reduced motion nothing moves: the first screen, no animation, final figures, tabs still work", async () => {
     const { context, page } = await open({ reducedMotion: "reduce" });
     try {
       await at(page);
       await page.clock.runFor(30000);
-      assert.equal(await current(page), "0", "moved under reduced motion");
-      assert.equal(await page.locator("[data-pause]").isVisible(), false);
-      assert.equal(await page.locator(".slide").first().evaluate((el) => getComputedStyle(el).transitionDuration), "0s");
+      assert.equal(await current(page), 0, "moved under reduced motion");
+      assert.equal(await filled(page, 0), 0, "the line fills under reduced motion");
+      assert.equal(await hint(page), "Choose a tab to see each screen.");
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       assert.equal(await page.evaluate(() => document.getAnimations().length), 0);
       const figures = await page.evaluate(() => [...document.querySelectorAll("[data-count]")].map((x) => [x.dataset.count, x.textContent]));
@@ -1817,9 +1967,10 @@ describe("the homepage's motion", () => {
         [...document.querySelectorAll(".reveal, .n-dots circle")].filter((el) => getComputedStyle(el).opacity !== "1").length,
       );
       assert.equal(hidden, 0, "something is left undrawn");
-      // The dots still change the screen, at once.
-      await page.click('[data-go="1"]');
-      assert.equal(await current(page), "1");
+      await toTourOnScreen(page);
+      await tab(page, 2).click();
+      assert.equal(await current(page), 2);
+      assert.equal(await page.locator("#tour-registers h3").textContent(), "Morning register in seconds");
     } finally {
       await context.close();
     }
@@ -1904,7 +2055,7 @@ describe("the homepage's motion", () => {
                 name: a.animationName || a.transitionProperty,
                 iterations: t.iterations,
                 duration: t.duration,
-                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .slide, .slider-dots, .btn, .step, .sheet")
+                target: a.effect.target.closest(".nodes, .float-card, .dot-grid, .reveal, .btn, .step, .sheet")
                   ? "ok" : a.effect.target.outerHTML.slice(0, 60),
               };
             }),

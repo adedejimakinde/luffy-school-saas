@@ -205,13 +205,13 @@ class TheWordsTests(SiteSetUp):
         shown = [html.unescape(name) for name in re.findall(r"</svg>([^<]+)</li>", card)]
         self.assertEqual(shown, [feature.name for feature in features.FEATURES])
 
-    def test_no_line_under_the_slider(self):
-        """The owner took the line under the slider out (12 October 2026); each
+    def test_no_line_under_the_screens(self):
+        """The owner took the line under the screens out (12 October 2026); each
         screen's description still names the school as a demo."""
         page = self.get().content.decode()
         self.assertNotIn("Screens show Crestfield Demo College", visible_text(page))
         self.assertNotIn("hero-demo-note", page)
-        self.assertEqual(len(re.findall(r'<img [^>]*alt="[^"]*Crestfield Demo College, a demo school', page)), 3)
+        self.assertEqual(len(re.findall(r'<img [^>]*alt="[^"]*Crestfield (?:Demo )?College, a demo school', page)), 6, "the hero's screen and the tour's five")
 
     def test_the_thank_you_replaces_the_form_once_sent(self):
         text = visible_text(self.get("/?sent=1").content.decode())
@@ -608,7 +608,7 @@ class TheBudgetsTests(SiteSetUp):
                          "web/fonts/hanken-grotesk-400.woff2", "web/fonts/hanken-grotesk-700.woff2"):
             self.assertIn(expected, assets)
         images = [self.served[url] for url in fetched_on_a_phone(self.page)]
-        self.assertEqual(len(images), 7, images)
+        self.assertEqual(len(images), 9, images)
         weight = len(self.page.encode()) + sum((STATIC / a).stat().st_size for a in [*assets, *images])
         self.assertLess(weight, 400 * 1024, f"{weight} bytes: {sorted(assets)} {images}")
 
@@ -633,25 +633,25 @@ class TheBudgetsTests(SiteSetUp):
         outside = re.sub(r'<a href="https://[^"]+" rel="noopener">', "", page)
         self.assertNotRegex(outside, r'(src|href|srcset)="https?://')
 
-    def test_images_are_webp_sized_described_and_only_the_hero_eager(self):
-        top, below = self.page.split('<section class="proof"', 1)
+    def test_images_are_webp_sized_described_and_only_the_first_of_each_eager(self):
+        top, rest = self.page.split('<section id="tour"', 1)
+        tour, below = rest.split('<section class="proof"', 1)
         hero = re.findall(r"<img\b[^>]*>", top)
+        shots = re.findall(r"<img\b[^>]*>", tour)
         rest = re.findall(r"<img\b[^>]*>", below)
-        self.assertEqual(len(hero), 5, "the principal and the four screens")
+        self.assertEqual(len(hero), 2, "the principal and the dashboard")
+        self.assertEqual(len(shots), 5, "the tour's five phones")
         self.assertEqual(len(rest), 2, "the bursar and the teacher")
-        for tag in hero + rest:
+        for tag in hero + shots + rest:
             with self.subTest(image=tag[:80]):
-                self.assertRegex(tag, r'srcset="[^"]+\.webp \d+w')
+                self.assertRegex(tag, r'(?:src|srcset)="[^"]+\.webp')
                 self.assertRegex(tag, r'width="\d+"')
                 self.assertRegex(tag, r'height="\d+"')
                 self.assertRegex(tag, r'alt="[^"]{12,}"')
-        eager = [t for t in hero if " srcset=" in t]
-        self.assertEqual(len(eager), 2, "the principal and the first screen load with the page")
         self.assertEqual(sum('fetchpriority="high"' in t for t in hero), 1)
-        for tag in hero:
-            if tag not in eager:
-                self.assertIn("data-srcset=", tag, "screens 2 to 4 wait for the page to load")
-        for tag in rest:
+        self.assertNotIn("loading=", "".join(hero), "the hero loads with the page")
+        self.assertNotIn("loading=", shots[0], "the first tour screen loads with the page")
+        for tag in shots[1:] + rest:
             self.assertIn('loading="lazy"', tag)
 
     def test_the_drawings_are_inline_and_small(self):
@@ -672,12 +672,12 @@ class TheBudgetsTests(SiteSetUp):
         attrs, code = scripts[0]
         self.assertEqual(attrs.strip(), 'type="module"')
         parts = [re.sub(r"/\*.*?\*/", "", part, flags=re.S).strip()
-                 for part in re.split(r"(?=/\* The hero slider)|(?=/\* Figures)", code)]
-        menu, slider, figures = parts
-        self.assertLess(len(slider.encode()), 2 * 1024, "the slider")
+                 for part in re.split(r"(?=/\* The product tour)|(?=/\* Figures)", code)]
+        menu, tour, figures = parts
+        self.assertLess(len(tour.encode()), 3 * 1024, "the tour")
         self.assertLess(len(figures.encode()), 1024, "the counting figures")
-        self.assertIn("setTimeout(()=>{show(i+1);run()},5000)", slider)
-        self.assertIn("prefers-reduced-motion: reduce", slider)
+        self.assertIn("T=3000", tour, "a screen every 3 seconds")
+        self.assertIn("prefers-reduced-motion: reduce", tour)
         self.assertIn("prefers-reduced-motion: reduce", figures)
 
 
@@ -731,9 +731,8 @@ class TheMotionRulesTests(TestCase):
         self.assertRegex(css, r"@keyframes add-up \{.*100% \{ --n: var\(--to\); opacity: 1; background-color: transparent; \} \}")
         self.assertRegex(css, r"@keyframes write \{.*to \{ opacity: 1; translate: 0 0; \} \}")
 
-    def test_the_crossfade_the_float_and_the_rise(self):
+    def test_the_float_and_the_rise(self):
         css = without_comments(CSS.read_text())
-        self.assertIn("transition: opacity 600ms ease", css)
         self.assertRegex(css, r"@keyframes float \{ 0%, 100% \{ translate: 0 0; \} 50% \{ translate: 0 -5px; \} \}")
         for seconds in re.findall(r"\.float-[a-f](?:, \.float-[a-f])* \{ animation-duration: ([\d.]+)s", css):
             self.assertTrue(4 <= float(seconds) <= 6, seconds)
