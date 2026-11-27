@@ -9,7 +9,10 @@
  */
 
 import { REFUSAL, endOfficer, fetchClass, fetchOverview, nameOfficer, printSlips } from "./api.js";
+import { saveFile } from "./print.js";
 import * as states from "./states.js";
+
+export { saveFile };
 
 /** The markup for one state. Pure, so every branch is testable. */
 export function htmlFor(state, { portal = "" } = {}) {
@@ -41,18 +44,6 @@ export function printedNote(filename) {
 
 export function printedMissingNote(filename) {
   return `Printed. Saved as ${filename}. Slips already handed out still work.`;
-}
-
-/** Saves the PDF, then lets go of it: the page keeps no copy of a PIN. */
-export function saveFile(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
 export async function mount(root, { fetchImpl = fetch, save = saveFile } = {}) {

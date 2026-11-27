@@ -348,13 +348,13 @@ export const SCREENS = [
     name: "tests-sitting",
     as: "sunrise.principal",
     url: `${SUNRISE}/tests/`,
-    steps: [["tests-sitting-log", 'a[href^="#sitting/"]']],
+    steps: [["tests-sitting-log", 'a[href^="sitting/#"]']],
   },
   {
     name: "tests-sitting-office",
     as: "sunrise.admin",
     url: `${SUNRISE}/tests/`,
-    steps: [["tests-sitting-office-log", 'a[href^="#sitting/"]']],
+    steps: [["tests-sitting-office-log", 'a[href^="sitting/#"]']],
   },
   // A test's results (CBT step 5): `seed_ui`'s UI Results class's test, which its six sat
   // and the principal released (their own class, child, parent and code: nothing sit or

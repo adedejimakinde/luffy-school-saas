@@ -66,6 +66,7 @@ class RowOut(Schema):
     late_refused: int
     answers_received: int
     may_retake: bool
+    class_id: Optional[int] = None
     events: List[EventOut]
     failed_sign_ins: int = 0
     sign_ins: List[SignInOut] = []
@@ -84,6 +85,10 @@ class ClassOut(Schema):
     open: bool
     by_hand: bool
     said: str
+    #: For a login that may print slips: the class's students who can have one, and how
+    #: many of them hold a live PIN now. Zero for everybody else.
+    printable: int = 0
+    with_a_pin: int = 0
 
 
 class LogOut(Schema):
@@ -100,6 +105,7 @@ class LogOut(Schema):
     may_run: bool
     may_extend: bool
     may_retake: bool
+    may_print: bool = False
     classes: List[ClassOut]
     rows: List[RowOut]
     code_changes: List[dict]
@@ -145,6 +151,7 @@ def _log_out(log, code=None) -> LogOut:
         may_run=log.may_run,
         may_extend=log.may_extend,
         may_retake=log.may_retake,
+        may_print=log.may_print,
         classes=[ClassOut(**c) for c in log.classes],
         rows=[RowOut(**r.__dict__) for r in log.rows],
         code_changes=log.code_changes,

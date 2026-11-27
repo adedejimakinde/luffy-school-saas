@@ -15,6 +15,7 @@ EXAM_SLIPS_MODULES = (
     "web/html.js",
     "web/http.js",
     "web/picker.js",
+    "exam-slips/print.js",
     "exam-slips/api.js",
     "exam-slips/states.js",
     "exam-slips/app.js",
@@ -42,6 +43,34 @@ RESULTS_MODULES = (
     "test-results/states.js",
     "test-results/app.js",
 )
+
+
+#: A test's sitting page's modules, entry point last.
+SITTING_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "exam-slips/print.js",
+    "test-sitting/api.js",
+    "test-sitting/states.js",
+    "test-sitting/app.js",
+)
+
+
+def sitting_page(request):
+    """The frame for `/tests/sitting/`: a test's code, classes, sitting log and exam slips.
+
+    Its own page beside the Tests page, as the results are, so the Tests page stays light.
+    No student, code or PIN is in the frame. `cbt.sitting_api` asks who is asking before it
+    reads anything, and the slip routes ask again before they print.
+    """
+    return render(
+        request,
+        "cbt/test_sitting_page.html",
+        {
+            "import_map": pages.import_map(*SITTING_MODULES),
+            "portal_host": sign_in_host(request),
+        },
+    )
 
 
 def results_page(request):
@@ -89,4 +118,13 @@ def exam_slips_page(request):
     )
 
 
-__all__ = ["EXAM_SLIPS_MODULES", "RESULTS_MODULES", "TESTS_MODULES", "exam_slips_page", "results_page", "tests_page"]
+__all__ = [
+    "EXAM_SLIPS_MODULES",
+    "RESULTS_MODULES",
+    "SITTING_MODULES",
+    "TESTS_MODULES",
+    "exam_slips_page",
+    "results_page",
+    "sitting_page",
+    "tests_page",
+]

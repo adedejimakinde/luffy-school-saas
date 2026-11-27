@@ -158,7 +158,7 @@ test("a lost slip: the class opens to its students, and one with no number canno
   assert.doesNotMatch(root.innerHTML, /ask-print-student" data-student="104"/);
 
   await root.click({ "data-action": "ask-print-student", "data-student": "101" });
-  assert.match(root.innerHTML, /Ada Obi gets a new slip, and the old one stops working\./);
+  assert.match(root.innerHTML, /This gives Ada Obi a new exam PIN\. Their old slip will stop working\./);
   await root.click({ "data-action": "print-student", "data-class": "3", "data-student": "101" });
 
   assert.ok(sent.includes("POST /api/cbt/slips/classes/3/students/101/print/"));

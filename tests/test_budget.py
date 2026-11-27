@@ -87,6 +87,7 @@ SCHOOL_PAGES = (
     "/id-cards/",
     "/tests/",
     "/tests/results/",
+    "/tests/sitting/",
     # The exam door and screen (CBT step 4): a frame, opened here by a member of staff.
     "/sit/",
     # Released test scores (CBT step 5): a parent's and a student's, with no staff menu.

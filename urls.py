@@ -31,7 +31,7 @@ from accounts.views import (
 )
 from attendance.views import absences_page, register_page
 from cbt import score_views, sit_views
-from cbt.views import exam_slips_page, results_page, tests_page
+from cbt.views import exam_slips_page, results_page, sitting_page, tests_page
 from fees.views import bank_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
@@ -146,6 +146,7 @@ urlpatterns = [
     path("tests/", tests_page, name="tests"),
     # A test's results, item analysis, release and Send to CA (`docs/cbt.md`, step 5).
     path("tests/results/", results_page, name="test-results"),
+    path("tests/sitting/", sitting_page, name="test-sitting"),
     path("promotion/", promotion_page, name="promotion"),
     path("roll/", roll_page, name="roll"),
     path("roll/import/", roll_import_page, name="roll-import"),
