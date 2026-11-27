@@ -1004,7 +1004,7 @@ body.has-shell { padding: 0; }
   .tabbar a[aria-current="page"] { color: var(--brand); }
   .tabbar a[aria-current="page"] .icon { background: var(--brand-tint); }
   .tabbar a:active .icon { background: var(--divider); }
-  .tabbar .tab-label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-align: center; text-wrap: balance; font-size: min(0.8125rem, 17cqi); line-height: 1.2; font-weight: 700; }
+  .tabbar .tab-label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-align: center; text-wrap: balance; font-size: min(0.8125rem, 16cqi); line-height: 1.2; font-weight: 700; }
 
     body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + var(--sp-16)); }
   body.has-tabbar .shell { padding-bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px)); }
