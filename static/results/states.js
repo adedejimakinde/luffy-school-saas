@@ -11,7 +11,7 @@
  * opinion, and the day it disagreed the wrong one would be the one on screen.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 /**
  * The steps, in the order the chain takes them, with what to call them.
@@ -125,7 +125,7 @@ function classRow(row, note, { asking, telling, confirming, focus, printing, unm
   return [
     `<li id="class-${esc(row.class_group_id)}" class="row state-${esc(row.state)}` +
       `${focus === row.class_group_id ? " focus" : ""}${note ? ` ${esc(note.kind)}` : ""}">`,
-    `<span class="name">${esc(row.class_group)}</span>`,
+    `<span class="name">${esc(keepTogether(row.class_group))}</span>`,
     row.state === "released"
       ? `<span class="standing"><span class="label label-ok">${esc(row.state_label)}</span></span>`
       : `<span class="standing">${esc(row.state_label)}</span>`,

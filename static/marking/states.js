@@ -8,7 +8,7 @@
  * answer on every route this page calls, never the browser's.
  */
 
-import { emptyState, esc, numberOrBlank } from "../web/html.js";
+import { emptyState, esc, keepTogether, numberOrBlank } from "../web/html.js";
 import { heldNote } from "../web/offline.js";
 import { copyNote } from "../web/snapshots.js";
 
@@ -52,7 +52,7 @@ export function choose({
         (a) =>
           `<li><button type="button" data-action="pick-assessment" ` +
           `data-assessment="${esc(a.id)}"${a.class_group_id ? ` data-class="${esc(a.class_group_id)}"` : ""}>` +
-          `${esc(a.subject)} &middot; ${esc(a.name)}${a.class_group ? `, ${esc(a.class_group)}` : ""} <span class="quiet">out of ${esc(a.max_score)}</span>` +
+          `${esc(a.subject)} &middot; ${esc(a.name)}${a.class_group ? `, ${esc(keepTogether(a.class_group))}` : ""} <span class="quiet">out of ${esc(a.max_score)}</span>` +
           `</button></li>`,
       )
       .join(""),

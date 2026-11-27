@@ -15,7 +15,7 @@
  * fixed at the foot with Previous, Calculator and Next. `sit.css` makes the change.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 import { KEYS } from "./calculator.js";
 import { formatLeft, WARN_MS } from "./clock.js";
 
@@ -297,7 +297,7 @@ export function exam(view) {
 function when(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return Number.isNaN(d.getTime()) ? "" : keepTogether(d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }));
 }
 
 /**

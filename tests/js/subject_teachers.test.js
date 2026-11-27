@@ -164,8 +164,8 @@ test("a term that began with last term's assignments says so, and what was left 
   });
 
   assert.match(html, /data-carried>.*This term began with 2 copied from Third term 2025\/2026, and 1 not copied/s);
-  assert.match(html, /Copied from Third term 2025\/2026: Kemi Bello, Mathematics in JSS 1A/);
-  assert.match(html, /Not copied from Third term 2025\/2026: Sade Ola, English in JSS 1B \(no longer a teacher here\)/);
+  assert.match(html, /Copied from Third term 2025\/2026: Kemi Bello, Mathematics in JSS\u00a01A/);
+  assert.match(html, /Not copied from Third term 2025\/2026: Sade Ola, English in JSS\u00a01B \(no longer a teacher here\)/);
   assert.match(html, /Ngozi Eze opened marking to all teachers/);
   assert.match(html, /Ngozi Eze restricted marking/);
   assert.doesNotMatch(states.overview({ ...OVERVIEW, notes: {} }), /data-carried/);
@@ -181,8 +181,8 @@ test("with no term open there is no form, and the page says where the term is se
 test("recent changes say who did what, and when", () => {
   const html = states.overview({ ...OVERVIEW, notes: {} });
 
-  assert.match(html, /Ngozi Eze gave Tayo Ojo Mathematics in JSS 1A <span class="when">23 Oct 2026, 10:04<\/span>/);
-  assert.match(html, /Ngozi Eze took English in JSS 1B from Kemi Bello/);
+  assert.match(html, /Ngozi Eze gave Tayo Ojo Mathematics in JSS\u00a01A <span class="when">23 Oct 2026, 10:04<\/span>/);
+  assert.match(html, /Ngozi Eze took English in JSS\u00a01B from Kemi Bello/);
   assert.doesNotMatch(states.overview({ ...OVERVIEW, changes: [], notes: {} }), /Recent changes/);
 });
 

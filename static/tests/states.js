@@ -1,6 +1,6 @@
 /** Every screen the Tests page can show, as a pure function of what the school sent. (docs/module-notes.md) */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 export const LETTERS = "ABCDE";
 
@@ -20,11 +20,11 @@ function tabs(view, summariesOnly) {
 // -- tests --
 
 function classNames(classes) {
-  return classes && classes.length ? classes.map((c) => esc(c.name)).join(", ") : "No class yet";
+  return classes && classes.length ? classes.map((c) => esc(keepTogether(c.name))).join(", ") : "No class yet";
 }
 
 function testRow(t, { summariesOnly }) {
-  const what = `${esc(t.subject)}${t.level_name ? `, ${esc(t.level_name)}` : ""}. ${classNames(t.classes)}.`;
+  const what = `${esc(t.subject)}${t.level_name ? `, ${esc(keepTogether(t.level_name))}` : ""}. ${classNames(t.classes)}.`;
   const when = `Opens ${esc(t.opens)}, closes ${esc(t.closes)}. ${plural(t.duration, "minute", "minutes")} each.`;
   const size = `${plural(t.size, "question", "questions")}. ${t.code_set ? "Test code set." : "No test code yet."}`;
   const open = summariesOnly ? "" : `<a class="btn btn-quiet" href="#test/${esc(t.id)}">Open</a>`;
@@ -375,7 +375,7 @@ export function shortTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return keepTogether(d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }));
 }
 
 /** "14:05" in the browser's time, or "". */

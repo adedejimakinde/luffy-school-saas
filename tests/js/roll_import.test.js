@@ -88,7 +88,7 @@ test("the first screen offers the template and a file chooser, and names the cla
 
   assert.match(html, new RegExp(`href="${TEMPLATE_URL}" download`));
   assert.match(html, /type="file"[^>]*accept="\.xlsx,\.csv/);
-  assert.match(html, /JSS 1A, JSS 1B/);
+  assert.match(html, /JSS\u00a01A, JSS\u00a01B/);
   assert.doesNotMatch(html, /disabled/);
 });
 

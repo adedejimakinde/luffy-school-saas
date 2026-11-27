@@ -545,8 +545,8 @@ const NARROWED = {
 test("a narrowed teacher is offered each paper with its class, and no class to mix it with", () => {
   const html = states.choose(NARROWED);
 
-  assert.match(html, /data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS 1A /);
-  assert.match(html, /data-assessment="4" data-class="12">English &middot; First CA, JSS 1B /);
+  assert.match(html, /data-assessment="3" data-class="11">Mathematics &middot; First CA, JSS\u00a01A /);
+  assert.match(html, /data-assessment="4" data-class="12">English &middot; First CA, JSS\u00a01B /);
   assert.doesNotMatch(html, /pick-class|Which class/);
 });
 

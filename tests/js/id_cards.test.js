@@ -94,7 +94,7 @@ test("the page says the expiry is the last day of the third term, and says so wh
 test("the page names the expiry, lists each class, and offers Print only where there are children", () => {
   const html = states.overview({ ...OVERVIEW, printing: null, notes: {} });
   assert.match(html, /<h1>Student ID cards<\/h1>/);
-  assert.match(html, /valid until 10 Aug 2027/);
+  assert.match(html, /valid until 10\u00a0Aug\u00a02027/);
   assert.match(html, /2026\/2027 session/);
   assert.match(html, /data-class="11"[\s\S]*2 children/);
   assert.match(html, /data-action="ask-print" data-class="11"/);

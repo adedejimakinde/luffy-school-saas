@@ -76,7 +76,7 @@ test("a row this login cannot act on is still listed, and says so", () => {
   // mark, no name and no number. Hiding it makes an empty list ambiguous.
   const html = states.chain({ rows: [row({ class_group: "JSS 3B", state: "submitted", state_label: "Submitted by teacher" })] });
 
-  assert.match(html, /JSS 3B/);
+  assert.match(html, /JSS\u00a03B/);
   assert.match(html, /Submitted by teacher/);
   assert.match(html, /Nothing for you here/);
   assert.doesNotMatch(html, /<button[^>]*data-step=/);
@@ -295,7 +295,7 @@ test("taking a step redraws that row from the answer, not from a guess", async (
   assert.match(root.innerHTML, /Submitted by teacher/);
   assert.doesNotMatch(root.innerHTML, /data-step="submit"/, "the button outlived the step");
   // The other row is untouched.
-  assert.match(root.innerHTML, /JSS 1B/);
+  assert.match(root.innerHTML, /JSS\u00a01B/);
 });
 
 test("the send-back box sends what was typed", async () => {

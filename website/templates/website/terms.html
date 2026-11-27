@@ -1,4 +1,4 @@
-{% extends "website/legal.html" %}
+{% extends "website/legal.html" %}{% load typography %}
 {% block heading %}Terms of use{% endblock %}
 {% block contents %}
   <li><a href="#about">About these terms</a></li>
@@ -115,7 +115,7 @@
   <p>These terms are governed by the laws of the Federal Republic of Nigeria. <span class="todo">TODO: lawyer.</span></p>
   <p>If there is a disagreement, we will first try to settle it by talking. <span class="todo">TODO: lawyer to set what happens next, and where.</span></p>
   <p>If we change these terms, we will change the date below and tell schools before the change applies. <span class="todo">TODO: lawyer.</span></p>
-  <p>Last updated {{ terms_updated }}</p>
+  <p>Last updated {{ terms_updated|nobreak }}</p>
 </section>
 
 <section id="contact">
