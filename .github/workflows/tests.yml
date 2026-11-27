@@ -337,7 +337,10 @@ jobs:
   # something a finger has to hit is under 44px, or when text on a phone is
   # under 15px, and it photographs every page at every width. The photographs
   # are uploaded as the `screens` artifact whether it passed or not, because
-  # they are also how a design change is reviewed.
+  # they are also how a design change is reviewed. `tests/ui/phone_width.test.js`
+  # holds the key pages of every role to a 320px phone with text at 100% and
+  # 130%: no sideways scroll, and no amount, date or class name split over two
+  # lines (`docs/phone-width-sweep.md`).
   #
   # Against the demo, because a page with nothing in it shows nothing about
   # how its rows and tables land: `seed_demo` refuses to run without DEBUG, so
@@ -441,7 +444,7 @@ jobs:
       # A failed test is run once more. Passing only on the retry is printed
       # as "FLAKY: <test name>" in the log and the job summary; failing twice
       # fails the job. See .github/scripts/run-screens.sh.
-      - name: Every page at 360, 768 and 1280
+      - name: Every page at 360, 768 and 1280, and the key pages at 320
         run: .github/scripts/run-screens.sh
 
       - name: The screenshots
