@@ -1163,7 +1163,7 @@ describe("exam slips: replacing PINs that are already out", () => {
         await page.goto(`${SUNRISE}/exam-slips/`);
         await settle(page);
         const row = page.locator(`.class-slips[data-class="${printed.id}"]`);
-        assert.match(await row.innerText(), /PINs last issued: \d{1,2} \w{3} \d{4}, \d\d:\d\d by /);
+        assert.match(await row.innerText(), /PINs last issued: \d{1,2}\s\w{3}\s\d{4}, \d\d:\d\d by /);
         await row.locator('[data-action="ask-print-class"]').click();
         await settle(page);
         const text = await row.innerText();
