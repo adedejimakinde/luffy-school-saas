@@ -171,7 +171,7 @@ const PAGES = [
   ["sun-test-scores-parent", "sunrise.uiresparent", `${SUNRISE}/test-scores/`],
   ["sun-id-card-valid", null, `${SUNRISE}/verify/UIidcardvalid001/`],
   ["sun-id-card-expired", null, `${SUNRISE}/verify/UIidcardexpire01/`],
-  ["sun-cards", "sunrise.parent", `${SUNRISE}/cards/`, [["sun-card", click(".cards a:visible")]]],
+  ["sun-cards", "sunrise.parent", `${SUNRISE}/cards/`, [["sun-cards-second-child", click(".child-switcher button:nth-of-type(2)")], ["sun-card", click(".cards a:visible")]]],
   ["harbour-website", null, `${HARBOUR}/`],
   ["harbour-website-boarding", null, `${HARBOUR}/pages/boarding/`],
 ];
@@ -287,7 +287,8 @@ function measure() {
     }
     if (c && (getComputedStyle(c).overflowX === "auto" || getComputedStyle(c).overflowX === "scroll") && c.scrollWidth > c.clientWidth + 1) {
       const cue = c.previousElementSibling && c.previousElementSibling.matches(".swipe-cue") && visible(c.previousElementSibling);
-      const edge = c.dataset.edge !== undefined || /shadow|gradient/.test(getComputedStyle(c).backgroundImage + getComputedStyle(c).maskImage + getComputedStyle(c).boxShadow) && getComputedStyle(c).backgroundImage !== "none";
+      const cs = getComputedStyle(c);
+      const edge = cs.boxShadow !== "none" || cs.maskImage !== "none" || parseFloat(cs.borderRightWidth) > 0;
       if (!edge) push("wide-table-no-visible-edge", table, `${Math.round(c.scrollWidth)}px in a ${Math.round(c.clientWidth)}px scroller${cue ? " (cue above, no edge)" : ""}`);
     }
   }
@@ -335,11 +336,11 @@ function measure() {
   const MONTH = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*";
   const TOKENS = [
     ["amount", /₦\s?-?[\d,]+(?:\.\d+)?(?:[km]\b)?/g],
-    ["date", new RegExp(`\\b(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,? )?\\d{1,2} ${MONTH}(?: \\d{4})?\\b|\\b${MONTH} \\d{4}\\b`, "g")],
+    ["date", new RegExp(`\\b(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\\s)?\\d{1,2}\\s${MONTH}(?:\\s\\d{4})?\\b|\\b${MONTH}\\s\\d{4}\\b`, "g")],
     ["class name", /\b(?:JSS|SSS|SS|Primary|Basic|Nursery|KG|Year|Grade|Pry)\s?\d+(?:\s?[A-Z]\b)?/g],
     ["admission number", /\b[A-Z]{2,5}\/[A-Z0-9-]+(?:\/[A-Z0-9-]+)*\b/g],
-    ["PIN", /\b\d{4} \d{4}\b/g],
-    ["time", /\b\d{1,2}:\d{2}(?:\s?[ap]m)?\b/gi],
+    ["PIN", /\b\d{4}\s\d{4}\b/g],
+    ["time", /\b\d{1,2}:\d{2}(?:\s?[ap]\.?m\b\.?)?/gi],
   ];
   const walk2 = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   while (walk2.nextNode()) {
