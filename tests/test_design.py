@@ -450,6 +450,25 @@ class EveryPageDrawsFromTheDesignTests(SimpleTestCase):
                 written = re.search(r"<!doctype html>\s*<html lang=\"en\">", head, re.I)
                 self.assertTrue(shared or written, "no doctype and lang")
 
+    def test_every_viewport_lets_the_reader_zoom_and_size_the_text(self):
+        """`width=device-width, initial-scale=1`, and never a cap on zoom.
+
+        `user-scalable=no` or a `maximum-scale` stops a pinch, and on some phones
+        the system font size with it: a budget Android with its font turned up is
+        who reads Classnode most (`docs/phone-width-sweep.md`).
+        """
+        seen = 0
+        files = [*ROOT.glob("templates/**/*.html"), *ROOT.glob("*/templates/**/*.html"), ROOT / "tests/ui/specimen.html"]
+        for name, html in ((str(f.relative_to(ROOT)), f.read_text()) for f in files):
+            for tag in re.findall(r"<meta\s+name=\"viewport\"[^>]*>", html):
+                seen += 1
+                with self.subTest(template=name):
+                    content = re.search(r'content="([^"]*)"', tag).group(1)
+                    self.assertIn("width=device-width", content)
+                    self.assertIn("initial-scale=1", content)
+                    self.assertNotRegex(content, r"user-scalable\s*=\s*(no|0)|maximum-scale|minimum-scale")
+        self.assertGreater(seen, 40, "the viewport tags were not found")
+
     def test_a_part_draws_no_head_and_a_layout_is_followed(self):
         """The control for the two allowances above: each is used, and narrowly."""
         names = dict(page_templates())

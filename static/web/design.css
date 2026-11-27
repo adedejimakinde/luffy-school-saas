@@ -70,18 +70,14 @@
   --stop-bg: #FDECEA;
     --action-bg: #FFF7E8;
 
-  /* The dashboard's three stat tiles (`home/dashboard.css`): a change for the worse, a
-     change for the better, and the "needs action" tint with its label, figure and line. */
   --stat-down: #9A5B0E;
   --stat-up: #0F6B47;
   --stat-action-bg: #FFF7EA;
   --stat-action-label: #8A5410;
   --stat-action-figure: #6E420B;
 
-  /* The public site's one gold: the line that fills under the tour's current tab. */
   --gold: #C9A24A;
 
-  /* The public site's icon tiles only, never words. */
   --teal: #0F766E;
   --amber: #B45309;
   --coral: #C2452D;
@@ -106,13 +102,11 @@
   --sp-24: 24px;
   --sp-32: 32px;
 
-  /* Short, and none under reduced motion (below). */
   --ease: 150ms ease;
 
   --font: "Hanken Grotesk", "Noto Sans", system-ui, -apple-system, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
 
-  /* 15px: the smallest body text on a phone. */
   --small: 0.9375rem;
 
   --sidebar: 240px;
@@ -987,6 +981,7 @@ body.has-shell { padding: 0; }
   }
 
   .tabbar a {
+    container-type: inline-size;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1009,11 +1004,22 @@ body.has-shell { padding: 0; }
   .tabbar a[aria-current="page"] { color: var(--brand); }
   .tabbar a[aria-current="page"] .icon { background: var(--brand-tint); }
   .tabbar a:active .icon { background: var(--divider); }
-  .tabbar .tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8125rem; font-weight: 700; }
+  .tabbar .tab-label { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; text-align: center; text-wrap: balance; font-size: min(0.8125rem, 17cqi); line-height: 1.2; font-weight: 700; }
 
     body.has-tabbar .content { padding-bottom: calc(var(--tabbar) + var(--sp-16)); }
   body.has-tabbar .shell { padding-bottom: calc(var(--tabbar-gap) + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* == Fit: docs/phone-width-sweep.md == */
+
+h1, h2, h3, legend { text-wrap: balance; }
+fieldset { min-inline-size: 0; }
+:where(.page-head, .card-head, .actions, .msg) > * { min-width: 0; }
+time { white-space: nowrap; }
+@supports (animation-timeline: scroll()) {
+  .scroll, .grid-scroll, .table-scroll { border: 0 solid transparent; border-inline-width: 1px; animation: edge linear both; animation-timeline: scroll(self inline); }
+}
+@keyframes edge { from { border-right-color: var(--field-border); } to { border-left-color: var(--field-border); } }
 
 /* == Forced colours and reduced motion == */
 
@@ -1025,7 +1031,8 @@ body.has-shell { padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { transition: none !important; animation: none !important; }
+  *, *::before, *::after { transition: none !important; }
+  :not(.scroll, .grid-scroll, .table-scroll), ::before, ::after { animation: none !important; }
   button:active, .btn:active, .press:active, a.card:active, a.list-row:active { transform: none; }
 }
 

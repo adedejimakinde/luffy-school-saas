@@ -26,6 +26,14 @@
 }
 
 .name { font-weight: 700; }
+
+/* A row too narrow for the class and where it stands side by side (a small
+   phone, large text): where it stands goes under the class's name. */
+.classes { container-type: inline-size; }
+@container (max-width: 16em) {
+  .row { grid-template-columns: minmax(0, 1fr); }
+  .standing { justify-self: start; }
+}
 .standing { color: var(--muted); }
 .actions { grid-column: 1 / -1; }
 .actions.quiet { color: var(--muted); display: block; }

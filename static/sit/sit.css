@@ -166,4 +166,11 @@ body > main.sit { max-width: none; margin: 0; padding: 0; background: none; bord
   .sit-calc { position: fixed; left: 12px; right: 12px; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 20; max-height: calc(100vh - 120px); overflow: auto; box-shadow: var(--shadow-2); }
   .sit-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 15; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--card); box-shadow: 0 -1px 0 var(--border); }
   .sit-bar .btn { min-height: 56px; padding: 8px; gap: 6px; }
+  /* Too narrow for an icon beside its word (a small phone, large text): the
+     icon goes above it, and the word is sized to its third of the bar. */
+  .sit-bar { container-type: inline-size; }
+  @container (max-width: 20em) {
+    .sit-bar .btn { flex-direction: column; gap: 2px; padding: 6px 4px; font-size: clamp(15px, 4.4cqi, 1rem); line-height: 1.2; }
+    .sit-bar .btn-primary { flex-direction: column-reverse; }
+  }
 }

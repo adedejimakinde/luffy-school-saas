@@ -153,7 +153,7 @@ function traits(o) {
     '<section class="ogun-pair">',
     ...o.traits.map((g) =>
       [
-        `<div><h2>${esc(g.label)}</h2><table class="ogun-traits">`,
+        `<div><h2>${esc(g.label)}</h2><div class="scroll"><table class="ogun-traits">`,
         `<thead><tr><th scope="col">Trait</th>${points.map((p) => `<th scope="col" class="n">${esc(p)}</th>`).join("")}</tr></thead><tbody>`,
         ...g.traits.map(
           (t) =>
@@ -164,7 +164,7 @@ function traits(o) {
         `<tr class="total"><th scope="row">Total</th><td class="n" colspan="${points.length}">${
           g.total === null || g.total === undefined ? "-" : `${esc(g.total)} of ${esc(g.out_of)}`
         }</td></tr>`,
-        "</tbody></table></div>",
+        "</tbody></table></div></div>",
       ].join(""),
     ),
     "</section>",
