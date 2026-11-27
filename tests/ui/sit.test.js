@@ -297,11 +297,11 @@ describe("the exam screen", () => {
       }, PASSWORD);
       assert.equal(status, 200);
       await desk.goto(`${SUNRISE}/tests/`);
-      await desk.locator('a[href^="#sitting/"]').first().waitFor();
+      await desk.locator('a[href^="sitting/#"]').first().waitFor();
       const tests = await desk.evaluate(async () => (await (await fetch("/api/cbt/tests/")).json()).tests);
       const own = tests.find((t) => t.classes.some((c) => c.name === "UI Sit"));
       await desk.goto("about:blank");
-      await desk.goto(`${SUNRISE}/tests/#sitting/${own.id}`);
+      await desk.goto(`${SUNRISE}/tests/sitting/#${own.id}`);
       await desk.waitForSelector('[data-state="sitting"]');
       const row = desk.locator(".sit-student-row", { hasText: "Efe Sit" });
       assert.equal((await row.locator('[data-count="Left the page"] dd').textContent()).trim(), "1");
@@ -342,10 +342,11 @@ describe("the exam screen", () => {
       }, PASSWORD);
       assert.equal(status, 200);
       await desk.goto(`${SUNRISE}/tests/`);
-      await desk.locator('a[href^="#sitting/"]').first().waitFor();
+      await desk.locator('a[href^="sitting/#"]').first().waitFor();
       const tests = await desk.evaluate(async () => (await (await fetch("/api/cbt/tests/")).json()).tests);
       const own = tests.find((t) => t.classes.some((c) => c.name === OWN_CLASS));
       await desk.goto("about:blank");
+      // An old link, from before the sitting had its own page, is sent on to it.
       await desk.goto(`${SUNRISE}/tests/#sitting/${own.id}`);
       await desk.waitForSelector('[data-state="sitting"]');
       const row = desk.locator(".sit-student-row", { hasText: "Dayo Sit" });
