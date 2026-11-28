@@ -285,6 +285,14 @@ export const SCREENS = [
       ["fees-account", '[data-action="open-account"]'],
     ],
   },
+  // The school's fee log and the term's reversals: what the principal and the
+  // proprietor read to see every correction, who made it and why.
+  {
+    name: "fees-log",
+    as: "sunrise.principal",
+    url: `${SUNRISE}/fees/log/`,
+    steps: [["fees-reversals", '[data-action="log-view"][data-only="yes"]']],
+  },
 
   { name: "bank", as: "sunrise.bursar", url: `${SUNRISE}/bank/` },
 

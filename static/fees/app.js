@@ -91,9 +91,7 @@ export async function mount(
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
   let where = { termId: null, classId: null, studentId: null };
-  //: One key per form, because each form is its own write: a payment, a
-  //: discount and a concession sent under one key would be refused as a
-  //: reused form.
+  // One key per form: each form is its own write (docs/module-notes.md)
   const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
@@ -110,8 +108,7 @@ export async function mount(
   }
 
   const showBooks = async (termId) => {
-    // The reminders that went nowhere are listed under the classes (D10, as
-    // decided). Asked beside the books, and a failure there leaves the books.
+    // Reminders that went nowhere, listed under the classes (docs/module-notes.md)
     const [answer, notSent] = await Promise.all([
       fetchBooks({ termId, fetchImpl }),
       fetchNotSent({ fetchImpl }),
@@ -135,8 +132,7 @@ export async function mount(
       fetchAccount({ studentId, fetchImpl }),
       fetchConcessions({ studentId, fetchImpl }),
     ]);
-    // One refusal for both: the routes ask the same question of the same
-    // person, so the first read's answer stands for the pair.
+    // One refusal answers both reads (docs/module-notes.md)
     land(answer.ok && !concessions.ok ? concessions : answer, (body) => ({
       step: "account",
       account: body,
@@ -204,11 +200,7 @@ export async function mount(
     else if (field.dataset.billsTerm !== undefined) await showBills(Number(field.value));
   });
 
-  /**
-   * A write made under a form key: a payment or a discount. Success mints the
-   * next key; a lost answer keeps it, and what was typed, so sending again is
-   * safe; a sentence from the server keeps what was typed and shows it.
-   */
+  /** A payment or a discount, written under its form key (docs/module-notes.md) */
   const keyed = async (intent, draft, send, { done, again, draftField }) => {
     const answer = await send({ ...draft, form_key: keys[intent] });
     if (answer.ok) {
@@ -280,8 +272,7 @@ export async function mount(
           posted
             ? `Payment recorded. Receipt ${entry.receipt_number}.`
             : "That payment was already recorded; nothing new was added.",
-        // The request may have landed. Same key, same payment: sending it
-        // again records it once whichever way the first one went.
+        // A lost answer: sending again records it once (docs/module-notes.md)
         again: "We could not tell whether that payment was saved. Send it again. It will not be recorded twice.",
       });
       return;
@@ -333,7 +324,10 @@ export async function mount(
     if (intent === "reversal" && state.reversing) {
       const answer = await postReversal({ entryId: state.reversing, reason: form.reason.value, fetchImpl });
       if (answer.ok) {
-        await showAccount(where.studentId, { note: "Undone. The account below includes it.", noteTone: "done" });
+        await showAccount(where.studentId, {
+          note: "Reversed. The original stays on the account, marked, and the balance below includes the reversal.",
+          noteTone: "done",
+        });
         return;
       }
       if (answer.refusal) {
@@ -341,7 +335,7 @@ export async function mount(
         draw();
         return;
       }
-      state = { ...state, noteTone: "stop", note: answer.body.detail || "That was not undone." };
+      state = { ...state, noteTone: "stop", note: answer.body.detail || "That was not reversed." };
       draw();
     }
   });
@@ -351,8 +345,7 @@ export async function mount(
     if (!hit) return;
     const action = hit.dataset.action;
     if (action === "ask-reminders" && ["books", "class"].includes(state.step)) {
-      // Asks first (docs/messaging.md D10): the preview writes nothing, and
-      // nothing is sent until "Send them".
+      // Asks first: the preview writes nothing (docs/module-notes.md)
       const scope = {
         termId: hit.dataset.term ? Number(hit.dataset.term) : where.termId,
         classId: hit.dataset.class ? Number(hit.dataset.class) : null,

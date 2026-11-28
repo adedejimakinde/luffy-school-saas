@@ -21,6 +21,7 @@ from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db import connection, transaction
+from django.db.models import QuerySet
 from django.db.utils import ProgrammingError
 from django.test import TestCase
 
@@ -227,14 +228,16 @@ class AppendOnlyTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             self.post_a_charge()
+            # A plain `QuerySet`, so `FeeLedgerQuerySet.update()`'s own refusal
+            # is out of the way and the statement reaches Postgres.
             with self.assertRefusedBy(APPEND_ONLY_UPDATE), transaction.atomic():
-                FeeLedgerEntry.objects.update(amount_kobo=1)
+                QuerySet(FeeLedgerEntry).update(amount_kobo=1)
 
     def test_the_database_refuses_a_delete_that_bypasses_the_model(self):
         with connected_to(self.stmarys):
             self.post_a_charge()
             with self.assertRefusedBy(APPEND_ONLY_DELETE), transaction.atomic():
-                FeeLedgerEntry.objects.all().delete()
+                QuerySet(FeeLedgerEntry).delete()
 
     def test_raw_sql_cannot_rewrite_the_books_either(self):
         """No ORM in the loop at all — the trigger is the whole defence."""
@@ -280,7 +283,7 @@ class CorrectionTests(LedgerSetUp):
     def test_a_reversal_undoes_the_entry_exactly(self):
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
-            reversal = services.reverse_entry(wrong, recorded_by=self.bursar)
+            reversal = services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
 
             self.assertEqual(reversal.kind, FeeEntryKind.REVERSAL)
             self.assertEqual(reversal.amount_kobo, -wrong.amount_kobo)
@@ -299,7 +302,7 @@ class CorrectionTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
-            services.reverse_entry(wrong)
+            services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
             term = self.reload_term()
             services.charge(
                 self.membership, term, 120_000 * KOBO_PER_NAIRA,
@@ -317,9 +320,9 @@ class CorrectionTests(LedgerSetUp):
     def test_an_entry_cannot_be_reversed_twice(self):
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
-            services.reverse_entry(wrong)
+            services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
             with self.assertRaises(services.AlreadyReversed):
-                services.reverse_entry(wrong)
+                services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
 
     def test_the_database_refuses_a_second_reversal_too(self):
         """The service checks under a lock; the index is what makes it true.
@@ -330,7 +333,7 @@ class CorrectionTests(LedgerSetUp):
         """
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
-            first = services.reverse_entry(wrong)
+            first = services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
             with self.assertRefusedBy("an_entry_is_reversed_at_most_once"), (
                 transaction.atomic()
             ):
@@ -341,6 +344,7 @@ class CorrectionTests(LedgerSetUp):
                     narration="second undo",
                     effective_on=date(2025, 10, 1),
                     reverses=wrong,
+                    recorded_by_id=self.bursar.pk,
                     student_membership_id=self.membership.pk,
                     student_name="Ada Obi",
                 )
@@ -348,9 +352,9 @@ class CorrectionTests(LedgerSetUp):
     def test_a_reversal_cannot_itself_be_reversed(self):
         with connected_to(self.stmarys):
             wrong = self.post_a_charge()
-            reversal = services.reverse_entry(wrong)
+            reversal = services.reverse_entry(wrong, reason="Posted in error", recorded_by=self.bursar)
             with self.assertRaises(services.CannotReverse):
-                services.reverse_entry(reversal)
+                services.reverse_entry(reversal, reason="Posted in error", recorded_by=self.bursar)
 
     def test_a_reversal_must_name_what_it_undoes(self):
         with connected_to(self.stmarys):
@@ -363,6 +367,7 @@ class CorrectionTests(LedgerSetUp):
                     amount_kobo=-TUITION,
                     narration="undoing... something",
                     effective_on=date(2025, 10, 1),
+                    recorded_by_id=self.bursar.pk,
                     student_membership_id=self.membership.pk,
                     student_name="Ada Obi",
                 )
@@ -432,16 +437,22 @@ class ConstraintTests(LedgerSetUp):
         charge must be strictly positive, and zero is not. So the row was
         refused before `a_ledger_entry_moves_money` was ever consulted, and this
         test passed with that rule removed from the model *and* the schema.
-        `REVERSAL` is the one kind carrying no sign rule, so a zero reversal is
-        the write only the zero rule refuses.
+        `REVERSAL` is the one kind carrying no sign rule. Since
+        `fees/migrations/0010` a zero reversal *of an entry* is refused first by
+        the insert trigger (it is not the entry's exact opposite), so the row
+        only this rule refuses is a zero reversal naming nothing: Postgres asks
+        check constraints in name order, and `a_ledger_entry_moves_money` comes
+        before `only_a_reversal_names_what_it_undoes`.
         """
         with connected_to(self.stmarys):
-            undone = self.entry()
             with self.assertRefusedBy("a_ledger_entry_moves_money"), (
                 transaction.atomic()
             ):
                 self.entry(
-                    kind=FeeEntryKind.REVERSAL, amount_kobo=0, reverses=undone
+                    kind=FeeEntryKind.REVERSAL,
+                    amount_kobo=0,
+                    reverses=None,
+                    recorded_by_id=self.bursar.pk,
                 )
 
     def test_a_negative_charge_is_refused(self):

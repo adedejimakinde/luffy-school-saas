@@ -132,11 +132,11 @@ class NoReason(FeeLedgerError):
 
     Decided 2026-09-24 (fees 2(a)). The reason becomes the entry's narration —
     what the books say about the row a year later — so it is refused rather
-    than filled in: an undo left to `reverse_entry()`'s default would say only
-    "Reversal of: Payment received", which records that something was undone
-    and never why. Asked by `discount_once()` and `undo()`, the two ways a
-    person does either, and not by the primitives beneath them, which a
-    schedule and a concession call with narrations of their own. Since B2,
+    than filled in: an undo with a default would say only "Reversal of:
+    Payment received", which records that something was undone and never why.
+    Asked by `discount_once()` and `reverse_entry()` (which nothing but a
+    person calls), and not by the posting primitives, which a schedule and a
+    concession call with narrations of their own. Since B2,
     `fees.billing` asks it too, of a concession's grant and its revocation
     (issue #75).
     """
@@ -794,51 +794,34 @@ def refund(membership, term, amount_kobo, *, method, narration="Refund",
 _NARRATION_MAX = FeeLedgerEntry._meta.get_field("narration").max_length
 
 
-def _inherited_narration(narration):
-    """`"Reversal of: X"`, trimmed to the column rather than failing to save.
-
-    `FeeScheduleLine.description` and `FeeLedgerEntry.narration` are both 255,
-    and `apply_to_class()` copies one into the other verbatim -- so a line
-    described in 243 characters or more posts a charge whose reversal is
-    thirteen characters too long. That was unreachable while every narration was
-    hand-typed, and this PR made it reachable.
-
-    It matters more than a truncation usually would, because of *how* it failed:
-    `full_clean()` raises `ValidationError`, which is not a `FeeLedgerError`. A
-    caller writing `except FeeLedgerError` -- the contract this module's
-    docstring insists on -- would not have caught it, and the charge simply
-    could not be undone. Trimming keeps the prefix, which is the part a reader
-    needs, and marks the cut so nobody reads the tail as the whole description.
-    """
-    inherited = f"Reversal of: {narration}"
-    if len(inherited) <= _NARRATION_MAX:
-        return inherited
-    return inherited[: _NARRATION_MAX - 1] + "\u2026"
-
-
-def undo(entry, *, reason, recorded_by=None):
-    """`reverse_entry()` as a person does it: with the reason, which becomes
-    the reversal's narration. Raises `NoReason` without one, before anything
-    is written."""
-    return reverse_entry(entry, narration=_require_reason(reason), recorded_by=recorded_by)
+def undo(entry, *, reason, recorded_by):
+    """`reverse_entry()` by its older name, which `fees/api.py` calls."""
+    return reverse_entry(entry, reason=reason, recorded_by=recorded_by)
 
 
 @transaction.atomic
-def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
-                  membership=None):
+def reverse_entry(entry, *, reason, recorded_by, effective_on=None):
     """Undo `entry` by posting its exact opposite. Returns the new entry.
 
     The only correction there is, and deliberately the only one. There is no
-    "edit the amount" and no free-form adjustment: a charge raised for the wrong
-    amount is reversed in full and the right one posted fresh, which leaves both
-    the mistake and the fix legible a year later. An adjustment of "-30,000
-    because the first number was wrong" tells a reader the difference and never
-    what actually happened.
+    "edit the amount" and no free-form adjustment: a payment recorded for the
+    wrong amount is reversed in full and the right one posted fresh, which
+    leaves both the mistake and the fix legible a year later. An adjustment of
+    "-30,000 because the first number was wrong" tells a reader the difference
+    and never what actually happened.
 
-    The identity snapshot is taken from `entry` rather than from a live lookup,
-    unless a `membership` is passed. A reversal is part of the original story and
-    should read the way the original read — including when the student has since
-    left and their membership has ended.
+    **A written reason and a person, always.** The reason becomes the
+    reversal's narration and is refused blank (`NoReason`) before anything is
+    written; `recorded_by` is who did it. Both are required here and not only
+    on the route, because nothing in this codebase undoes an entry except a
+    person, and a default narration ("Reversal of: X") records that something
+    was undone and never why. `a_reversal_says_why` and `a_reversal_says_who`
+    hold the same at the database.
+
+    The identity snapshot is taken from `entry`, never from a live lookup. A
+    reversal is part of the original story, reads the way the original read
+    (including when the student has since left), and belongs to the same child
+    and term, which `fees/migrations/0010`'s insert trigger also holds.
 
     **And it inherits the source**, for the same reason it inherits `reference`:
     a reversal of a schedule charge is still *about* that line of the bill, so
@@ -846,6 +829,10 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
     The uniqueness indexes are conditioned on `kind` precisely so that carrying
     the source across does not collide with the entry being undone.
     """
+    narration = _require_reason(reason)
+    if recorded_by is None:
+        raise CannotReverse("Say who is undoing it. The books keep who made every correction.")
+
     # Locked and re-read before deciding, because "has this been reversed
     # already?" is a question about the present, and two bursars clicking undo
     # on the same charge is exactly the race this guards. `select_for_update()`
@@ -863,7 +850,20 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
     # and in the other order the billing run stalls on its first insert. The
     # reversal needs the term's *id*, which the locked row already carries, so
     # the join bought nothing at all.
-    locked = FeeLedgerEntry.objects.select_for_update().get(pk=entry.pk)
+    locked = FeeLedgerEntry.objects.select_for_update().filter(pk=entry.pk).first()
+
+    # **The row locked is the row the caller meant.** Ids are per schema, so an
+    # entry read at one school and handed to this function while the connection
+    # is on another names some other school's row by the same number, or none.
+    # Undoing that row would correct a payment nobody asked about, so a row that
+    # is missing or reads differently is refused.
+    if locked is None or (
+        locked.student_membership_id,
+        locked.kind,
+        locked.amount_kobo,
+        locked.term_id,
+    ) != (entry.student_membership_id, entry.kind, entry.amount_kobo, entry.term_id):
+        raise CannotReverse("That entry is not in this school's books.")
 
     if locked.kind == FeeEntryKind.REVERSAL:
         raise CannotReverse(
@@ -877,31 +877,22 @@ def reverse_entry(entry, *, narration=None, effective_on=None, recorded_by=None,
             f"entry if something further needs correcting."
         )
 
-    if membership is not None:
-        identity = {}
-        snapshot = membership
-    else:
-        identity = {
-            "student_membership_id": locked.student_membership_id,
-            "student_name": locked.student_name,
-            "student_reference": locked.student_reference,
-        }
-        snapshot = None
-
     reversal = FeeLedgerEntry(
         # `term_id`, not `term`: the id is already on the locked row, and
         # touching `.term` would spend a query fetching a row nothing here reads.
         term_id=locked.term_id,
         kind=FeeEntryKind.REVERSAL,
         amount_kobo=-locked.amount_kobo,
-        narration=narration or _inherited_narration(locked.narration),
+        narration=narration,
         reference=locked.reference,
         source_line_id=locked.source_line_id,
         source_concession_id=locked.source_concession_id,
         effective_on=effective_on or timezone.localdate(),
         recorded_by_id=getattr(recorded_by, "pk", recorded_by),
         reverses=locked,
-        **(identity if snapshot is None else snapshot_student(snapshot)),
+        student_membership_id=locked.student_membership_id,
+        student_name=locked.student_name,
+        student_reference=locked.student_reference,
     )
     reversal.full_clean(exclude=None, validate_unique=False, validate_constraints=False)
     reversal.save()

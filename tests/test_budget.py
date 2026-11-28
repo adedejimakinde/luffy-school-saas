@@ -73,6 +73,7 @@ SCHOOL_PAGES = (
     "/master-broadsheet/1/1/",
     "/comments/",
     "/fees/",
+    "/fees/log/",
     "/bank/",
     "/timetable/",
     "/cards/",

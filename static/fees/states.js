@@ -3,7 +3,7 @@
 import { dayFirst, emptyState, esc } from "../web/html.js";
 import { balanceWords, naira, signed } from "./money.js";
 
-function termOptions(terms, chosen) {
+export function termOptions(terms, chosen) {
   return terms
     .map(
       (t) =>
@@ -24,16 +24,11 @@ export function collectedShare(collected, billed) {
   return Math.max(0, Math.min(100, Math.floor((Number(collected) * 100) / Number(billed))));
 }
 
-/**
- * One class as a list row: name over "25 children", what has been collected
- * with a bar and its share at the right, and a chevron. A button, so the page's
- * one click handler opens the class as it always did.
- */
+/** One class as a list row (docs/module-notes.md) */
 function classRow(c) {
   const share = collectedShare(c.collected_kobo, c.billed_kobo);
   const children = `${esc(c.children)} ${c.children === 1 ? "child" : "children"}`;
-  // What the class owes, all terms (audit G-12), on a line of its own: the
-  // sub-line stays the count alone.
+  // What the class owes, all terms (audit G-12), on its own line (docs/module-notes.md)
   const owes = c.owing
     ? `<span class="class-owes">${esc(naira(c.outstanding_kobo || 0))} outstanding</span>`
     : "";
@@ -54,11 +49,7 @@ function classRow(c) {
   );
 }
 
-/**
- * "Outstanding (all terms)" and "of which this term", the figures the dashboard
- * shows (`fees.outstanding`, audit G-12): the whole account of each child placed
- * this term who owes. Nothing when nobody owes.
- */
+/** "Outstanding (all terms)" and "of which this term" (docs/module-notes.md) */
 export function outstandingLine(body = {}) {
   const { owing = 0, outstanding_kobo: kobo = 0, outstanding_this_term_kobo: thisTerm = 0 } = body;
   if (!owing) return "";
@@ -86,7 +77,8 @@ export function books({
     `<h2>${esc(term)}</h2>`,
     outstandingLine(body),
     hasFeeItems
-      ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>'
+      ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button> ' +
+        `<a class="btn" href="/fees/log/?term_id=${esc(termId)}">Fee log and reversals</a></p>`
       : emptyState({
           key: "fees",
           icon: "i-fees",
@@ -187,11 +179,7 @@ function remindingBox(reminding) {
   ].join("");
 }
 
-/**
- * Reminders that went nowhere because the account moved before they were
- * sent (decided 2026-09-25): the amount they would have stated was no longer
- * true. Listed so the bursar can send again, with the account as it stands.
- */
+/** Reminders that went nowhere because the account moved (docs/module-notes.md) */
 function notSentSection(notSent, mayRemind, reminding) {
   if (!notSent || !notSent.length) return "";
   return [
@@ -263,11 +251,49 @@ function reversalForm(entry) {
   return [
     `<form class="reversal" data-reversal data-entry="${esc(entry.entry_id)}">`,
     '<input type="hidden" name="intent" value="reversal">',
-    `<label>Why is this being undone? <input name="reason" maxlength="255" required></label>`,
-    '<button type="submit">Undo it</button> ',
+    '<p class="quiet">The entry stays, marked reversed, with your reason and name. A reversal is final.</p>',
+    `<label>Why is this being reversed? <input name="reason" maxlength="255" autocomplete="off" required></label>`,
+    '<button type="submit">Reverse it</button> ',
     '<button type="button" data-action="cancel-reversal">Keep it</button>',
     "</form>",
   ].join("");
+}
+
+/** "28 Nov 2026, 14:05", the reader's clock. */
+export function whenTyped(iso) {
+  if (!iso) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const day = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  return `${dayFirst(day)}, ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+/** On a reversed entry: who, when, why. On a reversal: what it undid. */
+export function reversalLine(entry) {
+  const r = entry.reversal;
+  if (r) {
+    return (
+      `<span class="reversed-note" data-reversed-note>Reversed${r.by ? ` by ${esc(r.by)}` : ""} ` +
+      `on ${esc(whenTyped(r.at))}. Reason: ${esc(r.reason)}</span>`
+    );
+  }
+  const u = entry.reverses;
+  if (u) {
+    return (
+      `<span class="reversed-note">Reverses the ${esc(String(u.kind_label).toLowerCase())} of ` +
+      `<span class="whole">${esc(signed(u.amount_kobo))}</span> dated ${esc(dayFirst(u.effective_on))}</span>`
+    );
+  }
+  return "";
+}
+
+/** Who typed an entry in, and when. */
+function typedBy(entry) {
+  const when = whenTyped(entry.recorded_at);
+  if (!entry.recorded_by && !when) return "";
+  const parts = [entry.recorded_by ? `Entered by ${esc(entry.recorded_by)}` : "Entered", when ? esc(when) : ""];
+  return `<small>${parts.filter(Boolean).join(", ")}</small>`;
 }
 
 function entryRow(entry, { mayWrite, reversing }) {
@@ -278,20 +304,37 @@ function entryRow(entry, { mayWrite, reversing }) {
     );
   }
   if (mayWrite && entry.may_reverse && reversing !== entry.entry_id) {
-    actions.push(`<button type="button" data-action="reverse" data-entry="${esc(entry.entry_id)}">Undo</button>`);
+    actions.push(`<button type="button" data-action="reverse" data-entry="${esc(entry.entry_id)}">Reverse</button>`);
   }
-  const undone = entry.reversed_by_id ? ' <span class="tag">undone</span>' : "";
+  const reversed = entry.reversed_by_id || entry.reversal;
+  const tag = reversed ? ' <span class="tag" data-reversed>Reversed</span>' : "";
+  const note = reversalLine(entry);
+  const typed = typedBy(entry);
+  const child = entry.student
+    ? `<a href="/fees/?student=${esc(entry.student_membership_id)}">${esc(entry.student)}</a><br>`
+    : "";
   return [
-    `<tr data-entry-row="${esc(entry.entry_id)}"${entry.reversed_by_id ? ' class="undone"' : ""}>`,
+    `<tr data-entry-row="${esc(entry.entry_id)}"${reversed ? ' class="undone"' : ""}>`,
     `<td data-label="Date">${esc(dayFirst(entry.effective_on))}</td>`,
-    `<td class="stack-head">${esc(entry.kind_label)}${undone}</td>`,
-    `<td data-label="For">${esc(entry.narration)}<br><small>${esc(entry.term)}</small></td>`,
+    `<td class="stack-head">${esc(entry.kind_label)}${tag}</td>`,
+    `<td data-label="For">${child}${entry.kind === "reversal" ? "Reason: " : ""}${esc(entry.narration)}<br><small>${esc(entry.term)}</small>` +
+      `${typed ? `<br>${typed}` : ""}${note ? `<br>${note}` : ""}</td>`,
     `<td data-label="How">${esc(entry.method_label)}${entry.reference ? `<br><small>${esc(entry.reference)}</small>` : ""}</td>`,
     `<td class="num" data-label="Amount">${esc(signed(entry.amount_kobo))}</td>`,
     `<td class="actions stack-full">${actions.join(" ")}</td>`,
     "</tr>",
     reversing === entry.entry_id ? `<tr><td colspan="6" class="stack-full">${reversalForm(entry)}</td></tr>` : "",
   ].join("");
+}
+
+/** An account's entries, or the school's fee log, as one table. */
+export function entryTable(entries, opts) {
+  return (
+    '<div class="scroll"><table class="entries stack"><thead><tr>' +
+    '<th>Date</th><th>What</th><th>For</th><th>How</th><th class="num">Amount</th><th></th></tr></thead><tbody>' +
+    entries.map((e) => entryRow(e, opts)).join("") +
+    "</tbody></table></div>"
+  );
 }
 
 // -- concessions (B2) ----------------------------------------------------------
@@ -403,13 +446,7 @@ export function account({
       : "",
     "<h2>Account</h2>",
     entries.length
-      ? [
-          '<div class="scroll"><table class="entries stack"><thead><tr>',
-          '<th>Date</th><th>What</th><th>For</th><th>How</th><th class="num">Amount</th><th></th>',
-          "</tr></thead><tbody>",
-          entries.map((e) => entryRow(e, { mayWrite, reversing })).join(""),
-          "</tbody></table></div>",
-        ].join("")
+      ? entryTable(entries, { mayWrite, reversing })
       : '<p class="blank">Nothing has been charged or paid on this account yet.</p>',
     concessionsSection({ concessions, mayWrite, granting, revoking, grantDraft }),
     "</section>",
@@ -563,8 +600,9 @@ export function receipt({ receipt: body = {} } = {}) {
     '<article class="receipt">',
     `<header><h1>${esc(r.school)}</h1><p>Receipt <strong>${esc(r.receipt_number)}</strong></p></header>`,
     r.reversed
-      ? `<p class="void" data-void>UNDONE on ${esc(r.reversed.on)}: ${esc(r.reversed.reason)}. ` +
-        "This payment is no longer on the account.</p>"
+      ? `<p class="void" data-void>REVERSED on ${esc(dayFirst(r.reversed.on))}` +
+        `${r.reversed.by ? ` by ${esc(r.reversed.by)}` : ""}: ${esc(r.reversed.reason)}. ` +
+        "This payment no longer counts on the account.</p>"
       : "",
     "<dl>",
     `<dt>Received from</dt><dd>${esc(r.student)}${r.student_reference ? ` (${esc(r.student_reference)})` : ""}</dd>`,

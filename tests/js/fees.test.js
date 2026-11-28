@@ -19,6 +19,7 @@ import { htmlFor, mount } from "../../static/fees/app.js";
 import { REFUSAL, refusalFor } from "../../static/fees/api.js";
 import { balanceWords, naira, signed } from "../../static/fees/money.js";
 import * as states from "../../static/fees/states.js";
+import * as feeLog from "../../static/fees/log-app.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 
@@ -202,15 +203,144 @@ test("a receipt prints what the entry recorded", () => {
   assert.match(html, /ST-MARYS-000041/);
   assert.match(html, /₦50,000\.00/);
   assert.match(html, /TRF-2231/);
-  assert.doesNotMatch(html, /UNDONE/);
+  assert.doesNotMatch(html, /REVERSED/);
 });
 
-test("an undone payment's receipt says so across its face", () => {
+test("a reversed payment's receipt says so across its face, with who reversed it", () => {
   const html = states.receipt({
-    receipt: { ...RECEIPT, reversed: { on: "2025-10-03", reason: "Keyed twice" } },
+    receipt: { ...RECEIPT, reversed: { on: "2025-10-03", reason: "Keyed twice", by: "Bola Bursar" } },
   });
 
-  assert.match(html, /UNDONE on 2025-10-03: Keyed twice/);
+  assert.match(html, /REVERSED on 3\u00a0Oct\u00a02025 by Bola Bursar: Keyed twice/);
+});
+
+// -- a reversed payment stays on the account, marked ----------------------------
+
+const REVERSED_AT = "2025-10-03T09:15:00+01:00";
+
+const reversedPair = () => {
+  const reversal = {
+    ...PAYMENT,
+    entry_id: 42,
+    kind: "reversal",
+    kind_label: "Reversal",
+    amount_kobo: 5_000_000,
+    narration: "Keyed twice",
+    method: "",
+    method_label: "",
+    receipt_number: null,
+    may_reverse: false,
+    reverses_id: 41,
+    recorded_by: "Bola Bursar",
+    recorded_at: REVERSED_AT,
+    reverses: { entry_id: 41, kind_label: "Payment", amount_kobo: -5_000_000, effective_on: "2025-10-01" },
+  };
+  const original = {
+    ...PAYMENT,
+    may_reverse: false,
+    reversed_by_id: 42,
+    recorded_by: "Bola Bursar",
+    recorded_at: "2025-10-01T10:00:00+01:00",
+    reversal: { entry_id: 42, reason: "Keyed twice", by: "Bola Bursar", at: REVERSED_AT, on: "2025-10-03" },
+  };
+  return { reversal, original };
+};
+
+test("a reversed payment stays on the account, marked, with the reason, who and when", () => {
+  const { reversal, original } = reversedPair();
+  const html = states.account({ account: account({ entries: [reversal, original, CHARGE] }) });
+
+  assert.match(html, /data-entry-row="41" class="undone"/);
+  assert.match(html, /data-reversed>Reversed</);
+  assert.match(html, /Reversed by Bola Bursar on 3\u00a0Oct\u00a02025, \d\d:\d\d\. Reason: Keyed twice/);
+  assert.match(html, /Reverses the payment of <span class="whole">−₦50,000\.00<\/span> dated 1\u00a0Oct\u00a02025/);
+  assert.match(html, /Entered by Bola Bursar, 1\u00a0Oct\u00a02025, \d\d:\d\d/);
+  // Neither half of the pair can be reversed again; the charge beside them can.
+  assert.doesNotMatch(html, /data-action="reverse" data-entry="4[12]"/);
+  assert.match(html, /data-action="reverse" data-entry="40"/);
+});
+
+test("the reversal form says the entry stays and the reversal is final", () => {
+  const html = states.account({ account: account(), reversing: 41 });
+
+  assert.match(html, /stays, marked reversed, with your reason and name/);
+  assert.match(html, /A reversal is final/);
+  assert.match(html, /name="reason"[^>]*required/);
+});
+
+// -- the school's fee log and its reversals --------------------------------------
+
+const log = (overrides = {}) => {
+  const { reversal, original } = reversedPair();
+  return {
+    terms: TERMS,
+    term_id: 7,
+    term: "2025/2026 First term",
+    reversals_only: false,
+    reversals: 1,
+    page: 1,
+    has_more: false,
+    entries: [reversal, original].map((e) => ({
+      ...e,
+      student_membership_id: 3,
+      student: "Ada Obi",
+      student_reference: "SM/001",
+    })),
+    ...overrides,
+  };
+};
+
+test("the fee log shows the reversal and the original it reversed, together", () => {
+  const html = feeLog.feeLog({ log: log() });
+
+  assert.match(html, /<h1>Fee log<\/h1>/);
+  assert.match(html, /data-entry-row="42"/);
+  assert.match(html, /data-entry-row="41" class="undone"/);
+  assert.match(html, /<a href="\/fees\/\?student=3">Ada Obi<\/a>/);
+  assert.match(html, /Reason: Keyed twice/);
+  assert.match(html, /Reversed by Bola Bursar on 3\u00a0Oct\u00a02025, \d\d:\d\d\. Reason: Keyed twice/);
+  assert.match(html, /Reversals \(1\)/);
+  assert.match(html, /aria-pressed="true">Everything/);
+  assert.doesNotMatch(html, /data-action="reverse"/, "the log changes nothing");
+});
+
+test("the reversals view says when nothing was reversed", () => {
+  const html = feeLog.feeLog({ log: log({ reversals_only: true, reversals: 0, entries: [] }) });
+
+  assert.match(html, /<h1>Reversals<\/h1>/);
+  assert.match(html, /Nothing has been reversed this term\./);
+});
+
+test("the log page opens on the reversals, pages, and keeps the view and the term", async () => {
+  forgetToken();
+  const asked = [];
+  const fetchImpl = async (url) => {
+    asked.push(url);
+    const only = url.includes("reversals_only=true");
+    return { status: 200, json: async () => log({ reversals_only: only, has_more: !url.includes("page=2") }) };
+  };
+  const root = fakeRoot({ onSchool: "yes" });
+  await feeLog.mount(root, { fetchImpl, search: "?term_id=7&reversals=1" });
+  assert.equal(asked.at(-1), "/api/fees/log/?term_id=7&reversals_only=true");
+  assert.match(root.innerHTML, /<h1>Reversals<\/h1>/);
+
+  await root.click({ "data-action": "log-page", "data-page": "2" });
+  assert.equal(asked.at(-1), "/api/fees/log/?term_id=7&reversals_only=true&page=2");
+
+  await root.click({ "data-action": "log-view", "data-only": "no" });
+  assert.equal(asked.at(-1), "/api/fees/log/?term_id=7");
+  assert.match(root.innerHTML, /<h1>Fee log<\/h1>/);
+});
+
+test("the log page refuses as the fees page does", async () => {
+  forgetToken();
+  const root = fakeRoot({ onSchool: "yes" });
+  await feeLog.mount(root, { fetchImpl: async () => ({ status: 404, json: async () => ({}) }) });
+  assert.match(root.innerHTML, /not something you can open/);
+
+  const portal = fakeRoot({ onSchool: "" });
+  await feeLog.mount(portal, { fetchImpl: async () => { throw new Error("asked nothing"); } });
+  assert.match(portal.innerHTML, /data-state="wrong-host"/);
 });
 
 // -- what an answer means -----------------------------------------------------
@@ -311,7 +441,7 @@ test("a discount the server refuses keeps what was typed and says why", async ()
   assert.match(root.innerHTML, /data-discount/);
 });
 
-test("an undo sends its reason", async () => {
+test("a reversal sends its reason", async () => {
   const fetchImpl = serve([
     ["/reversal/", { status: 201, body: { entry: { ...PAYMENT, kind: "reversal" }, balance_kobo: 15_000_000 } }],
     ["/students/3/", { status: 200, body: account() }],
@@ -322,7 +452,7 @@ test("an undo sends its reason", async () => {
   await root.submit({ intent: "reversal", reason: "Keyed twice" });
 
   assert.deepEqual(fetchImpl.posted, [{ url: "/api/fees/entries/41/reversal/", body: { reason: "Keyed twice" } }]);
-  assert.match(root.innerHTML, /Undone\./);
+  assert.match(root.innerHTML, /Reversed\. The original stays on the account/);
 });
 
 // -- B2: bills ------------------------------------------------------------------
