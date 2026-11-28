@@ -90,14 +90,15 @@ const MONTHS = [
  * PDF: "Monday 21 December 2026". Built by hand rather than with
  * `toLocaleDateString`, whose weekday form inserts a comma Django's does not
  * and whose available locales are a property of the machine running the
- * browser or the test, not of this page.
+ * browser or the test, not of this page. The day, month and year on one
+ * line (the weekday may end the line before them, as a 320px phone needs).
  */
 export function date(isoDate) {
   const parsed = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(isoDate));
   if (!parsed) return esc(String(isoDate));
   const [, year, month, day] = parsed;
   const at = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
-  return `${WEEKDAYS[at.getUTCDay()]} ${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
+  return `${WEEKDAYS[at.getUTCDay()]} ${Number(day)}\u00a0${MONTHS[Number(month) - 1]}\u00a0${year}`;
 }
 
 /**

@@ -147,7 +147,7 @@ test("the administrator's list has no Open, no bank tab and no Set a test", () =
   assert.doesNotMatch(html, /href="#banks"/);
   assert.doesNotMatch(html, /#new-test/);
   assert.match(html, /Its questions are its teachers&#39; and the principal&#39;s/);
-  assert.match(html, /JSS 1A/);
+  assert.match(html, /JSS\u00a01A/);
 });
 
 test("a bank shows each answer to its readers, escaped, with Edit only for a writer", () => {
@@ -167,7 +167,7 @@ test("a test waiting for the principal shows the paper with its answers, and App
   assert.match(html, /data-action="ask-send-back"/);
   assert.doesNotMatch(html, /data-action="submit"/);
   const asking = states.testView(TEST, { confirming: "approve" });
-  assert.match(asking, /Approve First CA &lt;i&gt;test&lt;\/i&gt;\? It opens to JSS 1A at 10 Nov 2026, 09:00/);
+  assert.match(asking, /Approve First CA &lt;i&gt;test&lt;\/i&gt;\? It opens to JSS\u00a01A at 10 Nov 2026, 09:00/);
   assert.match(asking, /data-action="approve"/);
 });
 

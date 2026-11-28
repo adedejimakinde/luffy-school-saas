@@ -5,7 +5,7 @@
  * nobody demos, and a string can be asserted in `node --test` with no browser.
  */
 
-import { dayFirst, emptyState, esc, numberOrBlank } from "../web/html.js";
+import { dayFirst, emptyState, esc, keepTogether, numberOrBlank } from "../web/html.js";
 
 /** One setup section in its own card, under its heading; nothing to show, no card. */
 function card(parts) {
@@ -330,7 +330,7 @@ function newClassForm(note) {
     `<form class="new-class${note ? ` ${esc(note.kind)}` : ""}" data-form="class">`,
     "<h3>Open a class group</h3>",
     '<label for="class_name">Name</label>',
-    '<p class="hint" id="class_name_hint">The level and the arm, for example JSS 1A or SS 2B.</p>',
+    `<p class="hint" id="class_name_hint">The level and the arm, for example ${keepTogether("JSS 1A or SS 2B")}.</p>`,
     '<input id="class_name" name="name" placeholder="JSS 1A" aria-describedby="class_name_hint" required>',
     // Not derived from the name: "JSS 1A" sorts before "JSS 10A" as text, and
     // no string rule survives a school running Nursery, Primary and Senior.
@@ -399,19 +399,7 @@ function cardLook(card, notes) {
   ].join("");
 }
 
-/**
- * The affective and psychomotor sections: a switch, a trait list and the 1 to 5
- * scale's words. The principal's and the administrator's, and only theirs: the
- * server sends this block to nobody else.
- *
- * **Off hides, it does not delete.** The switch's sentence says so, because the
- * question a principal has is whether the ratings are gone. And every sentence
- * about a card already sent says it keeps what it showed: that is the promise
- * the whole section is built on, and the screen is where it is made.
- *
- * A trait is never deleted, only hidden: a hidden one stays in the list, muted,
- * with a button to show it again, because ratings and released cards still name it.
- */
+/** The affective and psychomotor sections: off hides, never deletes (docs/module-notes.md). */
 function conductSettings(conduct, notes) {
   return [
     '<h2 id="conduct">Affective and psychomotor</h2>',

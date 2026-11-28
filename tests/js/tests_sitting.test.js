@@ -174,7 +174,7 @@ test("the sitting says, for each class, when its PINs were last issued and by wh
     ],
   });
 
-  assert.match(html, /data-class="3">.*PINs last issued: 24 Oct 2026, 10:04 by Ngozi &lt;b&gt;Eze&lt;\/b&gt;/s);
+  assert.match(html, /data-class="3">.*PINs last issued: 24\u00a0Oct\u00a02026, 10:04 by Ngozi &lt;b&gt;Eze&lt;\/b&gt;/s);
   assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
   assert.doesNotMatch(html, /<b>Eze/);
 });
@@ -222,15 +222,15 @@ test("printing a class that holds PINs asks first, with Cancel the default", () 
   const html = states.sittingView(PRINTING, { confirming: "print-class-3" });
   assert.match(html, /This gives all 4 students new PINs\. Slips already handed out will stop working\./);
   assert.match(html, /data-action="keep" data-default>Cancel/);
-  assert.match(html, /data-action="print-class" data-class="3">Give JSS 1A new PINs and print/);
+  assert.match(html, /data-action="print-class" data-class="3">Give JSS\u00a01A new PINs and print/);
   assert.doesNotMatch(html, /Print exam PIN slips/);
 });
 
 test("a first print for a class says what it will print and still needs the second tap", () => {
   const log = { ...PRINTING, classes: [{ ...PRINTING.classes[0], with_a_pin: 0 }] };
   const html = states.sittingView(log, { confirming: "print-class-3" });
-  assert.match(html, /JSS 1A gets 4 slips\./);
-  assert.match(html, /data-action="print-class" data-class="3">Print JSS 1A</);
+  assert.match(html, /JSS\u00a01A gets 4 slips\./);
+  assert.match(html, /data-action="print-class" data-class="3">Print JSS\u00a01A</);
 });
 
 test("reissuing one student's slip asks, naming them, and says the old slip stops working", () => {

@@ -9,7 +9,7 @@
  * against the spreadsheet by hand to learn which children landed.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 import { TEMPLATE_URL } from "./api.js";
 
 /** The heading each column has in the template, for the preview's header. */
@@ -106,7 +106,7 @@ function template(classes) {
     "<strong>Username</strong> is made from it. Give a guardian's name and contact ",
     "together, or neither.</p>",
     classes.length
-      ? `<p class="classes"><span class="quiet">Classes this term:</span> ${classes.map(esc).join(", ")}</p>`
+      ? `<p class="classes"><span class="quiet">Classes this term:</span> ${classes.map((c) => esc(keepTogether(c))).join(", ")}</p>`
       : '<p class="quiet">This school has no classes yet. Add them on Setup first.</p>',
     `<a class="btn" href="${TEMPLATE_URL}" download>Download the template</a>`,
     "</section>",

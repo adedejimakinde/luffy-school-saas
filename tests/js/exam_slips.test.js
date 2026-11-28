@@ -138,7 +138,7 @@ test("printing a class asks first, says what stops working, and only the second 
 test("a class never printed says only how many slips it gets", () => {
   const html = states.overview({ ...OVERVIEW, confirming: "class4" });
 
-  assert.match(html, /data-confirm="class4"><p>JSS 1B &lt;b&gt;Gold&lt;\/b&gt; gets 1 slip\.<\/p>/);
+  assert.match(html, /data-confirm="class4"><p>JSS\u00a01B &lt;b&gt;Gold&lt;\/b&gt; gets 1 slip\.<\/p>/);
 });
 
 test("a lost slip: the class opens to its students, and one with no number cannot be printed", async () => {
@@ -239,8 +239,8 @@ test("a refused naming keeps the form with the school's sentence under it", asyn
 test("the logs say who printed what and who named whom, and when", () => {
   const html = states.overview({ ...OVERVIEW });
 
-  assert.match(html, /Ngozi Eze printed 3 slips for JSS 1A, 3 old PINs stopped, 1 student with no admission number <span class="when">24 Oct 2026, 10:04/);
-  assert.match(html, /Ade Admin printed a new slip for Ada Obi in JSS 1A, 1 old PIN stopped/);
+  assert.match(html, /Ngozi Eze printed 3 slips for JSS\u00a01A, 3 old PINs stopped, 1 student with no admission number <span class="when">24 Oct 2026, 10:04/);
+  assert.match(html, /Ade Admin printed a new slip for Ada Obi in JSS\u00a01A, 1 old PIN stopped/);
   assert.match(html, /Ngozi Eze named Kemi Bello \(Teacher\) exam officer: Runs the lab/);
   assert.match(html, /Ngozi Eze ended Sade Ola as exam officer/);
   const empty = states.overview({ ...OVERVIEW, prints: [], officer_changes: [] });
@@ -279,7 +279,7 @@ test("a teacher who is not an exam officer is told it is not theirs, and sees no
   });
 
   assert.match(root.innerHTML, /This page is not yours/);
-  assert.doesNotMatch(root.innerHTML, /JSS 1A/);
+  assert.doesNotMatch(root.innerHTML, /JSS(\u00a0| )1A/);
 });
 
 test("the print routes and the file's name", () => {
@@ -337,7 +337,7 @@ test("a class never issued says so; the log names an only-missing print", () => 
   const html = states.overview({ ...OVERVIEW, prints: [{ ...OVERVIEW.prints[0], only_missing: true, cancelled: 0 }] });
 
   assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
-  assert.match(html, /3 slips for JSS 1A \(only students without one\)/);
+  assert.match(html, /3 slips for JSS\u00a01A \(only students without one\)/);
 });
 
 test("a 409 from the server is a sentence in the row, not a broken page", async () => {

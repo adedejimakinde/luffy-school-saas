@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
+from typography import keep_together
 
 from . import access, pins, signin_log, sitting
 from .banks import NotYours, Refused, name_of, plain
@@ -345,12 +346,12 @@ def sitting_log_as(actor, school, test_id) -> Log:
                 "open": sitting.sitting_open(test, a.class_group_id, now),
                 "by_hand": latest is not None,
                 "pins_issued": (
-                    {"at": timezone.localtime(pins_row.at).strftime("%-d %b %Y, %H:%M"), "by": pins_row.printed_by_name}
+                    {"at": keep_together(timezone.localtime(pins_row.at).strftime("%-d %b %Y, %H:%M")), "by": pins_row.printed_by_name}
                     if pins_row
                     else None
                 ),
                 "said": (
-                    f"{latest.get_kind_display()} by hand by {latest.by_name}, {timezone.localtime(latest.at):%-d %b %H:%M}: {latest.reason}"
+                    keep_together(f"{latest.get_kind_display()} by hand by {latest.by_name}, {timezone.localtime(latest.at):%-d %b %H:%M}: {latest.reason}")
                     if latest
                     else "As planned"
                 ),

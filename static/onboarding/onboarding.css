@@ -180,7 +180,7 @@
 
 /* -- Start here: put off, any order, what changed, start again -------------- */
 .ob-any-order { margin: var(--s-2) 0 0; color: var(--muted); font-size: var(--t-3); }
-.later-list, .change-list, .again-list { display: grid; margin: var(--s-1) 0 0; padding: 0; list-style: none; }
+.later-list, .change-list, .again-list { display: grid; grid-template-columns: minmax(0, 1fr); margin: var(--s-1) 0 0; padding: 0; list-style: none; }
 .later-list li, .change-list li, .again-list li {
   display: flex;
   flex-wrap: wrap;
@@ -189,6 +189,7 @@
   gap: var(--s-half) var(--s-2);
   padding: var(--s-1) 0;
 }
+.later-list li > *, .change-list li > *, .again-list li > * { min-width: 0; }
 .later-list li + li, .change-list li + li, .again-list li + li { border-top: 1px solid var(--divider); }
 .change-list .quiet, .again-list .quiet { font-size: var(--t-3); }
 .again-list li { display: grid; justify-content: stretch; }

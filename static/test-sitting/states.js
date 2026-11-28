@@ -6,7 +6,7 @@
  */
 
 import { classConfirm, studentConfirm } from "../exam-slips/print.js";
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 const note = (n) => (n ? `<p class="note" role="alert">${esc(n)}</p>` : "");
 const done = (text) => (text ? `<p class="done" role="status">${esc(text)}</p>` : "");
@@ -17,7 +17,7 @@ export function shortTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return keepTogether(d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }));
 }
 
 /** "14:05" in the browser's time, or "". */
@@ -45,8 +45,8 @@ function signIns(r) {
 
 function sittingClass(log, c, confirming) {
   const state = c.open ? '<span class="label label-ok">Open</span>' : '<span class="label">Closed</span>';
-  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(c.name)} ${state}</span><span class="level">${esc(c.said)}</span><span class="level pins-issued">${
-    c.pins_issued ? `PINs last issued: ${esc(c.pins_issued.at)} by ${esc(c.pins_issued.by)}` : "PINs not issued yet this term"
+  const head = `<li class="group sit-class" data-class="${esc(c.id)}"><span class="name">${esc(keepTogether(c.name))} ${state}</span><span class="level">${esc(keepTogether(c.said))}</span><span class="level pins-issued">${
+    c.pins_issued ? `PINs last issued: ${esc(keepTogether(c.pins_issued.at))} by ${esc(c.pins_issued.by)}` : "PINs not issued yet this term"
   }</span>`;
   const acts = [];
   const asking = confirming === `print-class-${c.id}`;
@@ -141,7 +141,7 @@ function studentRow(log, r, confirming) {
   return [
     `<li class="sit-student-row" data-student="${esc(r.student_id)}">`,
     `<p class="name"><strong>${esc(r.name)}</strong> <span class="label${tone}">${esc(r.number > 1 ? `${r.state}, attempt ${r.number}` : r.state)}</span>${failed ? ` <span class="label label-warn" data-failed-sign-ins>${esc(failed)} failed sign-in${failed === 1 ? "" : "s"}</span>` : ""}</p>`,
-    `<p class="level">${esc(r.class_name)}${r.admission_number ? `, ${esc(r.admission_number)}` : ""}.${when.length ? ` ${esc(when.join(", "))}.` : ""}</p>`,
+    `<p class="level">${esc(keepTogether(r.class_name))}${r.admission_number ? `, ${esc(r.admission_number)}` : ""}.${when.length ? ` ${esc(when.join(", "))}.` : ""}</p>`,
     counts.length ? `<dl class="sit-counts">${counts.map(([k, v]) => `<div data-count="${esc(k)}"><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : "",
     acts.length ? `<div class="row-actions">${acts.join("")}</div>` : "",
     form,

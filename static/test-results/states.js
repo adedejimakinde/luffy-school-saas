@@ -12,7 +12,7 @@
  * none.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 export const LETTERS = "ABCDE";
 
@@ -26,7 +26,7 @@ export function shortTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  return keepTogether(d.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }));
 }
 
 const pct = (n) => (n === null || n === undefined ? "" : `${n}%`);

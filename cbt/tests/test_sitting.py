@@ -647,7 +647,8 @@ class TheSittingLogTests(SittingSetUp):
 
         issued = classes["JSS 1A"]["pins_issued"]
         self.assertEqual(issued["by"], self.head.user.full_name or self.head.user.get_username())
-        self.assertRegex(issued["at"], r"^\d{1,2} \w{3} \d{4}, \d\d:\d\d$")
+        # The date held on one line (`typography.keep_together`): any space.
+        self.assertRegex(issued["at"], r"^\d{1,2}\s\w{3}\s\d{4}, \d\d:\d\d$")
 
         with connected_to(self.stmarys):
             pins.print_class_as(self.admin.user, self.stmarys, self.jss1a_id, replace=True)

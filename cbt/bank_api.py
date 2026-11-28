@@ -29,6 +29,7 @@ from ninja import Router, Schema
 from academics.models import ClassGroup
 from accounts.session import session_auth
 from gradebook.models import Subject
+from typography import keep_together
 
 from . import access, banks, paper, setting
 from .models import (
@@ -281,7 +282,7 @@ def _school_of(request):
 
 
 def _worded(at) -> str:
-    return timezone.localtime(at).strftime("%-d %b %Y, %H:%M")
+    return keep_together(timezone.localtime(at).strftime("%-d %b %Y, %H:%M"))
 
 
 def _term_label(term) -> Optional[str]:

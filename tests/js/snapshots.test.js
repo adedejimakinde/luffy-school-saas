@@ -181,7 +181,7 @@ test("a copy is dated in the school's day, not the phone's or Greenwich's", () =
   assert.equal(asOfText("2025-09-17T07:40:00Z", { now }), "today 08:40");
   assert.equal(asOfText("2025-09-16T15:40:00Z", { now }), "yesterday 16:40");
   // The month's spelling ("Sep" or "Sept") is the browser's own.
-  assert.match(asOfText("2025-09-12T07:00:00Z", { now }), /^Fri,? 12 Sep\w* 08:00$/);
+  assert.match(asOfText("2025-09-12T07:00:00Z", { now }), /^Fri,?\u00a012\u00a0Sep\w* 08:00$/);
 });
 
 test("half past midnight in Lagos is already the next day", () => {

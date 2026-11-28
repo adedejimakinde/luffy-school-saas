@@ -10,7 +10,7 @@
  * the only place one exists is the PDF the browser saves.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 import { classConfirm, studentConfirm } from "./print.js";
 
 const note = (n) => (n ? `<p class="note" role="alert">${esc(n.detail)}</p>` : "");
@@ -165,7 +165,7 @@ function officerForm(candidates, n) {
 
 function printLine(p) {
   const only = p.only_missing ? " (only students without one)" : "";
-  const what = p.kind === "student" ? `a new slip for ${esc(p.student)} in ${esc(p.class_group)}` : `${plural(p.count, "slip", "slips")} for ${esc(p.class_group)}${only}`;
+  const what = p.kind === "student" ? `a new slip for ${esc(p.student)} in ${esc(keepTogether(p.class_group))}` : `${plural(p.count, "slip", "slips")} for ${esc(keepTogether(p.class_group))}${only}`;
   const cancelled = p.cancelled ? `, ${plural(p.cancelled, "old PIN", "old PINs")} stopped` : "";
   const missing = p.without_a_number ? `, ${plural(p.without_a_number, "student", "students")} with no admission number` : "";
   return `${esc(p.by)} printed ${what}${cancelled}${missing}`;

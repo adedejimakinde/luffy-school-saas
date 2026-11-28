@@ -439,7 +439,7 @@ test("the admission number sits beside the name, and is absent where none is on 
 
 test("next term's date is a full sentence, or the line is left out", () => {
   const html = card(payload({ next_term_begins: "2026-12-21" }));
-  assert.match(html, /<p class="resume"><strong>Next term begins:<\/strong> Monday 21 December 2026<\/p>/);
+  assert.match(html, /<p class="resume"><strong>Next term begins:<\/strong> Monday 21\u00a0December\u00a02026<\/p>/);
 
   assert.doesNotMatch(card(payload()), /class="resume"/, "the school has not set one: no guessed date");
 });

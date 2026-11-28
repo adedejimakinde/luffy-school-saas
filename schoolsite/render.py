@@ -47,6 +47,7 @@ from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
 from results import look
+from typography import keep_together
 
 from . import pictures, sections as section_rules, themes
 from .models import Album, PageKey, PageKind, SectionKind
@@ -352,6 +353,10 @@ def map_embed(data, address) -> str:
     return ""
 
 
+#: The words of a section a reader sees on the page, as against its settings.
+HELD_TOGETHER = ("heading", "subheading", "text", "body", "message", "title")
+
+
 def _section(theme, section, live_paths, school, address, *, pics=None, albums=None, first=False, page_path_=None,
              map_open=False, within=lambda path: path, pill=""):
     kind = section["kind"]
@@ -556,6 +561,12 @@ def draw_snapshot(school, snapshot, key, host, *, slug=None, preview=False, albu
                  page_path_=page_path(page), map_open=map_open, within=within, pill=pill)
         for i, s in enumerate(page_sections)
     ]
+    # A class, a date or a PIN in the school's own words stays on one line (`typography`).
+    for section in sections:
+        data = section["data"]
+        for field in HELD_TOGETHER:
+            if isinstance(data.get(field), str):
+                data[field] = keep_together(data[field])
     album_cards = []
     if key == PageKey.GALLERY and album is None:
         for shown in albums.values():

@@ -16,10 +16,18 @@ export function esc(value) {
 
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 
-/** A stored day (`2026-11-08`) as "8 Nov 2026", day first; anything else as it was. */
+const MONTH = "(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*";
+const HELD = new RegExp(`\\b(?:JSS|SSS|SS|JS|Primary|Pry|Basic|Year|Grade|Nursery|KG)\\s+\\d{1,2}(?:\\s?[A-Z]\\b)?|\\b(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun),?\\s+)?\\d{1,2}\\s+${MONTH}(?:\\s+\\d{4})?\\b|\\b${MONTH}\\s+\\d{4}\\b|\\b\\d{4} \\d{4}\\b`, "g");
+
+/** Text with each class name, date, time and PIN on one line (`typography.py`'s rule). Never a form's value. */
+export function keepTogether(text) {
+  return text === null || text === undefined ? "" : String(text).replace(HELD, (held) => held.replace(/\s+/g, "\u00a0"));
+}
+
+/** A stored day (`2026-11-08`) as "8 Nov 2026", day first, on one line; anything else as it was. */
 export function dayFirst(iso) {
   const [y, m, d] = String(iso ?? "").slice(0, 10).split("-").map(Number);
-  return y && d && MONTHS[m - 1] ? `${d} ${MONTHS[m - 1]} ${y}` : String(iso ?? "");
+  return y && d && MONTHS[m - 1] ? `${d}\u00a0${MONTHS[m - 1]}\u00a0${y}` : String(iso ?? "");
 }
 
 /** A number that may be nought: `0` and `null` are different answers. */

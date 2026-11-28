@@ -17,6 +17,14 @@ stylesheet). The code keeps a one-line summary.
   first: "8 Nov 2026". Never `11/08/2026`, which half the school would read the
   other way round. Anything that is not a real day comes back as it was, so
   nothing is hidden.
+- **`keepTogether(text)`.** `typography.py`'s rule for a module: the spaces
+  inside a class name ("JSS 1A"), a date ("Fri 20 Nov", "20 Nov 2026") and an
+  exam PIN ("0105 7149") become non-breaking (U+00A0), so a 320px phone with
+  its font turned up wraps the sentence around them and never inside them
+  (`docs/phone-width-sweep.md`). A whole weekday ("Monday") may still end a line
+  before its date. For words a person reads only: never a value a form sends
+  back or an attribute a script matches. `dayFirst()` returns its date held the
+  same way.
 - **`numberOrBlank`.** A number that may legitimately be nought, rendered
   without lying about it: `0` and `null` are different answers (present on no
   day, versus no register kept), and `value || fallback` would print the
@@ -240,3 +248,17 @@ neither shows.
 
 ## `tests/api.js`
 
+## `setup/states.js`
+
+- **`conductSettings()`.** The affective and psychomotor sections: a switch, a
+  trait list and the 1 to 5 scale's words. The principal's and the
+  administrator's, and only theirs: the server sends this block to nobody else.
+
+  **Off hides, it does not delete.** The switch's sentence says so, because the
+  question a principal has is whether the ratings are gone. And every sentence
+  about a card already sent says it keeps what it showed: that is the promise
+  the whole section is built on, and the screen is where it is made.
+
+  A trait is never deleted, only hidden: a hidden one stays in the list, muted,
+  with a button to show it again, because ratings and released cards still name
+  it.

@@ -202,7 +202,7 @@ button.signout { display: block; margin: 24px auto 0; }
 .ogun-crest { display: block; width: 64px; height: 64px; margin: 0 0 6px; }
 .ogun-photo { float: right; width: 92px; height: 118px; object-fit: cover; border: 1px solid var(--border); margin: 0 0 8px 12px; }
 .ogun-promotion { margin: 12px 0; padding: 10px 12px; border: 2px solid var(--text); font-weight: 700; text-align: center; }
-.ogun-who { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 6px 16px; margin: 0; }
+.ogun-who { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); gap: 6px 16px; margin: 0; }
 /* On the blue summary card, as `.who` is: white, the labels a little lighter. */
 .ogun-who dt { color: var(--card); opacity: .78; }
 .ogun-who dd { margin: 0; font-weight: 700; color: var(--card); overflow-wrap: anywhere; }
@@ -214,9 +214,10 @@ table.ogun-grid th, table.ogun-grid td { border-bottom: 1px solid var(--divider)
 table.ogun-grid td.n, table.ogun-grid th.n { text-align: center; }
 table.ogun-grid td.strong { font-weight: 700; }
 table.ogun-grid tr.department th { background: var(--card); font-weight: 700; padding-top: 12px; }
-.ogun-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 16px; }
+.ogun-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr)); gap: 16px; }
 .ogun-facts { margin: 0; display: grid; gap: 4px; }
 .ogun-facts > div { display: flex; justify-content: space-between; gap: 12px; }
+.ogun-pair .scroll { margin: 0; }
 table.ogun-traits, table.ogun-health-table { border-collapse: collapse; width: 100%; }
 /* "Beginning of term" may wrap: at 320px the table has 254px. */
 table.ogun-health-table thead th { white-space: normal; }

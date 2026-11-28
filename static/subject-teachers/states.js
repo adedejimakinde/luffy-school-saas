@@ -9,7 +9,7 @@
  * and every write is refused on the server for anybody else.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 const note = (n) => (n ? `<p class="note" role="alert">${esc(n.detail)}</p>` : "");
 
@@ -160,7 +160,7 @@ function assignmentRow(a, mayChange, confirming, n) {
 
 /** One line of the log. The system's own lines name the term they came from instead of a person. */
 function changeLine(c) {
-  const pair = `${esc(c.subject)} in ${esc(c.class_group)}`;
+  const pair = `${esc(c.subject)} in ${esc(keepTogether(c.class_group))}`;
   const from = esc(c.from_term);
   switch (c.kind) {
     case "added":

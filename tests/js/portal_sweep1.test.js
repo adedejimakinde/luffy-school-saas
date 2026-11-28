@@ -82,9 +82,9 @@ test("the office can set the short name beside the web page, with the default as
 });
 
 test("a stored day is said day first, never month first", () => {
-  assert.equal(dayFirst("2026-11-08"), "8 Nov 2026");
-  assert.equal(dayFirst("2026-01-31"), "31 Jan 2026");
-  assert.equal(dayFirst("2026-11-08T09:30"), "8 Nov 2026");
+  assert.equal(dayFirst("2026-11-08"), "8\u00a0Nov\u00a02026", "held on one line");
+  assert.equal(dayFirst("2026-01-31"), "31\u00a0Jan\u00a02026");
+  assert.equal(dayFirst("2026-11-08T09:30"), "8\u00a0Nov\u00a02026");
   assert.equal(dayFirst(null), "");
   assert.equal(dayFirst("not a day"), "not a day");
   for (let m = 1; m <= 12; m++) assert.doesNotMatch(dayFirst(`2026-${String(m).padStart(2, "0")}-08`), /\d\/\d/);
@@ -94,6 +94,6 @@ test("the term's dates in setup are day first", () => {
   const html = setup.shape({
     terms: [{ term_id: 1, session: "2025/2026", name: "first", name_label: "First term", starts_on: "2025-09-15", ends_on: "2025-12-12", school_days: 62, is_current: true }],
   });
-  assert.match(html, /15 Sep 2025 to 12 Dec 2025/);
+  assert.match(html, /15\u00a0Sep\u00a02025 to 12\u00a0Dec\u00a02025/);
   assert.doesNotMatch(html, /2025-09-15 to/);
 });

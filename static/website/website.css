@@ -1079,7 +1079,7 @@ html { scroll-padding-top: calc(var(--head) + 8px); }
 .land-table table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; table-layout: fixed; overflow-wrap: anywhere; }
 .land-table th, .land-table td { padding: 10px 8px; text-align: left; vertical-align: top; border-top: 1px solid var(--divider); }
 @media (min-width: 640px) { .land-table th, .land-table td { padding: 12px 16px; } }
-.land-table thead th { border-top: 0; color: var(--text); background: var(--brand-wash); }
+.land-table thead th { border-top: 0; color: var(--text); background: var(--brand-wash); white-space: normal; }
 .land-table tbody th { color: var(--text); font-weight: 700; }
 .land-table td { color: var(--muted); }
 .land-related { padding: 48px 0; }

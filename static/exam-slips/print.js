@@ -1,6 +1,6 @@
 /** What the exam slips page and the sitting page share: the two questions asked before a print, and saving the PDF. */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -13,15 +13,15 @@ export function classConfirm(c, key = `class${c.id}`) {
   const count = c.printable ?? c.students;
   if (c.with_a_pin) {
     return (
-      `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(c.name)} new PINs"><p><strong>This gives all ${count} students new PINs. Slips already handed out will stop working.</strong></p>` +
+      `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(keepTogether(c.name))} new PINs"><p><strong>This gives all ${count} students new PINs. Slips already handed out will stop working.</strong></p>` +
       // Cancel first, and the one the page focuses: Enter or a stray tap changes nothing.
       '<button type="button" class="submit" data-action="keep" data-default>Cancel</button>' +
-      `<button type="button" data-action="print-class" data-class="${esc(c.id)}">Give ${esc(c.name)} new PINs and print</button></div>`
+      `<button type="button" data-action="print-class" data-class="${esc(c.id)}">Give ${esc(keepTogether(c.name))} new PINs and print</button></div>`
     );
   }
   return (
-    `<div class="confirm" data-confirm="${esc(key)}"><p>${esc(c.name)} gets ${plural(count, "slip", "slips")}.</p>` +
-    `<button type="button" class="submit" data-action="print-class" data-class="${esc(c.id)}">Print ${esc(c.name)}</button>` +
+    `<div class="confirm" data-confirm="${esc(key)}"><p>${esc(keepTogether(c.name))} gets ${plural(count, "slip", "slips")}.</p>` +
+    `<button type="button" class="submit" data-action="print-class" data-class="${esc(c.id)}">Print ${esc(keepTogether(c.name))}</button>` +
     '<button type="button" class="again" data-action="keep">Not now</button></div>'
   );
 }

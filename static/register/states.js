@@ -26,7 +26,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 export function dayText(iso) {
   const day = /^\d{4}-\d{2}-\d{2}$/.test(iso) ? new Date(`${iso}T00:00:00Z`) : null;
   if (!day || Number.isNaN(day.getTime())) return iso;
-  return `${DAYS[day.getUTCDay()]} ${day.getUTCDate()} ${MONTHS[day.getUTCMonth()]}`;
+  return `${DAYS[day.getUTCDay()]}\u00a0${day.getUTCDate()}\u00a0${MONTHS[day.getUTCMonth()]}`;
 }
 
 /**

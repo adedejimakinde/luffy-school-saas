@@ -5,7 +5,7 @@
  * and a string can be asserted in `node --test` with no browser.
  */
 
-import { esc } from "../web/html.js";
+import { esc, keepTogether } from "../web/html.js";
 import { BLANK, fields, summary } from "./forms.js";
 
 const KIND_LABELS = {
@@ -27,7 +27,7 @@ function note(n) {
 function day(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return Number.isNaN(d.getTime()) ? "" : keepTogether(d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }));
 }
 
 /** Draft or published, and whether the draft holds changes: said at the top of every screen. */
@@ -237,7 +237,7 @@ function sectionRow(s, i, count, confirming, body = {}) {
   return [
     '<li class="group section-row">',
     `<span class="name">${esc(kindLabel(s.kind))}</span>`,
-    `<span class="level">${esc(summary(s.kind, s.data, { albums: body.albums || [] }))}</span>`,
+    `<span class="level">${esc(keepTogether(summary(s.kind, s.data, { albums: body.albums || [] })))}</span>`,
     '<span class="row-actions">',
     soon ? "" : `<button type="button" data-action="edit-section" data-id="${esc(s.id)}">Edit<span class="visually-hidden"> ${esc(kindLabel(s.kind))}</span></button>`,
     `<button type="button" class="icon-button" data-action="section-up" data-id="${esc(s.id)}"${i === 0 ? " disabled" : ""} aria-label="Move up">&uarr;</button>`,
