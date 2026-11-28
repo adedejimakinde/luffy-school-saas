@@ -251,9 +251,9 @@ test("a reversed payment stays on the account, marked, with the reason, who and 
 
   assert.match(html, /data-entry-row="41" class="undone"/);
   assert.match(html, /data-reversed>Reversed</);
-  assert.match(html, /Reversed 3\u00a0Oct\u00a02025, \d\d:\d\d by Bola Bursar: Keyed twice/);
-  assert.match(html, /Reverses the payment of −₦50,000\.00 dated 1\u00a0Oct\u00a02025/);
-  assert.match(html, /Entered by Bola Bursar/);
+  assert.match(html, /Reversed by Bola Bursar on 3\u00a0Oct\u00a02025, \d\d:\d\d\. Reason: Keyed twice/);
+  assert.match(html, /Reverses the payment of <span class="whole">−₦50,000\.00<\/span> dated 1\u00a0Oct\u00a02025/);
+  assert.match(html, /Entered by Bola Bursar, 1\u00a0Oct\u00a02025, \d\d:\d\d/);
   // Neither half of the pair can be reversed again; the charge beside them can.
   assert.doesNotMatch(html, /data-action="reverse" data-entry="4[12]"/);
   assert.match(html, /data-action="reverse" data-entry="40"/);
@@ -295,7 +295,7 @@ test("the fee log shows the reversal and the original it reversed, together", ()
   assert.match(html, /<h1>Fee log<\/h1>/);
   assert.match(html, /data-log-entry="42"/);
   assert.match(html, /data-log-entry="41"/);
-  assert.match(html, /Reversed 3\u00a0Oct\u00a02025, \d\d:\d\d by Bola Bursar: Keyed twice/);
+  assert.match(html, /Reversed by Bola Bursar on 3\u00a0Oct\u00a02025, \d\d:\d\d\. Reason: Keyed twice/);
   assert.match(html, /Reversals \(1\)/);
   assert.match(html, /aria-pressed="true">Everything/);
   assert.doesNotMatch(html, /data-action="reverse"/, "the log changes nothing");

@@ -33,6 +33,8 @@ tr.undone td { color: var(--muted); }
 /* A reversed entry and its reversal say what they are about each other, in
    ink and not only in grey: the reason is the part a reader needs. */
 .reversed-note { color: var(--text); font-size: var(--small); }
+/* An amount in a sentence moves to the next line whole: its minus sign never stays behind. */
+.whole { white-space: nowrap; }
 .tag[data-reversed] { color: var(--stop); }
 
 /* The fee log: one card per entry, so it reads at 320px with nothing to scroll sideways. */

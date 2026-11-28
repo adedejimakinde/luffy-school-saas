@@ -291,15 +291,15 @@ export function reversalLine(entry) {
   const r = entry.reversal;
   if (r) {
     return (
-      `<span class="reversed-note" data-reversed-note>Reversed ${esc(whenTyped(r.at))}` +
-      `${r.by ? ` by ${esc(r.by)}` : ""}: ${esc(r.reason)}</span>`
+      `<span class="reversed-note" data-reversed-note>Reversed${r.by ? ` by ${esc(r.by)}` : ""} ` +
+      `on ${esc(whenTyped(r.at))}. Reason: ${esc(r.reason)}</span>`
     );
   }
   const u = entry.reverses;
   if (u) {
     return (
       `<span class="reversed-note">Reverses the ${esc(String(u.kind_label).toLowerCase())} of ` +
-      `${esc(signed(u.amount_kobo))} dated ${esc(dayFirst(u.effective_on))}</span>`
+      `<span class="whole">${esc(signed(u.amount_kobo))}</span> dated ${esc(dayFirst(u.effective_on))}</span>`
     );
   }
   return "";
@@ -309,7 +309,8 @@ export function reversalLine(entry) {
 function typedBy(entry) {
   const when = whenTyped(entry.recorded_at);
   if (!entry.recorded_by && !when) return "";
-  return `<small>Entered ${entry.recorded_by ? `by ${esc(entry.recorded_by)} ` : ""}${when ? esc(when) : ""}</small>`;
+  const parts = [entry.recorded_by ? `Entered by ${esc(entry.recorded_by)}` : "Entered", when ? esc(when) : ""];
+  return `<small>${parts.filter(Boolean).join(", ")}</small>`;
 }
 
 function entryRow(entry, { mayWrite, reversing }) {
@@ -613,7 +614,8 @@ function logRow(e) {
     "</div>",
     `<p class="log-child"><button type="button" data-action="open-account" data-student="${esc(e.student_membership_id)}">` +
       `${esc(e.student)}</button>${e.student_reference ? ` <small>${esc(e.student_reference)}</small>` : ""}</p>`,
-    `<p class="log-for">${esc(e.narration)} <small>dated ${esc(dayFirst(e.effective_on))}</small></p>`,
+    `<p class="log-for">${e.kind === "reversal" ? "Reason: " : ""}${esc(e.narration)}</p>`,
+    `<p class="log-dated"><small>Dated ${esc(dayFirst(e.effective_on))}</small></p>`,
     typed ? `<p class="log-by">${typed}</p>` : "",
     note ? `<p class="log-note">${note}</p>` : "",
     "</li>",
