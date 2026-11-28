@@ -442,7 +442,7 @@ class IdempotencyTests(BillingSetUp):
                 kind=FeeEntryKind.CHARGE,
                 narration="Tuition",
             )
-            services.reverse_entry(tuition)
+            services.reverse_entry(tuition, reason="Posted in error", recorded_by=self.bursar)
             self.assertEqual(self.balance_of(self.ada), LEVY)
 
             second = self.apply()
@@ -467,7 +467,7 @@ class IdempotencyTests(BillingSetUp):
             charge = FeeLedgerEntry.objects.get(
                 student_membership_id=self.ada.pk, source_line=line
             )
-            services.reverse_entry(charge)
+            services.reverse_entry(charge, reason="Posted in error", recorded_by=self.bursar)
 
             # Naming the line: refused, whoever is asking.
             with self.assertRefusedBy(
@@ -501,7 +501,7 @@ class IdempotencyTests(BillingSetUp):
             charge = FeeLedgerEntry.objects.get(
                 student_membership_id=self.ada.pk, source_line=line
             )
-            reversal = services.reverse_entry(charge)
+            reversal = services.reverse_entry(charge, reason="Posted in error", recorded_by=self.bursar)
 
             self.assertEqual(reversal.source_line_id, line.pk)
             self.assertEqual(
@@ -619,7 +619,7 @@ class ConcessionTests(BillingSetUp):
                 student_membership_id=self.ada.pk, kind=FeeEntryKind.DISCOUNT
             )
 
-            reversal = services.reverse_entry(posted)
+            reversal = services.reverse_entry(posted, reason="Posted in error", recorded_by=self.bursar)
             self.assertEqual(reversal.source_concession_id, concession.pk)
 
             second = self.apply()
@@ -1417,6 +1417,7 @@ class ConstraintTests(BillingSetUp):
                     narration="Both at once",
                     effective_on=date(2025, 9, 20),
                     reverses=charge,
+                    recorded_by_id=self.bursar.pk,
                     source_line=line,
                     source_concession=concession,
                 )
@@ -1903,16 +1904,14 @@ class SourceColumnGuardTests(BillingSetUp):
     def test_a_very_long_line_description_still_produces_a_reversible_charge(self):
         """The charge and its undo are one feature; half of it is not a feature.
 
-        `FeeScheduleLine.description` and `FeeLedgerEntry.narration` are both
-        255, and the description is copied into the narration verbatim, so a
+        A reversal used to inherit "Reversal of: <description>", so a
         243-character line produced a charge whose reversal was thirteen
-        characters too long. It failed as `ValidationError` -- not a
-        `FeeLedgerError` -- so the documented `except FeeLedgerError` would not
-        have caught it either.
+        characters too long, and failed as `ValidationError`. A reversal's
+        narration is now the reason the person gave, which `NoReason` holds to
+        the column, so the line's length cannot reach it at all.
         """
         long_description = "Tuition, " + "boarding and incidentals " * 9 + "and books"
-        self.assertEqual(len(long_description), 243, "the shortest that overflows")
-        self.assertGreater(len("Reversal of: " + long_description), 255)
+        self.assertEqual(len(long_description), 243)
 
         with connected_to(self.stmarys):
             FeeScheduleLine.objects.create(
@@ -1923,19 +1922,14 @@ class SourceColumnGuardTests(BillingSetUp):
             )
             self.apply()
 
-            # Both children are billed the line; one of them is the subject.
             charge = FeeLedgerEntry.objects.get(
                 narration=long_description, student_membership_id=self.ada.pk
             )
-            reversal = services.reverse_entry(charge, recorded_by=self.bursar)
+            reversal = services.reverse_entry(charge, reason="Charged in error", recorded_by=self.bursar)
 
-            self.assertLessEqual(len(reversal.narration), 255)
-            self.assertTrue(reversal.narration.startswith("Reversal of: Tuition, "))
-            self.assertTrue(
-                reversal.narration.endswith("\u2026"),
-                "the cut is marked, so the tail is not read as the whole thing",
-            )
+            self.assertEqual(reversal.narration, "Charged in error")
             self.assertEqual(reversal.amount_kobo, -charge.amount_kobo)
+            self.assertEqual(reversal.source_line_id, charge.source_line_id)
 
     def test_the_reversal_lock_does_not_join_the_term(self):
         """`FOR UPDATE` on a joined term row is what stalls a billing run.
@@ -1954,7 +1948,7 @@ class SourceColumnGuardTests(BillingSetUp):
             ).first()
 
             with CaptureQueriesContext(connection) as captured:
-                services.reverse_entry(charge, recorded_by=self.bursar)
+                services.reverse_entry(charge, reason="Posted in error", recorded_by=self.bursar)
 
         locking = [
             q["sql"] for q in captured.captured_queries if "FOR UPDATE" in q["sql"]

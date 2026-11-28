@@ -136,6 +136,27 @@ class ClassBalancesOut(Schema):
     owing: int = 0
 
 
+class ReversalNoteOut(Schema):
+    """On an entry that has been reversed: the reversal that undid it, with
+    its reason, who made it, and when. The original stays on the account,
+    marked, so the mistake and the correction are read together."""
+
+    entry_id: int
+    reason: str
+    by: str
+    at: datetime
+    on: date
+
+
+class ReversesOut(Schema):
+    """On a reversal: what it undid, so it reads without the original beside it."""
+
+    entry_id: int
+    kind_label: str
+    amount_kobo: int
+    effective_on: date
+
+
 class EntryOut(Schema):
     entry_id: int
     kind: str
@@ -152,6 +173,15 @@ class EntryOut(Schema):
     #: Payments only. The number the receipt carries.
     receipt_number: Optional[str]
     may_reverse: bool
+    #: Who typed it in and when. The name is read from their login, as the
+    #: receipt's "Received by" is (issue #143); empty for an entry no person
+    #: posted, such as a bill applied by a machine run.
+    recorded_by: str = ""
+    recorded_at: Optional[datetime] = None
+    #: Set when this entry has been reversed.
+    reversal: Optional[ReversalNoteOut] = None
+    #: Set when this entry is a reversal.
+    reverses: Optional[ReversesOut] = None
 
 
 class MethodOut(Schema):
@@ -229,6 +259,29 @@ class ReversedOut(Schema):
 class ReversedNoteOut(Schema):
     on: date
     reason: str
+    by: str = ""
+    at: Optional[datetime] = None
+
+
+class LogEntryOut(EntryOut):
+    student_membership_id: int
+    student: str
+    student_reference: str
+
+
+class LogOut(Schema):
+    """The school's fee log for a term: every entry, the order it was typed in,
+    newest first; or, with `reversals_only`, every reversal. A page at a time."""
+
+    terms: List[TermChoiceOut]
+    term_id: Optional[int]
+    term: Optional[str]
+    reversals_only: bool
+    #: How many reversals the term has, whichever list is shown.
+    reversals: int
+    page: int
+    has_more: bool
+    entries: List[LogEntryOut]
 
 
 class ReceiptOut(Schema):
@@ -318,9 +371,49 @@ def _balance_of(membership_id) -> int:
     return FeeLedgerEntry.objects.for_student(membership_id).balance()
 
 
-def _entry_out(school, entry, *, reversed_by_id=None, term=None) -> EntryOut:
+def _names_of(user_ids) -> dict:
+    """{user id: name} for the people who posted these entries, in one read."""
+    ids = {i for i in user_ids if i}
+    if not ids:
+        return {}
+    return {
+        pk: (full_name or username)
+        for pk, full_name, username in User.objects.filter(pk__in=ids).values_list(
+            "pk", "full_name", "username"
+        )
+    }
+
+
+def _how_they_read(entries):
+    """What `_entry_out()` needs besides the entries: who reversed each one,
+    what each reversal undid, and everybody's names. Three reads whatever the
+    number of entries, so a page of the log costs what one entry does."""
+    ids = [e.pk for e in entries]
+    reversals = {
+        r.reverses_id: r for r in FeeLedgerEntry.objects.filter(reverses__in=ids)
+    }
+    undid = {
+        t.pk: t
+        for t in FeeLedgerEntry.objects.filter(
+            pk__in=[e.reverses_id for e in entries if e.reverses_id]
+        )
+    }
+    names = _names_of(
+        [e.recorded_by_id for e in entries] + [r.recorded_by_id for r in reversals.values()]
+    )
+    return {"reversals": reversals, "undid": undid, "names": names}
+
+
+def _entry_out(school, entry, *, reversed_by_id=None, term=None, read=None, out=EntryOut, **extra):
     is_payment = entry.kind == FeeEntryKind.PAYMENT
-    return EntryOut(
+    read = read or {"reversals": {}, "undid": {}, "names": {}}
+    reversal = read["reversals"].get(entry.pk)
+    if reversal is not None:
+        reversed_by_id = reversal.pk
+    undid = read["undid"].get(entry.reverses_id) if entry.reverses_id else None
+    names = read["names"]
+    return out(
+        **extra,
         entry_id=entry.pk,
         kind=entry.kind,
         kind_label=entry.get_kind_display(),
@@ -335,6 +428,29 @@ def _entry_out(school, entry, *, reversed_by_id=None, term=None) -> EntryOut:
         reversed_by_id=reversed_by_id,
         receipt_number=receipt_number(school, entry.pk) if is_payment else None,
         may_reverse=entry.kind != FeeEntryKind.REVERSAL and reversed_by_id is None,
+        recorded_by=names.get(entry.recorded_by_id, ""),
+        recorded_at=entry.recorded_at,
+        reversal=(
+            ReversalNoteOut(
+                entry_id=reversal.pk,
+                reason=reversal.narration,
+                by=names.get(reversal.recorded_by_id, ""),
+                at=reversal.recorded_at,
+                on=reversal.effective_on,
+            )
+            if reversal is not None
+            else None
+        ),
+        reverses=(
+            ReversesOut(
+                entry_id=undid.pk,
+                kind_label=undid.get_kind_display(),
+                amount_kobo=undid.amount_kobo,
+                effective_on=undid.effective_on,
+            )
+            if undid is not None
+            else None
+        ),
     )
 
 
@@ -486,11 +602,7 @@ def account(request, membership_id: int):
     entries = list(
         FeeLedgerEntry.objects.for_student(child.pk).select_related("term")
     )
-    reversed_by = dict(
-        FeeLedgerEntry.objects.filter(reverses__in=[e.pk for e in entries]).values_list(
-            "reverses_id", "pk"
-        )
-    )
+    read = _how_they_read(entries)
     from . import bank, virtual
 
     line = virtual.pay_into(child.pk)
@@ -504,8 +616,63 @@ def account(request, membership_id: int):
         may_write=may_write(request.user, school),
         terms=_term_choices(_terms()),
         methods=[MethodOut(value=v, label=l) for v, l in PaymentMethod.choices],
+        entries=[_entry_out(school, e, read=read) for e in entries],
+    )
+
+
+#: Entries on one page of the fee log.
+LOG_PAGE = 50
+
+
+@router.get("/log/", response=LogOut)
+def fee_log(request, term_id: Optional[int] = None, reversals_only: bool = False, page: int = 1):
+    """The school's fee log for a term: every entry, newest typed first, or
+    every reversal. Readers only, the same people as the books: the principal
+    and the proprietor (read as the administrator, docs/messaging.md D15) see
+    every correction made this term, and who made it, without asking the
+    bursar. Every original a reversal undid is in the log too, marked."""
+    school = _school_of(request)
+    _require_reader(request.user, school)
+
+    terms = _terms()
+    if term_id is not None:
+        term = next((t for t in terms if t.pk == term_id), None)
+        if term is None:
+            raise Http404("No such account.")
+    else:
+        term = next((t for t in terms if t.is_current), terms[0] if terms else None)
+    page = max(1, page)
+
+    entries, has_more, reversals = [], False, 0
+    if term is not None:
+        in_term = FeeLedgerEntry.objects.for_term(term)
+        reversals = in_term.filter(kind=FeeEntryKind.REVERSAL).count()
+        shown = in_term.filter(kind=FeeEntryKind.REVERSAL) if reversals_only else in_term
+        start = (page - 1) * LOG_PAGE
+        entries = list(shown.order_by("-id")[start : start + LOG_PAGE + 1])
+        has_more = len(entries) > LOG_PAGE
+        entries = entries[:LOG_PAGE]
+    read = _how_they_read(entries)
+    return LogOut(
+        terms=_term_choices(terms),
+        term_id=term.pk if term else None,
+        term=str(term) if term else None,
+        reversals_only=reversals_only,
+        reversals=reversals,
+        page=page,
+        has_more=has_more,
         entries=[
-            _entry_out(school, e, reversed_by_id=reversed_by.get(e.pk)) for e in entries
+            _entry_out(
+                school,
+                e,
+                term=term,
+                read=read,
+                out=LogEntryOut,
+                student_membership_id=e.student_membership_id,
+                student=e.student_name,
+                student_reference=e.student_reference,
+            )
+            for e in entries
         ],
     )
 
@@ -525,11 +692,8 @@ def receipt(request, entry_id: int):
         raise Http404("No such account.")
 
     undone = FeeLedgerEntry.objects.filter(reverses=entry).first()
-    received_by = (
-        User.objects.filter(pk=entry.recorded_by_id).values_list("full_name", flat=True).first()
-        if entry.recorded_by_id
-        else None
-    )
+    names = _names_of([entry.recorded_by_id, undone.recorded_by_id if undone else None])
+    received_by = names.get(entry.recorded_by_id)
     return ReceiptOut(
         receipt_number=receipt_number(school, entry.pk),
         school=school.name,
@@ -543,7 +707,14 @@ def receipt(request, entry_id: int):
         narration=entry.narration,
         received_by=received_by or "",
         reversed=(
-            ReversedNoteOut(on=undone.effective_on, reason=undone.narration) if undone else None
+            ReversedNoteOut(
+                on=undone.effective_on,
+                reason=undone.narration,
+                by=names.get(undone.recorded_by_id, ""),
+                at=undone.recorded_at,
+            )
+            if undone
+            else None
         ),
     )
 
@@ -680,7 +851,7 @@ def reverse(request, entry_id: int, payload: ReversalIn):
         return 409, MessageOut(detail=str(exc))
 
     return 201, ReversedOut(
-        entry=_entry_out(school, reversal),
+        entry=_entry_out(school, reversal, read=_how_they_read([reversal])),
         balance_kobo=_balance_of(entry.student_membership_id),
     )
 

@@ -50,7 +50,9 @@ mistake and the fix legible a year later.
 This is enforced twice, on purpose:
 
 - `FeeLedgerEntry.save()` refuses to write over an existing row and `.delete()`
-  refuses outright, raising `LedgerIsAppendOnly`. That is the error a developer
+  refuses outright, raising `LedgerIsAppendOnly`. So do the queryset's
+  `update()`, `bulk_update()` and `delete()`, which is what the Django admin's
+  "delete selected" and any bulk script reach. That is the error a developer
   sees, in the caller's own language.
 - A **Postgres trigger**, installed per schema by `fees/migrations/0002`, refuses
   `UPDATE` and `DELETE` on the table. That is the one a `psql` session, a data
@@ -71,9 +73,11 @@ Two further rules about reversals, because the interesting ones span rows:
   gives a good error, the index is what makes it true.
 - A reversal cannot itself be reversed. Undoing an undo is how a book stops
   being readable; reverse the original, or post a fresh entry.
-- A reversal must be exactly equal and opposite to its target. No check
-  constraint can express that (it compares two rows), so it lives in
-  `Model.clean()` and every service path calls `full_clean()`.
+- A reversal must be exactly equal and opposite to its target, for the same
+  child and the same term. No check constraint can express that (it compares
+  two rows), so it lives in `Model.clean()`, which every service path calls,
+  and since `fees/migrations/0010` in an insert trigger too. See "A payment is
+  never changed quietly" below.
 
 ### An entry freezes who it was for
 
@@ -291,6 +295,7 @@ Billing — fee schedules and concessions on a screen — is B2.
 | `POST students/<id>/payments/` | writers | a payment, with its form key |
 | `POST students/<id>/discounts/` | writers | a discount given by hand, with its reason and form key |
 | `POST entries/<id>/reversal/` | writers | undo any entry, with the reason |
+| `GET log/?term_id=&reversals_only=&page=` | readers | the school's fee log for a term, or its reversals (see "A payment is never changed quietly") |
 
 A write answers **201** when it posted and **200 when the same form had already
 posted**, with the entry that form posted. That way a retried request tells the
@@ -463,6 +468,91 @@ another amount is refused (409).
 
 Every bill write answers with the bill as it now stands, and the page draws
 that answer rather than patching what it had.
+
+## A payment is never changed quietly
+
+Built 2026-11-28. The homepage says "A payment cannot be edited or deleted,
+only reversed with a reason"; this is what makes every word of it true, and
+`fees/tests/test_payments_are_never_quietly_changed.py` is the test for each.
+
+### Nobody edits or deletes a recorded payment
+
+Not the bursar, the principal, the proprietor (read as the administrator,
+`docs/messaging.md` D15) or anybody else, by any route:
+
+| way in | what refuses it |
+| --- | --- |
+| an instance's `save()` or `delete()` | `LedgerIsAppendOnly`, from the model |
+| `QuerySet.update()`, `bulk_update()`, `QuerySet.delete()`, `update_or_create()` | `LedgerIsAppendOnly`, from `FeeLedgerQuerySet` |
+| a plain `QuerySet`, raw SQL, `psql`, an import, `manage.py shell` | the `0002` trigger, `restrict_violation` |
+| the Django admin | no fees model is registered, and the admin is on the portal, whose schema has no fee tables; an admin built for the ledger would reach the refusals above |
+| the routes | none edits or deletes an entry, for any role |
+
+The trigger refuses every `UPDATE` and `DELETE`, with no column carved out: a
+reversal is a new row and sets nothing on the payment it undoes. `0010`
+installs `0002`'s trigger again (`DROP TRIGGER IF EXISTS`, `CREATE TRIGGER`),
+so a school whose guard was dropped by hand gets it back on the next
+`migrate_schemas`.
+
+**What the database cannot stop**: the table's owner can still `ALTER TABLE
+... DISABLE TRIGGER` or `TRUNCATE`, and the application's database user is the
+owner. Closing that needs a separate, less privileged role for the running
+app, which is a deployment change and is not made here.
+
+### A reversal is the only correction
+
+`services.reverse_entry(entry, reason=..., recorded_by=...)`, which the route
+calls through `undo()`. Both arguments are required. There is no longer a
+default narration ("Reversal of: X"): nothing undoes an entry but a person,
+and the reason is what the books keep.
+
+| rule | service | database |
+| --- | --- | --- |
+| a written reason | `NoReason` | `a_reversal_says_why` |
+| who made it | `CannotReverse` | `a_reversal_says_who` |
+| when | `recorded_at`, set on insert | the same column, never updated |
+| at most once | `AlreadyReversed`, under a row lock | `an_entry_is_reversed_at_most_once` |
+| never of a reversal | `CannotReverse` | `fees_reversal_is_exact` trigger |
+| the same child, term and the opposite amount | `clean()` | `fees_reversal_is_exact` trigger |
+| the row meant, not one with the same id at another school | `CannotReverse` | ids are per schema; the trigger reads its target through `TG_TABLE_SCHEMA` |
+
+**Who** is `recorded_by_id`, a bare id, and the name shown beside it is read
+from the login, as the receipt's "Received by" is. That is
+[issue #143](https://github.com/adedejimakinde/luffy-school-saas/issues/143)
+and is unchanged here.
+
+The bursar and the administrator reverse, the same people who record payments
+(`fees.authority.WRITING_ROLES`). The principal and the vice principal are told
+they may not (403); everybody else gets the flat 404.
+
+### Both entries stay in both histories
+
+- **The child's account** (`GET students/<id>/`): each entry says who entered
+  it and when (`recorded_by`, `recorded_at`). An entry that was reversed
+  carries `reversal` (the reversal's id, the reason, who, when), and a reversal
+  carries `reverses` (what it undid). The page marks the original "Reversed" and
+  prints the reason, the name and the time under it.
+- **The school's fee log** (`GET log/?term_id=&reversals_only=&page=`): every
+  entry in the term, newest typed first, fifty to a page, or with
+  `reversals_only` every reversal. Readers only: the principal, the vice
+  principal, the bursar and the administrator. On the page it is "Fee log and
+  reversals", beside "Bills for this term".
+- **The receipt** says REVERSED across its face, with the date, the person and
+  the reason.
+
+**The figures** need nothing new. A balance is the plain sum, so a reversal
+restores it by being the opposite amount. "Collected" (the dashboard's, and
+each class's on the fees list) counts a reversal as the kind it undoes, so a
+reversed payment is not money collected. Outstanding is read from balances.
+The tests pin all of them coming back to where they were.
+
+### Every school, including the next one
+
+Constraints and triggers are created unqualified by a migration, so each lands
+in the schema `migrate_schemas` is migrating. A school created later is
+migrated from `0001` when it is created (`School.auto_create_schema`), and gets
+them the same way. A test builds a school by that real path
+(`make_school_by_migrating()`) and checks both triggers are there and fire.
 
 ## Not built
 

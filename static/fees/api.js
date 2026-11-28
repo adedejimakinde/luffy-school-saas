@@ -21,6 +21,13 @@ export const paymentUrl = (studentId) => `/api/fees/students/${q(studentId)}/pay
 export const discountUrl = (studentId) => `/api/fees/students/${q(studentId)}/discounts/`;
 export const reversalUrl = (entryId) => `/api/fees/entries/${q(entryId)}/reversal/`;
 export const receiptUrl = (entryId) => `/api/fees/entries/${q(entryId)}/receipt/`;
+export function logUrl({ termId = null, reversalsOnly = false, page = 1 } = {}) {
+  const parts = [];
+  if (termId != null) parts.push(`term_id=${q(termId)}`);
+  if (reversalsOnly) parts.push("reversals_only=true");
+  if (page > 1) parts.push(`page=${q(page)}`);
+  return `/api/fees/log/${parts.length ? `?${parts.join("&")}` : ""}`;
+}
 export const billsUrl = (termId) =>
   termId == null ? "/api/fees/bills/" : `/api/fees/bills/?term_id=${q(termId)}`;
 export const billUrl = (classId, termId) => `/api/fees/classes/${q(classId)}/bill/?term_id=${q(termId)}`;
@@ -75,6 +82,8 @@ export const fetchBooks = ({ termId = null, fetchImpl = fetch } = {}) => read(bo
 export const fetchClass = ({ classId, termId, fetchImpl = fetch }) => read(classUrl(classId, termId), fetchImpl);
 export const fetchAccount = ({ studentId, fetchImpl = fetch }) => read(accountUrl(studentId), fetchImpl);
 export const fetchReceipt = ({ entryId, fetchImpl = fetch }) => read(receiptUrl(entryId), fetchImpl);
+export const fetchLog = ({ termId = null, reversalsOnly = false, page = 1, fetchImpl = fetch } = {}) =>
+  read(logUrl({ termId, reversalsOnly, page }), fetchImpl);
 /**
  * Make the missing accounts for a class: a batch at a time, so the answer says how many
  * were made, how many already had one, each failure by name, and how many are left.

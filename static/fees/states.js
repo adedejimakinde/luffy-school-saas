@@ -86,7 +86,8 @@ export function books({
     `<h2>${esc(term)}</h2>`,
     outstandingLine(body),
     hasFeeItems
-      ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button></p>'
+      ? '<p class="more"><button type="button" data-action="open-bills">Bills for this term</button> ' +
+        '<button type="button" data-action="open-log">Fee log and reversals</button></p>'
       : emptyState({
           key: "fees",
           icon: "i-fees",
@@ -263,11 +264,52 @@ function reversalForm(entry) {
   return [
     `<form class="reversal" data-reversal data-entry="${esc(entry.entry_id)}">`,
     '<input type="hidden" name="intent" value="reversal">',
-    `<label>Why is this being undone? <input name="reason" maxlength="255" required></label>`,
-    '<button type="submit">Undo it</button> ',
+    '<p class="quiet">The entry stays on the account, marked reversed, with your reason, your name and the time. ' +
+      "A reversal cannot be changed or reversed.</p>",
+    `<label>Why is this being reversed? <input name="reason" maxlength="255" autocomplete="off" required></label>`,
+    '<button type="submit">Reverse it</button> ',
     '<button type="button" data-action="cancel-reversal">Keep it</button>',
     "</form>",
   ].join("");
+}
+
+/** A day and a time on the reader's own clock, as the page writes dates: "28 Nov 2026, 14:05". */
+export function whenTyped(iso) {
+  if (!iso) return "";
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  const day = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
+  return `${dayFirst(day)}, ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
+
+/**
+ * What a reversal and the entry it undid say about each other, in a sentence:
+ * on the original, the reason, who and when; on the reversal, what it undid.
+ */
+export function reversalLine(entry) {
+  const r = entry.reversal;
+  if (r) {
+    return (
+      `<span class="reversed-note" data-reversed-note>Reversed ${esc(whenTyped(r.at))}` +
+      `${r.by ? ` by ${esc(r.by)}` : ""}: ${esc(r.reason)}</span>`
+    );
+  }
+  const u = entry.reverses;
+  if (u) {
+    return (
+      `<span class="reversed-note">Reverses the ${esc(String(u.kind_label).toLowerCase())} of ` +
+      `${esc(signed(u.amount_kobo))} dated ${esc(dayFirst(u.effective_on))}</span>`
+    );
+  }
+  return "";
+}
+
+/** Who typed an entry in, and when. */
+function typedBy(entry) {
+  const when = whenTyped(entry.recorded_at);
+  if (!entry.recorded_by && !when) return "";
+  return `<small>Entered ${entry.recorded_by ? `by ${esc(entry.recorded_by)} ` : ""}${when ? esc(when) : ""}</small>`;
 }
 
 function entryRow(entry, { mayWrite, reversing }) {
@@ -278,14 +320,18 @@ function entryRow(entry, { mayWrite, reversing }) {
     );
   }
   if (mayWrite && entry.may_reverse && reversing !== entry.entry_id) {
-    actions.push(`<button type="button" data-action="reverse" data-entry="${esc(entry.entry_id)}">Undo</button>`);
+    actions.push(`<button type="button" data-action="reverse" data-entry="${esc(entry.entry_id)}">Reverse</button>`);
   }
-  const undone = entry.reversed_by_id ? ' <span class="tag">undone</span>' : "";
+  const reversed = entry.reversed_by_id || entry.reversal;
+  const tag = reversed ? ' <span class="tag" data-reversed>Reversed</span>' : "";
+  const note = reversalLine(entry);
+  const typed = typedBy(entry);
   return [
-    `<tr data-entry-row="${esc(entry.entry_id)}"${entry.reversed_by_id ? ' class="undone"' : ""}>`,
+    `<tr data-entry-row="${esc(entry.entry_id)}"${reversed ? ' class="undone"' : ""}>`,
     `<td data-label="Date">${esc(dayFirst(entry.effective_on))}</td>`,
-    `<td class="stack-head">${esc(entry.kind_label)}${undone}</td>`,
-    `<td data-label="For">${esc(entry.narration)}<br><small>${esc(entry.term)}</small></td>`,
+    `<td class="stack-head">${esc(entry.kind_label)}${tag}</td>`,
+    `<td data-label="For">${esc(entry.narration)}<br><small>${esc(entry.term)}</small>` +
+      `${typed ? `<br>${typed}` : ""}${note ? `<br>${note}` : ""}</td>`,
     `<td data-label="How">${esc(entry.method_label)}${entry.reference ? `<br><small>${esc(entry.reference)}</small>` : ""}</td>`,
     `<td class="num" data-label="Amount">${esc(signed(entry.amount_kobo))}</td>`,
     `<td class="actions stack-full">${actions.join(" ")}</td>`,
@@ -552,6 +598,62 @@ export function bill({
   ].join("");
 }
 
+// -- the school's fee log, and its reversals ------------------------------------
+
+function logRow(e) {
+  const reversed = Boolean(e.reversal);
+  const tag = reversed ? ' <span class="tag" data-reversed>Reversed</span>' : "";
+  const note = reversalLine(e);
+  const typed = typedBy(e);
+  return [
+    `<li class="log-entry${reversed ? " undone" : ""}${e.kind === "reversal" ? " is-reversal" : ""}" data-log-entry="${esc(e.entry_id)}">`,
+    '<div class="log-top">',
+    `<span class="log-what"><strong>${esc(e.kind_label)}</strong>${tag}</span>`,
+    `<span class="num log-amount">${esc(signed(e.amount_kobo))}</span>`,
+    "</div>",
+    `<p class="log-child"><button type="button" data-action="open-account" data-student="${esc(e.student_membership_id)}">` +
+      `${esc(e.student)}</button>${e.student_reference ? ` <small>${esc(e.student_reference)}</small>` : ""}</p>`,
+    `<p class="log-for">${esc(e.narration)} <small>dated ${esc(dayFirst(e.effective_on))}</small></p>`,
+    typed ? `<p class="log-by">${typed}</p>` : "",
+    note ? `<p class="log-note">${note}</p>` : "",
+    "</li>",
+  ].join("");
+}
+
+export function feeLog({ log: body = {} } = {}) {
+  const {
+    terms = [], term_id: termId, term = "", reversals_only: only = false, reversals = 0,
+    page = 1, has_more: more = false, entries = [],
+  } = body;
+  const toggle = (value, label, on) =>
+    `<button type="button" data-action="log-view" data-only="${value}" aria-pressed="${on ? "true" : "false"}">${label}</button>`;
+  return [
+    '<section class="state state-log" data-state="log">',
+    '<p class="back"><button type="button" data-action="back-to-books">Balances</button></p>',
+    `<h1>${only ? "Reversals" : "Fee log"}</h1>`,
+    '<form class="chooser"><label for="log-term">Term</label>',
+    `<select id="log-term" data-log-term>${termOptions(terms, termId)}</select></form>`,
+    `<h2>${esc(term)}</h2>`,
+    '<p class="quiet">Nothing here can be changed or deleted. A mistake is corrected by a reversal, ',
+    "and both stay in the log: the original marked reversed, with the reason, who and when.</p>",
+    '<p class="log-views" role="group" aria-label="Show">',
+    toggle("no", "Everything", !only),
+    " ",
+    toggle("yes", `Reversals (${esc(reversals)})`, only),
+    "</p>",
+    entries.length
+      ? `<ul class="log-entries">${entries.map(logRow).join("")}</ul>`
+      : `<p class="blank">${only ? "Nothing has been reversed this term." : "Nothing has been recorded this term."}</p>`,
+    page > 1 || more
+      ? '<p class="more log-pages">' +
+        (page > 1 ? `<button type="button" data-action="log-page" data-page="${esc(page - 1)}">Newer</button> ` : "") +
+        (more ? `<button type="button" data-action="log-page" data-page="${esc(page + 1)}">Older</button>` : "") +
+        "</p>"
+      : "",
+    "</section>",
+  ].join("");
+}
+
 // -- the receipt --------------------------------------------------------------
 
 export function receipt({ receipt: body = {} } = {}) {
@@ -563,8 +665,9 @@ export function receipt({ receipt: body = {} } = {}) {
     '<article class="receipt">',
     `<header><h1>${esc(r.school)}</h1><p>Receipt <strong>${esc(r.receipt_number)}</strong></p></header>`,
     r.reversed
-      ? `<p class="void" data-void>UNDONE on ${esc(r.reversed.on)}: ${esc(r.reversed.reason)}. ` +
-        "This payment is no longer on the account.</p>"
+      ? `<p class="void" data-void>REVERSED on ${esc(dayFirst(r.reversed.on))}` +
+        `${r.reversed.by ? ` by ${esc(r.reversed.by)}` : ""}: ${esc(r.reversed.reason)}. ` +
+        "This payment no longer counts on the account.</p>"
       : "",
     "<dl>",
     `<dt>Received from</dt><dd>${esc(r.student)}${r.student_reference ? ` (${esc(r.student_reference)})` : ""}</dd>`,

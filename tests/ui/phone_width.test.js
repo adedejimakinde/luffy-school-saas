@@ -51,6 +51,8 @@ const KEY_PAGES = [
   ["tests", "sunrise.principal", `${SUNRISE}/tests/`],
   ["exam-slips", "sunrise.principal", `${SUNRISE}/exam-slips/`],
   ["fees", "sunrise.bursar", `${SUNRISE}/fees/`, ['[data-action="open-class"]', '[data-action="open-account"]']],
+  ["fees-log", "sunrise.principal", `${SUNRISE}/fees/?log=all`],
+  ["fees-reversals", "sunrise.admin", `${SUNRISE}/fees/?log=reversals`],
   ["bank", "sunrise.bursar", `${SUNRISE}/bank/`],
   ["setup", "sunrise.admin", `${SUNRISE}/setup/`],
   ["roll", "sunrise.admin", `${SUNRISE}/roll/`],

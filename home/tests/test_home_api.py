@@ -187,12 +187,12 @@ class TheFiguresTests(HomeSetUp):
             term = self.this_term()
             fees.charge(ada, term, 100_000, narration="Tuition")
             wrong = fees.charge(emeka, term, 70_000, narration="Charged in error")
-            fees.reverse_entry(wrong, narration="Not his")
+            fees.reverse_entry(wrong, reason="Not his", recorded_by=self.head)
             fees.charge(emeka, term, 100_000, narration="Tuition")
             fees.discount(ada, term, 20_000, narration="Scholarship")
             fees.record_payment(ada, term, 50_000, method="cash")
             typo = fees.record_payment(emeka, term, 10_000, method="cash")
-            fees.reverse_entry(typo, narration="Keyed twice")
+            fees.reverse_entry(typo, reason="Keyed twice", recorded_by=self.head)
             fees.refund(ada, term, 5_000, method="cash")
             # Another term's money is another term's.
             fees.record_payment(

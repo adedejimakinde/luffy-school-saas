@@ -456,6 +456,34 @@ class LedgerIsAppendOnly(Exception):
 
 
 class FeeLedgerQuerySet(models.QuerySet):
+    """The ledger's queries. **No bulk rewrite and no bulk delete.**
+
+    `save()` and `delete()` on an instance refuse, but neither is asked by
+    `QuerySet.update()`, `bulk_update()`,
+    `QuerySet.delete()`, or the Django admin's "delete selected" action, which
+    calls `QuerySet.delete()`. Those refuse here, with the same error, before a
+    statement is sent; the trigger from `fees/migrations/0002` is what refuses
+    them when something goes around this class too.
+    """
+
+    def update(self, **kwargs):
+        raise LedgerIsAppendOnly(
+            "Ledger entries cannot be changed, one at a time or in bulk. Post a "
+            "reversal, with its reason, naming each entry instead."
+        )
+
+    def bulk_update(self, objs, fields, batch_size=None):
+        """Refused here, and not left to reach `update()`: `bulk_update()` opens
+        `atomic(savepoint=False)` first, so a refusal from inside it would also
+        mark the caller's whole transaction for rollback."""
+        self.update()
+
+    def delete(self):
+        raise LedgerIsAppendOnly(
+            "Ledger entries cannot be deleted, one at a time or in bulk. Post a "
+            "reversal, with its reason, naming each entry instead."
+        )
+
     def for_student(self, membership_id):
         return self.filter(student_membership_id=membership_id)
 
@@ -777,6 +805,22 @@ class FeeLedgerEntry(models.Model):
                 condition=Q(form_key__isnull=False),
                 name="a_form_posts_once",
             ),
+            # A reversal is the only way a payment is corrected, so it carries
+            # what a correction owes the school: a written reason, and the
+            # person who made it. `services.reverse_entry()` refuses without
+            # either; these hold the same line against a write from anywhere
+            # else. The regex, for the reason `a_concession_says_why` gives.
+            # The rest of what makes a reversal exact (equal and opposite, the
+            # same child and term, and never of another reversal) spans two
+            # rows, so it is `fees/migrations/0010`'s insert trigger.
+            models.CheckConstraint(
+                condition=~Q(kind=FeeEntryKind.REVERSAL) | Q(narration__regex=r"\S"),
+                name="a_reversal_says_why",
+            ),
+            models.CheckConstraint(
+                condition=~Q(kind=FeeEntryKind.REVERSAL) | Q(recorded_by_id__isnull=False),
+                name="a_reversal_says_who",
+            ),
         ]
 
     def __str__(self):
@@ -829,6 +873,13 @@ class FeeLedgerEntry(models.Model):
         if self.reverses.kind == FeeEntryKind.REVERSAL:
             raise ValidationError(
                 {"reverses": "A reversal cannot itself be reversed; reverse the original."}
+            )
+        if (
+            self.student_membership_id != self.reverses.student_membership_id
+            or self.term_id != self.reverses.term_id
+        ):
+            raise ValidationError(
+                {"reverses": "A reversal belongs to the same child and term as the entry it undoes."}
             )
         if self.amount_kobo != -self.reverses.amount_kobo:
             raise ValidationError(

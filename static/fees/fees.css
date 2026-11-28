@@ -30,6 +30,21 @@ button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; wi
 .bar { display: block; width: 72px; height: 6px; border-radius: 3px; background: var(--divider); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--ok); }
 tr.undone td { color: var(--muted); }
+/* A reversed entry and its reversal say what they are about each other, in
+   ink and not only in grey: the reason is the part a reader needs. */
+.reversed-note { color: var(--text); font-size: var(--small); }
+.tag[data-reversed] { color: var(--stop); }
+
+/* The fee log: one card per entry, so it reads at 320px with nothing to scroll sideways. */
+.log-views { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
+.log-views button[aria-pressed="true"] { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
+.log-entries { list-style: none; padding: 0; margin: var(--sp-8) 0; display: grid; gap: var(--sp-8); }
+.log-entry { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-8) var(--sp-12); min-width: 0; }
+.log-entry.undone { border-left: 3px solid var(--stop); }
+.log-entry.is-reversal { border-left: 3px solid var(--muted); }
+.log-entry p { margin: 4px 0 0; overflow-wrap: anywhere; }
+.log-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px var(--sp-8); }
+.log-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
 .balance { font-weight: 700; }
 .balance.owes { color: var(--warn); }
 .balance.credit { color: var(--ok); }
