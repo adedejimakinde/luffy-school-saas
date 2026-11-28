@@ -19,6 +19,7 @@ import { htmlFor, mount } from "../../static/fees/app.js";
 import { REFUSAL, refusalFor } from "../../static/fees/api.js";
 import { balanceWords, naira, signed } from "../../static/fees/money.js";
 import * as states from "../../static/fees/states.js";
+import * as feeLog from "../../static/fees/log-app.js";
 import { forgetToken } from "../../static/web/http.js";
 import { fakeRoot } from "./fake_dom.js";
 
@@ -262,8 +263,8 @@ test("a reversed payment stays on the account, marked, with the reason, who and 
 test("the reversal form says the entry stays and the reversal is final", () => {
   const html = states.account({ account: account(), reversing: 41 });
 
-  assert.match(html, /stays on the account, marked reversed/);
-  assert.match(html, /cannot be changed or reversed/);
+  assert.match(html, /stays, marked reversed, with your reason and name/);
+  assert.match(html, /A reversal is final/);
   assert.match(html, /name="reason"[^>]*required/);
 });
 
@@ -290,11 +291,13 @@ const log = (overrides = {}) => {
 };
 
 test("the fee log shows the reversal and the original it reversed, together", () => {
-  const html = states.feeLog({ log: log() });
+  const html = feeLog.feeLog({ log: log() });
 
   assert.match(html, /<h1>Fee log<\/h1>/);
-  assert.match(html, /data-log-entry="42"/);
-  assert.match(html, /data-log-entry="41"/);
+  assert.match(html, /data-entry-row="42"/);
+  assert.match(html, /data-entry-row="41" class="undone"/);
+  assert.match(html, /<a href="\/fees\/\?student=3">Ada Obi<\/a>/);
+  assert.match(html, /Reason: Keyed twice/);
   assert.match(html, /Reversed by Bola Bursar on 3\u00a0Oct\u00a02025, \d\d:\d\d\. Reason: Keyed twice/);
   assert.match(html, /Reversals \(1\)/);
   assert.match(html, /aria-pressed="true">Everything/);
@@ -302,29 +305,23 @@ test("the fee log shows the reversal and the original it reversed, together", ()
 });
 
 test("the reversals view says when nothing was reversed", () => {
-  const html = states.feeLog({ log: log({ reversals_only: true, reversals: 0, entries: [] }) });
+  const html = feeLog.feeLog({ log: log({ reversals_only: true, reversals: 0, entries: [] }) });
 
   assert.match(html, /<h1>Reversals<\/h1>/);
   assert.match(html, /Nothing has been reversed this term\./);
 });
 
-test("the log pages, and keeps the reversals view and the term as it pages", async () => {
+test("the log page opens on the reversals, pages, and keeps the view and the term", async () => {
   forgetToken();
   const asked = [];
   const fetchImpl = async (url) => {
     asked.push(url);
-    if (url.startsWith("/api/fees/log/")) {
-      const only = url.includes("reversals_only=true");
-      return { status: 200, json: async () => log({ reversals_only: only, has_more: !url.includes("page=2") }) };
-    }
-    if (url.startsWith("/api/fees/classes/")) {
-      return { status: 200, json: async () => ({ terms: TERMS, term_id: 7, term: "x", classes: [], may_write: true }) };
-    }
-    if (url.startsWith("/api/fees/reminders/not-sent/")) return { status: 200, json: async () => ({ children: [] }) };
-    throw new Error(`no stub for ${url}`);
+    const only = url.includes("reversals_only=true");
+    return { status: 200, json: async () => log({ reversals_only: only, has_more: !url.includes("page=2") }) };
   };
   const root = fakeRoot({ onSchool: "yes" });
-  await mount(root, { fetchImpl, search: "?log=reversals", newKey: keys(), today: "2025-10-05" });
+  await feeLog.mount(root, { fetchImpl, search: "?term_id=7&reversals=1" });
+  assert.equal(asked.at(-1), "/api/fees/log/?term_id=7&reversals_only=true");
   assert.match(root.innerHTML, /<h1>Reversals<\/h1>/);
 
   await root.click({ "data-action": "log-page", "data-page": "2" });
@@ -333,6 +330,17 @@ test("the log pages, and keeps the reversals view and the term as it pages", asy
   await root.click({ "data-action": "log-view", "data-only": "no" });
   assert.equal(asked.at(-1), "/api/fees/log/?term_id=7");
   assert.match(root.innerHTML, /<h1>Fee log<\/h1>/);
+});
+
+test("the log page refuses as the fees page does", async () => {
+  forgetToken();
+  const root = fakeRoot({ onSchool: "yes" });
+  await feeLog.mount(root, { fetchImpl: async () => ({ status: 404, json: async () => ({}) }) });
+  assert.match(root.innerHTML, /not something you can open/);
+
+  const portal = fakeRoot({ onSchool: "" });
+  await feeLog.mount(portal, { fetchImpl: async () => { throw new Error("asked nothing"); } });
+  assert.match(portal.innerHTML, /data-state="wrong-host"/);
 });
 
 // -- what an answer means -----------------------------------------------------

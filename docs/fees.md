@@ -535,8 +535,12 @@ they may not (403); everybody else gets the flat 404.
 - **The school's fee log** (`GET log/?term_id=&reversals_only=&page=`): every
   entry in the term, newest typed first, fifty to a page, or with
   `reversals_only` every reversal. Readers only: the principal, the vice
-  principal, the bursar and the administrator. On the page it is "Fee log and
-  reversals", beside "Bills for this term".
+  principal, the bursar and the administrator. Its page is `/fees/log/`
+  (`?reversals=1` opens on the reversals), linked as "Fee log and reversals"
+  beside "Bills for this term". A page of its own, not a screen of `/fees/`,
+  because the fees page is held to `tests/test_budget.py`'s 170 KB and had no
+  room for it; for the same reason the fees modules' long comments moved to
+  `docs/module-notes.md`, as the shared modules' did before them.
 - **The receipt** says REVERSED across its face, with the date, the person and
   the reason.
 

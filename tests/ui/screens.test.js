@@ -290,7 +290,7 @@ export const SCREENS = [
   {
     name: "fees-log",
     as: "sunrise.principal",
-    url: `${SUNRISE}/fees/?log=all`,
+    url: `${SUNRISE}/fees/log/`,
     steps: [["fees-reversals", '[data-action="log-view"][data-only="yes"]']],
   },
 

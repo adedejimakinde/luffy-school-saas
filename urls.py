@@ -32,7 +32,7 @@ from accounts.views import (
 from attendance.views import absences_page, register_page
 from cbt import score_views, sit_views
 from cbt.views import exam_slips_page, results_page, sitting_page, tests_page
-from fees.views import bank_page, fees_page
+from fees.views import bank_page, fees_log_page, fees_page
 from gradebook.views import marking_page, subject_teachers_page, subject_teachers_seen, teaching_page
 from home.views import home_page
 from idcards.views import id_cards_page, verify_page
@@ -171,6 +171,7 @@ urlpatterns = [
     path("ogsera/", ogsera_page, name="ogsera"),
     # The bursar's, on the broadsheet's terms.
     path("fees/", fees_page, name="fees"),
+    path("fees/log/", fees_log_page, name="fees-log"),
     path("bank/", bank_page, name="bank"),
     # Who teaches what, when: every teacher reads it, on the same terms.
     path("timetable/", timetable_page, name="timetable"),

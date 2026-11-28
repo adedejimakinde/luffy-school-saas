@@ -8,7 +8,6 @@ import {
   fetchBooks,
   fetchClass,
   fetchConcessions,
-  fetchLog,
   fetchNotSent,
   fetchReceipt,
   makeAccount,
@@ -59,8 +58,6 @@ export function htmlFor(state, { portal = "" } = {}) {
       return states.account(state);
     case "receipt":
       return states.receipt(state);
-    case "log":
-      return states.feeLog(state);
     case "bills":
       return states.bills(state);
     case "bill":
@@ -93,10 +90,8 @@ export async function mount(
   const portal = root.dataset.portal || "";
   const params = new URLSearchParams(search);
   let state = { step: "loading" };
-  let where = { termId: null, classId: null, studentId: null, fromLog: null };
-  //: One key per form, because each form is its own write: a payment, a
-  //: discount and a concession sent under one key would be refused as a
-  //: reused form.
+  let where = { termId: null, classId: null, studentId: null };
+  // One key per form: each form is its own write (docs/module-notes.md)
   const keys = { payment: newKey(), discount: newKey(), concession: newKey() };
   const draw = () => {
     root.innerHTML = htmlFor(state, { portal });
@@ -113,8 +108,7 @@ export async function mount(
   }
 
   const showBooks = async (termId) => {
-    // The reminders that went nowhere are listed under the classes (D10, as
-    // decided). Asked beside the books, and a failure there leaves the books.
+    // Reminders that went nowhere, listed under the classes (docs/module-notes.md)
     const [answer, notSent] = await Promise.all([
       fetchBooks({ termId, fetchImpl }),
       fetchNotSent({ fetchImpl }),
@@ -138,8 +132,7 @@ export async function mount(
       fetchAccount({ studentId, fetchImpl }),
       fetchConcessions({ studentId, fetchImpl }),
     ]);
-    // One refusal for both: the routes ask the same question of the same
-    // person, so the first read's answer stands for the pair.
+    // One refusal answers both reads (docs/module-notes.md)
     land(answer.ok && !concessions.ok ? concessions : answer, (body) => ({
       step: "account",
       account: body,
@@ -192,19 +185,11 @@ export async function mount(
     }
     draw();
   };
-  /** The school's fee log for a term, or its reversals; a page at a time. */
-  const showLog = async ({ termId = where.termId, reversalsOnly = false, page = 1 } = {}) => {
-    land(await fetchLog({ termId, reversalsOnly, page, fetchImpl }), (body) => {
-      where.termId = body.term_id;
-      return body.term_id === null ? { step: "no-terms" } : { step: "log", log: body };
-    });
-  };
   const showReceipt = async (entryId) => {
     land(await fetchReceipt({ entryId, fetchImpl }), (body) => ({ step: "receipt", receipt: body }));
   };
 
   if (params.get("receipt")) await showReceipt(Number(params.get("receipt")));
-  else if (params.get("log")) await showLog({ reversalsOnly: params.get("log") === "reversals" });
   else if (params.get("student")) await showAccount(Number(params.get("student")));
   else await showBooks(null);
 
@@ -213,16 +198,9 @@ export async function mount(
     if (!field || !field.dataset) return;
     if (field.dataset.term !== undefined) await showBooks(Number(field.value));
     else if (field.dataset.billsTerm !== undefined) await showBills(Number(field.value));
-    else if (field.dataset.logTerm !== undefined) {
-      await showLog({ termId: Number(field.value), reversalsOnly: Boolean(state.log && state.log.reversals_only) });
-    }
   });
 
-  /**
-   * A write made under a form key: a payment or a discount. Success mints the
-   * next key; a lost answer keeps it, and what was typed, so sending again is
-   * safe; a sentence from the server keeps what was typed and shows it.
-   */
+  /** A payment or a discount, written under its form key (docs/module-notes.md) */
   const keyed = async (intent, draft, send, { done, again, draftField }) => {
     const answer = await send({ ...draft, form_key: keys[intent] });
     if (answer.ok) {
@@ -294,8 +272,7 @@ export async function mount(
           posted
             ? `Payment recorded. Receipt ${entry.receipt_number}.`
             : "That payment was already recorded; nothing new was added.",
-        // The request may have landed. Same key, same payment: sending it
-        // again records it once whichever way the first one went.
+        // A lost answer: sending again records it once (docs/module-notes.md)
         again: "We could not tell whether that payment was saved. Send it again. It will not be recorded twice.",
       });
       return;
@@ -368,8 +345,7 @@ export async function mount(
     if (!hit) return;
     const action = hit.dataset.action;
     if (action === "ask-reminders" && ["books", "class"].includes(state.step)) {
-      // Asks first (docs/messaging.md D10): the preview writes nothing, and
-      // nothing is sent until "Send them".
+      // Asks first: the preview writes nothing (docs/module-notes.md)
       const scope = {
         termId: hit.dataset.term ? Number(hit.dataset.term) : where.termId,
         classId: hit.dataset.class ? Number(hit.dataset.class) : null,
@@ -425,17 +401,6 @@ export async function mount(
     }
     if (action === "open-class") return showClass(Number(hit.dataset.class));
     if (action === "open-bills") return showBills(where.termId);
-    if (action === "open-log") return showLog({ termId: where.termId });
-    if (action === "log-view" && state.step === "log") {
-      return showLog({ termId: where.termId, reversalsOnly: hit.dataset.only === "yes" });
-    }
-    if (action === "log-page" && state.step === "log") {
-      return showLog({
-        termId: where.termId,
-        reversalsOnly: Boolean(state.log.reversals_only),
-        page: Number(hit.dataset.page),
-      });
-    }
     if (action === "open-bill") return showBill(Number(hit.dataset.class));
     if (action === "back-to-bills") return showBills(where.termId);
     if (action === "change-line" && state.step === "bill") {
@@ -497,16 +462,8 @@ export async function mount(
       return;
     }
     if (action === "back-to-books") return showBooks(where.termId);
-    if (action === "open-account") {
-      // Back from the account goes where the account was opened from.
-      where.fromLog =
-        state.step === "log" ? { reversalsOnly: Boolean(state.log.reversals_only), page: state.log.page } : null;
-      return showAccount(Number(hit.dataset.student));
-    }
-    if (action === "back-to-class") {
-      if (where.fromLog) return showLog({ termId: where.termId, ...where.fromLog });
-      return where.classId ? showClass(where.classId) : showBooks(where.termId);
-    }
+    if (action === "open-account") return showAccount(Number(hit.dataset.student));
+    if (action === "back-to-class") return where.classId ? showClass(where.classId) : showBooks(where.termId);
     if (action === "receipt") return showReceipt(Number(hit.dataset.entry));
     if (action === "back-to-account") {
       return where.studentId ? showAccount(where.studentId) : showBooks(where.termId);

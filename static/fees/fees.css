@@ -1,15 +1,9 @@
-/*
- * Fees. Tables that scroll sideways on a phone, and a receipt that prints on
- * its own: the chrome is hidden on paper.
- *
- * Colours, type, controls, tables and labels are `web/design.css`'s; this is
- * the layout.
- */
+/* Fees: the layout; colours and controls are design.css's (docs/module-notes.md) */
 main { max-width: 60rem; }
 h2 { font-size: 1.1rem; margin: 20px 0 8px; }
 .chooser { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 ul.classes:not(.list-rows) { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-/* The classes: list rows (design.css's .list-rows) in ONE card; a row is a button that opens the class. */
+/* The classes: one card of list rows (docs/module-notes.md) */
 .class-card { padding: var(--sp-8) var(--sp-16); margin: var(--sp-8) 0 var(--sp-16); }
 .classes.list-rows { margin: 0; }
 .classes.list-rows > li + li::before { left: 0; right: 0; }
@@ -19,8 +13,7 @@ button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; wi
 .class-figures { display: grid; gap: 2px; justify-items: end; }
 .class-collected { font-weight: 700; font-variant-numeric: tabular-nums; }
 .class-share { color: var(--muted); font-size: var(--small); }
-/* A card too narrow for the class's words and its amounts side by side (a
-   small phone, large text): the amounts go under the words, never over them. */
+/* Too narrow for words and amounts side by side: amounts go under (docs/module-notes.md) */
 .class-card { container-type: inline-size; }
 @container (max-width: 14em) {
   button.class-row { grid-template-columns: minmax(0, 1fr); }
@@ -30,23 +23,11 @@ button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; wi
 .bar { display: block; width: 72px; height: 6px; border-radius: 3px; background: var(--divider); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--ok); }
 tr.undone td { color: var(--muted); }
-/* A reversed entry and its reversal say what they are about each other, in
-   ink and not only in grey: the reason is the part a reader needs. */
 .reversed-note { color: var(--text); font-size: var(--small); }
-/* An amount in a sentence moves to the next line whole: its minus sign never stays behind. */
 .whole { white-space: nowrap; }
 .tag[data-reversed] { color: var(--stop); }
-
-/* The fee log: one card per entry, so it reads at 320px with nothing to scroll sideways. */
 .log-views { display: flex; flex-wrap: wrap; gap: var(--sp-8); }
-.log-views button[aria-pressed="true"] { font-weight: 700; text-decoration: underline; text-underline-offset: 3px; }
-.log-entries { list-style: none; padding: 0; margin: var(--sp-8) 0; display: grid; gap: var(--sp-8); }
-.log-entry { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--sp-8) var(--sp-12); min-width: 0; }
-.log-entry.undone { border-left: 3px solid var(--stop); }
-.log-entry.is-reversal { border-left: 3px solid var(--muted); }
-.log-entry p { margin: 4px 0 0; overflow-wrap: anywhere; }
-.log-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px var(--sp-8); }
-.log-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+.log-views [aria-pressed="true"] { font-weight: 700; text-decoration: underline; }
 .balance { font-weight: 700; }
 .balance.owes { color: var(--warn); }
 .balance.credit { color: var(--ok); }
@@ -66,8 +47,7 @@ fieldset label { display: grid; gap: 4px; }
   .receipt { border-color: var(--text); }
 }
 
-/* Fee reminders (docs/messaging.md D10): the question before sending, and the
-   ones the account moved under. */
+/* Fee reminders, docs/messaging.md D10 (docs/module-notes.md) */
 .reminding { margin: 0.75rem 0; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); }
 .reminding p { margin: 0 0 0.5rem; }
 .reminder-children { margin: 0 0 0.75rem; padding-left: 1.2rem; }

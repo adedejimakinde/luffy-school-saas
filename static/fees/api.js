@@ -21,13 +21,6 @@ export const paymentUrl = (studentId) => `/api/fees/students/${q(studentId)}/pay
 export const discountUrl = (studentId) => `/api/fees/students/${q(studentId)}/discounts/`;
 export const reversalUrl = (entryId) => `/api/fees/entries/${q(entryId)}/reversal/`;
 export const receiptUrl = (entryId) => `/api/fees/entries/${q(entryId)}/receipt/`;
-export function logUrl({ termId = null, reversalsOnly = false, page = 1 } = {}) {
-  const parts = [];
-  if (termId != null) parts.push(`term_id=${q(termId)}`);
-  if (reversalsOnly) parts.push("reversals_only=true");
-  if (page > 1) parts.push(`page=${q(page)}`);
-  return `/api/fees/log/${parts.length ? `?${parts.join("&")}` : ""}`;
-}
 export const billsUrl = (termId) =>
   termId == null ? "/api/fees/bills/" : `/api/fees/bills/?term_id=${q(termId)}`;
 export const billUrl = (classId, termId) => `/api/fees/classes/${q(classId)}/bill/?term_id=${q(termId)}`;
@@ -46,7 +39,7 @@ export function refusalFor(status, body) {
   return REFUSAL.BROKEN;
 }
 
-async function read(url, fetchImpl) {
+export async function read(url, fetchImpl) {
   let answer;
   try {
     answer = await getJson(url, { fetchImpl });
@@ -57,11 +50,7 @@ async function read(url, fetchImpl) {
   return { ok: false, refusal: refusalFor(answer.status, answer.body), body: answer.body || {} };
 }
 
-/**
- * A write. 201 is posted; **200 is "this form had already posted"**, which is
- * success too — the payment is in the books once. 403, 409 and 422 carry a
- * sentence for the person and keep the page where it is.
- */
+/** A write: 201 posted, 200 already posted, 403/409/422 a sentence (docs/module-notes.md) */
 async function write(url, payload, fetchImpl, send = postJson, noted = [403, 409, 422]) {
   let answer;
   try {
@@ -82,13 +71,7 @@ export const fetchBooks = ({ termId = null, fetchImpl = fetch } = {}) => read(bo
 export const fetchClass = ({ classId, termId, fetchImpl = fetch }) => read(classUrl(classId, termId), fetchImpl);
 export const fetchAccount = ({ studentId, fetchImpl = fetch }) => read(accountUrl(studentId), fetchImpl);
 export const fetchReceipt = ({ entryId, fetchImpl = fetch }) => read(receiptUrl(entryId), fetchImpl);
-export const fetchLog = ({ termId = null, reversalsOnly = false, page = 1, fetchImpl = fetch } = {}) =>
-  read(logUrl({ termId, reversalsOnly, page }), fetchImpl);
-/**
- * Make the missing accounts for a class: a batch at a time, so the answer says how many
- * were made, how many already had one, each failure by name, and how many are left.
- * 409 (no bank yet) and 422 (no term) carry a sentence.
- */
+/** A class's missing accounts, a batch at a time (docs/module-notes.md) */
 export const makeClassAccounts = ({ classId, termId = null, fetchImpl = fetch }) =>
   write(
     `/api/fees/virtual/classes/${q(classId)}/`,
@@ -98,7 +81,7 @@ export const makeClassAccounts = ({ classId, termId = null, fetchImpl = fetch })
     [403, 409, 422],
   );
 
-/** Make the child's dedicated account. 409 (no bank yet), 422 and 503 (Paystack) carry a sentence. */
+/** Make the child's dedicated account. (docs/module-notes.md) */
 export const makeAccount = ({ studentId, fetchImpl = fetch }) =>
   write(virtualAccountUrl(studentId), {}, fetchImpl, postJson, [403, 409, 422, 503]);
 export const postPayment = ({ studentId, payment, fetchImpl = fetch }) =>
@@ -108,8 +91,7 @@ export const postDiscount = ({ studentId, discount, fetchImpl = fetch }) =>
 export const postReversal = ({ entryId, reason, fetchImpl = fetch }) =>
   write(reversalUrl(entryId), { reason }, fetchImpl);
 
-// -- B2: bills and concessions. Every bill write answers with the bill as it
-// now stands, so the page draws what the server holds rather than patching.
+// -- B2: bills and concessions (docs/module-notes.md)
 
 export const fetchBills = ({ termId = null, fetchImpl = fetch } = {}) => read(billsUrl(termId), fetchImpl);
 export const fetchBill = ({ classId, termId, fetchImpl = fetch }) => read(billUrl(classId, termId), fetchImpl);
@@ -126,8 +108,7 @@ export const postConcession = ({ studentId, concession, fetchImpl = fetch }) =>
 export const postRevocation = ({ concessionId, reason, fetchImpl = fetch }) =>
   write(revocationUrl(concessionId), { reason }, fetchImpl);
 
-// -- fee reminders (docs/messaging.md D10). The preview writes nothing; the
-// press answers with what it did. A 403 or a 422 is a sentence on the page.
+// -- fee reminders, docs/messaging.md D10 (docs/module-notes.md)
 
 export function remindersUrl({ termId, classId = null, children = null }) {
   const parts = [`term_id=${q(termId)}`];

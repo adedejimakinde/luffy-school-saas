@@ -26,6 +26,20 @@ FEES_MODULES = (
 )
 
 
+#: The fee log page's modules, entry point last: the school's entries for a
+#: term, or its reversals (docs/fees.md, "A payment is never changed quietly").
+#: A page of its own so the fees page does not carry it in its 170 KB.
+FEES_LOG_MODULES = (
+    "web/html.js",
+    "web/http.js",
+    "web/picker.js",
+    "fees/money.js",
+    "fees/api.js",
+    "fees/states.js",
+    "fees/log-app.js",
+)
+
+
 #: The school's bank account page's modules, entry point last.
 BANK_MODULES = (
     "web/html.js",
@@ -62,4 +76,17 @@ def fees_page(request):
     )
 
 
-__all__ = ["BANK_MODULES", "FEES_MODULES", "bank_page", "fees_page"]
+def fees_log_page(request):
+    """A shell, as `fees_page` is: the log route says who may read it."""
+    return render(
+        request,
+        "fees/fees_log_page.html",
+        {
+            "import_map": pages.import_map(*FEES_LOG_MODULES),
+            "portal_host": sign_in_host(request),
+            "on_school": getattr(request, "school", None) is not None,
+        },
+    )
+
+
+__all__ = ["BANK_MODULES", "FEES_LOG_MODULES", "FEES_MODULES", "bank_page", "fees_log_page", "fees_page"]

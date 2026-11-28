@@ -144,6 +144,38 @@ neither shows.
   read again rather than the page turned into "not something you can
   open": if the refusal is real, that read gets it too.
 
+- Before `const keys = { payment: newKey(), discount: newKey(), conces`:
+
+  One key per form, because each form is its own write: a payment, a
+  discount and a concession sent under one key would be refused as a
+  reused form.
+
+- Before `const [answer, notSent] = await Promise.all([`:
+
+  The reminders that went nowhere are listed under the classes (D10, as
+  decided). Asked beside the books, and a failure there leaves the books.
+
+- Before `land(answer.ok && !concessions.ok ? concessions : answer, (b`:
+
+  One refusal for both: the routes ask the same question of the same
+  person, so the first read's answer stands for the pair.
+
+- Before `const keyed = async (intent, draft, send, { done, again, dra`:
+
+  A write made under a form key: a payment or a discount. Success mints the
+  next key; a lost answer keeps it, and what was typed, so sending again is
+  safe; a sentence from the server keeps what was typed and shows it.
+
+- Before `again: "We could not tell whether that payment was saved. Se`:
+
+  The request may have landed. Same key, same payment: sending it
+  again records it once whichever way the first one went.
+
+- Before `const scope = {`:
+
+  Asks first (docs/messaging.md D10): the preview writes nothing, and
+  nothing is sent until "Send them".
+
 
 ## `fees/states.js`
 
@@ -192,6 +224,30 @@ neither shows.
   than taking it, and a form a bursar tabs into by accident is how it would
   happen by mistake. `draft` as for a payment.
 
+- Before `function classRow(c) {`:
+
+  One class as a list row: name over "25 children", what has been collected
+  with a bar and its share at the right, and a chevron. A button, so the page's
+  one click handler opens the class as it always did.
+
+- Before `const owes = c.owing`:
+
+  What the class owes, all terms (audit G-12), on a line of its own: the
+  sub-line stays the count alone.
+
+- Before `export function outstandingLine(body = {}) {`:
+
+  "Outstanding (all terms)" and "of which this term", the figures the dashboard
+  shows (`fees.outstanding`, audit G-12): the whole account of each child placed
+  this term who owes. Nothing when nobody owes.
+
+- Before `function notSentSection(notSent, mayRemind, reminding) {`:
+
+  Reminders that went nowhere because the account moved before they were
+  sent (decided 2026-09-25): the amount they would have stated was no longer
+  true. Listed so the bursar can send again, with the account as it stands.
+
+
 
 ## `fees/api.js`
 
@@ -204,6 +260,32 @@ neither shows.
   that does not exist — so the page says "not something you can open" for
   both and never guesses which. A 403 is different: it goes only to somebody
   who reads the books and may not write to them, and its sentence is shown.
+
+- Before `async function write(url, payload, fetchImpl, send = postJso`:
+
+  A write. 201 is posted; **200 is "this form had already posted"**, which is
+  success too — the payment is in the books once. 403, 409 and 422 carry a
+  sentence for the person and keep the page where it is.
+
+- Before `export const makeClassAccounts = ({ classId, termId = null, `:
+
+  Make the missing accounts for a class: a batch at a time, so the answer says how many
+  were made, how many already had one, each failure by name, and how many are left.
+  409 (no bank yet) and 422 (no term) carry a sentence.
+
+- Before `export const makeAccount = ({ studentId, fetchImpl = fetch }`:
+
+  Make the child's dedicated account. 409 (no bank yet), 422 and 503 (Paystack) carry a sentence.
+
+- The `-- B2: bills and concessions` divider:
+
+  Every bill write answers with the bill as it
+  now stands, so the page draws what the server holds rather than patching.
+
+- The `-- fee reminders` divider (docs/messaging.md D10):
+
+  The preview writes nothing; the
+  press answers with what it did. A 403 or a 422 is a sentence on the page.
 
 
 ## `fees/money.js`
@@ -262,3 +344,40 @@ neither shows.
   A trait is never deleted, only hidden: a hidden one stays in the list, muted,
   with a button to show it again, because ratings and released cards still name
   it.
+
+
+## `fees/fees.css`
+
+- Before `main { max-width: 60rem; }`:
+
+  Fees. Tables that scroll sideways on a phone, and a receipt that prints on
+  its own: the chrome is hidden on paper.
+  
+  Colours, type, controls, tables and labels are `web/design.css`'s; this is
+  the layout.
+
+- Before `.class-card { padding: var(--sp-8) var(--sp-16); margin: var`:
+
+  The classes: list rows (design.css's .list-rows) in ONE card; a row is a button that opens the class.
+
+- Before `.class-card { container-type: inline-size; }`:
+
+  A card too narrow for the class's words and its amounts side by side (a
+  small phone, large text): the amounts go under the words, never over them.
+
+- Before `.reminding { margin: 0.75rem 0; padding: 0.75rem 1rem; borde`:
+
+  Fee reminders (docs/messaging.md D10): the question before sending, and the
+  ones the account moved under.
+
+
+## `fees/log-app.js`
+
+- Before `import { esc } from "../web/html.js";`:
+
+  The fee log page (`/fees/log/`): a term's entries, newest typed first, or
+  with `?reversals=1` its reversals, fifty to a page. It draws with the fees
+  page's own entry table (`states.entryTable`), so a reversed payment reads the
+  same here as on the child's account: marked Reversed, with the reason, who
+  and when. It reads only; nothing on it changes the books. A child's name
+  links to their account on `/fees/`.

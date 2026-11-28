@@ -42,7 +42,7 @@ from schools.views import PLATFORM_MODULES
 from blog.write_views import EDITOR_MODULES as BLOG_EDITOR_MODULES
 from cbt.views import EXAM_SLIPS_MODULES, TESTS_MODULES
 from attendance.views import ABSENCE_MODULES, REGISTER_MODULES
-from fees.views import BANK_MODULES, FEES_MODULES
+from fees.views import BANK_MODULES, FEES_LOG_MODULES, FEES_MODULES
 from idcards.views import ID_CARDS_MODULES
 from gradebook.views import MARKING_MODULES, SUBJECT_TEACHERS_MODULES, TEACHING_MODULES
 from results.views import (
@@ -90,6 +90,7 @@ PAGES = {
     "invite": INVITE_MODULES,
     "absences": ABSENCE_MODULES,
     "fees": FEES_MODULES,
+    "fees-log": FEES_LOG_MODULES,
     "bank": BANK_MODULES,
     "timetable": TIMETABLE_MODULES,
     "checker": CHECKER_MODULES,
