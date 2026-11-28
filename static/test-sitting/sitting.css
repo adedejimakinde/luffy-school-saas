@@ -1,0 +1,16 @@
+/*
+ * A test's sitting (CBT step 4): the layout `setup/setup.css` and `tests/tests.css` do not
+ * already give. Colours are `web/design.css`'s tokens. Every row wraps rather than squeezes,
+ * so a 360px phone and text at 200% keep each button on a line of its own when it must.
+ */
+.sit-class { display: grid; gap: 4px; }
+.sit-class .again { justify-self: start; }
+.sit-code .code { font-size: 1.75rem; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; margin-right: 8px; }
+.sitting-log { list-style: none; margin: 0; padding: 0; }
+.sit-student-row { display: grid; gap: 6px; padding: 12px 0; border-bottom: 1px solid var(--divider); min-width: 0; overflow-wrap: anywhere; }
+.sit-student-row p { margin: 0; }
+.sit-counts { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; color: var(--muted); font-size: var(--small); }
+.sit-counts div { display: flex; gap: 6px; }
+.sit-counts dd { margin: 0; color: var(--text); font-weight: 700; }
+.sitting-log details { margin-top: 4px; }
+.sitting-log summary { min-height: var(--control); display: flex; align-items: center; cursor: pointer; }

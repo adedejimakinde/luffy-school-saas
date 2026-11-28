@@ -20,11 +20,11 @@ from typing import List, Optional
 from django.db import transaction
 from django.utils import timezone
 
-from academics.models import ClassGroup, ClassPlacement
+from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import Membership, Role
 from typography import keep_together
 
-from . import access, signin_log, sitting
+from . import access, pins, signin_log, sitting
 from .banks import NotYours, Refused, name_of, plain
 from .models import (
     MAX_EXTRA_MINUTES,
@@ -279,6 +279,9 @@ class Row:
     late_refused: int = 0
     answers_received: int = 0
     may_retake: bool = False
+    #: The class of this test the student is placed in this term, for the slip buttons;
+    #: none for a student who is in none of its classes.
+    class_id: Optional[int] = None
     events: List[dict] = field(default_factory=list)
     #: Sign-ins at the exam door that did not get through, with the real reason: staff only
     #: (`cbt.signin_log`), and never sent to the student's side.
@@ -295,6 +298,9 @@ class Log:
     may_extend: bool
     may_retake: bool
     code_set: bool
+    #: May this login print exam slips (`access.can_print`)? Only draws the buttons: the
+    #: print routes ask again.
+    may_print: bool
     code_changes: List[dict]
     controls: List[dict]
 
@@ -317,15 +323,25 @@ def sitting_log_as(actor, school, test_id) -> Log:
     audience = list(TestAudience.objects.filter(test=test).select_related("class_group"))
     group_names = {a.class_group_id: a.class_group.name for a in audience}
     classes = []
+    may_print = access.can_print(actor, school)
+    term = Term.objects.filter(pk=test.term_id).first()
     last_pins = {}
     for row in PinSlipPrint.objects.filter(term_id=test.term_id, class_group_id__in=list(group_names)).order_by("-id"):
         last_pins.setdefault(row.class_group_id, row)
     for a in audience:
         pins_row = last_pins.get(a.class_group_id)
         latest = SittingControl.objects.filter(test=test, class_group_id=a.class_group_id).order_by("-id").first()
+        printable, holding = 0, 0
+        if may_print and term is not None:
+            # What the whole-class print would do, so the screen can say it before it asks.
+            students = [s for s in pins.roster(school, a.class_group, term) if pins._typed_number(s.reference)]
+            printable = len(students)
+            holding = len(pins.live_pin_holders(term, [s.pk for s in students]))
         classes.append(
             {
                 "id": a.class_group_id,
+                "printable": printable,
+                "with_a_pin": holding,
                 "name": a.class_group.name,
                 "open": sitting.sitting_open(test, a.class_group_id, now),
                 "by_hand": latest is not None,
@@ -408,6 +424,7 @@ def sitting_log_as(actor, school, test_id) -> Log:
         mine = [e for e in events[sid] if attempt is None or e.attempt_id in (None, attempt.pk) or e.kind in ("extra_time", "retake")]
         row = Row(
             student_id=sid, name=name, admission_number=number_typed, class_name=class_name, state=state,
+            class_id=placements.get(sid) if placements.get(sid) in group_names else None,
             failed_sign_ins=len(refused[sid]), sign_ins=[signin_log.out(r) for r in refused[sid]],
         )
         if attempt is not None:
@@ -440,6 +457,7 @@ def sitting_log_as(actor, school, test_id) -> Log:
         may_run=access.runs_sitting(actor, school, test),
         may_extend=access.gives_extra_time(actor, school, test),
         may_retake=may_retake,
+        may_print=may_print,
         code_set=bool(test.code_digest),
         code_changes=[
             {"what": f"Code {c.kind}", "by": c.by_name, "role": c.role, "at": _iso(c.at)}

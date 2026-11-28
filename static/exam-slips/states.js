@@ -11,6 +11,7 @@
  */
 
 import { esc, keepTogether } from "../web/html.js";
+import { classConfirm, studentConfirm } from "./print.js";
 
 const note = (n) => (n ? `<p class="note" role="alert">${esc(n.detail)}</p>` : "");
 const done = (text) => (text ? `<p class="done" role="status">${esc(text)}</p>` : "");
@@ -69,14 +70,7 @@ function classRow(c, { open, roster, confirming, notes, printed }) {
   const print = !c.students
     ? ""
     : asking
-      ? c.with_a_pin
-        ? `<div class="confirm warn" data-confirm="${esc(key)}" role="alertdialog" aria-label="Give ${esc(c.name)} new PINs"><p><strong>This gives all ${c.printable ?? c.students} students new PINs. Slips already handed out will stop working.</strong></p>` +
-          // Cancel first, and the one the page focuses: Enter or a stray tap changes nothing.
-          '<button type="button" class="submit" data-action="keep" data-default>Cancel</button>' +
-          `<button type="button" class="again" data-action="print-class" data-class="${esc(c.id)}">Give ${esc(c.name)} new PINs and print</button></div>`
-        : `<div class="confirm" data-confirm="${esc(key)}"><p>${esc(c.name)} gets ${plural(c.students, "slip", "slips")}.</p>` +
-          `<button type="button" class="submit" data-action="print-class" data-class="${esc(c.id)}">Print ${esc(c.name)}</button>` +
-          '<button type="button" class="again" data-action="keep">Not now</button></div>'
+      ? classConfirm(c, key)
       : `<button type="button" data-action="ask-print-class" data-class="${esc(c.id)}">${c.with_a_pin ? "Print for the whole class again" : "Print slips"}</button>${onlyNew}`;
   const lost = c.students && c.with_a_pin
     ? `<button type="button" class="again" data-action="${open === c.id ? "close-class" : "open-class"}" data-class="${esc(c.id)}" aria-expanded="${open === c.id}">${open === c.id ? "Close" : "A lost slip"}</button>`
@@ -105,10 +99,8 @@ function studentRow(c, s, confirming, notes, printed) {
   const button = !s.admission_number
     ? '<span class="hint">No admission number on the Roll</span>'
     : asking
-      ? `<div class="confirm" data-confirm="${esc(key)}"><p>${esc(s.name)} gets a new slip${s.has_pin ? ", and the old one stops working" : ""}.</p>` +
-        `<button type="button" class="submit" data-action="print-student" data-class="${esc(c.id)}" data-student="${esc(s.id)}">Print for ${esc(s.name)}</button>` +
-        '<button type="button" class="again" data-action="keep">Not now</button></div>'
-      : `<button type="button" data-action="ask-print-student" data-student="${esc(s.id)}" aria-label="New slip for ${esc(s.name)}">New slip</button>`;
+      ? studentConfirm(c, s, key)
+      : `<button type="button" data-action="ask-print-student" data-student="${esc(s.id)}" aria-label="Reissue slip for ${esc(s.name)}">Reissue slip</button>`;
   return [
     `<li data-student="${esc(s.id)}">`,
     `<span class="what"><strong>${esc(s.name)}</strong> <span class="who">${esc(s.admission_number || "")}${s.has_pin ? "" : s.admission_number ? ", no slip yet" : ""}</span></span>`,

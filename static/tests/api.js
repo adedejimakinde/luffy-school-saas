@@ -59,18 +59,6 @@ export const moveTest = ({ testId, act, note = "", fetchImpl = fetch }) => write
 export const changeClasses = ({ testId, classGroupIds, fetchImpl = fetch }) =>
   write(`tests/${id(testId)}/classes/`, { class_group_ids: classGroupIds }, fetchImpl);
 
-// -- the sitting (CBT step 4) --
-
-export const fetchSitting = ({ testId, fetchImpl = fetch }) => send(() => getJson(`${BASE}tests/${id(testId)}/sitting/`, { fetchImpl }), { write: true });
-export const setCode = ({ testId, fetchImpl = fetch }) => write(`tests/${id(testId)}/code/`, {}, fetchImpl);
-/** `kind` is open or close. */
-export const controlSitting = ({ testId, classId, kind, reason, endAttempts = false, fetchImpl = fetch }) =>
-  write(`tests/${id(testId)}/classes/${id(classId)}/${kind}/`, { reason, end_attempts: endAttempts }, fetchImpl);
-export const giveExtraTime = ({ testId, studentId, minutes, reason, fetchImpl = fetch }) =>
-  write(`tests/${id(testId)}/students/${id(studentId)}/extra-time/`, { minutes, reason }, fetchImpl);
-export const allowRetake = ({ testId, studentId, reason, fetchImpl = fetch }) =>
-  write(`tests/${id(testId)}/students/${id(studentId)}/retake/`, { reason }, fetchImpl);
-
 /** A picture for a question, as multipart. (docs/module-notes.md) */
 export async function uploadPicture({ subjectId, level, file, fetchImpl = fetch }) {
   const url = `${BASE}banks/${id(subjectId)}/${id(level)}/pictures/`;

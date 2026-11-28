@@ -261,172 +261,37 @@ test("a refused send-back says why beside the form", async () => {
   assert.match(root.innerHTML, /The reason cannot be empty\./);
 });
 
-// -- the sitting (CBT step 4) ----------------------------------------------------------------
-
-const LOG = {
-  test_id: 9,
-  title: "First CA <i>test</i>",
-  state: "published",
-  opens_at: "2026-11-09T08:00:00Z",
-  closes_at: "2026-11-09T11:00:00Z",
-  duration: 30,
-  late_window: 2,
-  code_set: true,
-  code: null,
-  may_run: true,
-  may_extend: true,
-  may_retake: true,
-  classes: [{ id: 3, name: "JSS 1A", open: true, by_hand: false, said: "As planned" }],
-  rows: [
-    {
-      student_id: 41, name: "Ada <b>Obi</b>", admission_number: "SM/001", class_name: "JSS 1A", state: "Sitting", number: 1,
-      started_at: "2026-11-09T08:05:00Z", deadline: "2026-11-09T08:45:00Z", submitted_at: null, ended_by: "",
-      extra_minutes: 10, computers: 2, replaced: 1, disconnects: 1, left_page: 3, late_refused: 0, answers_received: 7,
-      may_retake: false,
-      events: [{ kind: "left_page", what: "Left the test's tab or window", said_by: "device", at: "2026-11-09T08:10:00Z", seat: "Seat 4", detail: { seconds: 14 } }],
-    },
-    {
-      student_id: 42, name: "Emeka Nwosu", admission_number: "SM/002", class_name: "JSS 1A", state: "The student submitted", number: 1,
-      started_at: "2026-11-09T08:05:00Z", deadline: "2026-11-09T08:35:00Z", submitted_at: "2026-11-09T08:30:00Z", ended_by: "student",
-      extra_minutes: 0, computers: 1, replaced: 0, disconnects: 0, left_page: 0, late_refused: 0, answers_received: 20,
-      may_retake: true, events: [],
-    },
-  ],
-  code_changes: [],
-  controls: [],
-};
-
-test("the sitting: classes, the log's counts, and no answer in it", () => {
-  const html = states.sittingView(LOG);
-  assert.match(html, /First CA &lt;i&gt;test&lt;\/i&gt;: the sitting/);
-  assert.match(html, /Ada &lt;b&gt;Obi&lt;\/b&gt;/, "a name is text");
-  assert.match(html, /data-count="Left the page"><dt>Left the page<\/dt><dd>3</);
-  assert.match(html, /data-count="Computers"><dt>Computers<\/dt><dd>2</);
-  assert.match(html, /10 extra minutes/);
-  assert.match(html, /Close it now/);
-  assert.match(html, /Change the code/);
-  assert.match(html, /data-action="ask-extra-41"/);
-  assert.doesNotMatch(html, /data-action="ask-extra-42"/, "no extra time once an attempt is closed");
-  assert.match(html, /data-action="ask-retake-42"/);
-  assert.match(html, /No answer or score is shown here/);
-  assert.doesNotMatch(html, /correct|chosen|score:/i);
+test("every action link on the test page is a real button, one navy and the rest outline", () => {
+  const html = states.testView({ ...TEST, state: "published", may_edit: true, may_submit: false, may_approve: false, items: [ITEM] });
+  const links = [...html.matchAll(/<a class="(btn[^"]*)" href="([^"]*)">([^<]*)<\/a>/g)];
+  assert.deepEqual(
+    links.map(([, cls, href, label]) => [label, cls, href]),
+    [
+      ["Change", "btn", "#edit-test/9"],
+      ["Try it as a student", "btn", "#preview/9"],
+      ["The sitting", "btn btn-primary", "sitting/#9"],
+      ["Results", "btn", "results/#9"],
+    ],
+  );
+  assert.doesNotMatch(html, /btn-quiet/);
 });
 
-// -- the staff attempt log: a sign-in that did not get through, and why --
-
-const REFUSALS = [
-  ["wrong_code", "Wrong test code"],
-  ["wrong_pin", "Wrong exam PIN"],
-  ["other_term_slip", "PIN is from another term's slip"],
-  ["not_in_class", "Not in a class sitting this test"],
-  ["not_open", "Test not open to their class"],
-  ["already_sat", "Has sat it already"],
-  ["locked", "Locked out for too many wrong tries"],
-];
-
-function tried(reason, what, extra = {}) {
-  return { at: "2026-11-09T07:58:00Z", reason, what, until: null, device: "a1b2c3", ...extra };
-}
-
-test("a student's failed sign-ins are listed with the real reason, each of the seven", () => {
-  const row = { ...LOG.rows[1], sign_ins: REFUSALS.map(([reason, what]) => tried(reason, what, reason === "locked" ? { until: "2026-11-09T08:05:00Z" } : {})) };
-  const html = states.sittingView({ ...LOG, rows: [row] });
-  assert.match(html, /<summary>Failed sign-ins \(7\)<\/summary>/);
-  assert.match(html, /data-failed-sign-ins>7 failed sign-ins</);
-  for (const [reason, what] of REFUSALS) {
-    assert.match(html, new RegExp(`<li data-reason="${reason}">[^<]*: ${what.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("'", "(?:'|&#39;)")}`), reason);
-  }
-  assert.match(html, /Only staff see this/);
+test("when the test waits for the principal, Approve is the one navy button", () => {
+  const html = states.testView({ ...TEST, may_approve: true, items: [ITEM] });
+  assert.equal((html.match(/btn-primary|class="submit"/g) || []).length, 1);
+  assert.match(html, /class="submit" data-action="ask-approve"/);
+  assert.match(html, /<button type="button" data-action="ask-send-back">/);
 });
 
-test("a lockout says until when, in HH:MM", () => {
-  const row = { ...LOG.rows[1], sign_ins: [tried("locked", "Locked out for too many wrong tries", { until: "2026-11-09T08:05:00Z" })] };
-  const html = states.sittingView({ ...LOG, rows: [row] });
-  const hhmm = states.clockTime("2026-11-09T08:05:00Z");
-  assert.match(hhmm, /^\d\d:\d\d$/);
-  assert.ok(html.includes(`Locked out for too many wrong tries, until ${hhmm}`), html);
-  assert.equal(states.clockTime(null), "");
-  assert.equal(states.clockTime("not a time"), "");
-});
-
-test("a student with none shows no list, and one is spoken of in the singular", () => {
-  assert.doesNotMatch(states.sittingView(LOG), /Failed sign-ins|failed sign-in/);
-  const one = states.sittingView({ ...LOG, rows: [{ ...LOG.rows[1], sign_ins: [tried("wrong_pin", "Wrong exam PIN")] }] });
-  assert.match(one, /1 failed sign-in</);
-  assert.match(one, /Failed sign-ins \(1\)/);
-});
-
-test("a name, a reason and a computer tag are text, never markup", () => {
-  const row = { ...LOG.rows[1], name: "<img src=x onerror=alert(1)>", sign_ins: [tried("wrong_pin", "<b>Wrong</b>", { device: '"><i>' })] };
-  const html = states.sittingView({ ...LOG, rows: [row] });
-  assert.doesNotMatch(html, /<img|<b>Wrong|<i>/);
-});
-
-test("a student outside the test's classes has a line of their own", () => {
-  const outsider = {
-    ...LOG.rows[1], student_id: 77, name: "Bimpe Ojo", admission_number: "SM/005", class_name: "JSS 1B",
-    state: "Not in this test's classes", number: 0, started_at: null, deadline: null, submitted_at: null, computers: 0,
-    sign_ins: [tried("not_in_class", "Not in a class sitting this test")],
-  };
-  const html = states.sittingView({ ...LOG, rows: [outsider] });
-  assert.match(html, /Bimpe Ojo/);
-  assert.match(html, /Not in this test(?:'|&#39;)s classes/);
-  assert.match(html, /data-reason="not_in_class"/);
-  assert.doesNotMatch(html, /data-count=/, "no attempt, no counts");
-});
-
-test("the code is shown once, in the answer that set it", () => {
-  assert.match(states.sittingView({ ...LOG, code_set: true }, { code: "KMTRWX" }), /<strong class="code">KMTRWX<\/strong>/);
-  assert.doesNotMatch(states.sittingView(LOG), /KMTRWX/);
-  assert.match(states.sittingView({ ...LOG, code_set: false }), /Set the test code/);
-});
-
-test("a login that may not run the sitting sees it and no button", () => {
-  const html = states.sittingView({ ...LOG, may_run: false, may_extend: false, rows: LOG.rows.map((r) => ({ ...r, may_retake: false })) });
-  assert.doesNotMatch(html, /Close it now|Change the code|Extra time|Allow a retake/);
-});
-
-test("closing by hand asks why, and offers to end the attempts in progress", () => {
-  const html = states.sittingView(LOG, { confirming: "close-3" });
-  assert.match(html, /data-form="control" data-kind="close" data-class="3"/);
-  assert.match(html, /name="end_attempts"/);
-  assert.match(html, /students already sitting carry on to their own time/);
-});
 
 test("the published test's row and page link to its sitting", () => {
-  assert.match(states.testsView({ tests: [{ ...ROW, state: "published" }], summaries_only: true }), /href="#sitting\/9"/);
-  assert.doesNotMatch(states.testsView({ tests: [{ ...ROW, state: "draft" }] }), /#sitting\//);
+  assert.match(states.testsView({ tests: [{ ...ROW, state: "published" }], summaries_only: true }), /href="sitting\/#9"/);
+  assert.doesNotMatch(states.testsView({ tests: [{ ...ROW, state: "draft" }] }), /sitting\/#/);
 });
 
-test("extra time is sent with its minutes and its reason, and the log is drawn again", async () => {
-  const calls = [];
-  const fetchImpl = async (url, init = {}) => {
-    calls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (url === "/api/csrf/") return { status: 200, json: async () => ({ csrf_token: "t" }) };
-    return { status: 200, json: async () => ({ ...LOG, rows: [{ ...LOG.rows[0], extra_minutes: 25 }] }) };
-  };
-  forgetToken();
+test("an old #sitting/<id> link is sent on to the sitting page", async () => {
+  const sent = [];
   const root = fakeRoot();
-  const page = await mount(root, { fetchImpl, location: { hash: "#sitting/9" } });
-  assert.equal(page.state().step, "sitting");
-  await root.submit({ minutes: "15", reason: "Power cut" }, { form: "extra", student: "41" });
-  const sent = calls.find(([url]) => url.endsWith("/students/41/extra-time/"));
-  assert.deepEqual(sent[1], { minutes: 15, reason: "Power cut" });
-  assert.match(root.innerHTML, /25 extra minutes/);
-  assert.match(root.innerHTML, /Extra time given/);
-});
-
-test("the sitting says, for each class, when its PINs were last issued and by whom", () => {
-  const issued = { at: "24 Oct 2026, 10:04", by: "Ngozi <b>Eze</b>" };
-  const html = states.sittingView({
-    ...LOG,
-    classes: [
-      { ...LOG.classes[0], pins_issued: issued },
-      { id: 4, name: "JSS 1B", open: false, by_hand: false, said: "As planned", pins_issued: null },
-    ],
-  });
-
-  assert.match(html, /data-class="3">.*PINs last issued: 24 Oct 2026, 10:04 by Ngozi &lt;b&gt;Eze&lt;\/b&gt;/s);
-  assert.match(html, /data-class="4">.*PINs not issued yet this term/s);
-  assert.doesNotMatch(html, /<b>Eze/);
+  await mount(root, { fetchImpl: async () => { throw new Error("nothing is fetched"); }, location: { hash: "#sitting/9", replace: (to) => sent.push(to) } });
+  assert.deepEqual(sent, ["sitting/#9"]);
 });
