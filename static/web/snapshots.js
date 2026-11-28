@@ -11,7 +11,7 @@
  * survive the reload that needs it.
  */
 
-import { esc } from "./html.js";
+import { esc, keepTogether } from "./html.js";
 
 const DATABASE = "luffy-snapshots";
 const SNAPSHOTS = "snapshots";
@@ -171,7 +171,7 @@ export function asOfText(at, { now = new Date(), timeZone = "Africa/Lagos" } = {
   const apart = Math.round((day(now) - day(taken)) / 86_400_000);
   if (apart === 0) return `today ${clock}`;
   if (apart === 1) return `yesterday ${clock}`;
-  return `${show(taken, { weekday: "short", day: "numeric", month: "short" })} ${clock}`;
+  return keepTogether(`${show(taken, { weekday: "short", day: "numeric", month: "short" })} ${clock}`);
 }
 
 /** The line shown when a page draws a copy and not the server's answer. */

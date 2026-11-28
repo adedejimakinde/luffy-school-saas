@@ -30,6 +30,7 @@ from ninja import Router, Schema
 from academics.models import ClassGroup, ClassPlacement, TermName
 from accounts.models import Membership, Role
 from accounts.session import session_auth
+from typography import keep_together
 
 from . import access, officers, pdf, pins
 from .models import ExamOfficerGrant, PinSlipPrint
@@ -154,7 +155,7 @@ def _school_of(request):
 
 
 def _worded(at) -> str:
-    return timezone.localtime(at).strftime("%-d %b %Y, %H:%M")
+    return keep_together(timezone.localtime(at).strftime("%-d %b %Y, %H:%M"))
 
 
 def _role_label(role) -> str:

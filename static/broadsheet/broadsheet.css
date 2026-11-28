@@ -27,5 +27,12 @@ tfoot th, tfoot td { font-weight: 700; border-top: 2px solid var(--text); }
   background: var(--card);
   box-shadow: inset -1px 0 0 var(--border);
 }
+/* In a box too narrow for both (a small phone, large text), only the name
+   stays put: the two together would cover every subject. */
+.wide { container-type: inline-size; }
+@container (max-width: 30em) {
+  .broadsheet :is(th, td):first-child { position: static; }
+  .broadsheet tbody td:nth-child(2), .broadsheet thead th:nth-child(2) { left: 0; }
+}
 .ranked-count { margin: 8px 0; }
 .not-ranked { color: var(--muted); }

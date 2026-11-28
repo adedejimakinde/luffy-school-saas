@@ -7,7 +7,7 @@
  * it because the school sends none.
  */
 
-import { esc, waitInWords } from "../web/html.js";
+import { esc, keepTogether, waitInWords } from "../web/html.js";
 
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
@@ -16,7 +16,7 @@ export function day(iso) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+  return keepTogether(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" }));
 }
 
 function scoreRow(s) {

@@ -34,6 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from academics.models import ClassGroup
+from typography import keep_together
 
 from . import access
 from .banks import NotAllowed, NotYours, Refused, current_term, live_questions, name_of, plain
@@ -312,7 +313,7 @@ def _move(actor, test, to_state, note=""):
 
 
 def _when(at) -> str:
-    return timezone.localtime(at).strftime("%-d %b %Y, %H:%M")
+    return keep_together(timezone.localtime(at).strftime("%-d %b %Y, %H:%M"))
 
 
 def draw(bank, count, *, rng=None):

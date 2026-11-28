@@ -30,6 +30,7 @@ from ninja import Router, Schema
 from academics.models import ClassGroup, ClassPlacement, Term
 from accounts.models import LIVE_STATUSES, Membership, Role
 from accounts.session import session_auth
+from typography import keep_together
 
 from . import cards, printing
 from .access import MAY_NOT_PRINT, may_print
@@ -161,7 +162,7 @@ def _counts(school, term):
 
 
 def _when(moment) -> str:
-    return timezone.localtime(moment).strftime("%-d %b %Y, %H:%M")
+    return keep_together(timezone.localtime(moment).strftime("%-d %b %Y, %H:%M"))
 
 
 @router.get("/", response={200: OverviewOut, 403: MessageOut}, tags=["id-cards"])

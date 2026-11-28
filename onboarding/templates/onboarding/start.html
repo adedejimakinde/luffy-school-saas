@@ -1,4 +1,4 @@
-{% extends "onboarding/layout.html" %}
+{% extends "onboarding/layout.html" %}{% load typography %}
 {% block title %}Start here{% endblock %}
 {% block content %}
       <header class="ob-head">
@@ -55,7 +55,7 @@
       <section class="panel" aria-labelledby="changes-title" data-changes>
         <div class="panel-head"><h2 id="changes-title">Recent setup changes</h2></div>
         <ul class="change-list">
-          {% for c in changes %}<li><span>{{ c.summary }}</span><span class="quiet">{{ c.by_name }}, {{ c.at|date:"j M Y, g:i a" }}</span></li>{% endfor %}
+          {% for c in changes %}<li><span>{{ c.summary }}</span><span class="quiet">{{ c.by_name }}, {{ c.at|date:"j M Y, g:i a"|nobreak }}</span></li>{% endfor %}
         </ul>
       </section>
       {% endif %}

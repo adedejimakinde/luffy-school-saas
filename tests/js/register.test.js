@@ -116,11 +116,11 @@ test("today is the default day and it is still editable", () => {
 
 test("the register names its day the way the home does, not as ISO", () => {
   // Django's `D j M` on the home: "Sep", where en-GB's locale says "Sept".
-  assert.equal(states.dayText("2026-10-15"), "Thu 15 Oct");
-  assert.equal(states.dayText("2025-09-17"), "Wed 17 Sep");
+  assert.equal(states.dayText("2026-10-15"), "Thu\u00a015\u00a0Oct", "held on one line");
+  assert.equal(states.dayText("2025-09-17"), "Wed\u00a017\u00a0Sep");
   assert.equal(states.dayText("not a day"), "not a day");
   const html = states.marking({ ...REGISTER, taken_on: "2026-10-15" });
-  assert.match(html, /<p class="when">2025\/2026 First term &middot; Thu 15 Oct<\/p>/);
+  assert.match(html, /<p class="when">2025\/2026 First term &middot; Thu\u00a015\u00a0Oct<\/p>/);
   assert.doesNotMatch(html, /2026-10-15/);
 });
 

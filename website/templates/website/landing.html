@@ -1,4 +1,4 @@
-{% extends "website/base.html" %}
+{% extends "website/base.html" %}{% load typography %}
 {% block head %}<script type="application/ld+json">{{ structured_data }}</script>
 {% endblock %}
 {% block main %}
@@ -19,7 +19,7 @@ questions are the page's FAQPage structured data, from the same list
   <div class="wrap">
     <p class="eyebrow">For Nigerian secondary schools</p>
     <h1 id="land-title">{{ h1 }}</h1>
-    <p class="hero-lead">{{ lead }}</p>
+    <p class="hero-lead">{{ lead|nobreak }}</p>
     <p class="hero-actions">
       <a class="btn btn-lg btn-primary" href="/#demo">Start your free first term</a>
       {% if whatsapp %}<a class="btn btn-lg btn-outline" href="{{ whatsapp }}" rel="noopener">WhatsApp us</a>{% endif %}
@@ -62,12 +62,12 @@ questions are the page's FAQPage structured data, from the same list
   <div class="wrap land{% if section.picture %} land-pair{% if section.flip %} land-flip{% endif %}{% endif %}">
     <div class="land-text">
       <h2 id="part-{{ forloop.counter }}">{{ section.heading }}</h2>
-      {% for paragraph in section.body %}<p>{{ paragraph }}</p>
+      {% for paragraph in section.body %}<p>{{ paragraph|nobreak }}</p>
       {% endfor %}{% if section.points %}<ul class="land-points">
-        {% for point in section.points %}<li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>{{ point }}</span></li>
+        {% for point in section.points %}<li><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg><span>{{ point|nobreak }}</span></li>
         {% endfor %}
       </ul>{% endif %}
-      {% for paragraph in section.after %}<p>{{ paragraph }}</p>
+      {% for paragraph in section.after %}<p>{{ paragraph|nobreak }}</p>
       {% endfor %}{% if section.rows %}<div class="land-table">
         <table>
           <thead><tr>{% for cell in section.header %}<th scope="col">{{ cell }}</th>{% endfor %}</tr></thead>

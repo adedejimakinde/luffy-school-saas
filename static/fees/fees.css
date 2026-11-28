@@ -19,6 +19,14 @@ button.class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; wi
 .class-figures { display: grid; gap: 2px; justify-items: end; }
 .class-collected { font-weight: 700; font-variant-numeric: tabular-nums; }
 .class-share { color: var(--muted); font-size: var(--small); }
+/* A card too narrow for the class's words and its amounts side by side (a
+   small phone, large text): the amounts go under the words, never over them. */
+.class-card { container-type: inline-size; }
+@container (max-width: 14em) {
+  button.class-row { grid-template-columns: minmax(0, 1fr); }
+  .class-money { justify-content: space-between; }
+  .class-figures { justify-items: start; }
+}
 .bar { display: block; width: 72px; height: 6px; border-radius: 3px; background: var(--divider); overflow: hidden; }
 .bar > span { display: block; height: 100%; background: var(--ok); }
 tr.undone td { color: var(--muted); }

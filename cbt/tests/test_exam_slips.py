@@ -544,7 +544,8 @@ class PinsLastIssuedTests(ExamSlipsSetUp):
 
         last = classes["JSS 1A"]["last_print"]
         self.assertEqual(last["by"], self.admin.user.full_name or self.admin.user.get_username())
-        self.assertRegex(last["at"], r"^\d{1,2} \w{3} \d{4}, \d\d:\d\d$")
+        # The date held on one line (`typography.keep_together`): any space.
+        self.assertRegex(last["at"], r"^\d{1,2}\s\w{3}\s\d{4}, \d\d:\d\d$")
         self.assertIsNone(classes["JSS 1B"]["last_print"])
 
     def test_the_print_log_marks_an_only_missing_print(self):
